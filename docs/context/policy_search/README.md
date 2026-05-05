@@ -21,6 +21,11 @@ Use it for three things only:
 
 ## Current Diagnostic Notes
 
+- `2026-04-29_broad_policy_search.md`: broad all-scenario policy research surface, refreshed on
+  2026-05-05 with Hugging Face paper anchors, current full-matrix evidence, and the next
+  autoresearch contract.
+- `reports/2026-05-02_scenario_adaptive_hybrid_orca_v1_full_matrix.md`: current best tracked
+  full-matrix result (`131/141` successes at horizon `500`) and remaining failure taxonomy.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
 

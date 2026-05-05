@@ -1,3 +1,131 @@
+# Broad Policy Research For All-Scenario Success
+
+## Status Update - 2026-05-05
+
+This note is the canonical broad research surface for the policy-search branch
+`research/all-scenario-policy-strategy`. It supersedes treating the problem as "try another
+planner" and frames the work as an evidence-gated search for the smallest policy stack that can
+solve every benchmark-eligible scenario.
+
+Current repository evidence changes the target:
+
+- "All scenarios" means the full `configs/scenarios/classic_interactions_francis2023.yaml` matrix
+  with the fixed eval seed set from `configs/benchmarks/seed_sets_v1.yaml`, unless a narrower
+  policy-search stage is named.
+- The best tracked local candidate is `scenario_adaptive_hybrid_orca_v1`, which reached `131/141`
+  successes on the full matrix at horizon `500`, with `0.0213` collision rate and `0.4113`
+  near-miss rate. See
+  `docs/context/policy_search/reports/2026-05-02_scenario_adaptive_hybrid_orca_v1_full_matrix.md`.
+- Five remaining raw failures have strong impossible/invalid evidence in
+  `docs/context/policy_search/validation/2026-05-01_policy_search_wrapup.md`, but they are not a
+  paper-facing exclusion until represented through `scenario_cert.v1` or an explicit benchmark
+  issue.
+- Six remaining failures are still policy work: `classic_merging_low` seeds `111` and `113`,
+  `classic_merging_medium` seeds `111`, `112`, and `113`, plus `francis2023_leave_group` seed
+  `113` before the ORCA scenario override. The current `scenario_adaptive_hybrid_orca_v1` full
+  matrix resolves the leave-group case, leaving classic merging as the dominant implementation
+  target.
+- PPO remains useful as a proposal source or long-horizon reference, but current evidence does not
+  support "train broader PPO" as the next best lever. The issue-856 broad-training control
+  underperformed the eval-aligned leader on the camera-ready matrix; see
+  `docs/context/issue_856_ppo_all_scenarios_full_budget.md`.
+
+The near-term research conclusion is:
+
+```text
+Certify or explicitly exclude impossible cases.
+Then implement a corridor-safe recovery layer for classic merging.
+Then keep ORCA as a narrow scenario override for Francis leave-group.
+Only after that, add learned risk/value/proposal models as components.
+```
+
+## Hugging Face Paper Search Snapshot - 2026-05-05
+
+The 2026-05-05 Hugging Face paper search supports a broad but staged approach. These papers are
+evidence anchors for approach classes, not implementation claims for this repository.
+
+| Approach family | Paper anchors | Repo implication |
+| --- | --- | --- |
+| Graph/attention crowd RL | [HEIGHT](https://hf.co/papers/2411.12150), [Social NCE](https://hf.co/papers/2012.11717), [DRL-VO](https://hf.co/papers/2301.06512), [Proximity-Aware Tasks](https://hf.co/papers/2212.00767) | Valuable for medium-term learned policies, but current in-repo `crowdnav_height`/legacy wrappers remain experimental and adapter-sensitive. Do not make this the first near-term fix. |
+| Socially compliant learned control | [SACSoN](https://hf.co/papers/2306.01874), [Safe Multi-Agent Navigation](https://hf.co/papers/2502.17813) | Aligns with counterfactual/social-cost training and goal-conditioned safe RL. Use as a learned scorer or shielded-policy direction after the classical failure modes are isolated. |
+| Predictive planning and MPC | [A Game-Theoretic Framework for Joint Forecasting and Planning](https://hf.co/papers/2308.06137), [SCOPE](https://hf.co/papers/2407.00144), [SAP-CoPE](https://hf.co/papers/2504.05727) | Supports prediction-aware local rollout scoring. The repo already has `prediction_planner` and `predictive_mppi`; the missing near-term piece is a hard-safe static-corridor recovery for classic merging. |
+| Safety filters and shields | [Control Barrier Functions](https://hf.co/papers/1903.11199), [Online CBFs](https://hf.co/papers/2303.04313), [ConBaT](https://hf.co/papers/2303.04212), [SafeDiffuser](https://hf.co/papers/2306.00148), [Compositional Shielding](https://hf.co/papers/2410.10460) | Strong support for layered safety: proposals can be learned or sampled, but static/dynamic collision guards must remain hard constraints with diagnostics. |
+| Imitation and offline RL | [A Workflow for Offline Model-Free Robotic RL](https://hf.co/papers/2109.10813), [SEABO](https://hf.co/papers/2402.03807), [Offline Goal-Conditioned RL with Recovery Policy](https://hf.co/papers/2403.01734), [Skill-based Safe RL with Risk Planning](https://hf.co/papers/2505.01619) | Best used to distill oracle rollouts for known hard cases. The repo already has expert-trajectory and pretraining entrypoints, so the next useful data product is an oracle/recovery dataset for classic merging. |
+| Diffusion/generative trajectory policies | [Diffusion Policy](https://hf.co/papers/2303.04137), [NavDP](https://hf.co/papers/2505.08712), [Navigation World Models](https://hf.co/papers/2412.03572), [Diffusion Predictive Control with Constraints](https://hf.co/papers/2412.09342) | Promising post-paper family for multi-modal local trajectory proposals. It is currently too much integration burden for the immediate all-scenario gap. |
+| Curriculum and scenario generation | [Automatic Curriculum Learning Survey](https://hf.co/papers/2003.04664), [ALP-GMM teacher algorithms](https://hf.co/papers/1910.07224), [CLUTR](https://hf.co/papers/2210.10243) | Supports failure-driven training/evaluation loops. Pair with `scenario_cert.v1`, adversarial scenario work, and the existing policy-search funnel. |
+| VLM/social scene understanding | [SocialNav-SUB](https://hf.co/papers/2509.08757), [OLiVia-Nav](https://hf.co/papers/2409.13675) | Useful for long-term semantic/social reasoning, but not a near-term control solution for the current geometric and dynamic benchmark failures. |
+
+## Autoresearch Contract For The Next Implementation Pass
+
+Goal: improve from the current `scenario_adaptive_hybrid_orca_v1` full-matrix result toward
+solving all benchmark-eligible scenarios without increasing collision rate.
+
+Baseline:
+
+```text
+candidate: scenario_adaptive_hybrid_orca_v1
+matrix: configs/scenarios/classic_interactions_francis2023.yaml
+stage: full_matrix
+horizon: 500
+episodes: 141
+success: 0.9291
+collision: 0.0213
+near_miss: 0.4113
+failures: 3 static_collision, 6 timeout_low_progress, 1 near_miss_intrusive
+```
+
+Primary metric:
+
+```text
+maximize full-matrix success count
+subject to collision_rate <= 0.0213
+and no new scenario-family regression without an explicit tradeoff note
+```
+
+Stop condition for a near-term branch:
+
+```text
+raw success >= 136/141 if the five impossible/invalid cases remain uncertified
+or 100% success on the scenario_cert.v1 eligible subset once exclusions are formalized
+```
+
+Local iteration command:
+
+```bash
+LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py \
+  --candidate <candidate> \
+  --stage nominal_sanity \
+  --output-dir output/ai/autoresearch/all_scenario_policy/<candidate>_nominal
+```
+
+Escalation command after nominal/stress evidence:
+
+```bash
+LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py \
+  --candidate <candidate> \
+  --stage full_matrix \
+  --horizon 500 \
+  --workers 2 \
+  --output-dir output/ai/autoresearch/all_scenario_policy/<candidate>_full_h500
+```
+
+The policy-search runbook normally treats `full_matrix` as SLURM/handoff work. Run it locally only
+when the user explicitly accepts the runtime, or when the current machine is idle and the local
+machine context permits it. Worktree-local `output/` artifacts remain disposable evidence, not
+durable dependencies.
+
+Candidate order for the next pass:
+
+1. Formalize the five likely impossible/invalid cases through `scenario_cert.v1` or a benchmark
+   issue before claiming "all eligible scenarios."
+2. Implement `scenario_adaptive_hybrid_orca_v2` with the existing ORCA leave-group override and a
+   new hard-safe static-corridor recovery mechanism targeted at classic merging.
+3. Add an oracle-rollout data collection path for the classic merging failures if the handcrafted
+   recovery layer stalls.
+4. Train a learned risk/value scorer for candidate ranking, not a direct action policy.
+5. Revisit shielded PPO or diffusion/transformer trajectory proposals only after the model-based
+   stack exposes a stable safety/evaluation interface.
+
 ## Executive Summary
 
 The best local navigation policies will probably not come from “one better planner.” They will come from a **policy generation system** that searches across several planner paradigms, combines them, and evaluates them under scenario-stratified evidence.

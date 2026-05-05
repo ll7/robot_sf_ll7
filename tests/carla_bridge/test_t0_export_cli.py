@@ -266,6 +266,17 @@ def test_catalog_carla_schemas_main_prints_catalog(capsys) -> None:
     assert json.loads(capsys.readouterr().out) == list_carla_bridge_schema_catalog()
 
 
+def test_catalog_carla_schemas_main_prints_schema(capsys) -> None:
+    """Schema catalog CLI should expose the catalog JSON Schema contract."""
+    from robot_sf_carla_bridge import load_schema_catalog_schema
+    from robot_sf_carla_bridge.cli import catalog_carla_schemas_main
+
+    exit_code = catalog_carla_schemas_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_schema_catalog_schema()
+
+
 def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -> None:
     """CARLA availability CLI should expose deterministic machine-readable status."""
     import importlib.util

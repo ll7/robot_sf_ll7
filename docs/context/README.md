@@ -271,6 +271,9 @@ why a change was made rather than a full issue execution transcript.
   exposes the CARLA bridge schema catalog through `robot-sf-catalog-carla-schemas`.
 - [Issue #998 CARLA Bridge Schema Catalog Schema](issue_998_carla_schema_catalog_schema.md)
   adds a packaged JSON Schema for `carla-bridge-schema-catalog.v1` metadata.
+- [Issue #1000 CARLA Bridge Schema Catalog Schema CLI](issue_1000_carla_schema_catalog_schema_cli.md)
+  exposes the CARLA bridge schema catalog JSON Schema through
+  `robot-sf-catalog-carla-schemas --schema`.
 
 ## DreamerV3 Notes
 

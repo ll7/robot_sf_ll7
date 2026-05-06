@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from scripts.validation.run_policy_search_candidate import (
+    _baseline_deltas,
     _deep_merge,
     _effective_candidate_config_for_scenario,
     _effective_candidate_runtime_for_scenario,
     _format_optional_float,
+    _format_signed_optional_float,
     _load_stage_scenarios,
     _prepare_scenarios_for_inline_run,
     decide_stage_status,
@@ -226,3 +229,32 @@ def test_format_optional_float_keeps_present_values() -> None:
     assert _format_optional_float(None) == "n/a"
     assert _format_optional_float("bad") == "n/a"
     assert _format_optional_float(1.23456) == "1.2346"
+
+
+def test_baseline_deltas_do_not_mix_near_miss_counts_with_rates(tmp_path: Path) -> None:
+    """Count-style baseline near-miss metrics must not be subtracted from rate summaries."""
+    baselines = tmp_path / "baselines.yaml"
+    baselines.write_text(
+        yaml.safe_dump(
+            {
+                "baselines": {
+                    "orca": {
+                        "success_rate": 0.2,
+                        "collision_rate": 0.1,
+                        "near_misses_mean": 4.3,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    deltas = _baseline_deltas(
+        {"success_rate": 0.3, "collision_rate": 0.05, "near_miss_rate": 0.4},
+        baselines,
+    )
+
+    assert deltas["orca"]["success_rate"] == pytest.approx(0.1)
+    assert deltas["orca"]["collision_rate"] == pytest.approx(-0.05)
+    assert "near_miss_rate" not in deltas["orca"]
+    assert _format_signed_optional_float(deltas["orca"].get("near_miss_rate")) == "n/a"

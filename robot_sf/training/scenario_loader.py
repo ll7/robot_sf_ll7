@@ -1502,6 +1502,27 @@ def _resolve_role_overrides(
     return role, role_target_id, role_offset
 
 
+def _resolve_metadata_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Resolve additive per-pedestrian metadata from a scenario override.
+
+    Returns:
+        dict[str, Any]: Existing metadata merged with override metadata when present.
+    """
+    if "metadata" not in entry:
+        return dict(ped.metadata)
+    raw_metadata = entry.get("metadata")
+    if raw_metadata is None:
+        return {}
+    if not isinstance(raw_metadata, Mapping):
+        raise ValueError(f"single_pedestrians '{ped.id}' metadata must be a mapping")
+    metadata = dict(ped.metadata)
+    metadata.update(dict(raw_metadata))
+    return metadata
+
+
 def _apply_single_pedestrian_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
@@ -1523,6 +1544,7 @@ def _apply_single_pedestrian_override(
     start_delay_s = _resolve_start_delay_override(ped, entry)
     note = _resolve_note_override(ped, entry)
     role, role_target_id, role_offset = _resolve_role_overrides(ped, entry)
+    metadata = _resolve_metadata_override(ped, entry)
 
     return SinglePedestrianDefinition(
         id=ped.id,
@@ -1536,6 +1558,7 @@ def _apply_single_pedestrian_override(
         role=role,
         role_target_id=role_target_id,
         role_offset=role_offset,
+        metadata=metadata,
     )
 
 

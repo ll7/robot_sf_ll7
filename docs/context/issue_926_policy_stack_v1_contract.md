@@ -9,6 +9,11 @@ new planner family is runnable or benchmark-ready.
 This note is a design and scope boundary only. It does not add a planner entrypoint, benchmark row,
 training run, or runtime behavior.
 
+Runtime update: issue #1004 adds the first narrow `policy_stack_v1` entry point and records its
+validation in
+[Issue #1004 Policy Stack V1 Runtime](issue_1004_policy_stack_v1_runtime.md). This note remains the
+contract and claim boundary for later #871 children.
+
 ## V1 Boundary
 
 `policy_stack_v1` should start as a non-learning portfolio over existing in-repo proposal

@@ -269,6 +269,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="policy_stack_v1",
+        tier="experimental",
+        aliases=("policy_stack_v1",),
+        note="Minimal non-learning portfolio over goal and risk_dwa proposal sources.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="hybrid_orca_sampler",
         tier="experimental",
         aliases=("hybrid_orca_sampler",),

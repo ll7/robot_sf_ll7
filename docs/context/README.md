@@ -86,6 +86,19 @@ knowledge, not every transient iteration detail.
 * [docs/context/issue_796_agent_knowledge_capture_policy.md](issue_796_agent_knowledge_capture_policy.md)
 * [docs/context/issue_805_teb_corridor_commitment_iteration.md](issue_805_teb_corridor_commitment_iteration.md)
 
+## Evidence Bundles
+
+* [Evidence Bundles](evidence/README.md) documents the narrow policy for promoting small generated
+  artifacts out of `output/` into git. Current bundles include the
+  [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md) and the
+  [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
+
+## Benchmark Run Notes
+
+* [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
+  records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
+  `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.
+
 ## Feature Extractor Notes
 
 * [Issue #193 Feature Extractor Evaluation](./issue_193_feature_extractor_evaluation.md)
@@ -107,6 +120,9 @@ knowledge, not every transient iteration detail.
 
 ## Performance Notes
 
+* [Issue #1001 Architecture Seam Audit](./issue_1001_architecture_seam_audit.md)
+  records benchmark/planner/training hotspot ownership boundaries, the top three refactor
+  candidates, and the first no-behavior-change map-runner command-contract extraction.
 * [Issue #1002 Complexity and Test Runtime Baseline](./issue_1002_complexity_runtime_baseline.md)
   adds a lightweight `scripts/dev/complexity_runtime_baseline.py` command and records the first
   2026-05-05 refactor-prioritization snapshot.
@@ -145,10 +161,37 @@ knowledge, not every transient iteration detail.
   unjustified.
 * [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 * [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
-* [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local evaluation funnel, and SLURM handoff notes for the current non-training policy-search workstream.
+* [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local
+  evaluation funnel, SLURM handoff notes, and the current
+  [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training
+  policy-search workstream.
 * [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
   defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
   claim boundary before runtime implementation under #871.
+* [Issue #1004 Policy Stack V1 Runtime](issue_1004_policy_stack_v1_runtime.md)
+  records the first runnable `policy_stack_v1` slice, its explicit proposal-status diagnostics, and
+  the map-runner smoke limitation under parent #871.
+* [Issue #871 Policy Stack Proposal Normalization](issue_871_policy_stack_proposal_normalization.md)
+  hardens `policy_stack_v1` so malformed, non-finite, or command-bounds-violating child proposals
+  are rejected before risk scoring.
+* [Issue #871 Policy Stack Topology Smoke](issue_871_policy_stack_topology_smoke.md)
+  records the `corridor_following` atomic topology smoke that proves `policy_stack_v1` can reach a
+  topology-heavy goal through the normal map-runner path with proposal diagnostics intact.
+* [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
+  records source-level hybrid-rule rejection diagnostics and two rejected classic-merging recovery
+  mechanisms; #884 remains unresolved until a route-completing corridor policy is proven.
+* [Issue #1027 Route-Corridor Attribution Diagnostics](issue_1027_route_corridor_attribution.md)
+  records additive route-corridor `last_decision()` diagnostics, five regenerated #884 traces, and
+  the geometry/dropout evidence needed before corridor-subgoal behavior work.
+* [Issue #1028 Corridor-Subgoal Recovery](issue_1028_corridor_subgoal_recovery.md)
+  records the disabled-by-default `corridor_subgoal` implementation, rejected enablement probes,
+  and final #1029 h500 validation showing no target collision regressions but no #884 recovery.
+* [Issue #1022 Route-Corridor Design Research](issue_1022_route_corridor_design_research.md)
+  records the research-first #884 follow-up: regenerated five-seed evidence, missing
+  route-corridor diagnostics, design options, and the recommended diagnostic-first split.
+  consolidates the #884 issue comments, rejected classic-merging recovery attempts, route-corridor
+  research hypothesis, diagnostic contract, proof boundary, and research-first deferral through
+  follow-up issue #1022.
 
 ## Map Coverage Notes
 
@@ -196,6 +239,13 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #944 Multi-Ped Adversarial Scenario Payload](issue_944_multi_ped_adversarial_scenario_payload.md)
   adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs, 
   stacked on the issue #936 override materializer.
+* [Issue #870 Multi-Ped Adversarial Runtime Slice](issue_870_multi_ped_adversarial_runtime.md)
+  adds a fail-closed config-to-`RobotSimulationConfig` runtime path with N>1 reset/step proof and
+  records the follow-up materialized policy-analysis smoke while keeping certification and benchmark
+  promotion out of scope.
+* [Issue #1015 Multi-Ped Adversarial Family Smoke](issue_1015_multi_ped_family_smoke.md)
+  adds group-squeeze and doorway-blocker development smoke fixtures with deterministic reset/step
+  proof and explicit non-benchmark-frozen episode metadata.
 * [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
 * [Issue #930 CARLA T0 Neutral Export Schema](issue_930_carla_t0_export_schema.md)

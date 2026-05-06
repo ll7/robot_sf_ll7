@@ -4,7 +4,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 <!-- This document should mainly serve as a navigation hub and overview for the various components and guides available within the Robot SF project. Refer to individual files for detailed information. -->
 
-**Artifact root**: All generated artifacts (JSONL, figures, videos) must live under the git-ignored `output/` directory. Legacy `results/` paths have been migrated; update commands accordingly when running examples or scripts.
+**Artifact root**: All generated artifacts (JSONL, figures, videos) must live under the git-ignored `output/` directory. Legacy `results/` paths have been migrated; update commands accordingly when running examples or scripts. Small, reviewable copies of durable evidence may be promoted into [docs/context/evidence](./context/evidence/README.md); do not mirror `output/` wholesale.
 
 ## 🚀 Social Navigation Benchmark Platform (Complete)
 
@@ -84,6 +84,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
 * **[Project Prioritization](./project_prioritization.md)** - Priority-score model, Project #5 field semantics, and the local/manual score-sync workflow
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
+* **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions

@@ -126,7 +126,7 @@ Status check on 2026-05-06 14:16 CEST:
 - Live throughput was about `179 fps`, which matches prior a30 issue-791 PPO throughput.
 - `MaxRSS` had reached about `80.8G` decimal under the `96G` allocation.
 
-### Job 12351: L40S Random-Seed Replica
+### Job 12351: Cancelled L40S Env22 Replica
 
 The same config was also submitted to `l40s` on 2026-05-06 because the a30 run was expected to take
 substantially longer than the prior l40s issue-791 leader.
@@ -185,9 +185,83 @@ total_timesteps=12000000
 requested_num_envs=22 num_envs=22 worker_mode=subproc randomize_seeds=True
 ```
 
+Outcome:
+
+- Job `12351` was intentionally cancelled after `00:12:25`.
+- Reason: replace it with a higher-throughput l40s run using 32 CPUs, 128G memory, and `num_envs: 30`.
+- `sacct` state: `CANCELLED by 1010`.
+
+### Job 12352: Active L40S Env30 Replacement
+
+Config:
+
+`configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml`
+
+This config keeps the same all-available h500 schedule, reward curriculum, large-capacity
+`grid_socnav` extractor, 12M-step budget, and randomized training seeds as job `12350`, but raises
+`num_envs` from 22 to 30 for a 32-CPU l40s allocation.
+
+Config-load proof:
+
+- `policy_id=ppo_expert_issue_1024_all_available_h500_schedule_12m_env30_l40s`
+- `total_timesteps=12000000`
+- `num_envs=30`
+- `randomize_seeds=True`
+- `scenario_count=90`
+
+Dry-run command:
+
+```sh
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml \
+  --partition l40s \
+  --qos l40s-gpu \
+  --job-name rsf-1024-h500-l40s-e30 \
+  --wandb-policy require \
+  --sbatch-arg --cpus-per-task=32 \
+  --sbatch-arg --mem=128G \
+  --dry-run \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+Submitted command:
+
+```sh
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml \
+  --partition l40s \
+  --qos l40s-gpu \
+  --job-name rsf-1024-h500-l40s-e30 \
+  --wandb-policy require \
+  --sbatch-arg --cpus-per-task=32 \
+  --sbatch-arg --mem=128G \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+Job details:
+
+- SLURM job: `12352`
+- Job name: `rsf-1024-h500-l40s-e30`
+- Partition/QOS: `l40s` / `l40s-gpu`
+- Node: `auxme-imech091`
+- Allocation: 32 CPUs, 128G memory, 1 L40S GPU
+- Time limit: `3-00:00:00`
+- SLURM log: `output/slurm/12352-issue791-reward-curriculum.out`
+- Wrapper scratch output root: `/tmp/luttkule/12352/results`
+
+Startup proof from the SLURM log confirms:
+
+```text
+randomize_seeds enabled; ignoring provided seeds for training.
+policy_id=ppo_expert_issue_1024_all_available_h500_schedule_12m_env30_l40s
+scenario_config=.../configs/scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml
+total_timesteps=12000000
+requested_num_envs=30 num_envs=30 worker_mode=subproc randomize_seeds=True
+```
+
 ## Follow-Up Boundary
 
-Wait for jobs `12350` and `12351` to finish before deciding on further retrains, evaluation
+Wait for jobs `12350` and `12352` to finish before deciding on further retrains, evaluation
 promotion, or registry updates. Treat `output/`, `/tmp/luttkule/12350/results`, and
-`/tmp/luttkule/12351/results` as worktree-local until resulting checkpoints and summaries are
+`/tmp/luttkule/12352/results` as worktree-local until resulting checkpoints and summaries are
 promoted through the repository's durable artifact path.

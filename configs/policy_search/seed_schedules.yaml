@@ -11,6 +11,9 @@ seed_schedules:
   full_matrix:
     seeds: [ 111, 112, 113 ]
     manifest: configs/benchmarks/seed_list_v1.yaml
+  leader_collision_slice_h500:
+    seeds: [ 111, 112, 113 ]
+    manifest: leader_collision_slice_h500_seeds.yaml
   robustness_extension:
     seeds: [ 114, 115 ]
     manifest: robustness_extension_seeds.yaml

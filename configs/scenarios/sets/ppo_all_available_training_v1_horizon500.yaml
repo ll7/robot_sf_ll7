@@ -1,0 +1,10 @@
+# All-available PPO training surface with a uniform long-horizon override.
+#
+# This preserves the broad issue-791 training scenario mix from
+# `ppo_all_available_training_v1.yaml` and forces every expanded scenario to
+# `max_episode_steps=500` for horizon-aligned warm-start training.
+includes:
+  - ppo_all_available_training_v1.yaml
+scenario_overrides:
+  simulation_config:
+    max_episode_steps: 500

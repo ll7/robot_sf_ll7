@@ -118,6 +118,22 @@ candidates:
       - stress_slice
       - full_matrix
 
+  scenario_adaptive_hybrid_orca_v2_collision_guard:
+    status: implemented
+    family: scenario_adaptive_classical
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    hypothesis: >
+      The h500 leader misses the strict collision gate by one controllable merging collision plus
+      two first-step dynamic-deadlock episodes that tuned ORCA does not repair. Disable the
+      static-escape/recenter extras only on `classic_merging_low`, preserving the v1 selector
+      elsewhere while reducing the controllable h500 collision slice.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - leader_collision_slice_h500
+
   hybrid_rule_v3_dynamic_relaxed:
     status: implemented
     family: hybrid_rule_based
@@ -415,6 +431,68 @@ candidates:
       - smoke
       - nominal_sanity
       - stress_slice
+
+  orca_prior_guarded_ppo_v1:
+    status: implemented
+    family: guarded_learning_policy
+    training_required: false
+    promotion_gate: tier_c
+    candidate_config_path: configs/policy_search/candidates/orca_prior_guarded_ppo_v1.yaml
+    hypothesis: >
+      A near-field ORCA prior can act as a residual correction on the existing PPO action,
+      preserving learned goal-seeking behavior while biasing crowded encounters toward the
+      repository's strongest reciprocal-avoidance safety baseline before the generic risk-DWA
+      fallback is needed.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  orca_prior_guarded_ppo_v2_static_global:
+    status: implemented
+    family: guarded_learning_policy
+    training_required: false
+    promotion_gate: tier_c
+    candidate_config_path: configs/policy_search/candidates/orca_prior_guarded_ppo_v2_static_global.yaml
+    hypothesis: >
+      The first ORCA-prior guarded PPO pass recovered some success but still allowed static
+      collision terminations when the PPO branch looked clear of pedestrians. Applying the ORCA
+      prior globally with stricter obstacle clearance should reduce static-risk exposure while
+      preserving enough learned PPO progress to remain competitive with ORCA.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  orca_primary_guarded_ppo_v1:
+    status: implemented
+    family: guarded_learning_policy
+    training_required: false
+    promotion_gate: tier_c
+    candidate_config_path: configs/policy_search/candidates/orca_primary_guarded_ppo_v1.yaml
+    hypothesis: >
+      If residual blending cannot remove static failures, a stricter ORCA-primary guard can keep
+      the learning stack inside the reciprocal-avoidance safety envelope while still allowing the
+      PPO and risk-DWA branches to contribute when ORCA does not provide a safe/progressive command.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  ppo_issue791_best_v1:
+    status: implemented
+    family: learned_policy_network
+    training_required: false
+    promotion_gate: tier_c
+    candidate_config_path: configs/policy_search/candidates/ppo_issue791_best_v1.yaml
+    hypothesis: >
+      The repository's current best learned checkpoint from issue 791 should be the strongest
+      feasible learning-only candidate: eval-aligned large-capacity PPO with predictive foresight,
+      reward curriculum, and fail-closed model inference, without additional action-level ORCA
+      wrapping that degraded the 2026-05-05 guarded-PPO attempts.
+    required_stages:
+      - smoke
+      - nominal_sanity
 
   scenario_adaptive_orca_v1:
     status: implemented

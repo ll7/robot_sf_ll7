@@ -25,9 +25,14 @@ eval-aligned issue-791 leader.
 - Added explicit seed-replica configs so the gated follow-up submissions stay reproducible:
   - `configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml`
   - `configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml`
+- Added the horizon-500 continuation surfaces for the best-checkpoint warm start:
+  - `configs/scenarios/sets/ppo_all_available_training_v1_horizon500.yaml`
+  - `configs/training/ppo/ablations/expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml`
 
-All three configs keep the same PPO hyperparameters, `grid_socnav` extractor, reward curriculum,
-predictive foresight settings, `num_envs: 22`, and `randomize_seeds: true`.
+The original three all-scenarios configs keep the same PPO hyperparameters, `grid_socnav`
+extractor, reward curriculum, predictive foresight settings, `num_envs: 22`, and
+`randomize_seeds: true`. The horizon-500 continuation inherits the same env22 recipe and swaps the
+scenario manifest plus resume/target-timestep settings.
 
 ## Submission Evidence
 
@@ -96,6 +101,118 @@ the wrapper's `a30` partition and were canceled before starting. Corrected l40s 
 
 Both use the l40s maximum wall time of `3-00:00:00` and write logs to
 `output/slurm/i856_allscen_10m_s{231,1337}_<jobid>.out`.
+
+## Horizon-500 Best-Checkpoint Slurm Handoff
+
+Date: 2026-05-05
+
+Goal: continue the current issue-791 best checkpoint on the broad all-available scenario surface
+with a uniform `max_episode_steps=500` horizon. This is a cluster-sized training run, not a local
+desktop run.
+
+Config:
+`configs/training/ppo/ablations/expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml`
+
+This config:
+
+- includes `configs/scenarios/sets/ppo_all_available_training_v1_horizon500.yaml`,
+- resumes from model id `ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417`,
+- starts from cached SB3 step `10272768`,
+- targets final `total_timesteps: 20275200`, so the intended continuation is about 10M additional
+  aggregate VecEnv transitions,
+- inherits `num_envs: 22`, `worker_mode: subproc`, `grid_socnav`, large capacity, reward
+  curriculum, and CUDA predictive foresight from
+  `expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml`,
+- writes W&B run name `ppo_issue791_best_ckpt_all_scenarios_horizon500_20m_env22`.
+
+Local failed attempt:
+
+- W&B run: `ll7/robot_sf/1btmjxks`
+- Local log: `output/training_logs/issue791_horizon500/train_20260505T174326.log`
+- Started on local host `auxme-imech036` at 2026-05-05 17:44:59 CEST.
+- Crashed before the first scheduled evaluation/checkpoint.
+- Root cause from kernel log:
+  `Out of memory: Killed process 97076 (python3) ... anon-rss:10322924kB`.
+- The later `BrokenPipeError` traces from `ForkServerProcess-*` workers are secondary fallout from
+  the parent process being OOM-killed.
+
+Reason for Slurm rerun:
+
+The local machine has about 31 GiB RAM and the 22-env setup is too large for this
+grid-socnav + predictive-foresight recipe. At the OOM event, the parent process was around 10 GiB
+RSS and many subprocess environments were each several hundred MiB RSS, so the run exhausted host
+memory almost immediately. The maintained Auxme wrapper requests `--mem=96G`, `--cpus-per-task=24`,
+and one GPU, which is the intended resource envelope for this env22 configuration.
+
+Validation before handoff:
+
+```bash
+uv run python - <<'PY'
+from pathlib import Path
+import yaml
+
+for path in [
+    Path("configs/scenarios/sets/ppo_all_available_training_v1_horizon500.yaml"),
+    Path("configs/training/ppo/ablations/expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml"),
+]:
+    yaml.safe_load(path.read_text(encoding="utf-8"))
+    print(f"{path}: ok")
+PY
+
+tmpdir=$(mktemp -d /tmp/robot-sf-horizon500-dryrun.XXXXXX)
+ROBOT_SF_ARTIFACT_ROOT="$tmpdir" LOGURU_LEVEL=WARNING \
+  uv run python scripts/training/train_ppo.py \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml \
+  --dry-run --log-level WARNING
+```
+
+Observed on 2026-05-05: both YAML files parsed, required Slurm/helper paths existed, and the
+training dry-run exited `0`. The scenario-loader warnings about entries with both `map_id` and
+`map_file` are inherited from the included broad-training scenario set and use `map_id`.
+
+Recommended submission command:
+
+```bash
+git fetch origin
+git checkout main
+git pull --ff-only
+
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml \
+  --wandb-policy require \
+  --job-name robot-sf-791-horizon500-bestckpt \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+If the helper chooses a congested partition, explicitly route to an open GPU partition:
+
+```bash
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml \
+  --partition l40s --qos l40s-gpu \
+  --wandb-policy require \
+  --job-name robot-sf-791-horizon500-bestckpt \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+Expected artifacts after a Slurm job `<jobid>`:
+
+- stdout log: `output/slurm/<jobid>-issue791-reward-curriculum.out`
+- synced artifact root: `output/slurm/issue791-reward-curriculum-job-<jobid>/`
+- best-checkpoint directory:
+  `output/slurm/issue791-reward-curriculum-job-<jobid>/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22/`
+
+Early health checks after the job starts:
+
+```bash
+tail -f output/slurm/<jobid>-issue791-reward-curriculum.out
+sstat -j <jobid>.batch --format=JobID,MaxRSS,AveRSS,MaxVMSize,AveCPU
+sacct -j <jobid> --format=JobID,State,ExitCode,Elapsed,MaxRSS,ReqMem,AllocCPUS,AllocTRES%40
+```
+
+Continue only if the log reaches the first scheduled evaluation at step `10485760` and produces a
+checkpoint. If it OOMs again on `a30` or `l40s`, rerun on a larger-memory partition or make an
+explicit reduced-env follow-up config instead of silently changing this env22 evidence surface.
 
 ## Camera-ready Benchmark Result
 

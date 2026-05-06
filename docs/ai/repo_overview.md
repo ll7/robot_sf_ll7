@@ -52,6 +52,8 @@ Then branch by task type:
 - `configs/`: canonical YAML configs for training, benchmarks, scenarios, and baselines
 - `scripts/`: runnable entrypoints and validation helpers
 - `output/`: git-ignored canonical artifact root
+- `docs/context/evidence/`: small tracked evidence bundles promoted from generated outputs when
+  they support durable benchmark or context decisions
 - `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context
 - `memory/`: repo-local Markdown memory tree for stable cross-session facts and concise retrieval
 

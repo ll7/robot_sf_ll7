@@ -1,0 +1,92 @@
+{
+  "jsonl_path": "output/policy_search/scenario_adaptive_hybrid_orca_v1/full_matrix_h500/policy_search_full_matrix_h500_leaders_clean_20260505_204501/full_matrix_h500__scenario_adaptive_hybrid_orca_v1__combined.jsonl",
+  "summary": {
+    "episodes": 144,
+    "success_rate": 0.9097222222222222,
+    "collision_rate": 0.020833333333333332,
+    "near_miss_rate": 0.4236111111111111,
+    "termination_reason_counts": {
+      "success": 131,
+      "max_steps": 7,
+      "collision": 3,
+      "terminated": 3
+    },
+    "failure_mode_counts": {
+      "near_miss_intrusive": 4,
+      "static_collision": 3,
+      "timeout_low_progress": 6
+    },
+    "scenario_exclusions": {
+      "count": 0,
+      "by_status": {},
+      "by_reason": {},
+      "records": []
+    },
+    "evidence_adjusted": {
+      "episodes": 144,
+      "excluded_episodes": 0,
+      "success_rate": 0.9097222222222222,
+      "collision_rate": 0.020833333333333332,
+      "near_miss_rate": 0.4236111111111111
+    },
+    "scenario_family": {
+      "classic": {
+        "episodes": 69,
+        "success_rate": 0.8695652173913043,
+        "collision_rate": 0.028985507246376812,
+        "near_miss_rate": 0.5072463768115942
+      },
+      "francis2023": {
+        "episodes": 75,
+        "success_rate": 0.9466666666666667,
+        "collision_rate": 0.013333333333333334,
+        "near_miss_rate": 0.3466666666666667
+      }
+    },
+    "mean_min_distance": 2.8377328322158006,
+    "mean_avg_speed": 1.425597078680668
+  },
+  "scenario_failure_counts": [
+    {
+      "failure_mode": "near_miss_intrusive",
+      "scenario_id": "classic_station_platform_medium",
+      "count": 3
+    },
+    {
+      "failure_mode": "timeout_low_progress",
+      "scenario_id": "francis2023_narrow_doorway",
+      "count": 3
+    },
+    {
+      "failure_mode": "timeout_low_progress",
+      "scenario_id": "classic_merging_medium",
+      "count": 2
+    },
+    {
+      "failure_mode": "static_collision",
+      "scenario_id": "classic_cross_trap_high",
+      "count": 1
+    },
+    {
+      "failure_mode": "static_collision",
+      "scenario_id": "classic_merging_low",
+      "count": 1
+    },
+    {
+      "failure_mode": "timeout_low_progress",
+      "scenario_id": "classic_merging_low",
+      "count": 1
+    },
+    {
+      "failure_mode": "near_miss_intrusive",
+      "scenario_id": "classic_merging_medium",
+      "count": 1
+    },
+    {
+      "failure_mode": "static_collision",
+      "scenario_id": "francis2023_circular_crossing",
+      "count": 1
+    }
+  ],
+  "scenario_exclusions": []
+}

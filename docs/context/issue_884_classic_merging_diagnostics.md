@@ -165,6 +165,120 @@ plus static-clearance-buffer probe removed that collision regression on the targ
 recovered none of the h500 timeouts. The candidate remains disabled and #884 remains unresolved. See
 `docs/context/issue_1028_corridor_subgoal_recovery.md` for the #1029 validation matrix and the
 follow-up boundary.
+## Consolidated Issue Comment Contract
+
+Date: 2026-05-06
+
+Issue #884 now has enough trace history that another broad constant sweep is not acceptable. The
+issue comments and follow-up research comment establish this contract for the next implementation
+attempt:
+
+- Keep hard static-collision safety strict. Partial recovery that introduces obstacle-collision
+  regressions is not benchmark-strengthening evidence.
+- Treat the remaining failures as a route-corner/static-corridor policy problem, not as an ORCA
+  replacement task, a global hard-margin relaxation, or a higher-sampling DWA sweep.
+- Do the broader research/design pass first, then implement a narrow route-corner or corridor
+  mechanism with explicit diagnostics and acceptance criteria.
+- Do not hide #884 failures behind `policy_stack_v1` fallback, degraded, or proposal-rejection
+  success. Any portfolio use must preserve native proposal-status diagnostics.
+
+Current scope update: as of 2026-05-06, implementation is intentionally deferred out of the active
+work goal. The next #884 pass should start with research issue
+[#1022](https://github.com/ll7/robot_sf_ll7/issues/1022), then split into deeper
+design/implementation work with explicit proof requirements.
+
+The issue body still defines the closing acceptance criteria:
+
+- document the targeted hypothesis before implementation,
+- evaluate at least `classic_merging_low` seeds `111` and `113`, plus
+  `classic_merging_medium` seeds `111`, `112`, and `113`,
+- introduce no new obstacle-collision regressions on nominal/stress gates,
+- show that the mechanism improves over the current `130/141` baseline with a full matrix or a
+  justified targeted matrix.
+
+### Consolidated Failed Attempts
+
+The issue comments collectively reject these paths:
+
+| Mechanism | Outcome | Decision |
+|---|---|---|
+| Global or scenario-scoped `static_hard_safety_margin: 0.0` | Unsafe or still blocked by static clearance | Do not retry as a closing path |
+| Narrow static-recenter promotion | Converted multiple timeout seeds to obstacle collisions | Rejected |
+| `scenario_adaptive_orca_v1` | Avoided some collisions but still timed out target seeds | Not a closing mechanism |
+| Static-corridor rotate promotion | Failed target seeds and regressed medium seed `113` to collision | Rejected |
+| `linear_samples: 11`, `angular_samples: 17`, or angular-only sampling increase | Still timed out or collided | Rejected |
+| Grid-route edge projection | Preserved low seed `113` success but did not improve the five-seed metric | Rejected |
+| Route-specific slow static-corridor stall recovery | Timed out all five probes and regressed low seed `113` | Rejected |
+| Very-slow unguarded corridor transit | Preserved low seed `113` but collided on medium seeds `112` and `113` | Rejected |
+| Guard-band widening to `static_corridor_transit_initial_band: 0.15` | Preserved low seed `113` but collided on medium seeds `111/112/113` | Rejected |
+| Existing `hybrid_orca_sampler_v1` and `planner_selector_v1` probes | Collided in representative classic-merging probes | Rejected |
+
+### Research Hypothesis To Implement
+
+The remaining failures appear to come from a local-horizon/reference mismatch around the
+classic-merging route corner or corridor transition. The current hybrid-rule planner samples
+constant-velocity dynamic-window arcs, direct path-following commands, optional route-guide
+commands, stop, creep, and rotate candidates. In the failing corridor geometry, moving commands
+either enter the hard static-clearance band or do not make enough route-arc progress, so the score
+often favors stopping. The low seed `111` collision is the unsafe mirror of the same family: the
+planner can keep making progress without anticipating the corridor corner before static clearance
+collapses.
+
+The implementation should therefore reuse the existing occupancy-grid route machinery to build a
+small route-corridor subgoal/recovery primitive. It should not introduce a new global planner. The
+primitive should be guarded by trace-backed signals:
+
+- stalled or near-stalled `progress_windows["3s"]`,
+- moving `static_clearance` rejections dominating the decision,
+- source-level rejection spread across `dynamic_window`, `path_follow`, `route_guide`, or `creep`,
+- no nearby pedestrian inside the existing slow/stop distance,
+- route waypoint or route-corridor geometry available,
+- current static clearance still above occupied-cell collision.
+
+For the collision case, the mechanism may also need an anticipatory route-corner trigger so the
+planner slows or chooses a corridor-following primitive before the hard static band collapses.
+
+### Diagnostic Fields Requested Before Or With Policy Change
+
+The next trace increment should expose route-corridor geometry instead of only candidate rejection
+counts. Useful fields for `last_decision()` and step diagnostics are:
+
+- `route_waypoint_world`,
+- `route_corner_distance`,
+- `route_tangent_heading`,
+- `route_heading_error`,
+- `corridor_width_estimate`,
+- `corridor_center_clearance`,
+- `robot_lateral_offset_to_corridor`,
+- `route_arc_progress_1s`,
+- `route_arc_progress_3s`,
+- `best_corridor_primitive`,
+- `corridor_primitive_count`,
+- `corridor_primitive_rejection_counts`,
+- `corridor_primitive_min_static_clearance`,
+- `corridor_primitive_min_dynamic_clearance`,
+- `corridor_trigger_reason`.
+
+The first implementation may keep the diagnostic names narrower if the underlying route-corridor
+primitive is smaller, but it should report enough geometry and rejection state to prove whether the
+route-corridor hypothesis is actually active on the five target seeds.
+
+### Implementation Boundary For The Next Pass
+
+The preferred mechanism is a `corridor_subgoal` candidate source in
+`HybridRuleLocalPlannerAdapter`, generated from the existing `GridRoutePlannerAdapter` route
+waypoint/path machinery. It should:
+
+- choose a center-biased local subgoal along the routed corridor rather than the raw SVG waypoint,
+- generate a small number of slow, bounded corridor-following commands or primitives,
+- fail closed if any rollout pose enters an occupied cell or violates the hard static/dynamic
+  safety checks,
+- score route-arc progress and corridor alignment separately from Euclidean goal progress,
+- expose source-level rejection diagnostics for accepted and rejected corridor candidates.
+
+This scope is intentionally smaller than a full trajectory optimizer, state lattice planner, or
+control-barrier-corridor implementation. Those remain research references and possible follow-up
+directions if the narrow route-corridor primitive cannot satisfy the five-seed proof.
 
 Update 2026-05-06 (#1034): the follow-up continuous-collision-checked maneuver recovered
 `classic_merging_low` seed `111` and `classic_merging_medium` seeds `111/112`, preserved

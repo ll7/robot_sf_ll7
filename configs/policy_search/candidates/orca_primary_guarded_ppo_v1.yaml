@@ -1,0 +1,42 @@
+name: orca_primary_guarded_ppo_v1
+algo: guarded_ppo
+base_config_path: configs/algos/guarded_ppo_relaxed_v2.yaml
+params:
+  guard_hard_ped_clearance: 0.48
+  guard_first_step_ped_clearance: 0.60
+  guard_hard_obstacle_clearance: 0.34
+  guard_obstacle_search_cells: 16
+  prior_policy: orca
+  prior_blend_weight: 1.0
+  prior_near_field_only: false
+  prior_progress_margin: 10.0
+  prior_allow_orca_fallback: false
+  prior_orca:
+    max_linear_speed: 1.35
+    max_angular_speed: 1.0
+    orca_neighbor_dist: 10.0
+    orca_max_neighbors: 8
+    orca_time_horizon: 6.0
+    orca_time_horizon_obst: 3.5
+    orca_obstacle_range: 7.0
+    orca_obstacle_margin: 0.18
+    orca_heading_slowdown: 0.45
+    orca_symmetry_bias: 0.22
+    orca_head_on_bias: 0.35
+    orca_stall_speed_threshold: 0.1
+    orca_commit_distance: 1.8
+    orca_commit_lateral_gain: 0.55
+  fallback_risk_dwa:
+    max_linear_speed: 0.85
+    max_angular_speed: 1.2
+    rollout_dt: 0.2
+    rollout_steps: 8
+    near_field_distance: 2.3
+    near_field_speed_cap: 0.55
+    goal_progress_weight: 4.8
+    heading_weight: 0.8
+    ped_clearance_weight: 2.0
+    obstacle_clearance_weight: 1.3
+    smoothness_weight: 0.12
+    ttc_weight: 0.32
+    progress_escape_enabled: true

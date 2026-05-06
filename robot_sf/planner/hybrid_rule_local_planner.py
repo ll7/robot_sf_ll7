@@ -155,6 +155,11 @@ class HybridRuleLocalPlannerConfig:
     control_effort_weight: float = 0.2
     deadlock_escape_weight: float = 0.0
     route_guide_commitment_weight: float = 0.0
+    corridor_subgoal_route_progress_weight: float = 0.0
+    corridor_subgoal_centering_weight: float = 0.0
+    corridor_subgoal_tangent_alignment_weight: float = 0.0
+    corridor_subgoal_clearance_weight: float = 0.0
+    corridor_subgoal_continuity_weight: float = 0.0
     freezing_weight: float = 0.8
     oscillation_weight: float = 0.5
 
@@ -168,6 +173,17 @@ class HybridRuleLocalPlannerConfig:
     route_guide_obstacle_inflation_cells: int = 3
     route_guide_waypoint_lookahead_cells: int = 5
     route_guide_clearance_penalty_weight: float = 0.5
+    corridor_subgoal_enabled: bool = False
+    corridor_subgoal_speed: float = 0.25
+    corridor_subgoal_turn_in_place_error: float = 0.25
+    corridor_subgoal_heading_gain: float = 1.0
+    corridor_subgoal_min_nearest_ped_distance: float = 1.0
+    corridor_subgoal_static_clearance_buffer: float = 0.2
+    corridor_subgoal_goal_stall_progress_3s: float = 0.05
+    corridor_subgoal_route_stall_progress_3s: float = 0.05
+    corridor_subgoal_route_regression_1s: float = -0.05
+    corridor_subgoal_min_route_remaining_distance: float = 0.5
+    corridor_subgoal_max_lateral_offset: float = 0.5
     recovery_enabled: bool = False
     recovery_reorient_angular_speed: float = 0.6
 
@@ -369,8 +385,253 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         return round(float(candidate.linear), 4), round(float(candidate.angular), 4)
 
+    def _candidate_source_priority(self, source: str) -> int:
+        """Return a source priority for preserving specialized duplicate commands."""
+        return {
+            "corridor_subgoal": 30,
+            "route_guide": 20,
+        }.get(source, 10)
+
+    def _route_point(self, route_corridor: dict[str, Any] | None, key: str) -> np.ndarray | None:
+        """Read one finite ``(x, y)`` point from route-corridor diagnostics.
+
+        Returns:
+            np.ndarray | None: Point array, or ``None`` when unavailable.
+        """
+        if not isinstance(route_corridor, dict):
+            return None
+        raw = route_corridor.get(key)
+        try:
+            point = np.asarray(raw, dtype=float).reshape(-1)[:2]
+        except (TypeError, ValueError):
+            return None
+        if point.shape[0] != 2 or not np.all(np.isfinite(point)):
+            return None
+        return point
+
+    def _route_float(self, route_corridor: dict[str, Any] | None, key: str) -> float | None:
+        """Read one finite scalar from route-corridor diagnostics.
+
+        Returns:
+            float | None: Finite scalar, or ``None`` when unavailable.
+        """
+        if not isinstance(route_corridor, dict):
+            return None
+        value = route_corridor.get(key)
+        if isinstance(value, int | float | np.integer | np.floating) and np.isfinite(value):
+            return float(value)
+        return None
+
+    def _route_progress_pair(
+        self, route_corridor: dict[str, Any] | None
+    ) -> tuple[float, float] | None:
+        """Read finite 1s and 3s route-arc progress diagnostics.
+
+        Returns:
+            tuple[float, float] | None: Progress over 1s and 3s, or ``None`` when unavailable.
+        """
+        if not isinstance(route_corridor, dict):
+            return None
+        route_progress = route_corridor.get("route_arc_progress_windows")
+        if not isinstance(route_progress, dict):
+            return None
+        try:
+            route_progress_1s = float(route_progress["1s"])
+            route_progress_3s = float(route_progress["3s"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not np.isfinite(route_progress_1s) or not np.isfinite(route_progress_3s):
+            return None
+        return route_progress_1s, route_progress_3s
+
+    def _route_tangent_heading(self, route_corridor: dict[str, Any] | None) -> float | None:
+        """Return a finite route tangent heading, deriving it from route points if needed."""
+        heading = self._route_float(route_corridor, "route_tangent_heading")
+        if heading is not None:
+            return heading
+        start = self._route_point(route_corridor, "route_start_world")
+        stop = self._route_point(route_corridor, "route_next_world")
+        if stop is None:
+            stop = self._route_point(route_corridor, "route_waypoint_world")
+        if start is None or stop is None:
+            return None
+        delta = stop - start
+        if float(np.linalg.norm(delta)) <= _EPS:
+            return None
+        return float(np.arctan2(delta[1], delta[0]))
+
+    @staticmethod
+    def _lateral_offset_to_segment(
+        point: np.ndarray,
+        segment_start: np.ndarray,
+        segment_stop: np.ndarray,
+    ) -> float | None:
+        """Return lateral distance from ``point`` to a world-space segment."""
+        segment = segment_stop - segment_start
+        length = float(np.linalg.norm(segment))
+        if length <= _EPS:
+            return None
+        relative = point - segment_start
+        return float(abs(segment[0] * relative[1] - segment[1] * relative[0]) / length)
+
+    def _corridor_subgoal_activation(
+        self,
+        *,
+        route_corridor: dict[str, Any] | None,
+        progress_windows: dict[str, float],
+        nearest_ped: float,
+    ) -> dict[str, Any]:
+        """Return fail-closed activation diagnostics for route-corridor subgoals."""
+        diagnostics: dict[str, Any] = {
+            "enabled": bool(self.config.corridor_subgoal_enabled),
+            "active": False,
+            "reason": "disabled",
+            "candidate_count": 0,
+            "nearest_pedestrian_distance": _finite_or_none(nearest_ped),
+            "min_nearest_pedestrian_distance": float(
+                self.config.corridor_subgoal_min_nearest_ped_distance
+            ),
+        }
+        if not bool(self.config.corridor_subgoal_enabled):
+            return diagnostics
+        if self._route_guide is None:
+            diagnostics["reason"] = "route_guide_disabled"
+            return diagnostics
+        if not isinstance(route_corridor, dict):
+            diagnostics["reason"] = "missing_route_geometry"
+            return diagnostics
+        if nearest_ped < float(self.config.corridor_subgoal_min_nearest_ped_distance):
+            diagnostics["reason"] = "near_pedestrian"
+            return diagnostics
+        route_remaining = self._route_float(route_corridor, "route_remaining_distance")
+        diagnostics["route_remaining_distance"] = _finite_or_none(route_remaining)
+        if route_remaining is None or route_remaining < float(
+            self.config.corridor_subgoal_min_route_remaining_distance
+        ):
+            diagnostics["reason"] = "route_too_short"
+            return diagnostics
+        waypoint = self._route_point(route_corridor, "route_waypoint_world")
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        if waypoint is None or tangent_heading is None:
+            diagnostics["reason"] = "incomplete_route_geometry"
+            return diagnostics
+        lateral_offset = self._route_float(route_corridor, "robot_lateral_offset_to_corridor")
+        diagnostics["robot_lateral_offset_to_corridor"] = _finite_or_none(lateral_offset)
+        if lateral_offset is not None and lateral_offset > float(
+            self.config.corridor_subgoal_max_lateral_offset
+        ):
+            diagnostics["reason"] = "outside_corridor_band"
+            return diagnostics
+
+        goal_progress_1s = float(progress_windows.get("1s", 0.0))
+        goal_progress_3s = float(progress_windows.get("3s", 0.0))
+        route_progress_pair = self._route_progress_pair(route_corridor)
+        if route_progress_pair is None:
+            diagnostics["reason"] = "missing_route_progress"
+            return diagnostics
+        route_progress_1s, route_progress_3s = route_progress_pair
+        diagnostics.update(
+            {
+                "goal_progress_1s": goal_progress_1s,
+                "goal_progress_3s": goal_progress_3s,
+                "route_arc_progress_1s": route_progress_1s,
+                "route_arc_progress_3s": route_progress_3s,
+            }
+        )
+        goal_progress_3s_threshold = float(self.config.corridor_subgoal_goal_stall_progress_3s)
+        goal_progress_1s_threshold = goal_progress_3s_threshold / 3.0
+        goal_stalled = (
+            0.0 <= goal_progress_1s <= goal_progress_1s_threshold
+            and 0.0 <= goal_progress_3s <= goal_progress_3s_threshold
+        )
+        route_stalled = route_progress_3s <= float(
+            self.config.corridor_subgoal_route_stall_progress_3s
+        )
+        route_regressing = route_progress_1s <= float(
+            self.config.corridor_subgoal_route_regression_1s
+        )
+        diagnostics.update(
+            {
+                "goal_stalled": bool(goal_stalled),
+                "route_stalled": bool(route_stalled),
+                "route_regressing": bool(route_regressing),
+            }
+        )
+        if not (goal_stalled and (route_stalled or route_regressing)):
+            diagnostics["reason"] = "progress_not_stalled"
+            return diagnostics
+        diagnostics["active"] = True
+        diagnostics["reason"] = "active"
+        return diagnostics
+
+    def _corridor_subgoal_candidates(
+        self,
+        *,
+        state: dict[str, Any],
+        speed_cap: float,
+        route_corridor: dict[str, Any] | None,
+        activation: dict[str, Any] | None,
+        bounds: tuple[float, float, float, float],
+    ) -> list[HybridRuleCandidate]:
+        """Generate route-corridor recovery candidates when activation is satisfied.
+
+        Returns:
+            list[HybridRuleCandidate]: Candidate commands from the subgoal primitive.
+        """
+        if not activation or not bool(activation.get("active")):
+            return []
+        v_min, v_max, w_min, w_max = bounds
+        robot_pos = state["robot_pos"]
+        heading = float(state["heading"])
+        waypoint = self._route_point(route_corridor, "route_waypoint_world")
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        if waypoint is None or tangent_heading is None:
+            return []
+
+        waypoint_vec = waypoint - robot_pos
+        waypoint_heading = (
+            tangent_heading
+            if float(np.linalg.norm(waypoint_vec)) <= _EPS
+            else float(np.arctan2(waypoint_vec[1], waypoint_vec[0]))
+        )
+        tangent_error = _wrap_angle(tangent_heading - heading)
+        waypoint_error = _wrap_angle(waypoint_heading - heading)
+        if abs(tangent_error) >= float(self.config.corridor_subgoal_turn_in_place_error):
+            desired_heading_error = tangent_error
+        else:
+            desired_heading_error = 0.5 * tangent_error + 0.5 * waypoint_error
+        desired_angular = float(
+            np.clip(
+                float(self.config.corridor_subgoal_heading_gain)
+                * desired_heading_error
+                / max(float(self.config.rollout_horizon), _EPS),
+                w_min,
+                w_max,
+            )
+        )
+        desired_speed = min(
+            float(speed_cap),
+            float(self.config.corridor_subgoal_speed),
+            float(self.config.max_linear_speed),
+        )
+        candidates: list[HybridRuleCandidate] = []
+        if abs(desired_heading_error) >= float(self.config.corridor_subgoal_turn_in_place_error):
+            candidates.append(HybridRuleCandidate(0.0, desired_angular, "corridor_subgoal"))
+            return candidates
+        if desired_speed > float(self.config.freezing_speed_threshold):
+            alignment = max(0.0, np.cos(desired_heading_error))
+            linear = float(np.clip(desired_speed * alignment, v_min, v_max))
+            if linear > float(self.config.freezing_speed_threshold):
+                candidates.append(HybridRuleCandidate(linear, desired_angular, "corridor_subgoal"))
+        return candidates
+
     def _generate_candidates(
-        self, state: dict[str, Any], speed_cap: float
+        self,
+        state: dict[str, Any],
+        speed_cap: float,
+        *,
+        route_corridor: dict[str, Any] | None = None,
+        corridor_subgoal: dict[str, Any] | None = None,
     ) -> list[HybridRuleCandidate]:
         """Generate deterministic DWA, path-following, and safety candidates.
 
@@ -427,6 +688,17 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 )
             )
 
+        subgoal_candidates = self._corridor_subgoal_candidates(
+            state=state,
+            speed_cap=speed_cap,
+            route_corridor=route_corridor,
+            activation=corridor_subgoal,
+            bounds=(v_min, v_max, w_min, w_max),
+        )
+        if corridor_subgoal is not None:
+            corridor_subgoal["candidate_count"] = len(subgoal_candidates)
+        candidates.extend(subgoal_candidates)
+
         candidates.extend(
             [
                 HybridRuleCandidate(0.0, 0.0, "stop"),
@@ -451,7 +723,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 ),
                 candidate.source,
             )
-            unique.setdefault(self._candidate_key(clipped), clipped)
+            key = self._candidate_key(clipped)
+            existing = unique.get(key)
+            if existing is None or self._candidate_source_priority(
+                clipped.source
+            ) > self._candidate_source_priority(existing.source):
+                unique[key] = clipped
         return list(unique.values())
 
     def _build_clearance_context(
@@ -714,6 +991,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             str | None: ``"escape"`` or ``"corridor_transit"`` when a guarded
             exception applies, otherwise ``None``.
         """
+        if candidate.source == "corridor_subgoal":
+            return None
         if self._static_clearance_escape_allowed(
             candidate=candidate,
             initial_clearance=initial_clearance,
@@ -822,6 +1101,92 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             return 0.0
         return 1.0
 
+    def _zero_corridor_subgoal_terms(self) -> dict[str, float]:
+        """Return neutral route-corridor score terms for non-subgoal candidates."""
+        return {
+            "corridor_subgoal_route_progress": 0.0,
+            "corridor_subgoal_centering": 0.0,
+            "corridor_subgoal_tangent_alignment": 0.0,
+            "corridor_subgoal_clearance_margin": 0.0,
+            "corridor_subgoal_continuity": 0.0,
+        }
+
+    def _corridor_subgoal_score_terms(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        route_corridor: dict[str, Any] | None,
+        state: dict[str, Any],
+        end_pos: np.ndarray,
+        end_heading: float,
+        min_static_clearance: float,
+        hard_static_clearance: float,
+    ) -> dict[str, float]:
+        """Score route-corridor progress terms for accepted subgoal candidates.
+
+        Returns:
+            dict[str, float]: Normalized score terms for the route-corridor primitive.
+        """
+        terms = self._zero_corridor_subgoal_terms()
+        if candidate.source != "corridor_subgoal" or not isinstance(route_corridor, dict):
+            return terms
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        if tangent_heading is None:
+            return terms
+        route_dir = np.array([np.cos(tangent_heading), np.sin(tangent_heading)], dtype=float)
+        displacement = end_pos - state["robot_pos"]
+        route_progress = float(np.dot(displacement, route_dir))
+        max_route_progress = max(
+            float(self.config.max_linear_speed) * float(self.config.rollout_horizon),
+            _EPS,
+        )
+        terms["corridor_subgoal_route_progress"] = float(
+            np.clip(route_progress / max_route_progress, -1.0, 1.0)
+        )
+
+        heading_error = abs(_wrap_angle(tangent_heading - end_heading))
+        terms["corridor_subgoal_tangent_alignment"] = float(0.5 + 0.5 * np.cos(heading_error))
+
+        start = self._route_point(route_corridor, "route_start_world")
+        stop = self._route_point(route_corridor, "route_next_world")
+        if stop is None:
+            stop = self._route_point(route_corridor, "route_waypoint_world")
+        if start is not None and stop is not None:
+            end_offset = self._lateral_offset_to_segment(end_pos, start, stop)
+            if end_offset is not None:
+                start_offset = self._route_float(route_corridor, "robot_lateral_offset_to_corridor")
+                corridor_width = self._route_float(route_corridor, "corridor_width_estimate")
+                half_width = max(
+                    0.5
+                    * (
+                        corridor_width
+                        if corridor_width is not None
+                        else 2.0 * float(self.config.desired_static_clearance)
+                    ),
+                    _EPS,
+                )
+                if start_offset is None:
+                    terms["corridor_subgoal_centering"] = 1.0 - _clip01(end_offset / half_width)
+                else:
+                    terms["corridor_subgoal_centering"] = _clip01(
+                        0.5 + (start_offset - end_offset) / half_width
+                    )
+
+        if np.isinf(min_static_clearance):
+            terms["corridor_subgoal_clearance_margin"] = 1.0
+        else:
+            terms["corridor_subgoal_clearance_margin"] = _clip01(
+                (float(min_static_clearance) - float(hard_static_clearance))
+                / max(float(self.config.desired_static_clearance), _EPS)
+            )
+        velocity_delta = abs(candidate.linear - float(self._last_command[0]))
+        angular_delta = abs(candidate.angular - float(self._last_command[1]))
+        terms["corridor_subgoal_continuity"] = 1.0 - 0.5 * (
+            _clip01(velocity_delta / max(float(self.config.max_linear_speed), _EPS))
+            + _clip01(angular_delta / max(float(self.config.max_angular_speed), _EPS))
+        )
+        return terms
+
     def _evaluate_candidate(
         self,
         *,
@@ -831,6 +1196,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         speed_cap: float,
         nearest_ped: float,
         progress_windows: dict[str, float] | None = None,
+        route_corridor: dict[str, Any] | None = None,
+        strict_static_clearance: bool = False,
     ) -> dict[str, Any]:
         """Filter and score one candidate command.
 
@@ -866,6 +1233,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else float(self.config.hard_safety_margin)
         )
         hard_static_clearance = float(state["robot_radius"]) + static_margin
+        corridor_clearance_buffer = (
+            max(float(self.config.corridor_subgoal_static_clearance_buffer), 0.0)
+            if candidate.source == "corridor_subgoal" or strict_static_clearance
+            else 0.0
+        )
+        required_static_clearance = hard_static_clearance + corridor_clearance_buffer
         initial_static_clearance = self._min_obstacle_clearance(robot_pos, observation)
         min_static_clearance = float("inf")
         min_dynamic_clearance = float("inf")
@@ -900,14 +1273,18 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance,
                 self._min_obstacle_clearance(robot_pos, observation),
             )
-            if min_static_clearance <= hard_static_clearance:
-                static_violation_policy = self._static_clearance_violation_policy(
-                    candidate=candidate,
-                    initial_clearance=initial_static_clearance,
-                    current_min_clearance=min_static_clearance,
-                    hard_static_clearance=hard_static_clearance,
-                    step_progress=start_dist - float(np.linalg.norm(goal - robot_pos)),
-                    progress_windows=progress_windows,
+            if min_static_clearance <= required_static_clearance:
+                static_violation_policy = (
+                    None
+                    if strict_static_clearance or corridor_clearance_buffer > 0.0
+                    else self._static_clearance_violation_policy(
+                        candidate=candidate,
+                        initial_clearance=initial_static_clearance,
+                        current_min_clearance=min_static_clearance,
+                        hard_static_clearance=hard_static_clearance,
+                        step_progress=start_dist - float(np.linalg.norm(goal - robot_pos)),
+                        progress_windows=progress_windows,
+                    )
                 )
                 if static_violation_policy is None:
                     return {
@@ -916,6 +1293,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                         "candidate": candidate,
                         "min_static_clearance": float(min_static_clearance),
                         "hard_static_clearance": float(hard_static_clearance),
+                        "required_static_clearance": float(required_static_clearance),
                         "time": float(t),
                     }
                 static_clearance_exception_terms.add(static_violation_policy)
@@ -1018,6 +1396,15 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             progress_windows=progress_windows,
             start_dist=start_dist,
         )
+        corridor_subgoal_terms = self._corridor_subgoal_score_terms(
+            candidate=candidate,
+            route_corridor=route_corridor,
+            state=state,
+            end_pos=robot_pos,
+            end_heading=heading,
+            min_static_clearance=min_static_clearance,
+            hard_static_clearance=hard_static_clearance,
+        )
         terms = {
             "goal_progress": float(np.clip(progress / max_progress, -1.0, 1.0)),
             "path_alignment": float(np.cos(heading_error)),
@@ -1049,6 +1436,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             if "corridor_transit" in static_clearance_exception_terms
             else 0.0,
             "route_guide_commitment": route_guide_commitment,
+            **corridor_subgoal_terms,
         }
         score = (
             float(self.config.goal_progress_weight) * terms["goal_progress"]
@@ -1064,6 +1452,16 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.static_recenter_weight) * terms["static_recenter"]
             + float(self.config.static_corridor_transit_weight) * terms["static_corridor_transit"]
             + float(self.config.route_guide_commitment_weight) * terms["route_guide_commitment"]
+            + float(self.config.corridor_subgoal_route_progress_weight)
+            * terms["corridor_subgoal_route_progress"]
+            + float(self.config.corridor_subgoal_centering_weight)
+            * terms["corridor_subgoal_centering"]
+            + float(self.config.corridor_subgoal_tangent_alignment_weight)
+            * terms["corridor_subgoal_tangent_alignment"]
+            + float(self.config.corridor_subgoal_clearance_weight)
+            * terms["corridor_subgoal_clearance_margin"]
+            + float(self.config.corridor_subgoal_continuity_weight)
+            * terms["corridor_subgoal_continuity"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )
@@ -1102,6 +1500,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         for key in (
             "min_static_clearance",
             "hard_static_clearance",
+            "required_static_clearance",
             "min_dynamic_clearance",
             "collision_radius",
             "obstacle_value",
@@ -1121,6 +1520,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         speed_cap: float,
         nearest_ped: float,
         progress_windows: dict[str, float],
+        route_corridor: dict[str, Any] | None = None,
+        corridor_subgoal: dict[str, Any] | None = None,
     ) -> tuple[
         list[dict[str, Any]],
         Counter[str],
@@ -1148,6 +1549,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 speed_cap=speed_cap,
                 nearest_ped=nearest_ped,
                 progress_windows=progress_windows,
+                route_corridor=route_corridor,
+                strict_static_clearance=bool(corridor_subgoal and corridor_subgoal.get("active")),
             )
             if bool(evaluation.get("accepted")):
                 accepted.append(evaluation)
@@ -1197,6 +1600,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 predicted_ttc=float("inf"),
                 progress_windows=progress_windows,
                 route_corridor=None,
+                corridor_subgoal=None,
             )
             return command
 
@@ -1207,7 +1611,17 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         nearest_ped = self._nearest_ped_distance(robot_pos, state["ped_pos"])
         speed_cap = self._human_speed_cap(nearest_ped)
         self._clearance_context = self._build_clearance_context(observation)
-        candidates = self._generate_candidates(state, speed_cap)
+        corridor_subgoal = self._corridor_subgoal_activation(
+            route_corridor=route_corridor,
+            progress_windows=progress_windows,
+            nearest_ped=nearest_ped,
+        )
+        candidates = self._generate_candidates(
+            state,
+            speed_cap,
+            route_corridor=route_corridor,
+            corridor_subgoal=corridor_subgoal,
+        )
         (
             accepted,
             rejection_counts,
@@ -1221,6 +1635,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             speed_cap=speed_cap,
             nearest_ped=nearest_ped,
             progress_windows=progress_windows,
+            route_corridor=route_corridor,
+            corridor_subgoal=corridor_subgoal,
         )
 
         self._rejection_counts.update(rejection_counts)
@@ -1280,6 +1696,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             predicted_ttc=predicted_ttc,
             progress_windows=progress_windows,
             route_corridor=route_corridor,
+            corridor_subgoal=corridor_subgoal,
             rejected_examples=rejected_examples,
             moving_rejection_counts=dict(moving_rejection_counts),
             rejection_counts_by_source=rejection_counts_by_source,
@@ -1317,6 +1734,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         predicted_ttc: float,
         progress_windows: dict[str, float],
         route_corridor: dict[str, Any] | None = None,
+        corridor_subgoal: dict[str, Any] | None = None,
         rejected_examples: list[dict[str, Any]] | None = None,
         moving_rejection_counts: dict[str, int] | None = None,
         rejection_counts_by_source: dict[str, dict[str, int]] | None = None,
@@ -1347,6 +1765,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "predicted_ttc": _finite_or_none(predicted_ttc),
             "progress_windows": {key: float(value) for key, value in progress_windows.items()},
             "route_corridor": route_corridor,
+            "corridor_subgoal": corridor_subgoal,
         }
 
     def diagnostics(self) -> dict[str, Any]:

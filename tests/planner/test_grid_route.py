@@ -195,6 +195,7 @@ def test_grid_route_geometry_exposes_corridor_diagnostics() -> None:
     assert geometry is not None
     assert geometry["route_path_cell_count"] > 1
     assert geometry["route_waypoint_index"] == 3
+    assert len(geometry["route_next_world"]) == 2
     assert len(geometry["route_waypoint_world"]) == 2
     assert geometry["route_remaining_distance"] > 0.0
     assert geometry["route_distance_to_waypoint"] > 0.0
@@ -227,6 +228,28 @@ def test_grid_route_lateral_offset_uses_immediate_segment() -> None:
 
     assert geometry["route_waypoint_index"] == 3
     assert geometry["robot_lateral_offset_to_corridor"] == 0.0
+
+
+def test_grid_route_geometry_handles_single_cell_path() -> None:
+    """Route geometry should be defensive when a path has only one cell."""
+    planner = GridRoutePlannerAdapter(GridRoutePlannerConfig())
+    meta = {
+        "origin": [0.0, 0.0],
+        "resolution": [1.0],
+        "use_ego_frame": [0.0],
+    }
+    path = [(0, 0)]
+
+    geometry = planner._route_geometry_from_path(
+        path=path,
+        clearance_map=None,
+        meta=meta,
+        robot_pos=np.asarray([0.5, 0.5], dtype=float),
+        heading=0.0,
+    )
+
+    assert geometry["route_waypoint_index"] == 0
+    assert geometry["route_next_world"] == geometry["route_start_world"]
 
 
 def test_grid_route_reuses_cached_path_for_same_observation() -> None:

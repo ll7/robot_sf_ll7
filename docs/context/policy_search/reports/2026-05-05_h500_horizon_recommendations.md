@@ -1,6 +1,6 @@
 # Policy Search Horizon Recommendations
 
-Generated from safe incumbent policy-search summaries.
+Generated from safe incumbent policy-search summaries. Scenario horizons use `ceil(p95_success_steps + 20)`, floor `80`, and cap `600`; scenarios with no safe-incumbent successes are marked `planner_blocked`.
 
 ## Selected Summaries
 
@@ -36,11 +36,11 @@ Generated from safe incumbent policy-search summaries.
 | `classic_head_on_corridor_low` | 221 | `recommended` | `medium` | 30 | 201.0 | 0/0 |
 | `classic_head_on_corridor_medium` | 232 | `recommended` | `medium` | 30 | 211.2 | 0/0 |
 | `classic_merging_low` | 376 | `recommended` | `long` | 2 | 356.0 | 26/28 |
-| `classic_merging_medium` | 500 | `planner_blocked` | `planner_blocked` | 0 | n/a | 30/30 |
+| `classic_merging_medium` | 600 | `planner_blocked` | `planner_blocked` | 0 | n/a | 30/30 |
 | `classic_overtaking_low` | 302 | `recommended` | `long` | 28 | 282.0 | 2/2 |
 | `classic_overtaking_medium` | 320 | `recommended` | `long` | 29 | 300.0 | 1/1 |
 | `classic_realworld_double_bottleneck_high` | 471 | `recommended` | `long` | 30 | 451.0 | 0/0 |
-| `classic_station_platform_medium` | 500 | `planner_blocked` | `planner_blocked` | 0 | n/a | 30/30 |
+| `classic_station_platform_medium` | 600 | `planner_blocked` | `planner_blocked` | 0 | n/a | 30/30 |
 | `classic_t_intersection_low` | 281 | `recommended` | `medium` | 30 | 261.0 | 0/0 |
 | `classic_t_intersection_medium` | 264 | `recommended` | `medium` | 30 | 244.0 | 0/0 |
 | `classic_urban_crossing_medium` | 191 | `recommended` | `medium` | 30 | 171.0 | 0/0 |
@@ -61,7 +61,7 @@ Generated from safe incumbent policy-search summaries.
 | `francis2023_join_group` | 132 | `recommended` | `short` | 24 | 112.0 | 6/6 |
 | `francis2023_leading_human` | 182 | `recommended` | `medium` | 30 | 162.0 | 0/0 |
 | `francis2023_leave_group` | 145 | `recommended` | `short` | 23 | 125.0 | 7/7 |
-| `francis2023_narrow_doorway` | 500 | `planner_blocked` | `planner_blocked` | 0 | n/a | 30/30 |
+| `francis2023_narrow_doorway` | 600 | `planner_blocked` | `planner_blocked` | 0 | n/a | 30/30 |
 | `francis2023_narrow_hallway` | 272 | `recommended` | `medium` | 26 | 252.0 | 4/4 |
 | `francis2023_parallel_traffic` | 211 | `recommended` | `medium` | 30 | 191.0 | 0/0 |
 | `francis2023_pedestrian_obstruction` | 228 | `recommended` | `medium` | 30 | 208.0 | 0/0 |

@@ -163,13 +163,13 @@ Recommended decision rule:
 1. For each scenario, collect successful completion step counts from the safe incumbent set
    (`collision <= 0.03`, success `>= 0.75`) across pinned h500 runs.
 2. Set the candidate horizon to `ceil(p95_success_steps + 20)` with a small floor for very short
-   scenes. Use the route-length/nominal-speed estimate as a sanity check when `shortest_path_len` or
-   equivalent path metrics are present.
-3. If `p95_success_steps` is near the cap or the scenario still has many h500 timeouts, run an h600
-   probe before deciding.
-4. If no safe incumbent succeeds by h500, mark the scenario as planner-blocked and keep the horizon
-   at h500 only for diagnosis. Do not keep raising the horizon and calling the resulting failure a
-   fair route-completion test.
+   scenes, capped at h600. Use the route-length/nominal-speed estimate as a sanity check when
+   `shortest_path_len` or equivalent path metrics are present.
+3. If `p95_success_steps` is near the h600 cap or the scenario still has many h500 timeouts, treat
+   the scenario as needing a separate design/probe decision rather than silently increasing the
+   benchmark budget.
+4. If no safe incumbent succeeds by h500, mark the scenario as `planner_blocked` under the h600 cap.
+   Do not keep raising the horizon and calling the resulting failure a fair route-completion test.
 
 Observed buckets from the h500 evidence:
 
@@ -177,8 +177,8 @@ Observed buckets from the h500 evidence:
 |---|---|---|
 | 90-150 steps | elevator/room entry-exit, group crossing, intersections, `francis2023_leave_group` | Short fixed budget is enough; use h150 unless route length changes. |
 | 180-280 steps | bottlenecks, corridors, T-intersections, most Francis following/traffic scenes | Use h250-h300, selected by per-scenario p95. |
-| 350-475 steps | cross-trap, overtaking, `classic_realworld_double_bottleneck_high`, some doorway seeds | Use h450-h500 and run h600 only if p95 is near 500. |
-| Planner-blocked at h500 | `classic_merging_medium`, `classic_station_platform_medium`, `francis2023_narrow_doorway` | Do not solve with horizon; require planner or scenario-contract work. |
+| 350-475 steps | cross-trap, overtaking, `classic_realworld_double_bottleneck_high`, some doorway seeds | Use h450-h500; h600 is the cap for near-cap or no-success classification. |
+| Planner-blocked at h600 | `classic_merging_medium`, `classic_station_platform_medium`, `francis2023_narrow_doorway` | Do not solve with horizon; require planner or scenario-contract work. |
 
 ## Validation
 

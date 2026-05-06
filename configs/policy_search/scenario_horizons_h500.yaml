@@ -5,7 +5,7 @@ selection:
   collision_rate_max: 0.03
   buffer_steps: 20
   floor_steps: 80
-  cap_steps: 500
+  cap_steps: 600
   near_cap_margin: 20
 selected_summaries:
 - candidate: hybrid_rule_v3_dynamic_relaxed
@@ -335,7 +335,7 @@ scenarios:
     success_steps_p95: 356.0
     success_steps_max: 356.0
   classic_merging_medium:
-    recommended_horizon_steps: 500
+    recommended_horizon_steps: 600
     status: planner_blocked
     bucket: planner_blocked
     safe_incumbent_episode_count: 30
@@ -383,7 +383,7 @@ scenarios:
     success_steps_p95: 451.0
     success_steps_max: 451.0
   classic_station_platform_medium:
-    recommended_horizon_steps: 500
+    recommended_horizon_steps: 600
     status: planner_blocked
     bucket: planner_blocked
     safe_incumbent_episode_count: 30
@@ -635,7 +635,7 @@ scenarios:
     success_steps_p95: 125.0
     success_steps_max: 125.0
   francis2023_narrow_doorway:
-    recommended_horizon_steps: 500
+    recommended_horizon_steps: 600
     status: planner_blocked
     bucket: planner_blocked
     safe_incumbent_episode_count: 30

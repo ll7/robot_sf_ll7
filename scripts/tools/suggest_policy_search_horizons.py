@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--collision-rate-max", type=float, default=0.03)
     parser.add_argument("--buffer-steps", type=int, default=20)
     parser.add_argument("--floor-steps", type=int, default=80)
-    parser.add_argument("--cap-steps", type=int, default=500)
+    parser.add_argument("--cap-steps", type=int, default=600)
     parser.add_argument("--near-cap-margin", type=int, default=20)
     parser.add_argument(
         "--output-yaml",
@@ -213,7 +213,10 @@ def main() -> int:
     lines = [
         "# Policy Search Horizon Recommendations",
         "",
-        "Generated from safe incumbent policy-search summaries.",
+        "Generated from safe incumbent policy-search summaries. Scenario horizons use "
+        f"`ceil(p95_success_steps + {int(args.buffer_steps)})`, floor "
+        f"`{int(args.floor_steps)}`, and cap `{int(args.cap_steps)}`; scenarios with no "
+        "safe-incumbent successes are marked `planner_blocked`.",
         "",
         "## Selected Summaries",
         "",

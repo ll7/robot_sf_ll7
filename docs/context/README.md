@@ -162,14 +162,17 @@ knowledge, not every transient iteration detail.
   records the `corridor_following` atomic topology smoke that proves `policy_stack_v1` can reach a
   topology-heavy goal through the normal map-runner path with proposal diagnostics intact.
 * [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
-  records source-level hybrid-rule rejection diagnostics and two rejected classic-merging recovery
-  mechanisms; #884 remains unresolved until a route-completing corridor policy is proven.
+  records source-level hybrid-rule rejection diagnostics, rejected classic-merging recovery
+  mechanisms, and the later #1034 targeted recovery result.
 * [Issue #1027 Route-Corridor Attribution Diagnostics](issue_1027_route_corridor_attribution.md)
   records additive route-corridor `last_decision()` diagnostics, five regenerated #884 traces, and
   the geometry/dropout evidence needed before corridor-subgoal behavior work.
 * [Issue #1028 Corridor-Subgoal Recovery](issue_1028_corridor_subgoal_recovery.md)
   records the disabled-by-default `corridor_subgoal` implementation, rejected enablement probes,
   and final #1029 h500 validation showing no target collision regressions but no #884 recovery.
+* [Issue #1034 Continuous Corridor Maneuver](issue_1034_continuous_corridor_maneuver.md)
+  records the environment-bound continuous static checks, rollout-sequence corridor maneuver,
+  tracked candidate config, and h500 target/nominal/stress evidence for the #884 follow-up.
 
 ## Map Coverage Notes
 

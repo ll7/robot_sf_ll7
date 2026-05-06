@@ -167,6 +167,33 @@ def test_build_policy_handles_unknown_and_placeholder() -> None:
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_hybrid_rule_attaches_env_bind_for_static_geometry() -> None:
+    """Hybrid-rule policies should bind environment geometry for continuous checks."""
+    policy, _meta = _build_policy(
+        "hybrid_rule_local_planner",
+        {"allow_testing_algorithms": True, "route_guide_enabled": True},
+        robot_kinematics="differential_drive",
+    )
+
+    class _DummySim:
+        map_def = SimpleNamespace(width=4.0, height=4.0)
+
+        def get_obstacle_lines(self):
+            return np.asarray([[0.2, -1.0, 0.2, 1.0]], dtype=float)
+
+    class _DummyEnv:
+        simulator = _DummySim()
+
+    assert hasattr(policy, "_planner_bind_env")
+    policy._planner_bind_env(_DummyEnv())
+    adapter = policy._planner_adapter
+    assert adapter._continuous_static_context is not None
+    np.testing.assert_allclose(
+        adapter._continuous_static_context.obstacle_segments,
+        np.asarray([[0.2, -1.0, 0.2, 1.0]], dtype=float),
+    )
+
+
 def test_build_policy_teb_wires_teb_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

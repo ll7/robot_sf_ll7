@@ -166,6 +166,14 @@ recovered none of the h500 timeouts. The candidate remains disabled and #884 rem
 `docs/context/issue_1028_corridor_subgoal_recovery.md` for the #1029 validation matrix and the
 follow-up boundary.
 
+Update 2026-05-06 (#1034): the follow-up continuous-collision-checked maneuver recovered
+`classic_merging_low` seed `111` and `classic_merging_medium` seeds `111/112`, preserved
+`classic_merging_low` seed `113`, and left `classic_merging_medium` seed `113` as a safe timeout.
+The retained h500 `nominal_sanity` and `stress_slice` gates stayed at zero collisions. The raw
+limitation remains that not all five target seeds are route-complete, so future broad benchmark
+claims still need a full-matrix run or an explicit targeted-boundary justification. See
+`docs/context/issue_1034_continuous_corridor_maneuver.md`.
+
 ## Validation Commands
 
 Focused code validation:

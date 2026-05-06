@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-04-30
+updated_at: 2026-05-06
 funnel_config: configs/policy_search/funnel.yaml
 promotion_gates: configs/policy_search/promotion_gates.yaml
 
@@ -78,6 +78,24 @@ candidates:
       static-escape gate, adding a scored static-recenter probe, and using a faster
       scenario-specific static-corridor creep should recover doorway, crossing, and long corridor
       stalls while preserving the hard static-collision gate.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  hybrid_rule_v3_fast_progress_static_escape_continuous:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+    hypothesis: >
+      Environment-bound continuous static checks should let the fast-progress
+      static-escape planner distinguish real obstacle contact from conservative
+      occupancy-grid clearance bands, while the corridor-subgoal sequence
+      primitive verifies turn-then-forward recovery maneuvers before selection.
+      A larger hard dynamic safety margin preserves pedestrian safety after
+      exact static clearance admits more motion through narrow route slices.
     required_stages:
       - smoke
       - nominal_sanity

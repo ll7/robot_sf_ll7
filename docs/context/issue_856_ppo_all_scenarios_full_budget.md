@@ -174,7 +174,7 @@ Recommended submission command:
 
 ```bash
 git fetch origin
-git checkout codex/best-learning-policy
+git checkout main
 git pull --ff-only
 
 scripts/dev/sbatch_auxme_issue791.sh \

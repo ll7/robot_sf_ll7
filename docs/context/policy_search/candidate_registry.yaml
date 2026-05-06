@@ -459,7 +459,6 @@ candidates:
     required_stages:
       - smoke
       - nominal_sanity
-      - paper_matrix_s3
 
   scenario_adaptive_orca_v1:
     status: implemented

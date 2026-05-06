@@ -114,7 +114,7 @@ Observed:
   ORCA: `0.2778` versus `0.2222`.
 - That gain is not promotion-quality because static collisions increase from `0.0556` to `0.1111`.
 - The ORCA-primary variant removes nominal collisions entirely, but success falls to `0.1667`,
-  below same-slice ORCA, due low-progress timeouts.
+  below same-slice ORCA, due to low-progress timeouts.
 - No learning-hybrid candidate passed the nominal gate (`success >= 0.80`, `collision <= 0.02`),
   so stress-slice or full-matrix escalation is not justified.
 - A scoped paper-matrix run was still executed to satisfy the 2026-05-05 prompt's named benchmark

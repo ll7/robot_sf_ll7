@@ -60,6 +60,40 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         self.fallback_adapter = fallback_adapter or RiskDWAPlannerAdapter()
         self.prior_adapter = prior_adapter
 
+    def _child_adapters(self) -> tuple[_CommandPlanner, ...]:
+        """Return configured child planners that may own episode-local state."""
+        if self.prior_adapter is None:
+            return (self.fallback_adapter,)
+        return (self.fallback_adapter, self.prior_adapter)
+
+    def bind_env(self, env: Any) -> None:
+        """Propagate environment binding to child planners that need map context."""
+        for adapter in self._child_adapters():
+            bind_env = getattr(adapter, "bind_env", None)
+            if callable(bind_env):
+                bind_env(env)
+
+    def reset(self, *, seed: int | None = None) -> None:
+        """Reset child planner state between benchmark episodes."""
+        for adapter in self._child_adapters():
+            reset = getattr(adapter, "reset", None)
+            if not callable(reset):
+                continue
+            if seed is None:
+                reset()
+                continue
+            try:
+                reset(seed=seed)
+            except TypeError:
+                reset()
+
+    def close(self) -> None:
+        """Close child planners that own external resources."""
+        for adapter in self._child_adapters():
+            close = getattr(adapter, "close", None)
+            if callable(close):
+                close()
+
     @staticmethod
     def _blend_commands(
         ppo_command: tuple[float, float],
@@ -284,18 +318,14 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         else:
             current_min_dist = float("inf")
 
+        prior_allowed_by_scene = not bool(
+            self.config.prior_near_field_only
+        ) or current_min_dist <= float(self.config.near_field_distance)
         ppo_eval = self._evaluate_command(observation, ppo_command)
-        prior_command = self._prior_command(observation)
+        prior_command = self._prior_command(observation) if prior_allowed_by_scene else None
         prior_eval: dict[str, float | bool] | None = None
         prior_weight = float(self.config.prior_blend_weight)
-        use_prior_in_scene = (
-            prior_command is not None
-            and prior_weight > 0.0
-            and (
-                not bool(self.config.prior_near_field_only)
-                or current_min_dist <= float(self.config.near_field_distance)
-            )
-        )
+        use_prior_in_scene = prior_command is not None and prior_weight > 0.0
         if use_prior_in_scene and prior_command is not None:
             blended_command = self._blend_commands(ppo_command, prior_command, prior_weight)
             blended_eval = self._evaluate_command(observation, blended_command)

@@ -42,14 +42,33 @@ def _obs(
 class _FallbackAdapter:
     def __init__(self, command: tuple[float, float]) -> None:
         self.command = command
+        self.plan_calls = 0
 
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:
         del observation
+        self.plan_calls += 1
         return self.command
 
 
 class _PriorAdapter(_FallbackAdapter):
     pass
+
+
+class _LifecycleAdapter(_FallbackAdapter):
+    def __init__(self, command: tuple[float, float]) -> None:
+        super().__init__(command)
+        self.bound_envs: list[object] = []
+        self.reset_seeds: list[int | None] = []
+        self.closed = False
+
+    def bind_env(self, env: object) -> None:
+        self.bound_envs.append(env)
+
+    def reset(self, *, seed: int | None = None) -> None:
+        self.reset_seeds.append(seed)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def test_guarded_ppo_keeps_safe_ppo_command() -> None:
@@ -175,6 +194,57 @@ def test_guarded_ppo_uses_safe_prior_before_fallback_when_ppo_is_unsafe() -> Non
 
     assert command == (0.1, -0.5)
     assert decision == "prior_safe"
+
+
+def test_guarded_ppo_near_field_only_prior_skips_clear_scenes() -> None:
+    """Near-field-only priors should not replace fallback behavior in clear scenes."""
+    fallback = _FallbackAdapter((0.0, 1.0))
+    prior = _PriorAdapter((0.1, -0.5))
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "guard_near_field_distance": 0.5,
+                "prior_near_field_only": True,
+            }
+        ),
+        fallback_adapter=fallback,
+        prior_adapter=prior,
+    )
+    evaluations = iter(
+        [
+            {"safe": False, "min_ped_clear": 0.2},
+            {"safe": True, "min_ped_clear": 0.9},
+        ]
+    )
+    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+
+    command, decision = guard.choose_command(
+        _obs(ped_positions=[(2.0, 2.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.6, 0.0),
+    )
+
+    assert command == (0.0, 1.0)
+    assert decision == "fallback_safe"
+    assert prior.plan_calls == 0
+
+
+def test_guarded_ppo_propagates_child_adapter_lifecycle_hooks() -> None:
+    """Guarded PPO should reset, bind, and close stateful child adapters."""
+    fallback = _LifecycleAdapter((0.0, 1.0))
+    prior = _LifecycleAdapter((0.1, -0.5))
+    guard = GuardedPPOAdapter(fallback_adapter=fallback, prior_adapter=prior)
+    env = object()
+
+    guard.bind_env(env)
+    guard.reset(seed=7)
+    guard.close()
+
+    assert fallback.bound_envs == [env]
+    assert prior.bound_envs == [env]
+    assert fallback.reset_seeds == [7]
+    assert prior.reset_seeds == [7]
+    assert fallback.closed
+    assert prior.closed
 
 
 def test_guarded_ppo_falls_back_to_stop_when_no_safe_motion_exists() -> None:

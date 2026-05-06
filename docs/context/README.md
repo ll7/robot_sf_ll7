@@ -178,6 +178,11 @@ knowledge, not every transient iteration detail.
   records the `corridor_following` atomic topology smoke that proves `policy_stack_v1` can reach a
   topology-heavy goal through the normal map-runner path with proposal diagnostics intact.
 * [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
+  records source-level hybrid-rule rejection diagnostics and two rejected classic-merging recovery
+  mechanisms; #884 remains unresolved until a route-completing corridor policy is proven.
+* [Issue #1022 Route-Corridor Design Research](issue_1022_route_corridor_design_research.md)
+  records the research-first #884 follow-up: regenerated five-seed evidence, missing
+  route-corridor diagnostics, design options, and the recommended diagnostic-first split.
   consolidates the #884 issue comments, rejected classic-merging recovery attempts, route-corridor
   research hypothesis, diagnostic contract, proof boundary, and research-first deferral through
   follow-up issue #1022.

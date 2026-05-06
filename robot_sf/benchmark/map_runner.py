@@ -72,6 +72,7 @@ from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     build_guarded_ppo_config,
     build_guarded_ppo_fallback,
+    build_guarded_ppo_prior,
 )
 from robot_sf.planner.hybrid_orca_sampler import (
     HybridORCASamplerAdapter,
@@ -1473,6 +1474,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         guard_adapter = GuardedPPOAdapter(
             config=build_guarded_ppo_config(algo_config),
             fallback_adapter=build_guarded_ppo_fallback(algo_config),
+            prior_adapter=build_guarded_ppo_prior(algo_config),
         )
         planner_cfg = getattr(ppo_planner, "config", None)
         if isinstance(planner_cfg, dict):
@@ -1496,6 +1498,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "ppo_clear": 0,
             "ppo_safe": 0,
             "fallback_safe": 0,
+            "prior_blend_safe": 0,
+            "prior_safe": 0,
             "stop_safe": 0,
             "fallback_best_effort": 0,
             "stop_best_effort": 0,
@@ -1548,7 +1552,18 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
             return linear, angular
 
-        _policy._planner_close = ppo_planner.close
+        _attach_planner_reset(_policy, guard_adapter)
+
+        def _close_guarded_ppo() -> None:
+            ppo_planner.close()
+            guard_close = getattr(guard_adapter, "close", None)
+            if callable(guard_close):
+                guard_close()
+
+        _policy._planner_close = _close_guarded_ppo
+        guard_bind_env = getattr(guard_adapter, "bind_env", None)
+        if callable(guard_bind_env):
+            _policy._planner_bind_env = guard_bind_env
         meta.setdefault("algorithm", "guarded_ppo")
         meta.setdefault("status", "ok")
         meta.setdefault("config", algo_config)

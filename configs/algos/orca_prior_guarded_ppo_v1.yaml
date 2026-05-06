@@ -1,0 +1,56 @@
+# Direct benchmark-facing config for the policy-search candidate
+# `configs/policy_search/candidates/orca_prior_guarded_ppo_v1.yaml`.
+
+model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+device: auto
+deterministic: true
+obs_mode: dict
+action_space: unicycle
+v_max: 2.0
+omega_max: 1.0
+fallback_to_goal: true
+
+guard_rollout_dt: 0.2
+guard_rollout_steps: 5
+guard_near_field_distance: 1.3
+guard_hard_ped_clearance: 0.44
+guard_first_step_ped_clearance: 0.56
+guard_hard_obstacle_clearance: 0.24
+guard_min_ttc: 0.40
+guard_obstacle_threshold: 0.5
+guard_obstacle_search_cells: 12
+
+prior_policy: orca
+prior_blend_weight: 0.35
+prior_near_field_only: true
+prior_progress_margin: 0.04
+prior_allow_orca_fallback: false
+prior_orca:
+  max_linear_speed: 1.7
+  max_angular_speed: 1.0
+  orca_neighbor_dist: 9.0
+  orca_max_neighbors: 8
+  orca_time_horizon: 5.0
+  orca_time_horizon_obst: 3.0
+  orca_obstacle_range: 6.0
+  orca_heading_slowdown: 0.35
+  orca_symmetry_bias: 0.2
+  orca_head_on_bias: 0.35
+  orca_stall_speed_threshold: 0.1
+  orca_commit_distance: 1.7
+  orca_commit_lateral_gain: 0.5
+
+fallback_risk_dwa:
+  max_linear_speed: 1.05
+  max_angular_speed: 1.2
+  rollout_dt: 0.2
+  rollout_steps: 7
+  near_field_distance: 2.2
+  near_field_speed_cap: 0.65
+  goal_progress_weight: 5.2
+  heading_weight: 0.8
+  ped_clearance_weight: 1.8
+  obstacle_clearance_weight: 1.0
+  smoothness_weight: 0.1
+  ttc_weight: 0.28
+  progress_escape_enabled: true

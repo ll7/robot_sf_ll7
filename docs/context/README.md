@@ -224,6 +224,9 @@ why a change was made rather than a full issue execution transcript.
 * [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+* [Issue #856 PPO All-Scenarios Full Budget](issue_856_ppo_all_scenarios_full_budget.md) -
+  broad-training PPO campaign record, camera-ready comparison, replica gate, and the horizon-500
+  best-checkpoint Slurm handoff after the local env22 OOM.
 * [Issue #845 Slurm Utilization Probe](issue_845_slurm_utilization_probe.md) - `sstat`/`sacct`/`seff`
   evidence collection path for diagnosing low CPU utilization without launching new jobs.
 * [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial

@@ -4,7 +4,7 @@
 
 Issue: https://github.com/ll7/robot_sf_ll7/issues/1024
 
-This note records the first bounded retrain for issue #1024: one PPO run cloned from the current
+This note records the first bounded retrains for issue #1024: PPO runs cloned from the current
 promoted issue-791 PPO leader, expanded to the broad all-available scenario surface, and aligned
 with the h500 per-scenario horizon recommendations from PR #1025.
 
@@ -19,7 +19,8 @@ with the h500 per-scenario horizon recommendations from PR #1025.
 
 The issue #1024 config keeps the leader's reward curriculum, large-capacity `grid_socnav`
 extractor, predictive-foresight env overrides, `num_envs: 22`, and `worker_mode: subproc`. It
-changes the training budget to 12M timesteps and changes the scenario surface.
+changes the training budget to 12M timesteps and changes the scenario surface. It also keeps
+`randomize_seeds: true`, so each submitted retrain uses randomized scenario-generation seeds.
 
 ## Scenario Surface
 
@@ -66,7 +67,9 @@ Config-load proof:
 Full pytest was intentionally not run on the Auxme login node; `local.machine.md` reserves heavy
 tests/training for SLURM or compute nodes.
 
-## SLURM Run
+## SLURM Runs
+
+### Job 12350: A30 First Run
 
 Partition preflight on 2026-05-06 selected `a30`:
 
@@ -115,8 +118,76 @@ total_timesteps=12000000
 requested_num_envs=22 num_envs=22 worker_mode=subproc
 ```
 
+Status check on 2026-05-06 14:16 CEST:
+
+- Job `12350` was still `RUNNING`.
+- The first scheduled evaluation at step `524288` completed.
+- Early eval metrics were `success_rate=0.457`, `collision_rate=0.529`, `snqi=-1.44`.
+- Live throughput was about `179 fps`, which matches prior a30 issue-791 PPO throughput.
+- `MaxRSS` had reached about `80.8G` decimal under the `96G` allocation.
+
+### Job 12351: L40S Random-Seed Replica
+
+The same config was also submitted to `l40s` on 2026-05-06 because the a30 run was expected to take
+substantially longer than the prior l40s issue-791 leader.
+
+Partition snapshot before submission:
+
+```text
+partition  qos        total_gpu alloc_gpu free_gpu running  pending  user_running slots_left score
+a30        a30-gpu    12        6         6        3        0        1            1          625
+l40s       l40s-gpu   8         6         2        3        0        0            2          250
+```
+
+Dry-run command:
+
+```sh
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env22.yaml \
+  --partition l40s \
+  --qos l40s-gpu \
+  --job-name rsf-1024-h500-l40s \
+  --wandb-policy require \
+  --dry-run \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+Submitted command:
+
+```sh
+scripts/dev/sbatch_auxme_issue791.sh \
+  --config configs/training/ppo/ablations/expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env22.yaml \
+  --partition l40s \
+  --qos l40s-gpu \
+  --job-name rsf-1024-h500-l40s \
+  --wandb-policy require \
+  SLURM/Auxme/issue_791_reward_curriculum.sl
+```
+
+Job details:
+
+- SLURM job: `12351`
+- Job name: `rsf-1024-h500-l40s`
+- Partition/QOS: `l40s` / `l40s-gpu`
+- Node: `auxme-imech091`
+- Allocation: 24 CPUs, 96G memory, 1 L40S GPU
+- Time limit: `3-00:00:00`
+- SLURM log: `output/slurm/12351-issue791-reward-curriculum.out`
+- Wrapper scratch output root: `/tmp/luttkule/12351/results`
+
+Startup proof from the SLURM log confirms:
+
+```text
+randomize_seeds enabled; ignoring provided seeds for training.
+policy_id=ppo_expert_issue_1024_all_available_h500_schedule_12m_env22
+scenario_config=.../configs/scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml
+total_timesteps=12000000
+requested_num_envs=22 num_envs=22 worker_mode=subproc randomize_seeds=True
+```
+
 ## Follow-Up Boundary
 
-Wait for job `12350` to finish before deciding on further retrains, evaluation promotion, or
-registry updates. Treat `output/` and `/tmp/luttkule/12350/results` as worktree-local until the
-resulting checkpoint and summaries are promoted through the repository's durable artifact path.
+Wait for jobs `12350` and `12351` to finish before deciding on further retrains, evaluation
+promotion, or registry updates. Treat `output/`, `/tmp/luttkule/12350/results`, and
+`/tmp/luttkule/12351/results` as worktree-local until resulting checkpoints and summaries are
+promoted through the repository's durable artifact path.

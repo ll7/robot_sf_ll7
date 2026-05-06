@@ -599,6 +599,49 @@ def test_multi_ped_adversarial_runtime_config_resets_and_steps() -> None:
         env.close()
 
 
+def test_multi_ped_adversarial_runtime_config_resets_and_steps_single_pedestrian() -> None:
+    """The 1-N adversarial runtime contract should include N=1 reset/step coverage."""
+    config = MultiPedAdversarialConfig(
+        family="late_stop",
+        scenario_seed=43,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="stopper",
+                start=Pose2D(1.5, 2.0),
+                goal=Pose2D(6.5, 2.0),
+                spawn_time_s=0.1,
+                speed_mps=0.8,
+                metadata={"role": "single_blocker"},
+            )
+        ],
+    )
+    robot_config = build_multi_ped_adversarial_robot_config(
+        config,
+        _runtime_base_map(),
+        map_id="late_stop_runtime",
+        sim_time_in_secs=0.5,
+    )
+    runtime_map = robot_config.map_pool.get_map("late_stop_runtime")
+    assert [ped.id for ped in runtime_map.single_pedestrians] == ["stopper"]
+    assert runtime_map.single_pedestrians[0].metadata["pedestrian_metadata"] == {
+        "role": "single_blocker"
+    }
+
+    env = make_robot_env(config=robot_config, debug=True, seed=config.scenario_seed)
+    try:
+        action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)
+        _obs, _info = env.reset(seed=config.scenario_seed)
+        first_positions = env.simulator.ped_pos.copy()
+
+        _obs, _reward, terminated, truncated, _info = env.step(action)
+        assert not (terminated and truncated)
+
+        env.reset(seed=config.scenario_seed)
+        np.testing.assert_allclose(env.simulator.ped_pos, first_positions)
+    finally:
+        env.close()
+
+
 @pytest.mark.parametrize(("fixture_path", "family", "expected_ids"), _MULTI_PED_FAMILY_FIXTURES)
 def test_multi_ped_adversarial_family_fixtures_reset_step_deterministically(
     fixture_path: Path,

@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+import yaml
 from gymnasium import spaces
 from loguru import logger
 
-from robot_sf.adversarial.config import MultiPedAdversarialConfig
+from robot_sf.adversarial.config import MultiPedAdversarialConfig, MultiPedCandidateSpec, Pose2D
 from robot_sf.adversarial.materialize import materialize_multi_ped_scenario_payload
 from robot_sf.planner.socnav import (
     HRVOPlannerAdapter,
@@ -642,6 +644,85 @@ def test_build_episode_record_preserves_multi_ped_adversarial_metadata(monkeypat
         record["scenario_params"]["single_pedestrians"][0]["metadata"]["adversarial_family"]
         == "doorway_blocker"
     )
+
+
+def test_policy_analysis_main_runs_materialized_multi_ped_adversarial_scenario(
+    tmp_path: Path,
+) -> None:
+    """A materialized multi-ped adversarial scenario should run through policy analysis."""
+
+    config = MultiPedAdversarialConfig(
+        family="group_squeeze",
+        scenario_seed=870,
+        pedestrians=[
+            MultiPedCandidateSpec(
+                id="h1",
+                start=Pose2D(14.0, 12.0),
+                goal=Pose2D(26.0, 12.0),
+                speed_mps=0.6,
+                metadata={"lane": "left"},
+            ),
+            MultiPedCandidateSpec(
+                id="h2",
+                start=Pose2D(26.0, 18.0),
+                goal=Pose2D(14.0, 18.0),
+                speed_mps=0.6,
+                metadata={"lane": "right"},
+            ),
+        ],
+    )
+    payload = materialize_multi_ped_scenario_payload(
+        config,
+        {
+            "scenarios": [
+                {
+                    "name": "issue_870_policy_analysis_smoke",
+                    "map_id": "static_humans",
+                    "simulation_config": {"max_episode_steps": 6, "ped_density": 0.0},
+                    "metadata": {"issue": 870, "evaluation_scope": "development_stress_test"},
+                }
+            ]
+        },
+    )
+    scenario = payload["scenarios"][0]
+    scenario_path = tmp_path / "multi_ped_policy_analysis_smoke.yaml"
+    output_dir = tmp_path / "policy_analysis"
+    scenario_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    exit_code = policy_analysis_run.main(
+        [
+            "--scenario",
+            str(scenario_path),
+            "--scenario-id",
+            scenario["name"],
+            "--policy",
+            "goal",
+            "--max-steps",
+            "3",
+            "--output",
+            str(output_dir),
+            "--no-record-forces",
+        ]
+    )
+
+    assert exit_code == 0
+    records = [
+        json.loads(line)
+        for line in (output_dir / "episodes.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(records) == 1
+    record = records[0]
+    assert record["steps"] > 0
+    assert record["termination_reason"] != "error"
+
+    scenario_params = record["scenario_params"]
+    runtime_status = scenario_params["metadata"]["adversarial_multi_ped_runtime"]
+    assert runtime_status["family"] == "group_squeeze"
+    assert runtime_status["pedestrian_ids"] == ["h1", "h2"]
+    assert runtime_status["benchmark_frozen"] is False
+    assert scenario_params["single_pedestrians"][0]["metadata"]["pedestrian_metadata"] == {
+        "lane": "left"
+    }
 
 
 def test_build_episode_record_metric_collision_overrides_route_complete(monkeypatch) -> None:

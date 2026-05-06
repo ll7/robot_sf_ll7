@@ -206,8 +206,9 @@ why a change was made rather than a full issue execution transcript.
   adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs, 
   stacked on the issue #936 override materializer.
 * [Issue #870 Multi-Ped Adversarial Runtime Slice](issue_870_multi_ped_adversarial_runtime.md)
-  adds a fail-closed config-to-`RobotSimulationConfig` runtime path with N>1 reset/step proof,
-  while keeping certification, policy-analysis smoke, and benchmark promotion out of scope.
+  adds a fail-closed config-to-`RobotSimulationConfig` runtime path with N>1 reset/step proof and
+  records the follow-up materialized policy-analysis smoke while keeping certification and benchmark
+  promotion out of scope.
 * [Issue #1015 Multi-Ped Adversarial Family Smoke](issue_1015_multi_ped_family_smoke.md)
   adds group-squeeze and doorway-blocker development smoke fixtures with deterministic reset/step
   proof and explicit non-benchmark-frozen episode metadata.

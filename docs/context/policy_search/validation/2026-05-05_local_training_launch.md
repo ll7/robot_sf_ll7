@@ -80,9 +80,46 @@ Observed startup evidence:
 - training device: `cuda`
 - early GPU snapshot: about `446 MiB` used, `1%` utilization, `45C`
 
+## Completion Review
+
+Reviewed on 2026-05-06 after the tmux session exited.
+
+Observed completion evidence:
+
+- tmux session `ppo128k_local_20260505` was gone after completion.
+- local GPU returned to idle desktop usage (`91 MiB`, `0%` utilization).
+- training log:
+  `output/ai/autoresearch/local_policy_training/ppo_128k_train_20260505_2229.log`
+- offline W&B run:
+  `output/wandb/wandb/offline-run-20260505_222910-z6rljd2f`
+- emitted checkpoint summary:
+  `output/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_reward_curriculum_promotion_128k/ppo_expert_issue_791_reward_curriculum_promotion_128k_best.summary.json`
+
+The PPO probe completed the configured `131072` timesteps at about `68` aggregate fps. The log
+reported two roughly 65k-step training phases around the mid-run evaluation (`960` seconds and
+`957` seconds), and the wall-clock log timestamps imply about 33 minutes from launch to final
+summary. The final rollout success rate was still only `0.03`.
+
+Best checkpoint metrics at eval step `131072`:
+
+- success rate: `0.18571428571428572`
+- collision rate: `0.7714285714285715`
+- comfort exposure: `0.1386281179138322`
+- path efficiency: `0.7807188531080449`
+- SNQI: `-2.3218818336133373`
+- eval episode return: `-15.744158194309088`
+
+The root expert-policy manifest reports the exported policy mean success at `0.12142857142857143`
+and mean collision rate at `0.7857142857142857`, so the best checkpoint is better than the final
+export but still unsafe.
+
+Decision: reject this checkpoint as a policy-search candidate. It is useful only as a negative
+local PPO probe because it remains far behind the non-learning h500 leaders and violates the
+safety expectation by a large margin.
+
 ## Follow-Up Evaluation
 
-When the tmux run exits, inspect:
+Historical inspection checklist used after exit:
 
 ```bash
 tmux capture-pane -pt ppo128k_local_20260505 -S -200
@@ -90,7 +127,7 @@ tail -200 output/ai/autoresearch/local_policy_training/ppo_128k_train_20260505_2
 find output/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_reward_curriculum_promotion_128k -maxdepth 1 -type f -print
 ```
 
-If a real checkpoint exists, evaluate it before treating it as useful:
+The original follow-up path was:
 
 ```bash
 LOGURU_LEVEL=WARNING uv run python scripts/tools/policy_analysis_run.py \
@@ -101,11 +138,11 @@ LOGURU_LEVEL=WARNING uv run python scripts/tools/policy_analysis_run.py \
   --output output/ai/autoresearch/local_policy_training/ppo_128k_policy_analysis_eval
 ```
 
-If the best checkpoint file is absent, use the final checkpoint emitted by the training script
-instead and record the exact path before evaluating.
+The checkpoint should not be promoted based on the completed training metrics above. Run this
+policy-analysis command only if a deeper scenario-level failure taxonomy is needed.
 
 ## Current Interpretation
 
-This run is only a bounded local training probe. It does not replace the current non-learning
-policy-search leaders unless the follow-up evaluation beats the tracked h500/full-matrix evidence
-without increasing collision rate.
+This run is a completed bounded local training probe. It does not replace the current non-learning
+policy-search leaders because the best checkpoint reached only `0.18571428571428572` eval success
+with `0.7714285714285715` collision rate.

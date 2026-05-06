@@ -97,6 +97,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 * **[Canonical PPO Training Workflow](./training/ppo_training_workflow.md)** - Config-driven PPO entrypoint, evaluation cadence semantics, and startup provenance logging.
+* **[Issue #1037 RL Environment Patterns](./context/issue_1037_rl_environment_patterns.md)** -
+  Design note mapping May 2026 LLM-era RL environment patterns to Robot SF training, reward,
+  rollout, benchmark, scaling, and provenance boundaries.
 * **[SLURM Submission Workflow](./dev/slurm_submission.md)** - Submit batch jobs with the effective partition/QoS max wall time by default
 * **[SLURM Multi-Worktree Branch Workflow](./context/slurm_multi_worktree_branch_workflow.md)** - Submit jobs from multiple active branches on one login node without branch-switch ambiguity
 * **[SLURM Resource Audit](./dev/slurm_resource_audit.md)** - Inspect Slurm allocations, query W&B system metrics correctly, and decide whether CPU, memory, or GPU requests are oversized

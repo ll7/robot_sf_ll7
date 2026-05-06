@@ -117,6 +117,9 @@ knowledge, not every transient iteration detail.
   config-first safety-reward mitigation candidate.
 * [Issue #863 SVG/Model Log Spam](./issue_863_svg_model_log_spam.md)
   log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
+* [Issue #1037 RL Environment Patterns](./issue_1037_rl_environment_patterns.md)
+  maps the May 2026 Hugging Face RL environment guide to Robot SF training, reward,
+  rollout, benchmark, scaling, and provenance boundaries.
 
 ## Performance Notes
 

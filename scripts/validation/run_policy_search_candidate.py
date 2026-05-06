@@ -428,6 +428,16 @@ def _format_optional_float(value: Any) -> str:
         return "n/a"
 
 
+def _format_signed_optional_float(value: Any) -> str:
+    """Format optional signed delta fields while preserving unavailable metrics."""
+    if value is None:
+        return "n/a"
+    try:
+        return f"{float(value):+.4f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
 def _write_markdown_report(  # noqa: PLR0913
     *,
     docs_root: Path,
@@ -517,7 +527,9 @@ def _write_markdown_report(  # noqa: PLR0913
         lines.append("|---|---:|---:|---:|")
         for name, row in sorted(deltas.items()):
             lines.append(
-                f"| {name} | {row.get('success_rate', 0.0):+.4f} | {row.get('collision_rate', 0.0):+.4f} | {row.get('near_miss_rate', 0.0):+.4f} |"
+                f"| {name} | {_format_signed_optional_float(row.get('success_rate'))} | "
+                f"{_format_signed_optional_float(row.get('collision_rate'))} | "
+                f"{_format_signed_optional_float(row.get('near_miss_rate'))} |"
             )
     else:
         lines.append("- Baseline deltas unavailable.")

@@ -69,12 +69,20 @@ def _resolve_jsonl_path(summary_path: Path, payload: dict[str, Any]) -> Path:
     return candidates[0]
 
 
+def _portable_summary_reference(summary_path: Path) -> tuple[str | None, str]:
+    """Return a durable summary reference, or mark worktree output as non-durable provenance."""
+    path = summary_path.as_posix()
+    if path.startswith("output/"):
+        return None, "worktree_output_not_promoted"
+    return path, "tracked"
+
+
 def _summary_metrics(payload: dict[str, Any]) -> dict[str, float]:
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     return {
-        "success_rate": float(summary.get("success_rate", 0.0)),
-        "collision_rate": float(summary.get("collision_rate", 1.0)),
-        "near_miss_rate": float(summary.get("near_miss_rate", 0.0)),
+        "success_rate": _round_float(float(summary.get("success_rate", 0.0))),
+        "collision_rate": _round_float(float(summary.get("collision_rate", 1.0))),
+        "near_miss_rate": _round_float(float(summary.get("near_miss_rate", 0.0))),
     }
 
 
@@ -89,6 +97,13 @@ def _quantile(values: list[float], q: float) -> float | None:
     high = min(low + 1, len(ordered) - 1)
     fraction = position - low
     return float(ordered[low] * (1.0 - fraction) + ordered[high] * fraction)
+
+
+def _round_float(value: float | None, digits: int = 6) -> float | None:
+    """Round generated YAML floats without changing integer horizon decisions."""
+    if value is None:
+        return None
+    return round(float(value), digits)
 
 
 def _is_success(record: dict[str, Any]) -> bool:
@@ -151,10 +166,12 @@ def main() -> int:
         candidate = str(payload.get("candidate", "unknown"))
         stage = str(payload.get("stage", "unknown"))
         metrics = _summary_metrics(payload)
+        portable_summary, artifact_status = _portable_summary_reference(summary_path)
         summary_record = {
             "candidate": candidate,
             "stage": stage,
-            "summary_json": summary_path.as_posix(),
+            "summary_json": portable_summary,
+            "source_artifact_status": artifact_status,
             **metrics,
         }
         if metrics["success_rate"] >= float(args.success_rate_min) and metrics[
@@ -190,19 +207,19 @@ def main() -> int:
             "success_episode_count": len(success_steps),
             "failure_episode_count": len(failure_records),
             "timeout_failure_count": timeout_count,
-            "success_steps_p50": _quantile(success_steps, 0.50),
-            "success_steps_p90": _quantile(success_steps, 0.90),
-            "success_steps_p95": _quantile(success_steps, 0.95),
-            "success_steps_max": max(success_steps) if success_steps else None,
+            "success_steps_p50": _round_float(_quantile(success_steps, 0.50)),
+            "success_steps_p90": _round_float(_quantile(success_steps, 0.90)),
+            "success_steps_p95": _round_float(_quantile(success_steps, 0.95)),
+            "success_steps_max": _round_float(max(success_steps) if success_steps else None),
         }
 
     output = {
         "version": 1,
         "source": "policy_search_h500_safe_incumbents",
         "selection": {
-            "success_rate_min": float(args.success_rate_min),
-            "collision_rate_max": float(args.collision_rate_max),
-            "p95_multiplier": float(args.p95_multiplier),
+            "success_rate_min": _round_float(float(args.success_rate_min)),
+            "collision_rate_max": _round_float(float(args.collision_rate_max)),
+            "p95_multiplier": _round_float(float(args.p95_multiplier)),
             "buffer_steps": int(args.buffer_steps),
             "floor_steps": int(args.floor_steps),
             "cap_steps": int(args.cap_steps),

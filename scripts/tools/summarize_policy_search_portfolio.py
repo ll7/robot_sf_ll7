@@ -18,11 +18,16 @@ STAGE_ORDER = (
     "nominal_sanity",
     "stress_slice",
     "full_matrix",
+    "leader_collision_slice_h500",
     "full_matrix_h500",
     "robustness_extension",
 )
 STAGE_RANK = {stage: index for index, stage in enumerate(STAGE_ORDER)}
-PROMOTION_SCALE_STAGES = {"full_matrix", "full_matrix_h500", "robustness_extension"}
+PROMOTION_SCALE_STAGES = {
+    "full_matrix",
+    "full_matrix_h500",
+    "robustness_extension",
+}
 
 
 @dataclass(frozen=True)

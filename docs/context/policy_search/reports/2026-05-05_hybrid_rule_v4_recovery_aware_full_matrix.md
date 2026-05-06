@@ -16,6 +16,7 @@ Adding a narrow static-deadlock recovery mode to the route-guided hybrid planner
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`
 - Seed manifest: `suite default`
 - Summary JSON: `output/policy_search/hybrid_rule_v4_recovery_aware/full_matrix/policy_search_full_matrix_all_20260505/summary.json`
+- Durable summary evidence: `not promoted`; the `output/` path is retained only as regeneration context.
 - Git commit: `3da4af0a6f424ee819cc3c7904d54745b45ac3c8`
 
 ## Aggregate Results

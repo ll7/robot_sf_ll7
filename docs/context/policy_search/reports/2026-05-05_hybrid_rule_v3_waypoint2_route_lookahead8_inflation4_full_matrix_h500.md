@@ -18,6 +18,12 @@ The 8-cell route lookahead improved nominal success but caused one static collis
 - Summary JSON: `output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_inflation4/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json`
 - Git commit: `47fecd938482949b7989f1011ec6e34237d8b45d`
 
+Validation note: the generated runtime config for this run contains
+`route_guide_obstacle_inflation_cells: 4` and
+`route_guide_waypoint_lookahead_cells: 8`. Its episode JSONL hash differs from
+the non-inflation4 `lookahead8` run, so the candidate was dispatched and applied;
+the aggregate metrics happened to match at the report's rounded precision.
+
 ## Aggregate Results
 
 | Episodes | Success | Collision | Near Miss | Mean MinDist | Mean AvgSpeed |

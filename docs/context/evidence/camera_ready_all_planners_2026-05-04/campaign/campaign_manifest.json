@@ -23,7 +23,7 @@
     "remote": "https://github.com/ll7/robot_sf_ll7"
   },
   "config_hash": "e2dfe44193c4ffbd",
-  "invoked_command": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/.venv/bin/python /home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/scripts/tools/run_camera_ready_benchmark.py --config /home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml --output-root output/benchmarks/camera_ready --mode run --log-level INFO --label main_latest_all",
+  "invoked_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml --output-root output/benchmarks/camera_ready --mode run --log-level INFO --label main_latest_all",
   "paper_facing": true,
   "paper_profile_version": "paper-matrix-v1",
   "amv_profile_name": "amv-paper-v1",
@@ -276,8 +276,8 @@
   ],
   "holonomic_command_mode": "vx_vy",
   "repository_url": "https://github.com/ll7/robot_sf_ll7",
-  "release_tag": "{release_tag}",
-  "doi": "10.5281/zenodo.<record-id>",
+  "release_tag": null,
+  "doi": null,
   "artifacts": {
     "preflight_validate_config": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/preflight/validate_config.json",
     "preflight_preview_scenarios": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/preflight/preview_scenarios.json",
@@ -310,5 +310,6 @@
     "bootstrap_level": 0.95,
     "bootstrap_samples": 300,
     "seed": 123
-  }
+  },
+  "publication_status": "pending_release_artifact"
 }

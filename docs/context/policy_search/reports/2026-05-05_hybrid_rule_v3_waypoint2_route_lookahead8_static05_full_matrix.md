@@ -16,6 +16,7 @@ The 8-cell route lookahead may become acceptable if paired with a 5 cm static ha
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`
 - Seed manifest: `suite default`
 - Summary JSON: `output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_static05/full_matrix/policy_search_full_matrix_all_20260505/summary.json`
+- Durable summary evidence: `not promoted`; the `output/` path is retained only as regeneration context.
 - Git commit: `3da4af0a6f424ee819cc3c7904d54745b45ac3c8`
 
 ## Aggregate Results
@@ -43,5 +44,8 @@ The 8-cell route lookahead may become acceptable if paired with a 5 cm static ha
 | Baseline | Success Delta | Collision Delta | Near-Miss Delta |
 |---|---:|---:|---:|
 | goal | +0.2497 | -0.2272 | +0.0000 |
-| orca | +0.0795 | -0.0216 | -3.9997 |
-| ppo | +0.0157 | -0.0854 | -3.1917 |
+| orca | +0.0795 | -0.0216 | n/a |
+| ppo | +0.0157 | -0.0854 | n/a |
+
+Near-miss deltas are `n/a` for baselines that only have `near_misses_mean` count-style
+reference values; the candidate aggregate reports an episode-level near-miss rate.

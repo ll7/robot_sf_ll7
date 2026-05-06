@@ -9,7 +9,7 @@
 - Runtime sec: `1894.2798869700637`
 - Episodes/sec: `0.5321283337977657`
 - Interpretation profile: `baseline-ready-core`
-- Command: `/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/.venv/bin/python /home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/scripts/tools/run_camera_ready_benchmark.py --config /home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml --output-root output/benchmarks/camera_ready --mode run --log-level INFO --label main_latest_all`
+- Command: `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml --output-root output/benchmarks/camera_ready --mode run --log-level INFO --label main_latest_all`
 
 ## Planner Summary
 

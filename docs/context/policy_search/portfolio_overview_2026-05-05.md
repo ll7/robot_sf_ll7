@@ -1,6 +1,6 @@
 # Policy Search Portfolio Overview
 
-Generated: `2026-05-06T06:27:03.013560+00:00`
+Generated: `2026-05-06T09:36:39.853042+00:00`
 
 This note summarizes the registered policy-search candidates and the latest tracked reports.
 It is an evidence map, not a paper-facing benchmark claim. Stages are not equally strong:
@@ -56,10 +56,10 @@ It is an evidence map, not a paper-facing benchmark claim. Stages are not equall
 | hybrid_rule_v3_waypoint2_route_lookahead8_clearance1 | implemented | hybrid_rule_based | smoke, nominal_sanity | full_matrix_h500 | 0.6944 | 0.1597 | moderate progress relative to weak baselines, collision rate still needs work, low near-miss exposure; design idea: Stronger route-guide clearance penalty may keep the 8-cell lookahead progress gain while avoiding the static collision without globally tightening the hard static margin. Main remaining failure mode: `static_collision` (23). |
 | hybrid_rule_v3_waypoint2_route_lookahead8_inflation4 | implemented | hybrid_rule_based | smoke, nominal_sanity | full_matrix_h500 | 0.6944 | 0.1597 | moderate progress relative to weak baselines, collision rate still needs work, low near-miss exposure; design idea: The 8-cell route lookahead improved nominal success but caused one static collision; increasing only route-guide obstacle inflation may preserve the progress gain while steering away from the static hazard. Main remaining failure mode: `static_collision` (23). |
 | mpc_clearance_sampler_v1 | implemented | model_predictive_control | smoke, nominal_sanity, stress_slice | full_matrix_h500 | 0.6111 | 0.3750 | moderate progress relative to weak baselines, collision rate still needs work, low near-miss exposure; design idea: A deterministic NMPC-style rollout scorer should improve constrained-geometry progress without giving up clearance control. Main remaining failure mode: `static_collision` (54). |
+| scenario_adaptive_orca_v1 | implemented | adaptive_classical | smoke, nominal_sanity, stress_slice | leader_collision_slice_h500 | 0.4444 | 0.1667 | moderate progress relative to weak baselines, collision rate still needs work, scenario-specific overrides are visible in the evidence; design idea: Family-specific ORCA parameterization should reduce classic bottleneck risk without slowing Francis-style flowing interactions too aggressively. Main remaining failure mode: `near_miss_intrusive` (4). |
 | hybrid_rule_v3_static_margin0_comfort | implemented | hybrid_rule_based | smoke, nominal_sanity | full_matrix | 0.1806 | 0.0972 | limited current success, collision rate still needs work, low near-miss exposure; design idea: Increasing dynamic clearance pressure and applying a lower speed cap out to 2.5 m should reduce doorway and crowd intrusive near misses without altering static safety. Main remaining failure mode: `timeout_low_progress` (75). |
 | hybrid_rule_v3_static_margin0_waypoint3 | implemented | hybrid_rule_based | smoke, nominal_sanity | full_matrix | 0.1458 | 0.1111 | limited current success, collision rate still needs work, low near-miss exposure; design idea: A 3.0 m waypoint handoff distance may further reduce route-local stalls in long crossing/corridor scenes, but may be brittle around doorway waypoints. Main remaining failure mode: `timeout_low_progress` (67). |
 | risk_guarded_ppo_v1 | implemented | guarded_learning_policy | smoke, nominal_sanity, stress_slice | full_matrix | 0.1181 | 0.1736 | limited current success, collision rate still needs work, low near-miss exposure; design idea: The existing PPO success signal can be preserved if unsafe short-horizon actions are vetoed and replaced with safer local controls. Main remaining failure mode: `timeout_low_progress` (71). |
-| scenario_adaptive_orca_v1 | implemented | adaptive_classical | smoke, nominal_sanity, stress_slice | full_matrix | 0.0486 | 0.0347 | limited current success, bounded collision rate, low near-miss exposure, scenario-specific overrides are visible in the evidence; design idea: Family-specific ORCA parameterization should reduce classic bottleneck risk without slowing Francis-style flowing interactions too aggressively. Main remaining failure mode: `timeout_low_progress` (100). |
 | planner_selector_v1 | implemented | adaptive_ensemble | smoke, nominal_sanity, stress_slice | full_matrix | 0.0486 | 0.3056 | limited current success, collision rate still needs work, low near-miss exposure; design idea: Existing non-learning and predictive heads can be combined into a stronger selector without introducing any new training dependency. Main remaining failure mode: `timeout_low_progress` (74). |
 | hybrid_orca_sampler_v1 | implemented | hybrid_model_based | smoke, nominal_sanity, stress_slice, full_matrix_if_promising | full_matrix | 0.0139 | 0.1111 | limited current success, collision rate still needs work, low near-miss exposure; design idea: Keep ORCA-like safety behavior while allowing a short-horizon sampler to recover progress in constrained geometry. Main remaining failure mode: `timeout_low_progress` (104). |
 | learned_risk_model_v1 | slurm_handoff_required | learned_auxiliary_cost | n/a | not_run | n/a | n/a | A lightweight learned risk estimator should improve candidate ranking only when attached to a hard safety guard |
@@ -68,6 +68,9 @@ It is an evidence map, not a paper-facing benchmark claim. Stages are not equall
 
 Candidates with no tracked report:
 - `learned_risk_model_v1` (learned_auxiliary_cost)
+
+Candidates that still need `full_matrix` evidence before broad comparison:
+- `scenario_adaptive_orca_v1`: best current stage `leader_collision_slice_h500` with success `0.4444` and collision `0.1667`
 
 ## Reproduction Commands
 

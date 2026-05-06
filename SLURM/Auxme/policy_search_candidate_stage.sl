@@ -23,14 +23,15 @@ HORIZON="${POLICY_SEARCH_HORIZON:-}"
 EXPECTED_COMMIT="${POLICY_SEARCH_EXPECTED_COMMIT:-}"
 REQUIRE_CLEAN="${POLICY_SEARCH_REQUIRE_CLEAN:-0}"
 
-if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
-  echo "This script expects a Slurm array task id." >&2
+TASK_ID="${SLURM_ARRAY_TASK_ID:-${POLICY_SEARCH_TASK_ID:-}}"
+if [[ -z "$TASK_ID" ]]; then
+  echo "This script expects SLURM_ARRAY_TASK_ID or POLICY_SEARCH_TASK_ID." >&2
   exit 2
 fi
 
-CANDIDATE="$(sed -n "$((SLURM_ARRAY_TASK_ID + 1))p" "$CANDIDATES_FILE")"
+CANDIDATE="$(sed -n "$((TASK_ID + 1))p" "$CANDIDATES_FILE")"
 if [[ -z "$CANDIDATE" ]]; then
-  echo "No candidate found for array index ${SLURM_ARRAY_TASK_ID} in ${CANDIDATES_FILE}" >&2
+  echo "No candidate found for array index ${TASK_ID} in ${CANDIDATES_FILE}" >&2
   exit 2
 fi
 

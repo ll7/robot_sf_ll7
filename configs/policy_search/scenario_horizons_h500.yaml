@@ -11,149 +11,173 @@ selection:
 selected_summaries:
 - candidate: hybrid_rule_v3_dynamic_relaxed
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_dynamic_relaxed/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7777777777777778
-  collision_rate: 0.013888888888888888
-  near_miss_rate: 0.4166666666666667
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.777778
+  collision_rate: 0.013889
+  near_miss_rate: 0.416667
 - candidate: hybrid_rule_v3_fast_progress
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_fast_progress/full_matrix_h500/policy_search_full_matrix_h500_leaders_clean_20260505_204501/summary.json
-  success_rate: 0.8263888888888888
-  collision_rate: 0.013888888888888888
-  near_miss_rate: 0.4236111111111111
+  summary_json: docs/context/evidence/policy_search_h500_2026-05-06/summaries/hybrid_rule_v3_fast_progress_full_matrix_h500_leaders_clean_summary.json
+  source_artifact_status: tracked
+  success_rate: 0.826389
+  collision_rate: 0.013889
+  near_miss_rate: 0.423611
 - candidate: hybrid_rule_v3_fast_progress_static_escape
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.9027777777777778
-  collision_rate: 0.020833333333333332
-  near_miss_rate: 0.4236111111111111
+  summary_json: docs/context/evidence/policy_search_h500_2026-05-06/summaries/hybrid_rule_v3_fast_progress_static_escape_full_matrix_h500_gt20_summary.json
+  source_artifact_status: tracked
+  success_rate: 0.902778
+  collision_rate: 0.020833
+  near_miss_rate: 0.423611
 - candidate: hybrid_rule_v3_progress_2p4
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_progress_2p4/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.8055555555555556
-  collision_rate: 0.013888888888888888
-  near_miss_rate: 0.4097222222222222
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.805556
+  collision_rate: 0.013889
+  near_miss_rate: 0.409722
 - candidate: hybrid_rule_v3_teb_like_rollout
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_teb_like_rollout/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7708333333333334
-  collision_rate: 0.013888888888888888
-  near_miss_rate: 0.4097222222222222
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.770833
+  collision_rate: 0.013889
+  near_miss_rate: 0.409722
 - candidate: hybrid_rule_v3_waypoint2_route_lookahead8_static02
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_static02/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7777777777777778
-  collision_rate: 0.013888888888888888
-  near_miss_rate: 0.4097222222222222
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.777778
+  collision_rate: 0.013889
+  near_miss_rate: 0.409722
 - candidate: hybrid_rule_v3_waypoint2_route_lookahead8_static05
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_static05/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7777777777777778
-  collision_rate: 0.013888888888888888
-  near_miss_rate: 0.4097222222222222
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.777778
+  collision_rate: 0.013889
+  near_miss_rate: 0.409722
 - candidate: hybrid_rule_v4_recovery_aware
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v4_recovery_aware/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.8055555555555556
-  collision_rate: 0.013888888888888888
-  near_miss_rate: 0.4097222222222222
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.805556
+  collision_rate: 0.013889
+  near_miss_rate: 0.409722
 - candidate: scenario_adaptive_hybrid_orca_v1
   stage: full_matrix_h500
-  summary_json: output/policy_search/scenario_adaptive_hybrid_orca_v1/full_matrix_h500/policy_search_full_matrix_h500_leaders_clean_20260505_204501/summary.json
-  success_rate: 0.9097222222222222
-  collision_rate: 0.020833333333333332
-  near_miss_rate: 0.4236111111111111
+  summary_json: docs/context/evidence/policy_search_h500_2026-05-06/summaries/scenario_adaptive_hybrid_orca_v1_full_matrix_h500_leaders_clean_summary.json
+  source_artifact_status: tracked
+  success_rate: 0.909722
+  collision_rate: 0.020833
+  near_miss_rate: 0.423611
 - candidate: scenario_adaptive_hybrid_orca_v2_collision_guard
   stage: full_matrix_h500
-  summary_json: output/policy_search/scenario_adaptive_hybrid_orca_v2_collision_guard/full_matrix_h500/policy_search_full_matrix_h500_collision_guard_20260506_0800/summary.json
-  success_rate: 0.9027777777777778
-  collision_rate: 0.013888888888888888
-  near_miss_rate: 0.4236111111111111
+  summary_json: docs/context/evidence/policy_search_h500_2026-05-06/summaries/scenario_adaptive_hybrid_orca_v2_collision_guard_full_matrix_h500_collision_guard_summary.json
+  source_artifact_status: tracked
+  success_rate: 0.902778
+  collision_rate: 0.013889
+  near_miss_rate: 0.423611
 rejected_summaries:
 - candidate: hybrid_rule_v0_minimal
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v0_minimal/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7361111111111112
-  collision_rate: 0.020833333333333332
-  near_miss_rate: 0.4166666666666667
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.736111
+  collision_rate: 0.020833
+  near_miss_rate: 0.416667
 - candidate: hybrid_rule_v3_static_margin0
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_static_margin0/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7222222222222222
-  collision_rate: 0.1388888888888889
-  near_miss_rate: 0.4236111111111111
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.722222
+  collision_rate: 0.138889
+  near_miss_rate: 0.423611
 - candidate: hybrid_rule_v3_static_margin0_waypoint2
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_static_margin0_waypoint2/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7222222222222222
-  collision_rate: 0.1388888888888889
-  near_miss_rate: 0.4236111111111111
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.722222
+  collision_rate: 0.138889
+  near_miss_rate: 0.423611
 - candidate: hybrid_rule_v3_waypoint2_dynamic_clearance
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_dynamic_clearance/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7222222222222222
-  collision_rate: 0.13194444444444445
-  near_miss_rate: 0.4305555555555556
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.722222
+  collision_rate: 0.131944
+  near_miss_rate: 0.430556
 - candidate: hybrid_rule_v3_waypoint2_mild_comfort
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_mild_comfort/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7222222222222222
-  collision_rate: 0.14583333333333334
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.722222
+  collision_rate: 0.145833
   near_miss_rate: 0.375
 - candidate: hybrid_rule_v3_waypoint2_progress
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_progress/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7291666666666666
-  collision_rate: 0.1388888888888889
-  near_miss_rate: 0.4305555555555556
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.729167
+  collision_rate: 0.138889
+  near_miss_rate: 0.430556
 - candidate: hybrid_rule_v3_waypoint2_route_commit
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_route_commit/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7708333333333334
-  collision_rate: 0.1111111111111111
-  near_miss_rate: 0.4652777777777778
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.770833
+  collision_rate: 0.111111
+  near_miss_rate: 0.465278
 - candidate: hybrid_rule_v3_waypoint2_route_lookahead6
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead6/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7638888888888888
-  collision_rate: 0.11805555555555555
-  near_miss_rate: 0.4097222222222222
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.763889
+  collision_rate: 0.118056
+  near_miss_rate: 0.409722
 - candidate: hybrid_rule_v3_waypoint2_route_lookahead8
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.6944444444444444
-  collision_rate: 0.1597222222222222
-  near_miss_rate: 0.4166666666666667
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.694444
+  collision_rate: 0.159722
+  near_miss_rate: 0.416667
 - candidate: hybrid_rule_v3_waypoint2_route_lookahead8_clearance1
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_clearance1/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.6944444444444444
-  collision_rate: 0.1597222222222222
-  near_miss_rate: 0.4097222222222222
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.694444
+  collision_rate: 0.159722
+  near_miss_rate: 0.409722
 - candidate: hybrid_rule_v3_waypoint2_route_lookahead8_inflation4
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_route_lookahead8_inflation4/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.6944444444444444
-  collision_rate: 0.1597222222222222
-  near_miss_rate: 0.4166666666666667
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.694444
+  collision_rate: 0.159722
+  near_miss_rate: 0.416667
 - candidate: hybrid_rule_v3_waypoint2_speed2p2
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_speed2p2/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7291666666666666
-  collision_rate: 0.1388888888888889
-  near_miss_rate: 0.4513888888888889
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.729167
+  collision_rate: 0.138889
+  near_miss_rate: 0.451389
 - candidate: hybrid_rule_v3_waypoint2_static_escape
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_waypoint2_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.7222222222222222
-  collision_rate: 0.1597222222222222
-  near_miss_rate: 0.4166666666666667
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.722222
+  collision_rate: 0.159722
+  near_miss_rate: 0.416667
 - candidate: mpc_clearance_sampler_v1
   stage: full_matrix_h500
-  summary_json: output/policy_search/mpc_clearance_sampler_v1/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
-  success_rate: 0.6111111111111112
+  summary_json: null
+  source_artifact_status: worktree_output_not_promoted
+  success_rate: 0.611111
   collision_rate: 0.375
-  near_miss_rate: 0.1597222222222222
+  near_miss_rate: 0.159722
 scenarios:
   classic_bottleneck_high:
     recommended_horizon_steps: 280
@@ -236,7 +260,7 @@ scenarios:
     failure_episode_count: 5
     timeout_failure_count: 5
     success_steps_p50: 151.0
-    success_steps_p90: 188.40000000000003
+    success_steps_p90: 188.4
     success_steps_p95: 200.0
     success_steps_max: 200.0
   classic_doorway_low:
@@ -368,7 +392,7 @@ scenarios:
     failure_episode_count: 1
     timeout_failure_count: 1
     success_steps_p50: 212.0
-    success_steps_p90: 280.79999999999995
+    success_steps_p90: 280.8
     success_steps_p95: 300.0
     success_steps_max: 300.0
   classic_realworld_double_bottleneck_high:
@@ -561,7 +585,7 @@ scenarios:
     timeout_failure_count: 0
     success_steps_p50: 174.5
     success_steps_p90: 179.0
-    success_steps_p95: 189.99999999999994
+    success_steps_p95: 190.0
     success_steps_max: 207.0
   francis2023_intersection_no_gesture:
     recommended_horizon_steps: 161
@@ -704,7 +728,7 @@ scenarios:
     failure_episode_count: 6
     timeout_failure_count: 6
     success_steps_p50: 121.0
-    success_steps_p90: 148.79999999999998
+    success_steps_p90: 148.8
     success_steps_p95: 156.0
     success_steps_max: 156.0
   francis2023_robot_crowding:

@@ -16,6 +16,7 @@ Switching from the active route waypoint at 2.0 m instead of 0.9 m may reduce ro
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`
 - Seed manifest: `suite default`
 - Summary JSON: `output/policy_search/hybrid_rule_v3_static_margin0_waypoint2/full_matrix/policy_search_full_matrix_all_20260505/summary.json`
+- Durable summary evidence: `not promoted`; the `output/` path is retained only as regeneration context.
 - Git commit: `a395f943ce0c1d10c9cf88e7e2a52ca302ebc38e`
 
 ## Aggregate Results

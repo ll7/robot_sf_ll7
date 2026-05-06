@@ -1,7 +1,7 @@
 # Camera-Ready Campaign Analysis
 
 - Campaign ID: `paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217`
-- Campaign root: `/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217`
+- Campaign root: `output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217`
 - Runtime sec: `1894.2798869700637`
 - Episodes/sec: `0.5321283337977657`
 

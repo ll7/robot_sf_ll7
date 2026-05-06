@@ -41,5 +41,8 @@ A deterministic NMPC-style rollout scorer should improve constrained-geometry pr
 | Baseline | Success Delta | Collision Delta | Near-Miss Delta |
 |---|---:|---:|---:|
 | goal | +0.2219 | +0.0436 | +0.0000 |
-| orca | +0.0517 | +0.2492 | -4.2011 |
-| ppo | -0.0121 | +0.1854 | -3.3931 |
+| orca | +0.0517 | +0.2492 | n/a |
+| ppo | -0.0121 | +0.1854 | n/a |
+
+Near-miss deltas are `n/a` for baselines that only have `near_misses_mean` count-style
+reference values; the candidate aggregate reports an episode-level near-miss rate.

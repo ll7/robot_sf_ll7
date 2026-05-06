@@ -4,7 +4,7 @@
   "successful_jobs": 144,
   "failed_jobs": 0,
   "failures": [],
-  "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/social_force__differential_drive/episodes.jsonl",
+  "out_path": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/social_force__differential_drive/episodes.jsonl",
   "algorithm_readiness": {
     "name": "social_force",
     "tier": "baseline-ready",

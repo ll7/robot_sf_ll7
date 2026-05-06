@@ -16,6 +16,7 @@ Stronger manual progress and speed preference on top of waypoint2 may convert lo
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`
 - Seed manifest: `suite default`
 - Summary JSON: `output/policy_search/hybrid_rule_v3_waypoint2_progress/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json`
+- Durable summary evidence: `not promoted`; the `output/` path is retained only as regeneration context.
 - Git commit: `47fecd938482949b7989f1011ec6e34237d8b45d`
 
 ## Aggregate Results

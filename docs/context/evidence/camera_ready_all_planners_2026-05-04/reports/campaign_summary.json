@@ -9,7 +9,7 @@
     "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
     "scenario_matrix_hash": "8ac8ab9387f4",
     "git_hash": "1d7acbaac53b32dd4d656c5a31466b018dd131f6",
-    "invoked_command": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/.venv/bin/python /home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/scripts/tools/run_camera_ready_benchmark.py --config /home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml --output-root output/benchmarks/camera_ready --mode run --log-level INFO --label main_latest_all",
+    "invoked_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml --output-root output/benchmarks/camera_ready --mode run --log-level INFO --label main_latest_all",
     "runtime_sec": 1894.2798869700637,
     "episodes_per_second": 0.5321283337977657,
     "total_episodes": 1008,
@@ -31,11 +31,11 @@
     "comparability_mapping_version": "alyassi-comparability-v1",
     "comparability_mapping_hash": "8345d81be4fd",
     "repository_url": "https://github.com/ll7/robot_sf_ll7",
-    "release_tag": "{release_tag}",
-    "doi": "10.5281/zenodo.<record-id>",
-    "release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/{release_tag}",
-    "release_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/{release_tag}/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217_publication_bundle.tar.gz",
-    "doi_url": "https://doi.org/10.5281/zenodo.<record-id>",
+    "release_tag": null,
+    "doi": null,
+    "release_url": null,
+    "release_asset_url": null,
+    "doi_url": null,
     "snqi_weights_version": "snqi_weights_camera_ready_v3",
     "snqi_weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
     "snqi_baseline_version": "snqi_baseline_camera_ready_v3",
@@ -46,7 +46,8 @@
     "snqi_contract_dominant_component": "time_penalty",
     "snqi_contract_dominant_component_mean_abs": 0.09264932269752284,
     "snqi_positioning_recommendation": "strengthen_as_operational_multi_objective_aggregation",
-    "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility"
+    "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility",
+    "publication_status": "pending_release_artifact"
   },
   "planner_rows": [
     {
@@ -469,7 +470,7 @@
         "successful_jobs": 144,
         "failed_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/prediction_planner__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/prediction_planner__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "prediction_planner",
           "tier": "experimental",
@@ -1283,7 +1284,7 @@
         "successful_jobs": 144,
         "failed_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/goal__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/goal__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "goal",
           "tier": "baseline-ready",
@@ -2087,7 +2088,7 @@
         "successful_jobs": 144,
         "failed_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/social_force__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/social_force__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "social_force",
           "tier": "baseline-ready",
@@ -2857,7 +2858,7 @@
         "successful_jobs": 144,
         "failed_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/orca__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/orca__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "orca",
           "tier": "baseline-ready",
@@ -3681,7 +3682,7 @@
         "successful_jobs": 144,
         "failed_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/ppo__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/ppo__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "ppo",
           "tier": "experimental",
@@ -4514,7 +4515,7 @@
         "successful_jobs": 144,
         "failed_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/socnav_sampling__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/socnav_sampling__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "socnav_sampling",
           "tier": "experimental",
@@ -5318,7 +5319,7 @@
         "successful_jobs": 144,
         "failed_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/sacadrl__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/runs/sacadrl__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "sacadrl",
           "tier": "experimental",
@@ -6141,11 +6142,12 @@
     "scenario_family_breakdown_md": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/reports/scenario_family_breakdown.md",
     "campaign_report_md": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/reports/campaign_report.md",
     "expected_release_archive": "paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217_publication_bundle.tar.gz",
-    "release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/{release_tag}",
-    "release_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/{release_tag}/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217_publication_bundle.tar.gz",
-    "doi_url": "https://doi.org/10.5281/zenodo.<record-id>",
+    "release_url": null,
+    "release_asset_url": null,
+    "doi_url": null,
     "snqi_diagnostics_json": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/reports/snqi_diagnostics.json",
     "snqi_diagnostics_md": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/reports/snqi_diagnostics.md",
-    "snqi_sensitivity_csv": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/reports/snqi_sensitivity.csv"
+    "snqi_sensitivity_csv": "output/benchmarks/camera_ready/paper_experiment_matrix_all_planners_v1_main_latest_all_20260504_171217/reports/snqi_sensitivity.csv",
+    "publication_status": "pending_release_artifact"
   }
 }

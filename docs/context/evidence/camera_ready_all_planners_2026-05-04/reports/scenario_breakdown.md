@@ -1,3 +1,8 @@
+Note: `collisions_mean` is the episode-level collision indicator rate. The
+`*_collision_count_mean` columns are logged count metrics when present in the
+episode payload and can remain `0.0000` for legacy/campaign rows that only expose
+the aggregate collision flag; use `collisions_mean` for collision-rate comparisons.
+
 | planner_key | algo | scenario_family | scenario_id | episodes | success_mean | collisions_mean | ped_collision_count_mean | obstacle_collision_count_mean | total_collision_count_mean | near_misses_mean | time_to_goal_norm_mean | path_efficiency_mean | comfort_exposure_mean | jerk_mean | snqi_mean |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | goal | goal | bottleneck | classic_bottleneck_high | 3 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 1.0000 | 1.0000 | 0.0000 |  | -0.0949 |

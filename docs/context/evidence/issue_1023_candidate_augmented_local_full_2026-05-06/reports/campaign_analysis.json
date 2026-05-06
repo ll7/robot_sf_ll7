@@ -404,9 +404,7 @@
           "p95_wall_time_sec": 15.684572696685791
         }
       ],
-      "findings": [
-        "snqi_mean mismatch: row=-0.079500, episodes=-0.083488"
-      ]
+      "findings": []
     },
     {
       "planner_key": "social_force",
@@ -13301,7 +13299,5 @@
     },
     "findings": []
   },
-  "findings": [
-    "scenario_adaptive_hybrid_orca_v1: snqi_mean mismatch: row=-0.079500, episodes=-0.083488"
-  ]
+  "findings": []
 }

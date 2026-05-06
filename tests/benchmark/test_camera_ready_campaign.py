@@ -1600,6 +1600,95 @@ def test_planner_report_row_uses_episode_ci_placeholders_when_means_are_backfill
     assert row["collision_ci_high"] == "nan"
 
 
+def test_planner_report_row_recomputes_all_means_for_mixed_algo_candidate() -> None:
+    """Mixed scenario-algo candidates should report all metrics over every episode."""
+    planner = PlannerSpec(key="scenario_adaptive_hybrid_orca_v1", algo="hybrid_rule_local_planner")
+    summary = {
+        "status": "ok",
+        "written": 4,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 4.0,
+        "algorithm_readiness": {"tier": "experimental"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        "algorithm_metadata_contract": {},
+    }
+    aggregates = {
+        "hybrid_rule_local_planner": {
+            "success": {"mean": 1.0},
+            "collisions": {"mean": 0.0},
+            "near_misses": {"mean": 3.0},
+            "time_to_goal_norm": {"mean": 0.5},
+            "comfort_exposure": {"mean": 0.01},
+            "snqi": {"mean": 0.2},
+        },
+        "orca": {
+            "success": {"mean": 0.0},
+            "collisions": {"mean": 1.0},
+            "near_misses": {"mean": 30.0},
+            "time_to_goal_norm": {"mean": 0.9},
+            "comfort_exposure": {"mean": 0.09},
+            "snqi": {"mean": -0.6},
+        },
+    }
+    records = [
+        {
+            "termination_reason": "success",
+            "metrics": {
+                "success": 1.0,
+                "near_misses": 3.0,
+                "time_to_goal_norm": 0.5,
+                "comfort_exposure": 0.01,
+                "snqi": 0.2,
+            },
+        },
+        {
+            "termination_reason": "success",
+            "metrics": {
+                "success": 1.0,
+                "near_misses": 3.0,
+                "time_to_goal_norm": 0.5,
+                "comfort_exposure": 0.01,
+                "snqi": 0.2,
+            },
+        },
+        {
+            "termination_reason": "success",
+            "metrics": {
+                "success": 1.0,
+                "near_misses": 3.0,
+                "time_to_goal_norm": 0.5,
+                "comfort_exposure": 0.01,
+                "snqi": 0.2,
+            },
+        },
+        {
+            "termination_reason": "collision",
+            "metrics": {
+                "success": 0.0,
+                "near_misses": 30.0,
+                "time_to_goal_norm": 0.9,
+                "comfort_exposure": 0.09,
+                "snqi": -0.6,
+            },
+        },
+    ]
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=aggregates,
+        kinematics="differential_drive",
+        records=records,
+    )
+
+    assert row["success_mean"] == "0.7500"
+    assert row["collisions_mean"] == "0.2500"
+    assert row["near_misses_mean"] == "9.7500"
+    assert row["time_to_goal_norm_mean"] == "0.6000"
+    assert row["comfort_exposure_mean"] == "0.0300"
+    assert row["snqi_mean"] == "0.0000"
+
+
 def test_jsonable_repo_relative_normalizes_paths_for_stable_hashing(tmp_path: Path) -> None:
     """Hash-prep helper should normalize Path values to stable repo-relative strings."""
     repo_root = get_repository_root().resolve()

@@ -127,4 +127,4 @@
 
 ## Findings
 
-- scenario_adaptive_hybrid_orca_v1: snqi_mean mismatch: row=-0.079500, episodes=-0.083488
+- No inconsistencies detected by automated checks.

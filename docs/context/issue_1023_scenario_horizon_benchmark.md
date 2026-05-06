@@ -21,6 +21,7 @@ Related:
   `docs/context/evidence/issue_1023_candidate_augmented_preflight_2026-05-06/`
 - Candidate-augmented local full evidence:
   `docs/context/evidence/issue_1023_candidate_augmented_local_full_2026-05-06/`
+- SNQI calibration follow-up: `ll7/robot_sf_ll7#1038`
 - Fallback policy: `docs/context/issue_691_benchmark_fallback_policy.md`
 
 ## Goal
@@ -210,8 +211,7 @@ The tracked 9-planner local full-campaign bundle records:
 - Benchmark success: true.
 - No failed, partial, not-available, fallback, or degraded planners.
 - Campaign warning: SNQI contract status `fail` with warn enforcement.
-- Analyzer finding: `scenario_adaptive_hybrid_orca_v1` has a small SNQI mean mismatch between
-  summary row and episode recomputation.
+- Analyzer finding after report-table regeneration: no automated campaign inconsistencies.
 - Runtime hotspots: `hybrid_rule_v3_fast_progress_static_escape`,
   `scenario_adaptive_hybrid_orca_v1`, and `prediction_planner`.
 
@@ -226,7 +226,7 @@ Planner-level candidate-augmented outcomes:
 | prediction_planner | experimental | 0.4931 | 0.4514 | 24.9375 | -0.1408 |
 | sacadrl | experimental | 0.0833 | 0.6667 | 5.7778 | -0.2726 |
 | socnav_sampling | experimental | 0.4028 | 0.5972 | 1.6458 | -0.0848 |
-| scenario_adaptive_hybrid_orca_v1 | experimental | 0.9097 | 0.0278 | 18.7447 | -0.0795 |
+| scenario_adaptive_hybrid_orca_v1 | experimental | 0.9097 | 0.0278 | 19.4583 | -0.0835 |
 | hybrid_rule_v3_fast_progress_static_escape | experimental | 0.9028 | 0.0278 | 20.7778 | -0.0874 |
 
 The two new candidates are the best route-completion rows in this matrix, but they are slow and
@@ -243,7 +243,8 @@ Use this evidence as a sensitivity/confounding analysis for the paper-facing ben
 mentions scenario-specific horizons, present them beside the fixed-horizon surface with explicit
 safety caveats, the SNQI `fail` status on the candidate-augmented run, the local non-Slurm
 provenance, and the `socnav_bench` coverage gap. Do not publish a release tag from this evidence
-until the SNQI contract failure and candidate safety interpretation are resolved.
+until the SNQI contract failure and candidate safety interpretation are resolved. Follow-up issue
+`ll7/robot_sf_ll7#1038` tracks the SNQI calibration or claim-scope decision.
 
 ## Validation Run
 

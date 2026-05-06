@@ -25,15 +25,14 @@ Summary:
 - Benchmark success: true.
 - Publication bundle: not exported.
 - SNQI contract status: `fail` with warn enforcement.
-- Analyzer finding: no failed, partial, not-available, fallback, or degraded planners.
-- Analyzer warning: `scenario_adaptive_hybrid_orca_v1` has a small SNQI mean mismatch between
-  summary row and episode recomputation.
+- Analyzer finding: no automated campaign inconsistencies after regenerating report tables from
+  per-episode records.
 
 Experimental candidate outcomes:
 
 | planner | success | collisions | near misses | SNQI | runtime(s) |
 |---|---:|---:|---:|---:|---:|
-| `scenario_adaptive_hybrid_orca_v1` | 0.9097 | 0.0278 | 18.7447 | -0.0795 | 570.8285 |
+| `scenario_adaptive_hybrid_orca_v1` | 0.9097 | 0.0278 | 19.4583 | -0.0835 | 570.8285 |
 | `hybrid_rule_v3_fast_progress_static_escape` | 0.9028 | 0.0278 | 20.7778 | -0.0874 | 576.6053 |
 
 Release interpretation:
@@ -41,6 +40,12 @@ Release interpretation:
 This is valid local non-Slurm evidence that the candidate-augmented long-horizon benchmark runs
 end-to-end. It is not clean release evidence. The SNQI contract fails, the comparison against the
 May 4 fixed-horizon evidence reports drift, and the candidates remain experimental challenger rows.
+
+Correction note:
+
+- Initial report tables used a first-subgroup aggregate for mixed-algorithm candidate metrics.
+  The tracked tables in this bundle were regenerated after fixing planner-row aggregation to use
+  all per-episode records for planner-level means.
 
 Included files:
 

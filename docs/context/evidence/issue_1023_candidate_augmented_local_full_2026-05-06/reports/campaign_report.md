@@ -21,7 +21,7 @@
 | ppo | ppo | experimental | differential_drive | ok | 2026-05-06T18:02:08.334194Z | 140.1452 | 144 | 1.0275 | 0.8056 | 0.1667 | -0.2074 | 0.0000 | 0.0000 |
 | prediction_planner | prediction_planner | experimental | differential_drive | ok | 2026-05-06T17:52:18.668771Z | 396.6133 | 144 | 0.3631 | 0.4931 | 0.4514 | -0.1408 | 0.0000 | 0.0000 |
 | sacadrl | sacadrl | experimental | differential_drive | ok | 2026-05-06T18:04:58.486725Z | 57.2194 | 144 | 2.5166 | 0.0833 | 0.6667 | -0.2726 | 0.0000 | 0.0000 |
-| scenario_adaptive_hybrid_orca_v1 | hybrid_rule_local_planner | experimental | differential_drive | ok | 2026-05-06T18:05:56.195892Z | 570.8285 | 144 | 0.2523 | 0.9097 | 0.0278 | -0.0795 | 0.0000 | 0.0000 |
+| scenario_adaptive_hybrid_orca_v1 | hybrid_rule_local_planner | experimental | differential_drive | ok | 2026-05-06T18:05:56.195892Z | 570.8285 | 144 | 0.2523 | 0.9097 | 0.0278 | -0.0835 | 0.0000 | 0.0000 |
 | social_force | social_force | core | differential_drive | ok | 2026-05-06T17:59:40.994347Z | 75.1397 | 144 | 1.9164 | 0.0139 | 0.3819 | -0.9537 | 0.0726 | 0.0726 |
 | socnav_sampling | socnav_sampling | experimental | differential_drive | ok | 2026-05-06T18:04:28.978949Z | 29.0170 | 144 | 4.9626 | 0.4028 | 0.5972 | -0.0848 | 0.9730 | 0.9730 |
 

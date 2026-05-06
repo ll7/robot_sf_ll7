@@ -2350,19 +2350,13 @@ def _planner_report_row(  # noqa: C901
             "snqi_mean": "snqi",
         }
         for field_name, metric_name in metric_sources.items():
-            if field_name in {
-                "success_mean",
-                "collisions_mean",
-                "total_collision_count_mean",
-            }:
-                resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
-                if field_name == "success_mean":
-                    success_ci = _episode_metric_ci(records, metric_name)
-                elif field_name == "collisions_mean":
-                    collision_ci = _episode_metric_ci(records, metric_name)
-                continue
-            if not math.isfinite(resolved_metrics[field_name]):
-                resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+            resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+            if field_name == "success_mean":
+                success_ci = _episode_metric_ci(records, metric_name)
+            elif field_name == "collisions_mean":
+                collision_ci = _episode_metric_ci(records, metric_name)
+            elif field_name == "snqi_mean":
+                snqi_ci = _episode_metric_ci(records, metric_name)
     episode_count = (
         len(records)
         if records is not None

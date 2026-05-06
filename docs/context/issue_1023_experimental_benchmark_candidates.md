@@ -18,6 +18,7 @@ Related:
   `configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml`
   and `configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml`
 - Benchmark fallback policy: `docs/context/issue_691_benchmark_fallback_policy.md`
+- SNQI calibration follow-up: `ll7/robot_sf_ll7#1038`
 
 ## Decision
 
@@ -51,7 +52,7 @@ treated as a general planner.
 
 Policy-search inclusion evidence: 144 episodes, success `0.9097`, collision `0.0208`, near miss
 `0.4236`. The candidate-augmented local full benchmark then ran 144 benchmark episodes with
-success `0.9097`, collisions `0.0278`, near misses `18.7447`, SNQI `-0.0795`, and runtime
+success `0.9097`, collisions `0.0278`, near misses `19.4583`, SNQI `-0.0835`, and runtime
 `570.8285` seconds. The report records strong route completion and low collision relative to weak
 baselines, with remaining failures dominated by long-horizon exposure and hard scenarios. This
 evidence justifies inclusion as a challenger row, not promotion to the baseline collection.
@@ -95,5 +96,6 @@ the two rows run end-to-end with no failed, unavailable, fallback, or degraded p
 classification.
 
 Do not publish a release tag from this run as-is. The campaign finished successfully, but SNQI
-contract status is `fail` with warn enforcement, and the analyzer reports a small SNQI mean
-mismatch for `scenario_adaptive_hybrid_orca_v1` between summary row and episode recomputation.
+contract status is `fail` with warn enforcement. An earlier report-table mismatch for
+`scenario_adaptive_hybrid_orca_v1` was traced to mixed-algorithm candidate aggregation and fixed by
+recomputing planner-level means from all episode records.

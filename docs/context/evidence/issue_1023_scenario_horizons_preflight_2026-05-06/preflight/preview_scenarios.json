@@ -1,0 +1,2497 @@
+{
+  "schema_version": "benchmark-preflight-preview-scenarios.v1",
+  "campaign_id": "issue1023_scenario_horizons_preflight_2026-05-06",
+  "generated_at_utc": "2026-05-06T10:19:58.924813Z",
+  "scenario_count": 48,
+  "preview_limit": 100,
+  "route_clearance_warnings": [
+    {
+      "scenario": "classic_cross_trap_high",
+      "map_file": "maps/svg_maps/classic_crossing.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.013277,
+      "min_clearance_margin_m": 0.013277,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_cross_trap_low",
+      "map_file": "maps/svg_maps/classic_crossing.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.013277,
+      "min_clearance_margin_m": 0.013277,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_cross_trap_medium",
+      "map_file": "maps/svg_maps/classic_crossing.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.013277,
+      "min_clearance_margin_m": 0.013277,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_doorway_high",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.012233,
+      "min_clearance_margin_m": 0.012233,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_doorway_low",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.012233,
+      "min_clearance_margin_m": 0.012233,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_doorway_medium",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.012233,
+      "min_clearance_margin_m": 0.012233,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_merging_low",
+      "map_file": "maps/svg_maps/classic_merging.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 0.0,
+      "min_clearance_margin_m": -1.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_merging_medium",
+      "map_file": "maps/svg_maps/classic_merging.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 0.0,
+      "min_clearance_margin_m": -1.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_overtaking_low",
+      "map_file": "maps/svg_maps/classic_overtaking.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.326555,
+      "min_clearance_margin_m": 0.326555,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_overtaking_medium",
+      "map_file": "maps/svg_maps/classic_overtaking.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.326555,
+      "min_clearance_margin_m": 0.326555,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "map_file": "maps/svg_maps/classic_station_platform.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 0.0,
+      "min_clearance_margin_m": -1.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_t_intersection_low",
+      "map_file": "maps/svg_maps/classic_t_intersection.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.288118,
+      "min_clearance_margin_m": 0.288118,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_t_intersection_medium",
+      "map_file": "maps/svg_maps/classic_t_intersection.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.288118,
+      "min_clearance_margin_m": 0.288118,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_entering_elevator",
+      "map_file": "maps/svg_maps/francis2023/francis2023_entering_elevator.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_entering_room",
+      "map_file": "maps/svg_maps/francis2023/francis2023_entering_room.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_exiting_elevator",
+      "map_file": "maps/svg_maps/francis2023/francis2023_exiting_elevator.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_exiting_room",
+      "map_file": "maps/svg_maps/francis2023/francis2023_exiting_room.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_narrow_doorway",
+      "map_file": "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    }
+  ],
+  "route_clearance_warning_count": 18,
+  "truncated": false,
+  "scenarios": [
+    {
+      "name": "classic_bottleneck_low",
+      "map_file": "maps/svg_maps/classic_bottleneck.svg",
+      "simulation_config": {
+        "max_episode_steps": 176,
+        "ped_density": 0.0
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "low",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": null,
+            "mean_distance": null,
+            "robot_ped_within_5m_frac": null,
+            "ped_force_mean": null,
+            "force_q95": null
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 176,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_bottleneck_medium",
+      "map_file": "maps/svg_maps/classic_bottleneck_medium.svg",
+      "simulation_config": {
+        "max_episode_steps": 331,
+        "ped_density": 0.0
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "medium",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": 1.3568504232890768,
+            "mean_distance": 10.304393328176037,
+            "robot_ped_within_5m_frac": 0.20673702551886897,
+            "ped_force_mean": 0.0977117812274009,
+            "force_q95": 0.36515309739568574
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 331,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_bottleneck_high",
+      "map_file": "maps/svg_maps/classic_bottleneck_high.svg",
+      "simulation_config": {
+        "max_episode_steps": 280,
+        "ped_density": 0.0
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "high",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": 1.3151934686291786,
+            "mean_distance": 10.098522314775332,
+            "robot_ped_within_5m_frac": 0.21322846692018266,
+            "ped_force_mean": 0.08291461806394115,
+            "force_q95": 0.21743377704570035
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 280,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_realworld_double_bottleneck_high",
+      "map_file": "maps/svg_maps/classic_realworld_bottleneck.svg",
+      "simulation_config": {
+        "max_episode_steps": 562,
+        "ped_density": 0.0
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "bottleneck",
+        "label": "real-world-inspired double sequential bottleneck",
+        "density": "high",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 562,
+          "status": "recommended",
+          "bucket": "extended"
+        }
+      },
+      "single_pedestrians": [
+        {
+          "id": "l1",
+          "speed_m_s": 0.7,
+          "start": [
+            10.0,
+            9.0
+          ],
+          "goal": [
+            50.0,
+            9.0
+          ]
+        },
+        {
+          "id": "l2",
+          "speed_m_s": 0.7,
+          "start": [
+            10.0,
+            9.5
+          ],
+          "goal": [
+            50.0,
+            9.5
+          ]
+        },
+        {
+          "id": "l3",
+          "speed_m_s": 0.7,
+          "start": [
+            10.0,
+            10.0
+          ],
+          "goal": [
+            50.0,
+            10.0
+          ]
+        },
+        {
+          "id": "l4",
+          "speed_m_s": 0.7,
+          "start": [
+            10.0,
+            10.5
+          ],
+          "goal": [
+            50.0,
+            10.5
+          ]
+        },
+        {
+          "id": "r1",
+          "speed_m_s": 0.7,
+          "start": [
+            50.0,
+            9.0
+          ],
+          "goal": [
+            10.0,
+            9.0
+          ]
+        },
+        {
+          "id": "r2",
+          "speed_m_s": 0.7,
+          "start": [
+            50.0,
+            9.5
+          ],
+          "goal": [
+            10.0,
+            9.5
+          ]
+        },
+        {
+          "id": "r3",
+          "speed_m_s": 0.7,
+          "start": [
+            50.0,
+            10.0
+          ],
+          "goal": [
+            10.0,
+            10.0
+          ]
+        },
+        {
+          "id": "r4",
+          "speed_m_s": 0.7,
+          "start": [
+            50.0,
+            10.5
+          ],
+          "goal": [
+            10.0,
+            10.5
+          ]
+        }
+      ],
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_station_platform_medium",
+      "map_file": "maps/svg_maps/classic_station_platform.svg",
+      "simulation_config": {
+        "max_episode_steps": 600,
+        "ped_density": 0.05
+      },
+      "single_pedestrians": [
+        {
+          "id": "p1",
+          "goal": null,
+          "trajectory": [
+            [
+              24.0,
+              22.0
+            ],
+            [
+              24.0,
+              18.5
+            ],
+            [
+              38.0,
+              22.0
+            ],
+            [
+              76.0,
+              22.0
+            ]
+          ],
+          "wait_at": [
+            {
+              "waypoint_index": 1,
+              "wait_s": 6.0,
+              "note": "wait near the left stair landing before continuing"
+            }
+          ],
+          "note": "left-to-right pause near stair access"
+        },
+        {
+          "id": "p3",
+          "goal": null,
+          "trajectory": [
+            [
+              60.0,
+              4.2
+            ],
+            [
+              60.0,
+              8.0
+            ],
+            [
+              44.0,
+              4.2
+            ],
+            [
+              9.0,
+              4.2
+            ]
+          ],
+          "wait_at": [
+            {
+              "waypoint_index": 1,
+              "wait_s": 5.0,
+              "note": "short dwell near the right stair landing"
+            }
+          ],
+          "note": "right-to-left pause near stair access"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "archetype": "station_platform",
+        "label": "station hall with stair and elevator cores and a central crossover",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.0,
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 600,
+          "status": "planner_blocked",
+          "bucket": "planner_blocked"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_cross_trap_low",
+      "map_id": "classic_cross_trap",
+      "simulation_config": {
+        "max_episode_steps": 514,
+        "ped_density": 0.02
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "cross_trap",
+        "label": "cross-trap local-minimum circulation",
+        "density": "low",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.8367418245009373,
+            "mean_distance": 5.9319317460258425,
+            "robot_ped_within_5m_frac": 0.4599224586174748,
+            "ped_force_mean": 0.2749112167516942,
+            "force_q95": 0.9427403086029689
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 514,
+          "status": "recommended",
+          "bucket": "extended"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ],
+      "map_file": "maps/svg_maps/classic_crossing.svg"
+    },
+    {
+      "name": "classic_cross_trap_medium",
+      "map_id": "classic_cross_trap",
+      "simulation_config": {
+        "max_episode_steps": 530,
+        "ped_density": 0.05
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "cross_trap",
+        "label": "cross-trap local-minimum circulation",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 4.789576152795328,
+            "mean_distance": 10.950417011157608,
+            "robot_ped_within_5m_frac": 0.06629362880886427,
+            "ped_force_mean": 0.18424997393839726,
+            "force_q95": 0.6445198830160026
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 530,
+          "status": "recommended",
+          "bucket": "extended"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ],
+      "map_file": "maps/svg_maps/classic_crossing.svg"
+    },
+    {
+      "name": "classic_cross_trap_high",
+      "map_id": "classic_cross_trap",
+      "simulation_config": {
+        "max_episode_steps": 498,
+        "ped_density": 0.08
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "cross_trap",
+        "label": "cross-trap local-minimum circulation",
+        "density": "high",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.8766785893771702,
+            "mean_distance": 10.02981557058951,
+            "robot_ped_within_5m_frac": 0.17466666666666666,
+            "ped_force_mean": 0.19881092600791625,
+            "force_q95": 0.739349157779526
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 498,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ],
+      "map_file": "maps/svg_maps/classic_crossing.svg"
+    },
+    {
+      "name": "classic_doorway_low",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "simulation_config": {
+        "max_episode_steps": 413,
+        "ped_density": 0.02,
+        "route_spawn_distribution": "spread",
+        "route_spawn_jitter_frac": 0.2,
+        "max_peds_per_group": 1
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "doorway",
+        "density": "low",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.463720507545049,
+            "mean_distance": 4.816876019796456,
+            "robot_ped_within_5m_frac": 0.6435411099964484,
+            "ped_force_mean": 0.3415082177106482,
+            "force_q95": 1.2272777395106866
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 413,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_doorway_medium",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "simulation_config": {
+        "max_episode_steps": 180,
+        "ped_density": 0.05,
+        "route_spawn_distribution": "spread",
+        "route_spawn_jitter_frac": 0.2,
+        "max_peds_per_group": 1
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "doorway",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.0678184908531962,
+            "mean_distance": 3.8315920323061348,
+            "robot_ped_within_5m_frac": 0.7868823705030602,
+            "ped_force_mean": 0.3252101197691243,
+            "force_q95": 1.3760223536317078
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 180,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_doorway_high",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "simulation_config": {
+        "max_episode_steps": 260,
+        "ped_density": 0.08,
+        "route_spawn_distribution": "spread",
+        "route_spawn_jitter_frac": 0.2,
+        "max_peds_per_group": 1
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "doorway",
+        "density": "high",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.5266752306601346,
+            "mean_distance": 3.6800348987218063,
+            "robot_ped_within_5m_frac": 0.8078135977219347,
+            "ped_force_mean": 0.2870675192361372,
+            "force_q95": 1.1067593700206833
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 260,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_group_crossing_low",
+      "map_file": "maps/svg_maps/classic_group_crossing.svg",
+      "simulation_config": {
+        "max_episode_steps": 149,
+        "ped_density": 0.04,
+        "groups": 0.5
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "group_crossing",
+        "density": "low",
+        "flow": "bi",
+        "groups": 0.5,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.786827502246117,
+            "mean_distance": 7.229886758663069,
+            "robot_ped_within_5m_frac": 0.27854876797388683,
+            "ped_force_mean": 0.20199272314365463,
+            "force_q95": 0.64291099435539
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 149,
+          "status": "recommended",
+          "bucket": "short"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_group_crossing_medium",
+      "map_file": "maps/svg_maps/classic_group_crossing.svg",
+      "simulation_config": {
+        "max_episode_steps": 169,
+        "ped_density": 0.08,
+        "groups": 0.5
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "group_crossing",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.5,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.6337745513868533,
+            "mean_distance": 5.827523727663918,
+            "robot_ped_within_5m_frac": 0.3938562438705459,
+            "ped_force_mean": 0.3374180570126427,
+            "force_q95": 1.150662182566604
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 169,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_group_crossing_high",
+      "map_file": "maps/svg_maps/classic_group_crossing.svg",
+      "simulation_config": {
+        "max_episode_steps": 166,
+        "ped_density": 0.12,
+        "groups": 0.5
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "group_crossing",
+        "density": "high",
+        "density_advisory": "high_density_stress",
+        "flow": "bi",
+        "groups": 0.5,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.2462613789534065,
+            "mean_distance": 4.577864020111103,
+            "robot_ped_within_5m_frac": 0.5766262998921123,
+            "ped_force_mean": 0.35675981000425605,
+            "force_q95": 1.287504328477061
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 166,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_head_on_corridor_low",
+      "map_file": "maps/svg_maps/classic_head_on_corridor.svg",
+      "simulation_config": {
+        "max_episode_steps": 262,
+        "ped_density": 0.02
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "head_on_corridor",
+        "density": "low",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.0121961320698123,
+            "mean_distance": 8.148975829981278,
+            "robot_ped_within_5m_frac": 0.403654650834825,
+            "ped_force_mean": 0.13192844736924741,
+            "force_q95": 0.44534841830005495
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 262,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_head_on_corridor_medium",
+      "map_file": "maps/svg_maps/classic_head_on_corridor.svg",
+      "simulation_config": {
+        "max_episode_steps": 274,
+        "ped_density": 0.05
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "head_on_corridor",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 0.9419324712080861,
+            "mean_distance": 5.656425184742342,
+            "robot_ped_within_5m_frac": 0.48393629580805386,
+            "ped_force_mean": 0.17172482282263632,
+            "force_q95": 0.7102478906368666
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 274,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_merging_low",
+      "map_file": "maps/svg_maps/classic_merging.svg",
+      "simulation_config": {
+        "max_episode_steps": 448,
+        "ped_density": 0.02
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "merging",
+        "density": "low",
+        "flow": "converging",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.3030618384387023,
+            "mean_distance": 10.665834093099505,
+            "robot_ped_within_5m_frac": 0.1888021176190665,
+            "ped_force_mean": 0.23497834764751574,
+            "force_q95": 0.8039577090977843
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 448,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_merging_medium",
+      "map_file": "maps/svg_maps/classic_merging.svg",
+      "simulation_config": {
+        "max_episode_steps": 600,
+        "ped_density": 0.05
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "merging",
+        "density": "medium",
+        "flow": "converging",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.1160493103690015,
+            "mean_distance": 7.980354629530384,
+            "robot_ped_within_5m_frac": 0.30860057401910634,
+            "ped_force_mean": 0.2219006248826909,
+            "force_q95": 0.8116757525826447
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 600,
+          "status": "planner_blocked",
+          "bucket": "planner_blocked"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_overtaking_low",
+      "map_file": "maps/svg_maps/classic_overtaking.svg",
+      "simulation_config": {
+        "max_episode_steps": 359,
+        "ped_density": 0.02
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "overtaking",
+        "density": "low",
+        "flow": "uni",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.4639839015136895,
+            "mean_distance": 8.10468445891877,
+            "robot_ped_within_5m_frac": 0.3599502939647695,
+            "ped_force_mean": 0.2151811883513986,
+            "force_q95": 0.7436062813070817
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 359,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_overtaking_medium",
+      "map_file": "maps/svg_maps/classic_overtaking.svg",
+      "simulation_config": {
+        "max_episode_steps": 380,
+        "ped_density": 0.05
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "overtaking",
+        "density": "medium",
+        "flow": "uni",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.42723812096239,
+            "mean_distance": 6.999369170525364,
+            "robot_ped_within_5m_frac": 0.4533904887383148,
+            "ped_force_mean": 0.21700768131426967,
+            "force_q95": 0.8323278797057224
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 380,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_t_intersection_low",
+      "map_file": "maps/svg_maps/classic_t_intersection.svg",
+      "simulation_config": {
+        "max_episode_steps": 334,
+        "ped_density": 0.02
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "t_intersection",
+        "density": "low",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 4.710008226868986,
+            "mean_distance": 9.071593541190264,
+            "robot_ped_within_5m_frac": 0.15306577480490524,
+            "ped_force_mean": 0.2490562277535709,
+            "force_q95": 0.7026898551137789
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 334,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_t_intersection_medium",
+      "map_file": "maps/svg_maps/classic_t_intersection.svg",
+      "simulation_config": {
+        "max_episode_steps": 313,
+        "ped_density": 0.05
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "t_intersection",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-30",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 3.278680868482456,
+            "mean_distance": 8.292060340069455,
+            "robot_ped_within_5m_frac": 0.18514597358631074,
+            "ped_force_mean": 0.35297214250650344,
+            "force_q95": 1.0863139386018612
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 313,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "classic_urban_crossing_medium",
+      "map_file": "maps/svg_maps/classic_urban_crossing.svg",
+      "simulation_config": {
+        "max_episode_steps": 226,
+        "ped_density": 0.05
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "crossing",
+        "label": "urban crosswalk intersection",
+        "density": "medium",
+        "flow": "bi",
+        "groups": 0.0,
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 226,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_frontal_approach",
+      "map_file": "maps/svg_maps/francis2023/francis2023_frontal_approach.svg",
+      "simulation_config": {
+        "max_episode_steps": 248,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7a",
+        "archetype": "frontal_approach",
+        "flow": "bi",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.2631365695932244,
+            "mean_distance": 8.475627129761023,
+            "robot_ped_within_5m_frac": 0.2812465549268845,
+            "ped_force_mean": 0.10206280703250976,
+            "force_q95": 0.3405429364463664
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 248,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_pedestrian_obstruction",
+      "map_file": "maps/svg_maps/francis2023/francis2023_ped_obstruction.svg",
+      "simulation_config": {
+        "max_episode_steps": 270,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal",
+          "speed_m_s": 0.3,
+          "note": "slow walker (tuning pending)"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7b",
+        "archetype": "pedestrian_obstruction",
+        "flow": "uni",
+        "behavior": "slow_ped",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.3613699693389782,
+            "mean_distance": 11.583565806426199,
+            "robot_ped_within_5m_frac": 0.2814906184134628,
+            "ped_force_mean": 0.06456635067231996,
+            "force_q95": 0.37521076423828775
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 270,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_pedestrian_overtaking",
+      "map_file": "maps/svg_maps/francis2023/francis2023_ped_overtaking.svg",
+      "simulation_config": {
+        "max_episode_steps": 222,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal",
+          "speed_m_s": 0.8,
+          "note": "fast walker (tuning pending)"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7c",
+        "archetype": "pedestrian_overtaking",
+        "flow": "uni",
+        "behavior": "fast_ped",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.2223542321899186,
+            "mean_distance": 8.737510755793421,
+            "robot_ped_within_5m_frac": 0.28587024062018307,
+            "ped_force_mean": 0.24676126309566468,
+            "force_q95": 1.208259633473192
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 222,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_robot_overtaking",
+      "map_file": "maps/svg_maps/francis2023/francis2023_robot_overtaking.svg",
+      "simulation_config": {
+        "max_episode_steps": 241,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal",
+          "speed_m_s": 0.3,
+          "note": "slow walker (tuning pending)"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7d",
+        "archetype": "robot_overtaking",
+        "flow": "uni",
+        "behavior": "slow_ped",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.012532959934575,
+            "mean_distance": 8.430144418850485,
+            "robot_ped_within_5m_frac": 0.2836315086782376,
+            "ped_force_mean": 0.15927885772122397,
+            "force_q95": 0.9233930895649017
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 241,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_down_path",
+      "map_file": "maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "simulation_config": {
+        "max_episode_steps": 215,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7e",
+        "archetype": "down_path",
+        "flow": "uni",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.4525620473833802,
+            "mean_distance": 8.18640912848803,
+            "robot_ped_within_5m_frac": 0.286921645008917,
+            "ped_force_mean": 0.058679364586949403,
+            "force_q95": 0.22723102640892362
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 215,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_intersection_no_gesture",
+      "map_file": "maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg",
+      "simulation_config": {
+        "max_episode_steps": 161,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7f",
+        "archetype": "intersection_no_gesture",
+        "flow": "perpendicular",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.7288044084615013,
+            "mean_distance": 6.230072579411624,
+            "robot_ped_within_5m_frac": 0.3968863713788641,
+            "ped_force_mean": 0.08248489757447244,
+            "force_q95": 0.3423159875291397
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 161,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_blind_corner",
+      "map_file": "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
+      "simulation_config": {
+        "max_episode_steps": 316,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7i",
+        "archetype": "blind_corner",
+        "flow": "bi",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 0.9603112090680298,
+            "mean_distance": 5.1063772493202,
+            "robot_ped_within_5m_frac": 0.7185,
+            "ped_force_mean": 0.1153471107407407,
+            "force_q95": 0.45482498070019484
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 316,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_narrow_hallway",
+      "map_file": "maps/svg_maps/francis2023/francis2023_narrow_hallway.svg",
+      "simulation_config": {
+        "max_episode_steps": 323,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7j",
+        "archetype": "narrow_hallway",
+        "flow": "bi",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 0.9195934368310343,
+            "mean_distance": 5.6718576032752415,
+            "robot_ped_within_5m_frac": 0.533601304024786,
+            "ped_force_mean": 0.5611255939989312,
+            "force_q95": 1.51429557399116
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 323,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_narrow_doorway",
+      "map_file": "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg",
+      "simulation_config": {
+        "max_episode_steps": 600,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7k",
+        "archetype": "narrow_doorway",
+        "flow": "bi",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 5.719522860489053,
+            "mean_distance": 8.143361921262386,
+            "robot_ped_within_5m_frac": 0.0,
+            "ped_force_mean": 0.05848146975193476,
+            "force_q95": 0.32300781273340784
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 600,
+          "status": "planner_blocked",
+          "bucket": "planner_blocked"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_entering_room",
+      "map_file": "maps/svg_maps/francis2023/francis2023_entering_room.svg",
+      "simulation_config": {
+        "max_episode_steps": 131,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7l",
+        "archetype": "entering_room",
+        "flow": "enter",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 5.224637284588586,
+            "mean_distance": 12.197621099343227,
+            "robot_ped_within_5m_frac": 0.0019801980198019802,
+            "ped_force_mean": 0.13826993362039994,
+            "force_q95": 0.4375912615159093
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 131,
+          "status": "recommended",
+          "bucket": "short"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_exiting_room",
+      "map_file": "maps/svg_maps/francis2023/francis2023_exiting_room.svg",
+      "simulation_config": {
+        "max_episode_steps": 144,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7m",
+        "archetype": "exiting_room",
+        "flow": "exit",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.5091095140234154,
+            "mean_distance": 5.040019234532677,
+            "robot_ped_within_5m_frac": 0.5395195309011214,
+            "ped_force_mean": 0.18461383289604444,
+            "force_q95": 0.6888443603726052
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 144,
+          "status": "recommended",
+          "bucket": "short"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_entering_elevator",
+      "map_file": "maps/svg_maps/francis2023/francis2023_entering_elevator.svg",
+      "simulation_config": {
+        "max_episode_steps": 102,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7n",
+        "archetype": "entering_elevator",
+        "flow": "enter",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.6329627492537844,
+            "mean_distance": 7.018890149273052,
+            "robot_ped_within_5m_frac": 0.27527255921880417,
+            "ped_force_mean": 0.1626901414381952,
+            "force_q95": 0.42404303193127524
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 102,
+          "status": "recommended",
+          "bucket": "short"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_exiting_elevator",
+      "map_file": "maps/svg_maps/francis2023/francis2023_exiting_elevator.svg",
+      "simulation_config": {
+        "max_episode_steps": 270,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7o",
+        "archetype": "exiting_elevator",
+        "flow": "exit",
+        "behavior": "none",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.9274021081195187,
+            "mean_distance": 3.672120444714254,
+            "robot_ped_within_5m_frac": 0.7592158661361399,
+            "ped_force_mean": 0.3153608063487094,
+            "force_q95": 0.7462034994191002
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 270,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_intersection_wait",
+      "map_file": "maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg",
+      "simulation_config": {
+        "max_episode_steps": 161,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal": null,
+          "trajectory": [
+            [
+              14.0,
+              17.5
+            ],
+            [
+              14.0,
+              15.0
+            ],
+            [
+              14.0,
+              4.0
+            ]
+          ],
+          "wait_at": [
+            {
+              "waypoint_index": 1,
+              "wait_s": 2.0,
+              "note": "yield before crossing"
+            }
+          ],
+          "note": "intersection wait"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7g",
+        "archetype": "intersection_wait",
+        "flow": "cross",
+        "behavior": "wait",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.9224395652295363,
+            "mean_distance": 6.39333132907679,
+            "robot_ped_within_5m_frac": 0.3760707041558785,
+            "ped_force_mean": 0.10270933754592775,
+            "force_q95": 0.37275307583690004
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 161,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_intersection_proceed",
+      "map_file": "maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg",
+      "simulation_config": {
+        "max_episode_steps": 161,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal": null,
+          "trajectory": [
+            [
+              14.0,
+              17.5
+            ],
+            [
+              14.0,
+              15.0
+            ],
+            [
+              14.0,
+              4.0
+            ]
+          ],
+          "note": "intersection proceed"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7h",
+        "archetype": "intersection_proceed",
+        "flow": "cross",
+        "behavior": "proceed",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.9224395652295363,
+            "mean_distance": 6.39333132907679,
+            "robot_ped_within_5m_frac": 0.3760707041558785,
+            "ped_force_mean": 0.10270933754592775,
+            "force_q95": 0.37275307583690004
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 161,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_following_human",
+      "map_file": "maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "simulation_config": {
+        "max_episode_steps": 215,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal": null,
+          "role": "lead",
+          "role_target_id": "robot:0",
+          "role_offset": [
+            2.0,
+            0.0
+          ],
+          "note": "human leads robot (role lead)"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7r",
+        "archetype": "following_human",
+        "flow": "uni",
+        "behavior": "lead",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.483457370738618,
+            "mean_distance": 7.826086665342063,
+            "robot_ped_within_5m_frac": 0.3160296101329766,
+            "ped_force_mean": 0.11548719787819786,
+            "force_q95": 0.393256336079603
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 215,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_leading_human",
+      "map_file": "maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "simulation_config": {
+        "max_episode_steps": 215,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal": null,
+          "role": "follow",
+          "role_target_id": "robot:0",
+          "role_offset": [
+            -1.5,
+            0.0
+          ],
+          "note": "human follows robot (role follow)"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7s",
+        "archetype": "leading_human",
+        "flow": "uni",
+        "behavior": "follow",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.3870452472855677,
+            "mean_distance": 7.948761036366759,
+            "robot_ped_within_5m_frac": 0.3180338840646543,
+            "ped_force_mean": 0.13604703590208986,
+            "force_q95": 0.46106699678358576
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 215,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_accompanying_peer",
+      "map_file": "maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "simulation_config": {
+        "max_episode_steps": 215,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal": null,
+          "role": "accompany",
+          "role_target_id": "robot:0",
+          "role_offset": [
+            0.0,
+            1.0
+          ],
+          "note": "side-by-side with robot"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7t",
+        "archetype": "accompanying_peer",
+        "flow": "uni",
+        "behavior": "accompany",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.7496495549242705,
+            "mean_distance": 7.936356090967665,
+            "robot_ped_within_5m_frac": 0.31012135932312673,
+            "ped_force_mean": 0.12365794520781112,
+            "force_q95": 0.4240773286941142
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 215,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_join_group",
+      "map_file": "maps/svg_maps/francis2023/francis2023_join_group.svg",
+      "simulation_config": {
+        "max_episode_steps": 155,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal": null,
+          "role": "wait",
+          "note": "group anchor (static)"
+        },
+        {
+          "id": "h2",
+          "goal": null,
+          "role": "wait",
+          "note": "group anchor (static)"
+        },
+        {
+          "id": "h3",
+          "goal": null,
+          "role": "join",
+          "role_target_id": "h1",
+          "note": "join group near h1"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7p",
+        "archetype": "join_group",
+        "flow": "n/a",
+        "behavior": "join",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.7841007486988372,
+            "mean_distance": 3.9225446276445384,
+            "robot_ped_within_5m_frac": 0.823536465611663,
+            "ped_force_mean": 0.16434165316401098,
+            "force_q95": 0.5636283965532219
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 155,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_leave_group",
+      "map_file": "maps/svg_maps/francis2023/francis2023_leave_group.svg",
+      "simulation_config": {
+        "max_episode_steps": 170,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "role": "leave",
+          "goal_poi": "poi_h1_goal",
+          "note": "leave group toward exit"
+        },
+        {
+          "id": "h2",
+          "goal": null,
+          "role": "wait",
+          "note": "group anchor (static)"
+        },
+        {
+          "id": "h3",
+          "goal": null,
+          "role": "wait",
+          "note": "group anchor (static)"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "figure": "7q",
+        "archetype": "leave_group",
+        "flow": "n/a",
+        "behavior": "leave",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 0.21500843997162228,
+            "mean_distance": 2.395321032903412,
+            "robot_ped_within_5m_frac": 0.9954022988505746,
+            "ped_force_mean": 0.26920531156921945,
+            "force_q95": 0.8489664264956982
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 170,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_crowd_navigation",
+      "map_file": "maps/svg_maps/francis2023/francis2023_crowd_navigation.svg",
+      "simulation_config": {
+        "max_episode_steps": 306,
+        "ped_density": 0.08
+      },
+      "robot_config": {},
+      "metadata": {
+        "figure": "7u",
+        "archetype": "crowd_navigation",
+        "flow": "crowd",
+        "behavior": "crowd",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.2872769612936248,
+            "mean_distance": 4.139879364452325,
+            "robot_ped_within_5m_frac": 0.7455471256563805,
+            "ped_force_mean": 1.7455711558688223,
+            "force_q95": 6.855429594992161
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 306,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_parallel_traffic",
+      "map_file": "maps/svg_maps/francis2023/francis2023_parallel_traffic.svg",
+      "simulation_config": {
+        "max_episode_steps": 250,
+        "ped_density": 0.04
+      },
+      "robot_config": {},
+      "metadata": {
+        "figure": "7v",
+        "archetype": "parallel_traffic",
+        "flow": "parallel",
+        "behavior": "traffic",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 1.2019108544352484,
+            "mean_distance": 4.386229227686682,
+            "robot_ped_within_5m_frac": 0.7929880484453392,
+            "ped_force_mean": 0.328979544233278,
+            "force_q95": 1.3171325804809033
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 250,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_perpendicular_traffic",
+      "map_file": "maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg",
+      "simulation_config": {
+        "max_episode_steps": 208,
+        "ped_density": 0.1
+      },
+      "robot_config": {},
+      "metadata": {
+        "figure": "7w",
+        "archetype": "perpendicular_traffic",
+        "flow": "perpendicular",
+        "behavior": "traffic",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 0.7605811967524287,
+            "mean_distance": 5.237325595518435,
+            "robot_ped_within_5m_frac": 0.4749830021908287,
+            "ped_force_mean": 0.4024648181569157,
+            "force_q95": 1.4319272820737639
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 208,
+          "status": "recommended",
+          "bucket": "medium"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_circular_crossing",
+      "map_file": "maps/svg_maps/francis2023/francis2023_circular_crossing.svg",
+      "simulation_config": {
+        "max_episode_steps": 104,
+        "ped_density": 0.06
+      },
+      "robot_config": {},
+      "metadata": {
+        "figure": "7x",
+        "archetype": "circular_crossing",
+        "flow": "circular",
+        "behavior": "traffic",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.0585364782135662,
+            "mean_distance": 3.3030352009664035,
+            "robot_ped_within_5m_frac": 0.5917009819448844,
+            "ped_force_mean": 7.162734045862031,
+            "force_q95": 29.256663468988307
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 104,
+          "status": "recommended",
+          "bucket": "short"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "name": "francis2023_robot_crowding",
+      "map_file": "maps/svg_maps/francis2023/francis2023_robot_crowding.svg",
+      "simulation_config": {
+        "max_episode_steps": 348,
+        "ped_density": 0.12
+      },
+      "robot_config": {},
+      "metadata": {
+        "figure": "7y",
+        "archetype": "robot_crowding",
+        "flow": "crowd",
+        "behavior": "crowding",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 3.045685547216631,
+            "mean_distance": 4.573849656079643,
+            "robot_ped_within_5m_frac": 0.6715,
+            "ped_force_mean": 0.5457873106030219,
+            "force_q95": 1.6530126353850463
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/policy_search/scenario_horizons_h500.yaml",
+          "recommended_horizon_steps": 348,
+          "status": "recommended",
+          "bucket": "long"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    }
+  ]
+}

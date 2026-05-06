@@ -90,7 +90,12 @@ knowledge, not every transient iteration detail.
 
 * [Evidence Bundles](evidence/README.md) documents the narrow policy for promoting small generated
   artifacts out of `output/` into git. Current bundles include the
-  [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md) and the
+  [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md),
+  [issue 1023 candidate-augmented preflight](evidence/issue_1023_candidate_augmented_preflight_2026-05-06/README.md),
+  [issue 1023 candidate-augmented local full campaign](evidence/issue_1023_candidate_augmented_local_full_2026-05-06/README.md),
+  [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
+  [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
+  and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
 ## Benchmark Run Notes
@@ -98,6 +103,14 @@ knowledge, not every transient iteration detail.
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.
+* [Issue #1023 Scenario-Horizon Benchmark Surface](issue_1023_scenario_horizon_benchmark.md)
+  records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
+  full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
+  promotion boundary.
+* [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
+  records why `scenario_adaptive_hybrid_orca_v1` and
+  `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as
+  experimental candidates, plus their planner behavior and caveats.
 
 ## Feature Extractor Notes
 

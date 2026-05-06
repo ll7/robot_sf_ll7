@@ -288,7 +288,7 @@ def test_hybrid_rule_static_clearance_escape_rejects_below_minimum(monkeypatch) 
 def test_hybrid_rule_static_clearance_escape_rejects_bounded_corridor_transit(
     monkeypatch,
 ) -> None:
-    """Static escape should not enter the hard band from a currently safe pose."""
+    """Static escape alone should not enter the hard band from a currently safe pose."""
     cfg = HybridRuleLocalPlannerConfig(
         linear_samples=2,
         angular_samples=3,
@@ -319,6 +319,92 @@ def test_hybrid_rule_static_clearance_escape_rejects_bounded_corridor_transit(
         speed_cap=cfg.max_linear_speed,
         nearest_ped=float("inf"),
         progress_windows={"3s": 1.0},
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_clearance"
+
+
+def test_hybrid_rule_static_corridor_transit_allows_slow_progress(
+    monkeypatch,
+) -> None:
+    """Corridor transit should permit bounded slow progress through the conservative band."""
+    cfg = HybridRuleLocalPlannerConfig(
+        linear_samples=2,
+        angular_samples=3,
+        max_linear_speed=0.4,
+        hard_safety_margin=0.1,
+        rollout_horizon=0.2,
+        static_clearance_escape_min_clearance=0.3,
+        static_clearance_escape_max_speed=0.3,
+        static_corridor_transit_enabled=True,
+        static_corridor_transit_initial_band=0.05,
+        static_corridor_transit_tolerance=0.05,
+        static_corridor_transit_min_progress_3s=0.1,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(speed=0.2, goal=(2.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "test_corridor_transit")
+    clearances = iter([0.37, 0.33])
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(
+        planner,
+        "_min_obstacle_clearance",
+        lambda point, observation: next(clearances),
+    )
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.2},
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["terms"]["static_corridor_transit"] == 1.0
+
+
+def test_hybrid_rule_static_corridor_transit_requires_recent_progress(
+    monkeypatch,
+) -> None:
+    """Corridor transit should not keep creeping after recent progress has collapsed."""
+    cfg = HybridRuleLocalPlannerConfig(
+        linear_samples=2,
+        angular_samples=3,
+        max_linear_speed=0.4,
+        hard_safety_margin=0.1,
+        rollout_horizon=0.2,
+        static_clearance_escape_min_clearance=0.3,
+        static_clearance_escape_max_speed=0.3,
+        static_corridor_transit_enabled=True,
+        static_corridor_transit_initial_band=0.05,
+        static_corridor_transit_tolerance=0.05,
+        static_corridor_transit_min_progress_3s=0.1,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(speed=0.2, goal=(2.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "test_corridor_transit")
+    clearances = iter([0.37, 0.33])
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(
+        planner,
+        "_min_obstacle_clearance",
+        lambda point, observation: next(clearances),
+    )
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.05},
     )
 
     assert evaluation["accepted"] is False

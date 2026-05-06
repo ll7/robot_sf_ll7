@@ -5,11 +5,13 @@
 This note summarizes the tracked `full_matrix_h500` policy-search reports. The initial 23-candidate
 matrix was produced from commit `47fecd938482949b7989f1011ec6e34237d8b45d`; the two leader rerun
 reports were refreshed by the clean pinned Slurm rerun on commit
-`2b796ea92104467d3bc913528801fb8bb11034dd`.
+`2b796ea92104467d3bc913528801fb8bb11034dd`. A focused collision-guard follow-up added
+`scenario_adaptive_hybrid_orca_v2_collision_guard` from commit
+`d22c5e6c91b8f690a4ba0a1c6e32bf7aa3cf1b21`.
 
 - Stage: `full_matrix_h500`
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`
-- Candidate reports: 23 tracked reports under `docs/context/policy_search/reports/`
+- Candidate reports: 24 tracked reports under `docs/context/policy_search/reports/`
 - Episode count: 144 per candidate
 - Local source artifacts: `output/policy_search/*/full_matrix_h500/*/summary.json` and combined
   JSONL files referenced by each report
@@ -33,20 +35,33 @@ Slurm job `12339` reran `scenario_adaptive_hybrid_orca_v1` and
   diagnostics show adapter execution throughout; internal `EMERGENCY_STOP` command fallbacks remain
   episode-level behavior, not fallback planner substitution.
 
+## Collision-Guard Rerun
+
+Slurm job `12348` ran `scenario_adaptive_hybrid_orca_v2_collision_guard` with `--clean-pinned`
+under run id `policy_search_full_matrix_h500_collision_guard_20260506_0800`.
+
+- The job completed successfully (`0:0`) on `auxme-imech172` in `00:22:55`.
+- The candidate deliberately trades one `classic_merging_low` success for one fewer collision:
+  `0.9028` success and `0.0139` collision.
+- The two remaining h500 collisions are first-step dynamic-deadlock episodes
+  (`classic_cross_trap_high` seed `112`, `francis2023_circular_crossing` seed `111`) that tuned
+  ORCA did not repair on the targeted micro-slice.
+- The strict `nominal_sanity` promotion gate marks this candidate `promote`.
+
 ## Aggregate Ranking
 
 | Rank | Candidate | Success | Collision | Near Miss | Classic Success | Francis Success | Main Failures |
 |---:|---|---:|---:|---:|---:|---:|---|
 | 1 | `scenario_adaptive_hybrid_orca_v1` | 0.9097 | 0.0208 | 0.4236 | 0.8696 | 0.9467 | `timeout_low_progress` 6, `static_collision` 3 |
-| 2 | `hybrid_rule_v3_fast_progress_static_escape` | 0.9028 | 0.0208 | 0.4236 | 0.8696 | 0.9333 | `timeout_low_progress` 6, `static_collision` 3 |
-| 3 | `hybrid_rule_v3_fast_progress` | 0.8264 | 0.0139 | 0.4236 | 0.7391 | 0.9067 | `timeout_low_progress` 11, `static_collision` 2 |
-| 4 | `hybrid_rule_v3_progress_2p4` | 0.8056 | 0.0139 | 0.4097 | 0.6957 | 0.9067 | `timeout_low_progress` 14, `static_collision` 2 |
-| 5 | `hybrid_rule_v4_recovery_aware` | 0.8056 | 0.0139 | 0.4097 | 0.6957 | 0.9067 | `timeout_low_progress` 14, `static_collision` 2 |
-| 6 | `hybrid_rule_v3_dynamic_relaxed` | 0.7778 | 0.0139 | 0.4167 | 0.6667 | 0.8800 | `timeout_low_progress` 15, `static_collision` 2 |
-| 7 | `hybrid_rule_v3_waypoint2_route_lookahead8_static02` | 0.7778 | 0.0139 | 0.4097 | 0.6522 | 0.8933 | `timeout_low_progress` 15, `static_collision` 2 |
-| 8 | `hybrid_rule_v3_waypoint2_route_lookahead8_static05` | 0.7778 | 0.0139 | 0.4097 | 0.6522 | 0.8933 | `timeout_low_progress` 15, `static_collision` 2 |
-| 9 | `hybrid_rule_v3_teb_like_rollout` | 0.7708 | 0.0139 | 0.4097 | 0.6667 | 0.8667 | `timeout_low_progress` 15, `static_collision` 2 |
-| 10 | `hybrid_rule_v0_minimal` | 0.7361 | 0.0208 | 0.4167 | 0.6667 | 0.8000 | `timeout_low_progress` 23, `static_collision` 3 |
+| 2 | `scenario_adaptive_hybrid_orca_v2_collision_guard` | 0.9028 | 0.0139 | 0.4236 | 0.8551 | 0.9467 | `timeout_low_progress` 8, `static_collision` 2 |
+| 3 | `hybrid_rule_v3_fast_progress_static_escape` | 0.9028 | 0.0208 | 0.4236 | 0.8696 | 0.9333 | `timeout_low_progress` 6, `static_collision` 3 |
+| 4 | `hybrid_rule_v3_fast_progress` | 0.8264 | 0.0139 | 0.4236 | 0.7391 | 0.9067 | `timeout_low_progress` 11, `static_collision` 2 |
+| 5 | `hybrid_rule_v3_progress_2p4` | 0.8056 | 0.0139 | 0.4097 | 0.6957 | 0.9067 | `timeout_low_progress` 14, `static_collision` 2 |
+| 6 | `hybrid_rule_v4_recovery_aware` | 0.8056 | 0.0139 | 0.4097 | 0.6957 | 0.9067 | `timeout_low_progress` 14, `static_collision` 2 |
+| 7 | `hybrid_rule_v3_dynamic_relaxed` | 0.7778 | 0.0139 | 0.4167 | 0.6667 | 0.8800 | `timeout_low_progress` 15, `static_collision` 2 |
+| 8 | `hybrid_rule_v3_waypoint2_route_lookahead8_static02` | 0.7778 | 0.0139 | 0.4097 | 0.6522 | 0.8933 | `timeout_low_progress` 15, `static_collision` 2 |
+| 9 | `hybrid_rule_v3_waypoint2_route_lookahead8_static05` | 0.7778 | 0.0139 | 0.4097 | 0.6522 | 0.8933 | `timeout_low_progress` 15, `static_collision` 2 |
+| 10 | `hybrid_rule_v3_teb_like_rollout` | 0.7708 | 0.0139 | 0.4097 | 0.6667 | 0.8667 | `timeout_low_progress` 15, `static_collision` 2 |
 
 The remaining route-lookahead and waypoint variants mostly trade extra success for static
 collisions. `mpc_clearance_sampler_v1` remains attractive only as a research component because it
@@ -65,9 +80,11 @@ not that a different planner family suddenly became dominant.
 | `hybrid_rule_v3_progress_2p4` | 0.2708 | 0.8056 | +0.5347 | +0.0000 |
 | `hybrid_rule_v4_recovery_aware` | 0.2500 | 0.8056 | +0.5556 | +0.0000 |
 
-The top two candidates gain the most success but also add one extra collision relative to the
-shorter full-matrix run. This matters because the strict `nominal_sanity` gate allows at most
-`0.0200` collision rate, while the top two finish at `0.0208` (3 collisions in 144 episodes).
+The raw-success leader and the `hybrid_rule_v3_fast_progress_static_escape` near-leader gain the
+most success but add one extra collision relative to the shorter full-matrix run. This matters
+because the strict `nominal_sanity` gate allows at most `0.0200` collision rate, while both finish
+at `0.0208` (3 collisions in 144 episodes). The v2 collision-guard follow-up is the h500 candidate
+that trades one success for a strict-gate-clean `0.0139` collision rate.
 
 ## Promotion Decision
 
@@ -79,9 +96,12 @@ Current h500 leader:
 
 Strict gate-clean h500 candidates:
 
-- Promote `hybrid_rule_v3_fast_progress` as the simplest strict-gate h500 candidate. It is the
-  best candidate that passes success `>= 0.80`, collision `<= 0.02`, and the scenario-stratified
-  collision guard (`0.8264` success, `0.0139` collision).
+- Promote `scenario_adaptive_hybrid_orca_v2_collision_guard` as the primary strict-gate h500
+  candidate. It preserves most of the v1 leader's success while passing success `>= 0.80`,
+  collision `<= 0.02`, and the scenario-stratified collision guard (`0.9028` success, `0.0139`
+  collision).
+- Keep `hybrid_rule_v3_fast_progress` as the simplest strict-gate h500 baseline. It passes the same
+  strict checks (`0.8264` success, `0.0139` collision), but gives up far more route completion.
 - Keep `hybrid_rule_v3_progress_2p4` and `hybrid_rule_v4_recovery_aware` as backup ablations. They
   both pass the same strict gate at `0.8056` success and `0.0139` collision, but neither beats
   `hybrid_rule_v3_fast_progress` on aggregate success.
@@ -107,7 +127,8 @@ H500 does not solve every case. The aggregate leader still fails:
 - `classic_merging_medium`: 0/3 success, 3 timeouts.
 - `classic_station_platform_medium`: 0/3 success, 3 timeouts.
 - `francis2023_narrow_doorway`: 0/3 success, 3 timeouts.
-- `classic_merging_low`: 1/3 success, with one collision and one timeout.
+- `classic_merging_low`: 1/3 success for v1, with one collision and one timeout; the v2 collision
+  guard changes this to 0/3 success with no collision.
 - `classic_cross_trap_high`: 2/3 success, with one collision.
 - `francis2023_circular_crossing`: 2/3 success, with one collision.
 
@@ -170,6 +191,9 @@ Observed buckets from the h500 evidence:
   in about 24 minutes, and the rerun summaries matched the earlier h500 metrics exactly.
 - Refreshed strict h500 gate reports and scenario horizon source paths so the two rerun leaders now
   reference `policy_search_full_matrix_h500_leaders_clean_20260505_204501`.
+- Ran h500 collision repair micro-sweeps (`12341`, `12345`, `12347`) and full h500 validation
+  (`12348`) for `scenario_adaptive_hybrid_orca_v2_collision_guard`; the full run completed with
+  exit code `0:0` and strict gate decision `promote`.
 - Follow-up implementation artifacts:
   - Clean pinned rerun handoff:
     `docs/context/policy_search/SLURM/004_h500_leader_clean_rerun.md`

@@ -71,6 +71,17 @@ Problem:
   `hybrid_rule_v3_fast_progress_static_escape` is only one episode and it misses the strict
   collision gate by one collision.
 
+2026-05-06 update:
+
+- `scenario_adaptive_hybrid_orca_v2_collision_guard` keeps the v1 selector everywhere except
+  `classic_merging_low`, where it disables static-escape/recenter extras.
+- Targeted micro-sweeps showed tuned ORCA does not repair the two first-step dynamic-deadlock
+  collisions (`classic_cross_trap_high` seed `112`, `francis2023_circular_crossing` seed `111`).
+- Full h500 evidence: v2 reaches `0.9028` success and `0.0139` collision, passing the strict
+  `nominal_sanity` gate while trading away one `classic_merging_low` success from v1.
+- Decision: treat v1 as the experimental raw-success leader and v2 as the primary strict-gate
+  h500 promotion candidate.
+
 Candidate direction:
 
 - Treat scenario overrides as auditable interventions.

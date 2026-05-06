@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("summary_json", nargs="+", type=Path)
     parser.add_argument("--success-rate-min", type=float, default=0.75)
     parser.add_argument("--collision-rate-max", type=float, default=0.03)
+    parser.add_argument("--p95-multiplier", type=float, default=1.2)
     parser.add_argument("--buffer-steps", type=int, default=20)
     parser.add_argument("--floor-steps", type=int, default=80)
     parser.add_argument("--cap-steps", type=int, default=600)
@@ -109,6 +110,7 @@ def _recommend_horizon(
     success_steps: list[float],
     *,
     buffer_steps: int,
+    p95_multiplier: float,
     floor_steps: int,
     cap_steps: int,
     near_cap_margin: int,
@@ -116,7 +118,9 @@ def _recommend_horizon(
     p95 = _quantile(success_steps, 0.95)
     if p95 is None:
         return int(cap_steps), "planner_blocked"
-    recommended = int(min(cap_steps, max(floor_steps, math.ceil(p95 + buffer_steps))))
+    recommended = int(
+        min(cap_steps, max(floor_steps, math.ceil((p95 * p95_multiplier) + buffer_steps)))
+    )
     if recommended >= cap_steps - near_cap_margin:
         return recommended, "needs_longer_probe"
     return recommended, "recommended"
@@ -173,6 +177,7 @@ def main() -> int:
         recommended, status = _recommend_horizon(
             success_steps,
             buffer_steps=int(args.buffer_steps),
+            p95_multiplier=float(args.p95_multiplier),
             floor_steps=int(args.floor_steps),
             cap_steps=int(args.cap_steps),
             near_cap_margin=int(args.near_cap_margin),
@@ -197,6 +202,7 @@ def main() -> int:
         "selection": {
             "success_rate_min": float(args.success_rate_min),
             "collision_rate_max": float(args.collision_rate_max),
+            "p95_multiplier": float(args.p95_multiplier),
             "buffer_steps": int(args.buffer_steps),
             "floor_steps": int(args.floor_steps),
             "cap_steps": int(args.cap_steps),
@@ -214,7 +220,8 @@ def main() -> int:
         "# Policy Search Horizon Recommendations",
         "",
         "Generated from safe incumbent policy-search summaries. Scenario horizons use "
-        f"`ceil(p95_success_steps + {int(args.buffer_steps)})`, floor "
+        f"`ceil(p95_success_steps * {float(args.p95_multiplier):.2f} "
+        f"+ {int(args.buffer_steps)})`, floor "
         f"`{int(args.floor_steps)}`, and cap `{int(args.cap_steps)}`; scenarios with no "
         "safe-incumbent successes are marked `planner_blocked`.",
         "",

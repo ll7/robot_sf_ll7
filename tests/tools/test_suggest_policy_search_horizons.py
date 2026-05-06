@@ -104,7 +104,8 @@ def test_horizon_recommendations_mark_no_success_scenarios_blocked(
     payload = yaml.safe_load(output_yaml.read_text(encoding="utf-8"))
     scenario_a = payload["scenarios"]["scenario_a"]
     scenario_b = payload["scenarios"]["scenario_b"]
-    assert scenario_a["recommended_horizon_steps"] == 34
+    assert payload["selection"]["p95_multiplier"] == 1.2
+    assert scenario_a["recommended_horizon_steps"] == 40
     assert scenario_a["status"] == "recommended"
     assert scenario_a["timeout_failure_count"] == 1
     assert scenario_b["recommended_horizon_steps"] == 50

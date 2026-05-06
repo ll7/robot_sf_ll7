@@ -162,8 +162,8 @@ Recommended decision rule:
 
 1. For each scenario, collect successful completion step counts from the safe incumbent set
    (`collision <= 0.03`, success `>= 0.75`) across pinned h500 runs.
-2. Set the candidate horizon to `ceil(p95_success_steps + 20)` with a small floor for very short
-   scenes, capped at h600. Use the route-length/nominal-speed estimate as a sanity check when
+2. Set the candidate horizon to `ceil(p95_success_steps * 1.2 + 20)` with a small floor for very
+   short scenes, capped at h600. Use the route-length/nominal-speed estimate as a sanity check when
    `shortest_path_len` or equivalent path metrics are present.
 3. If `p95_success_steps` is near the h600 cap or the scenario still has many h500 timeouts, treat
    the scenario as needing a separate design/probe decision rather than silently increasing the
@@ -175,9 +175,10 @@ Observed buckets from the h500 evidence:
 
 | Horizon Bucket | Candidate Scenarios | Recommended Handling |
 |---|---|---|
-| 90-150 steps | elevator/room entry-exit, group crossing, intersections, `francis2023_leave_group` | Short fixed budget is enough; use h150 unless route length changes. |
-| 180-280 steps | bottlenecks, corridors, T-intersections, most Francis following/traffic scenes | Use h250-h300, selected by per-scenario p95. |
-| 350-475 steps | cross-trap, overtaking, `classic_realworld_double_bottleneck_high`, some doorway seeds | Use h450-h500; h600 is the cap for near-cap or no-success classification. |
+| 100-180 steps | elevator/room entry-exit, group crossing, intersections, `francis2023_leave_group` | Short-to-medium fixed budgets are enough; keep the 20% slack unless route length changes. |
+| 200-350 steps | bottlenecks, corridors, T-intersections, most Francis following/traffic scenes | Use h200-h350, selected by per-scenario p95 with slack. |
+| 359-498 steps | cross-trap high, overtaking, `classic_merging_low`, doorway-low, robot-crowding | Use h360-h500; treat high failure counts as planner risk even when a few successes set the p95. |
+| 514-562 steps | cross-trap low/medium and `classic_realworld_double_bottleneck_high` | Use extended h515-h565 budgets under the h600 cap. |
 | Planner-blocked at h600 | `classic_merging_medium`, `classic_station_platform_medium`, `francis2023_narrow_doorway` | Do not solve with horizon; require planner or scenario-contract work. |
 
 ## Validation

@@ -1,0 +1,482 @@
+{
+  "generated_at": "2026-05-05T16:27:37.991806+00:00",
+  "candidate": "hybrid_rule_v3_fast_progress_static_escape",
+  "stage": "full_matrix_h500",
+  "algo": "hybrid_rule_local_planner",
+  "candidate_registry": "docs/context/policy_search/candidate_registry.yaml",
+  "candidate_config_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml",
+  "scenario_matrix": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/configs/scenarios/classic_interactions_francis2023.yaml",
+  "seed_manifest": null,
+  "benchmark_profile": "experimental",
+  "git_hash": "47fecd938482949b7989f1011ec6e34237d8b45d",
+  "summary": {
+    "episodes": 144,
+    "success_rate": 0.9027777777777778,
+    "collision_rate": 0.020833333333333332,
+    "near_miss_rate": 0.4236111111111111,
+    "termination_reason_counts": {
+      "success": 130,
+      "max_steps": 7,
+      "collision": 3,
+      "terminated": 4
+    },
+    "failure_mode_counts": {
+      "near_miss_intrusive": 5,
+      "static_collision": 3,
+      "timeout_low_progress": 6
+    },
+    "scenario_exclusions": {
+      "count": 0,
+      "by_status": {},
+      "by_reason": {},
+      "records": []
+    },
+    "evidence_adjusted": {
+      "episodes": 144,
+      "excluded_episodes": 0,
+      "success_rate": 0.9027777777777778,
+      "collision_rate": 0.020833333333333332,
+      "near_miss_rate": 0.4236111111111111
+    },
+    "scenario_family": {
+      "classic": {
+        "episodes": 69,
+        "success_rate": 0.8695652173913043,
+        "collision_rate": 0.028985507246376812,
+        "near_miss_rate": 0.5072463768115942
+      },
+      "francis2023": {
+        "episodes": 75,
+        "success_rate": 0.9333333333333333,
+        "collision_rate": 0.013333333333333334,
+        "near_miss_rate": 0.3466666666666667
+      }
+    },
+    "mean_min_distance": 2.8372144659859684,
+    "mean_avg_speed": 1.4176832008863023
+  },
+  "decision": "tracked",
+  "jsonl_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__combined.jsonl",
+  "family_runs": {
+    "classic": {
+      "summary": {
+        "episodes": 69,
+        "success_rate": 0.8695652173913043,
+        "collision_rate": 0.028985507246376812,
+        "near_miss_rate": 0.5072463768115942,
+        "termination_reason_counts": {
+          "success": 60,
+          "max_steps": 7,
+          "collision": 2
+        },
+        "failure_mode_counts": {
+          "near_miss_intrusive": 4,
+          "static_collision": 2,
+          "timeout_low_progress": 3
+        },
+        "scenario_exclusions": {
+          "count": 0,
+          "by_status": {},
+          "by_reason": {},
+          "records": []
+        },
+        "evidence_adjusted": {
+          "episodes": 69,
+          "excluded_episodes": 0,
+          "success_rate": 0.8695652173913043,
+          "collision_rate": 0.028985507246376812,
+          "near_miss_rate": 0.5072463768115942
+        },
+        "scenario_family": {
+          "classic": {
+            "episodes": 69,
+            "success_rate": 0.8695652173913043,
+            "collision_rate": 0.028985507246376812,
+            "near_miss_rate": 0.5072463768115942
+          }
+        },
+        "mean_min_distance": 2.6886569613194586,
+        "mean_avg_speed": 1.3372615256704858,
+        "runtime_sec": 858.6857014540583
+      },
+      "jsonl_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__classic.jsonl",
+      "algo_config_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__classic_algo.yaml",
+      "batch_summary": {
+        "total_jobs": 69,
+        "written": 69,
+        "successful_jobs": 69,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__classic.jsonl",
+        "algorithm_readiness": {
+          "name": "hybrid_rule_local_planner",
+          "tier": "experimental",
+          "profile": "experimental"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "hybrid_rule_local_planner",
+          "status": "ok",
+          "canonical_algorithm": "hybrid_rule_local_planner",
+          "baseline_category": "classical",
+          "policy_semantics": "hybrid_rule_deterministic_local_planner",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": false,
+            "supports_adapter_commands": true,
+            "execution_mode": "adapter",
+            "adapter_name": "HybridRuleLocalPlannerAdapter",
+            "adapter_active": true,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 15728,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "projection_rate": 0.0,
+            "infeasible_rate": 0.0,
+            "mean_abs_delta_linear": 0.0,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.0,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "hybrid_rule_local_planner",
+            "status": "ok",
+            "canonical_algorithm": "hybrid_rule_local_planner",
+            "baseline_category": "classical",
+            "policy_semantics": "hybrid_rule_deterministic_local_planner",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": false,
+              "supports_adapter_commands": true,
+              "execution_mode": "adapter",
+              "adapter_name": "HybridRuleLocalPlannerAdapter",
+              "adapter_active": true,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 15728,
+              "infeasible_native_count": 0,
+              "projected_count": 0,
+              "projection_rate": 0.0,
+              "infeasible_rate": 0.0,
+              "mean_abs_delta_linear": 0.0,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.0,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "adapter",
+          "readiness_status": "adapter",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        }
+      }
+    },
+    "francis2023": {
+      "summary": {
+        "episodes": 72,
+        "success_rate": 0.9305555555555556,
+        "collision_rate": 0.013888888888888888,
+        "near_miss_rate": 0.3611111111111111,
+        "termination_reason_counts": {
+          "success": 67,
+          "terminated": 4,
+          "collision": 1
+        },
+        "failure_mode_counts": {
+          "timeout_low_progress": 3,
+          "near_miss_intrusive": 1,
+          "static_collision": 1
+        },
+        "scenario_exclusions": {
+          "count": 0,
+          "by_status": {},
+          "by_reason": {},
+          "records": []
+        },
+        "evidence_adjusted": {
+          "episodes": 72,
+          "excluded_episodes": 0,
+          "success_rate": 0.9305555555555556,
+          "collision_rate": 0.013888888888888888,
+          "near_miss_rate": 0.3611111111111111
+        },
+        "scenario_family": {
+          "francis2023": {
+            "episodes": 72,
+            "success_rate": 0.9305555555555556,
+            "collision_rate": 0.013888888888888888,
+            "near_miss_rate": 0.3611111111111111
+          }
+        },
+        "mean_min_distance": 2.993241960391406,
+        "mean_avg_speed": 1.486068734535314,
+        "runtime_sec": 529.2582621658221
+      },
+      "jsonl_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__francis2023.jsonl",
+      "algo_config_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__francis2023_algo.yaml",
+      "batch_summary": {
+        "total_jobs": 72,
+        "written": 72,
+        "successful_jobs": 72,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__francis2023.jsonl",
+        "algorithm_readiness": {
+          "name": "hybrid_rule_local_planner",
+          "tier": "experimental",
+          "profile": "experimental"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "hybrid_rule_local_planner",
+          "status": "ok",
+          "canonical_algorithm": "hybrid_rule_local_planner",
+          "baseline_category": "classical",
+          "policy_semantics": "hybrid_rule_deterministic_local_planner",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": false,
+            "supports_adapter_commands": true,
+            "execution_mode": "adapter",
+            "adapter_name": "HybridRuleLocalPlannerAdapter",
+            "adapter_active": true,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 11486,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "projection_rate": 0.0,
+            "infeasible_rate": 0.0,
+            "mean_abs_delta_linear": 0.0,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.0,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "hybrid_rule_local_planner",
+            "status": "ok",
+            "canonical_algorithm": "hybrid_rule_local_planner",
+            "baseline_category": "classical",
+            "policy_semantics": "hybrid_rule_deterministic_local_planner",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": false,
+              "supports_adapter_commands": true,
+              "execution_mode": "adapter",
+              "adapter_name": "HybridRuleLocalPlannerAdapter",
+              "adapter_active": true,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 11486,
+              "infeasible_native_count": 0,
+              "projected_count": 0,
+              "projection_rate": 0.0,
+              "infeasible_rate": 0.0,
+              "mean_abs_delta_linear": 0.0,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.0,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "adapter",
+          "readiness_status": "adapter",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        }
+      }
+    },
+    "francis2023__francis2023_perpendicular_traffic": {
+      "summary": {
+        "episodes": 3,
+        "success_rate": 1.0,
+        "collision_rate": 0.0,
+        "near_miss_rate": 0.0,
+        "termination_reason_counts": {
+          "success": 3
+        },
+        "failure_mode_counts": {},
+        "scenario_exclusions": {
+          "count": 0,
+          "by_status": {},
+          "by_reason": {},
+          "records": []
+        },
+        "evidence_adjusted": {
+          "episodes": 3,
+          "excluded_episodes": 0,
+          "success_rate": 1.0,
+          "collision_rate": 0.0,
+          "near_miss_rate": 0.0
+        },
+        "scenario_family": {
+          "francis2023": {
+            "episodes": 3,
+            "success_rate": 1.0,
+            "collision_rate": 0.0,
+            "near_miss_rate": 0.0
+          }
+        },
+        "mean_min_distance": 2.360819702918675,
+        "mean_avg_speed": 1.6261289232737959,
+        "runtime_sec": 42.00927732978016
+      },
+      "jsonl_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__francis2023__francis2023_perpendicular_traffic.jsonl",
+      "algo_config_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__francis2023__francis2023_perpendicular_traffic_algo.yaml",
+      "batch_summary": {
+        "total_jobs": 3,
+        "written": 3,
+        "successful_jobs": 3,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/full_matrix_h500__hybrid_rule_v3_fast_progress_static_escape__francis2023__francis2023_perpendicular_traffic.jsonl",
+        "algorithm_readiness": {
+          "name": "hybrid_rule_local_planner",
+          "tier": "experimental",
+          "profile": "experimental"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "hybrid_rule_local_planner",
+          "status": "ok",
+          "canonical_algorithm": "hybrid_rule_local_planner",
+          "baseline_category": "classical",
+          "policy_semantics": "hybrid_rule_deterministic_local_planner",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": false,
+            "supports_adapter_commands": true,
+            "execution_mode": "adapter",
+            "adapter_name": "HybridRuleLocalPlannerAdapter",
+            "adapter_active": true,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 393,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "projection_rate": 0.0,
+            "infeasible_rate": 0.0,
+            "mean_abs_delta_linear": 0.0,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.0,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "hybrid_rule_local_planner",
+            "status": "ok",
+            "canonical_algorithm": "hybrid_rule_local_planner",
+            "baseline_category": "classical",
+            "policy_semantics": "hybrid_rule_deterministic_local_planner",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": false,
+              "supports_adapter_commands": true,
+              "execution_mode": "adapter",
+              "adapter_name": "HybridRuleLocalPlannerAdapter",
+              "adapter_active": true,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 393,
+              "infeasible_native_count": 0,
+              "projected_count": 0,
+              "projection_rate": 0.0,
+              "infeasible_rate": 0.0,
+              "mean_abs_delta_linear": 0.0,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.0,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "adapter",
+          "readiness_status": "adapter",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        }
+      }
+    }
+  }
+}

@@ -86,6 +86,13 @@ knowledge, not every transient iteration detail.
 * [docs/context/issue_796_agent_knowledge_capture_policy.md](issue_796_agent_knowledge_capture_policy.md)
 * [docs/context/issue_805_teb_corridor_commitment_iteration.md](issue_805_teb_corridor_commitment_iteration.md)
 
+## Evidence Bundles
+
+* [Evidence Bundles](evidence/README.md) documents the narrow policy for promoting small generated
+  artifacts out of `output/` into git. Current bundles include the
+  [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md) and the
+  [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
+
 ## Benchmark Run Notes
 
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)

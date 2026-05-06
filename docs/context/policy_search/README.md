@@ -32,6 +32,8 @@ Use it for three things only:
 - `reports/2026-05-05_h500_horizon_recommendations.md`: generated per-scenario horizon
   recommendations from safe h500 incumbent JSONL evidence; machine-readable output lives at
   `configs/policy_search/scenario_horizons_h500.yaml`.
+- `../evidence/policy_search_h500_2026-05-06/`: small tracked evidence bundle with selected h500
+  summaries and failure reports promoted from `output/`.
 - `reports/promotions/2026-05-05_full_matrix_h500_strict_gate/`: strict `nominal_sanity` gate
   reports for the h500 top candidates.
 - `reasoning/2026-05-05_h500_research_plan.md`: next research workstreams for h500 blockers,

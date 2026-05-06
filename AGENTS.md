@@ -107,6 +107,16 @@ Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gy
 - Any artifact required by future runs, benchmarks, reports, or release workflows must be promoted to a durable location before downstream steps depend on it.
 - Prefer durable publication through W&B artifacts/model uploads or another explicit persistent store with enough metadata to recover the exact artifact later.
 - Keep lightweight tracked manifests or registry entries when they describe how to retrieve, validate, or identify a durable artifact.
+- Use `docs/context/evidence/` for small, reviewable copies of generated evidence that supports a
+  durable context note or benchmark decision, such as compact `summary.json` files, Markdown
+  reports, CSV/JSON tables, and checksums. Do not mirror `output/` wholesale.
+- Keep raw episode JSONL, videos, large Slurm logs, coverage HTML, model caches, and checkpoints out
+  of git unless there is a narrow, reviewable fixture reason. If those artifacts are reproducible
+  from tracked configs, seeds, commits, and commands, they may be left ignored or deleted locally.
+  If they are expensive and non-regenerable, archive them in W&B, release storage, or another
+  durable store and track only the manifest/pointer.
+- Do not add Git LFS as the default answer for generated benchmark artifacts. Consider Git LFS only
+  for a deliberately versioned, non-regenerable binary fixture after an explicit maintainer decision.
 - Worktree launchers that need `output/model_cache/...` inputs should either hydrate them from a canonical cache or artifact reference, or fail with an actionable error that names the missing durable source.
 - Avoid committing bulky generated outputs directly unless the file is intentionally small, reviewable, and part of the source contract.
 

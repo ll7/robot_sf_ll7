@@ -1,0 +1,63 @@
+{
+  "generated_at": "2026-05-05T21:09:39.963655+00:00",
+  "candidate": "hybrid_rule_v3_fast_progress",
+  "stage": "full_matrix_h500",
+  "algo": "hybrid_rule_local_planner",
+  "candidate_registry": "docs/context/policy_search/candidate_registry.yaml",
+  "candidate_config_path": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/configs/policy_search/candidates/hybrid_rule_v3_fast_progress.yaml",
+  "scenario_matrix": "/home/luttkule/git/robot_sf_ll7.worktrees/benchmark_2026-05-04/configs/scenarios/classic_interactions_francis2023.yaml",
+  "seed_manifest": null,
+  "benchmark_profile": "experimental",
+  "git_hash": "2b796ea92104467d3bc913528801fb8bb11034dd",
+  "summary": {
+    "episodes": 144,
+    "success_rate": 0.8263888888888888,
+    "collision_rate": 0.013888888888888888,
+    "near_miss_rate": 0.4236111111111111,
+    "termination_reason_counts": {
+      "success": 119,
+      "max_steps": 16,
+      "collision": 2,
+      "terminated": 7
+    },
+    "failure_mode_counts": {
+      "near_miss_intrusive": 10,
+      "timeout_low_progress": 11,
+      "static_collision": 2,
+      "overconservative_stop": 2
+    },
+    "scenario_exclusions": {
+      "count": 0,
+      "by_status": {},
+      "by_reason": {},
+      "records": []
+    },
+    "evidence_adjusted": {
+      "episodes": 144,
+      "excluded_episodes": 0,
+      "success_rate": 0.8263888888888888,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.4236111111111111
+    },
+    "scenario_family": {
+      "classic": {
+        "episodes": 69,
+        "success_rate": 0.7391304347826086,
+        "collision_rate": 0.014492753623188406,
+        "near_miss_rate": 0.5217391304347826
+      },
+      "francis2023": {
+        "episodes": 75,
+        "success_rate": 0.9066666666666666,
+        "collision_rate": 0.013333333333333334,
+        "near_miss_rate": 0.3333333333333333
+      }
+    },
+    "mean_min_distance": 2.9110678662531457,
+    "mean_avg_speed": 1.327913458448312,
+    "runtime_sec": 1431.2314054770395
+  },
+  "decision": "tracked",
+  "jsonl_path": "output/policy_search/hybrid_rule_v3_fast_progress/full_matrix_h500/policy_search_full_matrix_h500_leaders_clean_20260505_204501/full_matrix_h500__hybrid_rule_v3_fast_progress.jsonl",
+  "family_runs": {}
+}

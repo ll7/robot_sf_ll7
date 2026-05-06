@@ -90,9 +90,10 @@ def load_scenarios(path: Path, *, base_dir: Path | None = None) -> list[Mapping[
     include lists (``includes``, ``include``, or ``scenario_files``) for
     composing per-scenario and per-archetype files into a single list.
     Manifests can also provide ``select_scenarios`` to keep only an explicit,
-    deterministic subset of the expanded scenarios by name, and
-    ``scenario_overrides`` to apply the same nested override block to every
-    expanded scenario.
+    deterministic subset of the expanded scenarios by name, ``scenario_overrides``
+    to apply the same nested override block to every expanded scenario, and
+    ``scenario_overrides_by_name`` to apply nested overrides to specific named
+    scenarios after expansion.
 
     Returns:
         list[Mapping[str, Any]]: Parsed scenario entries from the file(s).
@@ -155,6 +156,13 @@ def _load_scenarios_recursive(
         if isinstance(data, Mapping):
             combined = _apply_scenario_selection(combined, data=data, source=resolved)
             combined = _apply_scenario_overrides(
+                combined,
+                data=data,
+                source=resolved,
+                root=root,
+                map_search_paths=effective_search_paths,
+            )
+            combined = _apply_scenario_overrides_by_name(
                 combined,
                 data=data,
                 source=resolved,
@@ -329,6 +337,90 @@ def _apply_scenario_overrides(
         return scenarios
     return _normalize_scenarios(
         [_deep_merge_mapping(scenario, overrides) for scenario in scenarios],
+        source=source,
+        root=root,
+        map_search_paths=map_search_paths,
+    )
+
+
+def _resolve_scenario_overrides_by_name(
+    data: Mapping[str, Any],
+    *,
+    source: Path,
+) -> Mapping[str, Mapping[str, Any]]:
+    """Resolve per-scenario override blocks keyed by scenario name.
+
+    Returns:
+        Mapping[str, Mapping[str, Any]]: Nested override mappings to apply to
+            matching expanded scenario names.
+    """
+    raw = data.get("scenario_overrides_by_name")
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"scenario_overrides_by_name must be a mapping in '{source}'.")
+
+    overrides: dict[str, Mapping[str, Any]] = {}
+    for name, payload in raw.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(
+                f"scenario_overrides_by_name keys must be non-empty strings in '{source}'."
+            )
+        if not isinstance(payload, Mapping):
+            raise ValueError(
+                f"scenario_overrides_by_name entry '{name}' must be a mapping in '{source}'."
+            )
+        overrides[name.strip()] = payload
+    return overrides
+
+
+def _apply_scenario_overrides_by_name(
+    scenarios: list[Mapping[str, Any]],
+    *,
+    data: Mapping[str, Any],
+    source: Path,
+    root: Path,
+    map_search_paths: list[Path],
+) -> list[Mapping[str, Any]]:
+    """Apply nested overrides to specific scenario names after expansion.
+
+    Returns:
+        list[Mapping[str, Any]]: Scenario list with matching named overrides
+            applied.
+    """
+    overrides_by_name = _resolve_scenario_overrides_by_name(data, source=source)
+    if not overrides_by_name:
+        return scenarios
+
+    unused = {name.lower(): name for name in overrides_by_name}
+    target_keys = set(unused)
+    merged: list[Mapping[str, Any]] = []
+    applied_targets: set[str] = set()
+    for index, scenario in enumerate(scenarios):
+        name = _scenario_identifier(scenario, source=source, index=index)
+        key = name.lower()
+        if key in target_keys and key in applied_targets:
+            raise ValueError(
+                f"Duplicate scenario name '{name}' in '{source}' prevents "
+                "scenario_overrides_by_name."
+            )
+        if key in target_keys:
+            applied_targets.add(key)
+        override_name = unused.pop(key, None)
+        if override_name is None:
+            merged.append(scenario)
+            continue
+        merged.append(_deep_merge_mapping(scenario, overrides_by_name[override_name]))
+
+    if unused:
+        unknown = ", ".join(sorted(unused.values()))
+        raise ValueError(
+            f"Unknown scenario_overrides_by_name entr{'y' if len(unused) == 1 else 'ies'} "
+            f"in '{source}': {unknown}"
+        )
+
+    return _normalize_scenarios(
+        merged,
         source=source,
         root=root,
         map_search_paths=map_search_paths,

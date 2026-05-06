@@ -153,6 +153,124 @@ select_scenarios:
         load_scenarios(manifest)
 
 
+def test_load_scenarios_applies_named_overrides_after_includes(tmp_path: Path) -> None:
+    """Named overrides should tune one expanded scenario without touching siblings."""
+    source = tmp_path / "source.yaml"
+    manifest = tmp_path / "manifest.yaml"
+
+    _write_yaml(
+        source,
+        """
+scenarios:
+  - name: scenario_a
+    map_file: maps/a.svg
+    simulation_config:
+      max_episode_steps: 100
+      ped_density: 0.1
+  - name: scenario_b
+    map_file: maps/b.svg
+    simulation_config:
+      max_episode_steps: 100
+      ped_density: 0.2
+""",
+    )
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - source.yaml
+scenario_overrides_by_name:
+  scenario_b:
+    simulation_config:
+      max_episode_steps: 240
+""",
+    )
+
+    scenarios = load_scenarios(manifest)
+    by_name = {scenario["name"]: scenario for scenario in scenarios}
+
+    assert by_name["scenario_a"]["simulation_config"] == {
+        "max_episode_steps": 100,
+        "ped_density": 0.1,
+    }
+    assert by_name["scenario_b"]["simulation_config"] == {
+        "max_episode_steps": 240,
+        "ped_density": 0.2,
+    }
+
+
+def test_load_scenarios_allows_duplicate_names_outside_named_overrides(
+    tmp_path: Path,
+) -> None:
+    """Unchanged duplicate names may pass through when only another scenario is overridden."""
+    source = tmp_path / "source.yaml"
+    manifest = tmp_path / "manifest.yaml"
+
+    _write_yaml(
+        source,
+        """
+scenarios:
+  - name: repeated
+    map_file: maps/a.svg
+  - name: scenario_b
+    map_file: maps/b.svg
+    simulation_config:
+      max_episode_steps: 100
+  - name: repeated
+    map_file: maps/c.svg
+""",
+    )
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - source.yaml
+scenario_overrides_by_name:
+  scenario_b:
+    simulation_config:
+      max_episode_steps: 240
+""",
+    )
+
+    scenarios = load_scenarios(manifest)
+
+    assert [scenario["name"] for scenario in scenarios] == [
+        "repeated",
+        "scenario_b",
+        "repeated",
+    ]
+    assert scenarios[1]["simulation_config"]["max_episode_steps"] == 240
+
+
+def test_load_scenarios_rejects_unknown_named_override(tmp_path: Path) -> None:
+    """Per-scenario overrides must fail closed when a target name is absent."""
+    source = tmp_path / "source.yaml"
+    manifest = tmp_path / "manifest.yaml"
+
+    _write_yaml(
+        source,
+        """
+scenarios:
+  - name: scenario_a
+    map_file: maps/a.svg
+""",
+    )
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - source.yaml
+scenario_overrides_by_name:
+  scenario_missing:
+    simulation_config:
+      max_episode_steps: 240
+""",
+    )
+
+    with pytest.raises(ValueError, match="Unknown scenario_overrides_by_name"):
+        load_scenarios(manifest)
+
+
 def test_classic_interactions_uses_canonical_cross_trap_names() -> None:
     """The default classic suite should use issue-594 canonical cross-trap IDs."""
     scenarios = load_scenarios(Path("configs/scenarios/classic_interactions.yaml"))

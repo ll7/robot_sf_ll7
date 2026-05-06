@@ -539,7 +539,9 @@ def _resolve_policy_search_candidate_runtime(
     Returns:
         Effective algorithm key and flattened runtime config for the scenario.
     """
-    manifest = dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
+    manifest = (
+        dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
+    )
     if not _is_policy_search_candidate_manifest(manifest):
         return default_algo, manifest
 

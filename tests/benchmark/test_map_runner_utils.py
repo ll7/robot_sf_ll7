@@ -140,7 +140,9 @@ def test_resolve_policy_search_candidate_runtime_switches_algo_for_scenario(
     default_cfg = tmp_path / "hybrid.yaml"
     override_cfg = tmp_path / "orca.yaml"
     candidate_cfg = tmp_path / "candidate.yaml"
-    default_cfg.write_text("allow_testing_algorithms: true\nmax_linear_speed: 3.0\n", encoding="utf-8")
+    default_cfg.write_text(
+        "allow_testing_algorithms: true\nmax_linear_speed: 3.0\n", encoding="utf-8"
+    )
     override_cfg.write_text("orca_time_horizon: 4.0\nmax_linear_speed: 0.9\n", encoding="utf-8")
     candidate_cfg.write_text(
         yaml.safe_dump(

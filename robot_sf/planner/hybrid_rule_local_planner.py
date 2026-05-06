@@ -235,6 +235,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             maxlen=max(int(self.config.oscillation_window), 2)
         )
         self._progress_history: deque[tuple[float, float]] = deque(maxlen=256)
+        self._route_distance_history: deque[tuple[float, float]] = deque(maxlen=256)
         self._selected_source_counts: Counter[str] = Counter()
         self._rejection_counts: Counter[str] = Counter()
         self._fallback_count = 0
@@ -565,19 +566,65 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def _progress_windows(self, current_time: float, goal_distance: float) -> dict[str, float]:
         """Return sliding-window goal-distance progress diagnostics."""
+        return self._distance_progress_windows(
+            self._progress_history,
+            current_time=current_time,
+            current_distance=goal_distance,
+        )
+
+    @staticmethod
+    def _distance_progress_windows(
+        history: deque[tuple[float, float]],
+        *,
+        current_time: float,
+        current_distance: float,
+    ) -> dict[str, float]:
+        """Return sliding-window distance-progress diagnostics for a history."""
         windows: dict[str, float] = {}
         for seconds in (1.0, 3.0, 5.0):
             reference = None
-            for time_value, distance_value in self._progress_history:
+            for time_value, distance_value in history:
                 if time_value >= current_time - seconds:
                     reference = distance_value
                     break
-            if reference is None and self._progress_history:
-                reference = self._progress_history[0][1]
+            if reference is None and history:
+                reference = history[0][1]
             windows[f"{seconds:.0f}s"] = (
-                0.0 if reference is None else float(reference - goal_distance)
+                0.0 if reference is None else float(reference - current_distance)
             )
         return windows
+
+    def _route_corridor_diagnostics(
+        self,
+        observation: dict[str, Any],
+        *,
+        current_time: float,
+    ) -> dict[str, Any] | None:
+        """Return additive route-corridor diagnostics when route guide is enabled."""
+        if self._route_guide is None:
+            return None
+        route_geometry = getattr(self._route_guide, "route_geometry", None)
+        if not callable(route_geometry):
+            return None
+        try:
+            diagnostics = route_geometry(observation)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return None
+        if not isinstance(diagnostics, dict):
+            return None
+        route_remaining = diagnostics.get("route_remaining_distance")
+        if isinstance(route_remaining, int | float | np.integer | np.floating) and np.isfinite(
+            route_remaining
+        ):
+            remaining = float(route_remaining)
+            self._route_distance_history.append((current_time, remaining))
+            diagnostics = dict(diagnostics)
+            diagnostics["route_arc_progress_windows"] = self._distance_progress_windows(
+                self._route_distance_history,
+                current_time=current_time,
+                current_distance=remaining,
+            )
+        return diagnostics
 
     def _static_clearance_escape_allowed(
         self,
@@ -1149,9 +1196,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 nearest_static=float("inf"),
                 predicted_ttc=float("inf"),
                 progress_windows=progress_windows,
+                route_corridor=None,
             )
             return command
 
+        route_corridor = self._route_corridor_diagnostics(
+            state["observation"],
+            current_time=current_time,
+        )
         nearest_ped = self._nearest_ped_distance(robot_pos, state["ped_pos"])
         speed_cap = self._human_speed_cap(nearest_ped)
         self._clearance_context = self._build_clearance_context(observation)
@@ -1227,6 +1279,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             nearest_static=nearest_static,
             predicted_ttc=predicted_ttc,
             progress_windows=progress_windows,
+            route_corridor=route_corridor,
             rejected_examples=rejected_examples,
             moving_rejection_counts=dict(moving_rejection_counts),
             rejection_counts_by_source=rejection_counts_by_source,
@@ -1263,6 +1316,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         nearest_static: float,
         predicted_ttc: float,
         progress_windows: dict[str, float],
+        route_corridor: dict[str, Any] | None = None,
         rejected_examples: list[dict[str, Any]] | None = None,
         moving_rejection_counts: dict[str, int] | None = None,
         rejection_counts_by_source: dict[str, dict[str, int]] | None = None,
@@ -1292,6 +1346,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "nearest_static_obstacle_distance": _finite_or_none(nearest_static),
             "predicted_ttc": _finite_or_none(predicted_ttc),
             "progress_windows": {key: float(value) for key, value in progress_windows.items()},
+            "route_corridor": route_corridor,
         }
 
     def diagnostics(self) -> dict[str, Any]:

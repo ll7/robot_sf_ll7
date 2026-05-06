@@ -177,6 +177,94 @@ def test_astar_narrow_passage_routes_through_gap() -> None:
     assert (3, 7) in path, "Path must go through the narrow opening in the wall"
 
 
+def test_grid_route_geometry_exposes_corridor_diagnostics() -> None:
+    """Route geometry should expose corridor diagnostics without selecting a command."""
+    planner = GridRoutePlannerAdapter(
+        GridRoutePlannerConfig(
+            obstacle_inflation_cells=0,
+            waypoint_lookahead_cells=3,
+            clearance_penalty_weight=1.0,
+        )
+    )
+    observation = _observation(
+        occupied_cells=[(10, 11), (10, 12), (10, 13), (9, 12), (11, 12)],
+    )
+
+    geometry = planner.route_geometry(observation)
+
+    assert geometry is not None
+    assert geometry["route_path_cell_count"] > 1
+    assert geometry["route_waypoint_index"] == 3
+    assert len(geometry["route_waypoint_world"]) == 2
+    assert geometry["route_remaining_distance"] > 0.0
+    assert geometry["route_distance_to_waypoint"] > 0.0
+    assert geometry["route_tangent_heading"] is not None
+    assert geometry["route_heading_error"] is not None
+    assert geometry["route_corner_distance"] is not None
+    assert geometry["corridor_center_clearance"] is not None
+    assert geometry["corridor_width_estimate"] is not None
+    assert geometry["robot_lateral_offset_to_corridor"] is not None
+
+
+def test_grid_route_lateral_offset_uses_immediate_segment() -> None:
+    """Lateral offset should measure deviation from the local route segment."""
+    planner = GridRoutePlannerAdapter(GridRoutePlannerConfig(waypoint_lookahead_cells=3))
+    meta = {
+        "origin": [0.0, 0.0],
+        "resolution": [1.0],
+        "use_ego_frame": [0.0],
+    }
+    path = [(0, 0), (0, 1), (1, 1), (2, 1)]
+    robot_pos = planner._grid_to_world(path[1], meta)
+
+    geometry = planner._route_geometry_from_path(
+        path=path,
+        clearance_map=None,
+        meta=meta,
+        robot_pos=robot_pos,
+        heading=0.0,
+    )
+
+    assert geometry["route_waypoint_index"] == 3
+    assert geometry["robot_lateral_offset_to_corridor"] == 0.0
+
+
+def test_grid_route_reuses_cached_path_for_same_observation() -> None:
+    """Observation-level route consumers should share one A* route computation."""
+
+    class CountingGridRoutePlanner(GridRoutePlannerAdapter):
+        """Route planner that counts A* calls."""
+
+        def __init__(self, config: GridRoutePlannerConfig) -> None:
+            super().__init__(config)
+            self.astar_calls = 0
+
+        def _astar(
+            self,
+            blocked: np.ndarray,
+            start: tuple[int, int],
+            goal: tuple[int, int],
+            clearance_map: np.ndarray | None = None,
+        ) -> list[tuple[int, int]]:
+            self.astar_calls += 1
+            return super()._astar(blocked, start, goal, clearance_map=clearance_map)
+
+    planner = CountingGridRoutePlanner(
+        GridRoutePlannerConfig(
+            obstacle_inflation_cells=0,
+            waypoint_lookahead_cells=3,
+            clearance_penalty_weight=1.0,
+        )
+    )
+    observation = _observation(
+        occupied_cells=[(10, 11), (10, 12), (10, 13), (9, 12), (11, 12)],
+    )
+
+    assert planner.route_geometry(observation) is not None
+    assert planner.route_waypoint(observation) is not None
+    assert planner.astar_calls == 1
+
+
 def test_build_grid_route_config_clearance_penalty() -> None:
     """build_grid_route_config should round-trip clearance_penalty_weight."""
     cfg = build_grid_route_config({"clearance_penalty_weight": 0.75})

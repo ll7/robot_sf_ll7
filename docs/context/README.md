@@ -118,6 +118,12 @@ knowledge, not every transient iteration detail.
 * [Issue #863 SVG/Model Log Spam](./issue_863_svg_model_log_spam.md)
   log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
 
+## Training Notes
+
+* [Issue #1024 H500 PPO Retrain](issue_1024_h500_ppo_retrain.md)
+  records the all-available scenario surface, PR #1025 h500 horizon alignment, and SLURM job
+  `12350` for the first 12M-step PPO retrain.
+
 ## Performance Notes
 
 * [Issue #1001 Architecture Seam Audit](./issue_1001_architecture_seam_audit.md)

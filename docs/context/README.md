@@ -158,6 +158,9 @@ knowledge, not every transient iteration detail.
 * [Issue #871 Policy Stack Proposal Normalization](issue_871_policy_stack_proposal_normalization.md)
   hardens `policy_stack_v1` so malformed, non-finite, or command-bounds-violating child proposals
   are rejected before risk scoring.
+* [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
+  records source-level hybrid-rule rejection diagnostics and two rejected classic-merging recovery
+  mechanisms; #884 remains unresolved until a route-completing corridor policy is proven.
 
 ## Map Coverage Notes
 
@@ -202,6 +205,9 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #944 Multi-Ped Adversarial Scenario Payload](issue_944_multi_ped_adversarial_scenario_payload.md)
   adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs, 
   stacked on the issue #936 override materializer.
+* [Issue #870 Multi-Ped Adversarial Runtime Slice](issue_870_multi_ped_adversarial_runtime.md)
+  adds a fail-closed config-to-`RobotSimulationConfig` runtime path with N>1 reset/step proof,
+  while keeping certification, policy-analysis smoke, and benchmark promotion out of scope.
 * [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
 * [Issue #930 CARLA T0 Neutral Export Schema](issue_930_carla_t0_export_schema.md)

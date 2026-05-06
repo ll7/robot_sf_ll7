@@ -30,7 +30,8 @@ registered for one funnel stage.
 
 Options:
   --stage <name>          Funnel stage: smoke, nominal_sanity, stress_slice, full_matrix,
-                          full_matrix_h500, robustness_extension
+                          leader_collision_slice_h500, full_matrix_h500,
+                          robustness_extension
   --partition <name>      Slurm partition (default: a30)
   --qos <name>            Slurm QoS (default: a30-gpu)
   --throttle <n>          Slurm array throttle, e.g. 1 or 2 (default: 2)
@@ -141,7 +142,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$STAGE" in
-  smoke|nominal_sanity|stress_slice|full_matrix|full_matrix_h500|robustness_extension)
+  smoke|nominal_sanity|stress_slice|full_matrix|leader_collision_slice_h500|full_matrix_h500|robustness_extension)
     ;;
   *)
     echo "Unsupported stage: $STAGE" >&2

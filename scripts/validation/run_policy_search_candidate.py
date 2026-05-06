@@ -48,6 +48,7 @@ def parse_args() -> argparse.Namespace:
             "nominal_sanity",
             "stress_slice",
             "full_matrix",
+            "leader_collision_slice_h500",
             "full_matrix_h500",
             "robustness_extension",
         ),

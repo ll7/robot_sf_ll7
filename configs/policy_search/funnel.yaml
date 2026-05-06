@@ -3,6 +3,7 @@ stage_order:
   - nominal_sanity
   - stress_slice
   - full_matrix
+  - leader_collision_slice_h500
   - full_matrix_h500
   - robustness_extension
 
@@ -39,6 +40,14 @@ stages:
     seed_list: [ 111, 112, 113 ]
     benchmark_profile: experimental
     horizon: 120
+    dt: 0.1
+    workers: 2
+    requires_slurm: true
+  leader_collision_slice_h500:
+    scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+    seed_manifest: configs/policy_search/leader_collision_slice_h500_seeds.yaml
+    benchmark_profile: experimental
+    horizon: 500
     dt: 0.1
     workers: 2
     requires_slurm: true

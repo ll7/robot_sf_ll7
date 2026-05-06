@@ -11,6 +11,11 @@ params:
   static_recenter_enabled: true
   static_recenter_weight: 0.7
   static_recenter_probe_speed: 0.3
+  static_corridor_transit_enabled: true
+  static_corridor_transit_initial_band: 0.08
+  static_corridor_transit_tolerance: 0.08
+  static_corridor_transit_min_progress_3s: 0.1
+  static_corridor_transit_weight: 0.5
 scenario_overrides:
   francis2023_perpendicular_traffic:
     very_slow_speed: 0.6

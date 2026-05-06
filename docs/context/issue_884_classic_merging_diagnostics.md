@@ -10,9 +10,14 @@ Resolve the remaining `classic_merging_low` and `classic_merging_medium` failure
 `hybrid_rule_v3_fast_progress_static_escape` policy-search candidate without weakening the hard
 static-collision gate or counting fallback/degraded execution as success.
 
-This pass did not find a PR-safe merge-policy fix. It adds reusable decision diagnostics and records
-two rejected mechanisms so the next attempt can start from concrete trace evidence rather than
-repeat the same tuning loop.
+The first pass did not find a PR-safe merge-policy fix. It added reusable decision diagnostics and
+recorded two rejected mechanisms so the next attempt could start from concrete trace evidence
+rather than repeat the same tuning loop.
+
+A follow-up guarded static-corridor transit mechanism recovered one of the five named seeds and
+removed the low-density obstacle collision, while preserving the retained horizon-500 nominal and
+stress gates. It is still a partial improvement: four named classic-merging seeds remain timeouts,
+so #884 is not closed by this note.
 
 ## Diagnostic Change
 
@@ -52,6 +57,55 @@ clearance. The collision trace remains the unsafe side of the same corridor fami
 making progress until an obstacle collision.
 
 ## Rejected Mechanisms
+
+### Unguarded Static-Corridor Transit
+
+Probe output:
+`output/ai/autoresearch/issue_884_corridor_transit_probe/`
+
+Hypothesis: allow a slow command to pass through the conservative static-clearance band when the
+robot starts just outside the band, stays above an explicit minimum clearance, and makes local
+goal progress.
+
+Result:
+
+- `classic_merging_low` seed `113` recovered route completion.
+- `classic_merging_low` seed `111` converted from obstacle collision to timeout.
+- `classic_merging_medium` seeds `111` and `112` still timed out.
+- `classic_merging_medium` seed `113` regressed from timeout to obstacle collision after repeated
+  low-progress creep.
+
+Conclusion: reject the unguarded form. The mechanism needs a recent-progress guard so it can help
+through an active corridor passage without indefinitely creeping along the wall after progress has
+collapsed.
+
+### Guarded Static-Corridor Transit
+
+Probe output:
+`output/ai/autoresearch/issue_884_corridor_transit_guard_probe/`
+
+Hypothesis: keep the bounded static-corridor transit gate, but require recent 3 s progress before
+using it. This should preserve the `classic_merging_low` seed `113` corridor recovery and prevent
+the late `classic_merging_medium` seed `113` wall-creep collision.
+
+Result on the five named horizon-500 probes:
+
+| Scenario | Seed | Guarded outcome | Change from diagnostic baseline |
+|---|---:|---|---|
+| `classic_merging_low` | 111 | timeout | obstacle collision converted to timeout |
+| `classic_merging_low` | 113 | route-complete success at step `330` | timeout recovered |
+| `classic_merging_medium` | 111 | timeout | unchanged |
+| `classic_merging_medium` | 112 | timeout | unchanged |
+| `classic_merging_medium` | 113 | timeout | unchanged; unguarded collision avoided |
+
+Horizon-500 gate checks:
+
+- `nominal_sanity`: pass, `18/18` successes, `0` collisions, near-miss rate `0.2778`.
+- `stress_slice`: tracked, `24/24` successes, `0` collisions, near-miss rate `0.5000`.
+
+Conclusion: keep only the guarded form as a partial safety/progress improvement. It does not resolve
+#884 because three medium-density seeds and low seed `111` still fail to complete the route at
+horizon `500`.
 
 ### Static-Corridor Reorient Promotion
 
@@ -94,11 +148,13 @@ static band or still finds unsafe progress commands.
 
 ## Current Conclusion
 
-Issue #884 remains unresolved. The next credible implementation needs a route- or corridor-aware
-policy mechanism that preserves hard static-collision filtering while proving actual route
-completion on the five classic-merging seeds. The new diagnostics make that next mechanism easier
-to evaluate by showing which candidate sources are blocked by static clearance at each stalled
-step.
+Issue #884 remains unresolved. The guarded corridor-transit slice is safe enough to preserve because
+it removes one obstacle collision and recovers one route-complete seed without regressing the
+retained horizon-500 nominal/stress gates, but it is not a closing mechanism. The next credible
+implementation needs a route- or corridor-aware policy mechanism that proves actual route
+completion on the remaining four classic-merging seeds. The new diagnostics make that next
+mechanism easier to evaluate by showing which candidate sources are blocked by static clearance at
+each stalled step.
 
 Do not promote the rejected reorientation or sampling overrides as benchmark improvements. They are
 worktree-local failed experiments, not durable candidate configs.
@@ -133,3 +189,35 @@ The same command shape was run for:
 Sampling probes used the same five scenario/seed pairs with output roots
 `output/ai/autoresearch/issue_884_sampling_probe/` and
 `output/ai/autoresearch/issue_884_angular_sampling_probe/`.
+
+Guarded corridor-transit targeted probes used:
+
+```bash
+rtk env LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_step_diagnostics.py \
+  --candidate hybrid_rule_v3_fast_progress_static_escape \
+  --stage full_matrix \
+  --scenario-name classic_merging_low \
+  --seed 113 \
+  --horizon 500 \
+  --output-dir output/ai/autoresearch/issue_884_corridor_transit_guard_probe/classic_merging_low_113_h500
+```
+
+The same command shape was run for the five named scenario/seed pairs. Horizon-500 gate checks:
+
+```bash
+rtk env LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py \
+  --candidate hybrid_rule_v3_fast_progress_static_escape \
+  --stage nominal_sanity \
+  --horizon 500 \
+  --output-dir output/ai/autoresearch/issue_884_corridor_transit_guard_regression/nominal_sanity_h500 \
+  --docs-root output/ai/autoresearch/issue_884_corridor_transit_guard_regression/docs_h500 \
+  --workers 2
+
+rtk env LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py \
+  --candidate hybrid_rule_v3_fast_progress_static_escape \
+  --stage stress_slice \
+  --horizon 500 \
+  --output-dir output/ai/autoresearch/issue_884_corridor_transit_guard_regression/stress_slice_h500 \
+  --docs-root output/ai/autoresearch/issue_884_corridor_transit_guard_regression/docs_h500 \
+  --workers 2
+```

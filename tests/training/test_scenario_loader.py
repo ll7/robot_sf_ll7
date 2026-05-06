@@ -242,6 +242,41 @@ scenario_overrides_by_name:
     assert scenarios[1]["simulation_config"]["max_episode_steps"] == 240
 
 
+def test_load_scenarios_rejects_case_duplicate_named_overrides(tmp_path: Path) -> None:
+    """Per-scenario override targets should be unambiguous after case normalization."""
+    source = tmp_path / "source.yaml"
+    manifest = tmp_path / "manifest.yaml"
+
+    _write_yaml(
+        source,
+        """
+scenarios:
+  - name: scenario_a
+    map_file: maps/a.svg
+""",
+    )
+    _write_yaml(
+        manifest,
+        """
+includes:
+  - source.yaml
+scenario_overrides_by_name:
+  scenario_a:
+    simulation_config:
+      max_episode_steps: 240
+  Scenario_A:
+    simulation_config:
+      max_episode_steps: 480
+""",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Duplicate case-insensitive scenario_overrides_by_name",
+    ):
+        load_scenarios(manifest)
+
+
 def test_load_scenarios_rejects_unknown_named_override(tmp_path: Path) -> None:
     """Per-scenario overrides must fail closed when a target name is absent."""
     source = tmp_path / "source.yaml"

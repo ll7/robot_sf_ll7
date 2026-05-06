@@ -361,16 +361,25 @@ def _resolve_scenario_overrides_by_name(
         raise ValueError(f"scenario_overrides_by_name must be a mapping in '{source}'.")
 
     overrides: dict[str, Mapping[str, Any]] = {}
+    seen_names: dict[str, str] = {}
     for name, payload in raw.items():
         if not isinstance(name, str) or not name.strip():
             raise ValueError(
                 f"scenario_overrides_by_name keys must be non-empty strings in '{source}'."
             )
+        resolved_name = name.strip()
+        name_key = resolved_name.lower()
+        if name_key in seen_names:
+            raise ValueError(
+                "Duplicate case-insensitive scenario_overrides_by_name entries "
+                f"in '{source}': {seen_names[name_key]}, {resolved_name}"
+            )
         if not isinstance(payload, Mapping):
             raise ValueError(
                 f"scenario_overrides_by_name entry '{name}' must be a mapping in '{source}'."
             )
-        overrides[name.strip()] = payload
+        seen_names[name_key] = resolved_name
+        overrides[resolved_name] = payload
     return overrides
 
 

@@ -107,9 +107,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         )
         ppo_ttc = float(ppo_eval["min_ttc"])
         blend_ttc = float(blend_eval["min_ttc"])
-        clear_improves = blend_clear >= ppo_clear
-        ttc_improves = (not np.isfinite(ppo_ttc) and not np.isfinite(blend_ttc)) or (
-            np.isfinite(blend_ttc) and (not np.isfinite(ppo_ttc) or blend_ttc >= ppo_ttc)
+        clear_improves = blend_clear > ppo_clear
+        ttc_improves = (not np.isfinite(blend_ttc) and np.isfinite(ppo_ttc)) or (
+            np.isfinite(blend_ttc) and np.isfinite(ppo_ttc) and blend_ttc > ppo_ttc
         )
         return bool(clear_improves or ttc_improves)
 

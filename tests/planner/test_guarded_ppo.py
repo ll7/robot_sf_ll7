@@ -127,6 +127,32 @@ def test_guarded_ppo_blends_safe_orca_prior_in_near_field() -> None:
     assert decision == "prior_blend_safe"
 
 
+def test_guarded_ppo_prior_blend_requires_strict_safety_improvement() -> None:
+    """Blend selection should avoid equal metrics and handle infinite TTC correctly."""
+    guard = GuardedPPOAdapter(config=build_guarded_ppo_config({"guard_near_field_distance": 2.5}))
+    base_eval = {
+        "safe": True,
+        "progress": 0.4,
+        "min_ped_clear": 0.6,
+        "first_ped_clear": 0.6,
+        "min_obs_clear": float("inf"),
+        "min_ttc": float("inf"),
+    }
+    equal_blend_eval = dict(base_eval)
+    finite_blend_eval = {**base_eval, "min_ttc": 2.0}
+    infinite_improvement_eval = {
+        **base_eval,
+        "min_ped_clear": 0.5,
+        "first_ped_clear": 0.5,
+        "min_ttc": float("inf"),
+    }
+    finite_ppo_eval = {**base_eval, "min_ttc": 1.0}
+
+    assert not guard._blend_is_preferred(base_eval, equal_blend_eval)
+    assert not guard._blend_is_preferred(base_eval, finite_blend_eval)
+    assert guard._blend_is_preferred(finite_ppo_eval, infinite_improvement_eval)
+
+
 def test_guarded_ppo_uses_safe_prior_before_fallback_when_ppo_is_unsafe() -> None:
     """Unsafe PPO commands should prefer a safe configured prior over generic fallback."""
     guard = GuardedPPOAdapter(

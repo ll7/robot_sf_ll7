@@ -92,6 +92,7 @@ knowledge, not every transient iteration detail.
   artifacts out of `output/` into git. Current bundles include the
   [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md),
   [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
+  [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
@@ -101,8 +102,8 @@ knowledge, not every transient iteration detail.
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.
 * [Issue #1023 Scenario-Horizon Benchmark Surface](issue_1023_scenario_horizon_benchmark.md)
-  records the runnable paper-facing scenario-horizon config, preflight evidence, Slurm command, and
-  promotion boundary before the full rerun exists.
+  records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
+  full campaign, fixed-vs-scenario comparison, and promotion boundary.
 
 ## Feature Extractor Notes
 

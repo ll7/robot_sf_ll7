@@ -1,0 +1,4 @@
+planner_key,algo,planner_group,kinematics,readiness_tier,status,episodes,success_mean,collisions_mean,ped_collision_count_mean,obstacle_collision_count_mean,total_collision_count_mean,snqi_mean
+goal,goal,core,differential_drive,baseline-ready,ok,144,0.0556,0.6181,0.0000,0.0000,0.0000,'-0.1904
+orca,orca,core,differential_drive,baseline-ready,ok,144,0.7569,0.1667,0.0000,0.0000,0.0000,'-0.2513
+social_force,social_force,core,differential_drive,baseline-ready,ok,144,0.0139,0.3819,0.0000,0.0000,0.0000,'-0.9537

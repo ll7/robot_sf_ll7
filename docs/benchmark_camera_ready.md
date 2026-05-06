@@ -499,7 +499,11 @@ uv run python scripts/tools/compare_camera_ready_campaigns.py \
 ```
 
 Use this to validate quality changes (for example predictive planner success/collision deltas)
-after compatibility or config fixes.
+after compatibility or config fixes. When `scenario_breakdown.csv` and
+`scenario_family_breakdown.csv` are present in both campaigns, the JSON comparison also includes
+complete scenario-level and scenario-family deltas. The helper reports `unfinished_mean` as
+`1 - success_mean`; treat that as a route-incomplete comparison metric, not raw timeout
+attribution.
 
 Seed-schedule comparison helper:
 

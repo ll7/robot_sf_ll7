@@ -24,6 +24,11 @@ def _write_summary(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _write_csv(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+
+
 def test_compare_campaigns_reports_prediction_success_gain(tmp_path: Path) -> None:
     """Comparison should capture metric deltas between base and candidate planner rows."""
     base_root = tmp_path / "base_campaign"
@@ -103,6 +108,89 @@ def test_compare_campaigns_reports_missing_planners(tmp_path: Path) -> None:
     payload = compare_campaigns(base_root, candidate_root)
     assert payload["missing_in_base"] == ["prediction_planner"]
     assert payload["missing_in_candidate"] == ["orca"]
+
+
+def test_compare_campaigns_reports_scenario_and_family_deltas(tmp_path: Path) -> None:
+    """Comparison should include scenario and family deltas when breakdown CSVs exist."""
+    base_root = tmp_path / "base_campaign"
+    candidate_root = tmp_path / "candidate_campaign"
+    _write_summary(
+        base_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "base"},
+            "planner_rows": [
+                {"planner_key": "goal", "status": "ok", "episodes": 6, "success_mean": "0.25"}
+            ],
+        },
+    )
+    _write_summary(
+        candidate_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "candidate"},
+            "planner_rows": [
+                {"planner_key": "goal", "status": "ok", "episodes": 6, "success_mean": "0.75"}
+            ],
+        },
+    )
+    _write_csv(
+        base_root / "reports" / "scenario_breakdown.csv",
+        "\n".join(
+            [
+                "planner_key,scenario_family,scenario_id,episodes,success_mean,collisions_mean,near_misses_mean,snqi_mean",
+                "goal,doorway,classic_doorway_low,3,0.2500,0.5000,3.0000,'-0.2000",
+                "",
+            ]
+        ),
+    )
+    _write_csv(
+        candidate_root / "reports" / "scenario_breakdown.csv",
+        "\n".join(
+            [
+                "planner_key,scenario_family,scenario_id,episodes,success_mean,collisions_mean,near_misses_mean,snqi_mean",
+                "goal,doorway,classic_doorway_low,3,0.7500,0.2500,5.0000,'-0.1000",
+                "",
+            ]
+        ),
+    )
+    _write_csv(
+        base_root / "reports" / "scenario_family_breakdown.csv",
+        "\n".join(
+            [
+                "planner_key,scenario_family,episodes,success_mean,collisions_mean,near_misses_mean",
+                "goal,doorway,6,0.3000,0.4000,2.0000",
+                "",
+            ]
+        ),
+    )
+    _write_csv(
+        candidate_root / "reports" / "scenario_family_breakdown.csv",
+        "\n".join(
+            [
+                "planner_key,scenario_family,episodes,success_mean,collisions_mean,near_misses_mean",
+                "goal,doorway,6,0.6000,0.1000,4.0000",
+                "",
+            ]
+        ),
+    )
+
+    payload = compare_campaigns(base_root, candidate_root)
+
+    scenario = payload["scenario_deltas"][0]
+    assert scenario["planner_key"] == "goal"
+    assert scenario["scenario_id"] == "classic_doorway_low"
+    assert scenario["metrics"]["success_mean"]["delta"] == pytest.approx(0.5)
+    assert scenario["metrics"]["collisions_mean"]["delta"] == pytest.approx(-0.25)
+    assert scenario["metrics"]["near_misses_mean"]["delta"] == pytest.approx(2.0)
+    assert scenario["metrics"]["snqi_mean"]["delta"] == pytest.approx(0.1)
+    assert scenario["metrics"]["unfinished_mean"]["delta"] == pytest.approx(-0.5)
+    family = payload["scenario_family_deltas"][0]
+    assert family["scenario_family"] == "doorway"
+    assert family["metrics"]["success_mean"]["delta"] == pytest.approx(0.3)
+    assert family["metrics"]["unfinished_mean"]["delta"] == pytest.approx(-0.3)
+
+    markdown = _build_markdown(payload)
+    assert "## Scenario Deltas" in markdown
+    assert "## Scenario Family Deltas" in markdown
 
 
 def test_resolve_safe_output_path_rejects_escape(tmp_path: Path) -> None:

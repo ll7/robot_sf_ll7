@@ -1,0 +1,63 @@
+{
+  "repo": {
+    "remote": "https://github.com/ll7/robot_sf_ll7.git",
+    "branch": "1023-validate-scenario-h500-bench",
+    "commit": "521a5d798cb1aca9dd62c20eb76790f4cf5ee79d"
+  },
+  "matrix_path": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "scenario_matrix_hash": "fed70fa089d8",
+  "seed_policy": {
+    "mode": "seed-set",
+    "seed_set": "eval",
+    "seeds": [],
+    "resolved_seeds": [
+      111,
+      112,
+      113
+    ],
+    "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml"
+  },
+  "preflight_artifacts": {
+    "validate_config": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/preflight/validate_config.json",
+    "preview_scenarios": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/preflight/preview_scenarios.json",
+    "amv_coverage_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/amv_coverage_summary.json",
+    "amv_coverage_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/amv_coverage_summary.md",
+    "comparability_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/comparability_matrix.json",
+    "comparability_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/comparability_matrix.md",
+    "seed_variability_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_variability_by_scenario.json",
+    "seed_variability_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/statistical_sufficiency.json"
+  },
+  "snqi_artifacts": {
+    "diagnostics_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/snqi_diagnostics.json",
+    "diagnostics_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/snqi_diagnostics.md",
+    "sensitivity_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/snqi_sensitivity.csv"
+  },
+  "seed_variability_artifacts": {
+    "json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_variability_by_scenario.json",
+    "csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/statistical_sufficiency.json"
+  },
+  "seed_variability": {
+    "metrics": [
+      "success",
+      "collisions",
+      "near_misses",
+      "time_to_goal_norm",
+      "snqi"
+    ],
+    "row_count": 336,
+    "bootstrap_method": "bootstrap_mean_over_seed_means",
+    "bootstrap_level": 0.95,
+    "bootstrap_samples": 300,
+    "seed": 123
+  },
+  "campaign_id": "issue1023_scenario_horizons_h500_local_2026-05-06",
+  "started_at_utc": "2026-05-06T12:01:35.670439Z",
+  "finished_at_utc": "2026-05-06T12:15:15.455866Z",
+  "invoked_command": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/.venv/bin/python /home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml --output-root output/benchmarks/issue_1023 --campaign-id issue1023_scenario_horizons_h500_local_2026-05-06 --mode run --log-level INFO",
+  "runtime_sec": 819.7856649390014,
+  "episodes_per_second": 1.229589688025349
+}

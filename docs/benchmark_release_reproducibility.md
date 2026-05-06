@@ -74,6 +74,10 @@ uv run python scripts/tools/compare_camera_ready_campaigns.py \
 Pass `--require-identical` only when verifying tooling correctness, not as a
 release acceptance gate — the benchmark is outcome-stable but not bit-exact
 (see [Reproducibility Contract](#reproducibility-contract) below).
+When both campaigns include scenario and scenario-family breakdown CSVs, the
+comparison JSON also includes those row-level deltas. `unfinished_mean` is a
+derived route-incomplete metric (`1 - success_mean`), not raw timeout
+attribution.
 
 ## Reproducibility Contract
 

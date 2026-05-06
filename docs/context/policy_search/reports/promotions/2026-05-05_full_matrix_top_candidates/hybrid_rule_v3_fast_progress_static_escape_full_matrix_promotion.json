@@ -1,0 +1,17 @@
+{
+  "candidate": "hybrid_rule_v3_fast_progress_static_escape",
+  "stage": "full_matrix",
+  "runner_decision": "tracked",
+  "gate": "tier_b",
+  "checks": {
+    "candidate_registered": true,
+    "gate_configured": true,
+    "stage_decision_passed": true,
+    "success_rate": false,
+    "collision_rate": true,
+    "classic_collision_rate": true,
+    "francis_collision_rate": true
+  },
+  "decision": "revise",
+  "summary_json": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape/full_matrix/policy_search_full_matrix_all_20260505/summary.json"
+}

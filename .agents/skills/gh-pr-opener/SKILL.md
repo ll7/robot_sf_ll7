@@ -70,10 +70,20 @@ After a successful rerun, record freshness evidence:
    - Classify each relevant `output/` artifact as one of:
      - disposable local byproduct,
      - safe ignored cache,
+     - small reviewable evidence that should be copied under `docs/context/evidence/`,
      - needs a tracked manifest/registry pointer,
      - or must be uploaded to durable storage before PR handoff.
    - Treat benchmark bundles, model checkpoints, W&B run outputs, policy-analysis reports, and
      any config dependency under `output/model_cache` as durable-candidate artifacts.
+   - Promote only compact, reviewable evidence into git: selected `summary.json` files, Markdown
+     reports, small CSV/JSON tables, and checksums. Do not commit raw episode JSONL, videos, large
+     Slurm logs, coverage HTML, model caches, or checkpoints unless they are deliberately small
+     regression fixtures.
+   - If an ignored artifact is reproducible from tracked configs, seeds, commands, and commit SHAs,
+     document that it is safe to leave ignored or delete locally. Use external artifact storage
+     rather than git for large non-regenerable bundles, and track the manifest/pointer.
+   - Do not propose Git LFS by default. Use it only for deliberately versioned, non-regenerable
+     binary fixtures after an explicit maintainer decision.
    - If code or configs depend on an ignored local model/checkpoint, make that dependency
      persistent before opening the PR, preferably through `model/registry.yaml` with W&B metadata
      such as `wandb_artifact_path`, or another explicit durable artifact reference.

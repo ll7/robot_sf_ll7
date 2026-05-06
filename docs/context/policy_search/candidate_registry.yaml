@@ -100,6 +100,22 @@ candidates:
       - stress_slice
       - full_matrix
 
+  scenario_adaptive_hybrid_orca_v2_collision_guard:
+    status: implemented
+    family: scenario_adaptive_classical
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    hypothesis: >
+      The h500 leader misses the strict collision gate by one controllable merging collision plus
+      two first-step dynamic-deadlock episodes that tuned ORCA does not repair. Disable the
+      static-escape/recenter extras only on `classic_merging_low`, preserving the v1 selector
+      elsewhere while reducing the controllable h500 collision slice.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - leader_collision_slice_h500
+
   hybrid_rule_v3_dynamic_relaxed:
     status: implemented
     family: hybrid_rule_based

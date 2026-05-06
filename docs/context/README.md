@@ -90,7 +90,9 @@ knowledge, not every transient iteration detail.
 
 * [Evidence Bundles](evidence/README.md) documents the narrow policy for promoting small generated
   artifacts out of `output/` into git. Current bundles include the
-  [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md) and the
+  [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md),
+  [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
+  and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
 ## Benchmark Run Notes
@@ -98,6 +100,9 @@ knowledge, not every transient iteration detail.
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.
+* [Issue #1023 Scenario-Horizon Benchmark Surface](issue_1023_scenario_horizon_benchmark.md)
+  records the runnable paper-facing scenario-horizon config, preflight evidence, Slurm command, and
+  promotion boundary before the full rerun exists.
 
 ## Feature Extractor Notes
 

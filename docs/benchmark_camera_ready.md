@@ -87,6 +87,13 @@ Current promoted all-planners baseline run:
   + `paper_interpretation_profile=baseline-ready-core` means the matrix is paper-facing and
     anchored to the core baseline set, while still allowing experimental challenger rows for
     comparison
+* `configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml`
+  + issue-1023 validation surface that replaces the fixed campaign `horizon` with
+    `scenario_horizons: configs/policy_search/scenario_horizons_h500.yaml`
+  + patches each scenario's `simulation_config.max_episode_steps` before the map runner executes
+    and records `metadata.scenario_horizon` for provenance and `planner_blocked` accounting
+  + disables publication bundle export until the Slurm rerun is compared against the fixed-horizon
+    camera-ready evidence
 * `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
   + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
   + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,

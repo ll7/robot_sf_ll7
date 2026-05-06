@@ -81,6 +81,207 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
     assert list(cfg.seed_policy.seeds) == [101]
 
 
+def test_scenario_horizon_schedule_applies_to_loaded_campaign_scenarios(
+    tmp_path: Path,
+) -> None:
+    """Scenario-specific horizon schedules should patch episode limits with provenance."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "sc_a",
+                        "map_file": "maps/svg_maps/classic_crossing.svg",
+                        "simulation_config": {"max_episode_steps": 100},
+                    },
+                    {
+                        "name": "sc_blocked",
+                        "map_file": "maps/svg_maps/classic_crossing.svg",
+                    },
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    schedule_path = tmp_path / "scenario_horizons.yaml"
+    schedule_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "source": "unit_test",
+                "scenarios": {
+                    "sc_a": {
+                        "recommended_horizon_steps": 176,
+                        "status": "recommended",
+                        "bucket": "medium",
+                    },
+                    "sc_blocked": {
+                        "recommended_horizon_steps": 600,
+                        "status": "planner_blocked",
+                        "bucket": "planner_blocked",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: scheduled_campaign",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"scenario_horizons: {schedule_path.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+    scenarios = _load_campaign_scenarios(cfg)
+
+    by_name = {scenario["name"]: scenario for scenario in scenarios}
+    assert by_name["sc_a"]["simulation_config"]["max_episode_steps"] == 176
+    assert by_name["sc_blocked"]["simulation_config"]["max_episode_steps"] == 600
+    assert by_name["sc_a"]["metadata"]["scenario_horizon"]["status"] == "recommended"
+    assert by_name["sc_blocked"]["metadata"]["scenario_horizon"]["status"] == "planner_blocked"
+    assert by_name["sc_a"]["metadata"]["scenario_horizon"]["source"] == str(schedule_path.resolve())
+
+
+def test_preflight_reports_scenario_horizon_schedule_summary(tmp_path: Path) -> None:
+    """Preflight artifacts should expose scenario-horizon provenance and status counts."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {"name": "sc_a", "map_file": "maps/svg_maps/classic_crossing.svg"},
+                    {"name": "sc_blocked", "map_file": "maps/svg_maps/classic_crossing.svg"},
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    schedule_path = tmp_path / "scenario_horizons.yaml"
+    schedule_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "source": "unit_test",
+                "scenarios": {
+                    "sc_a": {
+                        "recommended_horizon_steps": 176,
+                        "status": "recommended",
+                        "bucket": "medium",
+                    },
+                    "sc_blocked": {
+                        "recommended_horizon_steps": 600,
+                        "status": "planner_blocked",
+                        "bucket": "planner_blocked",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: scheduled_campaign",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"scenario_horizons: {schedule_path.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    prepared = prepare_campaign_preflight(
+        cfg,
+        output_root=tmp_path / "out",
+        campaign_id="scheduled_preflight",
+    )
+    validate_payload = json.loads(Path(prepared["validate_config_path"]).read_text())
+    matrix_payload = json.loads(Path(prepared["matrix_summary_json_path"]).read_text())
+
+    assert validate_payload["scenario_horizons"] == {
+        "path": str(schedule_path.resolve()),
+        "scenario_count": 2,
+        "min_horizon_steps": 176,
+        "max_horizon_steps": 600,
+        "status_counts": {"planner_blocked": 1, "recommended": 1},
+    }
+    assert matrix_payload["rows"][0]["horizon_mode"] == "scenario_horizons"
+    assert matrix_payload["rows"][0]["scenario_horizons_path"] == str(schedule_path.resolve())
+
+
+def test_scenario_horizon_schedule_rejects_fixed_horizon(tmp_path: Path) -> None:
+    """Scenario-horizon campaigns should not silently keep a fixed global horizon."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {"scenarios": [{"name": "sc_a", "map_file": "maps/svg_maps/classic_crossing.svg"}]},
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    schedule_path = tmp_path / "scenario_horizons.yaml"
+    schedule_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": {
+                    "sc_a": {
+                        "recommended_horizon_steps": 176,
+                        "status": "recommended",
+                        "bucket": "medium",
+                    }
+                }
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: scheduled_campaign",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"scenario_horizons: {schedule_path.as_posix()}",
+                "horizon: 100",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="scenario_horizons cannot be combined with fixed horizon"):
+        load_campaign_config(config_path)
+
+
 def test_load_campaign_config_parses_snqi_contract_block(tmp_path: Path) -> None:
     """Config loader should parse SNQI contract thresholds and validation fields."""
     matrix_path = tmp_path / "matrix.yaml"
@@ -300,6 +501,35 @@ def test_issue_857_horizon400_probe_only_changes_horizon_and_bundle_export() -> 
         == Path("configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml").resolve()
     )
     assert planners["ppo"].workers_override == 1
+
+
+def test_issue_1023_scenario_horizon_config_uses_h500_schedule() -> None:
+    """Issue 1023 config should expose the h500 schedule as a paper-facing surface."""
+    cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml")
+    )
+
+    assert cfg.paper_facing is True
+    assert cfg.paper_profile_version == "paper-matrix-v1"
+    assert cfg.horizon is None
+    assert (
+        cfg.scenario_horizons_path
+        == Path("configs/policy_search/scenario_horizons_h500.yaml").resolve()
+    )
+    assert cfg.export_publication_bundle is False
+    assert all(planner.horizon_override is None for planner in cfg.planners)
+
+    scenarios = _load_campaign_scenarios(cfg)
+    horizon_meta = [
+        scenario["metadata"]["scenario_horizon"]
+        for scenario in scenarios
+        if "scenario_horizon" in scenario.get("metadata", {})
+    ]
+    assert len(horizon_meta) == 48
+    assert sum(1 for row in horizon_meta if row["status"] == "planner_blocked") == 3
+    assert {scenario["simulation_config"]["max_episode_steps"] for scenario in scenarios} <= set(
+        range(1, 601)
+    )
 
 
 def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:

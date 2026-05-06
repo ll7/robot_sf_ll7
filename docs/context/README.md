@@ -155,6 +155,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1004 Policy Stack V1 Runtime](issue_1004_policy_stack_v1_runtime.md)
   records the first runnable `policy_stack_v1` slice, its explicit proposal-status diagnostics, and
   the map-runner smoke limitation under parent #871.
+* [Issue #871 Policy Stack Proposal Normalization](issue_871_policy_stack_proposal_normalization.md)
+  hardens `policy_stack_v1` so malformed, non-finite, or command-bounds-violating child proposals
+  are rejected before risk scoring.
 * [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
   records source-level hybrid-rule rejection diagnostics and two rejected classic-merging recovery
   mechanisms; #884 remains unresolved until a route-completing corridor policy is proven.

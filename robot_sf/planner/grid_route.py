@@ -590,10 +590,12 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             dict[str, Any]: Structured route-corridor diagnostic payload.
         """
+        if not path:
+            raise ValueError("Route geometry requires at least one path cell.")
         resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
         waypoint_idx = min(max(int(self.config.waypoint_lookahead_cells), 1), len(path) - 1)
         start_world = self._grid_to_world(path[0], meta)
-        next_world = self._grid_to_world(path[1], meta)
+        next_world = self._grid_to_world(path[1] if len(path) > 1 else path[0], meta)
         goal_world = self._grid_to_world(path[-1], meta)
         waypoint_world = self._grid_to_world(path[waypoint_idx], meta)
 
@@ -616,7 +618,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             clearance_map=clearance_map,
             resolution=resolution,
         )
-        segment_stop_idx = 1
+        segment_stop_idx = min(1, len(path) - 1)
         lateral_offset = self._lateral_offset_to_segment(
             robot_pos,
             start_world,

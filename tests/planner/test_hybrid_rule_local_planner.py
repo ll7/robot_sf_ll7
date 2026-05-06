@@ -579,6 +579,31 @@ def test_hybrid_rule_corridor_subgoal_activation_requires_route_and_no_near_pede
     assert active["route_regressing"] is True
 
 
+def test_hybrid_rule_corridor_subgoal_uses_scaled_one_second_stall_threshold() -> None:
+    """One-second goal progress should use a tighter threshold than the 3s window."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        corridor_subgoal_goal_stall_progress_3s=0.06,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+
+    moving_recently = planner._corridor_subgoal_activation(
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+        progress_windows={"1s": 0.03, "3s": 0.03},
+        nearest_ped=float("inf"),
+    )
+    stalled = planner._corridor_subgoal_activation(
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+        progress_windows={"1s": 0.02, "3s": 0.03},
+        nearest_ped=float("inf"),
+    )
+
+    assert moving_recently["active"] is False
+    assert moving_recently["reason"] == "progress_not_stalled"
+    assert stalled["active"] is True
+
+
 def test_hybrid_rule_corridor_subgoal_turns_in_place_for_large_tangent_error() -> None:
     """Large route-tangent error should not mix turning with forward subgoal motion."""
     cfg = HybridRuleLocalPlannerConfig(
@@ -637,6 +662,34 @@ def test_hybrid_rule_corridor_subgoal_adds_forward_candidate_when_aligned() -> N
     assert len(subgoals) == 1
     assert subgoals[0].linear > cfg.freezing_speed_threshold
     assert subgoals[0].angular == pytest.approx(0.0)
+
+
+def test_hybrid_rule_corridor_subgoal_forward_speed_tracks_alignment() -> None:
+    """Poorly aligned forward subgoals should not use an artificial speed floor."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        corridor_subgoal_speed=0.3,
+        corridor_subgoal_turn_in_place_error=1.6,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    route_corridor = _route_corridor_payload(tangent_heading=0.0, route_progress_3s=0.0)
+    route_corridor["route_waypoint_world"] = [-1.0, 0.1]
+    activation = planner._corridor_subgoal_activation(
+        route_corridor=route_corridor,
+        progress_windows={"3s": 0.0},
+        nearest_ped=float("inf"),
+    )
+    state = planner._extract_state(_obs(goal=(4.0, 0.0)))
+
+    candidates = planner._generate_candidates(
+        state,
+        speed_cap=cfg.max_linear_speed,
+        route_corridor=route_corridor,
+        corridor_subgoal=activation,
+    )
+
+    assert not [candidate for candidate in candidates if candidate.source == "corridor_subgoal"]
 
 
 def test_hybrid_rule_corridor_subgoal_rejects_occupied_rollout(monkeypatch) -> None:

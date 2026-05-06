@@ -538,9 +538,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 "route_arc_progress_3s": route_progress_3s,
             }
         )
-        goal_stalled = 0.0 <= goal_progress_1s <= float(
-            self.config.corridor_subgoal_goal_stall_progress_3s
-        ) and 0.0 <= goal_progress_3s <= float(self.config.corridor_subgoal_goal_stall_progress_3s)
+        goal_progress_3s_threshold = float(self.config.corridor_subgoal_goal_stall_progress_3s)
+        goal_progress_1s_threshold = goal_progress_3s_threshold / 3.0
+        goal_stalled = (
+            0.0 <= goal_progress_1s <= goal_progress_1s_threshold
+            and 0.0 <= goal_progress_3s <= goal_progress_3s_threshold
+        )
         route_stalled = route_progress_3s <= float(
             self.config.corridor_subgoal_route_stall_progress_3s
         )
@@ -617,7 +620,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             return candidates
         if desired_speed > float(self.config.freezing_speed_threshold):
             alignment = max(0.0, np.cos(desired_heading_error))
-            linear = float(np.clip(desired_speed * max(alignment, 0.25), v_min, v_max))
+            linear = float(np.clip(desired_speed * alignment, v_min, v_max))
             if linear > float(self.config.freezing_speed_threshold):
                 candidates.append(HybridRuleCandidate(linear, desired_angular, "corridor_subgoal"))
         return candidates

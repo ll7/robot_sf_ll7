@@ -25,6 +25,13 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("configs/policy_search/promotion_gates.yaml"),
     )
+    parser.add_argument(
+        "--gate-name",
+        help=(
+            "Override the candidate registry promotion gate. Use this for stricter "
+            "diagnostic checks such as nominal_sanity on full_matrix_h500 summaries."
+        ),
+    )
     parser.add_argument("--output", type=Path, default=Path("output/policy_search/promotion"))
     return parser.parse_args()
 
@@ -61,7 +68,7 @@ def main() -> int:
     classic = family.get("classic", {}) if isinstance(family.get("classic"), dict) else {}
     francis = family.get("francis2023", {}) if isinstance(family.get("francis2023"), dict) else {}
 
-    gate_name = str(candidate_meta.get("promotion_gate", "tier_b"))
+    gate_name = str(args.gate_name or candidate_meta.get("promotion_gate", "tier_b"))
     gate_map = gates.get("gates") if isinstance(gates.get("gates"), dict) else {}
     gate_cfg = gate_map.get(gate_name, {}) if isinstance(gate_map, dict) else {}
     gate_configured = bool(gate_cfg)
@@ -69,7 +76,7 @@ def main() -> int:
 
     stage = str(payload.get("stage", "unknown"))
     runner_decision = str(payload.get("decision", "")).strip().lower()
-    promotion_scale_stage = stage in {"full_matrix", "robustness_extension"}
+    promotion_scale_stage = stage in {"full_matrix", "full_matrix_h500", "robustness_extension"}
     stage_decision_passed = promotion_scale_stage or runner_decision == "pass"
 
     checks = {

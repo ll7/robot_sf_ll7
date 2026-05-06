@@ -1,0 +1,17 @@
+{
+  "candidate": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+  "stage": "full_matrix_h500",
+  "runner_decision": "tracked",
+  "gate": "nominal_sanity",
+  "checks": {
+    "candidate_registered": true,
+    "gate_configured": true,
+    "stage_decision_passed": true,
+    "success_rate": true,
+    "collision_rate": true,
+    "classic_collision_rate": true,
+    "francis_collision_rate": true
+  },
+  "decision": "promote",
+  "summary_json": "docs/context/evidence/policy_search_h500_2026-05-06/summaries/scenario_adaptive_hybrid_orca_v2_collision_guard_full_matrix_h500_collision_guard_summary.json"
+}

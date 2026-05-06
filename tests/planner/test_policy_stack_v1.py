@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -25,6 +26,26 @@ def _obs(
         "goal": {"current": list(goal)},
         "pedestrians": {"positions": [list(p) for p in (peds or [])]},
     }
+
+
+def _load_atomic_topology_smoke_scenario(name: str) -> dict[str, object]:
+    """Load one atomic topology scenario with absolute map paths for inline map-runner use."""
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    scenario_path = Path("configs/scenarios/sets/atomic_navigation_minimal_full_v1.yaml")
+    scenario_root = scenario_path.parent.resolve()
+    for scenario in load_scenarios(scenario_path, base_dir=scenario_path):
+        if scenario.get("name") != name:
+            continue
+        selected = dict(scenario)
+        selected["seeds"] = [59621]
+        map_file = selected.get("map_file")
+        if isinstance(map_file, str) and map_file.strip():
+            map_path = Path(map_file)
+            if not map_path.is_absolute():
+                selected["map_file"] = str((scenario_root / map_path).resolve())
+        return selected
+    raise AssertionError(f"Scenario not found: {name}")
 
 
 class _DummyRiskDWA:
@@ -237,3 +258,47 @@ def test_policy_stack_map_runner_registration(monkeypatch: pytest.MonkeyPatch) -
     assert meta["baseline_category"] == "classical"
     assert meta["policy_semantics"] == "policy_stack_v1_portfolio"
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
+def test_policy_stack_runs_atomic_topology_smoke_through_map_runner(tmp_path: Path) -> None:
+    """The stack should execute a topology-heavy atomic scenario through the benchmark runner."""
+    from robot_sf.benchmark.map_runner import run_map_batch
+
+    out_path = tmp_path / "episodes.jsonl"
+    summary = run_map_batch(
+        [_load_atomic_topology_smoke_scenario("corridor_following")],
+        out_path,
+        schema_path=Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
+        algo="policy_stack_v1",
+        algo_config_path="configs/algos/policy_stack_v1.yaml",
+        horizon=180,
+        dt=0.1,
+        record_forces=False,
+        workers=1,
+        resume=False,
+        benchmark_profile="experimental",
+    )
+    rows = [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines()]
+
+    assert summary["total_jobs"] == 1
+    assert summary["successful_jobs"] == 1
+    assert summary["failed_jobs"] == 0
+    assert summary["benchmark_availability"]["benchmark_success"] is True
+    assert len(rows) == 1
+
+    record = rows[0]
+    assert record["scenario_id"] == "corridor_following"
+    assert record["status"] == "success"
+    assert record["termination_reason"] == "success"
+    assert record["steps"] > 0
+
+    metadata = record["algorithm_metadata"]
+    assert metadata["policy_semantics"] == "policy_stack_v1_portfolio"
+    assert metadata["planner_kinematics"]["execution_mode"] == "adapter"
+    assert metadata["kinematics_feasibility"]["commands_evaluated"] == record["steps"]
+
+    runtime = metadata["planner_runtime"]
+    assert runtime["steps"] == record["steps"]
+    assert runtime["proposal_status_counts"]["native"] > 0
+    assert runtime["proposal_status_counts"]["adapter"] > 0
+    assert runtime["last_step"]["selected_proposal_key"] in {"goal", "risk_dwa", "shield_stop"}

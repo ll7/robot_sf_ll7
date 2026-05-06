@@ -13,5 +13,5 @@
     "francis_collision_rate": true
   },
   "decision": "revise",
-  "summary_json": "output/policy_search/scenario_adaptive_hybrid_orca_v1/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json"
+  "summary_json": "output/policy_search/scenario_adaptive_hybrid_orca_v1/full_matrix_h500/policy_search_full_matrix_h500_leaders_clean_20260505_204501/summary.json"
 }

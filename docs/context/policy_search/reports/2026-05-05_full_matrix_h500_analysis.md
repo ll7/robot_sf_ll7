@@ -2,8 +2,10 @@
 
 ## Scope
 
-This note summarizes the tracked `full_matrix_h500` policy-search reports produced from commit
-`47fecd938482949b7989f1011ec6e34237d8b45d`.
+This note summarizes the tracked `full_matrix_h500` policy-search reports. The initial 23-candidate
+matrix was produced from commit `47fecd938482949b7989f1011ec6e34237d8b45d`; the two leader rerun
+reports were refreshed by the clean pinned Slurm rerun on commit
+`2b796ea92104467d3bc913528801fb8bb11034dd`.
 
 - Stage: `full_matrix_h500`
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`
@@ -15,6 +17,21 @@ This note summarizes the tracked `full_matrix_h500` policy-search reports produc
 These are policy-search triage artifacts, not paper-facing benchmark claims. The output artifacts
 under `output/` are worktree-local; the tracked Markdown reports and this synthesis are the durable
 record for handoff.
+
+## Clean Leader Rerun
+
+Slurm job `12339` reran `scenario_adaptive_hybrid_orca_v1` and
+`hybrid_rule_v3_fast_progress` with `--clean-pinned` under run id
+`policy_search_full_matrix_h500_leaders_clean_20260505_204501`.
+
+- Both array tasks completed successfully (`0:0`) on `auxme-imech172`.
+- The clean rerun reproduced the earlier h500 metrics exactly for both candidates.
+- The only tracked per-candidate report deltas are provenance updates to the clean summary paths and
+  commit hash.
+- Log review found repeated global-planner invalid-goal-cell messages, but no Slurm/job failure,
+  traceback, integrity contradiction, or benchmark fallback/degraded execution mode. Planner
+  diagnostics show adapter execution throughout; internal `EMERGENCY_STOP` command fallbacks remain
+  episode-level behavior, not fallback planner substitution.
 
 ## Aggregate Ranking
 
@@ -149,6 +166,10 @@ Observed buckets from the h500 evidence:
 - Parsed the 23 h500 report summary paths and combined JSONL files referenced by those reports to
   compute aggregate ranking, h100-to-h500 deltas, scenario blockers, gate checks, and horizon
   buckets.
+- Reviewed clean leader rerun job `12339` with `sacct`; both tasks completed with exit code `0:0`
+  in about 24 minutes, and the rerun summaries matched the earlier h500 metrics exactly.
+- Refreshed strict h500 gate reports and scenario horizon source paths so the two rerun leaders now
+  reference `policy_search_full_matrix_h500_leaders_clean_20260505_204501`.
 - Follow-up implementation artifacts:
   - Clean pinned rerun handoff:
     `docs/context/policy_search/SLURM/004_h500_leader_clean_rerun.md`

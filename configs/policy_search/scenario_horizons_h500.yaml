@@ -16,7 +16,7 @@ selected_summaries:
   near_miss_rate: 0.4166666666666667
 - candidate: hybrid_rule_v3_fast_progress
   stage: full_matrix_h500
-  summary_json: output/policy_search/hybrid_rule_v3_fast_progress/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
+  summary_json: output/policy_search/hybrid_rule_v3_fast_progress/full_matrix_h500/policy_search_full_matrix_h500_leaders_clean_20260505_204501/summary.json
   success_rate: 0.8263888888888888
   collision_rate: 0.013888888888888888
   near_miss_rate: 0.4236111111111111
@@ -58,7 +58,7 @@ selected_summaries:
   near_miss_rate: 0.4097222222222222
 - candidate: scenario_adaptive_hybrid_orca_v1
   stage: full_matrix_h500
-  summary_json: output/policy_search/scenario_adaptive_hybrid_orca_v1/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json
+  summary_json: output/policy_search/scenario_adaptive_hybrid_orca_v1/full_matrix_h500/policy_search_full_matrix_h500_leaders_clean_20260505_204501/summary.json
   success_rate: 0.9097222222222222
   collision_rate: 0.020833333333333332
   near_miss_rate: 0.4236111111111111

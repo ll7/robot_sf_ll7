@@ -15,8 +15,8 @@ Raising the manually specified speed envelope to the 3.0 m/s robot limit used el
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/hybrid_rule_v3_fast_progress/full_matrix_h500/policy_search_full_matrix_h500_gt20_20260505/summary.json`
-- Git commit: `47fecd938482949b7989f1011ec6e34237d8b45d`
+- Summary JSON: `output/policy_search/hybrid_rule_v3_fast_progress/full_matrix_h500/policy_search_full_matrix_h500_leaders_clean_20260505_204501/summary.json`
+- Git commit: `2b796ea92104467d3bc913528801fb8bb11034dd`
 
 ## Aggregate Results
 

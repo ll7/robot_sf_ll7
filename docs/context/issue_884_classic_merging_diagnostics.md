@@ -159,6 +159,12 @@ each stalled step.
 Do not promote the rejected reorientation or sampling overrides as benchmark improvements. They are
 worktree-local failed experiments, not durable candidate configs.
 
+Update 2026-05-06: #1028 implemented a guarded `corridor_subgoal` primitive behind disabled
+configuration flags. Enablement probes regressed obstacle collisions, so the candidate remains
+disabled and #884 remains unresolved. See
+`docs/context/issue_1028_corridor_subgoal_recovery.md` for the #1029 validation matrix and the
+follow-up boundary.
+
 ## Validation Commands
 
 Focused code validation:

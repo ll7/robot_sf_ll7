@@ -195,6 +195,7 @@ def test_grid_route_geometry_exposes_corridor_diagnostics() -> None:
     assert geometry is not None
     assert geometry["route_path_cell_count"] > 1
     assert geometry["route_waypoint_index"] == 3
+    assert len(geometry["route_next_world"]) == 2
     assert len(geometry["route_waypoint_world"]) == 2
     assert geometry["route_remaining_distance"] > 0.0
     assert geometry["route_distance_to_waypoint"] > 0.0

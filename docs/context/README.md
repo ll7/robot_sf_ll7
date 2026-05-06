@@ -167,6 +167,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1027 Route-Corridor Attribution Diagnostics](issue_1027_route_corridor_attribution.md)
   records additive route-corridor `last_decision()` diagnostics, five regenerated #884 traces, and
   the geometry/dropout evidence needed before corridor-subgoal behavior work.
+* [Issue #1028 Corridor-Subgoal Recovery](issue_1028_corridor_subgoal_recovery.md)
+  records the disabled-by-default `corridor_subgoal` implementation, rejected enablement probes,
+  and final #1029 h500 validation showing no target collision regressions but no #884 recovery.
 
 ## Map Coverage Notes
 

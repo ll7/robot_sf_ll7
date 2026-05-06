@@ -70,6 +70,36 @@ def _obs_with_grid(
     return obs
 
 
+def _route_corridor_payload(
+    *,
+    tangent_heading: float = 0.0,
+    route_progress_1s: float = 0.0,
+    route_progress_3s: float = 0.0,
+    lateral_offset: float = 0.0,
+) -> dict:
+    return {
+        "route_start_world": [0.0, 0.0],
+        "route_next_world": [1.0, 0.0],
+        "route_goal_world": [4.0, 0.0],
+        "route_waypoint_world": [1.0, 0.0],
+        "route_waypoint_index": 1,
+        "route_path_cell_count": 5,
+        "route_remaining_distance": 4.0,
+        "route_distance_to_waypoint": 1.0,
+        "route_corner_distance": None,
+        "route_tangent_heading": tangent_heading,
+        "route_heading_error": tangent_heading,
+        "corridor_center_clearance": 1.0,
+        "corridor_width_estimate": 2.0,
+        "robot_lateral_offset_to_corridor": lateral_offset,
+        "route_arc_progress_windows": {
+            "1s": route_progress_1s,
+            "3s": route_progress_3s,
+            "5s": route_progress_3s,
+        },
+    }
+
+
 def test_hybrid_rule_v0_returns_diagnostics_for_open_space() -> None:
     """V0 should choose a bounded forward command and expose score terms."""
     planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
@@ -484,6 +514,307 @@ def test_hybrid_rule_route_guide_adds_candidate_source(monkeypatch) -> None:
     assert any(candidate.source == "route_guide" for candidate in candidates)
 
 
+def test_hybrid_rule_corridor_subgoal_disabled_by_default() -> None:
+    """Corridor-subgoal candidates should be absent until explicitly enabled."""
+    cfg = HybridRuleLocalPlannerConfig(route_guide_enabled=True)
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    state = planner._extract_state(_obs(goal=(4.0, 0.0)))
+    activation = planner._corridor_subgoal_activation(
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+        progress_windows={"3s": 0.0},
+        nearest_ped=float("inf"),
+    )
+
+    candidates = planner._generate_candidates(
+        state,
+        speed_cap=cfg.max_linear_speed,
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+        corridor_subgoal=activation,
+    )
+
+    assert activation["active"] is False
+    assert activation["reason"] == "disabled"
+    assert all(candidate.source != "corridor_subgoal" for candidate in candidates)
+
+
+def test_hybrid_rule_corridor_subgoal_activation_requires_route_and_no_near_pedestrian() -> None:
+    """Subgoal recovery should fail closed without geometry or near pedestrians."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        corridor_subgoal_min_nearest_ped_distance=1.0,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+
+    missing = planner._corridor_subgoal_activation(
+        route_corridor=None,
+        progress_windows={"3s": 0.0},
+        nearest_ped=float("inf"),
+    )
+    near_ped = planner._corridor_subgoal_activation(
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+        progress_windows={"3s": 0.0},
+        nearest_ped=0.8,
+    )
+    route_without_progress = _route_corridor_payload(route_progress_3s=0.0)
+    route_without_progress.pop("route_arc_progress_windows")
+    missing_progress = planner._corridor_subgoal_activation(
+        route_corridor=route_without_progress,
+        progress_windows={"3s": 0.0},
+        nearest_ped=1.2,
+    )
+    active = planner._corridor_subgoal_activation(
+        route_corridor=_route_corridor_payload(route_progress_1s=-0.1, route_progress_3s=0.0),
+        progress_windows={"3s": 0.0},
+        nearest_ped=1.2,
+    )
+
+    assert missing["active"] is False
+    assert missing["reason"] == "missing_route_geometry"
+    assert near_ped["active"] is False
+    assert near_ped["reason"] == "near_pedestrian"
+    assert missing_progress["active"] is False
+    assert missing_progress["reason"] == "missing_route_progress"
+    assert active["active"] is True
+    assert active["route_regressing"] is True
+
+
+def test_hybrid_rule_corridor_subgoal_adds_recovery_candidate() -> None:
+    """Active route-corridor recovery should add a dedicated candidate source."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        corridor_subgoal_speed=0.3,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    route_corridor = _route_corridor_payload(tangent_heading=np.pi / 4.0, route_progress_3s=0.0)
+    activation = planner._corridor_subgoal_activation(
+        route_corridor=route_corridor,
+        progress_windows={"3s": 0.0},
+        nearest_ped=float("inf"),
+    )
+    state = planner._extract_state(_obs(goal=(4.0, 0.0)))
+
+    candidates = planner._generate_candidates(
+        state,
+        speed_cap=cfg.max_linear_speed,
+        route_corridor=route_corridor,
+        corridor_subgoal=activation,
+    )
+
+    subgoals = [candidate for candidate in candidates if candidate.source == "corridor_subgoal"]
+    assert activation["candidate_count"] == len(subgoals)
+    assert subgoals
+    assert any(candidate.linear == pytest.approx(0.0) for candidate in subgoals)
+
+
+def test_hybrid_rule_corridor_subgoal_rejects_occupied_rollout(monkeypatch) -> None:
+    """Subgoal candidates must still fail closed on occupied grid cells."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        rollout_horizon=0.2,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "corridor_subgoal")
+
+    grid = np.zeros((1, 3, 3), dtype=float)
+    monkeypatch.setattr(
+        planner,
+        "_obstacle_grid_payload",
+        lambda observation: (grid, {}, 0, 0.2),
+    )
+    monkeypatch.setattr(planner, "_grid_value", lambda point, grid, meta, channel: 1.0)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_collision"
+    assert evaluation["candidate"] == candidate
+
+
+def test_hybrid_rule_corridor_subgoal_rejects_static_clearance_band(monkeypatch) -> None:
+    """Subgoal recovery must not reuse static-clearance escape exceptions."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        rollout_horizon=0.2,
+        static_clearance_escape_enabled=True,
+        static_clearance_escape_min_clearance=0.1,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "corridor_subgoal")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.3)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_clearance"
+
+
+def test_hybrid_rule_corridor_subgoal_strict_lock_blocks_escape_candidates(monkeypatch) -> None:
+    """Active subgoal recovery should make every candidate obey hard static clearance."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        rollout_horizon=0.2,
+        static_clearance_escape_enabled=True,
+        static_clearance_escape_min_clearance=0.1,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "dynamic_window")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.3)
+
+    relaxed = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+    strict = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        strict_static_clearance=True,
+    )
+
+    assert relaxed["accepted"] is True
+    assert relaxed["terms"]["static_clearance_escape"] == 1.0
+    assert strict["accepted"] is False
+    assert strict["reason"] == "static_clearance"
+
+
+def test_hybrid_rule_corridor_subgoal_rejects_hard_dynamic_collision() -> None:
+    """Subgoal candidates should use the same hard pedestrian collision gate."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        rollout_horizon=0.2,
+        hard_collision_horizon=0.2,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(goal=(4.0, 0.0), ped_positions=[(0.25, 0.0)], ped_velocities=[(0.0, 0.0)])
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "corridor_subgoal")
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=0.25,
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "dynamic_collision"
+
+
+def test_hybrid_rule_corridor_subgoal_route_terms_score_route_arc_progress(monkeypatch) -> None:
+    """Route-corridor scoring should prefer progress along the route tangent."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        corridor_subgoal_route_progress_weight=2.0,
+        corridor_subgoal_tangent_alignment_weight=1.0,
+        rollout_horizon=0.4,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    route_corridor = _route_corridor_payload(tangent_heading=0.0, route_progress_3s=0.0)
+    forward = HybridRuleCandidate(0.4, 0.0, "corridor_subgoal")
+    sideways = HybridRuleCandidate(0.4, 1.2, "corridor_subgoal")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+
+    forward_eval = planner._evaluate_candidate(
+        candidate=forward,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=route_corridor,
+    )
+    sideways_eval = planner._evaluate_candidate(
+        candidate=sideways,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=route_corridor,
+    )
+
+    assert forward_eval["accepted"] is True
+    assert sideways_eval["accepted"] is True
+    assert forward_eval["terms"]["corridor_subgoal_route_progress"] > 0.0
+    assert (
+        forward_eval["terms"]["corridor_subgoal_tangent_alignment"]
+        > sideways_eval["terms"]["corridor_subgoal_tangent_alignment"]
+    )
+    assert forward_eval["score"] > sideways_eval["score"]
+
+
+def test_hybrid_rule_last_decision_includes_corridor_subgoal_diagnostics(monkeypatch) -> None:
+    """Decision diagnostics should report activation and selected subgoal terms."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        corridor_subgoal_tangent_alignment_weight=3.0,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    route_corridor = _route_corridor_payload(tangent_heading=-np.pi / 2.0, route_progress_3s=0.0)
+    monkeypatch.setattr(
+        planner,
+        "_route_corridor_diagnostics",
+        lambda observation, current_time: route_corridor,
+    )
+    monkeypatch.setattr(planner._route_guide, "plan", lambda observation: (0.0, 0.0))
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+
+    planner.plan(_obs(goal=(4.0, 0.0)))
+
+    last = planner.last_decision()
+    assert last is not None
+    assert last["corridor_subgoal"]["active"] is True
+    assert last["corridor_subgoal"]["candidate_count"] > 0
+    assert any(row["source"] == "corridor_subgoal" for row in last["top_k"])
+
+
 def test_hybrid_rule_last_decision_includes_route_corridor_diagnostics() -> None:
     """Route-guide diagnostics should include route-corridor geometry when available."""
     cfg = HybridRuleLocalPlannerConfig(route_guide_enabled=True)
@@ -640,7 +971,7 @@ def test_hybrid_rule_rejection_diagnostics_include_moving_and_source_counts(monk
     monkeypatch.setattr(
         planner,
         "_generate_candidates",
-        lambda state, speed_cap: [stop, rotate, blocked_forward],
+        lambda state, speed_cap, **kwargs: [stop, rotate, blocked_forward],
     )
 
     def evaluate_candidate(
@@ -651,6 +982,8 @@ def test_hybrid_rule_rejection_diagnostics_include_moving_and_source_counts(monk
         speed_cap,
         nearest_ped,
         progress_windows,
+        route_corridor=None,
+        strict_static_clearance=False,
     ):
         if candidate == blocked_forward:
             return {

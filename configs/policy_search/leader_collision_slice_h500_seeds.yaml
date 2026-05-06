@@ -1,0 +1,6 @@
+classic_cross_trap_high: [111, 112, 113]
+classic_merging_low: [111, 112, 113]
+classic_merging_medium: [111, 112, 113]
+francis2023_circular_crossing: [111, 112, 113]
+francis2023_leave_group: [111, 112, 113]
+francis2023_perpendicular_traffic: [111, 112, 113]

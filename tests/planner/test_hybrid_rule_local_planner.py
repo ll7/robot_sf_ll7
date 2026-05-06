@@ -506,6 +506,13 @@ def test_hybrid_rule_last_decision_includes_route_corridor_diagnostics() -> None
         "5s": 0.0,
     }
 
+    planner.plan(_obs_with_grid(robot=(0.2, 0.0), goal=(2.0, 0.0)))
+    last = planner.last_decision()
+    assert last is not None
+    route_corridor = last["route_corridor"]
+    assert route_corridor is not None
+    assert any(value != 0.0 for value in route_corridor["route_arc_progress_windows"].values())
+
 
 def test_hybrid_rule_route_corridor_diagnostics_fail_closed_without_grid() -> None:
     """Missing route geometry should leave diagnostics empty without affecting planning."""
@@ -515,6 +522,24 @@ def test_hybrid_rule_route_corridor_diagnostics_fail_closed_without_grid() -> No
     command = planner.plan(_obs(goal=(2.0, 0.0)))
 
     assert command[0] >= 0.0
+    last = planner.last_decision()
+    assert last is not None
+    assert last["route_corridor"] is None
+
+
+def test_hybrid_rule_goal_stop_skips_route_corridor_diagnostics(monkeypatch) -> None:
+    """Goal-stop decisions should not spend work on route-corridor diagnostics."""
+    cfg = HybridRuleLocalPlannerConfig(route_guide_enabled=True)
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+
+    def fail_route_geometry(_observation: dict) -> dict:
+        raise AssertionError("route geometry should not run for goal stop")
+
+    monkeypatch.setattr(planner._route_guide, "route_geometry", fail_route_geometry)
+
+    command = planner.plan(_obs_with_grid(goal=(0.0, 0.0)))
+
+    assert command == (0.0, 0.0)
     last = planner.last_decision()
     assert last is not None
     assert last["route_corridor"] is None

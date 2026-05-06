@@ -117,9 +117,9 @@ Implications:
 
 ## Follow-Up Boundary
 
-#1027 satisfies the diagnostic prerequisite for #1028. A future `corridor_subgoal` behavior PR
-should use these fields to fail closed when route geometry disappears, and should treat negative
-route-arc progress as a stronger recovery trigger than ordinary goal-distance stagnation.
+Issue `#1027` satisfies the diagnostic prerequisite for `#1028`. A future `corridor_subgoal`
+behavior PR should use these fields to fail closed when route geometry disappears, and should treat
+negative route-arc progress as a stronger recovery trigger than ordinary goal-distance stagnation.
 
 The next behavior PR must still prove:
 

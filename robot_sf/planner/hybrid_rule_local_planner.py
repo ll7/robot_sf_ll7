@@ -1182,10 +1182,6 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         current_time = float(self._step_index) * float(state["dt"])
         self._progress_history.append((current_time, goal_distance))
         progress_windows = self._progress_windows(current_time, goal_distance)
-        route_corridor = self._route_corridor_diagnostics(
-            state["observation"],
-            current_time=current_time,
-        )
         if goal_distance <= float(self.config.goal_tolerance):
             command = (0.0, 0.0)
             self._record_decision(
@@ -1200,10 +1196,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 nearest_static=float("inf"),
                 predicted_ttc=float("inf"),
                 progress_windows=progress_windows,
-                route_corridor=route_corridor,
+                route_corridor=None,
             )
             return command
 
+        route_corridor = self._route_corridor_diagnostics(
+            state["observation"],
+            current_time=current_time,
+        )
         nearest_ped = self._nearest_ped_distance(robot_pos, state["ped_pos"])
         speed_cap = self._human_speed_cap(nearest_ped)
         self._clearance_context = self._build_clearance_context(observation)

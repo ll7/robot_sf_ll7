@@ -72,6 +72,10 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: GridRoutePlannerConfig | None = None) -> None:
         """Initialize planner with a static-grid routing configuration."""
         self.config = config or GridRoutePlannerConfig()
+        self._last_route_path_key: tuple[Any, ...] | None = None
+        self._last_route_path_value: (
+            tuple[tuple[tuple[int, int], ...], np.ndarray | None] | None
+        ) = None
 
     def _extract_state(
         self, observation: dict[str, Any]
@@ -385,6 +389,52 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
                 return float(distance)
         return float("inf")
 
+    def _route_path_cache_key(
+        self,
+        *,
+        cache_key: Any | None,
+        robot_pos: np.ndarray,
+        goal: np.ndarray,
+        radius: float,
+        grid: np.ndarray,
+        meta: dict[str, Any],
+    ) -> tuple[Any, ...] | None:
+        """Build a last-call route cache key for repeated observation consumers.
+
+        Returns:
+            tuple[Any, ...] | None: Cache key, or ``None`` when caching is disabled.
+        """
+        if cache_key is None:
+            return None
+        return (
+            cache_key,
+            id(grid),
+            id(meta),
+            tuple(float(value) for value in np.asarray(robot_pos, dtype=float)[:2]),
+            tuple(float(value) for value in np.asarray(goal, dtype=float)[:2]),
+            float(radius),
+            float(self.config.obstacle_threshold),
+            int(self.config.obstacle_inflation_cells),
+            int(self.config.clearance_search_cells),
+            float(self.config.clearance_penalty_weight),
+        )
+
+    def _cache_route_path(
+        self,
+        key: tuple[Any, ...] | None,
+        path: list[tuple[int, int]],
+        clearance_map: np.ndarray | None,
+    ) -> tuple[list[tuple[int, int]], np.ndarray | None]:
+        """Store and return the latest route path result.
+
+        Returns:
+            tuple[list[tuple[int, int]], np.ndarray | None]: Route path and clearance map.
+        """
+        if key is not None:
+            self._last_route_path_key = key
+            self._last_route_path_value = (tuple(path), clearance_map)
+        return path, clearance_map
+
     def _route_path(
         self,
         *,
@@ -393,6 +443,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         radius: float,
         grid: np.ndarray,
         meta: dict[str, Any],
+        cache_key: Any | None = None,
     ) -> tuple[list[tuple[int, int]], np.ndarray | None]:
         """Compute an occupancy-grid route and optional clearance map.
 
@@ -400,28 +451,43 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             tuple[list[tuple[int, int]], np.ndarray | None]: Grid-cell route and
             optional clearance map, or ``([], None)`` when no route is available.
         """
+        route_cache_key = self._route_path_cache_key(
+            cache_key=cache_key,
+            robot_pos=robot_pos,
+            goal=goal,
+            radius=radius,
+            grid=grid,
+            meta=meta,
+        )
+        if (
+            route_cache_key is not None
+            and route_cache_key == self._last_route_path_key
+            and self._last_route_path_value is not None
+        ):
+            cached_path, cached_clearance_map = self._last_route_path_value
+            return list(cached_path), cached_clearance_map
+
         blocked = self._blocked_grid(grid, meta, radius)
         if blocked is None:
-            return [], None
+            return self._cache_route_path(route_cache_key, [], None)
 
         start_rc = self._world_to_grid(robot_pos, meta, (blocked.shape[0], blocked.shape[1]))
         goal_rc = self._world_to_grid(goal, meta, (blocked.shape[0], blocked.shape[1]))
         if start_rc is None or goal_rc is None:
-            return [], None
+            return self._cache_route_path(route_cache_key, [], None)
 
         free_start = self._nearest_free(blocked, start_rc, int(self.config.clearance_search_cells))
         free_goal = self._nearest_free(blocked, goal_rc, int(self.config.clearance_search_cells))
         if free_start is None or free_goal is None:
-            return [], None
+            return self._cache_route_path(route_cache_key, [], None)
 
         clearance_map = (
             self._compute_clearance_map(blocked)
             if float(self.config.clearance_penalty_weight) > 0.0
             else None
         )
-        return self._astar(
-            blocked, free_start, free_goal, clearance_map=clearance_map
-        ), clearance_map
+        path = self._astar(blocked, free_start, free_goal, clearance_map=clearance_map)
+        return self._cache_route_path(route_cache_key, path, clearance_map)
 
     def _route_target(
         self,
@@ -431,6 +497,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         radius: float,
         grid: np.ndarray,
         meta: dict[str, Any],
+        cache_key: Any | None = None,
     ) -> np.ndarray | None:
         """Resolve the local waypoint target from the occupancy-grid route.
 
@@ -444,6 +511,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             radius=radius,
             grid=grid,
             meta=meta,
+            cache_key=cache_key,
         )
         if len(path) < 2:
             return goal
@@ -547,7 +615,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             clearance_map=clearance_map,
             resolution=resolution,
         )
-        segment_stop_idx = max(1, waypoint_idx)
+        segment_stop_idx = 1
         lateral_offset = self._lateral_offset_to_segment(
             robot_pos,
             start_world,
@@ -597,6 +665,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
                 radius=radius,
                 grid=grid,
                 meta=meta,
+                cache_key=id(observation),
             )
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             return None
@@ -634,6 +703,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
                 radius=radius,
                 grid=grid,
                 meta=meta,
+                cache_key=id(observation),
             )
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             return None
@@ -665,6 +735,7 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             radius=radius,
             grid=grid,
             meta=meta,
+            cache_key=id(observation),
         )
         if waypoint is None:
             linear, angular, _heading_error = self._nominal_command(

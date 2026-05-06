@@ -922,7 +922,7 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
 
 def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912
     """Validate campaign-level invariants after config parsing."""
-    if cfg.scenario_horizons_path is not None and not cfg.scenario_horizons_path.exists():
+    if cfg.scenario_horizons_path is not None and not cfg.scenario_horizons_path.is_file():
         raise FileNotFoundError(
             f"Scenario horizon schedule not found: {cfg.scenario_horizons_path}"
         )

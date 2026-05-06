@@ -282,6 +282,38 @@ def test_scenario_horizon_schedule_rejects_fixed_horizon(tmp_path: Path) -> None
         load_campaign_config(config_path)
 
 
+def test_scenario_horizon_schedule_rejects_directory_path(tmp_path: Path) -> None:
+    """Scenario-horizon campaigns should fail closed when the schedule is not a file."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {"scenarios": [{"name": "sc_a", "map_file": "maps/svg_maps/classic_crossing.svg"}]},
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    schedule_dir = tmp_path / "scenario_horizons"
+    schedule_dir.mkdir()
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: scheduled_campaign",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"scenario_horizons: {schedule_dir.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileNotFoundError, match="Scenario horizon schedule not found"):
+        load_campaign_config(config_path)
+
+
 def test_load_campaign_config_parses_snqi_contract_block(tmp_path: Path) -> None:
     """Config loader should parse SNQI contract thresholds and validation fields."""
     matrix_path = tmp_path / "matrix.yaml"

@@ -164,6 +164,9 @@ knowledge, not every transient iteration detail.
 * [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
   records source-level hybrid-rule rejection diagnostics and two rejected classic-merging recovery
   mechanisms; #884 remains unresolved until a route-completing corridor policy is proven.
+* [Issue #1027 Route-Corridor Attribution Diagnostics](issue_1027_route_corridor_attribution.md)
+  records additive route-corridor `last_decision()` diagnostics, five regenerated #884 traces, and
+  the geometry/dropout evidence needed before corridor-subgoal behavior work.
 
 ## Map Coverage Notes
 

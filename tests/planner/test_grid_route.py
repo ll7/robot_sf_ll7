@@ -177,6 +177,35 @@ def test_astar_narrow_passage_routes_through_gap() -> None:
     assert (3, 7) in path, "Path must go through the narrow opening in the wall"
 
 
+def test_grid_route_geometry_exposes_corridor_diagnostics() -> None:
+    """Route geometry should expose corridor diagnostics without selecting a command."""
+    planner = GridRoutePlannerAdapter(
+        GridRoutePlannerConfig(
+            obstacle_inflation_cells=0,
+            waypoint_lookahead_cells=3,
+            clearance_penalty_weight=1.0,
+        )
+    )
+    observation = _observation(
+        occupied_cells=[(10, 11), (10, 12), (10, 13), (9, 12), (11, 12)],
+    )
+
+    geometry = planner.route_geometry(observation)
+
+    assert geometry is not None
+    assert geometry["route_path_cell_count"] > 1
+    assert geometry["route_waypoint_index"] == 3
+    assert len(geometry["route_waypoint_world"]) == 2
+    assert geometry["route_remaining_distance"] > 0.0
+    assert geometry["route_distance_to_waypoint"] > 0.0
+    assert geometry["route_tangent_heading"] is not None
+    assert geometry["route_heading_error"] is not None
+    assert geometry["route_corner_distance"] is not None
+    assert geometry["corridor_center_clearance"] is not None
+    assert geometry["corridor_width_estimate"] is not None
+    assert geometry["robot_lateral_offset_to_corridor"] is not None
+
+
 def test_build_grid_route_config_clearance_penalty() -> None:
     """build_grid_route_config should round-trip clearance_penalty_weight."""
     cfg = build_grid_route_config({"clearance_penalty_weight": 0.75})

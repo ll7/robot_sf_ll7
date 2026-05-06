@@ -41,10 +41,17 @@ scenario-loader `single_pedestrians` overrides, and `populate_single_pedestrians
 
 ## Scope Boundary
 
-This is a runtime smoke path, not the complete #870 epic. It does not yet add multiple scripted
-families, learned adversary training, policy-analysis smoke fixtures, scenario certification, replay
-certification, or benchmark-frozen case promotion. Treat generated scenarios as development stress
-tests until those later proof surfaces exist.
+This started as a runtime smoke path, not the complete #870 epic. Follow-up slices have now added
+two scripted development families and a policy-analysis smoke proof, but generated scenarios are
+still development stress tests unless a separate certification path promotes them.
+
+Still out of scope:
+
+- learned adversary training,
+- replay certification,
+- benchmark-frozen case promotion.
+
+Treat generated scenarios as development stress tests until those later proof surfaces exist.
 
 ## Validation
 
@@ -66,4 +73,42 @@ uv run ruff check robot_sf/adversarial/runtime.py robot_sf/adversarial/__init__.
   robot_sf/nav/map_config.py robot_sf/ped_npc/ped_population.py \
   robot_sf/training/scenario_loader.py tests/adversarial/test_adversarial_search.py
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
+```
+
+2026-05-06 update: a focused policy-analysis smoke now materializes a temporary multi-ped
+`group_squeeze` scenario against the existing `static_humans` map hooks (`h1`, `h2`), runs
+`scripts/tools/policy_analysis_run.py` through its Python `main(...)` entry point with the `goal`
+policy, and asserts that:
+
+- the produced episode is not an error-record fallback,
+- the episode has real rollout steps,
+- `scenario_params.metadata.adversarial_multi_ped_runtime` survives the policy-analysis record,
+- per-pedestrian attribution metadata survives the materialized `single_pedestrians` block.
+
+Validation command:
+
+```bash
+uv run pytest \
+  tests/tools/test_policy_analysis_run.py::test_policy_analysis_main_runs_materialized_multi_ped_adversarial_scenario -q
+```
+
+Observed result:
+
+```text
+1 passed in 40.39s
+```
+
+The runtime test coverage also now includes an explicit N=1 adversarial reset/step smoke for the
+same 1-N contract:
+
+```bash
+uv run pytest \
+  tests/adversarial/test_adversarial_search.py::test_multi_ped_adversarial_runtime_config_resets_and_steps_single_pedestrian \
+  tests/adversarial/test_adversarial_search.py::test_multi_ped_adversarial_runtime_config_resets_and_steps -q
+```
+
+Observed result:
+
+```text
+2 passed in 41.82s
 ```

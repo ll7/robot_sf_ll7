@@ -107,10 +107,10 @@ candidates:
     promotion_gate: tier_b
     candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
     hypothesis: >
-      The h500 leader misses the strict collision gate by three named collision seeds. Use tuned
-      ORCA only for the two first-step dynamic-deadlock scenarios and disable the
+      The h500 leader misses the strict collision gate by one controllable merging collision plus
+      two first-step dynamic-deadlock episodes that tuned ORCA does not repair. Disable the
       static-escape/recenter extras only on `classic_merging_low`, preserving the v1 selector
-      elsewhere while reducing the exact h500 collision slice.
+      elsewhere while reducing the controllable h500 collision slice.
     required_stages:
       - smoke
       - nominal_sanity

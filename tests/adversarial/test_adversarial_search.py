@@ -7,6 +7,7 @@ import types
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 import yaml
 
@@ -38,6 +39,19 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.ped_npc.ped_population import populate_single_pedestrians
+
+_MULTI_PED_FAMILY_FIXTURES = (
+    (
+        Path("configs/adversarial/group_squeeze_multi_ped_example.yaml"),
+        "group_squeeze",
+        ("left_blocker", "right_blocker"),
+    ),
+    (
+        Path("configs/adversarial/doorway_blocker_multi_ped_example.yaml"),
+        "doorway_blocker",
+        ("door_left", "door_right"),
+    ),
+)
 
 
 def _write_template(path: Path) -> None:
@@ -581,6 +595,61 @@ def test_multi_ped_adversarial_runtime_config_resets_and_steps() -> None:
         env.reset(seed=config.scenario_seed)
         assert env.simulator.ped_pos.shape == first_reset_positions.shape
         assert (env.simulator.ped_pos == first_reset_positions).all()
+    finally:
+        env.close()
+
+
+@pytest.mark.parametrize(("fixture_path", "family", "expected_ids"), _MULTI_PED_FAMILY_FIXTURES)
+def test_multi_ped_adversarial_family_fixtures_reset_step_deterministically(
+    fixture_path: Path,
+    family: str,
+    expected_ids: tuple[str, ...],
+) -> None:
+    """Certified development fixtures should reset and step deterministically."""
+    config = MultiPedAdversarialConfig.from_file(fixture_path)
+    assert config.family == family
+
+    payload = materialize_multi_ped_scenario_payload(
+        config,
+        {"scenarios": [{"name": f"{family}_smoke", "map_id": "synthetic_runtime"}]},
+    )
+    scenario = payload["scenarios"][0]
+    status = scenario["metadata"]["adversarial_multi_ped_runtime"]
+    assert status["benchmark_frozen"] is False
+    assert status["certification_status"] == "uncertified_development_smoke"
+    assert tuple(status["pedestrian_ids"]) == expected_ids
+
+    robot_config = build_multi_ped_adversarial_robot_config(
+        config,
+        _runtime_base_map(),
+        map_id=f"{family}_runtime",
+        sim_time_in_secs=0.5,
+    )
+    runtime_map = robot_config.map_pool.get_map(f"{family}_runtime")
+    assert tuple(ped.id for ped in runtime_map.single_pedestrians) == expected_ids
+    assert all(
+        ped.metadata["adversarial_family"] == family for ped in runtime_map.single_pedestrians
+    )
+
+    env = make_robot_env(config=robot_config, debug=True, seed=config.scenario_seed)
+    try:
+        action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)
+
+        def rollout_positions() -> list[np.ndarray]:
+            env.reset(seed=config.scenario_seed)
+            positions = [env.simulator.ped_pos.copy()]
+            for _ in range(2):
+                _obs, _reward, terminated, truncated, _info = env.step(action)
+                positions.append(env.simulator.ped_pos.copy())
+                if terminated or truncated:
+                    break
+            return positions
+
+        first = rollout_positions()
+        second = rollout_positions()
+        assert len(first) == len(second)
+        for left, right in zip(first, second, strict=True):
+            np.testing.assert_allclose(left, right)
     finally:
         env.close()
 

@@ -12,6 +12,8 @@ import pytest
 from gymnasium import spaces
 from loguru import logger
 
+from robot_sf.adversarial.config import MultiPedAdversarialConfig
+from robot_sf.adversarial.materialize import materialize_multi_ped_scenario_payload
 from robot_sf.planner.socnav import (
     HRVOPlannerAdapter,
     ORCAPlannerAdapter,
@@ -573,6 +575,73 @@ def test_build_episode_record_route_complete_success_without_terminal_flags(monk
     assert record["termination_reason"] == "success"
     assert record["outcome"]["route_complete"] is True
     assert record["outcome"]["collision_event"] is False
+
+
+def test_build_episode_record_preserves_multi_ped_adversarial_metadata(monkeypatch) -> None:
+    """Episode records should preserve multi-ped family attribution metadata."""
+
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "compute_all_metrics",
+        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0, "time_to_goal_norm": 0.2},
+    )
+    monkeypatch.setattr(
+        policy_analysis_run,
+        "post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(policy_analysis_run, "sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
+
+    class _Map:
+        obstacles = []
+        bounds = ((0.0, 0.0), (1.0, 1.0))
+
+    config = MultiPedAdversarialConfig.from_file(
+        "configs/adversarial/doorway_blocker_multi_ped_example.yaml"
+    )
+    scenario = materialize_multi_ped_scenario_payload(
+        config,
+        {"scenarios": [{"name": "doorway_blocker_smoke", "map_id": "synthetic_runtime"}]},
+    )["scenarios"][0]
+    traj = policy_analysis_run.EpisodeTrajectory(
+        robot_positions=[np.array([0.0, 0.0], dtype=float), np.array([1.0, 0.0], dtype=float)],
+        ped_positions=[],
+        ped_forces=[],
+    )
+
+    record = policy_analysis_run._build_episode_record(
+        scenario,
+        seed=config.scenario_seed,
+        policy_name="goal",
+        map_def=_Map(),
+        goal_vec=np.array([1.0, 0.0], dtype=float),
+        trajectory=traj,
+        reached_goal_step=1,
+        wall_time=1.0,
+        max_steps=10,
+        dt=0.1,
+        robot_max_speed=1.0,
+        robot_radius=1.0,
+        ped_radius=0.4,
+        ts_start="2026-03-02T00:00:00+00:00",
+        video_path=None,
+        terminated=False,
+        truncated=False,
+        last_info={"meta": {"is_route_complete": True}},
+        reached_max_steps=False,
+    )
+
+    metadata = record["scenario_params"]["metadata"]
+    runtime_status = metadata["adversarial_multi_ped_runtime"]
+    assert runtime_status["family"] == "doorway_blocker"
+    assert runtime_status["benchmark_frozen"] is False
+    assert runtime_status["certification_status"] == "uncertified_development_smoke"
+    assert runtime_status["pedestrian_ids"] == ["door_left", "door_right"]
+    assert (
+        record["scenario_params"]["single_pedestrians"][0]["metadata"]["adversarial_family"]
+        == "doorway_blocker"
+    )
 
 
 def test_build_episode_record_metric_collision_overrides_route_complete(monkeypatch) -> None:

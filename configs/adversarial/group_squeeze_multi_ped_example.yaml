@@ -1,6 +1,6 @@
 schema_version: adversarial-multi-ped.v1
 family: group_squeeze
-description: Schema-only example for issue 923; not a benchmark-ready runtime config.
+description: Development-smoke group squeeze fixture for issue 1015; not benchmark-frozen.
 scenario_seed: 41
 constraints:
   min_start_goal_distance_m: 1.0
@@ -11,8 +11,14 @@ pedestrians:
     spawn_time_s: 0.5
     speed_mps: 1.1
     delay_s: 0.25
+    metadata:
+      role: squeeze_left
+      lane: left
   - id: right_blocker
     start: {x: 1.0, y: 3.0}
     goal: {x: 5.0, y: 3.0}
     spawn_time_s: 0.75
     speed_mps: 1.2
+    metadata:
+      role: squeeze_right
+      lane: right

@@ -1,0 +1,104 @@
+{
+  "total_jobs": 144,
+  "written": 144,
+  "successful_jobs": 144,
+  "failed_jobs": 0,
+  "failures": [],
+  "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/social_force__differential_drive/episodes.jsonl",
+  "algorithm_readiness": {
+    "name": "social_force",
+    "tier": "baseline-ready",
+    "profile": "baseline-safe"
+  },
+  "algorithm_metadata_contract": {
+    "algorithm": "social_force",
+    "status": "ok",
+    "canonical_algorithm": "social_force",
+    "baseline_category": "classical",
+    "policy_semantics": "social_force_adapter",
+    "planner_kinematics": {
+      "robot_kinematics": "differential_drive",
+      "planner_command_space": "unicycle_vw",
+      "supports_native_commands": false,
+      "supports_adapter_commands": true,
+      "execution_mode": "adapter",
+      "adapter_name": "SocialForcePlannerAdapter",
+      "adapter_active": true,
+      "scenario_kinematics": [
+        "differential_drive"
+      ]
+    },
+    "adapter_impact": {
+      "requested": false,
+      "native_steps": 0,
+      "adapted_steps": 0,
+      "status": "disabled"
+    },
+    "kinematics_feasibility": {
+      "commands_evaluated": 32581,
+      "infeasible_native_count": 2366,
+      "projected_count": 2366,
+      "projection_rate": 0.07261901108007734,
+      "infeasible_rate": 0.07261901108007734,
+      "mean_abs_delta_linear": 0.02931445812576152,
+      "mean_abs_delta_angular": 0.0,
+      "max_abs_delta_linear": 0.9998927097023316,
+      "max_abs_delta_angular": 0.0
+    }
+  },
+  "preflight": {
+    "status": "ok",
+    "learned_policy_contract": {
+      "status": "not_applicable"
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "social_force",
+      "status": "ok",
+      "canonical_algorithm": "social_force",
+      "baseline_category": "classical",
+      "policy_semantics": "social_force_adapter",
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": false,
+        "supports_adapter_commands": true,
+        "execution_mode": "adapter",
+        "adapter_name": "SocialForcePlannerAdapter",
+        "adapter_active": true,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "adapter_impact": {
+        "requested": false,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "disabled"
+      },
+      "kinematics_feasibility": {
+        "commands_evaluated": 32581,
+        "infeasible_native_count": 2366,
+        "projected_count": 2366,
+        "projection_rate": 0.07261901108007734,
+        "infeasible_rate": 0.07261901108007734,
+        "mean_abs_delta_linear": 0.02931445812576152,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.9998927097023316,
+        "max_abs_delta_angular": 0.0
+      }
+    }
+  },
+  "benchmark_availability": {
+    "execution_mode": "adapter",
+    "readiness_status": "adapter",
+    "availability_status": "available",
+    "benchmark_success": true,
+    "availability_reason": null
+  },
+  "status": "ok",
+  "started_at_utc": "2026-05-06T12:08:58.591008Z",
+  "finished_at_utc": "2026-05-06T12:10:14.105768Z",
+  "runtime_sec": 75.5147667459969,
+  "episodes_per_second": 1.9069118028843488,
+  "kinematics": "differential_drive"
+}

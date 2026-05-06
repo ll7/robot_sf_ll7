@@ -1,0 +1,104 @@
+{
+  "total_jobs": 144,
+  "written": 144,
+  "successful_jobs": 144,
+  "failed_jobs": 0,
+  "failures": [],
+  "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/sacadrl__differential_drive/episodes.jsonl",
+  "algorithm_readiness": {
+    "name": "sacadrl",
+    "tier": "experimental",
+    "profile": "experimental"
+  },
+  "algorithm_metadata_contract": {
+    "algorithm": "sacadrl",
+    "status": "ok",
+    "canonical_algorithm": "sacadrl",
+    "baseline_category": "learning",
+    "policy_semantics": "learned_value_adapter",
+    "planner_kinematics": {
+      "robot_kinematics": "differential_drive",
+      "planner_command_space": "unicycle_vw",
+      "supports_native_commands": false,
+      "supports_adapter_commands": true,
+      "execution_mode": "adapter",
+      "adapter_name": "SACADRLPlannerAdapter",
+      "adapter_active": true,
+      "scenario_kinematics": [
+        "differential_drive"
+      ]
+    },
+    "adapter_impact": {
+      "requested": false,
+      "native_steps": 0,
+      "adapted_steps": 0,
+      "status": "disabled"
+    },
+    "kinematics_feasibility": {
+      "commands_evaluated": 20262,
+      "infeasible_native_count": 0,
+      "projected_count": 0,
+      "projection_rate": 0.0,
+      "infeasible_rate": 0.0,
+      "mean_abs_delta_linear": 0.0,
+      "mean_abs_delta_angular": 0.0,
+      "max_abs_delta_linear": 0.0,
+      "max_abs_delta_angular": 0.0
+    }
+  },
+  "preflight": {
+    "status": "ok",
+    "learned_policy_contract": {
+      "status": "not_applicable"
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "sacadrl",
+      "status": "ok",
+      "canonical_algorithm": "sacadrl",
+      "baseline_category": "learning",
+      "policy_semantics": "learned_value_adapter",
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": false,
+        "supports_adapter_commands": true,
+        "execution_mode": "adapter",
+        "adapter_name": "SACADRLPlannerAdapter",
+        "adapter_active": true,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "adapter_impact": {
+        "requested": false,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "disabled"
+      },
+      "kinematics_feasibility": {
+        "commands_evaluated": 20262,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "projection_rate": 0.0,
+        "infeasible_rate": 0.0,
+        "mean_abs_delta_linear": 0.0,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0
+      }
+    }
+  },
+  "benchmark_availability": {
+    "execution_mode": "adapter",
+    "readiness_status": "adapter",
+    "availability_status": "available",
+    "benchmark_success": true,
+    "availability_reason": null
+  },
+  "status": "ok",
+  "started_at_utc": "2026-05-06T12:14:17.129889Z",
+  "finished_at_utc": "2026-05-06T12:15:14.923820Z",
+  "runtime_sec": 57.79394187300932,
+  "episodes_per_second": 2.4916106313774433,
+  "kinematics": "differential_drive"
+}

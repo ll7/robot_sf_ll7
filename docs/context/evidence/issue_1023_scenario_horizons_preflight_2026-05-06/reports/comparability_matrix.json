@@ -1,0 +1,257 @@
+{
+  "schema_version": "benchmark-comparability-summary.v1",
+  "campaign_id": "issue1023_scenario_horizons_preflight_2026-05-06",
+  "generated_at_utc": "2026-05-06T10:19:58.924813Z",
+  "mapping_path": "configs/benchmarks/alyassi_comparability_map_v1.yaml",
+  "mapping_version": "alyassi-comparability-v1",
+  "mapping_hash": "8345d81be4fd",
+  "coverage_overlap_rows": [
+    {
+      "robot_sf_family": "accompanying_peer",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "blind_corner",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "bottleneck",
+      "scenario_count": 4,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "circular_crossing",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "cross_trap",
+      "scenario_count": 3,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "crossing",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "crowd_navigation",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "doorway",
+      "scenario_count": 3,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "down_path",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "entering_elevator",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "entering_room",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "exiting_elevator",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "exiting_room",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "following_human",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "frontal_approach",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "group_crossing",
+      "scenario_count": 3,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "head_on_corridor",
+      "scenario_count": 2,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "intersection_no_gesture",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "intersection_proceed",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "intersection_wait",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "join_group",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "leading_human",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "leave_group",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "merging",
+      "scenario_count": 2,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "narrow_doorway",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "narrow_hallway",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "overtaking",
+      "scenario_count": 2,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "parallel_traffic",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "pedestrian_obstruction",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "pedestrian_overtaking",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "perpendicular_traffic",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "robot_crowding",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "robot_overtaking",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "station_platform",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    },
+    {
+      "robot_sf_family": "t_intersection",
+      "scenario_count": 2,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    }
+  ],
+  "amv_specific_extensions": [
+    "shared-space micromobility interactions",
+    "delivery robot curb-side handoff approach",
+    "mixed sidewalk and bike-lane transitions"
+  ],
+  "metric_comparability_rows": [
+    {
+      "metric": "collisions",
+      "classification": "comparable",
+      "alyassi_metric": "collision_rate",
+      "rationale": "Collision rate is directly comparable at episode granularity."
+    },
+    {
+      "metric": "comfort_exposure",
+      "classification": "proxy",
+      "alyassi_metric": "comfort/smoothness terms",
+      "rationale": "Comfort exposure overlaps with smoothness-focused safety comfort metrics."
+    },
+    {
+      "metric": "near_misses",
+      "classification": "proxy",
+      "alyassi_metric": "safety-distance violations",
+      "rationale": "Near misses approximate low-clearance safety stress but are not identical."
+    },
+    {
+      "metric": "snqi",
+      "classification": "amv_specific",
+      "alyassi_metric": "n/a",
+      "rationale": "SNQI is a robot_sf composite quality index used as an AMV extension metric."
+    },
+    {
+      "metric": "success",
+      "classification": "comparable",
+      "alyassi_metric": "success_rate",
+      "rationale": "Both benchmarks report episode-level success completion."
+    }
+  ]
+}

@@ -1,0 +1,296 @@
+{
+  "schema_version": "benchmark-amv-coverage-summary.v1",
+  "campaign_id": "issue1023_scenario_horizons_h500_local_2026-05-06",
+  "generated_at_utc": "2026-05-06T12:01:35.670439Z",
+  "profile_name": "amv-paper-v1",
+  "contract_version": "1",
+  "coverage_enforcement": "warn",
+  "status": "warn",
+  "required_dimensions": {
+    "use_case": [
+      "delivery_robot",
+      "shared_space_micromobility"
+    ],
+    "context": [
+      "shared_space",
+      "sidewalk"
+    ],
+    "speed_regime": [
+      "scooter_speed",
+      "walking_speed"
+    ],
+    "maneuver_type": [
+      "bottleneck",
+      "crossing",
+      "overtake"
+    ]
+  },
+  "observed_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "missing_dimensions": {
+    "use_case": [
+      "delivery_robot",
+      "shared_space_micromobility"
+    ],
+    "context": [
+      "shared_space",
+      "sidewalk"
+    ],
+    "speed_regime": [
+      "scooter_speed",
+      "walking_speed"
+    ],
+    "maneuver_type": [
+      "bottleneck",
+      "crossing",
+      "overtake"
+    ]
+  },
+  "scenario_count": 48,
+  "scenario_rows": [
+    {
+      "name": "classic_bottleneck_low",
+      "scenario_family": "bottleneck",
+      "amv": {}
+    },
+    {
+      "name": "classic_bottleneck_medium",
+      "scenario_family": "bottleneck",
+      "amv": {}
+    },
+    {
+      "name": "classic_bottleneck_high",
+      "scenario_family": "bottleneck",
+      "amv": {}
+    },
+    {
+      "name": "classic_realworld_double_bottleneck_high",
+      "scenario_family": "bottleneck",
+      "amv": {}
+    },
+    {
+      "name": "classic_station_platform_medium",
+      "scenario_family": "station_platform",
+      "amv": {}
+    },
+    {
+      "name": "classic_cross_trap_low",
+      "scenario_family": "cross_trap",
+      "amv": {}
+    },
+    {
+      "name": "classic_cross_trap_medium",
+      "scenario_family": "cross_trap",
+      "amv": {}
+    },
+    {
+      "name": "classic_cross_trap_high",
+      "scenario_family": "cross_trap",
+      "amv": {}
+    },
+    {
+      "name": "classic_doorway_low",
+      "scenario_family": "doorway",
+      "amv": {}
+    },
+    {
+      "name": "classic_doorway_medium",
+      "scenario_family": "doorway",
+      "amv": {}
+    },
+    {
+      "name": "classic_doorway_high",
+      "scenario_family": "doorway",
+      "amv": {}
+    },
+    {
+      "name": "classic_group_crossing_low",
+      "scenario_family": "group_crossing",
+      "amv": {}
+    },
+    {
+      "name": "classic_group_crossing_medium",
+      "scenario_family": "group_crossing",
+      "amv": {}
+    },
+    {
+      "name": "classic_group_crossing_high",
+      "scenario_family": "group_crossing",
+      "amv": {}
+    },
+    {
+      "name": "classic_head_on_corridor_low",
+      "scenario_family": "head_on_corridor",
+      "amv": {}
+    },
+    {
+      "name": "classic_head_on_corridor_medium",
+      "scenario_family": "head_on_corridor",
+      "amv": {}
+    },
+    {
+      "name": "classic_merging_low",
+      "scenario_family": "merging",
+      "amv": {}
+    },
+    {
+      "name": "classic_merging_medium",
+      "scenario_family": "merging",
+      "amv": {}
+    },
+    {
+      "name": "classic_overtaking_low",
+      "scenario_family": "overtaking",
+      "amv": {}
+    },
+    {
+      "name": "classic_overtaking_medium",
+      "scenario_family": "overtaking",
+      "amv": {}
+    },
+    {
+      "name": "classic_t_intersection_low",
+      "scenario_family": "t_intersection",
+      "amv": {}
+    },
+    {
+      "name": "classic_t_intersection_medium",
+      "scenario_family": "t_intersection",
+      "amv": {}
+    },
+    {
+      "name": "classic_urban_crossing_medium",
+      "scenario_family": "crossing",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_frontal_approach",
+      "scenario_family": "frontal_approach",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_pedestrian_obstruction",
+      "scenario_family": "pedestrian_obstruction",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_pedestrian_overtaking",
+      "scenario_family": "pedestrian_overtaking",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_robot_overtaking",
+      "scenario_family": "robot_overtaking",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_down_path",
+      "scenario_family": "down_path",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_intersection_no_gesture",
+      "scenario_family": "intersection_no_gesture",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_blind_corner",
+      "scenario_family": "blind_corner",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_narrow_hallway",
+      "scenario_family": "narrow_hallway",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_narrow_doorway",
+      "scenario_family": "narrow_doorway",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_entering_room",
+      "scenario_family": "entering_room",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_exiting_room",
+      "scenario_family": "exiting_room",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_entering_elevator",
+      "scenario_family": "entering_elevator",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_exiting_elevator",
+      "scenario_family": "exiting_elevator",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_intersection_wait",
+      "scenario_family": "intersection_wait",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_intersection_proceed",
+      "scenario_family": "intersection_proceed",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_following_human",
+      "scenario_family": "following_human",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_leading_human",
+      "scenario_family": "leading_human",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_accompanying_peer",
+      "scenario_family": "accompanying_peer",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_join_group",
+      "scenario_family": "join_group",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_leave_group",
+      "scenario_family": "leave_group",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_crowd_navigation",
+      "scenario_family": "crowd_navigation",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_parallel_traffic",
+      "scenario_family": "parallel_traffic",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_perpendicular_traffic",
+      "scenario_family": "perpendicular_traffic",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_circular_crossing",
+      "scenario_family": "circular_crossing",
+      "amv": {}
+    },
+    {
+      "name": "francis2023_robot_crowding",
+      "scenario_family": "robot_crowding",
+      "amv": {}
+    }
+  ]
+}

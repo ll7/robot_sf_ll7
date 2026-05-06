@@ -156,3 +156,8 @@ This PR should not close #884. The next behavior attempt should either:
   environment, or
 - replace the constant-command primitive with a short-horizon corridor optimizer that verifies the
   route-corridor maneuver as a sequence rather than a single constant command.
+
+Update 2026-05-06: #1034 implemented that follow-up boundary by binding environment obstacle-line
+geometry, checking short rollout sequences, and adding the tracked
+`hybrid_rule_v3_fast_progress_static_escape_continuous` candidate. See
+`docs/context/issue_1034_continuous_corridor_maneuver.md` for the target and gate evidence.

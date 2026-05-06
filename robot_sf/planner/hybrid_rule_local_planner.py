@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 from scipy.ndimage import distance_transform_edt
 
+from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
@@ -79,11 +80,12 @@ def _ego_velocity_to_world(velocity: np.ndarray, heading: float) -> np.ndarray:
 
 @dataclass(frozen=True)
 class HybridRuleCandidate:
-    """Candidate constant unicycle command for short-horizon rollout."""
+    """Candidate unicycle command with an optional planned rollout sequence."""
 
     linear: float
     angular: float
     source: str
+    rollout_sequence: tuple[tuple[float, float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,15 @@ class _ObstacleClearanceContext:
     channel: int
     resolution: float
     clearance_cells: np.ndarray | None
+
+
+@dataclass(frozen=True)
+class _ContinuousStaticContext:
+    """Environment-backed continuous static-obstacle collision surface."""
+
+    width: float
+    height: float
+    obstacle_segments: np.ndarray
 
 
 @dataclass
@@ -178,6 +189,8 @@ class HybridRuleLocalPlannerConfig:
     corridor_subgoal_turn_in_place_error: float = 0.25
     corridor_subgoal_heading_gain: float = 1.0
     corridor_subgoal_min_nearest_ped_distance: float = 1.0
+    corridor_subgoal_use_continuous_static_check: bool = True
+    continuous_static_clearance_enabled: bool = False
     corridor_subgoal_static_clearance_buffer: float = 0.2
     corridor_subgoal_goal_stall_progress_3s: float = 0.05
     corridor_subgoal_route_stall_progress_3s: float = 0.05
@@ -236,7 +249,32 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             if bool(self.config.route_guide_enabled)
             else None
         )
+        self._continuous_static_context: _ContinuousStaticContext | None = None
         self.reset()
+
+    def bind_env(self, env: Any) -> None:
+        """Bind environment obstacle geometry for continuous static-collision checks."""
+        simulator = getattr(env, "simulator", None)
+        map_def = getattr(simulator, "map_def", None)
+        get_obstacle_lines = getattr(simulator, "get_obstacle_lines", None)
+        if map_def is None or not callable(get_obstacle_lines):
+            self._continuous_static_context = None
+            return
+        try:
+            width = float(map_def.width)
+            height = float(map_def.height)
+            obstacle_segments = np.asarray(get_obstacle_lines(), dtype=float).reshape(-1, 4)
+        except (AttributeError, TypeError, ValueError):
+            self._continuous_static_context = None
+            return
+        if width <= 0.0 or height <= 0.0 or not np.isfinite(width) or not np.isfinite(height):
+            self._continuous_static_context = None
+            return
+        self._continuous_static_context = _ContinuousStaticContext(
+            width=width,
+            height=height,
+            obstacle_segments=obstacle_segments,
+        )
 
     def reset(self, *, seed: int | None = None) -> None:
         """Clear per-episode deterministic state.
@@ -377,13 +415,117 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         w_max = min(float(self.config.max_angular_speed), last_w + w_delta)
         return v_min, v_max, w_min, w_max
 
-    def _candidate_key(self, candidate: HybridRuleCandidate) -> tuple[float, float]:
+    def _candidate_key(self, candidate: HybridRuleCandidate) -> tuple[Any, ...]:
         """Quantize a candidate command for duplicate removal.
 
         Returns:
-            tuple[float, float]: Rounded linear/angular command key.
+            tuple[Any, ...]: Rounded command and sequence key.
         """
-        return round(float(candidate.linear), 4), round(float(candidate.angular), 4)
+        rollout_key = tuple(
+            (round(float(duration), 3), round(float(linear), 4), round(float(angular), 4))
+            for duration, linear, angular in candidate.rollout_sequence
+        )
+        return round(float(candidate.linear), 4), round(float(candidate.angular), 4), rollout_key
+
+    def _clip_rollout_sequence(
+        self,
+        sequence: tuple[tuple[float, float, float], ...],
+        *,
+        speed_cap: float,
+    ) -> tuple[tuple[float, float, float], ...]:
+        """Return finite, bounded rollout-sequence segments."""
+        segments: list[tuple[float, float, float]] = []
+        max_linear = max(min(float(speed_cap), float(self.config.max_linear_speed)), 0.0)
+        max_angular = max(float(self.config.max_angular_speed), 0.0)
+        for segment in sequence:
+            try:
+                duration, linear, angular = segment
+                duration = float(duration)
+                linear = float(linear)
+                angular = float(angular)
+            except (TypeError, ValueError):
+                continue
+            if (
+                not (np.isfinite(duration) and np.isfinite(linear) and np.isfinite(angular))
+                or duration <= _EPS
+            ):
+                continue
+            segments.append(
+                (
+                    duration,
+                    float(np.clip(linear, 0.0, max_linear)),
+                    float(np.clip(angular, -max_angular, max_angular)),
+                )
+            )
+        return tuple(segments)
+
+    def _clip_candidate(
+        self,
+        candidate: HybridRuleCandidate,
+        *,
+        speed_cap: float,
+    ) -> HybridRuleCandidate:
+        """Return a candidate clipped to planner speed and turn-rate limits."""
+        max_linear = max(min(float(speed_cap), float(self.config.max_linear_speed)), 0.0)
+        max_angular = max(float(self.config.max_angular_speed), 0.0)
+        return HybridRuleCandidate(
+            float(np.clip(candidate.linear, 0.0, max_linear)),
+            float(np.clip(candidate.angular, -max_angular, max_angular)),
+            candidate.source,
+            self._clip_rollout_sequence(candidate.rollout_sequence, speed_cap=speed_cap),
+        )
+
+    def _candidate_rollout_commands(
+        self,
+        candidate: HybridRuleCandidate,
+        *,
+        dt: float,
+        steps: int,
+    ) -> list[tuple[float, float]]:
+        """Expand a candidate's rollout sequence to per-step commands.
+
+        Returns:
+            list[tuple[float, float]]: Linear/angular command for each rollout step.
+        """
+        if not candidate.rollout_sequence:
+            return [(float(candidate.linear), float(candidate.angular)) for _ in range(steps)]
+
+        segments = candidate.rollout_sequence
+        commands: list[tuple[float, float]] = []
+        segment_index = 0
+        segment_end = float(segments[0][0])
+        for step_idx in range(steps):
+            elapsed = float(step_idx) * float(dt)
+            while segment_index + 1 < len(segments) and elapsed >= segment_end - _EPS:
+                segment_index += 1
+                segment_end += float(segments[segment_index][0])
+            _duration, linear, angular = segments[segment_index]
+            commands.append((float(linear), float(angular)))
+        return commands
+
+    def _candidate_rollout_plan(
+        self,
+        candidate: HybridRuleCandidate,
+    ) -> tuple[float, int, list[tuple[float, float]]]:
+        """Return rollout integration settings and commands for a candidate.
+
+        Returns:
+            tuple[float, int, list[tuple[float, float]]]: Step size, step count,
+            and per-step commands.
+        """
+        dt = max(float(self.config.rollout_dt), 1e-3)
+        steps = max(int(np.ceil(float(self.config.rollout_horizon) / dt)), 1)
+        return dt, steps, self._candidate_rollout_commands(candidate, dt=dt, steps=steps)
+
+    @staticmethod
+    def _rollout_linear_stats(rollout_commands: list[tuple[float, float]]) -> tuple[float, float]:
+        """Return mean and max planned linear speed for scoring.
+
+        Returns:
+            tuple[float, float]: Mean and maximum linear speed across rollout steps.
+        """
+        linear_values = [command[0] for command in rollout_commands]
+        return float(np.mean(linear_values)), float(np.max(linear_values))
 
     def _candidate_source_priority(self, source: str) -> int:
         """Return a source priority for preserving specialized duplicate commands."""
@@ -604,7 +746,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             np.clip(
                 float(self.config.corridor_subgoal_heading_gain)
                 * desired_heading_error
-                / max(float(self.config.rollout_horizon), _EPS),
+                / max(float(self.config.control_period), _EPS),
                 w_min,
                 w_max,
             )
@@ -616,13 +758,39 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         candidates: list[HybridRuleCandidate] = []
         if abs(desired_heading_error) >= float(self.config.corridor_subgoal_turn_in_place_error):
-            candidates.append(HybridRuleCandidate(0.0, desired_angular, "corridor_subgoal"))
+            rollout_horizon = max(float(self.config.rollout_horizon), float(self.config.rollout_dt))
+            turn_duration = rollout_horizon
+            if abs(desired_angular) > _EPS:
+                turn_duration = min(
+                    abs(desired_heading_error) / abs(desired_angular), rollout_horizon
+                )
+            segments: list[tuple[float, float, float]] = [(turn_duration, 0.0, desired_angular)]
+            forward_duration = rollout_horizon - turn_duration
+            if forward_duration > _EPS and desired_speed > float(
+                self.config.freezing_speed_threshold
+            ):
+                segments.append((forward_duration, desired_speed, 0.0))
+            candidates.append(
+                HybridRuleCandidate(
+                    0.0,
+                    desired_angular,
+                    "corridor_subgoal",
+                    tuple(segments),
+                )
+            )
             return candidates
         if desired_speed > float(self.config.freezing_speed_threshold):
             alignment = max(0.0, np.cos(desired_heading_error))
             linear = float(np.clip(desired_speed * alignment, v_min, v_max))
             if linear > float(self.config.freezing_speed_threshold):
-                candidates.append(HybridRuleCandidate(linear, desired_angular, "corridor_subgoal"))
+                candidates.append(
+                    HybridRuleCandidate(
+                        linear,
+                        desired_angular,
+                        "corridor_subgoal",
+                        ((float(self.config.rollout_horizon), linear, desired_angular),),
+                    )
+                )
         return candidates
 
     def _generate_candidates(
@@ -710,19 +878,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ]
         )
 
-        unique: dict[tuple[float, float], HybridRuleCandidate] = {}
+        unique: dict[tuple[Any, ...], HybridRuleCandidate] = {}
         for candidate in candidates:
-            clipped = HybridRuleCandidate(
-                float(np.clip(candidate.linear, 0.0, speed_cap)),
-                float(
-                    np.clip(
-                        candidate.angular,
-                        -float(self.config.max_angular_speed),
-                        float(self.config.max_angular_speed),
-                    )
-                ),
-                candidate.source,
-            )
+            clipped = self._clip_candidate(candidate, speed_cap=speed_cap)
             key = self._candidate_key(clipped)
             existing = unique.get(key)
             if existing is None or self._candidate_source_priority(
@@ -787,6 +945,62 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         if clearance_cells > float(radius):
             return float("inf")
         return float(clearance_cells * max(float(context.resolution), 1e-6))
+
+    def _continuous_static_collision(self, point: np.ndarray, radius: float) -> bool | None:
+        """Return continuous obstacle collision status when environment geometry is bound."""
+        context = self._continuous_static_context
+        if context is None:
+            return None
+        position = np.asarray(point, dtype=float).reshape(-1)[:2]
+        if position.shape[0] != 2 or not np.all(np.isfinite(position)):
+            return True
+        x, y = float(position[0]), float(position[1])
+        if not (0.0 <= x <= context.width and 0.0 <= y <= context.height):
+            return True
+        collision_radius = max(float(radius), 0.0)
+        return bool(
+            circle_collides_any_lines(((x, y), collision_radius), context.obstacle_segments)
+        )
+
+    def _static_collision_rejection(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        observation: dict[str, Any],
+        robot_pos: np.ndarray,
+        hard_static_clearance: float,
+        use_continuous_static_check: bool,
+        t: float,
+    ) -> dict[str, Any] | None:
+        """Return an occupied-cell or continuous-obstacle rejection for a rollout pose."""
+        obstacle_value = 0.0
+        payload = self._obstacle_grid_payload(observation)
+        if payload is not None:
+            grid, meta, channel, _resolution = payload
+            obstacle_value = self._grid_value(robot_pos, grid, meta, channel)
+        if obstacle_value >= float(self.config.obstacle_threshold):
+            return {
+                "accepted": False,
+                "reason": "static_collision",
+                "candidate": candidate,
+                "obstacle_value": float(obstacle_value),
+                "time": float(t),
+            }
+        continuous_static_collision = (
+            self._continuous_static_collision(robot_pos, hard_static_clearance)
+            if use_continuous_static_check
+            else None
+        )
+        if continuous_static_collision is True:
+            return {
+                "accepted": False,
+                "reason": "static_collision",
+                "candidate": candidate,
+                "continuous_static_collision": True,
+                "hard_static_clearance": float(hard_static_clearance),
+                "time": float(t),
+            }
+        return None
 
     def _ttc_proxy(
         self,
@@ -1213,8 +1427,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 "candidate": candidate,
             }
 
-        dt = max(float(self.config.rollout_dt), 1e-3)
-        steps = max(int(np.ceil(float(self.config.rollout_horizon) / dt)), 1)
+        dt, _steps, rollout_commands = self._candidate_rollout_plan(candidate)
         robot_pos = np.array(state["robot_pos"], dtype=float)
         heading = float(state["heading"])
         goal = state["goal"]
@@ -1239,41 +1452,49 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else 0.0
         )
         required_static_clearance = hard_static_clearance + corridor_clearance_buffer
+        use_continuous_static_check = (
+            bool(self.config.corridor_subgoal_use_continuous_static_check)
+            and self._continuous_static_context is not None
+            and (
+                candidate.source == "corridor_subgoal"
+                or strict_static_clearance
+                or bool(self.config.continuous_static_clearance_enabled)
+            )
+        )
         initial_static_clearance = self._min_obstacle_clearance(robot_pos, observation)
         min_static_clearance = float("inf")
         min_dynamic_clearance = float("inf")
         static_clearance_exception_terms: set[str] = set()
 
-        for step_idx in range(steps):
+        for step_idx, (step_linear, step_angular) in enumerate(rollout_commands):
             t = (step_idx + 1) * dt
             robot_pos = (
                 robot_pos
                 + np.array(
-                    [candidate.linear * np.cos(heading), candidate.linear * np.sin(heading)],
+                    [step_linear * np.cos(heading), step_linear * np.sin(heading)],
                     dtype=float,
                 )
                 * dt
             )
-            heading = _wrap_angle(heading + candidate.angular * dt)
+            heading = _wrap_angle(heading + step_angular * dt)
 
-            obstacle_value = 0.0
-            payload = self._obstacle_grid_payload(observation)
-            if payload is not None:
-                grid, meta, channel, _resolution = payload
-                obstacle_value = self._grid_value(robot_pos, grid, meta, channel)
-            if obstacle_value >= float(self.config.obstacle_threshold):
-                return {
-                    "accepted": False,
-                    "reason": "static_collision",
-                    "candidate": candidate,
-                    "obstacle_value": float(obstacle_value),
-                    "time": float(t),
-                }
+            static_rejection = self._static_collision_rejection(
+                candidate=candidate,
+                observation=observation,
+                robot_pos=robot_pos,
+                hard_static_clearance=hard_static_clearance,
+                use_continuous_static_check=use_continuous_static_check,
+                t=t,
+            )
+            if static_rejection is not None:
+                return static_rejection
             min_static_clearance = min(
                 min_static_clearance,
                 self._min_obstacle_clearance(robot_pos, observation),
             )
             if min_static_clearance <= required_static_clearance:
+                if use_continuous_static_check:
+                    continue
                 static_violation_policy = (
                     None
                     if strict_static_clearance or corridor_clearance_buffer > 0.0
@@ -1361,6 +1582,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance / max(float(self.config.desired_static_clearance), _EPS)
             )
         )
+        rollout_mean_linear, rollout_max_linear = self._rollout_linear_stats(rollout_commands)
         dynamic_clearance = (
             1.0
             if np.isinf(min_dynamic_clearance)
@@ -1408,7 +1630,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         terms = {
             "goal_progress": float(np.clip(progress / max_progress, -1.0, 1.0)),
             "path_alignment": float(np.cos(heading_error)),
-            "speed_preference": _clip01(candidate.linear / max(speed_cap, _EPS)),
+            "speed_preference": _clip01(rollout_mean_linear / max(speed_cap, _EPS)),
             "static_clearance": static_clearance,
             "dynamic_clearance": dynamic_clearance,
             "time_to_collision_margin": 1.0
@@ -1425,7 +1647,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 + _clip01(abs(candidate.angular) / max(float(self.config.max_angular_speed), _EPS))
             ),
             "freezing_penalty": 1.0
-            if candidate.linear <= float(self.config.freezing_speed_threshold)
+            if rollout_max_linear <= float(self.config.freezing_speed_threshold)
             and start_dist > float(self.config.goal_far_distance)
             else 0.0,
             "oscillation_penalty": self._oscillation_penalty(candidate.angular),
@@ -1473,12 +1695,13 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "min_static_clearance": min_static_clearance,
             "min_dynamic_clearance": min_dynamic_clearance,
             "predicted_ttc": ttc,
+            "continuous_static_checked": bool(use_continuous_static_check),
         }
 
     def _candidate_diagnostic(self, evaluation: dict[str, Any]) -> dict[str, Any]:
         """Return a compact JSON-safe candidate diagnostic row."""
         candidate = evaluation["candidate"]
-        return {
+        row = {
             "command": [float(candidate.linear), float(candidate.angular)],
             "source": candidate.source,
             "score": float(evaluation["score"]),
@@ -1487,6 +1710,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "min_dynamic_clearance": _finite_or_none(evaluation.get("min_dynamic_clearance")),
             "predicted_ttc": _finite_or_none(evaluation.get("predicted_ttc")),
         }
+        if candidate.rollout_sequence:
+            row["rollout_sequence"] = [
+                [float(duration), float(linear), float(angular)]
+                for duration, linear, angular in candidate.rollout_sequence
+            ]
+        if "continuous_static_checked" in evaluation:
+            row["continuous_static_checked"] = bool(evaluation.get("continuous_static_checked"))
+        return row
 
     def _rejection_diagnostic(self, evaluation: dict[str, Any]) -> dict[str, Any]:
         """Return a compact JSON-safe rejected-candidate diagnostic row."""
@@ -1497,6 +1728,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         if isinstance(candidate, HybridRuleCandidate):
             row["command"] = [float(candidate.linear), float(candidate.angular)]
             row["source"] = candidate.source
+            if candidate.rollout_sequence:
+                row["rollout_sequence"] = [
+                    [float(duration), float(linear), float(angular)]
+                    for duration, linear, angular in candidate.rollout_sequence
+                ]
         for key in (
             "min_static_clearance",
             "hard_static_clearance",
@@ -1509,6 +1745,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             value = evaluation.get(key)
             if isinstance(value, int | float | np.integer | np.floating):
                 row[key] = float(value)
+        if "continuous_static_collision" in evaluation:
+            row["continuous_static_collision"] = bool(evaluation.get("continuous_static_collision"))
         return row
 
     def _evaluate_candidates_for_plan(

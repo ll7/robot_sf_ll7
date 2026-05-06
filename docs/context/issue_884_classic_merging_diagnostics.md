@@ -280,6 +280,14 @@ This scope is intentionally smaller than a full trajectory optimizer, state latt
 control-barrier-corridor implementation. Those remain research references and possible follow-up
 directions if the narrow route-corridor primitive cannot satisfy the five-seed proof.
 
+Update 2026-05-06 (#1034): the follow-up continuous-collision-checked maneuver recovered
+`classic_merging_low` seed `111` and `classic_merging_medium` seeds `111/112`, preserved
+`classic_merging_low` seed `113`, and left `classic_merging_medium` seed `113` as a safe timeout.
+The retained h500 `nominal_sanity` and `stress_slice` gates stayed at zero collisions. The raw
+limitation remains that not all five target seeds are route-complete, so future broad benchmark
+claims still need a full-matrix run or an explicit targeted-boundary justification. See
+`docs/context/issue_1034_continuous_corridor_maneuver.md`.
+
 ## Validation Commands
 
 Focused code validation:

@@ -100,6 +100,37 @@ def _route_corridor_payload(
     }
 
 
+def _bind_continuous_static_env(
+    planner: HybridRuleLocalPlannerAdapter,
+    *,
+    obstacle_segments: np.ndarray | None = None,
+    width: float = 4.0,
+    height: float = 4.0,
+) -> None:
+    """Bind a minimal environment-shaped continuous obstacle surface."""
+
+    class _MapDef:
+        pass
+
+    class _Simulator:
+        pass
+
+    class _Env:
+        pass
+
+    map_def = _MapDef()
+    map_def.width = width
+    map_def.height = height
+    simulator = _Simulator()
+    simulator.map_def = map_def
+    simulator.get_obstacle_lines = lambda: (
+        np.empty((0, 4), dtype=float) if obstacle_segments is None else obstacle_segments
+    )
+    env = _Env()
+    env.simulator = simulator
+    planner.bind_env(env)
+
+
 def test_hybrid_rule_v0_returns_diagnostics_for_open_space() -> None:
     """V0 should choose a bounded forward command and expose score terms."""
     planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
@@ -632,6 +663,12 @@ def test_hybrid_rule_corridor_subgoal_turns_in_place_for_large_tangent_error() -
     assert len(subgoals) == 1
     assert subgoals[0].linear == pytest.approx(0.0)
     assert subgoals[0].angular > 0.0
+    assert subgoals[0].rollout_sequence
+    assert subgoals[0].rollout_sequence[0][1] == pytest.approx(0.0)
+    assert any(
+        segment_linear > cfg.freezing_speed_threshold
+        for _duration, segment_linear, _segment_angular in subgoals[0].rollout_sequence
+    )
 
 
 def test_hybrid_rule_corridor_subgoal_adds_forward_candidate_when_aligned() -> None:
@@ -762,6 +799,178 @@ def test_hybrid_rule_corridor_subgoal_rejects_static_clearance_band(monkeypatch)
     assert planner._rejection_diagnostic(evaluation)["required_static_clearance"] == pytest.approx(
         0.5
     )
+
+
+def test_hybrid_rule_corridor_subgoal_rejects_continuous_static_collision(monkeypatch) -> None:
+    """Bound environment geometry should catch line collisions missed by grid payloads."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        rollout_horizon=0.2,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    obstacle_segments = np.asarray([[0.2, -1.0, 0.2, 1.0]], dtype=float)
+    _bind_continuous_static_env(planner, obstacle_segments=obstacle_segments)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "corridor_subgoal")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 2.0)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_collision"
+    assert evaluation["continuous_static_collision"] is True
+    assert planner._rejection_diagnostic(evaluation)["continuous_static_collision"] is True
+
+
+def test_hybrid_rule_corridor_subgoal_rejects_sequence_static_collision(
+    monkeypatch,
+) -> None:
+    """Continuous checks should cover later forward segments after an initial turn."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        rollout_dt=0.2,
+        rollout_horizon=0.6,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    obstacle_segments = np.asarray([[0.45, -1.0, 0.45, 1.0]], dtype=float)
+    _bind_continuous_static_env(planner, obstacle_segments=obstacle_segments)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(
+        0.0,
+        0.5,
+        "corridor_subgoal",
+        ((0.2, 0.0, 0.5), (0.4, 0.4, 0.0)),
+    )
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 2.0)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_collision"
+    assert evaluation["continuous_static_collision"] is True
+    assert evaluation["time"] == pytest.approx(0.6)
+
+
+def test_hybrid_rule_corridor_subgoal_uses_continuous_static_check_over_grid_band(
+    monkeypatch,
+) -> None:
+    """Exact continuous checks may allow close but non-colliding corridor commands."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        rollout_horizon=0.2,
+        static_clearance_escape_enabled=True,
+        static_clearance_escape_min_clearance=0.1,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    _bind_continuous_static_env(planner)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "corridor_subgoal")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(route_progress_3s=0.0),
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["continuous_static_checked"] is True
+    assert evaluation["min_static_clearance"] == pytest.approx(0.4)
+
+
+def test_hybrid_rule_continuous_static_clearance_opt_in_allows_dynamic_grid_band(
+    monkeypatch,
+) -> None:
+    """Opt-in exact geometry checks may replace conservative grid clearance for any source."""
+    cfg = HybridRuleLocalPlannerConfig(
+        rollout_horizon=0.2,
+        continuous_static_clearance_enabled=True,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    _bind_continuous_static_env(planner)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "dynamic_window")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.2)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["continuous_static_checked"] is True
+    assert evaluation["min_static_clearance"] == pytest.approx(0.2)
+
+
+def test_hybrid_rule_continuous_static_clearance_opt_in_rejects_dynamic_collision(
+    monkeypatch,
+) -> None:
+    """Opt-in exact geometry checks should still fail closed on hard static collision."""
+    cfg = HybridRuleLocalPlannerConfig(
+        rollout_horizon=0.2,
+        continuous_static_clearance_enabled=True,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    obstacle_segments = np.asarray([[0.2, -1.0, 0.2, 1.0]], dtype=float)
+    _bind_continuous_static_env(planner, obstacle_segments=obstacle_segments)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "dynamic_window")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 2.0)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_collision"
+    assert evaluation["continuous_static_collision"] is True
 
 
 def test_hybrid_rule_corridor_subgoal_strict_lock_blocks_escape_candidates(monkeypatch) -> None:

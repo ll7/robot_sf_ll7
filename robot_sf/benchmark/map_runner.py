@@ -299,6 +299,8 @@ def _build_adapter_policy(
 
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
+    if hasattr(adapter, "bind_env"):
+        _policy._planner_bind_env = adapter.bind_env
     if hasattr(adapter, "close"):
         _policy._planner_close = adapter.close
     if hasattr(adapter, "diagnostics"):

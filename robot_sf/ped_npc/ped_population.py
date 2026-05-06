@@ -647,6 +647,7 @@ def populate_single_pedestrians(
                 "role": ped.role,
                 "role_target_id": ped.role_target_id,
                 "role_offset": ped.role_offset,
+                "metadata": dict(getattr(ped, "metadata", {}) or {}),
             }
         )
 

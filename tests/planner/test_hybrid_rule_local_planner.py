@@ -579,8 +579,8 @@ def test_hybrid_rule_corridor_subgoal_activation_requires_route_and_no_near_pede
     assert active["route_regressing"] is True
 
 
-def test_hybrid_rule_corridor_subgoal_adds_recovery_candidate() -> None:
-    """Active route-corridor recovery should add a dedicated candidate source."""
+def test_hybrid_rule_corridor_subgoal_turns_in_place_for_large_tangent_error() -> None:
+    """Large route-tangent error should not mix turning with forward subgoal motion."""
     cfg = HybridRuleLocalPlannerConfig(
         route_guide_enabled=True,
         corridor_subgoal_enabled=True,
@@ -604,8 +604,39 @@ def test_hybrid_rule_corridor_subgoal_adds_recovery_candidate() -> None:
 
     subgoals = [candidate for candidate in candidates if candidate.source == "corridor_subgoal"]
     assert activation["candidate_count"] == len(subgoals)
-    assert subgoals
-    assert any(candidate.linear == pytest.approx(0.0) for candidate in subgoals)
+    assert len(subgoals) == 1
+    assert subgoals[0].linear == pytest.approx(0.0)
+    assert subgoals[0].angular > 0.0
+
+
+def test_hybrid_rule_corridor_subgoal_adds_forward_candidate_when_aligned() -> None:
+    """Aligned route-corridor recovery should add a bounded forward subgoal."""
+    cfg = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        corridor_subgoal_enabled=True,
+        corridor_subgoal_speed=0.3,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    route_corridor = _route_corridor_payload(tangent_heading=0.0, route_progress_3s=0.0)
+    activation = planner._corridor_subgoal_activation(
+        route_corridor=route_corridor,
+        progress_windows={"3s": 0.0},
+        nearest_ped=float("inf"),
+    )
+    state = planner._extract_state(_obs(goal=(4.0, 0.0)))
+
+    candidates = planner._generate_candidates(
+        state,
+        speed_cap=cfg.max_linear_speed,
+        route_corridor=route_corridor,
+        corridor_subgoal=activation,
+    )
+
+    subgoals = [candidate for candidate in candidates if candidate.source == "corridor_subgoal"]
+    assert activation["candidate_count"] == len(subgoals)
+    assert len(subgoals) == 1
+    assert subgoals[0].linear > cfg.freezing_speed_threshold
+    assert subgoals[0].angular == pytest.approx(0.0)
 
 
 def test_hybrid_rule_corridor_subgoal_rejects_occupied_rollout(monkeypatch) -> None:
@@ -658,7 +689,7 @@ def test_hybrid_rule_corridor_subgoal_rejects_static_clearance_band(monkeypatch)
     candidate = HybridRuleCandidate(0.2, 0.0, "corridor_subgoal")
 
     monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
-    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.3)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
 
     evaluation = planner._evaluate_candidate(
         candidate=candidate,
@@ -672,6 +703,12 @@ def test_hybrid_rule_corridor_subgoal_rejects_static_clearance_band(monkeypatch)
 
     assert evaluation["accepted"] is False
     assert evaluation["reason"] == "static_clearance"
+    assert evaluation["min_static_clearance"] == pytest.approx(0.4)
+    assert evaluation["hard_static_clearance"] == pytest.approx(0.3)
+    assert evaluation["required_static_clearance"] == pytest.approx(0.5)
+    assert planner._rejection_diagnostic(evaluation)["required_static_clearance"] == pytest.approx(
+        0.5
+    )
 
 
 def test_hybrid_rule_corridor_subgoal_strict_lock_blocks_escape_candidates(monkeypatch) -> None:
@@ -689,7 +726,7 @@ def test_hybrid_rule_corridor_subgoal_strict_lock_blocks_escape_candidates(monke
     candidate = HybridRuleCandidate(0.2, 0.0, "dynamic_window")
 
     monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
-    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.3)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
 
     relaxed = planner._evaluate_candidate(
         candidate=candidate,
@@ -710,9 +747,10 @@ def test_hybrid_rule_corridor_subgoal_strict_lock_blocks_escape_candidates(monke
     )
 
     assert relaxed["accepted"] is True
-    assert relaxed["terms"]["static_clearance_escape"] == 1.0
+    assert relaxed["terms"]["static_clearance_escape"] == 0.0
     assert strict["accepted"] is False
     assert strict["reason"] == "static_clearance"
+    assert strict["required_static_clearance"] == pytest.approx(0.5)
 
 
 def test_hybrid_rule_corridor_subgoal_rejects_hard_dynamic_collision() -> None:
@@ -795,6 +833,7 @@ def test_hybrid_rule_last_decision_includes_corridor_subgoal_diagnostics(monkeyp
         route_guide_enabled=True,
         corridor_subgoal_enabled=True,
         corridor_subgoal_tangent_alignment_weight=3.0,
+        top_k_diagnostics=50,
     )
     planner = HybridRuleLocalPlannerAdapter(cfg)
     route_corridor = _route_corridor_payload(tangent_heading=-np.pi / 2.0, route_progress_3s=0.0)

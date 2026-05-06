@@ -178,6 +178,7 @@ class HybridRuleLocalPlannerConfig:
     corridor_subgoal_turn_in_place_error: float = 0.25
     corridor_subgoal_heading_gain: float = 1.0
     corridor_subgoal_min_nearest_ped_distance: float = 1.0
+    corridor_subgoal_static_clearance_buffer: float = 0.2
     corridor_subgoal_goal_stall_progress_3s: float = 0.05
     corridor_subgoal_route_stall_progress_3s: float = 0.05
     corridor_subgoal_route_regression_1s: float = -0.05
@@ -613,6 +614,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         candidates: list[HybridRuleCandidate] = []
         if abs(desired_heading_error) >= float(self.config.corridor_subgoal_turn_in_place_error):
             candidates.append(HybridRuleCandidate(0.0, desired_angular, "corridor_subgoal"))
+            return candidates
         if desired_speed > float(self.config.freezing_speed_threshold):
             alignment = max(0.0, np.cos(desired_heading_error))
             linear = float(np.clip(desired_speed * max(alignment, 0.25), v_min, v_max))
@@ -1228,6 +1230,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else float(self.config.hard_safety_margin)
         )
         hard_static_clearance = float(state["robot_radius"]) + static_margin
+        corridor_clearance_buffer = (
+            max(float(self.config.corridor_subgoal_static_clearance_buffer), 0.0)
+            if candidate.source == "corridor_subgoal" or strict_static_clearance
+            else 0.0
+        )
+        required_static_clearance = hard_static_clearance + corridor_clearance_buffer
         initial_static_clearance = self._min_obstacle_clearance(robot_pos, observation)
         min_static_clearance = float("inf")
         min_dynamic_clearance = float("inf")
@@ -1262,10 +1270,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 min_static_clearance,
                 self._min_obstacle_clearance(robot_pos, observation),
             )
-            if min_static_clearance <= hard_static_clearance:
+            if min_static_clearance <= required_static_clearance:
                 static_violation_policy = (
                     None
-                    if strict_static_clearance
+                    if strict_static_clearance or corridor_clearance_buffer > 0.0
                     else self._static_clearance_violation_policy(
                         candidate=candidate,
                         initial_clearance=initial_static_clearance,
@@ -1282,6 +1290,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                         "candidate": candidate,
                         "min_static_clearance": float(min_static_clearance),
                         "hard_static_clearance": float(hard_static_clearance),
+                        "required_static_clearance": float(required_static_clearance),
                         "time": float(t),
                     }
                 static_clearance_exception_terms.add(static_violation_policy)
@@ -1488,6 +1497,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         for key in (
             "min_static_clearance",
             "hard_static_clearance",
+            "required_static_clearance",
             "min_dynamic_clearance",
             "collision_radius",
             "obstacle_value",

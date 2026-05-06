@@ -28,11 +28,15 @@ The primitive:
 - activates only when goal progress is nonnegative and near-zero while route-arc progress is stalled
   or regressing,
 - generates route-tangent turn/slow subgoal candidates,
+- keeps route-tangent recovery turn-only until the robot is aligned with the corridor tangent,
 - preserves the `corridor_subgoal` source during candidate de-duplication,
 - scores route-tangent progress, corridor centering, tangent alignment, static-clearance margin, and
   command continuity as separate terms,
 - applies a strict static-clearance lock while active so the older static-clearance escape/transit
-  exceptions do not become the recovery mechanism.
+  exceptions do not become the recovery mechanism,
+- adds a configurable static-clearance buffer for `corridor_subgoal` and strict active-mode
+  candidate evaluation to cover the observed gap between occupancy-grid clearance and the
+  environment's continuous obstacle collision check.
 
 `GridRoutePlannerAdapter.route_geometry()` now also exposes `route_next_world` so the local planner
 can score immediate corridor centering against the next route segment rather than only the farther
@@ -42,7 +46,7 @@ lookahead waypoint.
 
 Do not enable `corridor_subgoal` for `hybrid_rule_v3_fast_progress_static_escape` from this branch.
 
-Two enabled probes were rejected:
+Enabled probes were rejected:
 
 - `output/ai/autoresearch/issue_1028_corridor_subgoal_recovery/`
   - permissive activation introduced obstacle collisions on low `111`, low `113`, and medium `111`;
@@ -52,6 +56,13 @@ Two enabled probes were rejected:
   - tighter activation preserved low `113`, but medium `113` still regressed to obstacle collision;
   - the strict-lock probe showed that a linear `corridor_subgoal` command itself can be unsafe in
     the medium `113` corner.
+- `output/ai/autoresearch/issue_1028_corridor_subgoal_turn_buffer_probe/`
+  - turn-only alignment plus the static-clearance buffer removed the medium `113` obstacle
+    collision regression and preserved low `113` success;
+  - it did not recover any target timeout: low `111`, medium `111`, medium `112`, and medium `113`
+    still timed out at h500;
+  - medium `111` selected `corridor_subgoal` only four times before timing out, while medium `113`
+    activated the primitive for `139` steps but rejected it for `static_clearance` `138` times.
 
 The final branch therefore leaves the config default disabled. This satisfies the implementation
 slice but does not claim a #884 behavior improvement.
@@ -141,8 +152,7 @@ rtk env LOGURU_LEVEL=WARNING DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
 
 This PR should not close #884. The next behavior attempt should either:
 
-- keep `corridor_subgoal` turn-only and prove the subsequent forward action cannot re-enter the
-  static hard band, or
+- verify the exact executed action against the same continuous static-collision surface used by the
+  environment, or
 - replace the constant-command primitive with a short-horizon corridor optimizer that verifies the
-  exact executed action against the same static-collision surface used by the environment.
-
+  route-corridor maneuver as a sequence rather than a single constant command.

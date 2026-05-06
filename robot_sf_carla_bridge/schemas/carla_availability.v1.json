@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/carla_availability.v1.json",
+  "title": "CARLA Bridge Availability Metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "available",
+    "status",
+    "reason",
+    "dependency"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "carla-availability.v1"
+    },
+    "available": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["available", "not-available"]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dependency": {
+      "const": "carla"
+    }
+  }
+}

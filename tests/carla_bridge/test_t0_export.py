@@ -505,6 +505,32 @@ def test_write_export_records_writes_payloads_and_manifest(tmp_path) -> None:
     assert (tmp_path / "exports" / "manifest.json").exists()
 
 
+def test_export_manifest_validates_against_schema(tmp_path) -> None:
+    """Writer output should satisfy the packaged manifest JSON Schema."""
+    from robot_sf_carla_bridge import load_export_manifest_schema, write_export_records
+
+    manifest = write_export_records(
+        [{"scenario_id": "unit scenario", "payload": _minimal_payload()}],
+        tmp_path / "exports",
+    )
+
+    jsonschema.validate(manifest, load_export_manifest_schema())
+
+
+def test_export_manifest_schema_rejects_malformed_entries() -> None:
+    """Manifest schema should reject malformed batch references."""
+    from robot_sf_carla_bridge import load_export_manifest_schema
+
+    with pytest.raises(jsonschema.ValidationError, match="path"):
+        jsonschema.validate(
+            {
+                "schema_version": "carla-replay-export-manifest.v1",
+                "exports": [{"scenario_id": "unit"}],
+            },
+            load_export_manifest_schema(),
+        )
+
+
 def test_read_export_manifest_round_trips_writer_output(tmp_path) -> None:
     """Manifest reader should validate the writer output without loading payload files."""
     from robot_sf_carla_bridge import read_export_manifest, write_export_records
@@ -599,6 +625,43 @@ def test_resolve_export_manifest_payload_paths_rejects_unsafe_paths(tmp_path) ->
     )
     with pytest.raises(ValueError, match="parent"):
         resolve_export_manifest_payload_paths(manifest_path)
+
+
+def test_load_export_manifest_payloads_preserves_manifest_order(tmp_path) -> None:
+    """Batch loader should read and validate every payload listed by the manifest."""
+    from robot_sf_carla_bridge import load_export_manifest_payloads, write_export_records
+
+    first = _minimal_payload()
+    first["scenario"]["id"] = "first"
+    second = _minimal_payload()
+    second["scenario"]["id"] = "second"
+    write_export_records(
+        [
+            {"scenario_id": "first", "payload": first},
+            {"scenario_id": "second", "payload": second},
+        ],
+        tmp_path / "exports",
+    )
+
+    records = load_export_manifest_payloads(tmp_path / "exports" / "manifest.json")
+
+    assert [record["scenario_id"] for record in records] == ["first", "second"]
+    assert [record["payload"]["scenario"]["id"] for record in records] == ["first", "second"]
+    assert [record["path"].name for record in records] == ["first.json", "second.json"]
+
+
+def test_load_export_manifest_payloads_fails_for_missing_payload(tmp_path) -> None:
+    """Batch loader should surface missing payload files clearly."""
+    from robot_sf_carla_bridge import load_export_manifest_payloads, write_export_records
+
+    write_export_records(
+        [{"scenario_id": "unit", "payload": _minimal_payload()}],
+        tmp_path / "exports",
+    )
+    (tmp_path / "exports" / "unit.json").unlink()
+
+    with pytest.raises(FileNotFoundError):
+        load_export_manifest_payloads(tmp_path / "exports" / "manifest.json")
 
 
 def test_read_export_manifest_rejects_parent_relative_path() -> None:
@@ -702,13 +765,119 @@ def test_write_export_payload_normalizes_json_like_values(tmp_path) -> None:
 
 def test_missing_carla_reports_not_available(monkeypatch) -> None:
     """Missing CARLA should be a status object, not an import-time crash."""
+    import importlib.util
+
     from robot_sf_carla_bridge.availability import check_carla_availability
 
+    real_find_spec = importlib.util.find_spec
     monkeypatch.setattr(
-        "importlib.util.find_spec", lambda name: None if name == "carla" else object()
+        "importlib.util.find_spec",
+        lambda name, *args, **kwargs: (
+            None if name == "carla" else real_find_spec(name, *args, **kwargs)
+        ),
     )
 
     status = check_carla_availability()
 
     assert status["status"] == "not-available"
+    assert status["available"] is False
+    assert status["schema_version"] == "carla-availability.v1"
     assert "carla" in status["reason"].lower()
+
+
+def test_missing_carla_availability_validates_against_schema(monkeypatch) -> None:
+    """Missing-CARLA availability metadata should satisfy its JSON schema."""
+    from robot_sf_carla_bridge.availability import (
+        check_carla_availability,
+        load_availability_schema,
+    )
+
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: None if name == "carla" else object()
+    )
+
+    jsonschema.validate(check_carla_availability(), load_availability_schema())
+
+
+def test_schema_catalog_lists_all_carla_bridge_contracts() -> None:
+    """Schema catalog should expose every CARLA bridge schema contract."""
+    from robot_sf_carla_bridge import list_carla_bridge_schema_catalog
+
+    catalog = list_carla_bridge_schema_catalog()
+
+    assert catalog == {
+        "schema_version": "carla-bridge-schema-catalog.v1",
+        "schemas": [
+            {
+                "name": "availability",
+                "loader": "load_availability_schema",
+                "schema_version": "carla-availability.v1",
+            },
+            {
+                "name": "t0_export_payload",
+                "loader": "load_export_schema",
+                "schema_version": "carla-replay-export.v1",
+            },
+            {
+                "name": "t0_export_manifest",
+                "loader": "load_export_manifest_schema",
+                "schema_version": "carla-replay-export-manifest.v1",
+            },
+            {
+                "name": "t0_batch_validation_summary",
+                "loader": "load_batch_validation_summary_schema",
+                "schema_version": "carla-replay-export-batch-validation-summary.v1",
+            },
+            {
+                "name": "schema_catalog",
+                "loader": "load_schema_catalog_schema",
+                "schema_version": "carla-bridge-schema-catalog.v1",
+            },
+        ],
+    }
+
+
+def test_schema_catalog_validates_against_schema() -> None:
+    """Schema catalog metadata should satisfy its packaged JSON schema."""
+    from robot_sf_carla_bridge import (
+        list_carla_bridge_schema_catalog,
+        load_schema_catalog_schema,
+    )
+
+    jsonschema.validate(list_carla_bridge_schema_catalog(), load_schema_catalog_schema())
+
+
+def test_importable_carla_reports_available(monkeypatch) -> None:
+    """Importable CARLA should report a boolean available status."""
+    import importlib.util
+
+    from robot_sf_carla_bridge.availability import check_carla_availability
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name, *args, **kwargs: (
+            object() if name == "carla" else real_find_spec(name, *args, **kwargs)
+        ),
+    )
+
+    status = check_carla_availability()
+
+    assert status["status"] == "available"
+    assert status["available"] is True
+    assert status["schema_version"] == "carla-availability.v1"
+    assert status["dependency"] == "carla"
+
+
+def test_importable_carla_availability_validates_against_schema(monkeypatch) -> None:
+    """Available-CARLA metadata should satisfy its JSON schema."""
+    from robot_sf_carla_bridge.availability import (
+        check_carla_availability,
+        load_availability_schema,
+    )
+
+    monkeypatch.setattr(
+        "importlib.util.find_spec", lambda name: object() if name == "carla" else None
+    )
+
+    jsonschema.validate(check_carla_availability(), load_availability_schema())

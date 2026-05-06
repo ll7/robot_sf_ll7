@@ -120,6 +120,14 @@ knowledge, not every transient iteration detail.
 
 ## Performance Notes
 
+* [Issue #1001 Architecture Seam Audit](./issue_1001_architecture_seam_audit.md)
+  records benchmark/planner/training hotspot ownership boundaries, the top three refactor
+  candidates, and the first no-behavior-change map-runner command-contract extraction.
+* [Issue #1002 Complexity and Test Runtime Baseline](./issue_1002_complexity_runtime_baseline.md)
+  adds a lightweight `scripts/dev/complexity_runtime_baseline.py` command and records the first
+  2026-05-05 refactor-prioritization snapshot.
+* [Issue #1006 GitHub CI Runtime Drift Diagnosis](./issue_1006_ci_runtime_drift.md)
+  adds `scripts/dev/ci_timing_summary.py` and records timing evidence from PRs #1007 and #1008.
 * [Issue #513 High-Density Perf Gate Calibration](./issue_513_high_density_perf_gate.md)
   keeps `classic_cross_trap_high` advisory because no stable local trend-history window was
   available; documents the rerun evidence and non-blocking policy.
@@ -160,6 +168,18 @@ knowledge, not every transient iteration detail.
 * [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
   defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
   claim boundary before runtime implementation under #871.
+* [Issue #1004 Policy Stack V1 Runtime](issue_1004_policy_stack_v1_runtime.md)
+  records the first runnable `policy_stack_v1` slice, its explicit proposal-status diagnostics, and
+  the map-runner smoke limitation under parent #871.
+* [Issue #871 Policy Stack Proposal Normalization](issue_871_policy_stack_proposal_normalization.md)
+  hardens `policy_stack_v1` so malformed, non-finite, or command-bounds-violating child proposals
+  are rejected before risk scoring.
+* [Issue #871 Policy Stack Topology Smoke](issue_871_policy_stack_topology_smoke.md)
+  records the `corridor_following` atomic topology smoke that proves `policy_stack_v1` can reach a
+  topology-heavy goal through the normal map-runner path with proposal diagnostics intact.
+* [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
+  records source-level hybrid-rule rejection diagnostics and two rejected classic-merging recovery
+  mechanisms; #884 remains unresolved until a route-completing corridor policy is proven.
 
 ## Map Coverage Notes
 
@@ -204,6 +224,13 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #944 Multi-Ped Adversarial Scenario Payload](issue_944_multi_ped_adversarial_scenario_payload.md)
   adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs, 
   stacked on the issue #936 override materializer.
+* [Issue #870 Multi-Ped Adversarial Runtime Slice](issue_870_multi_ped_adversarial_runtime.md)
+  adds a fail-closed config-to-`RobotSimulationConfig` runtime path with N>1 reset/step proof and
+  records the follow-up materialized policy-analysis smoke while keeping certification and benchmark
+  promotion out of scope.
+* [Issue #1015 Multi-Ped Adversarial Family Smoke](issue_1015_multi_ped_family_smoke.md)
+  adds group-squeeze and doorway-blocker development smoke fixtures with deterministic reset/step
+  proof and explicit non-benchmark-frozen episode metadata.
 * [Issue 868 Scenario Certification](issue_868_scenario_certification.md) - `scenario_cert.v1`
   scope, public surfaces, validation path, and known limits.
 * [Issue #930 CARLA T0 Neutral Export Schema](issue_930_carla_t0_export_schema.md)
@@ -242,6 +269,51 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later, 
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
+* [Issue #962 CARLA T0 Manifest Payload Loader](issue_962_carla_t0_manifest_payload_loader.md)
+  loads and validates all payloads referenced by a local T0 export manifest, stacked on the issue
+  #960 path resolver.
+* [Issue #964 CARLA T0 Batch Validation CLI](issue_964_carla_t0_batch_validation_cli.md)
+  exposes the issue #962 manifest payload loader through a CARLA-free batch validation project
+  script.
+- [Issue #966 CARLA T0 Batch Validation JSON Summary](issue_966_carla_t0_batch_validation_json_summary.md)
+  adds deterministic machine-readable output to the CARLA-free batch validation CLI.
+- [Issue #968 CARLA Runtime Availability Guard](issue_968_carla_runtime_availability_guard.md)
+  adds a strict optional-CARLA import guard for future replay entry points.
+- [Issue #970 CARLA Availability Check CLI](issue_970_carla_availability_check_cli.md)
+  exposes CARLA bridge availability metadata through a CARLA-free project script.
+- [Issue #972 CARLA Availability CLI Require Mode](issue_972_carla_availability_cli_require_mode.md)
+  adds fail-closed availability checking for CARLA-dependent setup gates.
+- [Issue #974 CARLA Availability Boolean Field](issue_974_carla_availability_boolean_field.md)
+  adds an explicit boolean to CARLA availability metadata and CLI JSON output.
+- [Issue #976 CARLA Availability Schema Version](issue_976_carla_availability_schema_version.md)
+  adds a schema version to CARLA availability metadata for stable script consumption.
+- [Issue #978 CARLA Availability JSON Schema](issue_978_carla_availability_json_schema.md)
+  adds a JSON Schema for validating CARLA availability metadata.
+- [Issue #980 CARLA Availability Schema CLI](issue_980_carla_availability_schema_cli.md)
+  exposes the CARLA availability JSON Schema through `robot-sf-check-carla --schema`.
+- [Issue #982 CARLA T0 Export Schema CLI](issue_982_carla_t0_export_schema_cli.md)
+  exposes the CARLA T0 neutral export JSON Schema through `robot-sf-export-carla-t0 --schema`.
+- [Issue #984 CARLA T0 Export Manifest Schema](issue_984_carla_t0_export_manifest_schema.md)
+  adds a packaged JSON Schema for `carla-replay-export-manifest.v1` metadata.
+- [Issue #986 CARLA T0 Manifest Schema CLI](issue_986_carla_t0_manifest_schema_cli.md)
+  exposes the CARLA T0 export manifest JSON Schema through
+  `robot-sf-validate-carla-t0-manifest --schema`.
+- [Issue #988 CARLA T0 Batch Summary Version](issue_988_carla_t0_batch_summary_version.md)
+  adds a schema version marker to `robot-sf-validate-carla-t0-batch --json` output.
+- [Issue #990 CARLA T0 Batch Summary Schema](issue_990_carla_t0_batch_summary_schema.md)
+  adds a packaged JSON Schema for `carla-replay-export-batch-validation-summary.v1`.
+- [Issue #992 CARLA T0 Batch Summary Schema CLI](issue_992_carla_t0_batch_summary_schema_cli.md)
+  exposes the CARLA T0 batch validation summary JSON Schema through
+  `robot-sf-validate-carla-t0-batch --schema`.
+- [Issue #994 CARLA Bridge Schema Catalog API](issue_994_carla_schema_catalog_api.md)
+  adds an import-safe catalog for CARLA bridge schema names, versions, and loader helpers.
+- [Issue #996 CARLA Bridge Schema Catalog CLI](issue_996_carla_schema_catalog_cli.md)
+  exposes the CARLA bridge schema catalog through `robot-sf-catalog-carla-schemas`.
+- [Issue #998 CARLA Bridge Schema Catalog Schema](issue_998_carla_schema_catalog_schema.md)
+  adds a packaged JSON Schema for `carla-bridge-schema-catalog.v1` metadata.
+- [Issue #1000 CARLA Bridge Schema Catalog Schema CLI](issue_1000_carla_schema_catalog_schema_cli.md)
+  exposes the CARLA bridge schema catalog JSON Schema through
+  `robot-sf-catalog-carla-schemas --schema`.
 
 ## DreamerV3 Notes
 

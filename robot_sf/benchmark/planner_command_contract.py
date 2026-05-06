@@ -1,0 +1,120 @@
+"""Planner command-space and kinematics-feasibility helpers for benchmarks."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from robot_sf.planner.kinematics_model import KinematicsModel
+
+_DEFAULT_KINEMATICS = "differential_drive"
+
+
+def default_robot_command_space(
+    robot_kinematics: str | None,
+    algo_config: dict[str, Any],
+    *,
+    robot_command_mode: str | None = None,
+) -> str:
+    """Resolve robot command-space metadata for the current run.
+
+    Returns:
+        str: Canonical command-space label.
+    """
+    kin = str(robot_kinematics or _DEFAULT_KINEMATICS).strip().lower()
+    if kin in {"holonomic", "omni", "omnidirectional"}:
+        mode_source = (
+            robot_command_mode
+            if robot_command_mode is not None
+            else algo_config.get("command_mode", "vx_vy")
+        )
+        mode = str(mode_source).strip().lower()
+        return "holonomic_vxy_world" if mode == "vx_vy" else "unicycle_vw"
+    return "unicycle_vw"
+
+
+def init_feasibility_metadata(meta: dict[str, Any]) -> None:
+    """Initialize mutable kinematics-feasibility counters in algorithm metadata."""
+    meta["kinematics_feasibility"] = {
+        "commands_evaluated": 0,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "_sum_abs_delta_linear": 0.0,
+        "_sum_abs_delta_angular": 0.0,
+        "_max_abs_delta_linear": 0.0,
+        "_max_abs_delta_angular": 0.0,
+    }
+
+
+def project_with_feasibility(
+    *,
+    model: KinematicsModel,
+    command: tuple[float, float],
+    meta: dict[str, Any],
+) -> tuple[float, float]:
+    """Project a command while accumulating feasibility diagnostics.
+
+    Returns:
+        tuple[float, float]: Projected command.
+    """
+    projected = model.project(command)
+    feasibility = meta.get("kinematics_feasibility")
+    if not isinstance(feasibility, dict):
+        return projected
+    feasible_native = bool(model.is_feasible(command))
+    delta_linear = abs(float(projected[0]) - float(command[0]))
+    delta_angular = abs(float(projected[1]) - float(command[1]))
+    feasibility["commands_evaluated"] = int(feasibility.get("commands_evaluated", 0)) + 1
+    if not feasible_native:
+        feasibility["infeasible_native_count"] = (
+            int(feasibility.get("infeasible_native_count", 0)) + 1
+        )
+    if command != projected:
+        feasibility["projected_count"] = int(feasibility.get("projected_count", 0)) + 1
+    feasibility["_sum_abs_delta_linear"] = float(
+        feasibility.get("_sum_abs_delta_linear", 0.0)
+    ) + float(delta_linear)
+    feasibility["_sum_abs_delta_angular"] = float(
+        feasibility.get("_sum_abs_delta_angular", 0.0)
+    ) + float(delta_angular)
+    feasibility["_max_abs_delta_linear"] = max(
+        float(feasibility.get("_max_abs_delta_linear", 0.0)),
+        float(delta_linear),
+    )
+    feasibility["_max_abs_delta_angular"] = max(
+        float(feasibility.get("_max_abs_delta_angular", 0.0)),
+        float(delta_angular),
+    )
+    return projected
+
+
+def planner_kinematics_compatibility(
+    *,
+    algo: str,
+    robot_kinematics: str,
+    algo_config: dict[str, Any],
+) -> tuple[bool, str | None]:
+    """Return explicit compatibility status for planner/kinematics combinations."""
+    algo_key = algo.strip().lower()
+    kin = robot_kinematics.strip().lower()
+    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key in {"rvo", "dwa"}:
+        return (
+            False,
+            f"planner '{algo_key}' is a placeholder adapter and is disabled for '{kin}' runs",
+        )
+    if algo_key == "ppo" and kin in {"holonomic", "omni", "omnidirectional"}:
+        obs_mode = str(algo_config.get("obs_mode", "vector")).strip().lower()
+        if obs_mode == "image":
+            return (
+                False,
+                "ppo holonomic runs require non-image obs_mode for map-runner compatibility",
+            )
+    return True, None
+
+
+__all__ = [
+    "default_robot_command_space",
+    "init_feasibility_metadata",
+    "planner_kinematics_compatibility",
+    "project_with_feasibility",
+]

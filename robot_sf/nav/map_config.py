@@ -6,6 +6,7 @@ import os
 import random
 from dataclasses import dataclass, field
 from math import sqrt
+from typing import Any
 
 import matplotlib.axes
 import matplotlib.patches as mpl_patches
@@ -59,6 +60,7 @@ class SinglePedestrianDefinition:
         role (str | None): Optional runtime behavior role (wait, follow, lead, accompany, join, leave).
         role_target_id (str | None): Optional target identifier for role behaviors (e.g., "robot:0").
         role_offset (Vec2D | None): Optional (forward, lateral) offset for follow/lead/accompany roles.
+        metadata (dict[str, Any]): Optional JSON/YAML-safe attribution metadata.
     """
 
     id: str
@@ -72,6 +74,7 @@ class SinglePedestrianDefinition:
     role: str | None = None
     role_target_id: str | None = None
     role_offset: Vec2D | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """
@@ -93,6 +96,7 @@ class SinglePedestrianDefinition:
         self._validate_role()
         self._validate_role_target()
         self._validate_role_offset()
+        self._validate_metadata()
         self._warn_if_static()
 
     def _validate_id(self):
@@ -258,6 +262,14 @@ class SinglePedestrianDefinition:
                 f"got {self.role_offset!r}"
             )
         self.role_offset = (float(self.role_offset[0]), float(self.role_offset[1]))
+
+    def _validate_metadata(self) -> None:
+        """Validate and copy optional per-pedestrian metadata."""
+        if not isinstance(self.metadata, dict):
+            raise ValueError(
+                f"Pedestrian '{self.id}': metadata must be a mapping, got {self.metadata!r}"
+            )
+        self.metadata = dict(self.metadata)
 
 
 @dataclass
@@ -979,6 +991,13 @@ def _parse_single_pedestrians(
         role = ped_def.get("role")
         role_target_id = ped_def.get("role_target_id")
         role_offset = ped_def.get("role_offset")
+        metadata = ped_def.get("metadata", {})
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise ValueError(
+                f"single_pedestrians metadata for '{ped_id}' must be a mapping, got: {metadata!r}"
+            )
         role_target_value = str(role_target_id) if role_target_id is not None else None
         role_offset_tuple = None
         if role_offset is not None:
@@ -1001,6 +1020,7 @@ def _parse_single_pedestrians(
                 role=str(role) if role is not None else None,
                 role_target_id=role_target_value,
                 role_offset=role_offset_tuple,
+                metadata=dict(metadata),
             )
         )
     return single_pedestrians

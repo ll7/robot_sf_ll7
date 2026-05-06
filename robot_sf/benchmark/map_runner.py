@@ -21,6 +21,7 @@ from robot_sf.baselines.drl_vo import DrlVoPlanner
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.baselines.sac import SACPlanner
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
+from robot_sf.benchmark import planner_command_contract as planner_commands
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
@@ -95,6 +96,10 @@ from robot_sf.planner.mppi_social import (
 from robot_sf.planner.nmpc_social import (
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
+)
+from robot_sf.planner.policy_stack_v1 import (
+    PolicyStackV1Adapter,
+    build_policy_stack_v1_build_config,
 )
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
@@ -201,6 +206,11 @@ _PPO_ALLOWED_OBS_MODES = {"vector", "dict", "native_dict", "multi_input"}
 _PPO_ALLOWED_ACTION_SPACES = {"velocity", "unicycle"}
 _PPO_WARN_ROBOT_KINEMATICS = {"holonomic", "omni", "omnidirectional"}
 
+_default_robot_command_space = planner_commands.default_robot_command_space
+_init_feasibility_metadata = planner_commands.init_feasibility_metadata
+_planner_kinematics_compatibility = planner_commands.planner_kinematics_compatibility
+_project_with_feasibility = planner_commands.project_with_feasibility
+
 
 def _holonomic_world_velocity_command(vx: float, vy: float) -> dict[str, float | str]:
     """Build an explicit world-frame holonomic velocity command payload.
@@ -230,84 +240,6 @@ def _apply_direct_world_velocity_metadata(
     upstream_reference = meta.get("upstream_reference")
     if isinstance(upstream_reference, dict) and adapter_boundary is not None:
         upstream_reference["adapter_boundary"] = adapter_boundary
-
-
-def _default_robot_command_space(
-    robot_kinematics: str | None,
-    algo_config: dict[str, Any],
-    *,
-    robot_command_mode: str | None = None,
-) -> str:
-    """Resolve robot command-space metadata for the current run.
-
-    Returns:
-        str: Canonical command-space label.
-    """
-    kin = str(robot_kinematics or _DEFAULT_KINEMATICS).strip().lower()
-    if kin in {"holonomic", "omni", "omnidirectional"}:
-        mode_source = (
-            robot_command_mode
-            if robot_command_mode is not None
-            else algo_config.get("command_mode", "vx_vy")
-        )
-        mode = str(mode_source).strip().lower()
-        return "holonomic_vxy_world" if mode == "vx_vy" else "unicycle_vw"
-    return "unicycle_vw"
-
-
-def _init_feasibility_metadata(meta: dict[str, Any]) -> None:
-    """Initialize mutable kinematics-feasibility counters in algorithm metadata."""
-    meta["kinematics_feasibility"] = {
-        "commands_evaluated": 0,
-        "infeasible_native_count": 0,
-        "projected_count": 0,
-        "_sum_abs_delta_linear": 0.0,
-        "_sum_abs_delta_angular": 0.0,
-        "_max_abs_delta_linear": 0.0,
-        "_max_abs_delta_angular": 0.0,
-    }
-
-
-def _project_with_feasibility(
-    *,
-    model: KinematicsModel,
-    command: tuple[float, float],
-    meta: dict[str, Any],
-) -> tuple[float, float]:
-    """Project a command while accumulating feasibility diagnostics.
-
-    Returns:
-        tuple[float, float]: Projected command.
-    """
-    projected = model.project(command)
-    feasibility = meta.get("kinematics_feasibility")
-    if not isinstance(feasibility, dict):
-        return projected
-    feasible_native = bool(model.is_feasible(command))
-    delta_linear = abs(float(projected[0]) - float(command[0]))
-    delta_angular = abs(float(projected[1]) - float(command[1]))
-    feasibility["commands_evaluated"] = int(feasibility.get("commands_evaluated", 0)) + 1
-    if not feasible_native:
-        feasibility["infeasible_native_count"] = (
-            int(feasibility.get("infeasible_native_count", 0)) + 1
-        )
-    if command != projected:
-        feasibility["projected_count"] = int(feasibility.get("projected_count", 0)) + 1
-    feasibility["_sum_abs_delta_linear"] = float(
-        feasibility.get("_sum_abs_delta_linear", 0.0)
-    ) + float(delta_linear)
-    feasibility["_sum_abs_delta_angular"] = float(
-        feasibility.get("_sum_abs_delta_angular", 0.0)
-    ) + float(delta_angular)
-    feasibility["_max_abs_delta_linear"] = max(
-        float(feasibility.get("_max_abs_delta_linear", 0.0)),
-        float(delta_linear),
-    )
-    feasibility["_max_abs_delta_angular"] = max(
-        float(feasibility.get("_max_abs_delta_angular", 0.0)),
-        float(delta_angular),
-    )
-    return projected
 
 
 def _build_adapter_policy(
@@ -767,30 +699,6 @@ def _preflight_policy(  # noqa: C901, PLR0915
         raise RuntimeError(message) from exc
 
 
-def _planner_kinematics_compatibility(
-    *,
-    algo: str,
-    robot_kinematics: str,
-    algo_config: dict[str, Any],
-) -> tuple[bool, str | None]:
-    """Return explicit compatibility status for planner/kinematics combinations."""
-    algo_key = algo.strip().lower()
-    kin = robot_kinematics.strip().lower()
-    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key in {"rvo", "dwa"}:
-        return (
-            False,
-            f"planner '{algo_key}' is a placeholder adapter and is disabled for '{kin}' runs",
-        )
-    if algo_key == "ppo" and kin in {"holonomic", "omni", "omnidirectional"}:
-        obs_mode = str(algo_config.get("obs_mode", "vector")).strip().lower()
-        if obs_mode == "image":
-            return (
-                False,
-                "ppo holonomic runs require non-image obs_mode for map-runner compatibility",
-            )
-    return True, None
-
-
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
@@ -1134,6 +1042,22 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
             adapter=adapter,
             adapter_name="RiskDWAPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key == "policy_stack_v1":
+        stack_cfg = build_policy_stack_v1_build_config(algo_config)
+        adapter = PolicyStackV1Adapter(
+            config=stack_cfg.policy_stack,
+            risk_dwa=RiskDWAPlannerAdapter(config=stack_cfg.risk_dwa),
+        )
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="PolicyStackV1Adapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
         )

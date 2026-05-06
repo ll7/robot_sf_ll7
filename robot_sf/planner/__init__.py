@@ -23,6 +23,7 @@ from robot_sf.planner.classic_planner_adapter import (
     attach_classic_global_planner,
 )
 from robot_sf.planner.poi_sampler import POISampler
+from robot_sf.planner.policy_stack_v1 import PolicyStackV1Adapter, PolicyStackV1Config
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
 from robot_sf.planner.teb_commitment import TEBCommitmentConfig, TEBCommitmentPlannerAdapter
 from robot_sf.planner.visibility_planner import (
@@ -44,6 +45,8 @@ __all__ = [
     "PlannerConfig",
     "PlanningError",
     "PlanningFailedError",
+    "PolicyStackV1Adapter",
+    "PolicyStackV1Config",
     "RiskDWAPlannerAdapter",
     "RiskDWAPlannerConfig",
     "TEBCommitmentConfig",

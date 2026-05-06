@@ -24,6 +24,20 @@ def _metadata_payload(
     }
 
 
+def _runtime_status_payload(config: MultiPedAdversarialConfig) -> dict[str, Any]:
+    """Return certification-boundary metadata for development adversarial smoke cases."""
+
+    return {
+        "schema_version": config.schema_version,
+        "family": config.family,
+        "scenario_seed": int(config.scenario_seed),
+        "pedestrian_ids": [pedestrian.id for pedestrian in config.pedestrians],
+        "evaluation_scope": "development_stress_test",
+        "certification_status": "uncertified_development_smoke",
+        "benchmark_frozen": False,
+    }
+
+
 def materialize_multi_ped_single_pedestrian_overrides(
     config: MultiPedAdversarialConfig,
 ) -> list[dict[str, Any]]:
@@ -84,6 +98,7 @@ def materialize_multi_ped_scenario_payload(
 
     metadata = dict(scenario.get("metadata") or {})
     metadata["adversarial_multi_ped"] = config.to_json()
+    metadata["adversarial_multi_ped_runtime"] = _runtime_status_payload(config)
     scenario["metadata"] = metadata
 
     scenario["single_pedestrians"] = _merge_single_pedestrian_entries(

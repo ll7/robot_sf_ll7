@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import functools
 import json
 import re
 from dataclasses import dataclass
+from functools import cache
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 EXPORT_SCHEMA_VERSION = "carla-replay-export.v1"
 _SCHEMA_RESOURCE = "schemas/carla_replay_export.v1.json"
 EXPORT_MANIFEST_SCHEMA_VERSION = "carla-replay-export-manifest.v1"
+_MANIFEST_SCHEMA_RESOURCE = "schemas/carla_replay_export_manifest.v1.json"
+BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION = "carla-replay-export-batch-validation-summary.v1"
+_BATCH_VALIDATION_SUMMARY_SCHEMA_RESOURCE = (
+    "schemas/carla_replay_export_batch_validation_summary.v1.json"
+)
 _EXPORTABLE_CERT_STATUSES = {"passed", "valid", "hard_but_solvable", "knife_edge"}
 _DEFAULT_TRAJECTORY_FIELDS = [
     "success",
@@ -193,7 +198,7 @@ class SimulationSpec:
         }
 
 
-@functools.lru_cache(maxsize=1)
+@cache
 def load_export_schema() -> dict[str, Any]:
     """Load the versioned T0 neutral export JSON schema (cached).
 
@@ -202,6 +207,30 @@ def load_export_schema() -> dict[str, Any]:
     """
 
     schema_path = files("robot_sf_carla_bridge").joinpath(_SCHEMA_RESOURCE)
+    return json.loads(schema_path.read_text(encoding="utf-8"))
+
+
+@cache
+def load_export_manifest_schema() -> dict[str, Any]:
+    """Load the versioned T0 export manifest JSON schema.
+
+    Returns:
+        Parsed JSON schema dictionary.
+    """
+
+    schema_path = files("robot_sf_carla_bridge").joinpath(_MANIFEST_SCHEMA_RESOURCE)
+    return json.loads(schema_path.read_text(encoding="utf-8"))
+
+
+@cache
+def load_batch_validation_summary_schema() -> dict[str, Any]:
+    """Load the versioned T0 batch validation summary JSON schema.
+
+    Returns:
+        Parsed JSON schema dictionary.
+    """
+
+    schema_path = files("robot_sf_carla_bridge").joinpath(_BATCH_VALIDATION_SUMMARY_SCHEMA_RESOURCE)
     return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
@@ -489,6 +518,7 @@ def read_export_manifest(input_path: str | Path) -> dict[str, Any]:
         path = entry.get("path")
         if not isinstance(path, str) or not path.strip():
             raise ValueError(f"export manifest exports[{index}].path must be a non-empty string")
+    jsonschema.validate(instance=manifest, schema=load_export_manifest_schema())
     return cast("dict[str, Any]", manifest)
 
 
@@ -520,6 +550,32 @@ def resolve_export_manifest_payload_paths(input_path: str | Path) -> list[dict[s
             {
                 "scenario_id": entry["scenario_id"],
                 "path": root / payload_path,
+            }
+        )
+    return records
+
+
+def load_export_manifest_payloads(input_path: str | Path) -> list[dict[str, Any]]:
+    """Load every payload referenced by a validated export manifest.
+
+    Returns:
+        Ordered records with ``scenario_id``, resolved ``path``, and validated ``payload`` fields.
+
+    Raises:
+        FileNotFoundError: if the manifest or a referenced payload file is missing.
+        ValueError: if the manifest shape is unsupported.
+        json.JSONDecodeError: if the manifest or any referenced payload contains invalid JSON.
+        jsonschema.ValidationError: if a referenced payload is not schema-valid.
+    """
+
+    records: list[dict[str, Any]] = []
+    for entry in resolve_export_manifest_payload_paths(input_path):
+        payload = read_export_payload(entry["path"])
+        records.append(
+            {
+                "scenario_id": entry["scenario_id"],
+                "path": entry["path"],
+                "payload": payload,
             }
         )
     return records

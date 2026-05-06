@@ -1,0 +1,25 @@
+schema_version: adversarial-multi-ped.v1
+family: doorway_blocker
+description: Development-smoke doorway blocker fixture for issue 1015; not benchmark-frozen.
+scenario_seed: 53
+constraints:
+  min_start_goal_distance_m: 1.0
+pedestrians:
+  - id: door_left
+    start: {x: 3.6, y: 1.5}
+    goal: {x: 3.6, y: 4.5}
+    spawn_time_s: 0.2
+    speed_mps: 0.8
+    delay_s: 0.0
+    metadata:
+      role: doorway_blocker
+      side: left
+  - id: door_right
+    start: {x: 4.4, y: 4.5}
+    goal: {x: 4.4, y: 1.5}
+    spawn_time_s: 0.4
+    speed_mps: 0.8
+    delay_s: 0.0
+    metadata:
+      role: doorway_blocker
+      side: right

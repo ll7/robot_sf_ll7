@@ -1,5 +1,5 @@
 # Full maintained positive eval surface for issue-857 horizon-matched retrain checks:
-# - same 47 classic/francis maintained benchmark scenarios
+# - same 48 classic/francis maintained benchmark scenarios
 # - same 23 maintained atomic scenarios
 # - all expanded scenarios are forced to max_episode_steps=100
 includes:

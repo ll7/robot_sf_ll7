@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import tomllib
 from pathlib import Path
+
+import jsonschema
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -57,6 +61,34 @@ def test_export_t0_scenarios_main_writes_records_and_prints_manifest(
     assert "manifest.json" in capsys.readouterr().out
 
 
+def test_export_t0_scenarios_main_prints_schema(capsys) -> None:
+    """CARLA T0 export CLI should expose its JSON Schema contract."""
+    from robot_sf_carla_bridge.cli import export_t0_scenarios_main
+    from robot_sf_carla_bridge.export import load_export_schema
+
+    exit_code = export_t0_scenarios_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_export_schema()
+
+
+def test_export_t0_scenarios_main_rejects_blank_required_args() -> None:
+    """Schema mode is the only path that should bypass required export arguments."""
+    from robot_sf_carla_bridge.cli import export_t0_scenarios_main
+
+    with pytest.raises(SystemExit, match="2"):
+        export_t0_scenarios_main(
+            [
+                "--scenario-file",
+                "   ",
+                "--output-dir",
+                "",
+                "--robot-sf-commit",
+                "\t",
+            ]
+        )
+
+
 def test_validate_t0_manifest_main_reads_manifest_and_prints_count(
     tmp_path,
     monkeypatch,
@@ -86,6 +118,275 @@ def test_validate_t0_manifest_main_reads_manifest_and_prints_count(
     assert "1 export" in capsys.readouterr().out
 
 
+def test_validate_t0_manifest_main_prints_schema(capsys) -> None:
+    """Manifest validator CLI should expose its JSON Schema contract."""
+    from robot_sf_carla_bridge.cli import validate_t0_manifest_main
+    from robot_sf_carla_bridge.export import load_export_manifest_schema
+
+    exit_code = validate_t0_manifest_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_export_manifest_schema()
+
+
+def test_validate_t0_manifest_main_rejects_blank_manifest() -> None:
+    """Manifest validator CLI should reject blank manifest paths before file I/O."""
+    from robot_sf_carla_bridge.cli import validate_t0_manifest_main
+
+    with pytest.raises(SystemExit, match="2"):
+        validate_t0_manifest_main(["--manifest", "   "])
+
+
+def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Batch validator CLI should validate every manifest payload and report the count."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+    calls = {"resolved": [], "validated": []}
+
+    def fake_resolve_payloads(path):
+        calls["path"] = Path(path)
+        return [
+            {"scenario_id": "first", "path": tmp_path / "first.json"},
+            {"scenario_id": "second", "path": tmp_path / "second.json"},
+        ]
+
+    def fake_read_payload(path):
+        calls["validated"].append(Path(path))
+        return {"schema_version": "carla-replay-export.v1"}
+
+    monkeypatch.setattr(cli_module, "resolve_export_manifest_payload_paths", fake_resolve_payloads)
+    monkeypatch.setattr(cli_module, "read_export_payload", fake_read_payload)
+
+    exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path)])
+
+    assert exit_code == 0
+    assert calls["path"] == manifest_path
+    assert calls["validated"] == [tmp_path / "first.json", tmp_path / "second.json"]
+    assert "2 payloads" in capsys.readouterr().out
+
+
+def test_validate_t0_export_batch_main_prints_json_summary(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Batch validator CLI should support deterministic machine-readable output."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+    calls = {"validated": []}
+
+    def fake_resolve_payloads(path):
+        assert Path(path) == manifest_path
+        return [
+            {"scenario_id": "first", "path": tmp_path / "first.json"},
+            {"scenario_id": "second", "path": tmp_path / "second.json"},
+        ]
+
+    def fake_read_payload(path):
+        calls["validated"].append(Path(path))
+        return {"schema_version": "carla-replay-export.v1"}
+
+    monkeypatch.setattr(cli_module, "resolve_export_manifest_payload_paths", fake_resolve_payloads)
+    monkeypatch.setattr(cli_module, "read_export_payload", fake_read_payload)
+
+    exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path), "--json"])
+
+    assert exit_code == 0
+    assert calls["validated"] == [tmp_path / "first.json", tmp_path / "second.json"]
+    assert json.loads(capsys.readouterr().out) == {
+        "manifest": manifest_path.as_posix(),
+        "payload_count": 2,
+        "scenario_ids": ["first", "second"],
+        "schema_version": "carla-replay-export-batch-validation-summary.v1",
+    }
+
+
+def test_validate_t0_export_batch_main_json_summary_validates_against_schema(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Batch validator JSON summary should satisfy its packaged schema."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge import load_batch_validation_summary_schema
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+
+    def fake_load_payloads(path):
+        assert Path(path) == manifest_path
+        return [{"scenario_id": "unit", "path": tmp_path / "unit.json", "payload": {}}]
+
+    monkeypatch.setattr(cli_module, "load_export_manifest_payloads", fake_load_payloads)
+
+    exit_code = validate_t0_export_batch_main(["--manifest", str(manifest_path), "--json"])
+
+    assert exit_code == 0
+    jsonschema.validate(json.loads(capsys.readouterr().out), load_batch_validation_summary_schema())
+
+
+def test_validate_t0_export_batch_main_prints_schema(capsys) -> None:
+    """Batch validator CLI should expose its JSON summary Schema contract."""
+    from robot_sf_carla_bridge import load_batch_validation_summary_schema
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    exit_code = validate_t0_export_batch_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_batch_validation_summary_schema()
+
+
+def test_validate_t0_export_batch_main_rejects_blank_manifest() -> None:
+    """Batch validator CLI should reject blank manifest paths before file I/O."""
+    from robot_sf_carla_bridge.cli import validate_t0_export_batch_main
+
+    with pytest.raises(SystemExit, match="2"):
+        validate_t0_export_batch_main(["--manifest", "\t"])
+
+
+def test_catalog_carla_schemas_main_prints_catalog(capsys) -> None:
+    """Schema catalog CLI should expose deterministic catalog metadata."""
+    from robot_sf_carla_bridge import list_carla_bridge_schema_catalog
+    from robot_sf_carla_bridge.cli import catalog_carla_schemas_main
+
+    exit_code = catalog_carla_schemas_main([])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == list_carla_bridge_schema_catalog()
+
+
+def test_catalog_carla_schemas_main_prints_schema(capsys) -> None:
+    """Schema catalog CLI should expose the catalog JSON Schema contract."""
+    from robot_sf_carla_bridge import load_schema_catalog_schema
+    from robot_sf_carla_bridge.cli import catalog_carla_schemas_main
+
+    exit_code = catalog_carla_schemas_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_schema_catalog_schema()
+
+
+def test_check_carla_availability_main_prints_json_status(monkeypatch, capsys) -> None:
+    """CARLA availability CLI should expose deterministic machine-readable status."""
+    import importlib.util
+
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name, *args, **kwargs: (
+            None if name == "carla" else real_find_spec(name, *args, **kwargs)
+        ),
+    )
+
+    exit_code = check_carla_availability_main(["--json"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "available": False,
+        "dependency": "carla",
+        "reason": "CARLA Python API package 'carla' is not importable",
+        "schema_version": "carla-availability.v1",
+        "status": "not-available",
+    }
+
+
+def test_check_carla_availability_main_prints_schema(capsys) -> None:
+    """CARLA availability CLI should expose its JSON Schema contract."""
+    from robot_sf_carla_bridge.availability import load_availability_schema
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    exit_code = check_carla_availability_main(["--schema"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == load_availability_schema()
+
+
+def test_check_carla_availability_main_prints_text_status(monkeypatch, capsys) -> None:
+    """CARLA availability CLI should keep a concise human-readable output."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "available",
+            "reason": "CARLA Python API package is importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main([])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == "carla: available - CARLA Python API package is importable\n"
+
+
+def test_check_carla_availability_main_require_fails_when_unavailable(
+    monkeypatch,
+    capsys,
+) -> None:
+    """Require mode should fail closed when CARLA is unavailable."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "not-available",
+            "reason": "CARLA Python API package 'carla' is not importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main(["--require", "--json"])
+
+    assert exit_code == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "dependency": "carla",
+        "reason": "CARLA Python API package 'carla' is not importable",
+        "status": "not-available",
+    }
+
+
+def test_check_carla_availability_main_require_passes_when_available(
+    monkeypatch,
+    capsys,
+) -> None:
+    """Require mode should still succeed when CARLA is available."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import check_carla_availability_main
+
+    monkeypatch.setattr(
+        cli_module,
+        "check_carla_availability",
+        lambda: {
+            "status": "available",
+            "reason": "CARLA Python API package is importable",
+            "dependency": "carla",
+        },
+    )
+
+    exit_code = check_carla_availability_main(["--require"])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == "carla: available - CARLA Python API package is importable\n"
+
+
 def test_export_t0_cli_is_packaged_as_project_script() -> None:
     """Project metadata should expose the CLI and include the bridge package."""
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -95,6 +396,15 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     )
     assert pyproject["project"]["scripts"]["robot-sf-validate-carla-t0-manifest"] == (
         "robot_sf_carla_bridge.cli:validate_t0_manifest_main"
+    )
+    assert pyproject["project"]["scripts"]["robot-sf-validate-carla-t0-batch"] == (
+        "robot_sf_carla_bridge.cli:validate_t0_export_batch_main"
+    )
+    assert pyproject["project"]["scripts"]["robot-sf-check-carla"] == (
+        "robot_sf_carla_bridge.cli:check_carla_availability_main"
+    )
+    assert pyproject["project"]["scripts"]["robot-sf-catalog-carla-schemas"] == (
+        "robot_sf_carla_bridge.cli:catalog_carla_schemas_main"
     )
     hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
     assert {"include": "robot_sf_carla_bridge"} in hatchling_packages

@@ -88,12 +88,15 @@ Current promoted all-planners baseline run:
     anchored to the core baseline set, while still allowing experimental challenger rows for
     comparison
 * `configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml`
-  + issue-1023 validation surface that replaces the fixed campaign `horizon` with
+  + current long-horizon benchmark collection that replaces the fixed campaign `horizon` with
     `scenario_horizons: configs/policy_search/scenario_horizons_h500.yaml`
   + patches each scenario's `simulation_config.max_episode_steps` before the map runner executes
     and records `metadata.scenario_horizon` for provenance and `planner_blocked` accounting
-  + disables publication bundle export until the Slurm rerun is compared against the fixed-horizon
-    camera-ready evidence
+  + includes the baseline-ready core rows plus experimental challengers, including the h500
+    policy-search candidates `scenario_adaptive_hybrid_orca_v1` and
+    `hybrid_rule_v3_fast_progress_static_escape`
+  + disables publication bundle export because the candidate-augmented local full run completed but
+    has SNQI contract status `fail` under warn enforcement
 * `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
   + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
   + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,
@@ -124,6 +127,26 @@ future reconsideration, but does not remove the opt-in requirement by itself.
 probe to pass without fallback, complete all three probe episodes, show non-zero success, and keep
 runtime within `3x` the `goal` row on the same slice before any broader paper-compatible subset is
 run. See `docs/context/issue_562_socnav_bench_reentry.md`.
+
+### Scenario-Horizon Change
+
+The long-horizon collection uses the h500-derived scenario schedule instead of a single fixed
+`horizon: 100`. The schedule in `configs/policy_search/scenario_horizons_h500.yaml` was derived
+from safe h500 policy-search incumbents using the documented selection parameters:
+`p95_multiplier=1.2`, `buffer_steps=20`, `floor_steps=80`, and `cap_steps=600`. Three scenarios
+remain marked `planner_blocked` and keep the h600 cap rather than being silently excluded.
+
+This change exists because the fixed 100-step budget mixed route-completion quality with route
+length and scenario geometry. Longer or bottlenecked routes could appear as planner failures even
+when the planner was still making valid progress. The scenario-specific schedule reduces that
+budget artifact, but it also changes the safety exposure: longer episodes give planners more time
+to collide or enter near-miss states. Treat success gains under the long horizons as a
+route-budget sensitivity result unless the updated campaign also preserves collision, near-miss,
+SNQI, fallback, and runtime evidence.
+
+The 2026-05-06 candidate-augmented local full run completed 9 planner rows and 1296 episodes, with
+no failed, unavailable, fallback, or degraded planners. It is still not release-tag evidence:
+SNQI contract status is `fail`, and the two added candidates remain experimental challenger rows.
 
 SNQI calibration assets used by camera-ready presets:
 

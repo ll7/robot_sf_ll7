@@ -550,6 +550,21 @@ def test_issue_1023_scenario_horizon_config_uses_h500_schedule() -> None:
     )
     assert cfg.export_publication_bundle is False
     assert all(planner.horizon_override is None for planner in cfg.planners)
+    planners = {planner.key: planner for planner in cfg.planners}
+    assert (
+        planners["scenario_adaptive_hybrid_orca_v1"].algo_config_path
+        == Path("configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml").resolve()
+    )
+    assert planners["scenario_adaptive_hybrid_orca_v1"].benchmark_profile == "experimental"
+    assert (
+        planners["hybrid_rule_v3_fast_progress_static_escape"].algo_config_path
+        == Path(
+            "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml"
+        ).resolve()
+    )
+    assert planners["hybrid_rule_v3_fast_progress_static_escape"].benchmark_profile == (
+        "experimental"
+    )
 
     scenarios = _load_campaign_scenarios(cfg)
     horizon_meta = [

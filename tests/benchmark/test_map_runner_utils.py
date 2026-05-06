@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.benchmark.map_runner import (
     _build_policy,
@@ -27,6 +28,7 @@ from robot_sf.benchmark.map_runner import (
     _ppo_paper_gate_status,
     _preflight_policy,
     _project_with_feasibility,
+    _resolve_policy_search_candidate_runtime,
     _resolve_seed_list,
     _robot_kinematics_label,
     _robot_max_speed,
@@ -89,6 +91,83 @@ def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:
     list_path.write_text("- item\n", encoding="utf-8")
     with pytest.raises(TypeError):
         _parse_algo_config(str(list_path))
+
+
+def test_resolve_policy_search_candidate_runtime_merges_base_and_scenario_override(
+    tmp_path: Path,
+) -> None:
+    """Benchmark runs should execute policy-search candidates with scenario overrides."""
+    base_cfg = tmp_path / "base.yaml"
+    candidate_cfg = tmp_path / "candidate.yaml"
+    base_cfg.write_text(
+        "allow_testing_algorithms: true\nmax_linear_speed: 2.0\nnested:\n  a: 1\n  b: 2\n",
+        encoding="utf-8",
+    )
+    candidate_cfg.write_text(
+        yaml.safe_dump(
+            {
+                "base_config_path": "base.yaml",
+                "params": {"max_linear_speed": 3.0, "nested": {"b": 4}},
+                "scenario_overrides": {
+                    "francis2023_perpendicular_traffic": {
+                        "very_slow_speed": 0.6,
+                        "nested": {"c": 5},
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    algo, cfg = _resolve_policy_search_candidate_runtime(
+        default_algo="hybrid_rule_local_planner",
+        algo_config_path=str(candidate_cfg),
+        scenario={"name": "francis2023_perpendicular_traffic"},
+    )
+
+    assert algo == "hybrid_rule_local_planner"
+    assert cfg["allow_testing_algorithms"] is True
+    assert cfg["max_linear_speed"] == 3.0
+    assert cfg["very_slow_speed"] == 0.6
+    assert cfg["nested"] == {"a": 1, "b": 4, "c": 5}
+
+
+def test_resolve_policy_search_candidate_runtime_switches_algo_for_scenario(
+    tmp_path: Path,
+) -> None:
+    """Scenario-adaptive candidates should be able to switch planner families."""
+    default_cfg = tmp_path / "hybrid.yaml"
+    override_cfg = tmp_path / "orca.yaml"
+    candidate_cfg = tmp_path / "candidate.yaml"
+    default_cfg.write_text("allow_testing_algorithms: true\nmax_linear_speed: 3.0\n", encoding="utf-8")
+    override_cfg.write_text("orca_time_horizon: 4.0\nmax_linear_speed: 0.9\n", encoding="utf-8")
+    candidate_cfg.write_text(
+        yaml.safe_dump(
+            {
+                "base_config_path": "hybrid.yaml",
+                "params": {"max_linear_speed": 3.0},
+                "scenario_algo_overrides": {
+                    "francis2023_leave_group": {
+                        "algo": "orca",
+                        "base_config_path": "orca.yaml",
+                        "params": {"max_linear_speed": 1.15},
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    algo, cfg = _resolve_policy_search_candidate_runtime(
+        default_algo="hybrid_rule_local_planner",
+        algo_config_path=str(candidate_cfg),
+        scenario={"name": "francis2023_leave_group"},
+    )
+
+    assert algo == "orca"
+    assert cfg == {"orca_time_horizon": 4.0, "max_linear_speed": 1.15}
 
 
 def test_scenario_with_episode_seed_defaults_fills_missing_route_spawn_seed() -> None:

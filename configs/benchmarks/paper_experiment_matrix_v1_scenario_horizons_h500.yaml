@@ -1,9 +1,10 @@
 # Issue-1023 validation benchmark: paper v1 matrix with h500-derived
 # per-scenario route-completion horizons.
 #
-# This config is paper-facing for preflight/comparability/SNQI contracts, but it
-# deliberately disables publication bundle export until the scenario-horizon
-# rerun is reviewed against the fixed-horizon camera-ready surface.
+# This config is paper-facing for preflight/comparability/SNQI contracts and is
+# the current long-horizon benchmark collection. Publication bundle export stays
+# disabled because the 2026-05-06 candidate-augmented local full run completed
+# but has SNQI contract status=fail under warn enforcement.
 
 name: paper_experiment_matrix_v1_scenario_horizons_h500
 paper_facing: true
@@ -106,3 +107,15 @@ planners:
     planner_group: experimental
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fallback
+
+  - key: scenario_adaptive_hybrid_orca_v1
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    benchmark_profile: experimental
+
+  - key: hybrid_rule_v3_fast_progress_static_escape
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    benchmark_profile: experimental

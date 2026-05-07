@@ -77,6 +77,8 @@ Additional validation:
 
 ## Follow-Up Boundary
 
-Issue #1056 should classify more h500 failures and distinguish seed-level success, exposure, and
-collision outcomes across scenario families. Issue #1055 should turn this into exposure-aware
-tables. This pilot is intentionally small and should not be used as a full h500 ranking.
+Issue #1056 classifies these findings in
+`docs/context/issue_1056_h500_failure_classification.md` and distinguishes seed-level success,
+exposure, and collision outcomes across scenario families. Issue #1055 should turn this into
+exposure-aware tables. This pilot is intentionally small and should not be used as a full h500
+ranking.

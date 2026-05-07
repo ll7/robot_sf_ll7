@@ -118,6 +118,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1049 H500 Mechanism Pilot](issue_1049_h500_mechanism_pilot.md)
   records compact fixed-h100 versus h500 ORCA traces for clean budget relief, exposure/comfort
   pressure, and safety-regressed long-horizon behavior.
+* [Issue #1056 H500 Failure Classification](issue_1056_h500_failure_classification.md)
+  defines the reusable h500 classification vocabulary and routes observed mechanisms to reporting,
+  planner, or scenario-certification follow-up boundaries.
 * [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
   defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
   pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.

@@ -103,6 +103,14 @@ represent the planner, or generate videos from retained episode JSONL for all-pl
 cells. The pilot is complete only when the trace/video evidence can distinguish waiting from
 continuous delayed progress and risk-taking.
 
+Issue #1049 now provides the first compact trace-backed pilot:
+
+* `docs/context/issue_1049_h500_mechanism_pilot.md`
+* `docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/README.md`
+
+The pilot supports clean budget relief, exposure/comfort-pressure increase, and safety-regressed
+long-horizon exposure examples for ORCA. It does not support a broad wait-then-go claim.
+
 ## SNQI Contract
 
 Do not overwrite camera-ready v3 SNQI assets. If h500 SNQI is reported, use one of these safer

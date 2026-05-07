@@ -277,6 +277,10 @@ env = make_image_robot_env(debug=True)
 env = make_pedestrian_env(robot_model=model, debug=True)
 ```
 
+The compact reviewer contract for environment creation, rollout ownership, reward ownership,
+benchmark verifier boundaries, and PPO run-record provenance is
+`docs/training/environment_contract.md`.
+
 ### Key architectural layers
 
 - **`robot_sf/gym_env/`**: Gymnasium environment implementations with factory pattern

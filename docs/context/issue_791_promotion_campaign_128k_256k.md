@@ -1,5 +1,11 @@
 # Issue 791 Promotion Campaign (128k / 256k / 1m / 10m GPU Foresight)
 
+> Status: historical campaign log. The engineering attribution that distribution alignment was the
+> dominant lever remains useful inside the repo, but current paper-facing wording is superseded by
+> `memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md`: report issue-791 as
+> benchmark-set performance on the evaluated scenario matrix, not as OOD generalization, transfer,
+> unseen-environment performance, or an architecture-causality claim.
+
 ## Objective
 
 Run a full-length promotion campaign for the three issue-791 quality-gate improvements

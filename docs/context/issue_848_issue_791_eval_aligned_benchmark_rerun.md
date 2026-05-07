@@ -136,8 +136,10 @@ Attention-head follow-up evidence from job `12209`:
 
 ## Remaining Risks
 
-- The issue body's held-out OOD requirement remains open; this note only restores the benchmark
-  rerun surface.
+- The original issue body's held-out OOD requirement is no longer part of the current paper
+  framing. The active decision in
+  `memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md` scopes issue-791 claims to
+  benchmark-set performance on the evaluated scenario matrix.
 - External write-ups must keep the benchmark-set / in-distribution caveat explicit.
 - The publication bundle from job `12208` is still an ignored, worktree-local artifact until it is
   uploaded to a durable release/artifact store.

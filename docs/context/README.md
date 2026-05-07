@@ -118,6 +118,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
   defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
   pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.
+* [Issue #1052 Claim-Language Audit](issue_1052_claim_language_audit.md)
+  records the benchmark-set claim boundary for issue-791 paper wording and marks stale OOD /
+  transfer language as historical rather than current manuscript scope.
 * [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as

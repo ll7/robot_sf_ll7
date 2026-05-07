@@ -1,0 +1,30 @@
+scenario_family,case_count,mean_success_delta,mean_collision_delta,mean_near_miss_delta,mechanisms
+accompanying_peer,4,0.83335,0.083325,0.0,"{'budget_limited_clean_completion': 2, 'partial_timeout_relief': 1, 'safety_regressed_completion': 1}"
+blind_corner,2,0.83335,0.0,7.33335,{'exposure_enabled_completion': 2}
+bottleneck,12,0.750017,0.138883,26.250008,"{'budget_limited_clean_completion': 3, 'exposure_enabled_completion': 4, 'partial_timeout_relief': 1, 'safety_regressed_completion': 4}"
+circular_crossing,1,0.3333,0.0,0.0,{'partial_timeout_relief': 1}
+cross_trap,8,0.666662,0.125012,8.75,"{'exposure_enabled_completion': 4, 'partial_timeout_relief': 2, 'safety_regressed_completion': 2}"
+crossing,4,0.75,0.0,0.0,"{'budget_limited_clean_completion': 2, 'partial_timeout_relief': 2}"
+crowd_navigation,5,0.86666,0.0,12.40002,"{'exposure_enabled_completion': 4, 'partial_timeout_relief': 1}"
+doorway,5,0.4667,0.13334,4.73336,"{'exposure_enabled_completion': 4, 'safety_regressed_completion': 1}"
+down_path,3,0.8889,0.1111,0.0,"{'budget_limited_clean_completion': 2, 'safety_regressed_completion': 1}"
+exiting_elevator,3,0.7778,0.0,5.1111,"{'budget_limited_clean_completion': 2, 'exposure_enabled_completion': 1}"
+exiting_room,1,0.6667,0.0,0.0,{'partial_timeout_relief': 1}
+following_human,3,0.8889,0.1111,0.0,"{'budget_limited_clean_completion': 2, 'safety_regressed_completion': 1}"
+frontal_approach,3,0.8889,0.0,26.333333,{'exposure_enabled_completion': 3}
+group_crossing,7,0.571429,0.0,1.619043,"{'budget_limited_clean_completion': 1, 'exposure_enabled_completion': 1, 'late_clean_completion': 1, 'partial_timeout_relief': 4}"
+head_on_corridor,8,0.666662,0.166675,3.916675,"{'budget_limited_clean_completion': 3, 'exposure_enabled_completion': 2, 'partial_timeout_relief': 1, 'safety_regressed_completion': 2}"
+intersection_no_gesture,4,0.750025,0.0,0.0,"{'budget_limited_clean_completion': 3, 'late_clean_completion': 1}"
+intersection_proceed,4,0.750025,0.0,0.0,"{'budget_limited_clean_completion': 3, 'late_clean_completion': 1}"
+intersection_wait,4,0.750025,0.0,0.0,"{'budget_limited_clean_completion': 3, 'late_clean_completion': 1}"
+leading_human,4,0.83335,0.083325,0.0,"{'budget_limited_clean_completion': 2, 'partial_timeout_relief': 1, 'safety_regressed_completion': 1}"
+merging,2,0.5,0.5,29.16665,{'safety_regressed_completion': 2}
+narrow_hallway,1,0.6667,0.3333,69.3333,{'safety_regressed_completion': 1}
+overtaking,6,0.8889,0.05555,1.777783,"{'budget_limited_clean_completion': 1, 'exposure_enabled_completion': 4, 'safety_regressed_completion': 1}"
+parallel_traffic,4,0.66665,0.083325,5.91665,"{'exposure_enabled_completion': 2, 'partial_timeout_relief': 1, 'safety_regressed_completion': 1}"
+pedestrian_obstruction,2,1.0,0.0,8.8333,{'exposure_enabled_completion': 2}
+pedestrian_overtaking,5,0.86666,0.0,0.0,"{'budget_limited_clean_completion': 3, 'late_clean_completion': 1, 'partial_timeout_relief': 1}"
+perpendicular_traffic,4,0.833325,0.0,6.58335,"{'budget_limited_clean_completion': 1, 'exposure_enabled_completion': 3}"
+robot_crowding,2,0.3333,0.1667,45.0,"{'exposure_enabled_completion': 1, 'safety_regressed_completion': 1}"
+robot_overtaking,4,0.83335,0.083325,1.916675,"{'budget_limited_clean_completion': 1, 'exposure_enabled_completion': 1, 'partial_timeout_relief': 1, 'safety_regressed_completion': 1}"
+t_intersection,8,0.708337,0.125012,10.083338,"{'budget_limited_clean_completion': 4, 'exposure_enabled_completion': 2, 'safety_regressed_completion': 2}"

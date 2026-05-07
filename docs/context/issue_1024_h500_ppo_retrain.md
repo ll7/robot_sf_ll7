@@ -259,9 +259,43 @@ total_timesteps=12000000
 requested_num_envs=30 num_envs=30 worker_mode=subproc randomize_seeds=True
 ```
 
+Outcome:
+
+- Job `12352` completed successfully on 2026-05-06 after `08:56:43` wall time.
+- W&B run: <https://wandb.ai/ll7/robot_sf/runs/n5oxm4rk>
+- Final eval at `12,000,000` steps:
+  - `success_rate=0.857`
+  - `collision_rate=0.129`
+  - `snqi=0.0389`
+- Best checkpoint by in-run `success_rate`:
+  - step `6,291,456`
+  - `success_rate=0.900`
+  - `collision_rate=0.100`
+  - `snqi=0.134`
+- Local synced report root:
+  `output/slurm/issue791-reward-curriculum-job-12352/benchmarks/ppo_imitation/`
+
+Interpretation:
+
+- This is a useful checkpoint-selection result, not a promotion result.
+- The retrain learned the all-available h500 schedule, but its best checkpoint still trails the
+  current issue-791 PPO leader's registered best eval on the maintained eval surface
+  (`success_rate=0.929`, `collision_rate=0.071`, `SNQI=0.353`).
+- The best checkpoint is stronger than the final checkpoint; any follow-up eval should start from
+  the `6,291,456`-step best-success checkpoint, not the final model.
+- Remaining failures are concentrated in constrained interaction cases, especially doorway,
+  merging, double-bottleneck, and narrow-hallway/narrow-doorway scenarios.
+- The main insight is that the previously trained issue-791 leader appears to scale better to the
+  longer h500 horizons than a fresh broad retrain on long-horizon scenarios. Follow-up work should
+  therefore favor evaluating or warm-starting from the previous leader before spending more compute
+  on fresh PPO retrains.
+
 ## Follow-Up Boundary
 
-Wait for jobs `12350` and `12352` to finish before deciding on further retrains, evaluation
-promotion, or registry updates. Treat `output/`, `/tmp/luttkule/12350/results`, and
-`/tmp/luttkule/12352/results` as worktree-local until resulting checkpoints and summaries are
-promoted through the repository's durable artifact path.
+Job `12352` is complete and already provides the main issue insight. Job `12350` remains useful as
+an A30/env22 comparison point, but the issue/PR does not need to stay open waiting for it unless the
+maintainer wants a same-config hardware/control comparison in the same branch.
+
+Treat `output/`, `/tmp/luttkule/12350/results`, and `/tmp/luttkule/12352/results` as worktree-local
+until resulting checkpoints and summaries are promoted through the repository's durable artifact
+path.

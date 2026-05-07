@@ -1,0 +1,152 @@
+# Issue-1024 PPO retraining surface:
+# - include the broadest curated PPO training surface from issue 856
+# - apply PR #1025 h500 recommended horizons to the 48 classic/francis scenarios
+# - preserve the other all-available training entries' existing per-scenario step budgets
+includes:
+  - ppo_all_available_training_v1.yaml
+
+scenario_overrides_by_name:
+  classic_bottleneck_high:
+    simulation_config:
+      max_episode_steps: 280
+  classic_bottleneck_low:
+    simulation_config:
+      max_episode_steps: 176
+  classic_bottleneck_medium:
+    simulation_config:
+      max_episode_steps: 331
+  classic_cross_trap_high:
+    simulation_config:
+      max_episode_steps: 498
+  classic_cross_trap_low:
+    simulation_config:
+      max_episode_steps: 514
+  classic_cross_trap_medium:
+    simulation_config:
+      max_episode_steps: 530
+  classic_doorway_high:
+    simulation_config:
+      max_episode_steps: 260
+  classic_doorway_low:
+    simulation_config:
+      max_episode_steps: 413
+  classic_doorway_medium:
+    simulation_config:
+      max_episode_steps: 180
+  classic_group_crossing_high:
+    simulation_config:
+      max_episode_steps: 166
+  classic_group_crossing_low:
+    simulation_config:
+      max_episode_steps: 149
+  classic_group_crossing_medium:
+    simulation_config:
+      max_episode_steps: 169
+  classic_head_on_corridor_low:
+    simulation_config:
+      max_episode_steps: 262
+  classic_head_on_corridor_medium:
+    simulation_config:
+      max_episode_steps: 274
+  classic_merging_low:
+    simulation_config:
+      max_episode_steps: 448
+  classic_merging_medium:
+    simulation_config:
+      max_episode_steps: 600
+  classic_overtaking_low:
+    simulation_config:
+      max_episode_steps: 359
+  classic_overtaking_medium:
+    simulation_config:
+      max_episode_steps: 380
+  classic_realworld_double_bottleneck_high:
+    simulation_config:
+      max_episode_steps: 562
+  classic_station_platform_medium:
+    simulation_config:
+      max_episode_steps: 600
+  classic_t_intersection_low:
+    simulation_config:
+      max_episode_steps: 334
+  classic_t_intersection_medium:
+    simulation_config:
+      max_episode_steps: 313
+  classic_urban_crossing_medium:
+    simulation_config:
+      max_episode_steps: 226
+  francis2023_accompanying_peer:
+    simulation_config:
+      max_episode_steps: 215
+  francis2023_blind_corner:
+    simulation_config:
+      max_episode_steps: 316
+  francis2023_circular_crossing:
+    simulation_config:
+      max_episode_steps: 104
+  francis2023_crowd_navigation:
+    simulation_config:
+      max_episode_steps: 306
+  francis2023_down_path:
+    simulation_config:
+      max_episode_steps: 215
+  francis2023_entering_elevator:
+    simulation_config:
+      max_episode_steps: 102
+  francis2023_entering_room:
+    simulation_config:
+      max_episode_steps: 131
+  francis2023_exiting_elevator:
+    simulation_config:
+      max_episode_steps: 270
+  francis2023_exiting_room:
+    simulation_config:
+      max_episode_steps: 144
+  francis2023_following_human:
+    simulation_config:
+      max_episode_steps: 215
+  francis2023_frontal_approach:
+    simulation_config:
+      max_episode_steps: 248
+  francis2023_intersection_no_gesture:
+    simulation_config:
+      max_episode_steps: 161
+  francis2023_intersection_proceed:
+    simulation_config:
+      max_episode_steps: 161
+  francis2023_intersection_wait:
+    simulation_config:
+      max_episode_steps: 161
+  francis2023_join_group:
+    simulation_config:
+      max_episode_steps: 155
+  francis2023_leading_human:
+    simulation_config:
+      max_episode_steps: 215
+  francis2023_leave_group:
+    simulation_config:
+      max_episode_steps: 170
+  francis2023_narrow_doorway:
+    simulation_config:
+      max_episode_steps: 600
+  francis2023_narrow_hallway:
+    simulation_config:
+      max_episode_steps: 323
+  francis2023_parallel_traffic:
+    simulation_config:
+      max_episode_steps: 250
+  francis2023_pedestrian_obstruction:
+    simulation_config:
+      max_episode_steps: 270
+  francis2023_pedestrian_overtaking:
+    simulation_config:
+      max_episode_steps: 222
+  francis2023_perpendicular_traffic:
+    simulation_config:
+      max_episode_steps: 208
+  francis2023_robot_crowding:
+    simulation_config:
+      max_episode_steps: 348
+  francis2023_robot_overtaking:
+    simulation_config:
+      max_episode_steps: 241

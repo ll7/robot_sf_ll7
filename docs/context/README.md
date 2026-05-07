@@ -134,6 +134,12 @@ knowledge, not every transient iteration detail.
   maps the May 2026 Hugging Face RL environment guide to Robot SF training, reward,
   rollout, benchmark, scaling, and provenance boundaries.
 
+## Training Notes
+
+* [Issue #1024 H500 PPO Retrain](issue_1024_h500_ppo_retrain.md)
+  records the all-available scenario surface, PR #1025 h500 horizon alignment, and SLURM job
+  `12350` for the first 12M-step PPO retrain.
+
 ## Performance Notes
 
 * [Issue #1001 Architecture Seam Audit](./issue_1001_architecture_seam_audit.md)

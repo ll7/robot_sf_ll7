@@ -61,21 +61,19 @@ from scripts.classic_benchmark_full import BenchmarkCLIConfig, run_full_benchmar
 
 
 def _project_root() -> Path:
-    """TODO docstring. Document this function.
-
+    """Return the project root directory.
 
     Returns:
-        TODO docstring.
+        Path to the repository root directory.
     """
     return Path(__file__).resolve().parents[2]
 
 
 def main() -> int:
-    """TODO docstring. Document this function.
-
+    """Run the full classic benchmark demo programmatically.
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success).
     """
     root = _project_root()
 

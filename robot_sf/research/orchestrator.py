@@ -71,7 +71,7 @@ def _figures_module():
 
 @dataclass
 class SeedSummary:
-    """TODO docstring. Document this class."""
+    """Summary of a single seed's run status for reporting."""
 
     seed: int
     baseline_status: str

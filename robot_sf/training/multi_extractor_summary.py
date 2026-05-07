@@ -35,13 +35,13 @@ def write_summary_artifacts(*, summary: TrainingRunSummary, destination: Path) -
 
 
 def _render_markdown(summary: TrainingRunSummary) -> str:
-    """TODO docstring. Document this function.
+    """Render training summary as Markdown string.
 
     Args:
-        summary: TODO docstring.
+        summary: Training run summary data
 
     Returns:
-        TODO docstring.
+        Markdown-formatted summary string
     """
     lines: list[str] = []
     lines.append("# Multi-Extractor Training Summary")
@@ -65,13 +65,13 @@ def _render_markdown(summary: TrainingRunSummary) -> str:
 
 
 def _render_hardware_overview(summary: TrainingRunSummary) -> list[str]:
-    """TODO docstring. Document this function.
+    """Render hardware overview section.
 
     Args:
-        summary: TODO docstring.
+        summary: Training run summary data
 
     Returns:
-        TODO docstring.
+        List of Markdown lines for hardware section
     """
     lines = ["## Hardware Overview"]
     lines.append("| Platform | Arch | GPU Model | CUDA Version | Python | Workers |")
@@ -87,13 +87,13 @@ def _render_hardware_overview(summary: TrainingRunSummary) -> list[str]:
 
 
 def _render_extractor_table(records: list[ExtractorRunRecord]) -> list[str]:
-    """TODO docstring. Document this function.
+    """Render extractor results as Markdown table.
 
     Args:
-        records: TODO docstring.
+        records: List of extractor run records
 
     Returns:
-        TODO docstring.
+        List of Markdown lines for table
     """
     lines = ["## Extractor Results"]
     lines.append("| Extractor Name | Status | Worker Mode | Duration (s) | Best Metric | Notes |")
@@ -113,14 +113,13 @@ def _render_extractor_table(records: list[ExtractorRunRecord]) -> list[str]:
 
 
 def _best_metric(record: ExtractorRunRecord) -> tuple[str, str]:
-    # Prioritize the most important metric for the summary table.
-    """TODO docstring. Document this function.
+    """Find the best metric for display in summary table.
 
     Args:
-        record: TODO docstring.
+        record: Extractor run record with metrics
 
     Returns:
-        TODO docstring.
+        (metric_name, formatted_value) tuple
     """
     priority_metric = "best_mean_reward"
     if record.metrics and priority_metric in record.metrics:
@@ -139,13 +138,13 @@ def _best_metric(record: ExtractorRunRecord) -> tuple[str, str]:
 
 
 def _render_failures(records: list[ExtractorRunRecord]) -> list[str]:
-    """TODO docstring. Document this function.
+    """Render failures and skips section.
 
     Args:
-        records: TODO docstring.
+        records: List of extractor run records
 
     Returns:
-        TODO docstring.
+        List of Markdown lines for failures section
     """
     lines = ["## Failures & Skips"]
     issues = [record for record in records if record.status != "success"]
@@ -159,13 +158,13 @@ def _render_failures(records: list[ExtractorRunRecord]) -> list[str]:
 
 
 def _render_aggregate_metrics(metrics: dict[str, float]) -> list[str]:
-    """TODO docstring. Document this function.
+    """Render aggregate metrics as table.
 
     Args:
-        metrics: TODO docstring.
+        metrics: Dictionary of metric names and values
 
     Returns:
-        TODO docstring.
+        List of Markdown lines for metrics table
     """
     lines = ["## Aggregated Metrics"]
     if not metrics:
@@ -184,13 +183,13 @@ def _render_aggregate_metrics(metrics: dict[str, float]) -> list[str]:
 
 
 def _render_reproducibility(summary: TrainingRunSummary) -> list[str]:
-    """TODO docstring. Document this function.
+    """Render reproducibility section.
 
     Args:
-        summary: TODO docstring.
+        summary: Training run summary data
 
     Returns:
-        TODO docstring.
+        List of Markdown lines for reproducibility section
     """
     lines = ["## Reproducibility"]
     lines.append(f"- JSON summary: `{SUMMARY_JSON_FILENAME}`")

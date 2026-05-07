@@ -15,10 +15,10 @@ class SimpleRobotEnv(gymnasium.Env):
     """
 
     def __init__(self, env_config: EnvSettings = EnvSettings()):
-        """TODO docstring. Document this function.
+        """Initialize the simple robot environment.
 
         Args:
-            env_config: TODO docstring.
+            env_config: Environment configuration dictionary
         """
         self.info = {}
 
@@ -71,10 +71,10 @@ class SimpleRobotEnv(gymnasium.Env):
         return self.info
 
     def step(self, action):
-        """TODO docstring. Document this function.
+        """Apply action and advance simulation.
 
         Args:
-            action: TODO docstring.
+            action: Action vector to apply
         """
         pass
 

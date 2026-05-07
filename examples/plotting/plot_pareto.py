@@ -34,7 +34,7 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def _synthetic_records():
-    """TODO docstring. Document this function."""
+    """Parse command-line arguments for the pareto plot demo."""
     return [
         {
             "scenario_id": "s1",
@@ -60,13 +60,13 @@ def _synthetic_records():
 
 
 def main(argv: list[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Run the pareto plot demo, generating visualization from benchmark data.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional command-line arguments (uses sys.argv if None).
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success).
     """
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", default=None)

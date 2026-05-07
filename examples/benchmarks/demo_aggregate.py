@@ -30,10 +30,10 @@ from robot_sf.render.helper_catalog import ensure_output_dir
 
 
 def _write_demo_matrix(path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write a minimal scenario matrix for aggregate demo.
 
     Args:
-        path: TODO docstring.
+        path: Output path for the YAML matrix file.
     """
     scenarios = [
         {

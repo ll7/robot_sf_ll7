@@ -18,7 +18,11 @@ import sys
 
 
 def test_logging_toggle_reduces_output():
-    """TODO docstring. Document this function."""
+    """Test that logging can be toggled to reduce output.
+
+    This test verifies that the logging toggle mechanism works correctly
+    by comparing output volume with logging enabled vs disabled.
+    """
     mod = importlib.import_module("examples.classic_interactions_pygame")
     # Force non-dry run
     original_dry = getattr(mod, "DRY_RUN", None)

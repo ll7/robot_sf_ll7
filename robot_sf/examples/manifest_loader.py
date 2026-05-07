@@ -40,7 +40,14 @@ class ExampleCategory:
     ci_default: bool = True
 
     def __post_init__(self) -> None:
-        """TODO docstring. Document this function."""
+        """Validate the example category configuration.
+
+        Ensures all category fields meet structural requirements:
+        - Slug is non-empty and has no path separators
+        - Slug has no leading/trailing whitespace
+        - Order is an integer
+        - ci_default is a boolean
+        """
         if not self.slug:
             raise ManifestValidationError("Category slug cannot be empty.")
         if "/" in self.slug or "\\" in self.slug:
@@ -76,7 +83,14 @@ class ExampleScript:
     tags: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        """TODO docstring. Document this function."""
+        """Validate the example category configuration.
+
+        Ensures all category fields meet structural requirements:
+        - Slug is non-empty and has no path separators
+        - Slug has no leading/trailing whitespace
+        - Order is an integer
+        - ci_default is a boolean
+        """
         normalized_path = PurePosixPath(str(self.path))
         if normalized_path.is_absolute():
             raise ManifestValidationError(
@@ -132,7 +146,14 @@ class ExampleManifest:
     _categories_by_slug: dict[str, ExampleCategory] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        """TODO docstring. Document this function."""
+        """Validate the example category configuration.
+
+        Ensures all category fields meet structural requirements:
+        - Slug is non-empty and has no path separators
+        - Slug has no leading/trailing whitespace
+        - Order is an integer
+        - ci_default is a boolean
+        """
         if not self.version:
             raise ManifestValidationError("Manifest version string cannot be empty.")
         if not self.manifest_path.is_file():
@@ -251,13 +272,16 @@ def load_manifest(
 
 
 def _resolve_manifest_path(manifest_path: str | Path | None) -> Path:
-    """TODO docstring. Document this function.
+    """Resolve the manifest path from user input or default location.
 
     Args:
-        manifest_path: TODO docstring.
+        manifest_path: Optional path string or Path object.
 
     Returns:
-        TODO docstring.
+        Resolved Path object to the manifest file.
+
+    Raises:
+        ManifestValidationError: If manifest file is not found.
     """
     if manifest_path is not None:
         path = Path(manifest_path).expanduser().resolve()
@@ -273,13 +297,16 @@ def _resolve_manifest_path(manifest_path: str | Path | None) -> Path:
 
 
 def _read_manifest_yaml(path: Path) -> Mapping[str, Any]:
-    """TODO docstring. Document this function.
+    """Read the manifest YAML file into a dictionary.
 
     Args:
-        path: TODO docstring.
+        path: Path to the manifest YAML file.
 
     Returns:
-        TODO docstring.
+        Parsed YAML data as a dictionary.
+
+    Raises:
+        ManifestValidationError: If the YAML is not a mapping.
     """
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
@@ -289,13 +316,16 @@ def _read_manifest_yaml(path: Path) -> Mapping[str, Any]:
 
 
 def _parse_categories(raw_categories: Any) -> dict[str, ExampleCategory]:
-    """TODO docstring. Document this function.
+    """Parse raw category data into a dict of ExampleCategory objects.
 
     Args:
-        raw_categories: TODO docstring.
+        raw_categories: Raw category data from YAML.
 
     Returns:
-        TODO docstring.
+        Dict mapping category slugs to ExampleCategory objects.
+
+    Raises:
+        ManifestValidationError: If any category fails validation.
     """
     if not isinstance(raw_categories, Sequence):
         raise ManifestValidationError("Manifest 'categories' must be a list.")
@@ -327,14 +357,17 @@ def _parse_examples(
     raw_examples: Any,
     categories: Mapping[str, ExampleCategory],
 ) -> tuple[ExampleScript, ...]:
-    """TODO docstring. Document this function.
+    """Parse raw example data into ExampleScript objects.
 
     Args:
-        raw_examples: TODO docstring.
-        categories: TODO docstring.
+        raw_examples: Raw example data from YAML.
+        categories: Mapping of category objects for reference.
 
     Returns:
-        TODO docstring.
+        Tuple of ExampleScript objects.
+
+    Raises:
+        ManifestValidationError: If any example fails validation.
     """
     if not isinstance(raw_examples, Sequence):
         raise ManifestValidationError("Manifest 'examples' must be a list.")
@@ -379,14 +412,17 @@ def _parse_examples(
 
 
 def _expect_string(value: Any, field_name: str) -> str:
-    """TODO docstring. Document this function.
+    """Validate that a field is a non-empty string.
 
     Args:
-        value: TODO docstring.
-        field_name: TODO docstring.
+        value: The field value to check.
+        field_name: Name of the field for error messages.
 
     Returns:
-        TODO docstring.
+        The string value if valid.
+
+    Raises:
+        ManifestValidationError: If the value is not a non-empty string.
     """
     if not isinstance(value, str) or not value:
         raise ManifestValidationError(f"Field '{field_name}' must be a non-empty string.")
@@ -394,14 +430,17 @@ def _expect_string(value: Any, field_name: str) -> str:
 
 
 def _expect_int(value: Any, field_name: str) -> int:
-    """TODO docstring. Document this function.
+    """Validate that a field is an integer.
 
     Args:
-        value: TODO docstring.
-        field_name: TODO docstring.
+        value: The field value to check.
+        field_name: Name of the field for error messages.
 
     Returns:
-        TODO docstring.
+        The integer value if valid.
+
+    Raises:
+        ManifestValidationError: If the value is not an integer.
     """
     if not isinstance(value, int):
         raise ManifestValidationError(f"Field '{field_name}' must be an integer.")
@@ -409,14 +448,17 @@ def _expect_int(value: Any, field_name: str) -> int:
 
 
 def _expect_bool(value: Any, field_name: str) -> bool:
-    """TODO docstring. Document this function.
+    """Validate that a field is a boolean.
 
     Args:
-        value: TODO docstring.
-        field_name: TODO docstring.
+        value: The field value to check.
+        field_name: Name of the field for error messages.
 
     Returns:
-        TODO docstring.
+        The boolean value if valid.
+
+    Raises:
+        ManifestValidationError: If the value is not a boolean.
     """
     if not isinstance(value, bool):
         raise ManifestValidationError(f"Field '{field_name}' must be a boolean.")
@@ -424,13 +466,13 @@ def _expect_bool(value: Any, field_name: str) -> bool:
 
 
 def _optional_string(value: Any) -> str | None:
-    """TODO docstring. Document this function.
+    """Validate that a field is an optional string.
 
     Args:
-        value: TODO docstring.
+        value: The field value to check.
 
     Returns:
-        TODO docstring.
+        The string value if provided, None otherwise.
     """
     if value is None:
         return None
@@ -441,14 +483,14 @@ def _optional_string(value: Any) -> str | None:
 
 
 def _optional_string_sequence(value: Any, field_name: str) -> tuple[str, ...]:
-    """TODO docstring. Document this function.
+    """Validate that a field is an optional string sequence.
 
     Args:
-        value: TODO docstring.
-        field_name: TODO docstring.
+        value: The field value to check.
+        field_name: Name of the field for error messages.
 
     Returns:
-        TODO docstring.
+        Tuple of strings if provided, empty tuple otherwise.
     """
     if value is None:
         return ()
@@ -460,15 +502,18 @@ def _validate_string_sequence(
     field_name: str,
     context: PurePosixPath | None = None,
 ) -> tuple[str, ...]:
-    """TODO docstring. Document this function.
+    """Validate that a field is a sequence of strings.
 
     Args:
-        value: TODO docstring.
-        field_name: TODO docstring.
-        context: TODO docstring.
+        value: The field value to check.
+        field_name: Name of the field for error messages.
+        context: Optional path context for error messages.
 
     Returns:
-        TODO docstring.
+        Tuple of strings if valid.
+
+    Raises:
+        ManifestValidationError: If the value is not a string sequence.
     """
     if isinstance(value, str):
         raise ManifestValidationError(

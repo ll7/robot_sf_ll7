@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for the test_forces module."""
 
 import numpy as np
 import pytest
@@ -11,18 +11,18 @@ from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
 
 @pytest.fixture()
 def generate_scene():
-    """TODO docstring. Document this function."""
+    """Test case for the force calculation functionality."""
     raw_states = np.zeros((5, 7))
     raw_states[:, :4] = np.array(
         [[1, 1, 1, 0], [1, 1.1, 0, 1], [3, 3, 1, 1], [3, 3.01, 1, 2], [3, 4, 3, 1]]
     )
 
     def populate(sim_config: SimulatorConfig, map_def: MapDefinition):
-        """TODO docstring. Document this function.
+        """Create pedestrian states and groupings for testing.
 
         Args:
-            sim_config: TODO docstring.
-            map_def: TODO docstring.
+            sim_config: Simulator configuration parameters.
+            map_def: Map definition with obstacles and routes.
         """
         states = PedestrianStates(raw_states)
         groupings = PedestrianGroupings(states, {})
@@ -34,7 +34,7 @@ def generate_scene():
 
 @pytest.fixture()
 def generate_scene_with_groups():
-    """TODO docstring. Document this function."""
+    """Test case for the force calculation functionality."""
     groups = {0: {1, 0}, 1: {3, 2}}
     raw_states = np.zeros((5, 7))
     raw_states[:, :4] = np.array(
@@ -42,11 +42,11 @@ def generate_scene_with_groups():
     )
 
     def populate(sim_config: SimulatorConfig, map_def: MapDefinition):
-        """TODO docstring. Document this function.
+        """Create pedestrian states and groupings for testing.
 
         Args:
-            sim_config: TODO docstring.
-            map_def: TODO docstring.
+            sim_config: Simulator configuration parameters.
+            map_def: Map definition with obstacles and routes.
         """
         states = PedestrianStates(raw_states)
         groupings = PedestrianGroupings(states, groups)
@@ -57,10 +57,12 @@ def generate_scene_with_groups():
 
 
 def test_desired_force(generate_scene: Simulator):
-    """TODO docstring. Document this function.
+    """Test desired force computation.
+
+    Verifies force calculations against known expected values.
 
     Args:
-        generate_scene: TODO docstring.
+        generate_scene: Fixture that creates a test scene.
     """
     scene = generate_scene
     config = scene.config
@@ -80,10 +82,12 @@ def test_desired_force(generate_scene: Simulator):
 
 
 def test_social_force(generate_scene: Simulator):
-    """TODO docstring. Document this function.
+    """Test social force computation.
+
+    Verifies force calculations against known expected values.
 
     Args:
-        generate_scene: TODO docstring.
+        generate_scene: Fixture that creates a test scene.
     """
     scene = generate_scene
     config = scene.config
@@ -103,10 +107,12 @@ def test_social_force(generate_scene: Simulator):
 
 
 def test_group_rep_force(generate_scene_with_groups: Simulator):
-    """TODO docstring. Document this function.
+    """Test group repulsive force computation.
+
+    Verifies force calculations against known expected values.
 
     Args:
-        generate_scene_with_groups: TODO docstring.
+        generate_scene_with_groups: Fixture that creates a test scene with groups.
     """
     scene = generate_scene_with_groups
     print(scene)

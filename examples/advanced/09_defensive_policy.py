@@ -50,10 +50,10 @@ def run_simulation() -> None:
     model = load_trained_policy(str(model_path))
 
     def obs_adapter(orig_obs):
-        """TODO docstring. Document this function.
+        """Adapt observations for the defensive policy.
 
         Args:
-            orig_obs: TODO docstring.
+            orig_obs: Original observation dictionary from the environment.
         """
         drive_state = orig_obs[OBS_DRIVE_STATE]
         ray_state = orig_obs[OBS_RAYS]
@@ -77,7 +77,11 @@ def run_simulation() -> None:
 
 
 def prepare_gym_spaces():
-    """TODO docstring. Document this function."""
+    """Prepare Gymnasium observation and action spaces for the defensive policy.
+
+    Returns:
+        Tuple of (observation_space, action_space) as Box spaces.
+    """
     obs_low = np.array(
         [
             0.0,

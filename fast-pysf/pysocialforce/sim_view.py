@@ -43,14 +43,14 @@ class VisualizableSimState:
 
 
 def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimState:
-    """TODO docstring. Document this function.
+    """Convert simulator state to visualizable format.
 
     Args:
-        step: TODO docstring.
-        sim_state: TODO docstring.
+        step: Current simulation timestep.
+        sim_state: Simulation state tuple (pedestrian state, groups).
 
     Returns:
-        TODO docstring.
+        VisualizableSimState: Formatted state for rendering.
     """
     state, _groups = sim_state
     ped_pos = np.array(state[:, 0:2])
@@ -97,16 +97,17 @@ class SimulationView:
 
     @property
     def timestep_text_pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
-
+        """Get position for timestep text display.
 
         Returns:
-            TODO docstring.
+            Vec2D: (x, y) position coordinates.
         """
         return (16, 16)
 
     def __post_init__(self):
-        """TODO docstring. Document this function."""
+        """Initialize the simulation view after dataclass field processing.
+
+        Sets up Pygame display, creates font, and processes obstacles."""
         pygame.init()
         pygame.font.init()
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
@@ -117,11 +118,10 @@ class SimulationView:
 
     def preprocess_obstacles(self) -> pygame.Surface:
         # Scale the vertices of the obstacles
-        """TODO docstring. Document this function.
-
+        """Preprocess obstacles into a Pygame surface for efficient rendering.
 
         Returns:
-            TODO docstring.
+            pygame.Surface: Surface containing rendered obstacles.
         """
         obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]
 
@@ -169,11 +169,11 @@ class SimulationView:
         self.ui_events_thread.start()
 
         def handle_sigint(signum, frame):
-            """TODO docstring. Document this function.
+            """Handle SIGINT signal for graceful exit.
 
             Args:
-                signum: TODO docstring.
-                frame: TODO docstring.
+                signum: Signal number.
+                frame: Current stack frame.
             """
             self.is_exit_requested = True
             self.is_abortion_requested = True
@@ -181,7 +181,7 @@ class SimulationView:
         signal(SIGINT, handle_sigint)
 
     def exit(self):
-        """TODO docstring. Document this function."""
+        """Exit the simulation view and join UI thread."""
         self.is_exit_requested = True
         self.ui_events_thread.join()
 
@@ -279,29 +279,29 @@ class SimulationView:
         pygame.display.update()
 
     def _resize_window(self):
-        """TODO docstring. Document this function."""
+        """Resize the simulation window."""
         old_surface = self.screen
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
     def _scale_pedestrian_state(self, state: VisualizableSimState) -> VisualizableSimState:
-        """TODO docstring. Document this function.
+        """Scale pedestrian state to screen coordinates.
 
         Args:
-            state: TODO docstring.
+            state: Input visualizable state.
 
         Returns:
-            TODO docstring.
+            VisualizableSimState: State with scaled coordinates.
         """
         state.pedestrian_positions *= self.scaling
         state.ped_actions *= self.scaling
         return state
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
-        """TODO docstring. Document this function.
+        """Draw pedestrians as circles on the screen.
 
         Args:
-            ped_pos: TODO docstring.
+            ped_pos: Array of pedestrian positions.
         """
         for ped_x, ped_y in ped_pos:
             pygame.draw.circle(
@@ -313,7 +313,7 @@ class SimulationView:
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
-        """TODO docstring. Document this function."""
+        """Draw obstacles as polygons on the screen."""
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [
@@ -353,10 +353,10 @@ class SimulationView:
             )
 
     def _add_text(self, timestep: int):
-        """TODO docstring. Document this function.
+        """Add timestep and view parameters as text overlay.
 
         Args:
-            timestep: TODO docstring.
+            timestep: Current simulation timestep.
         """
         text_lines = [
             f"step: {timestep}",

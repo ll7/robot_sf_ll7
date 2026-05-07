@@ -34,16 +34,16 @@ class _NvmlHandle:
     """Lazy NVML initializer so callers do not pay the cost unless needed."""
 
     def __init__(self) -> None:
-        """TODO docstring. Document this function."""
+        """Initialize the NVML handle in lazy mode (no initialization performed)."""
         self._initialized = False
         self._failed_reason: str | None = _NVML_ERROR
 
     def ensure_initialized(self) -> bool:
-        """TODO docstring. Document this function.
+        """Ensure NVML is initialized, performing one-time setup if needed.
 
 
         Returns:
-            TODO docstring.
+            True if NVML is successfully initialized, False otherwise.
         """
         if pynvml is None:
             return False
@@ -58,7 +58,7 @@ class _NvmlHandle:
         return True
 
     def shutdown(self) -> None:
-        """TODO docstring. Document this function."""
+        """Initialize the NVML handle in lazy mode (no initialization performed)."""
         if not self._initialized or pynvml is None:
             return
         with contextlib.suppress(Exception):  # pragma: no cover - teardown best-effort only
@@ -67,11 +67,11 @@ class _NvmlHandle:
 
     @property
     def failed_reason(self) -> str | None:
-        """TODO docstring. Document this function.
+        """Ensure NVML is initialized, performing one-time setup if needed.
 
 
         Returns:
-            TODO docstring.
+            True if NVML is successfully initialized, False otherwise.
         """
         return self._failed_reason
 
@@ -138,14 +138,14 @@ def with_gpu_support(func: Callable[..., Any]) -> Callable[..., Any]:
     """
 
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        """TODO docstring. Document this function.
+        """Wrapper that checks GPU availability before executing the wrapped function.
 
         Args:
-            args: TODO docstring.
-            kwargs: TODO docstring.
+            args: Positional arguments passed to the wrapped function.
+            kwargs: Keyword arguments passed to the wrapped function.
 
         Returns:
-            TODO docstring.
+            None if GPU telemetry is unavailable, otherwise the result of the wrapped function.
         """
         if gpu_support_reason() is not None:
             return None

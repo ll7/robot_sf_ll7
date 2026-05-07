@@ -38,7 +38,7 @@ def _get_pyplot():
 
 @dataclass
 class EvalHistory:
-    """TODO docstring. Document this class."""
+    """Evaluation history for a single training run."""
 
     timesteps: list[float]
     mean_rewards: list[float]
@@ -150,13 +150,13 @@ def generate_figures(
 
 
 def summarize_metric(values: Iterable[float]) -> dict[str, float]:
-    """TODO docstring. Document this function.
+    """Compute summary statistics for a list of values.
 
     Args:
-        values: TODO docstring.
+        values: Iterable of numeric values
 
     Returns:
-        TODO docstring.
+        Dictionary with mean, median, and count
     """
     items = [v for v in values if math.isfinite(v)]
     if not items:

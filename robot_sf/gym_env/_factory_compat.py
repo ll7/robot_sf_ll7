@@ -28,7 +28,7 @@ LEGACY_PERMISSIVE_ENV = "ROBOT_SF_FACTORY_LEGACY"
 
 @dataclass(frozen=True)
 class DeprecationEntry:
-    """TODO docstring. Document this class."""
+    """Configuration wrapper for backward-compatible factory usage."""
 
     legacy: str
     new: str | None  # None means removed with no replacement (ignored permissively)

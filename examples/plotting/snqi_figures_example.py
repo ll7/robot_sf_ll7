@@ -28,14 +28,14 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def _ensure_file(path: Path, content: str) -> Path:
-    """TODO docstring. Document this function.
+    """Ensure a file exists at the resolved artifact path.
 
     Args:
-        path: TODO docstring.
-        content: TODO docstring.
+        path: Relative path under artifact root.
+        content: Text content to write if file doesn't exist.
 
     Returns:
-        TODO docstring.
+        Resolved absolute path to the file.
     """
     resolved = resolve_artifact_path(path)
     resolved.parent.mkdir(parents=True, exist_ok=True)
@@ -45,11 +45,10 @@ def _ensure_file(path: Path, content: str) -> Path:
 
 
 def main() -> int:
-    """TODO docstring. Document this function.
-
+    """Run the SNQI figures generation pipeline.
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success).
     """
     ap = argparse.ArgumentParser(description="SNQI figures example runner")
     ap.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL path")

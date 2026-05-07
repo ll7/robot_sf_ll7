@@ -40,11 +40,10 @@ class HardwareProfile:
     cuda_version: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
-
+        """Convert hardware profile to dictionary for serialization.
 
         Returns:
-            TODO docstring.
+            Dictionary representation of hardware profile
         """
         payload = {
             "platform": self.platform,
@@ -76,11 +75,10 @@ class ExtractorRunRecord:
     reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
-
+        """Convert hardware profile to dictionary for serialization.
 
         Returns:
-            TODO docstring.
+            Dictionary representation of hardware profile
         """
         payload = {
             "config_name": self.config_name,
@@ -112,11 +110,10 @@ class TrainingRunSummary:
     notes: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
-
+        """Convert hardware profile to dictionary for serialization.
 
         Returns:
-            TODO docstring.
+            Dictionary representation of hardware profile
         """
         payload = {
             "run_id": self.run_id,

@@ -14,10 +14,10 @@ from robot_sf.research.aggregation import bootstrap_ci
 
 
 def _get_pyplot():
-    """TODO docstring. Document this function.
+    """Import and return matplotlib.pyplot module.
 
     Returns:
-        matplotlib.pyplot module.
+        matplotlib.pyplot module for figure generation.
     """
     return importlib.import_module("matplotlib.pyplot")
 

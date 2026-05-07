@@ -169,14 +169,14 @@ class BaseEnv(Env):
             )
 
     def render(self):
-        """TODO docstring. Document this function."""
+        """Close the environment and release resources."""
         raise NotImplementedError
 
     def step(self, action):
-        """TODO docstring. Document this function.
+        """Step the environment forward.
 
         Args:
-            action: TODO docstring.
+            action: Action to apply (type depends on action space)
         """
         raise NotImplementedError
 

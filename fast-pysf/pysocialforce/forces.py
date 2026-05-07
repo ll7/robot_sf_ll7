@@ -1,4 +1,15 @@
-"""Calculate forces for individuals and groups"""
+"""Force computation module for pedestrian simulation.
+
+This module implements the various forces that act on pedestrians in the
+simulation including:
+
+- DesiredForce: Force pulling pedestrians toward their goals
+- SocialForce: Interaction between pedestrians
+- ObstacleForce: Repulsion from obstacles
+- GroupCoherenceForceAlt: Alternative group coherence model
+- GroupRepulsiveForce: Repulsion between group members
+- GroupGazeForceAlt: Alternative group gaze model
+"""
 
 import logging
 import re
@@ -26,33 +37,30 @@ Force = Callable[[], np.ndarray]
 
 
 class SimEntitiesProvider(Protocol):
-    """Not implemented!!!"""
+    """Protocol for providing simulation entities (obstacles and pedestrians)."""
 
     def get_obstacles(self) -> list[np.ndarray]:
-        """TODO docstring. Document this function.
-
+        """Get obstacles as list of obstacle arrays.
 
         Returns:
-            TODO docstring.
+            List of obstacle arrays, each representing one obstacle.
         """
         raise NotImplementedError()
 
     def get_raw_obstacles(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
+        """Get obstacles in raw format.
 
         Returns:
-            TODO docstring.
+            Raw obstacles array in format expected by force computation.
         """
         raise NotImplementedError()
 
     @property
     def peds(self) -> PedState:
-        """TODO docstring. Document this function.
-
+        """Get pedestrian state.
 
         Returns:
-            TODO docstring.
+            Pedestrian state array containing positions, velocities, and goals.
         """
         raise NotImplementedError()
 
@@ -61,10 +69,10 @@ class DebuggableForce:
     """A wrapper class that adds debugging functionality to a given force."""
 
     def __init__(self, force: Force):
-        """TODO docstring. Document this function.
+        """Initialize the DebuggableForce wrapper.
 
         Args:
-            force: TODO docstring.
+            force: The force to wrap with debugging functionality.
         """
         self.force = force
 

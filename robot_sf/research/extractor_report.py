@@ -26,22 +26,22 @@ configure_matplotlib_backend()
 
 
 def _get_pyplot():
-    """TODO docstring. Document this function.
+    """Import and return matplotlib.pyplot module.
 
     Returns:
-        matplotlib.pyplot module.
+        matplotlib.pyplot module for figure generation.
     """
     return importlib.import_module("matplotlib.pyplot")
 
 
 def _latex_escape(text: str) -> str:
-    """TODO docstring. Document this function.
+    """Escape special characters for LaTeX compatibility.
 
     Args:
-        text: TODO docstring.
+        text: Input string containing potential LaTeX special chars
 
     Returns:
-        TODO docstring.
+        String with LaTeX special characters escaped
     """
     return (
         text.replace("&", r"\&")
@@ -56,7 +56,7 @@ def _latex_escape(text: str) -> str:
 
 @dataclass
 class ReportConfig:
-    """TODO docstring. Document this class."""
+    """Configuration for generating research reports."""
 
     experiment_name: str
     hypothesis: str | None
@@ -66,23 +66,25 @@ class ReportConfig:
 
 
 def _timestamp() -> str:
-    """TODO docstring. Document this function.
-
+    """Generate a timestamp for report output filenames.
 
     Returns:
-        TODO docstring.
+        Current UTC timestamp in YYYYMMDD-HHMMSS format.
     """
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def _load_summary(path: Path) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Load a summary.json file from disk.
 
     Args:
-        path: TODO docstring.
+        path: Path to the summary.json file
 
     Returns:
-        TODO docstring.
+        Parsed JSON as dictionary
+
+    Raises:
+        ValueError: If file content is not a dict
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -91,14 +93,14 @@ def _load_summary(path: Path) -> dict[str, Any]:
 
 
 def _maybe_copy_config(config_path: Path | None, target_dir: Path) -> Path | None:
-    """TODO docstring. Document this function.
+    """Copy config file to target directory if it exists.
 
     Args:
-        config_path: TODO docstring.
-        target_dir: TODO docstring.
+        config_path: Path to source config file (None allowed)
+        target_dir: Directory to copy config to
 
     Returns:
-        TODO docstring.
+        Path to copied file, or None if source doesn't exist
     """
     if config_path is None or not config_path.exists():
         return None
@@ -109,11 +111,10 @@ def _maybe_copy_config(config_path: Path | None, target_dir: Path) -> Path | Non
 
 
 def _git_hash() -> str:
-    """TODO docstring. Document this function.
-
+    """Get current git commit hash.
 
     Returns:
-        TODO docstring.
+        Short git hash, or 'unknown' if git not available
     """
     try:
         return (
@@ -132,14 +133,14 @@ def _git_hash() -> str:
 
 
 def _extract_metric(records: list[dict[str, Any]], key: str) -> list[float]:
-    """TODO docstring. Document this function.
+    """Extract a metric value from records.
 
     Args:
-        records: TODO docstring.
-        key: TODO docstring.
+        records: List of record dictionaries containing metrics
+        key: Metric key to extract
 
     Returns:
-        TODO docstring.
+        List of metric values as floats
     """
     vals: list[float] = []
     for rec in records:
@@ -151,14 +152,14 @@ def _extract_metric(records: list[dict[str, Any]], key: str) -> list[float]:
 
 
 def _generate_figures(records: list[dict[str, Any]], figures_dir: Path) -> dict[str, Path]:
-    """TODO docstring. Document this function.
+    """Generate figure files from records.
 
     Args:
-        records: TODO docstring.
-        figures_dir: TODO docstring.
+        records: List of records with metric data
+        figures_dir: Directory to write figure files to
 
     Returns:
-        TODO docstring.
+        Dictionary mapping figure names to file paths
     """
     plt = _get_pyplot()
 
@@ -166,13 +167,13 @@ def _generate_figures(records: list[dict[str, Any]], figures_dir: Path) -> dict[
     paths: dict[str, Path] = {}
 
     def _collect_named_metric(metric_key: str) -> list[tuple[str, float]]:
-        """TODO docstring. Document this function.
+        """Collect a metric from all records with config names.
 
         Args:
-            metric_key: TODO docstring.
+            metric_key: Metric key to extract
 
         Returns:
-            TODO docstring.
+            List of (config_name, metric_value) tuples
         """
         aligned: list[tuple[str, float]] = []
         for idx, rec in enumerate(records):
@@ -222,29 +223,29 @@ def _render_markdown(
     figures: dict[str, Path],
     metadata_path: Path,
 ) -> str:
-    """TODO docstring. Document this function.
+    """Render a Markdown report from summary data.
 
     Args:
-        summary: TODO docstring.
-        config: TODO docstring.
-        stats: TODO docstring.
-        figures: TODO docstring.
-        metadata_path: TODO docstring.
+        summary: Summary data dictionary
+        config: Report configuration
+        stats: Statistical analysis results
+        figures: Dictionary of figure paths
+        metadata_path: Path to metadata file
 
     Returns:
-        TODO docstring.
+        Markdown-formatted report string
     """
     run_id = summary.get("run_id", "unknown")
     output_dir = metadata_path.parent
 
     def _fmt_stat(value: float | None) -> str:
-        """TODO docstring. Document this function.
+        """Format a statistic value for display.
 
         Args:
-            value: TODO docstring.
+            value: Numeric value or None
 
         Returns:
-            TODO docstring.
+            Formatted string with 4 decimal places, or 'n/a' for None
         """
         return "n/a" if value is None else f"{value:.4f}"
 
@@ -305,25 +306,25 @@ def _render_latex(
     metadata_path: Path,
     output_path: Path,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Render a LaTeX report from summary data.
 
     Args:
-        summary: TODO docstring.
-        config: TODO docstring.
-        stats: TODO docstring.
-        figures: TODO docstring.
-        metadata_path: TODO docstring.
-        output_path: TODO docstring.
+        summary: Summary data dictionary
+        config: Report configuration
+        stats: Statistical analysis results
+        figures: Dictionary of figure paths
+        metadata_path: Path to metadata file
+        output_path: Output path for .tex file
     """
 
     def _fmt_stat(value: float | None) -> str:
-        """TODO docstring. Document this function.
+        """Format a statistic value for display.
 
         Args:
-            value: TODO docstring.
+            value: Numeric value or None
 
         Returns:
-            TODO docstring.
+            Formatted string with 4 decimal places, or 'n/a' for None
         """
         return "n/a" if value is None else f"{value:.4f}"
 
@@ -394,14 +395,14 @@ def _stats_against_baseline(
     baseline_vals: list[float],
     candidate_vals: list[float],
 ) -> tuple[float | None, float | None]:
-    """TODO docstring. Document this function.
+    """Compute statistical comparison against baseline.
 
     Args:
-        baseline_vals: TODO docstring.
-        candidate_vals: TODO docstring.
+        baseline_vals: Baseline metric values
+        candidate_vals: Candidate metric values
 
     Returns:
-        TODO docstring.
+        Tuple of (p_value, effect_size) or (None, None) if not available
     """
     test_result = welch_t_test(baseline_vals, candidate_vals)
     effect = cohen_d_independent(baseline_vals, candidate_vals)
@@ -415,16 +416,16 @@ def generate_extractor_report(
     config: ReportConfig,
     config_path: Path | None = None,
 ) -> dict[str, Path | None]:
-    """TODO docstring. Document this function.
+    """Generate a research report from extractor summary data.
 
     Args:
-        summary_path: TODO docstring.
-        output_root: TODO docstring.
-        config: TODO docstring.
-        config_path: TODO docstring.
+        summary_path: Path to summary.json file
+        output_root: Root directory for report output
+        config: Report configuration
+        config_path: Optional path to config file to include
 
     Returns:
-        TODO docstring.
+        Dictionary with output file paths
     """
     summary = _load_summary(summary_path)
     run_id = summary.get("run_id", "unknown")

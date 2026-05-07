@@ -29,7 +29,8 @@ from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
 def make_demo_sim():
-    """TODO docstring. Document this function."""
+    """Create a demonstration simulation with synthetic pedestrians and obstacles."""
+
     state = np.array(
         [
             [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
@@ -45,7 +46,7 @@ def make_demo_sim():
 
 def main():
     # LaTeX-friendly export settings (see docs/dev_guide.md)
-    """TODO docstring. Document this function."""
+    """Run force field demo and export to PNG/PDF files."""
     plt.rcParams.update(
         {
             "savefig.bbox": "tight",

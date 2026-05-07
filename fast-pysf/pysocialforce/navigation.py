@@ -1,4 +1,8 @@
-"""TODO docstring. Document this module."""
+"""Route navigation functionality for pedestrian simulation.
+
+This module provides the RouteNavigator class for navigating pedestrians
+along defined routes with waypoint tracking and destination detection.
+"""
 
 from dataclasses import dataclass, field
 from math import atan2, dist

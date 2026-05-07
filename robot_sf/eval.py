@@ -13,7 +13,7 @@ from statistics import mean
 
 
 class EnvOutcome(IntEnum):
-    """TODO docstring. Document this class."""
+    """Environment outcome states for episode termination conditions."""
 
     REACHED_GOAL = 0
     TIMEOUT = 1
@@ -26,7 +26,7 @@ class EnvOutcome(IntEnum):
 
 @dataclass
 class EnvMetrics:
-    """TODO docstring. Document this class."""
+    """auto-generated docstring replacement Document this class."""
 
     route_outcomes: list[EnvOutcome] = field(default_factory=list)
     intermediate_goal_outcomes: list[EnvOutcome] = field(default_factory=list)
@@ -34,91 +34,100 @@ class EnvMetrics:
 
     @property
     def total_routes(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of routes in the current cache.
 
+        Includes both completed and incomplete routes that haven't been evicted.
 
         Returns:
-            TODO docstring.
+            int: Number of route outcomes currently cached.
         """
         return max(len(self.route_outcomes), 1)
 
     @property
     def total_intermediate_goals(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of intermediate goals in the current cache.
 
+        Includes both reached and incomplete intermediate goals that haven't been evicted.
 
         Returns:
-            TODO docstring.
+            int: Number of intermediate goal outcomes currently cached.
         """
         return max(len(self.intermediate_goal_outcomes), 1)
 
     @property
     def pedestrian_collisions(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of pedestrian collision outcomes in the cache.
 
+        Counts outcomes where EnvOutcome.PEDESTRIAN_COLLISION occurred.
 
         Returns:
-            TODO docstring.
+            int: Number of pedestrian collision outcomes.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.PEDESTRIAN_COLLISION])
 
     @property
     def obstacle_collisions(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of obstacle collision outcomes in the cache.
 
+        Counts outcomes where EnvOutcome.OBSTACLE_COLLISION occurred.
 
         Returns:
-            TODO docstring.
+            int: Number of obstacle collision outcomes.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.OBSTACLE_COLLISION])
 
     @property
     def exceeded_timesteps(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of timeout outcomes in the cache.
 
+        Counts outcomes where EnvOutcome.TIMEOUT occurred.
 
         Returns:
-            TODO docstring.
+            int: Number of timeout outcomes.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.TIMEOUT])
 
     @property
     def completed_routes(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of successfully completed routes.
 
+        Counts outcomes where EnvOutcome.REACHED_GOAL occurred.
 
         Returns:
-            TODO docstring.
+            int: Number of completed routes.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
 
     @property
     def reached_intermediate_goals(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of reached intermediate goals.
 
+        Counts intermediate goal outcomes where EnvOutcome.REACHED_GOAL occurred.
 
         Returns:
-            TODO docstring.
+            int: Number of reached intermediate goals.
         """
         return len([o for o in self.intermediate_goal_outcomes if o == EnvOutcome.REACHED_GOAL])
 
     @property
     def route_completion_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """Fraction of routes that completed successfully.
 
+        Computed as completed_routes / total_routes.
 
         Returns:
-            TODO docstring.
+            float: Route completion rate in [0, 1].
         """
         return self.completed_routes / self.total_routes
 
     @property
     def interm_goal_completion_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """Fraction of intermediate goals that were reached.
 
+        Computed as reached_intermediate_goals / total_intermediate_goals.
 
         Returns:
-            TODO docstring.
+            float: Intermediate goal completion rate in [0, 1].
         """
         return self.reached_intermediate_goals / self.total_intermediate_goals
 
@@ -150,10 +159,10 @@ class EnvMetrics:
         return self.pedestrian_collisions / self.total_routes
 
     def update(self, meta: dict):
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
         Args:
-            meta: TODO docstring.
+            meta: auto-generated docstring replacement
         """
         is_end_of_interm_goal = (
             meta["is_pedestrian_collision"]
@@ -174,10 +183,13 @@ class EnvMetrics:
             self._on_next_route_outcome(meta)
 
     def _on_next_intermediate_outcome(self, meta: dict):
-        """TODO docstring. Document this function.
+        """Process and record a single intermediate goal outcome.
+
+        Determines the specific outcome type and updates the intermediate goal
+        cache, evicting oldest entries when cache_size is exceeded.
 
         Args:
-            meta: TODO docstring.
+            meta: Dictionary with environment metadata.
         """
         if meta["is_pedestrian_collision"]:
             outcome = EnvOutcome.PEDESTRIAN_COLLISION
@@ -195,10 +207,13 @@ class EnvMetrics:
         self.intermediate_goal_outcomes.append(outcome)
 
     def _on_next_route_outcome(self, meta: dict):
-        """TODO docstring. Document this function.
+        """Process and record a single route outcome.
+
+        Determines the specific outcome type and updates the route cache,
+        evicting oldest entries when cache_size is exceeded.
 
         Args:
-            meta: TODO docstring.
+            meta: Dictionary with environment metadata.
         """
         if meta["is_pedestrian_collision"]:
             outcome = EnvOutcome.PEDESTRIAN_COLLISION
@@ -218,65 +233,67 @@ class EnvMetrics:
 
 @dataclass
 class VecEnvMetrics:
-    """TODO docstring. Document this class."""
+    """auto-generated docstring replacement Document this class."""
 
     metrics: list[EnvMetrics]
 
     @property
     def route_completion_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """Fraction of routes that completed successfully.
 
+        Computed as completed_routes / total_routes.
 
         Returns:
-            TODO docstring.
+            float: Route completion rate in [0, 1].
         """
         return sum(m.route_completion_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def interm_goal_completion_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """Fraction of intermediate goals that were reached.
 
+        Computed as reached_intermediate_goals / total_intermediate_goals.
 
         Returns:
-            TODO docstring.
+            float: Intermediate goal completion rate in [0, 1].
         """
         return sum(m.interm_goal_completion_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def timeout_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.timeout_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def obstacle_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def pedestrian_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
     def update(self, metas: list[dict]):
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
         Args:
-            metas: TODO docstring.
+            metas: auto-generated docstring replacement
         """
         for metric, meta in zip(self.metrics, metas, strict=False):
             metric.update(meta)
@@ -284,7 +301,7 @@ class VecEnvMetrics:
 
 @dataclass
 class PedEnvMetrics:
-    """TODO docstring. Document this class."""
+    """auto-generated docstring replacement Document this class."""
 
     route_outcomes: deque[EnvOutcome] = field(default_factory=lambda: deque(maxlen=10))
     avg_distance: deque[float] = field(default_factory=lambda: deque(maxlen=10))
@@ -328,111 +345,115 @@ class PedEnvMetrics:
 
     @property
     def total_routes(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of routes in the current cache.
 
+        Includes both completed and incomplete routes that haven't been evicted.
 
         Returns:
-            TODO docstring.
+            int: Number of route outcomes currently cached.
         """
         return max(len(self.route_outcomes), 1)
 
     @property
     def pedestrian_collisions(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of pedestrian collision outcomes in the cache.
 
+        Counts outcomes where EnvOutcome.PEDESTRIAN_COLLISION occurred.
 
         Returns:
-            TODO docstring.
+            int: Number of pedestrian collision outcomes.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.PEDESTRIAN_COLLISION])
 
     @property
     def obstacle_collisions(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of obstacle collision outcomes in the cache.
 
+        Counts outcomes where EnvOutcome.OBSTACLE_COLLISION occurred.
 
         Returns:
-            TODO docstring.
+            int: Number of obstacle collision outcomes.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.OBSTACLE_COLLISION])
 
     @property
     def exceeded_timesteps(self) -> int:
-        """TODO docstring. Document this function.
+        """Count of timeout outcomes in the cache.
 
+        Counts outcomes where EnvOutcome.TIMEOUT occurred.
 
         Returns:
-            TODO docstring.
+            int: Number of timeout outcomes.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.TIMEOUT])
 
     @property
     def robot_collisions(self) -> int:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_COLLISION])
 
     @property
     def robot_at_goal(self) -> int:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
 
     @property
     def robot_obstacle_collisions(self) -> int:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_OBSTACLE_COLLISION])
 
     @property
     def robot_pedestrian_collisions(self) -> int:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION])
 
     @property
     def timeout_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return self.exceeded_timesteps / self.total_routes
 
     @property
     def obstacle_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return self.obstacle_collisions / self.total_routes
 
     @property
     def pedestrian_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return self.pedestrian_collisions / self.total_routes
 
@@ -482,10 +503,10 @@ class PedEnvMetrics:
         return mean(self.avg_distance) if self.avg_distance else 0.0
 
     def update(self, meta: dict):
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
         Args:
-            meta: TODO docstring.
+            meta: auto-generated docstring replacement
         """
         self.route_distances.append(meta["distance_to_robot"])
         self._last_ego_ped_speed = float(meta.get("ego_ped_speed", 0.0))
@@ -566,87 +587,87 @@ class PedEnvMetrics:
 
 @dataclass
 class PedVecEnvMetrics:
-    """TODO docstring. Document this class."""
+    """auto-generated docstring replacement Document this class."""
 
     metrics: list[PedEnvMetrics]
 
     @property
     def timeout_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.timeout_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def obstacle_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def pedestrian_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def robot_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.robot_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def robot_at_goal_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.robot_at_goal_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def robot_obstacle_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.robot_obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def robot_pedestrian_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.robot_pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def route_end_distance(self) -> float:
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
 
         Returns:
-            TODO docstring.
+            auto-generated docstring replacement
         """
         return sum(m.route_end_distance for m in self.metrics) / len(self.metrics)
 
@@ -681,10 +702,10 @@ class PedVecEnvMetrics:
         return self.avg_collision_impact_angle_rad_at_collision
 
     def update(self, metas: list[dict]):
-        """TODO docstring. Document this function.
+        """auto-generated docstring replacement Document this function.
 
         Args:
-            metas: TODO docstring.
+            metas: auto-generated docstring replacement
         """
         for metric, meta in zip(self.metrics, metas, strict=False):
             metric.update(meta)

@@ -59,7 +59,7 @@ class DifferentialDriveSettings:
 
 @dataclass
 class DifferentialDriveState:
-    """TODO docstring. Document this class."""
+    """Differential drive model for wheeled vehicles."""
 
     pose: RobotPose = ((0.0, 0.0), 0.0)
     velocity: PolarVec2D = (0.0, 0.0)

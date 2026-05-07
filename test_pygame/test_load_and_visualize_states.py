@@ -1,5 +1,8 @@
 """
-load a recording and play it back
+Load and visualize recorded simulation states.
+
+This module provides a test function to load previously recorded simulation
+states and visualize them using the playback system.
 """
 
 import loguru
@@ -10,7 +13,11 @@ logger = loguru.logger
 
 
 def test_load_and_visualize_states():
-    """TODO docstring. Document this function."""
+    """Load and visualize a recorded simulation file.
+
+    Loads a pickle file containing simulation states and visualizes the
+    playback using the RobotSF rendering system.
+    """
     logger.info("Testing load and visualize states")
     test_file = "test_pygame/recordings/2024-06-04_08-39-59.pkl"
 

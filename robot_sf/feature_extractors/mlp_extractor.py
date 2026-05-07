@@ -43,13 +43,13 @@ class MLPFeatureExtractor(BaseFeaturesExtractor):
         drive_hidden_dims: list[int] | None = None,
         dropout_rate: float = 0.1,
     ):
-        """TODO docstring. Document this function.
+        """Initialize MLP feature extractor.
 
         Args:
-            observation_space: TODO docstring.
-            ray_hidden_dims: TODO docstring.
-            drive_hidden_dims: TODO docstring.
-            dropout_rate: TODO docstring.
+            observation_space: Environment observation space
+            ray_hidden_dims: Hidden layer sizes for ray processing
+            drive_hidden_dims: Hidden layer sizes for drive state
+            dropout_rate: Dropout rate between layers
         """
         if ray_hidden_dims is None:
             ray_hidden_dims = [128, 64]

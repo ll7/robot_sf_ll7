@@ -36,7 +36,11 @@ class TensorBoardAdapter:
     tag_prefix: str = "telemetry"
 
     def __post_init__(self) -> None:
-        """TODO docstring. Document this function."""
+        """Initialize the TensorBoard adapter after dataclass field setup.
+
+        Sets up the log directory and prepares the SummaryWriter class
+        for creating TensorBoard event files.
+        """
         self.log_dir = Path(self.log_dir)
         self._writer_cls = _SummaryWriter
         self._writer: _SummaryWriter | None = None

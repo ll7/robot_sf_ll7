@@ -33,7 +33,7 @@ from robot_sf.sim.simulator import PedSimulator, Simulator
 
 
 class AgentType(Enum):
-    """TODO docstring. Document this class."""
+    """Environment state wrapper for convenient access to simulator data."""
 
     ROBOT = 1
     PEDESTRIAN = 2

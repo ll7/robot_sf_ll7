@@ -1,4 +1,9 @@
-"""TODO docstring. Document this module."""
+"""SVG to JSON map converter for RobotSF simulator.
+
+This module provides functionality to convert SVG maps from OpenStreetMap
+to JSON format that can be imported into the RobotSF simulator. It extracts
+polygon data from SVG files and converts them to obstacle representations.
+"""
 
 import json
 import os
@@ -20,26 +25,26 @@ your own use case."""
 
 
 def paths_of_svg(svg: SVG) -> list[Path]:
-    """TODO docstring. Document this function.
+    """Extract all path elements from an SVG document.
 
     Args:
-        svg: TODO docstring.
+        svg: The SVG document to extract paths from.
 
     Returns:
-        TODO docstring.
+        A list of Path elements from the SVG.
     """
     return [e for e in svg.elements() if isinstance(e, Path)]
 
 
 def filter_paths_by_color(paths: list[Path], color: RgbColor) -> list[Path]:
-    """TODO docstring. Document this function.
+    """Filter paths by a specific RGB color.
 
     Args:
-        paths: TODO docstring.
-        color: TODO docstring.
+        paths: List of Path elements to filter.
+        color: RGB color tuple (red, green, blue) to match.
 
     Returns:
-        TODO docstring.
+        A list of paths that have the specified fill color.
     """
     red, green, blue = color
     paths = [
@@ -49,13 +54,14 @@ def filter_paths_by_color(paths: list[Path], color: RgbColor) -> list[Path]:
 
 
 def points_of_paths(paths: list[Path]) -> list[list[Vec2D]]:
-    """TODO docstring. Document this function.
+    """Extract points from paths as coordinate tuples.
 
     Args:
-        paths: TODO docstring.
+        paths: List of Path elements to extract points from.
 
     Returns:
-        TODO docstring.
+        A list of lists, where each inner list contains (x, y) coordinate tuples
+        representing the points of a path.
     """
     all_lines = []
     for path in paths:
@@ -65,13 +71,14 @@ def points_of_paths(paths: list[Path]) -> list[list[Vec2D]]:
 
 
 def serialize_mapjson(poly_points: list[list[Vec2D]]) -> str:
-    """TODO docstring. Document this function.
+    """Serialize polygon points to JSON map format.
 
     Args:
-        poly_points: TODO docstring.
+        poly_points: List of polygon point sequences, where each polygon is a list
+                    of (x, y) coordinate tuples.
 
     Returns:
-        TODO docstring.
+        A JSON string containing obstacles and margin information.
     """
     obstacles = poly_points
     all_points = [p for points in poly_points for p in points]
@@ -84,24 +91,24 @@ def serialize_mapjson(poly_points: list[list[Vec2D]]) -> str:
 
 
 def scale(p: Vec2D, factor: float) -> Vec2D:
-    """TODO docstring. Document this function.
+    """Scale a 2D point by a factor.
 
     Args:
-        p: TODO docstring.
-        factor: TODO docstring.
+        p: A 2D point (x, y) to scale.
+        factor: The scaling factor to apply to both coordinates.
 
     Returns:
-        TODO docstring.
+        A new 2D point with coordinates scaled by the factor.
     """
     return p[0] * factor, p[1] * factor
 
 
 def convert_map(input_svg_file: str, output_json_file: str):
-    """TODO docstring. Document this function.
+    """Convert an SVG file to a JSON map file.
 
     Args:
-        input_svg_file: TODO docstring.
-        output_json_file: TODO docstring.
+        input_svg_file: Path to the input SVG file.
+        output_json_file: Path to the output JSON file.
     """
     svg = SVG.parse(input_svg_file)
     house_color = (217, 208, 201)
@@ -115,22 +122,32 @@ def convert_map(input_svg_file: str, output_json_file: str):
 
 
 def main():
-    """TODO docstring. Document this function."""
+    """Main entry point for the SVG-to-JSON converter.
+
+    Parses command line arguments and performs the conversion if valid.
+    Expects two arguments: input SVG file path and output JSON file path.
+    """
 
     def file_exists(path):
-        """TODO docstring. Document this function.
+        """Check if a file exists at the given path.
 
         Args:
-            path: TODO docstring.
+            path: The file path to check.
+
+        Returns:
+            True if the file exists and is a regular file, False otherwise.
         """
         return os.path.exists(path) and os.path.isfile(path)
 
     def has_fileext(path, ext):
-        """TODO docstring. Document this function.
+        """Check if a file has the specified extension.
 
         Args:
-            path: TODO docstring.
-            ext: TODO docstring.
+            path: The file path to check.
+            ext: The file extension to look for (without the dot).
+
+        Returns:
+            True if the file has the specified extension, False otherwise.
         """
         return "." + path.split(".")[-1] == ext
 

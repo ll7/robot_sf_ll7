@@ -25,8 +25,8 @@ from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
 def make_demo_sim():
-    # two pedestrians walking to the right, small vertical obstacle
-    """TODO docstring. Document this function."""
+    """Create a demonstration simulation with two pedestrians and an obstacle."""
+
     state = np.array(
         [
             [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
@@ -41,7 +41,7 @@ def make_demo_sim():
 
 
 def main():
-    """TODO docstring. Document this function."""
+    """Run force field visualization demo with matplotlib interactive window."""
     sim = make_demo_sim()
     wrapper = FastPysfWrapper(sim)
 

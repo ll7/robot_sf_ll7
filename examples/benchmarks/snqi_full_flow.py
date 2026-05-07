@@ -32,23 +32,23 @@ DEFAULT_SCHEMA = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _run(cmd: list[str]) -> None:
-    """TODO docstring. Document this function.
+    """Execute a subprocess command and print the command line.
 
     Args:
-        cmd: TODO docstring.
+        cmd: Command and arguments to execute.
     """
     print("[run]", " ".join(cmd))
     subprocess.check_call(cmd)
 
 
 def _ensure_weights(path: Path) -> Path:
-    """TODO docstring. Document this function.
+    """Ensure SNQI weights JSON exists, creating default if needed.
 
     Args:
-        path: TODO docstring.
+        path: Expected path to weights JSON.
 
     Returns:
-        TODO docstring.
+        Absolute path to the existing or newly created weights file.
     """
     if path.exists():
         return path.resolve()
@@ -74,11 +74,10 @@ def _ensure_weights(path: Path) -> Path:
 
 
 def main() -> int:
-    """TODO docstring. Document this function.
-
+    """Run the complete SNQI figure generation pipeline.
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success).
     """
     ap = argparse.ArgumentParser(description="Full SNQI pipeline example")
     ap.add_argument(

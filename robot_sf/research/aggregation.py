@@ -276,13 +276,13 @@ def compute_completeness_score(
     """
 
     def _seed_sort_key(value: str) -> tuple[int, str]:
-        """TODO docstring. Document this function.
+        """Sort key for seed strings, treating numeric seeds first.
 
         Args:
-            value: TODO docstring.
+            value: Seed value as string
 
         Returns:
-            TODO docstring.
+            Tuple (0, int_value) for numeric seeds, (1, str_value) for non-numeric.
         """
         try:
             return (0, str(int(value)))

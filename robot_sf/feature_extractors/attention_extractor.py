@@ -22,12 +22,12 @@ class MultiHeadAttention(nn.Module):
     """
 
     def __init__(self, embed_dim: int, num_heads: int, dropout: float = 0.1):
-        """TODO docstring. Document this function.
+        """Initialize multi-head attention module.
 
         Args:
-            embed_dim: TODO docstring.
-            num_heads: TODO docstring.
-            dropout: TODO docstring.
+            embed_dim: Embedding dimension
+            num_heads: Number of attention heads
+            dropout: Dropout probability
         """
         super().__init__()
         self.embed_dim = embed_dim
@@ -44,13 +44,13 @@ class MultiHeadAttention(nn.Module):
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
     def forward(self, x: th.Tensor) -> th.Tensor:
-        """TODO docstring. Document this function.
+        """Process input through attention mechanism.
 
         Args:
-            x: TODO docstring.
+            x: Input tensor of shape (batch_size, seq_len, embed_dim)
 
         Returns:
-            TODO docstring.
+            Output tensor with same shape as input
         """
         batch_size, seq_len, embed_dim = x.shape
 
@@ -104,15 +104,15 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
         dropout_rate: float = 0.1,
         drive_hidden_dims: list[int] | None = None,
     ):
-        """TODO docstring. Document this function.
+        """Initialize attention-based feature extractor.
 
         Args:
-            observation_space: TODO docstring.
-            embed_dim: TODO docstring.
-            num_heads: TODO docstring.
-            num_layers: TODO docstring.
-            dropout_rate: TODO docstring.
-            drive_hidden_dims: TODO docstring.
+            observation_space: Environment observation space
+            embed_dim: Embedding dimension for attention
+            num_heads: Number of attention heads
+            num_layers: Number of transformer layers
+            dropout_rate: Dropout rate for transformer
+            drive_hidden_dims: Hidden dimensions for drive state MLP
         """
         if drive_hidden_dims is None:
             drive_hidden_dims = [32, 16]

@@ -16,7 +16,7 @@ MAPS_DIR = TEST_DIR / "test_maps"
 
 def test_load_map():
     # Test with a valid map file
-    """TODO docstring. Document this function."""
+    """Load a map and verify all components are parsed correctly."""
     map_file = str(MAPS_DIR / "map_regular.json")
     map_definition = load_map(map_file)
     assert isinstance(map_definition, MapDefinition)
@@ -42,7 +42,7 @@ def test_load_map():
 
 def test_load_map_with_invalid_file():
     # Test with a non-existent file
-    """TODO docstring. Document this function."""
+    """Raise FileNotFoundError for non-existent files."""
     with pytest.raises(FileNotFoundError):
         load_map("non_existent_file.json")
 

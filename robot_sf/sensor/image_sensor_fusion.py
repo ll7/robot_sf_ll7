@@ -38,8 +38,7 @@ class ImageSensorFusion:
     cache_steps: int = field(init=False)
 
     def __post_init__(self):
-        # Initialize the number of steps to cache based on the LiDAR observation space
-        """TODO docstring. Document this function."""
+        """Initialize observation caches after dataclass field setup."""
         rays_space = self.unnormed_obs_space[OBS_RAYS]
         if hasattr(rays_space, "shape") and rays_space.shape is not None:
             self.cache_steps = rays_space.shape[0]

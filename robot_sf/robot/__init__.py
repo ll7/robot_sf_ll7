@@ -1,1 +1,1 @@
-"""TODO docstring. Document this module."""
+"""Robot module providing vehicle dynamics models and motion primitives."""

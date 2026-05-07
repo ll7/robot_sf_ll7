@@ -33,22 +33,22 @@ class DummyConstantSensor(Sensor):
     """A sensor that returns a constant numpy array observation."""
 
     def __init__(self, config: dict[str, Any]):
-        """TODO docstring. Document this function.
+        """Initialize the DummyConstantSensor with configuration.
 
         Args:
-            config: TODO docstring.
+            config: Dictionary with keys: type, name, value, shape (optional), dtype (optional), space (optional).
         """
         self._config = config
         self._obs = self._build_value(config)
 
     def _build_value(self, cfg: dict[str, Any]) -> np.ndarray:
-        """TODO docstring. Document this function.
+        """Build the constant observation array from configuration.
 
         Args:
-            cfg: TODO docstring.
+            cfg: Configuration dictionary containing value, dtype, and shape settings.
 
         Returns:
-            TODO docstring.
+            numpy.ndarray: Constant array of specified dtype, shape, and value.
         """
         dtype = np.float32 if cfg.get("dtype", "float32") == "float32" else np.int32
         value = cfg.get("value", 0.0)
@@ -59,23 +59,23 @@ class DummyConstantSensor(Sensor):
         return arr
 
     def reset(self) -> None:  # no state
-        """TODO docstring. Document this function."""
+        """Reset the sensor state (no-op since sensor has no state)."""
         return None
 
     def step(self, state: Any) -> None:  # no dependence on state
-        """TODO docstring. Document this function.
+        """Step the sensor.
 
         Args:
-            state: TODO docstring.
+            state: Current simulation state (unused).
         """
         return None
 
     def get_observation(self) -> np.ndarray:
-        """TODO docstring. Document this function.
+        """Return the constant observation array.
 
 
         Returns:
-            TODO docstring.
+            numpy.ndarray: The pre-computed constant observation.
         """
         return self._obs
 

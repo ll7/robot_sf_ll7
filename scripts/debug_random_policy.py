@@ -8,7 +8,11 @@ from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def benchmark():
-    """TODO docstring. Document this function."""
+    """Run a random policy benchmark to test the environment.
+
+    Generates random actions and runs the environment for a fixed
+    number of steps, logging episode rewards and progress.
+    """
     total_steps = 20000
     env = RobotEnv(debug=True)
     env.reset()

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Bicycle drive model for vehicle dynamics simulation."""
 
 from dataclasses import dataclass, field
 from math import atan2, cos, sin, tan
@@ -190,29 +190,29 @@ class BicycleDriveRobot:
         return self.state.current_speed
 
     def apply_action(self, action: BicycleAction, d_t: float):
-        """TODO docstring. Document this function.
+        """Apply action and advance simulation by dt.
 
         Args:
-            action: TODO docstring.
-            d_t: TODO docstring.
+            action: (velocity, steering_angle) tuple
+            d_t: Time step duration
         """
         self.movement.move(self.state, action, d_t)
 
     def reset_state(self, new_pose: RobotPose):
-        """TODO docstring. Document this function.
+        """Update vehicle state directly.
 
         Args:
-            new_pose: TODO docstring.
+            new_pose: New (x, y, theta) pose tuple
         """
         self.state = BicycleDriveState(new_pose, 0)
 
     def parse_action(self, action: np.ndarray) -> BicycleAction:
-        """TODO docstring. Document this function.
+        """Reset vehicle to initial state.
 
         Args:
-            action: TODO docstring.
+            action: Unused action (kept for interface compatibility)
 
         Returns:
-            TODO docstring.
+            Initial observation dictionary
         """
         return (action[0], action[1])

@@ -1,4 +1,12 @@
-"""TODO docstring. Document this module."""
+"""Pedestrian behavior definitions for simulation.
+
+This module provides behavior classes that define how pedestrians act in the
+simulation. It includes:
+
+- PedestrianBehavior: Protocol for pedestrian behavior implementations
+- CrowdedZoneBehavior: Behavior for pedestrians in crowded zones
+- FollowRouteBehavior: Behavior for pedestrians following predefined routes
+"""
 
 from dataclasses import dataclass, field
 from math import dist
@@ -13,14 +21,18 @@ Zone = tuple[Vec2D, Vec2D, Vec2D]
 
 
 class PedestrianBehavior(Protocol):
-    """TODO docstring. Document this class."""
+    """Protocol defining the interface for pedestrian behaviors.
+
+    All pedestrian behaviors must implement the step() and reset() methods
+    to update behavior each simulation step and reset state when needed.
+    """
 
     def step(self):
-        """TODO docstring. Document this function."""
+        """Update the behavior for one simulation time step."""
         raise NotImplementedError()
 
     def reset(self):
-        """TODO docstring. Document this function."""
+        """Reset the behavior to its initial state."""
         raise NotImplementedError()
 
 

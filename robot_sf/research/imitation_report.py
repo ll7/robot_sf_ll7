@@ -33,7 +33,7 @@ from robot_sf.research.statistics import (
 
 @dataclass
 class ImitationReportConfig:
-    """TODO docstring. Document this class."""
+    """Configuration for generating imitation learning comparison reports."""
 
     experiment_name: str
     hypothesis: str | None = "BC pre-training reduces timesteps by ≥30%"
@@ -49,23 +49,25 @@ class ImitationReportConfig:
 
 
 def _timestamp() -> str:
-    """TODO docstring. Document this function.
-
+    """Generate a timestamp for report output filenames.
 
     Returns:
-        TODO docstring.
+        Current UTC timestamp in YYYYMMDD-HHMMSS format.
     """
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def _load_summary(path: Path) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Load a summary.json file from disk.
 
     Args:
-        path: TODO docstring.
+        path: Path to the summary.json file
 
     Returns:
-        TODO docstring.
+        Parsed JSON as dictionary
+
+    Raises:
+        ValueError: If file content is not a dict
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -119,14 +121,14 @@ def _select_records(
 
 
 def _metric(record: dict[str, Any], key: str) -> float:
-    """TODO docstring. Document this function.
+    """Extract a metric value from a record, returning 0.0 if missing or non-numeric.
 
     Args:
-        record: TODO docstring.
-        key: TODO docstring.
+        record: Record dictionary containing metrics
+        key: Metric key to look up
 
     Returns:
-        TODO docstring.
+        Float value of the metric, or 0.0 if not found or non-numeric
     """
     metrics = record.get("metrics") or {}
     val = metrics.get(key)
@@ -151,13 +153,13 @@ def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
 
 
 def _fmt_stat(value: float | None | str) -> str:
-    """TODO docstring. Document this function.
+    """Format a statistic value for display.
 
     Args:
-        value: TODO docstring.
+        value: Numeric value, None, or 'n/a'
 
     Returns:
-        TODO docstring.
+        Formatted string with 4 decimal places, or 'n/a' for None/'n/a'
     """
     return "n/a" if value is None or value == "n/a" else f"{value:.4f}"
 
@@ -289,13 +291,13 @@ def _render_markdown(  # noqa: PLR0913
 
 
 def _latex_escape(text: str) -> str:
-    """TODO docstring. Document this function.
+    """Escape special characters for LaTeX.
 
     Args:
-        text: TODO docstring.
+        text: Input string
 
     Returns:
-        TODO docstring.
+        String with LaTeX special characters escaped
     """
     return (
         text.replace("&", r"\&")

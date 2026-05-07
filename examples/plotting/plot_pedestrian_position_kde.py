@@ -30,7 +30,7 @@ from robot_sf.render.playback_recording import load_states
 
 
 def main():
-    """TODO docstring. Document this function."""
+    """Run pedestrian position KDE visualization from a recording file."""
     parser = argparse.ArgumentParser(description="Plot KDE of pedestrian positions.")
     parser.add_argument(
         "--recording",

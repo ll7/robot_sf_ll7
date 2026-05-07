@@ -101,13 +101,13 @@ def _hardware_profile_from_manifest(manifest: dict[str, Any]) -> HardwareProfile
     """
 
     def _as_profile(payload: dict[str, Any]) -> HardwareProfile | None:
-        """TODO docstring. Document this function.
+        """Convert hardware payload to HardwareProfile if complete.
 
         Args:
-            payload: TODO docstring.
+            payload: Raw hardware data dictionary
 
         Returns:
-            TODO docstring.
+            HardwareProfile or None if incomplete
         """
         try:
             platform = str(payload.get("platform", "unknown"))

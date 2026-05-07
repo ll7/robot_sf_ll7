@@ -17,14 +17,14 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 
 
 def _make_episode(T: int, K: int) -> EpisodeData:
-    """TODO docstring. Document this function.
+    """Create a synthetic episode for force quantile demo.
 
     Args:
-        T: TODO docstring.
-        K: TODO docstring.
+        T: Number of timesteps.
+        K: Number of pedestrians.
 
     Returns:
-        TODO docstring.
+        Synthetic episode data for force analysis.
     """
     robot_pos = np.zeros((T, 2))
     robot_vel = np.zeros((T, 2))
@@ -45,7 +45,7 @@ def _make_episode(T: int, K: int) -> EpisodeData:
 
 
 def main() -> None:
-    """TODO docstring. Document this function."""
+    """Run the per-pedestrian vs aggregated force quantiles demo."""
     T, K = 5, 3
     ep = _make_episode(T=T, K=K)
 

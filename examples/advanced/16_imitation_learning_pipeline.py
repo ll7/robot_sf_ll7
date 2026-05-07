@@ -286,11 +286,10 @@ def _override_expert_config_policy_id(config_path: Path, policy_id: str) -> Path
 
 
 def _run_manifest_dir() -> Path:
-    """TODO docstring. Document this function.
-
+    """Return the directory containing training run manifests.
 
     Returns:
-        TODO docstring.
+        Path to the manifests directory.
     """
     return get_training_run_manifest_path("placeholder").parent
 
@@ -322,13 +321,13 @@ def _discover_latest_training_run_id(prefix: str) -> str | None:
 
 
 def _env_flag(name: str) -> bool:
-    """TODO docstring. Document this function.
+    """Check if an environment variable is set to a truthy value.
 
     Args:
-        name: TODO docstring.
+        name: The environment variable name to check.
 
     Returns:
-        TODO docstring.
+        True if the variable is set to '1', 'true', 'yes', or 'on' (case-insensitive).
     """
     value = os.environ.get(name)
     if value is None:
@@ -337,13 +336,16 @@ def _env_flag(name: str) -> bool:
 
 
 def _resolve_tracker_destination(hint: str | None) -> tuple[RunTrackerConfig, str]:
-    """TODO docstring. Document this function.
+    """Resolve the destination configuration for the run tracker.
+
+    Parses the hint parameter to determine the tracker configuration and run ID.
+    The hint can be a simple run identifier or a full path to tracker artifacts.
 
     Args:
-        hint: TODO docstring.
+        hint: Optional path or identifier for the tracker destination.
 
     Returns:
-        TODO docstring.
+        Tuple of (tracker configuration, run ID).
     """
     config = RunTrackerConfig()
     run_id = generate_run_id("pipeline")
@@ -374,17 +376,20 @@ def _create_tracker_context(
     scenario_config: Path,
     telemetry_interval: float | None,
 ) -> TrackerContext:
-    """TODO docstring. Document this function.
+    """Create a tracker context for pipeline execution.
+
+    Initializes the manifest writer, progress tracker, and telemetry components
+    needed for tracking the imitation learning pipeline execution.
 
     Args:
-        step_definitions: TODO docstring.
-        tracker_output: TODO docstring.
-        initiator: TODO docstring.
-        scenario_config: TODO docstring.
-        telemetry_interval: TODO docstring.
+        step_definitions: List of pipeline step definitions to track.
+        tracker_output: Optional path or identifier for tracker output.
+        initiator: Command-line string that initiated the pipeline.
+        scenario_config: Path to the scenario configuration file.
+        telemetry_interval: Interval in seconds for telemetry sampling.
 
     Returns:
-        TODO docstring.
+        Initialized TrackerContext for pipeline execution.
     """
     config, run_id = _resolve_tracker_destination(tracker_output)
     writer = ManifestWriter(config, run_id)
@@ -411,11 +416,14 @@ def _start_tracker_telemetry(
     *,
     interval_seconds: float | None,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Start telemetry sampling for the pipeline run.
+
+    Initializes and starts the telemetry sampler that collects runtime metrics
+    and feeds them to the recommendation engine for analysis.
 
     Args:
-        context: TODO docstring.
-        interval_seconds: TODO docstring.
+        context: Tracker context containing writer and tracker references.
+        interval_seconds: Sampling interval in seconds (minimum 0.5s enforced).
     """
     if interval_seconds is None or interval_seconds <= 0:
         return
@@ -433,10 +441,10 @@ def _start_tracker_telemetry(
 
 
 def _stop_tracker_telemetry(context: TrackerContext) -> None:
-    """TODO docstring. Document this function.
+    """Stop telemetry sampling and record sample count.
 
     Args:
-        context: TODO docstring.
+        context: Tracker context with telemetry sampler reference.
     """
     sampler = context.telemetry_sampler
     if sampler is None:
@@ -450,14 +458,14 @@ def _build_tracker_summary(
     context: TrackerContext,
     base_summary: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Build a comprehensive summary from tracker context and base data.
 
     Args:
-        context: TODO docstring.
-        base_summary: TODO docstring.
+        context: Tracker context with telemetry and recommendation data.
+        base_summary: Optional base summary dictionary to extend.
 
     Returns:
-        TODO docstring.
+        Comprehensive summary dictionary including telemetry data.
     """
     summary = dict(base_summary or {})
     telemetry_summary = _telemetry_summary(context)
@@ -469,13 +477,13 @@ def _build_tracker_summary(
 
 
 def _telemetry_summary(context: TrackerContext) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Extract telemetry summary from the recommendation engine.
 
     Args:
-        context: TODO docstring.
+        context: Tracker context with recommendation engine reference.
 
     Returns:
-        TODO docstring.
+        Dictionary containing telemetry summary data.
     """
     engine = context.recommendation_engine
     if engine is None:
@@ -487,13 +495,13 @@ def _telemetry_summary(context: TrackerContext) -> dict[str, Any]:
 
 
 def _collect_recommendations(context: TrackerContext) -> list[dict[str, Any]]:
-    """TODO docstring. Document this function.
+    """Collect and serialize recommendations from the engine.
 
     Args:
-        context: TODO docstring.
+        context: Tracker context with recommendation engine reference.
 
     Returns:
-        TODO docstring.
+        List of recommendation dictionaries.
     """
     engine = context.recommendation_engine
     if engine is None:
@@ -507,12 +515,12 @@ def _append_run_snapshot(
     *,
     summary: dict[str, Any] | None = None,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Append a run snapshot record to the manifest.
 
     Args:
-        context: TODO docstring.
-        status: TODO docstring.
-        summary: TODO docstring.
+        context: Tracker context with writer reference.
+        status: Current pipeline run status.
+        summary: Optional summary dictionary to include.
     """
     record = PipelineRunRecord(
         run_id=context.run_id,
@@ -535,12 +543,12 @@ def _finalize_tracker(
     *,
     summary: dict[str, Any] | None = None,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Finalize the tracker and write final records.
 
     Args:
-        context: TODO docstring.
-        status: TODO docstring.
-        summary: TODO docstring.
+        context: Tracker context to finalize (may be None).
+        status: Final pipeline run status.
+        summary: Optional final summary dictionary.
     """
     if context is None:
         return
@@ -560,16 +568,16 @@ def _run_tracked_step(
     step_id: str,
     func: Callable[[], Any],
 ) -> Any:
-    """TODO docstring. Document this function.
+    """Execute a function while tracking its progress.
 
     Args:
-        tracker_ctx: TODO docstring.
-        tracked_steps: TODO docstring.
-        step_id: TODO docstring.
-        func: TODO docstring.
+        tracker_ctx: Tracker context (may be None for untracked execution).
+        tracked_steps: Set of step IDs to track.
+        step_id: ID of the current step being executed.
+        func: Function to execute.
 
     Returns:
-        TODO docstring.
+        Result from the function execution.
     """
     is_tracked = tracker_ctx is not None and step_id in tracked_steps
     if is_tracked:
@@ -592,13 +600,14 @@ def _run_tracked_step(
 
 
 def _run_tracker_smoke(
-    context: TrackerContext | None, step_definitions: list[PipelineStepDefinition]
+    context: TrackerContext | None,
+    step_definitions: list[PipelineStepDefinition],
 ) -> None:
-    """TODO docstring. Document this function.
+    """Run a smoke test of the tracker without actual pipeline steps.
 
     Args:
-        context: TODO docstring.
-        step_definitions: TODO docstring.
+        context: Tracker context (required for smoke execution).
+        step_definitions: Step definitions to simulate.
     """
     if context is None:
         raise RuntimeError("Tracker smoke execution requires --enable-tracker")
@@ -763,14 +772,14 @@ def main():  # noqa: C901,PLR0912,PLR0915
         return 0
 
     def fail_and_return(step_id: str, exit_code: int) -> int:
-        """TODO docstring. Document this function.
+        """Handle failure by finalizing tracker and returning exit code.
 
         Args:
-            step_id: TODO docstring.
-            exit_code: TODO docstring.
+            step_id: ID of the failed step.
+            exit_code: Exit code to return.
 
         Returns:
-            TODO docstring.
+            The provided exit code.
         """
         _finalize_tracker(
             tracker_context,

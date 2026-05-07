@@ -1,4 +1,8 @@
-"""TODO docstring. Document this module."""
+"""Performance benchmark for forces computation in pedestrian simulation.
+
+This module provides functionality to benchmark the social and obstacle forces
+calculation using the Scalene profiler to measure performance characteristics.
+"""
 
 from dataclasses import dataclass
 
@@ -9,7 +13,14 @@ from scalene import scalene_profiler
 
 @dataclass
 class SimConfig:
-    """TODO docstring. Document this class."""
+    """Configuration for a simulation instance.
+
+    Attributes:
+        sim_steps: Number of simulation steps to run.
+        initial_state: Initial pedestrian state array.
+        groups: List of group memberships.
+        obstacles: List of obstacle line segments.
+    """
 
     sim_steps: int
     initial_state: np.ndarray
@@ -20,7 +31,17 @@ class SimConfig:
 
 @dataclass
 class SimSettings:
-    """TODO docstring. Document this class."""
+    """Settings for generating simulation scenarios.
+
+    Attributes:
+        map_width: Width of the simulation map.
+        map_height: Height of the simulation map.
+        sim_steps: Number of simulation steps.
+        num_peds: Number of pedestrians.
+        num_groups: Number of pedestrian groups.
+        group_cov: Covariance matrix for group position sampling.
+        num_obstacles: Number of obstacles to generate.
+    """
 
     map_width: float
     map_height: float
@@ -31,11 +52,10 @@ class SimSettings:
     num_obstacles: int
 
     def sample(self) -> SimConfig:
-        """TODO docstring. Document this function.
-
+        """Generate a random simulation configuration.
 
         Returns:
-            TODO docstring.
+            SimConfig: Randomly generated simulation configuration.
         """
         spawned_peds = 0
         group_centroids = self.rand_2d_coords(self.num_groups)
@@ -91,13 +111,13 @@ class SimSettings:
         return config
 
     def rand_2d_coords(self, num_coords: int) -> list[tuple[float, float]]:
-        """TODO docstring. Document this function.
+        """Generate random 2D coordinates.
 
         Args:
-            num_coords: TODO docstring.
+            num_coords: Number of coordinates to generate.
 
         Returns:
-            TODO docstring.
+            List of (x, y) coordinate tuples.
         """
         x = np.random.uniform(0, self.map_width, num_coords)
         y = np.random.uniform(0, self.map_height, num_coords)
@@ -105,17 +125,21 @@ class SimSettings:
 
 
 def simulate(config: SimConfig):
-    """TODO docstring. Document this function.
+    """Run a simulation with the given configuration.
 
     Args:
-        config: TODO docstring.
+        config: Simulation configuration parameters.
     """
     s = psf.Simulator(config.initial_state, config.groups, config.obstacles)
     s.step(config.sim_steps)
 
 
 def benchmark():
-    """TODO docstring. Document this function."""
+    """Run the forces performance benchmark.
+
+    Executes 100 simulations with 25 pedestrians, 3 groups, and 10 obstacles
+    while profiling with Scalene to analyze performance characteristics.
+    """
     num_simulations = 100
     settings = SimSettings(
         map_width=80,

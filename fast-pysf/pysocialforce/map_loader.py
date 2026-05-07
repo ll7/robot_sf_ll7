@@ -45,13 +45,16 @@ def load_map(file_path: str | Path) -> MapDefinition:
 
             # Helper to coerce truthy/falsey strings and numbers to bool
             def _as_bool(value) -> bool:
-                """TODO docstring. Document this function.
+                """Convert a value to boolean.
+
+                Handles bool, numeric, and string representations of truthy/falsey values.
+                String comparison is case-insensitive.
 
                 Args:
-                    value: TODO docstring.
+                    value: A value that can be a bool, number, or string representation.
 
                 Returns:
-                    TODO docstring.
+                    True if the value represents a truthy value, False otherwise.
                 """
                 if isinstance(value, bool):
                     return value

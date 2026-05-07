@@ -61,7 +61,11 @@ def parse(lines: list[str]) -> list[dict[str, object]]:
 
 
 def main() -> None:
-    """TODO docstring. Document this function."""
+    """Main entry point for the slow tests collector.
+
+    Parses pytest duration output and writes structured JSON to stdout.
+    Reads from stdin by default or from a specified input file.
+    """
     parser = argparse.ArgumentParser(description="Parse pytest --durations output to JSON")
     parser.add_argument(
         "--input",

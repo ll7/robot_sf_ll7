@@ -27,11 +27,10 @@ from robot_sf.nav.obstacle import Obstacle
 
 
 def create_multi_pedestrian_map() -> MapDefinition:
-    """TODO docstring. Document this function.
-
+    """Create a multi-pedestrian scenario map definition.
 
     Returns:
-        TODO docstring.
+        MapDefinition with robot routes, obstacles, and 4 single pedestrians.
     """
     width, height = 20.0, 20.0
     obstacles = [
@@ -100,7 +99,7 @@ def create_multi_pedestrian_map() -> MapDefinition:
 
 
 def run_multi_pedestrian_simulation():
-    """TODO docstring. Document this function."""
+    """Run a multi-pedestrian simulation with interactive visualization."""
     map_def = create_multi_pedestrian_map()
     pool = MapDefinitionPool(map_defs={"multi_ped": map_def})
     config = RobotSimulationConfig()

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for obstacle force calculations."""
 
 import unittest
 
@@ -6,7 +6,7 @@ from pysocialforce.forces import obstacle_force
 
 
 class TestObstacleForce(unittest.TestCase):
-    """TODO docstring. Document this class."""
+    """Test suite for obstacle force calculations."""
 
     def test_single_point_obstacle(self):
         """Test obstacle_force with an obstacle that is a single point."""

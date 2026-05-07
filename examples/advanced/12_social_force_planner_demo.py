@@ -35,14 +35,17 @@ except ImportError:
 
     # Mock numpy for basic functionality
     class MockNumpy:
-        """TODO docstring. Document this class."""
+        """Mock implementation of numpy for when dependencies are unavailable."""
 
         def array(self, data, dtype=None):
-            """TODO docstring. Document this function.
+            """Convert data to numpy-like array.
 
             Args:
-                data: TODO docstring.
-                dtype: TODO docstring.
+                data: Input data array.
+                dtype: Optional data type.
+
+            Returns:
+                The input data as an array.
             """
             return data
 
@@ -50,30 +53,39 @@ except ImportError:
         ndarray = list
 
         def linalg(self):
-            """TODO docstring. Document this function."""
+            """Return linalg module stub."""
             return self
 
         def norm(self, vec):
-            """TODO docstring. Document this function.
+            """Compute Euclidean norm of a vector.
 
             Args:
-                vec: TODO docstring.
+                vec: Vector to compute norm for.
+
+            Returns:
+                Euclidean norm of the vector.
             """
             return math.sqrt(sum(x * x for x in vec))
 
         def mean(self, data):
-            """TODO docstring. Document this function.
+            """Compute mean of data.
 
             Args:
-                data: TODO docstring.
+                data: Input data sequence.
+
+            Returns:
+                Arithmetic mean of the data.
             """
             return sum(data) / len(data)
 
         def max(self, data):
-            """TODO docstring. Document this function.
+            """Compute maximum of data.
 
             Args:
-                data: TODO docstring.
+                data: Input data sequence.
+
+            Returns:
+                Maximum value in the data.
             """
             return max(data)
 
@@ -96,16 +108,16 @@ except ImportError as e:
 
     # Mock implementations for demo purposes
     class Observation:
-        """TODO docstring. Document this class."""
+        """Social Force planner observation data."""
 
         def __init__(self, dt, robot, agents, obstacles=None):
-            """TODO docstring. Document this function.
+            """Initialize observation data.
 
             Args:
-                dt: TODO docstring.
-                robot: TODO docstring.
-                agents: TODO docstring.
-                obstacles: TODO docstring.
+                dt: Simulation timestep.
+                robot: Robot state dictionary.
+                agents: List of agent state dictionaries.
+                obstacles: Optional list of obstacle dictionaries.
             """
             self.dt = dt
             self.robot = robot
@@ -113,14 +125,14 @@ except ImportError as e:
             self.obstacles = obstacles or []
 
     class SFPlannerConfig:
-        """TODO docstring. Document this class."""
+        """Configuration for Social Force planner."""
 
         def __init__(self, **kwargs):
             # Default configuration values
-            """TODO docstring. Document this function.
+            """Initialize configuration with optional overrides.
 
             Args:
-                kwargs: TODO docstring.
+                kwargs: Configuration parameters to override defaults.
             """
             self.action_space = kwargs.get("action_space", "velocity")
             self.v_max = kwargs.get("v_max", 2.0)
@@ -139,11 +151,11 @@ except ImportError as e:
         """Mock Social Force Planner for demonstration purposes."""
 
         def __init__(self, config, seed=None):
-            """TODO docstring. Document this function.
+            """Initialize mock planner.
 
             Args:
-                config: TODO docstring.
-                seed: TODO docstring.
+                config: Planner configuration (dict or SFPlannerConfig).
+                seed: Optional random seed.
             """
             if isinstance(config, dict):
                 self.config = SFPlannerConfig(**config)
@@ -152,7 +164,14 @@ except ImportError as e:
             self.seed = seed
 
         def step(self, obs) -> dict[str, float]:
-            """Mock implementation that demonstrates basic Social Force behavior."""
+            """Compute action based on observation using Social Force model.
+
+            Args:
+                obs: Observation data.
+
+            Returns:
+                Action dictionary with velocity or unicycle commands.
+            """
             robot_pos = obs.robot["position"]
             goal_pos = obs.robot["goal"]
 
@@ -216,33 +235,39 @@ except ImportError as e:
             return {"vx": total_vel[0], "vy": total_vel[1]}
 
         def reset(self, seed=None):
-            """TODO docstring. Document this function.
+            """Reset planner state.
 
             Args:
-                seed: TODO docstring.
+                seed: Optional random seed.
             """
             if seed is not None:
                 self.seed = seed
 
         def configure(self, new_config):
-            """TODO docstring. Document this function.
+            """Configure planner with new settings.
 
             Args:
-                new_config: TODO docstring.
+                new_config: New configuration (dict or SFPlannerConfig).
             """
             if isinstance(new_config, dict):
                 for key, value in new_config.items():
                     setattr(self.config, key, value)
 
         def close(self):
-            """TODO docstring. Document this function."""
+            """Clean up planner resources."""
             pass
 
     def get_baseline(name):
-        """TODO docstring. Document this function.
+        """Get the baseline planner class by name.
 
         Args:
-            name: TODO docstring.
+            name: Name of the baseline (e.g., "baseline_sf").
+
+        Returns:
+            The baseline planner class.
+
+        Raises:
+            KeyError: If the baseline name is not recognized.
         """
         if name == "baseline_sf":
             return MockSocialForcePlanner
@@ -257,24 +282,24 @@ if "MockSocialForcePlanner" not in globals():
         """Lightweight mock Social Force Planner (fallback when real deps present)."""
 
         def __init__(self, config, seed=None):
-            """TODO docstring. Document this function.
+            """Initialize mock planner.
 
             Args:
-                config: TODO docstring.
-                seed: TODO docstring.
+                config: Planner configuration (dict or SFPlannerConfig).
+                seed: Optional random seed.
             """
             self.config = config
             self.seed = seed
 
         def step(self, obs) -> dict[str, float]:
             # Trivial straight-line goal seeker with zero avoidance
-            """TODO docstring. Document this function.
+            """Compute action using trivial straight-line goal seeking.
 
             Args:
-                obs: TODO docstring.
+                obs: Observation containing robot state, agents, and obstacles.
 
             Returns:
-                TODO docstring.
+                Action dictionary with velocity or unicycle commands.
             """
             goal = obs.robot["goal"]
             pos = obs.robot["position"]
@@ -294,24 +319,24 @@ if "MockSocialForcePlanner" not in globals():
             return {"vx": ux * speed, "vy": uy * speed}
 
         def reset(self, seed=None):
-            """TODO docstring. Document this function.
+            """Reset planner state.
 
             Args:
-                seed: TODO docstring.
+                seed: Optional random seed.
             """
             if seed is not None:
                 self.seed = seed
 
         def configure(self, new_config):
-            """TODO docstring. Document this function.
+            """Configure planner with new settings.
 
             Args:
-                new_config: TODO docstring.
+                new_config: New configuration (dict or SFPlannerConfig).
             """
             pass
 
         def close(self):
-            """TODO docstring. Document this function."""
+            """Clean up planner resources."""
             pass
 
 
@@ -662,10 +687,13 @@ class SFPDemo:
             # Create observation
             # Convert container types safely
             def _to_list(x):
-                """TODO docstring. Document this function.
+                """Convert input data to a standard Python list.
 
                 Args:
-                    x: TODO docstring.
+                    x: Input data that may be numpy array, list, tuple, or scalar.
+
+                Returns:
+                    Input converted to a standard Python list.
                 """
                 if hasattr(x, "tolist"):
                     return x.tolist()

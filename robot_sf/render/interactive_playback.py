@@ -421,20 +421,20 @@ class InteractivePlayback(SimulationView):
     # Property to ensure direct assignment also updates deques
     @property
     def max_trajectory_length(self) -> int:
-        """TODO docstring. Document this function.
+        """Get the maximum trajectory trail length.
 
 
         Returns:
-            TODO docstring.
+            Maximum number of points stored in trajectory deques (clamped to [10, 500]).
         """
         return getattr(self, "_max_trajectory_length", 100)
 
     @max_trajectory_length.setter
     def max_trajectory_length(self, value: int) -> None:
-        """TODO docstring. Document this function.
+        """Set the maximum trajectory trail length and reconfigure existing deques.
 
         Args:
-            value: TODO docstring.
+            value: Desired maximum length (will be clamped to [10, 500]).
         """
         clamped = max(10, min(int(value), 500))
         old = getattr(self, "_max_trajectory_length", None)

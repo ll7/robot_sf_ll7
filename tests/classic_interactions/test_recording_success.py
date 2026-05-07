@@ -22,7 +22,11 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def test_recording_creates_mp4_when_enabled():
-    """TODO docstring. Document this function."""
+    """Test that recording creates MP4 files when enabled and dependencies are available.
+
+    Verifies that when recording is enabled and moviepy/ffmpeg are available,
+    each completed episode produces an MP4 file with the expected naming pattern.
+    """
     mod = importlib.import_module("examples.classic_interactions_pygame")
     # Skip if moviepy not available
     if not getattr(mod, "MOVIEPY_AVAILABLE", False):  # type: ignore[attr-defined]

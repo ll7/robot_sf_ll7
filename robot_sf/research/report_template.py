@@ -280,13 +280,13 @@ class MarkdownReportRenderer:
                 pdf = Path(pdf_path) if pdf_path else None
 
                 def _rel_safe(path: Path) -> str:
-                    """TODO docstring. Document this function.
+                    """Compute relative path for figures, handling absolute paths.
 
                     Args:
-                        path: TODO docstring.
+                        path: Path to convert to relative or return as-is
 
                     Returns:
-                        TODO docstring.
+                        Relative path string or basename for absolute paths outside output_dir.
                     """
                     if not path.is_absolute():
                         return path.as_posix()

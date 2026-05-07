@@ -12,7 +12,11 @@ import importlib
 
 
 def test_recording_skip_graceful():
-    """TODO docstring. Document this function."""
+    """Test that recording can be skipped gracefully when dependencies are missing.
+
+    Verifies that run_demo() completes without raising even when recording
+    is enabled but MOVIEPY is unavailable.
+    """
     mod = importlib.import_module("examples.classic_interactions_pygame")
     # Force non-dry path
     if hasattr(mod, "DRY_RUN"):

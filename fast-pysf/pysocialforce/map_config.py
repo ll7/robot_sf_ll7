@@ -1,4 +1,13 @@
-"""TODO docstring. Document this module."""
+"""Map configuration and data structures for pedestrian simulation.
+
+This module defines the core data structures and utility functions for
+representing maps, including obstacles, routes, and crowded zones.
+Key components:
+- Obstacle: Polygonal obstacle representation
+- GlobalRoute: Route with waypoints and spawning information
+- MapDefinition: Complete map definition with all components
+- Sample functions: Utilities for sampling positions in zones/circles
+"""
 
 from dataclasses import dataclass, field
 from math import dist
@@ -67,7 +76,10 @@ class Obstacle:
     vertices_np: np.ndarray = field(init=False)
 
     def __post_init__(self):
-        """TODO docstring. Document this function."""
+        """Initialize obstacle representation after dataclass field processing.
+
+        Converts vertices to NumPy array and computes line segments for edges.
+        Filters out zero-length edge segments."""
         if not self.vertices:
             raise ValueError("No vertices specified for obstacle!")
 

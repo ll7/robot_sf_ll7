@@ -35,20 +35,18 @@ class ForceContext(Protocol):
     peds: PedState
 
     def get_obstacles(self) -> list[np.ndarray]:
-        """TODO docstring. Document this function.
-
+        """Get obstacles as list of obstacle arrays.
 
         Returns:
-            TODO docstring.
+            List of obstacle arrays, each representing one obstacle.
         """
         ...
 
     def get_raw_obstacles(self) -> np.ndarray:
-        """TODO docstring. Document this function.
-
+        """Get obstacles in raw format.
 
         Returns:
-            TODO docstring.
+            Raw obstacles array in format expected by force computation.
         """
         ...
 
@@ -81,7 +79,22 @@ def make_forces(sim: ForceContext, config: SimulatorConfig) -> list[forces.Force
 
 
 class Simulator_v2:
-    """TODO docstring. Document this class."""
+    """Main simulation engine implementing the Extended Social Force model.
+
+    This class manages the complete simulation including pedestrian states,
+    forces, behaviors, and map configuration. It provides stepping functionality
+    to advance the simulation through time steps.
+
+    Attributes:
+        config: Simulator configuration
+        states: Current pedestrian states
+        groupings: Group membership information
+        behaviors: Active pedestrian behaviors
+        env: Environment state with obstacles
+        peds: Pedestrian state accessor
+        forces: Active force components
+        t: Current simulation time
+    """
 
     def __init__(
         self,

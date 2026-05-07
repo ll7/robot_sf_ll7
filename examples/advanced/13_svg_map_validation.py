@@ -40,11 +40,11 @@ def _summarize_map(
     name: str,
     md,
 ) -> None:  # md: MapDefinition (duck-typed here to avoid import churn)
-    """TODO docstring. Document this function.
+    """Log statistics for a single SVG map.
 
     Args:
-        name: TODO docstring.
-        md: TODO docstring.
+        name: Map identifier string.
+        md: MapDefinition object (duck-typed to avoid import churn).
     """
     logger.info(
         "Map '{n}': robot_routes={rr} ped_routes={pr} robot_spawn={rs} robot_goal={rg} ped_spawn={ps} ped_goal={pg} obstacles={ob}",
@@ -60,13 +60,13 @@ def _summarize_map(
 
 
 def _validate_single(path: str) -> bool:
-    """TODO docstring. Document this function.
+    """Validate a single SVG map file.
 
     Args:
-        path: TODO docstring.
+        path: Path to the SVG file to validate.
 
     Returns:
-        TODO docstring.
+        True if validation succeeded, False otherwise.
     """
     logger.info("Validating single SVG: {p}", p=path)
     try:
@@ -82,14 +82,14 @@ def _validate_single(path: str) -> bool:
 
 
 def _bulk_validate(directory: str, strict: bool) -> tuple[list[str], list[str]]:
-    """TODO docstring. Document this function.
+    """Validate all maps in a directory.
 
     Args:
-        directory: TODO docstring.
-        strict: TODO docstring.
+        directory: Path to directory containing SVG maps.
+        strict: Whether to perform strict structural validation.
 
     Returns:
-        TODO docstring.
+        Tuple of (valid_map_names, invalid_map_names).
     """
     logger.info("Bulk validating directory: {d} (strict={s})", d=directory, s=strict)
     valid: list[str] = []
@@ -118,11 +118,11 @@ def _bulk_validate(directory: str, strict: bool) -> tuple[list[str], list[str]]:
 
 
 def _print_summary(header: str, collection: Iterable[str]) -> None:
-    """TODO docstring. Document this function.
+    """Log a summary of items.
 
     Args:
-        header: TODO docstring.
-        collection: TODO docstring.
+        header: Summary heading text.
+        collection: Iterable of item strings to summarize.
     """
     items = list(collection)
     if not items:
@@ -133,7 +133,7 @@ def _print_summary(header: str, collection: Iterable[str]) -> None:
 
 @dataclass
 class _Options:
-    """TODO docstring. Document this class."""
+    """CLI options for SVG map validation."""
 
     single: str | None
     all: bool
@@ -175,13 +175,13 @@ def _parse_args(argv: list[str]) -> _Options:
 
 
 def main(argv: list[str]) -> int:
-    """TODO docstring. Document this function.
+    """Run SVG map validation with provided CLI arguments.
 
     Args:
-        argv: TODO docstring.
+        argv: Command-line argument list (excluding script name).
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success, non-zero for errors).
     """
     opts = _parse_args(argv)
     strict = opts.strict or os.getenv("SVG_VALIDATE_STRICT") == "1"

@@ -22,11 +22,14 @@ display = pysf.SimulationView(map_def=map_def, scaling=10)
 
 
 def render_step(t, s):
-    """TODO docstring. Document this function.
+    """Render a single frame of the simulation.
 
     Args:
-        t: TODO docstring.
-        s: TODO docstring.
+        t: Current simulation time.
+        s: Scaling factor for rendering.
+
+    Returns:
+        Rendered frame for the current step.
     """
     return display.render(pysf.to_visualizable_state(t, s))
 

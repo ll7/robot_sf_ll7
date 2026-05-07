@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Feature extractors for processing observations in reinforcement learning."""
 # WARNING: don't move this script or else loading trained SB3 policies might not work
 
 import numpy as np
@@ -37,14 +37,14 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         dropout_rates: list[float] | None = None,
     ):
         # Extract the ray and drive state spaces from the observation space
-        """TODO docstring. Document this function.
+        """Initialize feature extractor factory.
 
         Args:
-            observation_space: TODO docstring.
-            use_ray_conv: TODO docstring.
-            num_filters: TODO docstring.
-            kernel_sizes: TODO docstring.
-            dropout_rates: TODO docstring.
+            observation_space: Environment observation space
+            use_ray_conv: Whether to use convolutional layers for rays
+            num_filters: Number of filters in CNN layers
+            kernel_sizes: Kernel sizes for CNN layers
+            dropout_rates: Dropout rates between layers
         """
         if dropout_rates is None:
             dropout_rates = [0.3, 0.3, 0.3, 0.3]
@@ -132,13 +132,13 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         self.drive_state_extractor = nn.Sequential(nn.Flatten())
 
     def forward(self, obs: dict) -> th.Tensor:
-        """TODO docstring. Document this function.
+        """Extract features from observation.
 
         Args:
-            obs: TODO docstring.
+            obs: Observation dictionary from environment
 
         Returns:
-            TODO docstring.
+            Feature tensor for policy/value networks
         """
         ray_x = self.ray_extractor(obs[OBS_RAYS])
         drive_x = self.drive_state_extractor(obs[OBS_DRIVE_STATE])

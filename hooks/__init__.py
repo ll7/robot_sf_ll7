@@ -1,1 +1,1 @@
-"""TODO docstring. Document this module."""
+"""Hook utilities for the RobotSF project."""

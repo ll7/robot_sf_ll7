@@ -1,4 +1,16 @@
-"""TODO docstring. Document this module."""
+"""Pedestrian population module for simulation initialization.
+
+This module provides functionality for populating simulations with pedestrians
+based on routes and crowded zones. It includes classes and functions for
+configuring pedestrian spawning, sampling positions, and generating initial
+pedestrian states with appropriate groupings and behaviors.
+
+Key components:
+- PedSpawnConfig: Configuration for pedestrian spawning parameters
+- ZonePointsGenerator: Generates points within different zones
+- RoutePointsGenerator: Generates points along routes
+- populate_simulation: Main function to populate simulation with pedestrians
+"""
 
 from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
@@ -142,7 +154,9 @@ class ZonePointsGenerator:
     _zone_probs: list[float] = field(init=False)
 
     def __post_init__(self):
-        """TODO docstring. Document this function."""
+        """Initialize the ZonePointsGenerator after dataclass field processing.
+
+        Calculates zone areas and probabilities based on their sizes."""
         self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
         total_area = sum(self.zone_areas)
         self._zone_probs = [area / total_area for area in self.zone_areas]
@@ -164,7 +178,13 @@ class ZonePointsGenerator:
 
 @dataclass
 class RoutePointsGenerator:
-    """TODO docstring. Document this class."""
+    """Generates points along routes for pedestrian spawning.
+
+    Attributes:
+        routes: List of GlobalRoute objects to sample from
+        sidewalk_width: Width of the sidewalk for area calculation
+        _route_probs: Pre-calculated probabilities for each route based on length
+    """
 
     routes: list[GlobalRoute]
     sidewalk_width: float
@@ -172,37 +192,35 @@ class RoutePointsGenerator:
 
     def __post_init__(self):
         # info: distribute proportionally by zone area; area ~ route length * sidewalk width
-        """TODO docstring. Document this function."""
+        """Initialize route probabilities based on route lengths."""
         self._zone_probs = [r.total_length / self.total_length for r in self.routes]
 
     @property
     def total_length(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Calculate the total length of all routes.
 
         Returns:
-            TODO docstring.
+            float: Sum of total_length for all routes
         """
         return sum(r.total_length for r in self.routes)
 
     @property
     def total_sidewalks_area(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Calculate the total sidewalk area.
 
         Returns:
-            TODO docstring.
+            float: Total sidewalk area (total_length * sidewalk_width)
         """
         return self.total_length * self.sidewalk_width
 
     def generate(self, num_samples: int) -> tuple[list[Vec2D], int, int]:
-        """TODO docstring. Document this function.
+        """Generate spawn positions for pedestrians along routes.
 
         Args:
-            num_samples: TODO docstring.
+            num_samples: Number of pedestrian positions to generate
 
         Returns:
-            TODO docstring.
+            tuple[list[Vec2D], int, int]: Spawn positions, route ID, and section ID
         """
         route_id = np.random.choice(len(self.routes), size=1, p=self._zone_probs)[0]
         spawn_pos, sec_id = sample_group_spawn_on_route(

@@ -39,13 +39,13 @@ SVG_MAPS = [
 
 
 def _step_budget(default: int) -> int:
-    """TODO docstring. Document this function.
+    """Compute the step budget based on environment or fast demo mode.
 
     Args:
-        default: TODO docstring.
+        default: Default step budget when not overridden.
 
     Returns:
-        TODO docstring.
+        Step budget adjusted for fast demo mode or environment override.
     """
     override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
     if override:
@@ -76,11 +76,11 @@ SCENARIOS_TO_RUN = _scenario_budget(len(SVG_MAPS))
 
 
 def run_svg_scenario(name: str, svg_path: str) -> None:
-    """TODO docstring. Document this function.
+    """Run a single SVG-based social navigation scenario.
 
     Args:
-        name: TODO docstring.
-        svg_path: TODO docstring.
+        name: Name of the scenario for display.
+        svg_path: Path to the SVG map file.
     """
     print(f"\n=== Scenario: {name} ===")
     map_def = convert_map(svg_path)
@@ -103,7 +103,7 @@ def run_svg_scenario(name: str, svg_path: str) -> None:
 
 
 def main() -> None:
-    """TODO docstring. Document this function."""
+    """Run all configured SVG scenarios sequentially."""
     for name, svg_path in SVG_MAPS[:SCENARIOS_TO_RUN]:
         run_svg_scenario(name, svg_path)
     print("\nAll scenarios completed.")

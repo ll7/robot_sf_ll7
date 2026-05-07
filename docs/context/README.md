@@ -107,6 +107,9 @@ knowledge, not every transient iteration detail.
   records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
   full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
   promotion boundary.
+* [Issue #1038 H500 SNQI Contract Decision](issue_1038_h500_snqi_contract.md)
+  records the h500 scenario-horizon SNQI failure decomposition and the decision to keep the surface
+  experimental instead of overwriting the camera-ready v3 SNQI assets.
 * [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as

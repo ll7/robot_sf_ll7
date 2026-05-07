@@ -244,7 +244,10 @@ mentions scenario-specific horizons, present them beside the fixed-horizon surfa
 safety caveats, the SNQI `fail` status on the candidate-augmented run, the local non-Slurm
 provenance, and the `socnav_bench` coverage gap. Do not publish a release tag from this evidence
 until the SNQI contract failure and candidate safety interpretation are resolved. Follow-up issue
-`ll7/robot_sf_ll7#1038` tracks the SNQI calibration or claim-scope decision.
+`ll7/robot_sf_ll7#1038` tracks the SNQI calibration or claim-scope decision. The current decision
+is recorded in `docs/context/issue_1038_h500_snqi_contract.md`: keep h500 scenario horizons as an
+experimental sensitivity surface and do not overwrite the camera-ready v3 SNQI assets from this
+local evidence.
 
 ## Validation Run
 

@@ -37,5 +37,7 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   paper-facing scenario-horizon benchmark config.
 - `issue_1023_scenario_horizons_local_full_2026-05-06/`: compact local non-Slurm full-campaign
   artifacts, analyzer output, and fixed-vs-scenario comparison for issue #1023.
+- `issue_1045_h500_solvability_mechanisms_2026-05-07/`: aggregate mechanism classification for
+  h500 fixed-timeout relief, including explicit trace-required boundaries for wait-then-go claims.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and
   reports from the May 4 run.

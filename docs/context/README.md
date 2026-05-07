@@ -95,6 +95,7 @@ knowledge, not every transient iteration detail.
   [issue 1023 candidate-augmented local full campaign](evidence/issue_1023_candidate_augmented_local_full_2026-05-06/README.md),
   [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
+  [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
@@ -110,6 +111,10 @@ knowledge, not every transient iteration detail.
 * [Issue #1038 H500 SNQI Contract Decision](issue_1038_h500_snqi_contract.md)
   records the h500 scenario-horizon SNQI failure decomposition and the decision to keep the surface
   experimental instead of overwriting the camera-ready v3 SNQI assets.
+* [Issue #1045 H500 Solvability Mechanisms](issue_1045_h500_solvability_mechanisms.md)
+  classifies aggregate fixed-to-h500 timeout relief into clean budget relief, late completion,
+  exposure-enabled completion, partial relief, and safety-regressed completion while marking
+  wait-then-go explanations as trace-required.
 * [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as

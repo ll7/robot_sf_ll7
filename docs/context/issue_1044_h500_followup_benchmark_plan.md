@@ -122,13 +122,16 @@ Existing reusable commands:
 
 ```bash
 python scripts/tools/compare_camera_ready_campaigns.py \
-  --base <fixed_campaign_root> \
-  --candidate <h500_campaign_root> \
-  --output-dir <comparison_output_dir>
+  --base-campaign-root <fixed_campaign_root> \
+  --candidate-campaign-root <h500_campaign_root> \
+  --output-json <comparison_output_dir>/fixed_vs_h500_comparison.json \
+  --output-md <comparison_output_dir>/fixed_vs_h500_comparison.md
 
 python scripts/tools/analyze_snqi_contract.py \
-  --episodes <h500_episodes_or_summary_input> \
-  --output-dir <h500_snqi_output_dir>
+  --campaign-root <h500_campaign_root> \
+  --output-json <h500_snqi_output_dir>/snqi_diagnostics.json \
+  --output-md <h500_snqi_output_dir>/snqi_diagnostics.md \
+  --output-csv <h500_snqi_output_dir>/snqi_planner_ordering.csv
 
 python scripts/tools/analyze_h500_solvability_mechanisms.py \
   docs/context/evidence/issue_1023_candidate_augmented_local_full_2026-05-06/reports/fixed_vs_scenario_horizon_candidates_comparison.json \

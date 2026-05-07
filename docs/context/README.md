@@ -115,6 +115,9 @@ knowledge, not every transient iteration detail.
   classifies aggregate fixed-to-h500 timeout relief into clean budget relief, late completion,
   exposure-enabled completion, partial relief, and safety-regressed completion while marking
   wait-then-go explanations as trace-required.
+* [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
+  defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
+  pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.
 * [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as

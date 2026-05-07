@@ -33,5 +33,9 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that
   support the v1 raw-success leader and v2 strict-gate promotion decision.
+- `issue_1023_scenario_horizons_preflight_2026-05-06/`: compact preflight artifacts for the
+  paper-facing scenario-horizon benchmark config.
+- `issue_1023_scenario_horizons_local_full_2026-05-06/`: compact local non-Slurm full-campaign
+  artifacts, analyzer output, and fixed-vs-scenario comparison for issue #1023.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and
   reports from the May 4 run.

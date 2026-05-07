@@ -1,0 +1,114 @@
+{
+  "total_jobs": 144,
+  "written": 144,
+  "successful_jobs": 144,
+  "failed_jobs": 0,
+  "failures": [],
+  "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/prediction_planner__differential_drive/episodes.jsonl",
+  "algorithm_readiness": {
+    "name": "prediction_planner",
+    "tier": "experimental",
+    "profile": "experimental"
+  },
+  "algorithm_metadata_contract": {
+    "algorithm": "prediction_planner",
+    "status": "ok",
+    "canonical_algorithm": "prediction_planner",
+    "baseline_category": "learning",
+    "policy_semantics": "predictive_model_based_adapter",
+    "planner_kinematics": {
+      "robot_kinematics": "differential_drive",
+      "planner_command_space": "unicycle_vw",
+      "supports_native_commands": false,
+      "supports_adapter_commands": true,
+      "execution_mode": "adapter",
+      "adapter_name": "PredictionPlannerAdapter",
+      "adapter_active": true,
+      "scenario_kinematics": [
+        "differential_drive"
+      ]
+    },
+    "adapter_impact": {
+      "requested": false,
+      "native_steps": 0,
+      "adapted_steps": 0,
+      "status": "disabled"
+    },
+    "prediction_mode": "deterministic",
+    "predictive_uncertainty_mode": "deterministic",
+    "predictive_risk_objective": "mean",
+    "predictive_risk_sample_count": 1,
+    "predictive_search_mode": "sequence_beam",
+    "kinematics_feasibility": {
+      "commands_evaluated": 20691,
+      "infeasible_native_count": 0,
+      "projected_count": 0,
+      "projection_rate": 0.0,
+      "infeasible_rate": 0.0,
+      "mean_abs_delta_linear": 0.0,
+      "mean_abs_delta_angular": 0.0,
+      "max_abs_delta_linear": 0.0,
+      "max_abs_delta_angular": 0.0
+    }
+  },
+  "preflight": {
+    "status": "ok",
+    "learned_policy_contract": {
+      "status": "not_applicable"
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "prediction_planner",
+      "status": "ok",
+      "canonical_algorithm": "prediction_planner",
+      "baseline_category": "learning",
+      "policy_semantics": "predictive_model_based_adapter",
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": false,
+        "supports_adapter_commands": true,
+        "execution_mode": "adapter",
+        "adapter_name": "PredictionPlannerAdapter",
+        "adapter_active": true,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "adapter_impact": {
+        "requested": false,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "disabled"
+      },
+      "prediction_mode": "deterministic",
+      "predictive_uncertainty_mode": "deterministic",
+      "predictive_risk_objective": "mean",
+      "predictive_risk_sample_count": 1,
+      "predictive_search_mode": "sequence_beam",
+      "kinematics_feasibility": {
+        "commands_evaluated": 20691,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "projection_rate": 0.0,
+        "infeasible_rate": 0.0,
+        "mean_abs_delta_linear": 0.0,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0
+      }
+    }
+  },
+  "benchmark_availability": {
+    "execution_mode": "adapter",
+    "readiness_status": "adapter",
+    "availability_status": "available",
+    "benchmark_success": true,
+    "availability_reason": null
+  },
+  "status": "ok",
+  "started_at_utc": "2026-05-06T12:01:35.798848Z",
+  "finished_at_utc": "2026-05-06T12:08:12.565722Z",
+  "runtime_sec": 396.76687634900736,
+  "episodes_per_second": 0.3629335223874221,
+  "kinematics": "differential_drive"
+}

@@ -1,0 +1,6126 @@
+{
+  "campaign": {
+    "schema_version": "benchmark-camera-ready-campaign.v1",
+    "campaign_id": "issue1023_scenario_horizons_h500_local_2026-05-06",
+    "name": "paper_experiment_matrix_v1_scenario_horizons_h500",
+    "created_at_utc": "2026-05-06T12:01:35.670439Z",
+    "started_at_utc": "2026-05-06T12:01:35.670439Z",
+    "finished_at_utc": "2026-05-06T12:15:15.455866Z",
+    "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "scenario_matrix_hash": "fed70fa089d8",
+    "git_hash": "521a5d798cb1aca9dd62c20eb76790f4cf5ee79d",
+    "invoked_command": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/.venv/bin/python /home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml --output-root output/benchmarks/issue_1023 --campaign-id issue1023_scenario_horizons_h500_local_2026-05-06 --mode run --log-level INFO",
+    "runtime_sec": 819.7856649390014,
+    "episodes_per_second": 1.229589688025349,
+    "total_episodes": 1008,
+    "successful_runs": 7,
+    "total_runs": 7,
+    "benchmark_success": true,
+    "paper_interpretation_profile": "baseline-ready-core",
+    "kinematics_matrix": [
+      "differential_drive"
+    ],
+    "holonomic_command_mode": "vx_vy",
+    "paper_facing": true,
+    "paper_profile_version": "paper-matrix-v1",
+    "amv_profile_name": "amv-paper-v1",
+    "amv_contract_version": "1",
+    "amv_coverage_enforcement": "warn",
+    "amv_coverage_status": "warn",
+    "comparability_mapping_path": "configs/benchmarks/alyassi_comparability_map_v1.yaml",
+    "comparability_mapping_version": "alyassi-comparability-v1",
+    "comparability_mapping_hash": "8345d81be4fd",
+    "repository_url": "https://github.com/ll7/robot_sf_ll7",
+    "release_tag": "{release_tag}",
+    "doi": "10.5281/zenodo.<record-id>",
+    "release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/{release_tag}",
+    "release_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/{release_tag}/issue1023_scenario_horizons_h500_local_2026-05-06_publication_bundle.tar.gz",
+    "doi_url": "https://doi.org/10.5281/zenodo.<record-id>",
+    "snqi_weights_version": "snqi_weights_camera_ready_v3",
+    "snqi_weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
+    "snqi_baseline_version": "snqi_baseline_camera_ready_v3",
+    "snqi_baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+    "snqi_contract_status": "warn",
+    "snqi_contract_rank_alignment_spearman": 0.32142857142857145,
+    "snqi_contract_outcome_separation": 0.21996748943799715,
+    "snqi_contract_dominant_component": "time_penalty",
+    "snqi_contract_dominant_component_mean_abs": 0.08075486062352744,
+    "snqi_positioning_recommendation": "strengthen_as_operational_multi_objective_aggregation",
+    "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility"
+  },
+  "planner_rows": [
+    {
+      "planner_key": "goal",
+      "algo": "goal",
+      "planner_group": "core",
+      "kinematics": "differential_drive",
+      "status": "ok",
+      "episodes": 144,
+      "started_at_utc": "2026-05-06T12:08:13.057999Z",
+      "finished_at_utc": "2026-05-06T12:08:58.107895Z",
+      "runtime_sec": "45.0499",
+      "episodes_per_second": "3.1965",
+      "failed_jobs": 0,
+      "success_mean": "0.0556",
+      "collisions_mean": "0.6181",
+      "ped_collision_count_mean": "0.0000",
+      "obstacle_collision_count_mean": "0.0000",
+      "total_collision_count_mean": "0.0000",
+      "near_misses_mean": "7.0556",
+      "time_to_goal_norm_mean": "0.9943",
+      "path_efficiency_mean": "1.0000",
+      "comfort_exposure_mean": "0.0254",
+      "jerk_mean": "0.0082",
+      "snqi_mean": "-0.1904",
+      "success_ci_low": "nan",
+      "success_ci_high": "nan",
+      "collision_ci_low": "nan",
+      "collision_ci_high": "nan",
+      "snqi_ci_low": "-0.2112",
+      "snqi_ci_high": "-0.1734",
+      "execution_mode": "native",
+      "execution_detail": "unspecified",
+      "planner_command_space": "unicycle_vw",
+      "benchmark_command_space": "unknown",
+      "projection_policy": "unknown",
+      "readiness_status": "native",
+      "availability_status": "available",
+      "benchmark_success": "true",
+      "availability_reason": "",
+      "most_likely_failure_reason": "",
+      "readiness_tier": "baseline-ready",
+      "preflight_status": "ok",
+      "socnav_prereq_policy": "fail-fast",
+      "learned_policy_contract_status": "not_applicable",
+      "learned_policy_contract_critical": 0,
+      "learned_policy_contract_warnings": 0,
+      "commands_evaluated": 22560,
+      "projection_rate": "0.0000",
+      "infeasible_rate": "0.0000"
+    },
+    {
+      "planner_key": "orca",
+      "algo": "orca",
+      "planner_group": "core",
+      "kinematics": "differential_drive",
+      "status": "ok",
+      "episodes": 144,
+      "started_at_utc": "2026-05-06T12:10:14.588783Z",
+      "finished_at_utc": "2026-05-06T12:11:26.381156Z",
+      "runtime_sec": "71.7924",
+      "episodes_per_second": "2.0058",
+      "failed_jobs": 0,
+      "success_mean": "0.7569",
+      "collisions_mean": "0.1667",
+      "ped_collision_count_mean": "0.0000",
+      "obstacle_collision_count_mean": "0.0000",
+      "total_collision_count_mean": "0.0000",
+      "near_misses_mean": "13.6806",
+      "time_to_goal_norm_mean": "0.6833",
+      "path_efficiency_mean": "0.9896",
+      "comfort_exposure_mean": "0.0270",
+      "jerk_mean": "0.1874",
+      "snqi_mean": "-0.2513",
+      "success_ci_low": "nan",
+      "success_ci_high": "nan",
+      "collision_ci_low": "nan",
+      "collision_ci_high": "nan",
+      "snqi_ci_low": "-0.3311",
+      "snqi_ci_high": "-0.1693",
+      "execution_mode": "adapter",
+      "execution_detail": "unspecified",
+      "planner_command_space": "unicycle_vw",
+      "benchmark_command_space": "unicycle_vw",
+      "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": "true",
+      "availability_reason": "",
+      "most_likely_failure_reason": "",
+      "readiness_tier": "baseline-ready",
+      "preflight_status": "ok",
+      "socnav_prereq_policy": "fallback",
+      "learned_policy_contract_status": "not_applicable",
+      "learned_policy_contract_critical": 0,
+      "learned_policy_contract_warnings": 0,
+      "commands_evaluated": 23594,
+      "projection_rate": "0.6469",
+      "infeasible_rate": "0.6469"
+    },
+    {
+      "planner_key": "ppo",
+      "algo": "ppo",
+      "planner_group": "experimental",
+      "kinematics": "differential_drive",
+      "status": "ok",
+      "episodes": 144,
+      "started_at_utc": "2026-05-06T12:11:26.865266Z",
+      "finished_at_utc": "2026-05-06T12:13:46.917265Z",
+      "runtime_sec": "140.0520",
+      "episodes_per_second": "1.0282",
+      "failed_jobs": 0,
+      "success_mean": "0.8056",
+      "collisions_mean": "0.1667",
+      "ped_collision_count_mean": "0.0000",
+      "obstacle_collision_count_mean": "0.0000",
+      "total_collision_count_mean": "0.0000",
+      "near_misses_mean": "5.6181",
+      "time_to_goal_norm_mean": "0.6165",
+      "path_efficiency_mean": "0.9516",
+      "comfort_exposure_mean": "0.0246",
+      "jerk_mean": "0.4881",
+      "snqi_mean": "-0.2074",
+      "success_ci_low": "nan",
+      "success_ci_high": "nan",
+      "collision_ci_low": "nan",
+      "collision_ci_high": "nan",
+      "snqi_ci_low": "-0.2589",
+      "snqi_ci_high": "-0.1649",
+      "execution_mode": "native",
+      "execution_detail": "unspecified",
+      "planner_command_space": "unicycle_vw",
+      "benchmark_command_space": "unknown",
+      "projection_policy": "unknown",
+      "readiness_status": "native",
+      "availability_status": "available",
+      "benchmark_success": "true",
+      "availability_reason": "",
+      "most_likely_failure_reason": "",
+      "readiness_tier": "experimental",
+      "preflight_status": "ok",
+      "socnav_prereq_policy": "fail-fast",
+      "learned_policy_contract_status": "pass",
+      "learned_policy_contract_critical": 0,
+      "learned_policy_contract_warnings": 0,
+      "commands_evaluated": 19358,
+      "projection_rate": "0.0000",
+      "infeasible_rate": "0.0000"
+    },
+    {
+      "planner_key": "prediction_planner",
+      "algo": "prediction_planner",
+      "planner_group": "experimental",
+      "kinematics": "differential_drive",
+      "status": "ok",
+      "episodes": 144,
+      "started_at_utc": "2026-05-06T12:01:35.798848Z",
+      "finished_at_utc": "2026-05-06T12:08:12.565722Z",
+      "runtime_sec": "396.7669",
+      "episodes_per_second": "0.3629",
+      "failed_jobs": 0,
+      "success_mean": "0.4931",
+      "collisions_mean": "0.4514",
+      "ped_collision_count_mean": "0.0000",
+      "obstacle_collision_count_mean": "0.0000",
+      "total_collision_count_mean": "0.0000",
+      "near_misses_mean": "24.9375",
+      "time_to_goal_norm_mean": "0.8667",
+      "path_efficiency_mean": "0.9992",
+      "comfort_exposure_mean": "0.0323",
+      "jerk_mean": "0.0940",
+      "snqi_mean": "-0.1408",
+      "success_ci_low": "nan",
+      "success_ci_high": "nan",
+      "collision_ci_low": "nan",
+      "collision_ci_high": "nan",
+      "snqi_ci_low": "-0.1733",
+      "snqi_ci_high": "-0.1089",
+      "execution_mode": "adapter",
+      "execution_detail": "unspecified",
+      "planner_command_space": "unicycle_vw",
+      "benchmark_command_space": "unknown",
+      "projection_policy": "unknown",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": "true",
+      "availability_reason": "",
+      "most_likely_failure_reason": "",
+      "readiness_tier": "experimental",
+      "preflight_status": "ok",
+      "socnav_prereq_policy": "fail-fast",
+      "learned_policy_contract_status": "not_applicable",
+      "learned_policy_contract_critical": 0,
+      "learned_policy_contract_warnings": 0,
+      "commands_evaluated": 20691,
+      "projection_rate": "0.0000",
+      "infeasible_rate": "0.0000"
+    },
+    {
+      "planner_key": "sacadrl",
+      "algo": "sacadrl",
+      "planner_group": "experimental",
+      "kinematics": "differential_drive",
+      "status": "ok",
+      "episodes": 144,
+      "started_at_utc": "2026-05-06T12:14:17.129889Z",
+      "finished_at_utc": "2026-05-06T12:15:14.923820Z",
+      "runtime_sec": "57.7939",
+      "episodes_per_second": "2.4916",
+      "failed_jobs": 0,
+      "success_mean": "0.0833",
+      "collisions_mean": "0.6667",
+      "ped_collision_count_mean": "0.0000",
+      "obstacle_collision_count_mean": "0.0000",
+      "total_collision_count_mean": "0.0000",
+      "near_misses_mean": "5.7778",
+      "time_to_goal_norm_mean": "0.9774",
+      "path_efficiency_mean": "0.9989",
+      "comfort_exposure_mean": "0.0240",
+      "jerk_mean": "0.0704",
+      "snqi_mean": "-0.2726",
+      "success_ci_low": "nan",
+      "success_ci_high": "nan",
+      "collision_ci_low": "nan",
+      "collision_ci_high": "nan",
+      "snqi_ci_low": "-0.3073",
+      "snqi_ci_high": "-0.2455",
+      "execution_mode": "adapter",
+      "execution_detail": "unspecified",
+      "planner_command_space": "unicycle_vw",
+      "benchmark_command_space": "unknown",
+      "projection_policy": "unknown",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": "true",
+      "availability_reason": "",
+      "most_likely_failure_reason": "",
+      "readiness_tier": "experimental",
+      "preflight_status": "ok",
+      "socnav_prereq_policy": "fallback",
+      "learned_policy_contract_status": "not_applicable",
+      "learned_policy_contract_critical": 0,
+      "learned_policy_contract_warnings": 0,
+      "commands_evaluated": 20262,
+      "projection_rate": "0.0000",
+      "infeasible_rate": "0.0000"
+    },
+    {
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "planner_group": "core",
+      "kinematics": "differential_drive",
+      "status": "ok",
+      "episodes": 144,
+      "started_at_utc": "2026-05-06T12:08:58.591008Z",
+      "finished_at_utc": "2026-05-06T12:10:14.105768Z",
+      "runtime_sec": "75.5148",
+      "episodes_per_second": "1.9069",
+      "failed_jobs": 0,
+      "success_mean": "0.0139",
+      "collisions_mean": "0.3819",
+      "ped_collision_count_mean": "0.0000",
+      "obstacle_collision_count_mean": "0.0000",
+      "total_collision_count_mean": "0.0000",
+      "near_misses_mean": "5.2917",
+      "time_to_goal_norm_mean": "0.9985",
+      "path_efficiency_mean": "0.8084",
+      "comfort_exposure_mean": "0.0370",
+      "jerk_mean": "0.4677",
+      "snqi_mean": "-0.9537",
+      "success_ci_low": "nan",
+      "success_ci_high": "nan",
+      "collision_ci_low": "nan",
+      "collision_ci_high": "nan",
+      "snqi_ci_low": "-1.0109",
+      "snqi_ci_high": "-0.8994",
+      "execution_mode": "adapter",
+      "execution_detail": "unspecified",
+      "planner_command_space": "unicycle_vw",
+      "benchmark_command_space": "unknown",
+      "projection_policy": "unknown",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": "true",
+      "availability_reason": "",
+      "most_likely_failure_reason": "",
+      "readiness_tier": "baseline-ready",
+      "preflight_status": "ok",
+      "socnav_prereq_policy": "fail-fast",
+      "learned_policy_contract_status": "not_applicable",
+      "learned_policy_contract_critical": 0,
+      "learned_policy_contract_warnings": 0,
+      "commands_evaluated": 32581,
+      "projection_rate": "0.0726",
+      "infeasible_rate": "0.0726"
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "algo": "socnav_sampling",
+      "planner_group": "experimental",
+      "kinematics": "differential_drive",
+      "status": "ok",
+      "episodes": 144,
+      "started_at_utc": "2026-05-06T12:13:47.409492Z",
+      "finished_at_utc": "2026-05-06T12:14:16.639925Z",
+      "runtime_sec": "29.2304",
+      "episodes_per_second": "4.9264",
+      "failed_jobs": 0,
+      "success_mean": "0.4028",
+      "collisions_mean": "0.5972",
+      "ped_collision_count_mean": "0.0000",
+      "obstacle_collision_count_mean": "0.0000",
+      "total_collision_count_mean": "0.0000",
+      "near_misses_mean": "1.6458",
+      "time_to_goal_norm_mean": "0.8193",
+      "path_efficiency_mean": "0.9886",
+      "comfort_exposure_mean": "0.0341",
+      "jerk_mean": "0.0719",
+      "snqi_mean": "-0.0848",
+      "success_ci_low": "nan",
+      "success_ci_high": "nan",
+      "collision_ci_low": "nan",
+      "collision_ci_high": "nan",
+      "snqi_ci_low": "-0.1164",
+      "snqi_ci_high": "-0.0565",
+      "execution_mode": "adapter",
+      "execution_detail": "unspecified",
+      "planner_command_space": "unicycle_vw",
+      "benchmark_command_space": "unknown",
+      "projection_policy": "unknown",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": "true",
+      "availability_reason": "",
+      "most_likely_failure_reason": "",
+      "readiness_tier": "experimental",
+      "preflight_status": "ok",
+      "socnav_prereq_policy": "fail-fast",
+      "learned_policy_contract_status": "not_applicable",
+      "learned_policy_contract_critical": 0,
+      "learned_policy_contract_warnings": 0,
+      "commands_evaluated": 12093,
+      "projection_rate": "0.9730",
+      "infeasible_rate": "0.9730"
+    }
+  ],
+  "runs": [
+    {
+      "planner": {
+        "key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "benchmark_profile": "experimental",
+        "kinematics": "differential_drive",
+        "algo_config_path": "configs/algos/prediction_planner_camera_ready.yaml",
+        "socnav_missing_prereq_policy": "fail-fast",
+        "adapter_impact_eval": false,
+        "workers": 2,
+        "horizon": null,
+        "dt": 0.1
+      },
+      "status": "ok",
+      "started_at_utc": "2026-05-06T12:01:35.798848Z",
+      "finished_at_utc": "2026-05-06T12:08:12.565722Z",
+      "runtime_sec": 396.76687634900736,
+      "episodes_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/prediction_planner__differential_drive/episodes.jsonl",
+      "summary_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/prediction_planner__differential_drive/summary.json",
+      "summary": {
+        "total_jobs": 144,
+        "written": 144,
+        "successful_jobs": 144,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/prediction_planner__differential_drive/episodes.jsonl",
+        "algorithm_readiness": {
+          "name": "prediction_planner",
+          "tier": "experimental",
+          "profile": "experimental"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "prediction_planner",
+          "status": "ok",
+          "canonical_algorithm": "prediction_planner",
+          "baseline_category": "learning",
+          "policy_semantics": "predictive_model_based_adapter",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": false,
+            "supports_adapter_commands": true,
+            "execution_mode": "adapter",
+            "adapter_name": "PredictionPlannerAdapter",
+            "adapter_active": true,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "prediction_mode": "deterministic",
+          "predictive_uncertainty_mode": "deterministic",
+          "predictive_risk_objective": "mean",
+          "predictive_risk_sample_count": 1,
+          "predictive_search_mode": "sequence_beam",
+          "kinematics_feasibility": {
+            "commands_evaluated": 20691,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "projection_rate": 0.0,
+            "infeasible_rate": 0.0,
+            "mean_abs_delta_linear": 0.0,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.0,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "prediction_planner",
+            "status": "ok",
+            "canonical_algorithm": "prediction_planner",
+            "baseline_category": "learning",
+            "policy_semantics": "predictive_model_based_adapter",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": false,
+              "supports_adapter_commands": true,
+              "execution_mode": "adapter",
+              "adapter_name": "PredictionPlannerAdapter",
+              "adapter_active": true,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "prediction_mode": "deterministic",
+            "predictive_uncertainty_mode": "deterministic",
+            "predictive_risk_objective": "mean",
+            "predictive_risk_sample_count": 1,
+            "predictive_search_mode": "sequence_beam",
+            "kinematics_feasibility": {
+              "commands_evaluated": 20691,
+              "infeasible_native_count": 0,
+              "projected_count": 0,
+              "projection_rate": 0.0,
+              "infeasible_rate": 0.0,
+              "mean_abs_delta_linear": 0.0,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.0,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "adapter",
+          "readiness_status": "adapter",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        },
+        "status": "ok",
+        "started_at_utc": "2026-05-06T12:01:35.798848Z",
+        "finished_at_utc": "2026-05-06T12:08:12.565722Z",
+        "runtime_sec": 396.76687634900736,
+        "episodes_per_second": 0.3629335223874221,
+        "kinematics": "differential_drive",
+        "episodes_total": 144
+      },
+      "aggregates": {
+        "prediction_planner": {
+          "agent_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "avg_speed": {
+            "mean": 1.3319512027464644,
+            "median": 1.4326411949726443,
+            "p95": 1.6000000000000014,
+            "mean_ci": [
+              1.2735369008311355,
+              1.3856055532127136
+            ],
+            "median_ci": [
+              1.3749463968448776,
+              1.4718976219199469
+            ],
+            "p95_ci": [
+              1.6000000000000012,
+              1.6000000000000079
+            ]
+          },
+          "clearing_distance_avg": {
+            "mean": 3.666864270056946,
+            "median": 3.149381864803147,
+            "p95": 7.917246332952286,
+            "mean_ci": [
+              3.3555022695482983,
+              3.9793890337639284
+            ],
+            "median_ci": [
+              2.9391061056755703,
+              3.3708483531757603
+            ],
+            "p95_ci": [
+              6.6096602462342355,
+              10.281380702001691
+            ]
+          },
+          "clearing_distance_min": {
+            "mean": 1.8912002625056512,
+            "median": 1.6076912629256548,
+            "p95": 3.5612487759782434,
+            "mean_ci": [
+              1.7530901225970743,
+              2.0492342782449375
+            ],
+            "median_ci": [
+              1.3958411887041442,
+              1.9661916430705606
+            ],
+            "p95_ci": [
+              3.464592618826085,
+              3.7429129195655126
+            ]
+          },
+          "collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "comfort_exposure": {
+            "mean": 0.03234642030871798,
+            "median": 0.0063898415809243835,
+            "p95": 0.16409370199692752,
+            "mean_ci": [
+              0.021768797915619146,
+              0.04771845409950388
+            ],
+            "median_ci": [
+              0.004962809713807201,
+              0.012578616352201259
+            ],
+            "p95_ci": [
+              0.06479159509904958,
+              0.2372549019607843
+            ]
+          },
+          "curvature_mean": {
+            "mean": 0.02802694492047437,
+            "median": 0.008542304831766224,
+            "p95": 0.12495399302339714,
+            "mean_ci": [
+              0.021681680817306797,
+              0.035750241701293
+            ],
+            "median_ci": [
+              0.00019028466444301432,
+              0.013773083256543443
+            ],
+            "p95_ci": [
+              0.08552766949946389,
+              0.15355856295339676
+            ]
+          },
+          "energy": {
+            "mean": 19.62951979961047,
+            "median": 14.408321581663497,
+            "p95": 51.43979009890742,
+            "mean_ci": [
+              16.248091195323155,
+              23.488113436000493
+            ],
+            "median_ci": [
+              11.200000000000632,
+              18.26263311312972
+            ],
+            "p95_ci": [
+              42.079728254797395,
+              57.2085540390821
+            ]
+          },
+          "force_exceed_events": {
+            "mean": 21.25,
+            "median": 3.0,
+            "p95": 100.69999999999999,
+            "mean_ci": [
+              12.211631944444445,
+              31.059548611111097
+            ],
+            "median_ci": [
+              2.0,
+              6.0
+            ],
+            "p95_ci": [
+              53.54999999999998,
+              163.0
+            ]
+          },
+          "jerk_mean": {
+            "mean": 0.09396241595428242,
+            "median": 0.07838545529041177,
+            "p95": 0.2532352607835264,
+            "mean_ci": [
+              0.08055103825459886,
+              0.10785031869809812
+            ],
+            "median_ci": [
+              0.04958353126258409,
+              0.09831129728276872
+            ],
+            "p95_ci": [
+              0.20599908493892166,
+              0.31040889439947766
+            ]
+          },
+          "near_misses": {
+            "mean": 24.9375,
+            "median": 0.0,
+            "p95": 108.09999999999997,
+            "mean_ci": [
+              17.265104166666667,
+              34.052951388888864
+            ],
+            "median_ci": [
+              0.0,
+              4.0
+            ],
+            "p95_ci": [
+              76.92125,
+              132.89999999999992
+            ]
+          },
+          "obstacle_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "path_efficiency": {
+            "mean": 0.9992069144285679,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.9979544422554187,
+              1.0
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "ped_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "snqi": {
+            "mean": -0.14075642225341856,
+            "median": -0.13371638795579924,
+            "p95": 0.1200850825998083,
+            "mean_ci": [
+              -0.17325491387598746,
+              -0.10893833866247707
+            ],
+            "median_ci": [
+              -0.17240913629365218,
+              -0.1002178029092523
+            ],
+            "p95_ci": [
+              0.11205372648070513,
+              0.1221867930424619
+            ]
+          },
+          "socnavbench_path_irregularity": {
+            "mean": 0.18474283187624677,
+            "median": 0.0942949010637032,
+            "p95": 0.6262182998065816,
+            "mean_ci": [
+              0.147810525850819,
+              0.22796061678150475
+            ],
+            "median_ci": [
+              0.08355328656106809,
+              0.13570330662307256
+            ],
+            "p95_ci": [
+              0.5205191933354246,
+              0.9144027782990365
+            ]
+          },
+          "socnavbench_path_length": {
+            "mean": 18.650305555555533,
+            "median": 19.840000000000018,
+            "p95": 31.251999999999928,
+            "mean_ci": [
+              17.543654166666652,
+              20.101916666666643
+            ],
+            "median_ci": [
+              16.325950000000056,
+              20.887999999999963
+            ],
+            "p95_ci": [
+              30.21599999999993,
+              31.44286999999994
+            ]
+          },
+          "socnavbench_path_length_ratio": {
+            "mean": 0.8212811317283557,
+            "median": 0.8893294480797398,
+            "p95": 0.9652896749208598,
+            "mean_ci": [
+              0.7876189767057746,
+              0.8530060867445888
+            ],
+            "median_ci": [
+              0.8554729384933433,
+              0.9123023892317212
+            ],
+            "p95_ci": [
+              0.9561311622101427,
+              1.1566449153180016
+            ]
+          },
+          "success": {
+            "mean": 0.4930555555555556,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.4236111111111111,
+              0.5763888888888888
+            ],
+            "median_ci": [
+              0.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio": {
+            "mean": 1.370007787052415,
+            "median": 1.3033427841011869,
+            "p95": 1.847741433018828,
+            "mean_ci": [
+              1.3108080304547587,
+              1.4341691324801675
+            ],
+            "median_ci": [
+              1.2609609319523394,
+              1.34616174809501
+            ],
+            "p95_ci": [
+              1.7076299364909249,
+              2.017660795372521
+            ]
+          },
+          "time_to_goal_ideal_ratio_valid": {
+            "mean": 0.4930555555555556,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.4236111111111111,
+              0.5763888888888888
+            ],
+            "median_ci": [
+              0.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm": {
+            "mean": 0.8667081096546326,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.8332020960876946,
+              0.8944523537316632
+            ],
+            "median_ci": [
+              0.9286942544203955,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm_success_only": {
+            "mean": 0.729661518172776,
+            "median": 0.7516778523489933,
+            "p95": 0.9511627906976745,
+            "mean_ci": [
+              0.6915025691502419,
+              0.7660277946369772
+            ],
+            "median_ci": [
+              0.7115384615384616,
+              0.794077022375215
+            ],
+            "p95_ci": [
+              0.9302325581395349,
+              0.9720930232558139
+            ]
+          },
+          "time_to_goal_success_only_valid": {
+            "mean": 0.4930555555555556,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.4236111111111111,
+              0.5763888888888888
+            ],
+            "median_ci": [
+              0.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "total_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "wall_collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "force_q50": {
+            "mean": 0.16242282993331,
+            "median": 0.08753902003118547,
+            "p95": 0.3816012018280741,
+            "mean_ci": [
+              0.1164594110639202,
+              0.23012177913218143
+            ],
+            "median_ci": [
+              0.06903144015509156,
+              0.10830038242798591
+            ],
+            "p95_ci": [
+              0.2756841088355597,
+              0.6025126916975518
+            ]
+          },
+          "force_q90": {
+            "mean": 0.9686501137193708,
+            "median": 0.624817332414932,
+            "p95": 2.9844895564596565,
+            "mean_ci": [
+              0.7554537999577673,
+              1.2932537544898244
+            ],
+            "median_ci": [
+              0.4755945659343619,
+              0.6919968537120829
+            ],
+            "p95_ci": [
+              1.5981530735743623,
+              3.5815089028251386
+            ]
+          },
+          "force_q95": {
+            "mean": 1.3796446397458892,
+            "median": 0.9127830441299949,
+            "p95": 3.283215903339211,
+            "mean_ci": [
+              1.091067383214241,
+              1.7841974105614888
+            ],
+            "median_ci": [
+              0.7455765443824821,
+              1.0938501011066388
+            ],
+            "p95_ci": [
+              2.4429292350282896,
+              6.262150892209677
+            ]
+          },
+          "mean_clearance": {
+            "mean": 5.849358322368736,
+            "median": 5.177776246608771,
+            "p95": 15.351086151447365,
+            "mean_ci": [
+              5.118711936748867,
+              6.609093689043411
+            ],
+            "median_ci": [
+              4.010851418165694,
+              5.680745693266048
+            ],
+            "p95_ci": [
+              11.235827377235873,
+              17.717890279055815
+            ]
+          },
+          "mean_distance": {
+            "mean": 7.249358322368734,
+            "median": 6.577776246608773,
+            "p95": 16.751086151447367,
+            "mean_ci": [
+              6.518711936748867,
+              8.00909368904341
+            ],
+            "median_ci": [
+              5.410851418165694,
+              7.080745693266047
+            ],
+            "p95_ci": [
+              12.635827377235872,
+              19.117890279055814
+            ]
+          },
+          "min_clearance": {
+            "mean": 2.1708329328730165,
+            "median": 0.6372880119965596,
+            "p95": 7.371761076940098,
+            "mean_ci": [
+              1.6089135226162434,
+              2.786010381468694
+            ],
+            "median_ci": [
+              0.22926072891681515,
+              0.9519748780429178
+            ],
+            "p95_ci": [
+              6.380208421155546,
+              10.614087181494627
+            ]
+          },
+          "min_distance": {
+            "mean": 3.5708329328730164,
+            "median": 2.0372880119965595,
+            "p95": 8.771761076940098,
+            "mean_ci": [
+              3.008913522616243,
+              4.186010381468694
+            ],
+            "median_ci": [
+              1.629260728916815,
+              2.3519748780429177
+            ],
+            "p95_ci": [
+              7.780208421155546,
+              12.014087181494627
+            ]
+          },
+          "ped_force_mean": {
+            "mean": 0.40950009388828457,
+            "median": 0.23902635093413072,
+            "p95": 0.9589266864900494,
+            "mean_ci": [
+              0.2990540362641298,
+              0.5756266356486053
+            ],
+            "median_ci": [
+              0.21143948612106517,
+              0.27182988733397145
+            ],
+            "p95_ci": [
+              0.6273746243499452,
+              1.4815396545673307
+            ]
+          },
+          "ped_force_q50": {
+            "mean": 0.25786977565470726,
+            "median": 0.13197900062435436,
+            "p95": 1.0992273806617987,
+            "mean_ci": [
+              0.1757458428256412,
+              0.36210594811083624
+            ],
+            "median_ci": [
+              0.0916625206300337,
+              0.15442688042630331
+            ],
+            "p95_ci": [
+              0.39467912090234186,
+              1.4743867537718285
+            ]
+          },
+          "ped_force_q90": {
+            "mean": 0.8503822238256866,
+            "median": 0.5721618504854106,
+            "p95": 1.849284518523671,
+            "mean_ci": [
+              0.6851536780187042,
+              1.1069296731426086
+            ],
+            "median_ci": [
+              0.49951171104529113,
+              0.644235932213349
+            ],
+            "p95_ci": [
+              1.5981530735743623,
+              3.490100680260989
+            ]
+          },
+          "ped_force_q95": {
+            "mean": 1.173666278880195,
+            "median": 0.7455765443824821,
+            "p95": 2.6502412247848977,
+            "mean_ci": [
+              0.9392883276712604,
+              1.538889059965737
+            ],
+            "median_ci": [
+              0.6349040126833646,
+              0.871356427659554
+            ],
+            "p95_ci": [
+              2.1397245943579524,
+              4.284407126861384
+            ]
+          },
+          "robot_ped_within_5m_frac": {
+            "mean": 0.4760957185543302,
+            "median": 0.48258706467661694,
+            "p95": 1.0,
+            "mean_ci": [
+              0.4215957688886002,
+              0.5335619334065183
+            ],
+            "median_ci": [
+              0.4117647058823529,
+              0.5541125541125541
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          }
+        },
+        "_meta": {
+          "group_by": "scenario_params.algo",
+          "effective_group_key": "scenario_params.algo | algo | scenario_id",
+          "missing_algorithms": [],
+          "warnings": [],
+          "metric_parameters": {
+            "threshold_profile": {
+              "candidate_speed_dependent_variants": [
+                "relative_speed_weighted",
+                "ttc_gated"
+              ],
+              "collision_distance_m": 0.25,
+              "comfort_force_threshold": 2.0,
+              "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+              "near_miss_distance_m": 0.5,
+              "near_miss_speed_dependence": "disabled_distance_only",
+              "profile_id": "social_nav_thresholds_v1",
+              "sources": {
+                "constants": "robot_sf/benchmark/constants.py",
+                "metrics": "robot_sf/benchmark/metrics.py",
+                "spec": "docs/ped_metrics/metrics_spec.md"
+              }
+            },
+            "threshold_signature": "719af0264cdb3c9cdffc077e4638fecec31ca8360845dd2bd0844902e54320f4",
+            "missing_profile_records": 0,
+            "explicit_profile_records": 144
+          }
+        }
+      }
+    },
+    {
+      "planner": {
+        "key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "benchmark_profile": "baseline-safe",
+        "kinematics": "differential_drive",
+        "algo_config_path": null,
+        "socnav_missing_prereq_policy": "fail-fast",
+        "adapter_impact_eval": false,
+        "workers": 2,
+        "horizon": null,
+        "dt": 0.1
+      },
+      "status": "ok",
+      "started_at_utc": "2026-05-06T12:08:13.057999Z",
+      "finished_at_utc": "2026-05-06T12:08:58.107895Z",
+      "runtime_sec": 45.04990268399706,
+      "episodes_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/goal__differential_drive/episodes.jsonl",
+      "summary_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/goal__differential_drive/summary.json",
+      "summary": {
+        "total_jobs": 144,
+        "written": 144,
+        "successful_jobs": 144,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/goal__differential_drive/episodes.jsonl",
+        "algorithm_readiness": {
+          "name": "goal",
+          "tier": "baseline-ready",
+          "profile": "baseline-safe"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "goal",
+          "status": "ok",
+          "canonical_algorithm": "goal",
+          "baseline_category": "classical",
+          "policy_semantics": "deterministic_goal_seeking",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": true,
+            "supports_adapter_commands": false,
+            "execution_mode": "native",
+            "adapter_name": "none",
+            "adapter_active": false,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 22560,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "projection_rate": 0.0,
+            "infeasible_rate": 0.0,
+            "mean_abs_delta_linear": 0.0,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.0,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "goal",
+            "status": "ok",
+            "canonical_algorithm": "goal",
+            "baseline_category": "classical",
+            "policy_semantics": "deterministic_goal_seeking",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": true,
+              "supports_adapter_commands": false,
+              "execution_mode": "native",
+              "adapter_name": "none",
+              "adapter_active": false,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 22560,
+              "infeasible_native_count": 0,
+              "projected_count": 0,
+              "projection_rate": 0.0,
+              "infeasible_rate": 0.0,
+              "mean_abs_delta_linear": 0.0,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.0,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "native",
+          "readiness_status": "native",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        },
+        "status": "ok",
+        "started_at_utc": "2026-05-06T12:08:13.057999Z",
+        "finished_at_utc": "2026-05-06T12:08:58.107895Z",
+        "runtime_sec": 45.04990268399706,
+        "episodes_per_second": 3.1964552955883003,
+        "kinematics": "differential_drive",
+        "episodes_total": 144
+      },
+      "aggregates": {
+        "goal": {
+          "agent_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "avg_speed": {
+            "mean": 0.9747083751374537,
+            "median": 0.9921881451647826,
+            "p95": 0.9997685698797544,
+            "mean_ci": [
+              0.9531993804792513,
+              0.9897475715964744
+            ],
+            "median_ci": [
+              0.990305150163839,
+              0.9939602636541917
+            ],
+            "p95_ci": [
+              0.9996487127000476,
+              0.9998222441010423
+            ]
+          },
+          "clearing_distance_avg": {
+            "mean": 3.665109374606322,
+            "median": 3.0852649584628806,
+            "p95": 7.342681133971411,
+            "mean_ci": [
+              3.38408670182094,
+              3.971359792589261
+            ],
+            "median_ci": [
+              2.9366515221394933,
+              3.3421391101612477
+            ],
+            "p95_ci": [
+              6.527578415821254,
+              9.903667592073045
+            ]
+          },
+          "clearing_distance_min": {
+            "mean": 2.036360540765761,
+            "median": 2.0231566778495864,
+            "p95": 3.7150834117536036,
+            "mean_ci": [
+              1.896567499393587,
+              2.2093189777241475
+            ],
+            "median_ci": [
+              1.757341385020663,
+              2.1677154361689364
+            ],
+            "p95_ci": [
+              3.5302471456609847,
+              3.7624664149275535
+            ]
+          },
+          "collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "comfort_exposure": {
+            "mean": 0.02539676793585162,
+            "median": 0.004777263875365142,
+            "p95": 0.08006756756756753,
+            "mean_ci": [
+              0.01586006901734445,
+              0.0399617123963833
+            ],
+            "median_ci": [
+              0.004202356926743566,
+              0.01100961538461538
+            ],
+            "p95_ci": [
+              0.05456335057792689,
+              0.17896174863387979
+            ]
+          },
+          "curvature_mean": {
+            "mean": 0.036973770316770876,
+            "median": 0.020772639547984022,
+            "p95": 0.11859011347545009,
+            "mean_ci": [
+              0.030584294522858976,
+              0.044838155440848466
+            ],
+            "median_ci": [
+              0.01700393505773799,
+              0.027483561145950706
+            ],
+            "p95_ci": [
+              0.10590165947045597,
+              0.15376144380615603
+            ]
+          },
+          "energy": {
+            "mean": 5.382620522288011,
+            "median": 3.082257971017211,
+            "p95": 23.260669685440067,
+            "mean_ci": [
+              4.4143862086588,
+              6.452371100194614
+            ],
+            "median_ci": [
+              2.8110194950438863,
+              3.7582686717792617
+            ],
+            "p95_ci": [
+              12.962490947346534,
+              27.55834246594395
+            ]
+          },
+          "force_exceed_events": {
+            "mean": 15.881944444444445,
+            "median": 3.0,
+            "p95": 60.64999999999995,
+            "mean_ci": [
+              8.99201388888889,
+              24.114583333333332
+            ],
+            "median_ci": [
+              1.0,
+              5.0
+            ],
+            "p95_ci": [
+              31.69999999999999,
+              128.0
+            ]
+          },
+          "jerk_mean": {
+            "mean": 0.008240586541319808,
+            "median": 0.0047693929342383905,
+            "p95": 0.031240491677735783,
+            "mean_ci": [
+              0.006873050968177119,
+              0.009828202415909346
+            ],
+            "median_ci": [
+              0.0037896056057378897,
+              0.005760595585940405
+            ],
+            "p95_ci": [
+              0.023038133199971965,
+              0.035101955831095426
+            ]
+          },
+          "near_misses": {
+            "mean": 7.055555555555555,
+            "median": 0.0,
+            "p95": 25.69999999999999,
+            "mean_ci": [
+              5.200694444444444,
+              9.646527777777777
+            ],
+            "median_ci": [
+              0.0,
+              4.5
+            ],
+            "p95_ci": [
+              21.69999999999999,
+              53.0
+            ]
+          },
+          "obstacle_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "path_efficiency": {
+            "mean": 1.0,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              1.0,
+              1.0
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "ped_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "snqi": {
+            "mean": -0.1904378873091616,
+            "median": -0.16830582548485395,
+            "p95": -0.09491099136070058,
+            "mean_ci": [
+              -0.21122485993638498,
+              -0.1733509084356573
+            ],
+            "median_ci": [
+              -0.18162659670211223,
+              -0.15133288895597108
+            ],
+            "p95_ci": [
+              -0.09491099136070058,
+              0.05668471606454858
+            ]
+          },
+          "socnavbench_path_irregularity": {
+            "mean": 0.11743677390913317,
+            "median": 0.02317660221003006,
+            "p95": 0.7251998513549474,
+            "mean_ci": [
+              0.08479505538199542,
+              0.15618432723282477
+            ],
+            "median_ci": [
+              0.01725412047244958,
+              0.03388793682581405
+            ],
+            "p95_ci": [
+              0.3646741025884056,
+              0.9024505587748204
+            ]
+          },
+          "socnavbench_path_length": {
+            "mean": 15.396674466769769,
+            "median": 15.177914878675994,
+            "p95": 26.523679088525352,
+            "mean_ci": [
+              14.414790535291027,
+              16.68140040687743
+            ],
+            "median_ci": [
+              13.905387253292815,
+              15.933512959280085
+            ],
+            "p95_ci": [
+              25.583744411234644,
+              28.81865311723294
+            ]
+          },
+          "socnavbench_path_length_ratio": {
+            "mean": 0.6884041716331599,
+            "median": 0.7276479317619866,
+            "p95": 0.920179330381114,
+            "mean_ci": [
+              0.6595201982202762,
+              0.7166356162186248
+            ],
+            "median_ci": [
+              0.7050477276575782,
+              0.7512702695156666
+            ],
+            "p95_ci": [
+              0.8923591125444602,
+              0.9493434264637655
+            ]
+          },
+          "success": {
+            "mean": 0.05555555555555555,
+            "median": 0.0,
+            "p95": 0.8499999999999943,
+            "mean_ci": [
+              0.020833333333333332,
+              0.09027777777777778
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio_valid": {
+            "mean": 0.05555555555555555,
+            "median": 0.0,
+            "p95": 0.8499999999999943,
+            "mean_ci": [
+              0.020833333333333332,
+              0.09027777777777778
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm": {
+            "mean": 0.9942769304417204,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.9886586211785021,
+              0.9984448188830598
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_success_only_valid": {
+            "mean": 0.05555555555555555,
+            "median": 0.0,
+            "p95": 0.8499999999999943,
+            "mean_ci": [
+              0.020833333333333332,
+              0.09027777777777778
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              1.0
+            ]
+          },
+          "total_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "wall_collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "force_q50": {
+            "mean": 0.12794446399538414,
+            "median": 0.06762243107361894,
+            "p95": 0.24599778214078022,
+            "mean_ci": [
+              0.08800035980038336,
+              0.18776101994031236
+            ],
+            "median_ci": [
+              0.05931186983499567,
+              0.08522090448792417
+            ],
+            "p95_ci": [
+              0.20218600085080463,
+              0.32448937211520357
+            ]
+          },
+          "force_q90": {
+            "mean": 0.8326499160233818,
+            "median": 0.5008660560591361,
+            "p95": 1.7133260292066488,
+            "mean_ci": [
+              0.6280162040009959,
+              1.1327148007777967
+            ],
+            "median_ci": [
+              0.4091788774936212,
+              0.6420855991034942
+            ],
+            "p95_ci": [
+              1.161345781463581,
+              4.464443845348979
+            ]
+          },
+          "force_q95": {
+            "mean": 1.294376277600362,
+            "median": 0.8705963930539059,
+            "p95": 2.642298846145847,
+            "mean_ci": [
+              0.9761718345793512,
+              1.7199814758361447
+            ],
+            "median_ci": [
+              0.6882634346239248,
+              0.990434696663509
+            ],
+            "p95_ci": [
+              2.0618937533771353,
+              8.34713283189973
+            ]
+          },
+          "mean_clearance": {
+            "mean": 5.780034752070857,
+            "median": 3.9977461107169883,
+            "p95": 14.596443465559908,
+            "mean_ci": [
+              5.001734008887708,
+              6.453775976632099
+            ],
+            "median_ci": [
+              3.407039847653673,
+              5.534195015702143
+            ],
+            "p95_ci": [
+              12.220391153673292,
+              16.313993934029885
+            ]
+          },
+          "mean_distance": {
+            "mean": 7.180034752070857,
+            "median": 5.397746110716988,
+            "p95": 15.996443465559908,
+            "mean_ci": [
+              6.401734008887709,
+              7.853775976632098
+            ],
+            "median_ci": [
+              4.807039847653673,
+              6.9341950157021435
+            ],
+            "p95_ci": [
+              13.620391153673289,
+              17.71399393402988
+            ]
+          },
+          "min_clearance": {
+            "mean": 1.4563825429729687,
+            "median": 0.4746643227626881,
+            "p95": 5.850355493131806,
+            "mean_ci": [
+              1.0986494342196653,
+              1.8730038679267662
+            ],
+            "median_ci": [
+              0.12180711937721929,
+              0.692910314653219
+            ],
+            "p95_ci": [
+              4.62442704072491,
+              8.253496275392951
+            ]
+          },
+          "min_distance": {
+            "mean": 2.856382542972969,
+            "median": 1.874664322762688,
+            "p95": 7.250355493131806,
+            "mean_ci": [
+              2.4986494342196655,
+              3.2730038679267666
+            ],
+            "median_ci": [
+              1.5218071193772191,
+              2.092910314653219
+            ],
+            "p95_ci": [
+              6.024427040724911,
+              9.653496275392952
+            ]
+          },
+          "ped_force_mean": {
+            "mean": 0.3616989719461733,
+            "median": 0.2129933059702987,
+            "p95": 0.6487656453843447,
+            "mean_ci": [
+              0.260271905087528,
+              0.5159965960829717
+            ],
+            "median_ci": [
+              0.18034307311199763,
+              0.2471702737636561
+            ],
+            "p95_ci": [
+              0.4806732873648888,
+              1.884611066676958
+            ]
+          },
+          "ped_force_q50": {
+            "mean": 0.19508915015891606,
+            "median": 0.08381903904833547,
+            "p95": 0.3086011108340149,
+            "mean_ci": [
+              0.123869299011329,
+              0.2934050871925077
+            ],
+            "median_ci": [
+              0.07021617105788956,
+              0.12384731896588665
+            ],
+            "p95_ci": [
+              0.2473250648083389,
+              0.8797835679447362
+            ]
+          },
+          "ped_force_q90": {
+            "mean": 0.7736559839615006,
+            "median": 0.5008660560591361,
+            "p95": 1.7498464510055014,
+            "mean_ci": [
+              0.5948717919455804,
+              1.0090684309669582
+            ],
+            "median_ci": [
+              0.40883493018899825,
+              0.577893298823617
+            ],
+            "p95_ci": [
+              1.137261651192773,
+              3.83806723372845
+            ]
+          },
+          "ped_force_q95": {
+            "mean": 1.1081122718821022,
+            "median": 0.7165242063344377,
+            "p95": 2.405907966248238,
+            "mean_ci": [
+              0.8747983443211338,
+              1.4876435321069303
+            ],
+            "median_ci": [
+              0.6499467125473707,
+              0.8527283892413619
+            ],
+            "p95_ci": [
+              2.0794539450311103,
+              4.267534181247751
+            ]
+          },
+          "robot_ped_within_5m_frac": {
+            "mean": 0.4665197064023441,
+            "median": 0.4697674418604651,
+            "p95": 1.0,
+            "mean_ci": [
+              0.40977851738275944,
+              0.5261623042717133
+            ],
+            "median_ci": [
+              0.3672566371681416,
+              0.5555555555555556
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio": {
+            "mean": 1.7849063048928198,
+            "median": 1.8340956270821147,
+            "p95": 1.9271434501254445,
+            "mean_ci": [
+              1.655228681715113,
+              1.8756685367503534
+            ],
+            "median_ci": [
+              1.6286367876590295,
+              1.919094018719022
+            ],
+            "p95_ci": [
+              1.8400000000000003,
+              1.9314777593442876
+            ]
+          },
+          "time_to_goal_norm_success_only": {
+            "mean": 0.8969847479509683,
+            "median": 0.9164056155006381,
+            "p95": 0.9935096153846154,
+            "mean_ci": [
+              0.8407917628152725,
+              0.9488122318550843
+            ],
+            "median_ci": [
+              0.8078291814946619,
+              0.9783610403151061
+            ],
+            "p95_ci": [
+              0.9314949862100682,
+              0.9951923076923077
+            ]
+          }
+        },
+        "_meta": {
+          "group_by": "scenario_params.algo",
+          "effective_group_key": "scenario_params.algo | algo | scenario_id",
+          "missing_algorithms": [],
+          "warnings": [],
+          "metric_parameters": {
+            "threshold_profile": {
+              "candidate_speed_dependent_variants": [
+                "relative_speed_weighted",
+                "ttc_gated"
+              ],
+              "collision_distance_m": 0.25,
+              "comfort_force_threshold": 2.0,
+              "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+              "near_miss_distance_m": 0.5,
+              "near_miss_speed_dependence": "disabled_distance_only",
+              "profile_id": "social_nav_thresholds_v1",
+              "sources": {
+                "constants": "robot_sf/benchmark/constants.py",
+                "metrics": "robot_sf/benchmark/metrics.py",
+                "spec": "docs/ped_metrics/metrics_spec.md"
+              }
+            },
+            "threshold_signature": "719af0264cdb3c9cdffc077e4638fecec31ca8360845dd2bd0844902e54320f4",
+            "missing_profile_records": 0,
+            "explicit_profile_records": 144
+          }
+        }
+      }
+    },
+    {
+      "planner": {
+        "key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "benchmark_profile": "baseline-safe",
+        "kinematics": "differential_drive",
+        "algo_config_path": null,
+        "socnav_missing_prereq_policy": "fail-fast",
+        "adapter_impact_eval": false,
+        "workers": 2,
+        "horizon": null,
+        "dt": 0.1
+      },
+      "status": "ok",
+      "started_at_utc": "2026-05-06T12:08:58.591008Z",
+      "finished_at_utc": "2026-05-06T12:10:14.105768Z",
+      "runtime_sec": 75.5147667459969,
+      "episodes_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/social_force__differential_drive/episodes.jsonl",
+      "summary_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/social_force__differential_drive/summary.json",
+      "summary": {
+        "total_jobs": 144,
+        "written": 144,
+        "successful_jobs": 144,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/social_force__differential_drive/episodes.jsonl",
+        "algorithm_readiness": {
+          "name": "social_force",
+          "tier": "baseline-ready",
+          "profile": "baseline-safe"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "social_force",
+          "status": "ok",
+          "canonical_algorithm": "social_force",
+          "baseline_category": "classical",
+          "policy_semantics": "social_force_adapter",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": false,
+            "supports_adapter_commands": true,
+            "execution_mode": "adapter",
+            "adapter_name": "SocialForcePlannerAdapter",
+            "adapter_active": true,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 32581,
+            "infeasible_native_count": 2366,
+            "projected_count": 2366,
+            "projection_rate": 0.07261901108007734,
+            "infeasible_rate": 0.07261901108007734,
+            "mean_abs_delta_linear": 0.02931445812576152,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.9998927097023316,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "social_force",
+            "status": "ok",
+            "canonical_algorithm": "social_force",
+            "baseline_category": "classical",
+            "policy_semantics": "social_force_adapter",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": false,
+              "supports_adapter_commands": true,
+              "execution_mode": "adapter",
+              "adapter_name": "SocialForcePlannerAdapter",
+              "adapter_active": true,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 32581,
+              "infeasible_native_count": 2366,
+              "projected_count": 2366,
+              "projection_rate": 0.07261901108007734,
+              "infeasible_rate": 0.07261901108007734,
+              "mean_abs_delta_linear": 0.02931445812576152,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.9998927097023316,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "adapter",
+          "readiness_status": "adapter",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        },
+        "status": "ok",
+        "started_at_utc": "2026-05-06T12:08:58.591008Z",
+        "finished_at_utc": "2026-05-06T12:10:14.105768Z",
+        "runtime_sec": 75.5147667459969,
+        "episodes_per_second": 1.9069118028843488,
+        "kinematics": "differential_drive",
+        "episodes_total": 144
+      },
+      "aggregates": {
+        "social_force": {
+          "agent_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "avg_speed": {
+            "mean": 1.0352862336462048,
+            "median": 1.234667355407473,
+            "p95": 1.536546757852898,
+            "mean_ci": [
+              0.9659006623652346,
+              1.1079432475483937
+            ],
+            "median_ci": [
+              1.1355475870779541,
+              1.3098102148822492
+            ],
+            "p95_ci": [
+              1.514239555150841,
+              1.8062293429195786
+            ]
+          },
+          "clearing_distance_avg": {
+            "mean": 4.669827556809837,
+            "median": 4.709830488575034,
+            "p95": 7.873825254677908,
+            "mean_ci": [
+              4.396052941922633,
+              4.969034367133397
+            ],
+            "median_ci": [
+              4.030051275520658,
+              5.0820614133701385
+            ],
+            "p95_ci": [
+              6.901428827493529,
+              10.318472300371543
+            ]
+          },
+          "clearing_distance_min": {
+            "mean": 3.099031687263131,
+            "median": 3.033708726039351,
+            "p95": 5.2572480290854635,
+            "mean_ci": [
+              2.9165794875810818,
+              3.2735570929727795
+            ],
+            "median_ci": [
+              2.89302605375494,
+              3.2452196016743
+            ],
+            "p95_ci": [
+              5.076258561511854,
+              5.362600533329721
+            ]
+          },
+          "collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "comfort_exposure": {
+            "mean": 0.03695210233906604,
+            "median": 0.004779798072091005,
+            "p95": 0.1552991452991453,
+            "mean_ci": [
+              0.023084001755213454,
+              0.055753929494828214
+            ],
+            "median_ci": [
+              0.0026217233258242884,
+              0.009345794392523364
+            ],
+            "p95_ci": [
+              0.09756319201631695,
+              0.47368421052631576
+            ]
+          },
+          "curvature_mean": {
+            "mean": 29.124651951843948,
+            "median": 0.7749375834894962,
+            "p95": 82.44861052270655,
+            "mean_ci": [
+              11.090698767025943,
+              52.697172202184014
+            ],
+            "median_ci": [
+              0.7207555443197565,
+              1.1040011967629693
+            ],
+            "p95_ci": [
+              41.54381797632886,
+              401.8546553745847
+            ]
+          },
+          "energy": {
+            "mean": 210.3463821796503,
+            "median": 120.2805331281696,
+            "p95": 611.715567768944,
+            "mean_ci": [
+              178.97571180569747,
+              246.33702730936645
+            ],
+            "median_ci": [
+              102.47605059129573,
+              185.68205257195672
+            ],
+            "p95_ci": [
+              461.65562432424406,
+              747.7895411239867
+            ]
+          },
+          "force_exceed_events": {
+            "mean": 15.3125,
+            "median": 3.0,
+            "p95": 50.849999999999994,
+            "mean_ci": [
+              8.686805555555555,
+              23.174999999999997
+            ],
+            "median_ci": [
+              2.0,
+              5.0
+            ],
+            "p95_ci": [
+              31.456249999999983,
+              126.0
+            ]
+          },
+          "jerk_mean": {
+            "mean": 0.46770095116149396,
+            "median": 0.3436331019787575,
+            "p95": 1.0307731611771966,
+            "mean_ci": [
+              0.41823316720639436,
+              0.5197739529889923
+            ],
+            "median_ci": [
+              0.3104386471584368,
+              0.5164558209955991
+            ],
+            "p95_ci": [
+              0.9281476532225478,
+              1.1239126230084833
+            ]
+          },
+          "near_misses": {
+            "mean": 5.291666666666667,
+            "median": 2.0,
+            "p95": 19.849999999999994,
+            "mean_ci": [
+              3.9923611111111112,
+              6.798611111111111
+            ],
+            "median_ci": [
+              0.0,
+              4.0
+            ],
+            "p95_ci": [
+              15.0,
+              33.0
+            ]
+          },
+          "obstacle_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "path_efficiency": {
+            "mean": 0.8084237571610925,
+            "median": 0.9944968791454256,
+            "p95": 1.0,
+            "mean_ci": [
+              0.7618887519844765,
+              0.852018630363454
+            ],
+            "median_ci": [
+              0.9364303656466187,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "ped_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "snqi": {
+            "mean": -0.9537106074382993,
+            "median": -1.0988662041216104,
+            "p95": -0.21124756564243877,
+            "mean_ci": [
+              -1.010896156786214,
+              -0.8994357379623733
+            ],
+            "median_ci": [
+              -1.1111902049419853,
+              -1.0232268685716073
+            ],
+            "p95_ci": [
+              -0.3161866539532797,
+              -0.17832648333363593
+            ]
+          },
+          "socnavbench_path_irregularity": {
+            "mean": 0.9456472390405928,
+            "median": 1.1104309393809926,
+            "p95": 1.627847848557692,
+            "mean_ci": [
+              0.8562496870469201,
+              1.0327376029344477
+            ],
+            "median_ci": [
+              0.9343611040057933,
+              1.234868602215876
+            ],
+            "p95_ci": [
+              1.544223209647631,
+              1.8497031380788267
+            ]
+          },
+          "socnavbench_path_length": {
+            "mean": 19.476685888978004,
+            "median": 18.59242371634083,
+            "p95": 48.077496689900194,
+            "mean_ci": [
+              17.269715430643615,
+              22.115858286643906
+            ],
+            "median_ci": [
+              14.802836480657511,
+              21.149922581923548
+            ],
+            "p95_ci": [
+              40.692648491089244,
+              61.08418711888434
+            ]
+          },
+          "socnavbench_path_length_ratio": {
+            "mean": 1.3819044422015934,
+            "median": 1.0022516125893641,
+            "p95": 4.552903553502031,
+            "mean_ci": [
+              1.1816412020151537,
+              1.6094337482807428
+            ],
+            "median_ci": [
+              0.8332692634122634,
+              1.083909761783267
+            ],
+            "p95_ci": [
+              2.9650029249812886,
+              5.479886288104252
+            ]
+          },
+          "success": {
+            "mean": 0.013888888888888888,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.034722222222222224
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "time_to_goal_ideal_ratio_valid": {
+            "mean": 0.013888888888888888,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.034722222222222224
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "time_to_goal_norm": {
+            "mean": 0.9985135135135135,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.9959159159159159,
+              1.0
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_success_only_valid": {
+            "mean": 0.013888888888888888,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.034722222222222224
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "total_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "wall_collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "force_q50": {
+            "mean": 0.20704990545808094,
+            "median": 0.07270120353559899,
+            "p95": 0.8294469143400747,
+            "mean_ci": [
+              0.14442400019989063,
+              0.2888117282683984
+            ],
+            "median_ci": [
+              0.06848171517799735,
+              0.09343036721690062
+            ],
+            "p95_ci": [
+              0.3399267595518925,
+              1.8223566144493386
+            ]
+          },
+          "force_q90": {
+            "mean": 0.955662657407094,
+            "median": 0.546902758862572,
+            "p95": 2.543869191347087,
+            "mean_ci": [
+              0.7177729311953222,
+              1.3106915685140064
+            ],
+            "median_ci": [
+              0.45025296191678543,
+              0.639004402031786
+            ],
+            "p95_ci": [
+              1.9353336848624079,
+              5.342316043038246
+            ]
+          },
+          "force_q95": {
+            "mean": 1.3854469887774794,
+            "median": 0.8521299888533767,
+            "p95": 3.184279117304547,
+            "mean_ci": [
+              1.0666841856799512,
+              1.8972741359756804
+            ],
+            "median_ci": [
+              0.7165242063344377,
+              0.9888292653378942
+            ],
+            "p95_ci": [
+              2.250797118259385,
+              8.632929374708453
+            ]
+          },
+          "mean_clearance": {
+            "mean": 5.902273159546791,
+            "median": 5.289642640176996,
+            "p95": 14.496559729616592,
+            "mean_ci": [
+              5.175823500947769,
+              6.572277848889929
+            ],
+            "median_ci": [
+              3.8751885325371536,
+              5.776402797152183
+            ],
+            "p95_ci": [
+              11.957610768054659,
+              16.18431785278576
+            ]
+          },
+          "mean_distance": {
+            "mean": 7.302273159546791,
+            "median": 6.689642640176997,
+            "p95": 15.896559729616595,
+            "mean_ci": [
+              6.575823500947768,
+              7.972277848889929
+            ],
+            "median_ci": [
+              5.275188532537153,
+              7.176402797152183
+            ],
+            "p95_ci": [
+              13.357610768054657,
+              17.58431785278576
+            ]
+          },
+          "min_clearance": {
+            "mean": 1.7681349311992247,
+            "median": 0.3371837419027546,
+            "p95": 7.9283854225168575,
+            "mean_ci": [
+              1.3205671481530978,
+              2.1866896616785327
+            ],
+            "median_ci": [
+              0.1499523979782702,
+              0.4807221055989084
+            ],
+            "p95_ci": [
+              6.813999402717032,
+              8.827848066235164
+            ]
+          },
+          "min_distance": {
+            "mean": 3.1681349311992246,
+            "median": 1.7371837419027545,
+            "p95": 9.328385422516858,
+            "mean_ci": [
+              2.7205671481530977,
+              3.5866896616785326
+            ],
+            "median_ci": [
+              1.5499523979782701,
+              1.8807221055989083
+            ],
+            "p95_ci": [
+              8.213999402717032,
+              10.227848066235165
+            ]
+          },
+          "ped_force_mean": {
+            "mean": 0.4311946607248293,
+            "median": 0.21120257286375693,
+            "p95": 1.564243750217679,
+            "mean_ci": [
+              0.3113377702545979,
+              0.6131188526326599
+            ],
+            "median_ci": [
+              0.18160183304152228,
+              0.24245815788139283
+            ],
+            "p95_ci": [
+              1.008483693428132,
+              1.9426601519738558
+            ]
+          },
+          "ped_force_q50": {
+            "mean": 0.27246934926650085,
+            "median": 0.08467445826007143,
+            "p95": 1.2395680815081174,
+            "mean_ci": [
+              0.18127206644880597,
+              0.39726934739276965
+            ],
+            "median_ci": [
+              0.07200702912652789,
+              0.10867844707053283
+            ],
+            "p95_ci": [
+              0.7170237102375664,
+              2.0406156601553316
+            ]
+          },
+          "ped_force_q90": {
+            "mean": 0.8829996771561627,
+            "median": 0.48986442122653745,
+            "p95": 2.6502412247848977,
+            "mean_ci": [
+              0.6858675638611778,
+              1.1846168576890945
+            ],
+            "median_ci": [
+              0.4101730064019139,
+              0.5807514555817275
+            ],
+            "p95_ci": [
+              2.043316136659765,
+              3.9993907794014536
+            ]
+          },
+          "ped_force_q95": {
+            "mean": 1.2081554315584997,
+            "median": 0.7165242063344377,
+            "p95": 2.659150873024934,
+            "mean_ci": [
+              0.9523110758767461,
+              1.619286492846949
+            ],
+            "median_ci": [
+              0.6425580341033166,
+              0.8889803337309127
+            ],
+            "p95_ci": [
+              2.301996628033947,
+              4.404937371747768
+            ]
+          },
+          "robot_ped_within_5m_frac": {
+            "mean": 0.45365860379680567,
+            "median": 0.4074074074074074,
+            "p95": 1.0,
+            "mean_ci": [
+              0.3972708938255983,
+              0.5194059452474418
+            ],
+            "median_ci": [
+              0.34624697336561744,
+              0.4891304347826087
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio": {
+            "mean": 1.3331653966447985,
+            "median": 1.3331653966447985,
+            "p95": 1.3331653966447985,
+            "mean_ci": [
+              1.3331653966447985,
+              1.3331653966447985
+            ],
+            "median_ci": [
+              1.3331653966447985,
+              1.3331653966447985
+            ],
+            "p95_ci": [
+              1.3331653966447985,
+              1.3331653966447985
+            ]
+          },
+          "time_to_goal_norm_success_only": {
+            "mean": 0.892972972972973,
+            "median": 0.892972972972973,
+            "p95": 0.9406486486486486,
+            "mean_ci": [
+              0.84,
+              0.9459459459459459
+            ],
+            "median_ci": [
+              0.84,
+              0.9459459459459459
+            ],
+            "p95_ci": [
+              0.84,
+              0.9459459459459459
+            ]
+          }
+        },
+        "_meta": {
+          "group_by": "scenario_params.algo",
+          "effective_group_key": "scenario_params.algo | algo | scenario_id",
+          "missing_algorithms": [],
+          "warnings": [],
+          "metric_parameters": {
+            "threshold_profile": {
+              "candidate_speed_dependent_variants": [
+                "relative_speed_weighted",
+                "ttc_gated"
+              ],
+              "collision_distance_m": 0.25,
+              "comfort_force_threshold": 2.0,
+              "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+              "near_miss_distance_m": 0.5,
+              "near_miss_speed_dependence": "disabled_distance_only",
+              "profile_id": "social_nav_thresholds_v1",
+              "sources": {
+                "constants": "robot_sf/benchmark/constants.py",
+                "metrics": "robot_sf/benchmark/metrics.py",
+                "spec": "docs/ped_metrics/metrics_spec.md"
+              }
+            },
+            "threshold_signature": "719af0264cdb3c9cdffc077e4638fecec31ca8360845dd2bd0844902e54320f4",
+            "missing_profile_records": 0,
+            "explicit_profile_records": 144
+          }
+        }
+      }
+    },
+    {
+      "planner": {
+        "key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "benchmark_profile": "baseline-safe",
+        "kinematics": "differential_drive",
+        "algo_config_path": null,
+        "socnav_missing_prereq_policy": "fallback",
+        "adapter_impact_eval": false,
+        "workers": 2,
+        "horizon": null,
+        "dt": 0.1
+      },
+      "status": "ok",
+      "started_at_utc": "2026-05-06T12:10:14.588783Z",
+      "finished_at_utc": "2026-05-06T12:11:26.381156Z",
+      "runtime_sec": 71.79237888999342,
+      "episodes_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/orca__differential_drive/episodes.jsonl",
+      "summary_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/orca__differential_drive/summary.json",
+      "summary": {
+        "total_jobs": 144,
+        "written": 144,
+        "successful_jobs": 144,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/orca__differential_drive/episodes.jsonl",
+        "algorithm_readiness": {
+          "name": "orca",
+          "tier": "baseline-ready",
+          "profile": "baseline-safe"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "orca",
+          "status": "ok",
+          "canonical_algorithm": "orca",
+          "baseline_category": "classical",
+          "policy_semantics": "orca_adapter",
+          "upstream_reference": {
+            "repo_url": "https://github.com/mit-acl/Python-RVO2",
+            "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+            "vendored_path": "third_party/python-rvo2",
+            "adapter_boundary": "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, then project the selected velocity into Robot SF unicycle_vw commands."
+          },
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": false,
+            "supports_adapter_commands": true,
+            "execution_mode": "adapter",
+            "adapter_name": "ORCAPlannerAdapter",
+            "upstream_command_space": "velocity_vector_xy",
+            "benchmark_command_space": "unicycle_vw",
+            "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+            "projection_documented": true,
+            "adapter_active": true,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 23594,
+            "infeasible_native_count": 15263,
+            "projected_count": 15263,
+            "projection_rate": 0.6469017546833941,
+            "infeasible_rate": 0.6469017546833941,
+            "mean_abs_delta_linear": 0.6037102689279394,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.9999999999774012,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "orca",
+            "status": "ok",
+            "canonical_algorithm": "orca",
+            "baseline_category": "classical",
+            "policy_semantics": "orca_adapter",
+            "upstream_reference": {
+              "repo_url": "https://github.com/mit-acl/Python-RVO2",
+              "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
+              "vendored_path": "third_party/python-rvo2",
+              "adapter_boundary": "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, then project the selected velocity into Robot SF unicycle_vw commands."
+            },
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": false,
+              "supports_adapter_commands": true,
+              "execution_mode": "adapter",
+              "adapter_name": "ORCAPlannerAdapter",
+              "upstream_command_space": "velocity_vector_xy",
+              "benchmark_command_space": "unicycle_vw",
+              "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+              "projection_documented": true,
+              "adapter_active": true,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 23594,
+              "infeasible_native_count": 15263,
+              "projected_count": 15263,
+              "projection_rate": 0.6469017546833941,
+              "infeasible_rate": 0.6469017546833941,
+              "mean_abs_delta_linear": 0.6037102689279394,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.9999999999774012,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "adapter",
+          "readiness_status": "adapter",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        },
+        "status": "ok",
+        "started_at_utc": "2026-05-06T12:10:14.588783Z",
+        "finished_at_utc": "2026-05-06T12:11:26.381156Z",
+        "runtime_sec": 71.79237888999342,
+        "episodes_per_second": 2.005783931754782,
+        "kinematics": "differential_drive",
+        "episodes_total": 144
+      },
+      "aggregates": {
+        "orca": {
+          "agent_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "avg_speed": {
+            "mean": 1.5974652434629073,
+            "median": 1.9245719911597394,
+            "p95": 1.9999922218566155,
+            "mean_ci": [
+              1.510346127230122,
+              1.6936919556073673
+            ],
+            "median_ci": [
+              1.7995714683516884,
+              1.9725810935196193
+            ],
+            "p95_ci": [
+              1.999985888272451,
+              1.9999928025608804
+            ]
+          },
+          "clearing_distance_avg": {
+            "mean": 3.392839486068482,
+            "median": 2.8055162515749776,
+            "p95": 7.317883482140653,
+            "mean_ci": [
+              3.1126476577104967,
+              3.6964607653958454
+            ],
+            "median_ci": [
+              2.454623112812553,
+              3.071061483586288
+            ],
+            "p95_ci": [
+              6.13161828202369,
+              9.906193968410896
+            ]
+          },
+          "clearing_distance_min": {
+            "mean": 1.975739844861424,
+            "median": 1.640703699844467,
+            "p95": 3.4364659772000006,
+            "mean_ci": [
+              1.8728953438432048,
+              2.098775165430485
+            ],
+            "median_ci": [
+              1.4538318009800693,
+              1.9621122721904225
+            ],
+            "p95_ci": [
+              3.1697706018273606,
+              3.7103164491563287
+            ]
+          },
+          "collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "comfort_exposure": {
+            "mean": 0.02698756457541647,
+            "median": 0.006535947712418301,
+            "p95": 0.09008139487679129,
+            "mean_ci": [
+              0.01626737445590585,
+              0.0415627172684464
+            ],
+            "median_ci": [
+              0.00420000162940755,
+              0.008146010831517073
+            ],
+            "p95_ci": [
+              0.06502379636452954,
+              0.1124413145539906
+            ]
+          },
+          "curvature_mean": {
+            "mean": 0.575715594661665,
+            "median": 0.05400825655272579,
+            "p95": 2.006081464267655,
+            "mean_ci": [
+              0.2641921830187875,
+              1.049862298852056
+            ],
+            "median_ci": [
+              0.04261959100125609,
+              0.07755494761980092
+            ],
+            "p95_ci": [
+              1.1766519515840195,
+              4.471957867176403
+            ]
+          },
+          "energy": {
+            "mean": 50.26812564174717,
+            "median": 33.97338761973916,
+            "p95": 140.4177411424722,
+            "mean_ci": [
+              42.76183706650728,
+              58.096700016771194
+            ],
+            "median_ci": [
+              28.831986409934732,
+              48.71004969935043
+            ],
+            "p95_ci": [
+              103.38946020983217,
+              180.62221897233033
+            ]
+          },
+          "force_exceed_events": {
+            "mean": 17.40972222222222,
+            "median": 3.0,
+            "p95": 60.49999999999994,
+            "mean_ci": [
+              10.331597222222223,
+              25.826215277777774
+            ],
+            "median_ci": [
+              1.0,
+              6.0
+            ],
+            "p95_ci": [
+              34.14000000000001,
+              131.0
+            ]
+          },
+          "jerk_mean": {
+            "mean": 0.18742492914976572,
+            "median": 0.11862478273315485,
+            "p95": 0.6528364817325868,
+            "mean_ci": [
+              0.14994441389512114,
+              0.2250054774497853
+            ],
+            "median_ci": [
+              0.09593315823861717,
+              0.15291815707715356
+            ],
+            "p95_ci": [
+              0.40802142538056624,
+              0.826073408919519
+            ]
+          },
+          "near_misses": {
+            "mean": 13.680555555555555,
+            "median": 5.5,
+            "p95": 55.099999999999966,
+            "mean_ci": [
+              9.9328125,
+              18.70399305555555
+            ],
+            "median_ci": [
+              0.0,
+              9.0
+            ],
+            "p95_ci": [
+              35.849999999999994,
+              88.94999999999996
+            ]
+          },
+          "obstacle_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "path_efficiency": {
+            "mean": 0.9896071707076745,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.9827907343032405,
+              0.9942484638247788
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "ped_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "snqi": {
+            "mean": -0.2513452684641341,
+            "median": -0.04193637106107689,
+            "p95": 0.13464130436076324,
+            "mean_ci": [
+              -0.3311455622061063,
+              -0.1693084493627097
+            ],
+            "median_ci": [
+              -0.15654370552422897,
+              0.0062462832337421784
+            ],
+            "p95_ci": [
+              0.13120010936156615,
+              0.13564395887643158
+            ]
+          },
+          "socnavbench_path_irregularity": {
+            "mean": 0.28975458422567574,
+            "median": 0.168497954994562,
+            "p95": 1.038922880167747,
+            "mean_ci": [
+              0.2410835473315323,
+              0.34604817071262006
+            ],
+            "median_ci": [
+              0.116286645898158,
+              0.19839777488472052
+            ],
+            "p95_ci": [
+              0.6300043310183095,
+              1.2491693963510913
+            ]
+          },
+          "socnavbench_path_length": {
+            "mean": 23.899616296541303,
+            "median": 21.55386298851326,
+            "p95": 43.604698906840085,
+            "mean_ci": [
+              22.348348077875244,
+              25.731782968254507
+            ],
+            "median_ci": [
+              20.734764492079382,
+              27.200000000000014
+            ],
+            "p95_ci": [
+              41.25320500187735,
+              52.50202607980072
+            ]
+          },
+          "socnavbench_path_length_ratio": {
+            "mean": 0.9389200205919271,
+            "median": 0.9379634698320777,
+            "p95": 1.2990171548973912,
+            "mean_ci": [
+              0.9048786077469114,
+              0.9769169474709151
+            ],
+            "median_ci": [
+              0.9203520037695746,
+              0.9424967912320861
+            ],
+            "p95_ci": [
+              1.1633333217338362,
+              1.5755804429012603
+            ]
+          },
+          "success": {
+            "mean": 0.7569444444444444,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.6838541666666668,
+              0.8263888888888888
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio": {
+            "mean": 1.1185337515525533,
+            "median": 0.9631942271764585,
+            "p95": 1.6735080167746275,
+            "mean_ci": [
+              1.0469849181788256,
+              1.205162465233182
+            ],
+            "median_ci": [
+              0.9510785765201509,
+              0.9878787878787879
+            ],
+            "p95_ci": [
+              1.4491514959081389,
+              2.8247310476148306
+            ]
+          },
+          "time_to_goal_ideal_ratio_valid": {
+            "mean": 0.7569444444444444,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.6838541666666668,
+              0.8263888888888888
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm": {
+            "mean": 0.683277102325536,
+            "median": 0.6583850931677019,
+            "p95": 1.0,
+            "mean_ci": [
+              0.6501740158722332,
+              0.7189537927411223
+            ],
+            "median_ci": [
+              0.6140470974808324,
+              0.6744186046511628
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm_success_only": {
+            "mean": 0.5815770893107999,
+            "median": 0.6037037037037037,
+            "p95": 0.7086835548172757,
+            "mean_ci": [
+              0.5598746002148025,
+              0.6032015279720134
+            ],
+            "median_ci": [
+              0.5771812080536913,
+              0.6188442308187931
+            ],
+            "p95_ci": [
+              0.7069767441860465,
+              0.7342342342342343
+            ]
+          },
+          "time_to_goal_success_only_valid": {
+            "mean": 0.7569444444444444,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.6838541666666668,
+              0.8263888888888888
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "total_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "wall_collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "force_q50": {
+            "mean": 0.14386253317844858,
+            "median": 0.08371314480037105,
+            "p95": 0.42929433291863267,
+            "mean_ci": [
+              0.1024549191713364,
+              0.20381118042443327
+            ],
+            "median_ci": [
+              0.06813559455090615,
+              0.09661614923752562
+            ],
+            "p95_ci": [
+              0.25018642353585835,
+              0.5210569560624128
+            ]
+          },
+          "force_q90": {
+            "mean": 0.8424706107674839,
+            "median": 0.6270404458972764,
+            "p95": 1.757602920307767,
+            "mean_ci": [
+              0.649318387685302,
+              1.1478518478052928
+            ],
+            "median_ci": [
+              0.5361244362226838,
+              0.7008028941615452
+            ],
+            "p95_ci": [
+              1.410462520012885,
+              2.110679416859915
+            ]
+          },
+          "force_q95": {
+            "mean": 1.3314540738838552,
+            "median": 0.954440664744566,
+            "p95": 2.634905036538409,
+            "mean_ci": [
+              1.0535326559315203,
+              1.731514901511106
+            ],
+            "median_ci": [
+              0.8838659687684718,
+              1.0825489984439773
+            ],
+            "p95_ci": [
+              2.363067850711928,
+              6.262150892209677
+            ]
+          },
+          "mean_clearance": {
+            "mean": 5.651934896330762,
+            "median": 4.669697132128369,
+            "p95": 12.250093905968718,
+            "mean_ci": [
+              5.071754416872057,
+              6.24188486553402
+            ],
+            "median_ci": [
+              4.1478524906324905,
+              6.189444693975804
+            ],
+            "p95_ci": [
+              11.0474811087779,
+              14.276259542443642
+            ]
+          },
+          "mean_distance": {
+            "mean": 7.051934896330763,
+            "median": 6.06969713212837,
+            "p95": 13.650093905968715,
+            "mean_ci": [
+              6.471754416872057,
+              7.641884865534021
+            ],
+            "median_ci": [
+              5.54785249063249,
+              7.589444693975805
+            ],
+            "p95_ci": [
+              12.447481108777898,
+              15.67625954244364
+            ]
+          },
+          "min_clearance": {
+            "mean": 1.4107404859433423,
+            "median": 0.3594791697186088,
+            "p95": 6.89820397306533,
+            "mean_ci": [
+              1.0842180183716956,
+              1.728031274050489
+            ],
+            "median_ci": [
+              0.22259810538466596,
+              0.6114670726089795
+            ],
+            "p95_ci": [
+              6.805531281387019,
+              7.602550454942136
+            ]
+          },
+          "min_distance": {
+            "mean": 2.8107404859433425,
+            "median": 1.7594791697186087,
+            "p95": 8.29820397306533,
+            "mean_ci": [
+              2.484218018371695,
+              3.1280312740504885
+            ],
+            "median_ci": [
+              1.6225981053846659,
+              2.0114670726089794
+            ],
+            "p95_ci": [
+              8.20553128138702,
+              9.002550454942137
+            ]
+          },
+          "ped_force_mean": {
+            "mean": 0.37233872995259254,
+            "median": 0.2237791958235733,
+            "p95": 0.70570865100532,
+            "mean_ci": [
+              0.271736683277149,
+              0.5302221495216513
+            ],
+            "median_ci": [
+              0.20606891788805062,
+              0.2636000259268022
+            ],
+            "p95_ci": [
+              0.540577434064019,
+              1.4089569917690512
+            ]
+          },
+          "ped_force_q50": {
+            "mean": 0.20102241207016883,
+            "median": 0.10302566252704526,
+            "p95": 0.3838826838774359,
+            "mean_ci": [
+              0.12478410159528192,
+              0.2978233179134567
+            ],
+            "median_ci": [
+              0.08371314480037105,
+              0.11856961012794709
+            ],
+            "p95_ci": [
+              0.307098383855158,
+              0.4437883794539107
+            ]
+          },
+          "ped_force_q90": {
+            "mean": 0.8167012637544744,
+            "median": 0.592836257710031,
+            "p95": 1.8366943687993933,
+            "mean_ci": [
+              0.6509578821510369,
+              1.0646259911502522
+            ],
+            "median_ci": [
+              0.5195214053714348,
+              0.648469631344055
+            ],
+            "p95_ci": [
+              1.3797244895628171,
+              3.4398714228569123
+            ]
+          },
+          "ped_force_q95": {
+            "mean": 1.1996473877707068,
+            "median": 0.9029753724583042,
+            "p95": 2.5214959443147515,
+            "mean_ci": [
+              0.9725894953517209,
+              1.588803715883255
+            ],
+            "median_ci": [
+              0.771371669900054,
+              0.9758599899689165
+            ],
+            "p95_ci": [
+              2.154045587473944,
+              3.490100680260989
+            ]
+          },
+          "robot_ped_within_5m_frac": {
+            "mean": 0.4873407590306309,
+            "median": 0.4968944099378882,
+            "p95": 1.0,
+            "mean_ci": [
+              0.43703001582823875,
+              0.5447881367346439
+            ],
+            "median_ci": [
+              0.35850000000000004,
+              0.5454545454545454
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          }
+        },
+        "_meta": {
+          "group_by": "scenario_params.algo",
+          "effective_group_key": "scenario_params.algo | algo | scenario_id",
+          "missing_algorithms": [],
+          "warnings": [],
+          "metric_parameters": {
+            "threshold_profile": {
+              "candidate_speed_dependent_variants": [
+                "relative_speed_weighted",
+                "ttc_gated"
+              ],
+              "collision_distance_m": 0.25,
+              "comfort_force_threshold": 2.0,
+              "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+              "near_miss_distance_m": 0.5,
+              "near_miss_speed_dependence": "disabled_distance_only",
+              "profile_id": "social_nav_thresholds_v1",
+              "sources": {
+                "constants": "robot_sf/benchmark/constants.py",
+                "metrics": "robot_sf/benchmark/metrics.py",
+                "spec": "docs/ped_metrics/metrics_spec.md"
+              }
+            },
+            "threshold_signature": "719af0264cdb3c9cdffc077e4638fecec31ca8360845dd2bd0844902e54320f4",
+            "missing_profile_records": 0,
+            "explicit_profile_records": 144
+          }
+        }
+      }
+    },
+    {
+      "planner": {
+        "key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "benchmark_profile": "experimental",
+        "kinematics": "differential_drive",
+        "algo_config_path": "configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml",
+        "socnav_missing_prereq_policy": "fail-fast",
+        "adapter_impact_eval": true,
+        "workers": 1,
+        "horizon": null,
+        "dt": 0.1
+      },
+      "status": "ok",
+      "started_at_utc": "2026-05-06T12:11:26.865266Z",
+      "finished_at_utc": "2026-05-06T12:13:46.917265Z",
+      "runtime_sec": 140.05200053100998,
+      "episodes_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/ppo__differential_drive/episodes.jsonl",
+      "summary_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/ppo__differential_drive/summary.json",
+      "summary": {
+        "total_jobs": 144,
+        "written": 144,
+        "successful_jobs": 144,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/ppo__differential_drive/episodes.jsonl",
+        "algorithm_readiness": {
+          "name": "ppo",
+          "tier": "experimental",
+          "profile": "experimental"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "ppo",
+          "status": "ok",
+          "canonical_algorithm": "ppo",
+          "baseline_category": "learning",
+          "policy_semantics": "policy_network_inference",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": true,
+            "supports_adapter_commands": true,
+            "execution_mode": "native",
+            "adapter_name": "ppo_action_to_unicycle",
+            "adapter_active": false,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": true,
+            "native_steps": 19358,
+            "adapted_steps": 0,
+            "status": "complete",
+            "execution_mode": "native",
+            "adapter_fraction": 0.0
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 19358,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "projection_rate": 0.0,
+            "infeasible_rate": 0.0,
+            "mean_abs_delta_linear": 0.0,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.0,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "pass",
+            "schema": {
+              "algorithm": "ppo",
+              "observation_modes": [
+                "dict",
+                "multi_input",
+                "native_dict",
+                "vector"
+              ],
+              "action_spaces": [
+                "unicycle",
+                "velocity"
+              ],
+              "strict_profiles": [
+                "baseline-safe",
+                "paper-baseline"
+              ]
+            },
+            "observed": {
+              "obs_mode": "dict",
+              "action_space": "unicycle",
+              "robot_kinematics": "differential_drive",
+              "benchmark_profile": "experimental"
+            },
+            "critical_mismatches": [],
+            "warnings": []
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "ppo",
+            "status": "ok",
+            "canonical_algorithm": "ppo",
+            "baseline_category": "learning",
+            "policy_semantics": "policy_network_inference",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": true,
+              "supports_adapter_commands": true,
+              "execution_mode": "native",
+              "adapter_name": "ppo_action_to_unicycle",
+              "adapter_active": false,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": true,
+              "native_steps": 19358,
+              "adapted_steps": 0,
+              "status": "complete",
+              "execution_mode": "native",
+              "adapter_fraction": 0.0
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 19358,
+              "infeasible_native_count": 0,
+              "projected_count": 0,
+              "projection_rate": 0.0,
+              "infeasible_rate": 0.0,
+              "mean_abs_delta_linear": 0.0,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.0,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "native",
+          "readiness_status": "native",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        },
+        "status": "ok",
+        "started_at_utc": "2026-05-06T12:11:26.865266Z",
+        "finished_at_utc": "2026-05-06T12:13:46.917265Z",
+        "runtime_sec": 140.05200053100998,
+        "episodes_per_second": 1.028189525704889,
+        "kinematics": "differential_drive",
+        "episodes_total": 144
+      },
+      "aggregates": {
+        "ppo": {
+          "agent_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "avg_speed": {
+            "mean": 1.8503076304952397,
+            "median": 1.9913209652916841,
+            "p95": 1.9999213159109648,
+            "mean_ci": [
+              1.7883810893922731,
+              1.8988035073433582
+            ],
+            "median_ci": [
+              1.976396658710424,
+              1.9990938635141093
+            ],
+            "p95_ci": [
+              1.9999030224315055,
+              1.9999277216854132
+            ]
+          },
+          "clearing_distance_avg": {
+            "mean": 3.3663156816940503,
+            "median": 2.929416424263726,
+            "p95": 6.706388130046906,
+            "mean_ci": [
+              3.1268308781024494,
+              3.6299729066738577
+            ],
+            "median_ci": [
+              2.7978949778432747,
+              3.060945819433743
+            ],
+            "p95_ci": [
+              5.978608811068304,
+              8.68129119324293
+            ]
+          },
+          "clearing_distance_min": {
+            "mean": 1.8242648337236547,
+            "median": 1.677556221609644,
+            "p95": 3.107026878301798,
+            "mean_ci": [
+              1.7071745214308898,
+              1.9655993079490306
+            ],
+            "median_ci": [
+              1.4149458864706543,
+              1.8469558567484765
+            ],
+            "p95_ci": [
+              2.899015060229297,
+              3.545034059618642
+            ]
+          },
+          "collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "comfort_exposure": {
+            "mean": 0.02456793318927099,
+            "median": 0.005162523052915307,
+            "p95": 0.07171741535453328,
+            "mean_ci": [
+              0.015114316462368596,
+              0.038707936736649
+            ],
+            "median_ci": [
+              0.0,
+              0.006756756756756757
+            ],
+            "p95_ci": [
+              0.05745033091711314,
+              0.13095238095238096
+            ]
+          },
+          "curvature_mean": {
+            "mean": 0.2980510736819198,
+            "median": 0.18966958636366837,
+            "p95": 0.5697757195754183,
+            "mean_ci": [
+              0.21482588774239683,
+              0.39806006077606126
+            ],
+            "median_ci": [
+              0.1762315927565309,
+              0.1970151404532872
+            ],
+            "p95_ci": [
+              0.27351911958995145,
+              2.3812391383632066
+            ]
+          },
+          "energy": {
+            "mean": 74.70776103354409,
+            "median": 48.83973132896578,
+            "p95": 183.11256062796517,
+            "mean_ci": [
+              64.49229885363938,
+              86.15515092222532
+            ],
+            "median_ci": [
+              45.01462554990418,
+              62.57988822343038
+            ],
+            "p95_ci": [
+              152.62447829619632,
+              269.03973961869656
+            ]
+          },
+          "force_exceed_events": {
+            "mean": 15.38888888888889,
+            "median": 1.5,
+            "p95": 50.0,
+            "mean_ci": [
+              8.246354166666666,
+              24.00677083333333
+            ],
+            "median_ci": [
+              0.0,
+              4.5
+            ],
+            "p95_ci": [
+              30.0,
+              132.0
+            ]
+          },
+          "jerk_mean": {
+            "mean": 0.4881112112431235,
+            "median": 0.47735767691132724,
+            "p95": 0.9897644103769733,
+            "mean_ci": [
+              0.4442288590999772,
+              0.5384540152192295
+            ],
+            "median_ci": [
+              0.4515699068687182,
+              0.4931129784679986
+            ],
+            "p95_ci": [
+              0.7448852723256831,
+              1.2489806198610194
+            ]
+          },
+          "near_misses": {
+            "mean": 5.618055555555555,
+            "median": 0.0,
+            "p95": 25.849999999999994,
+            "mean_ci": [
+              4.0640625,
+              7.373090277777776
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              19.0,
+              34.0
+            ]
+          },
+          "obstacle_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "path_efficiency": {
+            "mean": 0.9515839350856297,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.9258146569452108,
+              0.9750826168229965
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "ped_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "snqi": {
+            "mean": -0.20744673065513033,
+            "median": -0.10330469953211145,
+            "p95": 0.10563880217680426,
+            "mean_ci": [
+              -0.25887807055763656,
+              -0.1648668688565855
+            ],
+            "median_ci": [
+              -0.16630038656035995,
+              -0.07553550166909906
+            ],
+            "p95_ci": [
+              0.038889760451373476,
+              0.11393097908056712
+            ]
+          },
+          "socnavbench_path_irregularity": {
+            "mean": 0.39871775863389664,
+            "median": 0.18578481185748735,
+            "p95": 1.722873658714334,
+            "mean_ci": [
+              0.3250351253587874,
+              0.48170300145030864
+            ],
+            "median_ci": [
+              0.15552077107478993,
+              0.21904924340330767
+            ],
+            "p95_ci": [
+              1.1609575896282347,
+              1.8563288766532506
+            ]
+          },
+          "socnavbench_path_length": {
+            "mean": 24.635002280414724,
+            "median": 22.017392937839034,
+            "p95": 45.70117982149126,
+            "mean_ci": [
+              22.92848857175824,
+              26.713436573736708
+            ],
+            "median_ci": [
+              21.087239420413972,
+              25.644497332721947
+            ],
+            "p95_ci": [
+              39.806895285800074,
+              49.57156435251235
+            ]
+          },
+          "socnavbench_path_length_ratio": {
+            "mean": 1.1213451712247315,
+            "median": 0.9432423974872568,
+            "p95": 1.7247731823492585,
+            "mean_ci": [
+              1.0151623110365795,
+              1.2556177817219922
+            ],
+            "median_ci": [
+              0.92627598150809,
+              0.949368986543418
+            ],
+            "p95_ci": [
+              1.5019658429920717,
+              4.6719167392529375
+            ]
+          },
+          "success": {
+            "mean": 0.8055555555555556,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.7361111111111112,
+              0.8611111111111112
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio": {
+            "mean": 1.0491717079634806,
+            "median": 0.957872903051211,
+            "p95": 1.567115573759387,
+            "mean_ci": [
+              1.000519753181099,
+              1.1096319829498775
+            ],
+            "median_ci": [
+              0.9437475868848157,
+              0.9736829943328577
+            ],
+            "p95_ci": [
+              1.2520842614344072,
+              2.574409875465939
+            ]
+          },
+          "time_to_goal_ideal_ratio_valid": {
+            "mean": 0.8055555555555556,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.7361111111111112,
+              0.8611111111111112
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm": {
+            "mean": 0.6165243349907095,
+            "median": 0.5958580718122704,
+            "p95": 1.0,
+            "mean_ci": [
+              0.5840363518566876,
+              0.6561946080762332
+            ],
+            "median_ci": [
+              0.5529673096091579,
+              0.6252033195020748
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm_success_only": {
+            "mean": 0.5239612434367428,
+            "median": 0.539365796519411,
+            "p95": 0.7069767441860465,
+            "mean_ci": [
+              0.49744589073445744,
+              0.5493445401745884
+            ],
+            "median_ci": [
+              0.49791086350974934,
+              0.5778018227577791
+            ],
+            "p95_ci": [
+              0.7023255813953488,
+              0.7213269308125503
+            ]
+          },
+          "time_to_goal_success_only_valid": {
+            "mean": 0.8055555555555556,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.7361111111111112,
+              0.8611111111111112
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "total_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "wall_collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "force_q50": {
+            "mean": 0.14829603760954527,
+            "median": 0.0791886033452675,
+            "p95": 0.3307795972082911,
+            "mean_ci": [
+              0.10729447668520008,
+              0.2094594903856988
+            ],
+            "median_ci": [
+              0.07351524741348944,
+              0.0946615154993797
+            ],
+            "p95_ci": [
+              0.29138486815356707,
+              0.37262224572250724
+            ]
+          },
+          "force_q90": {
+            "mean": 0.8251993528579237,
+            "median": 0.5809315845822361,
+            "p95": 1.5175522868390965,
+            "mean_ci": [
+              0.6562557194822595,
+              1.0365540797219723
+            ],
+            "median_ci": [
+              0.49151576835616523,
+              0.6567820842781544
+            ],
+            "p95_ci": [
+              1.2738402528409358,
+              3.5815089028251386
+            ]
+          },
+          "force_q95": {
+            "mean": 1.3158671341080583,
+            "median": 0.8521345935742409,
+            "p95": 2.8723950153242668,
+            "mean_ci": [
+              1.041706102944891,
+              1.6662455030973127
+            ],
+            "median_ci": [
+              0.7713846051664066,
+              0.9412091820260104
+            ],
+            "p95_ci": [
+              2.123029689327562,
+              6.262150892209677
+            ]
+          },
+          "mean_clearance": {
+            "mean": 6.445384926046867,
+            "median": 5.9041974701162205,
+            "p95": 13.204688761404185,
+            "mean_ci": [
+              5.830069176104634,
+              7.071669094890095
+            ],
+            "median_ci": [
+              4.932473344233197,
+              7.2271047558429595
+            ],
+            "p95_ci": [
+              11.422470646350979,
+              15.248667501780659
+            ]
+          },
+          "mean_distance": {
+            "mean": 7.845384926046868,
+            "median": 7.304197470116221,
+            "p95": 14.604688761404187,
+            "mean_ci": [
+              7.230069176104633,
+              8.471669094890094
+            ],
+            "median_ci": [
+              6.332473344233198,
+              8.627104755842957
+            ],
+            "p95_ci": [
+              12.822470646350979,
+              16.648667501780658
+            ]
+          },
+          "min_clearance": {
+            "mean": 1.7501567794332602,
+            "median": 0.6238254718987806,
+            "p95": 7.170208847542975,
+            "mean_ci": [
+              1.3587485303326763,
+              2.1630952342920207
+            ],
+            "median_ci": [
+              0.5316482824068245,
+              0.9025127266318184
+            ],
+            "p95_ci": [
+              6.927957321546257,
+              7.889343051477443
+            ]
+          },
+          "min_distance": {
+            "mean": 3.1501567794332606,
+            "median": 2.0238254718987805,
+            "p95": 8.570208847542975,
+            "mean_ci": [
+              2.758748530332676,
+              3.5630952342920206
+            ],
+            "median_ci": [
+              1.9316482824068244,
+              2.3025127266318184
+            ],
+            "p95_ci": [
+              8.327957321546258,
+              9.289343051477443
+            ]
+          },
+          "ped_force_mean": {
+            "mean": 0.36277319409519426,
+            "median": 0.22522993111907566,
+            "p95": 0.6265212909030496,
+            "mean_ci": [
+              0.27447473726069416,
+              0.47502192341500565
+            ],
+            "median_ci": [
+              0.1864178203234876,
+              0.26258003949524816
+            ],
+            "p95_ci": [
+              0.5298952545443696,
+              1.8685848674279526
+            ]
+          },
+          "ped_force_q50": {
+            "mean": 0.1915014193778442,
+            "median": 0.1057122310394018,
+            "p95": 0.3701680867910933,
+            "mean_ci": [
+              0.1337058879587843,
+              0.2674669142317396
+            ],
+            "median_ci": [
+              0.08763453278068083,
+              0.14649354990279964
+            ],
+            "p95_ci": [
+              0.32984210807928505,
+              0.42258162595168464
+            ]
+          },
+          "ped_force_q90": {
+            "mean": 0.8169534367665802,
+            "median": 0.5517653370948273,
+            "p95": 1.641722923881733,
+            "mean_ci": [
+              0.6568591089616954,
+              1.0257975082944262
+            ],
+            "median_ci": [
+              0.487340934754769,
+              0.6137961972538124
+            ],
+            "p95_ci": [
+              1.28530445975654,
+              3.490100680260989
+            ]
+          },
+          "ped_force_q95": {
+            "mean": 1.1287704758398216,
+            "median": 0.7751841377183365,
+            "p95": 2.3300855903965365,
+            "mean_ci": [
+              0.9241060521221824,
+              1.4385175594317272
+            ],
+            "median_ci": [
+              0.6964692587270048,
+              0.8325638267129408
+            ],
+            "p95_ci": [
+              1.9283100656725682,
+              3.7441233652165002
+            ]
+          },
+          "robot_ped_within_5m_frac": {
+            "mean": 0.41109154393708214,
+            "median": 0.34591194968553457,
+            "p95": 1.0,
+            "mean_ci": [
+              0.3586329192804094,
+              0.46551923056096073
+            ],
+            "median_ci": [
+              0.3026315789473684,
+              0.4090909090909091
+            ],
+            "p95_ci": [
+              0.8865979381443299,
+              1.0
+            ]
+          }
+        },
+        "_meta": {
+          "group_by": "scenario_params.algo",
+          "effective_group_key": "scenario_params.algo | algo | scenario_id",
+          "missing_algorithms": [],
+          "warnings": [],
+          "metric_parameters": {
+            "threshold_profile": {
+              "candidate_speed_dependent_variants": [
+                "relative_speed_weighted",
+                "ttc_gated"
+              ],
+              "collision_distance_m": 0.25,
+              "comfort_force_threshold": 2.0,
+              "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+              "near_miss_distance_m": 0.5,
+              "near_miss_speed_dependence": "disabled_distance_only",
+              "profile_id": "social_nav_thresholds_v1",
+              "sources": {
+                "constants": "robot_sf/benchmark/constants.py",
+                "metrics": "robot_sf/benchmark/metrics.py",
+                "spec": "docs/ped_metrics/metrics_spec.md"
+              }
+            },
+            "threshold_signature": "719af0264cdb3c9cdffc077e4638fecec31ca8360845dd2bd0844902e54320f4",
+            "missing_profile_records": 0,
+            "explicit_profile_records": 144
+          }
+        }
+      }
+    },
+    {
+      "planner": {
+        "key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "benchmark_profile": "experimental",
+        "kinematics": "differential_drive",
+        "algo_config_path": null,
+        "socnav_missing_prereq_policy": "fail-fast",
+        "adapter_impact_eval": false,
+        "workers": 2,
+        "horizon": null,
+        "dt": 0.1
+      },
+      "status": "ok",
+      "started_at_utc": "2026-05-06T12:13:47.409492Z",
+      "finished_at_utc": "2026-05-06T12:14:16.639925Z",
+      "runtime_sec": 29.2304396880063,
+      "episodes_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/socnav_sampling__differential_drive/episodes.jsonl",
+      "summary_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/socnav_sampling__differential_drive/summary.json",
+      "summary": {
+        "total_jobs": 144,
+        "written": 144,
+        "successful_jobs": 144,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/socnav_sampling__differential_drive/episodes.jsonl",
+        "algorithm_readiness": {
+          "name": "socnav_sampling",
+          "tier": "experimental",
+          "profile": "experimental"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "socnav_sampling",
+          "status": "ok",
+          "canonical_algorithm": "socnav_sampling",
+          "baseline_category": "classical",
+          "policy_semantics": "heuristic_sampling_adapter",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": false,
+            "supports_adapter_commands": true,
+            "execution_mode": "adapter",
+            "adapter_name": "SamplingPlannerAdapter",
+            "adapter_active": true,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 12093,
+            "infeasible_native_count": 11767,
+            "projected_count": 11767,
+            "projection_rate": 0.973042255850492,
+            "infeasible_rate": 0.973042255850492,
+            "mean_abs_delta_linear": 0.9124409151030537,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 1.0,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "socnav_sampling",
+            "status": "ok",
+            "canonical_algorithm": "socnav_sampling",
+            "baseline_category": "classical",
+            "policy_semantics": "heuristic_sampling_adapter",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": false,
+              "supports_adapter_commands": true,
+              "execution_mode": "adapter",
+              "adapter_name": "SamplingPlannerAdapter",
+              "adapter_active": true,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 12093,
+              "infeasible_native_count": 11767,
+              "projected_count": 11767,
+              "projection_rate": 0.973042255850492,
+              "infeasible_rate": 0.973042255850492,
+              "mean_abs_delta_linear": 0.9124409151030537,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 1.0,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "adapter",
+          "readiness_status": "adapter",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        },
+        "status": "ok",
+        "started_at_utc": "2026-05-06T12:13:47.409492Z",
+        "finished_at_utc": "2026-05-06T12:14:16.639925Z",
+        "runtime_sec": 29.2304396880063,
+        "episodes_per_second": 4.926371328553276,
+        "kinematics": "differential_drive",
+        "episodes_total": 144
+      },
+      "aggregates": {
+        "socnav_sampling": {
+          "agent_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "avg_speed": {
+            "mean": 1.9593002257864736,
+            "median": 1.9984472101403297,
+            "p95": 1.999989096137463,
+            "mean_ci": [
+              1.9140412515154803,
+              1.989706724395804
+            ],
+            "median_ci": [
+              1.997783984152153,
+              1.999110870286209
+            ],
+            "p95_ci": [
+              1.9999761071651498,
+              1.999993666177016
+            ]
+          },
+          "clearing_distance_avg": {
+            "mean": 3.3285457864647463,
+            "median": 2.9393597208327176,
+            "p95": 6.291951963317991,
+            "mean_ci": [
+              3.0552899650180674,
+              3.607385803907705
+            ],
+            "median_ci": [
+              2.7155252412951714,
+              3.316292001379558
+            ],
+            "p95_ci": [
+              5.593009992642183,
+              9.176423613914725
+            ]
+          },
+          "clearing_distance_min": {
+            "mean": 1.5531161861239564,
+            "median": 1.1776678591980412,
+            "p95": 3.5451386471475286,
+            "mean_ci": [
+              1.410648682162917,
+              1.6950601099655356
+            ],
+            "median_ci": [
+              1.0246422666679973,
+              1.3727542460976256
+            ],
+            "p95_ci": [
+              3.0337018266358613,
+              3.7647411741529466
+            ]
+          },
+          "collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "comfort_exposure": {
+            "mean": 0.03407773708879421,
+            "median": 0.01010204081632653,
+            "p95": 0.12061104218362281,
+            "mean_ci": [
+              0.022605621612795807,
+              0.04985065055509509
+            ],
+            "median_ci": [
+              0.006671410780999822,
+              0.01800753771691272
+            ],
+            "p95_ci": [
+              0.085121587396978,
+              0.28399122807017546
+            ]
+          },
+          "curvature_mean": {
+            "mean": 0.07450647631418456,
+            "median": 0.048874677559607116,
+            "p95": 0.27726090949948534,
+            "mean_ci": [
+              0.0632437777425501,
+              0.08865292955889802
+            ],
+            "median_ci": [
+              0.04173691833496553,
+              0.06013131060296181
+            ],
+            "p95_ci": [
+              0.16066821624653888,
+              0.3056665793065333
+            ]
+          },
+          "energy": {
+            "mean": 20.627948792602755,
+            "median": 13.654523723857654,
+            "p95": 58.1441054761594,
+            "mean_ci": [
+              17.95206480408998,
+              23.75323796599429
+            ],
+            "median_ci": [
+              11.513602495578104,
+              17.44898016133364
+            ],
+            "p95_ci": [
+              49.606713868032536,
+              75.27003813992002
+            ]
+          },
+          "force_exceed_events": {
+            "mean": 13.256944444444445,
+            "median": 1.0,
+            "p95": 40.64999999999995,
+            "mean_ci": [
+              6.851041666666668,
+              21.29548611111111
+            ],
+            "median_ci": [
+              1.0,
+              3.0
+            ],
+            "p95_ci": [
+              23.0,
+              132.0
+            ]
+          },
+          "jerk_mean": {
+            "mean": 0.07190449733628215,
+            "median": 0.04540731786482635,
+            "p95": 0.2786870710267745,
+            "mean_ci": [
+              0.05963385785562484,
+              0.08632796539886436
+            ],
+            "median_ci": [
+              0.03388939763519976,
+              0.05316003343787324
+            ],
+            "p95_ci": [
+              0.1910992503536019,
+              0.3178480589651814
+            ]
+          },
+          "near_misses": {
+            "mean": 1.6458333333333333,
+            "median": 0.0,
+            "p95": 8.849999999999994,
+            "mean_ci": [
+              1.190798611111111,
+              2.222569444444444
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              5.849999999999994,
+              12.0
+            ]
+          },
+          "obstacle_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "path_efficiency": {
+            "mean": 0.9885572268089494,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.9788826729657275,
+              0.9948635059745607
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "ped_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "snqi": {
+            "mean": -0.08483026461988694,
+            "median": -0.10655538315469955,
+            "p95": 0.13820911246697984,
+            "mean_ci": [
+              -0.11635897217404798,
+              -0.056484138238220856
+            ],
+            "median_ci": [
+              -0.14064066582118373,
+              -0.09491099136070058
+            ],
+            "p95_ci": [
+              0.1330624744942673,
+              0.147655462370482
+            ]
+          },
+          "socnavbench_path_irregularity": {
+            "mean": 0.317041193118224,
+            "median": 0.17393683334467686,
+            "p95": 0.844736761422885,
+            "mean_ci": [
+              0.26748279686114074,
+              0.38513627385338245
+            ],
+            "median_ci": [
+              0.14734020401206488,
+              0.22844147514139573
+            ],
+            "p95_ci": [
+              0.7684921425767302,
+              1.4985659602438544
+            ]
+          },
+          "socnavbench_path_length": {
+            "mean": 16.53727334732719,
+            "median": 15.600000000000005,
+            "p95": 33.53579004935996,
+            "mean_ci": [
+              15.166491863127588,
+              17.863354923413176
+            ],
+            "median_ci": [
+              13.897527340970704,
+              17.288984203109614
+            ],
+            "p95_ci": [
+              30.465386847608183,
+              35.31905438868944
+            ]
+          },
+          "socnavbench_path_length_ratio": {
+            "mean": 0.7767926511228589,
+            "median": 0.8723670909582346,
+            "p95": 1.2102453240554751,
+            "mean_ci": [
+              0.7224677707127521,
+              0.8320063826757444
+            ],
+            "median_ci": [
+              0.7847676556420441,
+              0.904476030929827
+            ],
+            "p95_ci": [
+              1.103661708145896,
+              1.3301941600490648
+            ]
+          },
+          "success": {
+            "mean": 0.4027777777777778,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.3263888888888889,
+              0.48281249999999987
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio": {
+            "mean": 0.9566451318448772,
+            "median": 0.9452376483232714,
+            "p95": 1.0833275111962961,
+            "mean_ci": [
+              0.9365412995494893,
+              0.976956661767379
+            ],
+            "median_ci": [
+              0.9255942766209558,
+              0.9530858862413387
+            ],
+            "p95_ci": [
+              1.0343741389988106,
+              1.2128564047141388
+            ]
+          },
+          "time_to_goal_ideal_ratio_valid": {
+            "mean": 0.4027777777777778,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.3263888888888889,
+              0.48281249999999987
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm": {
+            "mean": 0.8192506575899924,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.7823908565846573,
+              0.8573117591980174
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm_success_only": {
+            "mean": 0.5512430119475673,
+            "median": 0.5680816146573262,
+            "p95": 0.7027027027027027,
+            "mean_ci": [
+              0.5235597971248072,
+              0.5807470630980882
+            ],
+            "median_ci": [
+              0.5215993379887345,
+              0.611430688876341
+            ],
+            "p95_ci": [
+              0.6671068405947754,
+              0.7116279069767442
+            ]
+          },
+          "time_to_goal_success_only_valid": {
+            "mean": 0.4027777777777778,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.3263888888888889,
+              0.48281249999999987
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "total_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "wall_collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "force_q50": {
+            "mean": 0.176465652933377,
+            "median": 0.1057122310394018,
+            "p95": 0.37841174117501186,
+            "mean_ci": [
+              0.13649542467812412,
+              0.2326159261739377
+            ],
+            "median_ci": [
+              0.08135205906450883,
+              0.13027681121960322
+            ],
+            "p95_ci": [
+              0.32220384467267904,
+              0.5841600066122159
+            ]
+          },
+          "force_q90": {
+            "mean": 0.9985297190579324,
+            "median": 0.6245778396492625,
+            "p95": 2.3092260008371115,
+            "mean_ci": [
+              0.7736371707389484,
+              1.3337650387606321
+            ],
+            "median_ci": [
+              0.5033469474294396,
+              0.7756158521501726
+            ],
+            "p95_ci": [
+              1.6466816345713589,
+              3.5815089028251386
+            ]
+          },
+          "force_q95": {
+            "mean": 1.5748875819496773,
+            "median": 0.9864843844292981,
+            "p95": 4.032777662323435,
+            "mean_ci": [
+              1.2218483293858864,
+              2.0295382406554308
+            ],
+            "median_ci": [
+              0.7983974098703756,
+              1.2232942934081605
+            ],
+            "p95_ci": [
+              2.6160604542909898,
+              7.977207243059704
+            ]
+          },
+          "mean_clearance": {
+            "mean": 6.6244227577123125,
+            "median": 5.72682932175355,
+            "p95": 14.57088757312585,
+            "mean_ci": [
+              5.96396122755534,
+              7.274960094272344
+            ],
+            "median_ci": [
+              4.741015094324285,
+              7.136772385350021
+            ],
+            "p95_ci": [
+              12.460895868656298,
+              15.304214549482538
+            ]
+          },
+          "mean_distance": {
+            "mean": 8.024422757712312,
+            "median": 7.1268293217535525,
+            "p95": 15.97088757312585,
+            "mean_ci": [
+              7.363961227555339,
+              8.674960094272343
+            ],
+            "median_ci": [
+              6.141015094324285,
+              8.536772385350021
+            ],
+            "p95_ci": [
+              13.8608958686563,
+              16.70421454948254
+            ]
+          },
+          "min_clearance": {
+            "mean": 2.218983656380465,
+            "median": 1.1633976590560606,
+            "p95": 7.499638744008166,
+            "mean_ci": [
+              1.7745514577950667,
+              2.6833978919652655
+            ],
+            "median_ci": [
+              0.914012090094328,
+              1.6673687432100466
+            ],
+            "p95_ci": [
+              7.388243436284014,
+              8.160821052353846
+            ]
+          },
+          "min_distance": {
+            "mean": 3.6189836563804647,
+            "median": 2.5633976590560605,
+            "p95": 8.899638744008167,
+            "mean_ci": [
+              3.174551457795067,
+              4.083397891965265
+            ],
+            "median_ci": [
+              2.314012090094328,
+              3.0673687432100465
+            ],
+            "p95_ci": [
+              8.788243436284015,
+              9.560821052353846
+            ]
+          },
+          "ped_force_mean": {
+            "mean": 0.44500639967492717,
+            "median": 0.27038594746398914,
+            "p95": 1.1005750670262215,
+            "mean_ci": [
+              0.33160014988770264,
+              0.6246833757468161
+            ],
+            "median_ci": [
+              0.21713091916980096,
+              0.30371677506618006
+            ],
+            "p95_ci": [
+              0.6490203393034858,
+              2.4304832287473053
+            ]
+          },
+          "ped_force_q50": {
+            "mean": 0.2709151771483623,
+            "median": 0.14349734708522158,
+            "p95": 0.6355519701956257,
+            "mean_ci": [
+              0.18688441568480518,
+              0.3824386736388134
+            ],
+            "median_ci": [
+              0.11497237081371439,
+              0.171952225140416
+            ],
+            "p95_ci": [
+              0.37551655824825303,
+              2.2963337032909554
+            ]
+          },
+          "ped_force_q90": {
+            "mean": 0.8908897659667148,
+            "median": 0.5758930938971614,
+            "p95": 2.183678122911103,
+            "mean_ci": [
+              0.7023582999019657,
+              1.1639571898400498
+            ],
+            "median_ci": [
+              0.4900052372189442,
+              0.6691196026379685
+            ],
+            "p95_ci": [
+              1.5057489886953006,
+              3.817820049561204
+            ]
+          },
+          "ped_force_q95": {
+            "mean": 1.2772481372440057,
+            "median": 0.7983974098703756,
+            "p95": 2.892962250326744,
+            "mean_ci": [
+              1.0166057083880802,
+              1.705781146891909
+            ],
+            "median_ci": [
+              0.7413637106581786,
+              0.9276820278312504
+            ],
+            "p95_ci": [
+              2.267701498398137,
+              4.473151613426382
+            ]
+          },
+          "robot_ped_within_5m_frac": {
+            "mean": 0.3753489271056997,
+            "median": 0.26282051282051283,
+            "p95": 1.0,
+            "mean_ci": [
+              0.3246655073530607,
+              0.43033819319694044
+            ],
+            "median_ci": [
+              0.22727272727272727,
+              0.36
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          }
+        },
+        "_meta": {
+          "group_by": "scenario_params.algo",
+          "effective_group_key": "scenario_params.algo | algo | scenario_id",
+          "missing_algorithms": [],
+          "warnings": [],
+          "metric_parameters": {
+            "threshold_profile": {
+              "candidate_speed_dependent_variants": [
+                "relative_speed_weighted",
+                "ttc_gated"
+              ],
+              "collision_distance_m": 0.25,
+              "comfort_force_threshold": 2.0,
+              "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+              "near_miss_distance_m": 0.5,
+              "near_miss_speed_dependence": "disabled_distance_only",
+              "profile_id": "social_nav_thresholds_v1",
+              "sources": {
+                "constants": "robot_sf/benchmark/constants.py",
+                "metrics": "robot_sf/benchmark/metrics.py",
+                "spec": "docs/ped_metrics/metrics_spec.md"
+              }
+            },
+            "threshold_signature": "719af0264cdb3c9cdffc077e4638fecec31ca8360845dd2bd0844902e54320f4",
+            "missing_profile_records": 0,
+            "explicit_profile_records": 144
+          }
+        }
+      }
+    },
+    {
+      "planner": {
+        "key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "benchmark_profile": "experimental",
+        "kinematics": "differential_drive",
+        "algo_config_path": null,
+        "socnav_missing_prereq_policy": "fallback",
+        "adapter_impact_eval": false,
+        "workers": 2,
+        "horizon": null,
+        "dt": 0.1
+      },
+      "status": "ok",
+      "started_at_utc": "2026-05-06T12:14:17.129889Z",
+      "finished_at_utc": "2026-05-06T12:15:14.923820Z",
+      "runtime_sec": 57.79394187300932,
+      "episodes_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/sacadrl__differential_drive/episodes.jsonl",
+      "summary_path": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/sacadrl__differential_drive/summary.json",
+      "summary": {
+        "total_jobs": 144,
+        "written": 144,
+        "successful_jobs": 144,
+        "failed_jobs": 0,
+        "failures": [],
+        "out_path": "/home/luttkule/git/robot_sf_ll7.worktrees/origin-1023-validate-scenario-h500-bench/output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/runs/sacadrl__differential_drive/episodes.jsonl",
+        "algorithm_readiness": {
+          "name": "sacadrl",
+          "tier": "experimental",
+          "profile": "experimental"
+        },
+        "algorithm_metadata_contract": {
+          "algorithm": "sacadrl",
+          "status": "ok",
+          "canonical_algorithm": "sacadrl",
+          "baseline_category": "learning",
+          "policy_semantics": "learned_value_adapter",
+          "planner_kinematics": {
+            "robot_kinematics": "differential_drive",
+            "planner_command_space": "unicycle_vw",
+            "supports_native_commands": false,
+            "supports_adapter_commands": true,
+            "execution_mode": "adapter",
+            "adapter_name": "SACADRLPlannerAdapter",
+            "adapter_active": true,
+            "scenario_kinematics": [
+              "differential_drive"
+            ]
+          },
+          "adapter_impact": {
+            "requested": false,
+            "native_steps": 0,
+            "adapted_steps": 0,
+            "status": "disabled"
+          },
+          "kinematics_feasibility": {
+            "commands_evaluated": 20262,
+            "infeasible_native_count": 0,
+            "projected_count": 0,
+            "projection_rate": 0.0,
+            "infeasible_rate": 0.0,
+            "mean_abs_delta_linear": 0.0,
+            "mean_abs_delta_angular": 0.0,
+            "max_abs_delta_linear": 0.0,
+            "max_abs_delta_angular": 0.0
+          }
+        },
+        "preflight": {
+          "status": "ok",
+          "learned_policy_contract": {
+            "status": "not_applicable"
+          },
+          "algorithm_metadata_contract": {
+            "algorithm": "sacadrl",
+            "status": "ok",
+            "canonical_algorithm": "sacadrl",
+            "baseline_category": "learning",
+            "policy_semantics": "learned_value_adapter",
+            "planner_kinematics": {
+              "robot_kinematics": "differential_drive",
+              "planner_command_space": "unicycle_vw",
+              "supports_native_commands": false,
+              "supports_adapter_commands": true,
+              "execution_mode": "adapter",
+              "adapter_name": "SACADRLPlannerAdapter",
+              "adapter_active": true,
+              "scenario_kinematics": [
+                "differential_drive"
+              ]
+            },
+            "adapter_impact": {
+              "requested": false,
+              "native_steps": 0,
+              "adapted_steps": 0,
+              "status": "disabled"
+            },
+            "kinematics_feasibility": {
+              "commands_evaluated": 20262,
+              "infeasible_native_count": 0,
+              "projected_count": 0,
+              "projection_rate": 0.0,
+              "infeasible_rate": 0.0,
+              "mean_abs_delta_linear": 0.0,
+              "mean_abs_delta_angular": 0.0,
+              "max_abs_delta_linear": 0.0,
+              "max_abs_delta_angular": 0.0
+            }
+          }
+        },
+        "benchmark_availability": {
+          "execution_mode": "adapter",
+          "readiness_status": "adapter",
+          "availability_status": "available",
+          "benchmark_success": true,
+          "availability_reason": null
+        },
+        "status": "ok",
+        "started_at_utc": "2026-05-06T12:14:17.129889Z",
+        "finished_at_utc": "2026-05-06T12:15:14.923820Z",
+        "runtime_sec": 57.79394187300932,
+        "episodes_per_second": 2.4916106313774433,
+        "kinematics": "differential_drive",
+        "episodes_total": 144
+      },
+      "aggregates": {
+        "sacadrl": {
+          "agent_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "avg_speed": {
+            "mean": 0.9859908228492021,
+            "median": 0.9999307627584357,
+            "p95": 0.9999927589823816,
+            "mean_ci": [
+              0.9651483774023628,
+              0.9998886017740568
+            ],
+            "median_ci": [
+              0.999907320000285,
+              0.999945153931269
+            ],
+            "p95_ci": [
+              0.9999879308019685,
+              0.9999940741348256
+            ]
+          },
+          "clearing_distance_avg": {
+            "mean": 3.491264385806993,
+            "median": 2.782474999275572,
+            "p95": 6.641493145255779,
+            "mean_ci": [
+              3.214813928525221,
+              3.815842067282629
+            ],
+            "median_ci": [
+              2.597343298205031,
+              3.0736584748422606
+            ],
+            "p95_ci": [
+              6.387860269048237,
+              10.014188839676814
+            ]
+          },
+          "clearing_distance_min": {
+            "mean": 1.642814096896081,
+            "median": 1.1906761756621034,
+            "p95": 3.5285432108520927,
+            "mean_ci": [
+              1.4975253851277595,
+              1.7843020671007508
+            ],
+            "median_ci": [
+              1.0003741548314407,
+              1.598033766721108
+            ],
+            "p95_ci": [
+              3.0830343695217124,
+              3.699285890871784
+            ]
+          },
+          "collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "comfort_exposure": {
+            "mean": 0.024017462637573588,
+            "median": 0.0056415501761563815,
+            "p95": 0.07113228699551565,
+            "mean_ci": [
+              0.014008803167998195,
+              0.038100241317049685
+            ],
+            "median_ci": [
+              0.00046844181459566745,
+              0.011969914864340516
+            ],
+            "p95_ci": [
+              0.04395604395604396,
+              0.10080645161290322
+            ]
+          },
+          "curvature_mean": {
+            "mean": 0.14347464233332496,
+            "median": 0.08324579045984418,
+            "p95": 0.5118991989592722,
+            "mean_ci": [
+              0.11904577242390231,
+              0.16881004712362946
+            ],
+            "median_ci": [
+              0.07058873732650003,
+              0.10897399365241556
+            ],
+            "p95_ci": [
+              0.3778213432583398,
+              0.5803890823937274
+            ]
+          },
+          "energy": {
+            "mean": 14.049749175570655,
+            "median": 11.207591695933733,
+            "p95": 35.05932538841673,
+            "mean_ci": [
+              12.462018028188707,
+              15.874447407455737
+            ],
+            "median_ci": [
+              8.95929454644774,
+              12.519776280253312
+            ],
+            "p95_ci": [
+              31.00245380823473,
+              46.99521982480008
+            ]
+          },
+          "force_exceed_events": {
+            "mean": 15.819444444444445,
+            "median": 1.0,
+            "p95": 60.34999999999994,
+            "mean_ci": [
+              8.811111111111112,
+              24.13628472222222
+            ],
+            "median_ci": [
+              0.23750000000000338,
+              4.0
+            ],
+            "p95_ci": [
+              32.0,
+              145.0
+            ]
+          },
+          "jerk_mean": {
+            "mean": 0.07043145310616067,
+            "median": 0.044961691578212185,
+            "p95": 0.24259118486284983,
+            "mean_ci": [
+              0.05906191888485568,
+              0.08194014744091804
+            ],
+            "median_ci": [
+              0.04036074863579242,
+              0.05117833853352478
+            ],
+            "p95_ci": [
+              0.19849038732931074,
+              0.26115651835556386
+            ]
+          },
+          "near_misses": {
+            "mean": 5.777777777777778,
+            "median": 0.0,
+            "p95": 23.849999999999994,
+            "mean_ci": [
+              4.051909722222222,
+              7.924652777777777
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              19.849999999999994,
+              48.0
+            ]
+          },
+          "obstacle_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "path_efficiency": {
+            "mean": 0.99893732671139,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.9977731166594431,
+              0.9999039926218188
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "ped_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "snqi": {
+            "mean": -0.2725885642962835,
+            "median": -0.22422837420027508,
+            "p95": -0.09491099136070058,
+            "mean_ci": [
+              -0.30730684614915943,
+              -0.2454858459543266
+            ],
+            "median_ci": [
+              -0.25283197882795827,
+              -0.1981941368769961
+            ],
+            "p95_ci": [
+              -0.09491099136070058,
+              0.0656868857087632
+            ]
+          },
+          "socnavbench_path_irregularity": {
+            "mean": 0.34537753506201097,
+            "median": 0.24545465195224087,
+            "p95": 0.980629112236791,
+            "mean_ci": [
+              0.29159524752218874,
+              0.3986400435080418
+            ],
+            "median_ci": [
+              0.19401771621795483,
+              0.2939240994501222
+            ],
+            "p95_ci": [
+              0.7112593380325154,
+              1.4556276769753376
+            ]
+          },
+          "socnavbench_path_length": {
+            "mean": 13.970833333333353,
+            "median": 13.350000000000012,
+            "p95": 27.269999999999964,
+            "mean_ci": [
+              12.620434027777794,
+              15.365937500000012
+            ],
+            "median_ci": [
+              10.300000000000006,
+              15.69999999999996
+            ],
+            "p95_ci": [
+              26.099999999999927,
+              39.70999999999976
+            ]
+          },
+          "socnavbench_path_length_ratio": {
+            "mean": 0.6554831827257145,
+            "median": 0.7011972844646728,
+            "p95": 1.0895089508686586,
+            "mean_ci": [
+              0.6045716707118891,
+              0.7104781775664429
+            ],
+            "median_ci": [
+              0.6430157664972685,
+              0.7584052368702701
+            ],
+            "p95_ci": [
+              0.971326633238553,
+              1.240643451250256
+            ]
+          },
+          "success": {
+            "mean": 0.08333333333333333,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.041666666666666664,
+              0.13559027777777763
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio_valid": {
+            "mean": 0.08333333333333333,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.041666666666666664,
+              0.13559027777777763
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              1.0
+            ]
+          },
+          "time_to_goal_norm": {
+            "mean": 0.9773878182561982,
+            "median": 1.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.9589823186013788,
+              0.9912440986644638
+            ],
+            "median_ci": [
+              1.0,
+              1.0
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_success_only_valid": {
+            "mean": 0.08333333333333333,
+            "median": 0.0,
+            "p95": 1.0,
+            "mean_ci": [
+              0.041666666666666664,
+              0.13559027777777763
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              1.0
+            ]
+          },
+          "total_collision_count": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "wall_collisions": {
+            "mean": 0.0,
+            "median": 0.0,
+            "p95": 0.0,
+            "mean_ci": [
+              0.0,
+              0.0
+            ],
+            "median_ci": [
+              0.0,
+              0.0
+            ],
+            "p95_ci": [
+              0.0,
+              0.0
+            ]
+          },
+          "force_q50": {
+            "mean": 0.14119406747602695,
+            "median": 0.08798850945448704,
+            "p95": 0.25630064450883616,
+            "mean_ci": [
+              0.10137394908123422,
+              0.2018442993113271
+            ],
+            "median_ci": [
+              0.07699673343305197,
+              0.10531055788213217
+            ],
+            "p95_ci": [
+              0.21712992518306629,
+              0.43088139311757045
+            ]
+          },
+          "force_q90": {
+            "mean": 0.7808516293426215,
+            "median": 0.5688272086436361,
+            "p95": 1.5119449296767957,
+            "mean_ci": [
+              0.5981159986785054,
+              1.0750876773860818
+            ],
+            "median_ci": [
+              0.4834089736798981,
+              0.6639431177766347
+            ],
+            "p95_ci": [
+              1.085160367685265,
+              2.029058835481869
+            ]
+          },
+          "force_q95": {
+            "mean": 1.238194101333061,
+            "median": 0.883997933679996,
+            "p95": 2.5309320256841317,
+            "mean_ci": [
+              0.9496530219779014,
+              1.6498804136578287
+            ],
+            "median_ci": [
+              0.6961315316174105,
+              1.0077364410339766
+            ],
+            "p95_ci": [
+              1.7764987924464926,
+              6.262793905834589
+            ]
+          },
+          "mean_clearance": {
+            "mean": 6.300370844918892,
+            "median": 3.721991499030923,
+            "p95": 16.219131362402113,
+            "mean_ci": [
+              5.334307581275264,
+              7.310176694232366
+            ],
+            "median_ci": [
+              3.0949996061542437,
+              5.892626802525539
+            ],
+            "p95_ci": [
+              14.542975988842318,
+              21.794084048133588
+            ]
+          },
+          "mean_distance": {
+            "mean": 7.700370844918893,
+            "median": 5.121991499030923,
+            "p95": 17.61913136240211,
+            "mean_ci": [
+              6.734307581275265,
+              8.710176694232366
+            ],
+            "median_ci": [
+              4.494999606154244,
+              7.29262680252554
+            ],
+            "p95_ci": [
+              15.942975988842317,
+              23.19408404813359
+            ]
+          },
+          "min_clearance": {
+            "mean": 2.8497534837664853,
+            "median": 1.2091085144812084,
+            "p95": 14.384329181120771,
+            "mean_ci": [
+              2.0675522236571533,
+              3.6960308362732266
+            ],
+            "median_ci": [
+              0.6340035650116969,
+              1.4240367580384699
+            ],
+            "p95_ci": [
+              8.436981298119864,
+              18.00141468873174
+            ]
+          },
+          "min_distance": {
+            "mean": 4.249753483766486,
+            "median": 2.6091085144812083,
+            "p95": 15.784329181120771,
+            "mean_ci": [
+              3.4675522236571537,
+              5.0960308362732265
+            ],
+            "median_ci": [
+              2.0340035650116968,
+              2.8240367580384698
+            ],
+            "p95_ci": [
+              9.836981298119865,
+              19.401414688731737
+            ]
+          },
+          "ped_force_mean": {
+            "mean": 0.35751000194142496,
+            "median": 0.2309583317426586,
+            "p95": 0.7124639442329695,
+            "mean_ci": [
+              0.25521194308200223,
+              0.5142584774828517
+            ],
+            "median_ci": [
+              0.20197419456434448,
+              0.26056179765112614
+            ],
+            "p95_ci": [
+              0.4445893074193503,
+              1.0611589324170334
+            ]
+          },
+          "ped_force_q50": {
+            "mean": 0.21106186963269205,
+            "median": 0.11928576279933753,
+            "p95": 0.3627183148289051,
+            "mean_ci": [
+              0.1400851723350057,
+              0.30526941491764226
+            ],
+            "median_ci": [
+              0.10098112935469726,
+              0.14408268270040733
+            ],
+            "p95_ci": [
+              0.2564582782854039,
+              0.785682021081208
+            ]
+          },
+          "ped_force_q90": {
+            "mean": 0.733381255745452,
+            "median": 0.52347141945353,
+            "p95": 1.745767776742411,
+            "mean_ci": [
+              0.5674244781868688,
+              0.9787052988101662
+            ],
+            "median_ci": [
+              0.4450472752059676,
+              0.5917250323501159
+            ],
+            "p95_ci": [
+              1.0463845976598998,
+              3.1221401199552283
+            ]
+          },
+          "ped_force_q95": {
+            "mean": 1.0916588837507868,
+            "median": 0.756772418816319,
+            "p95": 2.465856355945364,
+            "mean_ci": [
+              0.8647052950469386,
+              1.451971925989555
+            ],
+            "median_ci": [
+              0.6561931914948574,
+              0.8843858515759233
+            ],
+            "p95_ci": [
+              1.8077279642710078,
+              3.915081819203914
+            ]
+          },
+          "robot_ped_within_5m_frac": {
+            "mean": 0.4900718456804061,
+            "median": 0.5208333333333334,
+            "p95": 1.0,
+            "mean_ci": [
+              0.4230145614309263,
+              0.5608024326260618
+            ],
+            "median_ci": [
+              0.36082474226804123,
+              0.6182572614107884
+            ],
+            "p95_ci": [
+              1.0,
+              1.0
+            ]
+          },
+          "time_to_goal_ideal_ratio": {
+            "mean": 1.9086141586982341,
+            "median": 1.8930798602715202,
+            "p95": 2.09721053691142,
+            "mean_ci": [
+              1.8306339123033697,
+              1.9796157765123152
+            ],
+            "median_ci": [
+              1.7963433286367112,
+              2.011743325531913
+            ],
+            "p95_ci": [
+              1.963959576006985,
+              2.1163591195998728
+            ]
+          },
+          "time_to_goal_norm_success_only": {
+            "mean": 0.7286538190743793,
+            "median": 0.7693598840314335,
+            "p95": 0.9813253012048193,
+            "mean_ci": [
+              0.5957794715096324,
+              0.8435476986892694
+            ],
+            "median_ci": [
+              0.49319172113289855,
+              0.8920894679725044
+            ],
+            "p95_ci": [
+              0.8618677042801557,
+              0.9879518072289156
+            ]
+          }
+        },
+        "_meta": {
+          "group_by": "scenario_params.algo",
+          "effective_group_key": "scenario_params.algo | algo | scenario_id",
+          "missing_algorithms": [],
+          "warnings": [],
+          "metric_parameters": {
+            "threshold_profile": {
+              "candidate_speed_dependent_variants": [
+                "relative_speed_weighted",
+                "ttc_gated"
+              ],
+              "collision_distance_m": 0.25,
+              "comfort_force_threshold": 2.0,
+              "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+              "near_miss_distance_m": 0.5,
+              "near_miss_speed_dependence": "disabled_distance_only",
+              "profile_id": "social_nav_thresholds_v1",
+              "sources": {
+                "constants": "robot_sf/benchmark/constants.py",
+                "metrics": "robot_sf/benchmark/metrics.py",
+                "spec": "docs/ped_metrics/metrics_spec.md"
+              }
+            },
+            "threshold_signature": "719af0264cdb3c9cdffc077e4638fecec31ca8360845dd2bd0844902e54320f4",
+            "missing_profile_records": 0,
+            "explicit_profile_records": 144
+          }
+        }
+      }
+    }
+  ],
+  "warnings": [
+    "SNQI contract status=warn with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
+  ],
+  "artifacts": {
+    "campaign_manifest": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/campaign_manifest.json",
+    "campaign_summary_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/campaign_summary.json",
+    "campaign_table_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/campaign_table.csv",
+    "campaign_table_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/campaign_table.md",
+    "campaign_table_core_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/campaign_table_core.csv",
+    "campaign_table_core_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/campaign_table_core.md",
+    "campaign_table_experimental_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/campaign_table_experimental.csv",
+    "campaign_table_experimental_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/campaign_table_experimental.md",
+    "kinematics_parity_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/kinematics_parity_table.csv",
+    "kinematics_parity_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/kinematics_parity_table.md",
+    "kinematics_skipped_combinations_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/kinematics_skipped_combinations.csv",
+    "kinematics_skipped_combinations_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/kinematics_skipped_combinations.md",
+    "matrix_summary_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/matrix_summary.json",
+    "matrix_summary_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/matrix_summary.csv",
+    "amv_coverage_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/amv_coverage_summary.json",
+    "amv_coverage_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/amv_coverage_summary.md",
+    "comparability_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/comparability_matrix.json",
+    "comparability_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/comparability_matrix.md",
+    "seed_variability_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_variability_by_scenario.json",
+    "seed_variability_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/statistical_sufficiency.json",
+    "preflight_validate_config": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/preflight/validate_config.json",
+    "preflight_preview_scenarios": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/preflight/preview_scenarios.json",
+    "scenario_breakdown_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/scenario_breakdown.csv",
+    "scenario_breakdown_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/scenario_breakdown.md",
+    "scenario_family_breakdown_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/scenario_family_breakdown.csv",
+    "scenario_family_breakdown_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/scenario_family_breakdown.md",
+    "campaign_report_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/campaign_report.md",
+    "expected_release_archive": "issue1023_scenario_horizons_h500_local_2026-05-06_publication_bundle.tar.gz",
+    "release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/{release_tag}",
+    "release_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/{release_tag}/issue1023_scenario_horizons_h500_local_2026-05-06_publication_bundle.tar.gz",
+    "doi_url": "https://doi.org/10.5281/zenodo.<record-id>",
+    "snqi_diagnostics_json": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/snqi_diagnostics.json",
+    "snqi_diagnostics_md": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/snqi_diagnostics.md",
+    "snqi_sensitivity_csv": "output/benchmarks/issue_1023/issue1023_scenario_horizons_h500_local_2026-05-06/reports/snqi_sensitivity.csv"
+  }
+}

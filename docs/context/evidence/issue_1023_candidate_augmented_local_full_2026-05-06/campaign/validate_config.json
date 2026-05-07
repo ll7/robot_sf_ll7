@@ -1,0 +1,237 @@
+{
+  "schema_version": "benchmark-preflight-validate-config.v1",
+  "campaign_id": "issue1023_scenario_horizons_candidates_local_2026-05-06",
+  "generated_at_utc": "2026-05-06T17:52:18.544160Z",
+  "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "scenario_count": 48,
+  "planner_count": 9,
+  "workers": 2,
+  "horizon": null,
+  "dt": 0.1,
+  "resume": true,
+  "seed_policy": {
+    "mode": "seed-set",
+    "seed_set": "eval",
+    "seeds": [],
+    "resolved_seeds": [
+      111,
+      112,
+      113
+    ],
+    "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml"
+  },
+  "amv_profile": {
+    "name": "amv-paper-v1",
+    "contract_version": "1",
+    "coverage_enforcement": "warn",
+    "required_dimensions": {
+      "use_case": [
+        "delivery_robot",
+        "shared_space_micromobility"
+      ],
+      "context": [
+        "sidewalk",
+        "shared_space"
+      ],
+      "speed_regime": [
+        "walking_speed",
+        "scooter_speed"
+      ],
+      "maneuver_type": [
+        "overtake",
+        "crossing",
+        "bottleneck"
+      ]
+    }
+  },
+  "comparability_mapping": "configs/benchmarks/alyassi_comparability_map_v1.yaml",
+  "snqi_contract": {
+    "enabled": true,
+    "enforcement": "warn",
+    "rank_alignment_warn_threshold": 0.5,
+    "rank_alignment_fail_threshold": 0.3,
+    "outcome_separation_warn_threshold": 0.05,
+    "outcome_separation_fail_threshold": 0.0,
+    "max_component_dominance_warn_threshold": 0.24,
+    "max_component_dominance_fail_threshold": 0.27,
+    "calibration_seed": 123,
+    "calibration_trials": 6000
+  },
+  "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+  "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+  "route_clearance_warnings": [
+    {
+      "scenario": "classic_cross_trap_high",
+      "map_file": "maps/svg_maps/classic_crossing.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.013277,
+      "min_clearance_margin_m": 0.013277,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_cross_trap_low",
+      "map_file": "maps/svg_maps/classic_crossing.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.013277,
+      "min_clearance_margin_m": 0.013277,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_cross_trap_medium",
+      "map_file": "maps/svg_maps/classic_crossing.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.013277,
+      "min_clearance_margin_m": 0.013277,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_doorway_high",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.012233,
+      "min_clearance_margin_m": 0.012233,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_doorway_low",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.012233,
+      "min_clearance_margin_m": 0.012233,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_doorway_medium",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.012233,
+      "min_clearance_margin_m": 0.012233,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_merging_low",
+      "map_file": "maps/svg_maps/classic_merging.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 0.0,
+      "min_clearance_margin_m": -1.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_merging_medium",
+      "map_file": "maps/svg_maps/classic_merging.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 0.0,
+      "min_clearance_margin_m": -1.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_overtaking_low",
+      "map_file": "maps/svg_maps/classic_overtaking.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.326555,
+      "min_clearance_margin_m": 0.326555,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_overtaking_medium",
+      "map_file": "maps/svg_maps/classic_overtaking.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.326555,
+      "min_clearance_margin_m": 0.326555,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_station_platform_medium",
+      "map_file": "maps/svg_maps/classic_station_platform.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 0.0,
+      "min_clearance_margin_m": -1.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_t_intersection_low",
+      "map_file": "maps/svg_maps/classic_t_intersection.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.288118,
+      "min_clearance_margin_m": 0.288118,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "classic_t_intersection_medium",
+      "map_file": "maps/svg_maps/classic_t_intersection.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.288118,
+      "min_clearance_margin_m": 0.288118,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_entering_elevator",
+      "map_file": "maps/svg_maps/francis2023/francis2023_entering_elevator.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_entering_room",
+      "map_file": "maps/svg_maps/francis2023/francis2023_entering_room.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_exiting_elevator",
+      "map_file": "maps/svg_maps/francis2023/francis2023_exiting_elevator.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_exiting_room",
+      "map_file": "maps/svg_maps/francis2023/francis2023_exiting_room.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "francis2023_narrow_doorway",
+      "map_file": "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.0,
+      "min_clearance_margin_m": 0.0,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    }
+  ],
+  "route_clearance_warning_count": 18,
+  "scenario_horizons": {
+    "path": "configs/policy_search/scenario_horizons_h500.yaml",
+    "scenario_count": 48,
+    "min_horizon_steps": 102,
+    "max_horizon_steps": 600,
+    "status_counts": {
+      "planner_blocked": 3,
+      "recommended": 45
+    }
+  }
+}

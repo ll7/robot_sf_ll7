@@ -14,6 +14,7 @@ import math
 import re
 import subprocess
 import time
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -165,6 +166,7 @@ class CampaignConfig:
     scenario_matrix_path: Path
     planners: tuple[PlannerSpec, ...]
     seed_policy: SeedPolicy = SeedPolicy()
+    scenario_horizons_path: Path | None = None
     workers: int = 1
     horizon: int | None = None
     dt: float | None = None
@@ -357,6 +359,142 @@ def _resolve_seed_override(policy: SeedPolicy) -> list[int] | None:
     raise ValueError(f"Unsupported seed policy mode: {policy.mode}")
 
 
+def _campaign_scenario_id(scenario: dict[str, Any]) -> str:
+    """Return the stable identifier used to join scenario metadata to campaign sidecars."""
+    for key in ("name", "scenario_id", "id"):
+        value = scenario.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown"
+
+
+def _load_scenario_horizon_schedule(path: Path) -> dict[str, dict[str, Any]]:
+    """Load and validate a scenario-horizon schedule sidecar.
+
+    Returns:
+        Mapping from scenario id to normalized horizon metadata.
+    """
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Scenario horizon schedule must be a mapping: {path}")
+    raw_scenarios = payload.get("scenarios")
+    if not isinstance(raw_scenarios, dict) or not raw_scenarios:
+        raise ValueError(f"Scenario horizon schedule requires non-empty 'scenarios': {path}")
+
+    schedule: dict[str, dict[str, Any]] = {}
+    for scenario_id, raw_entry in raw_scenarios.items():
+        sid = str(scenario_id).strip()
+        if not sid:
+            raise ValueError(f"Scenario horizon schedule contains an empty scenario id: {path}")
+        if not isinstance(raw_entry, dict):
+            raise ValueError(f"Scenario horizon entry for '{sid}' must be a mapping: {path}")
+        try:
+            horizon_steps = int(raw_entry["recommended_horizon_steps"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Scenario horizon entry for '{sid}' requires integer recommended_horizon_steps"
+            ) from exc
+        if horizon_steps <= 0:
+            raise ValueError(
+                f"Scenario horizon entry for '{sid}' must use a positive horizon, got {horizon_steps}"
+            )
+        schedule[sid] = {
+            "recommended_horizon_steps": horizon_steps,
+            "status": str(raw_entry.get("status", "recommended")).strip() or "recommended",
+            "bucket": str(raw_entry.get("bucket", "")).strip(),
+        }
+    return schedule
+
+
+def _apply_scenario_horizon_schedule(
+    scenarios: list[dict[str, Any]],
+    *,
+    schedule_path: Path | None,
+) -> list[dict[str, Any]]:
+    """Apply a scenario-specific horizon schedule to scenario max-step limits.
+
+    Returns:
+        Scenario list with patched ``simulation_config.max_episode_steps`` and provenance metadata.
+    """
+    if schedule_path is None:
+        return scenarios
+
+    schedule = _load_scenario_horizon_schedule(schedule_path)
+    missing = [
+        scenario_id
+        for scenario in scenarios
+        if (scenario_id := _campaign_scenario_id(scenario)) not in schedule
+    ]
+    if missing:
+        preview = ", ".join(sorted(missing)[:8])
+        suffix = "" if len(missing) <= 8 else f", ... ({len(missing)} total)"
+        raise ValueError(
+            "Scenario horizon schedule is missing entries for campaign scenarios: "
+            f"{preview}{suffix}"
+        )
+
+    patched_scenarios: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        scenario_id = _campaign_scenario_id(scenario)
+        entry = schedule[scenario_id]
+        horizon_steps = int(entry["recommended_horizon_steps"])
+        patched = deepcopy(scenario)
+        simulation_config = patched.setdefault("simulation_config", {})
+        if not isinstance(simulation_config, dict):
+            raise ValueError(
+                f"Scenario '{scenario_id}' simulation_config must be a mapping for horizon patching"
+            )
+        simulation_config["max_episode_steps"] = horizon_steps
+
+        metadata = patched.setdefault("metadata", {})
+        if not isinstance(metadata, dict):
+            raise ValueError(f"Scenario '{scenario_id}' metadata must be a mapping")
+        metadata["scenario_horizon"] = {
+            "source": _repo_relative(schedule_path),
+            "recommended_horizon_steps": horizon_steps,
+            "status": entry["status"],
+            "bucket": entry["bucket"],
+        }
+        patched_scenarios.append(patched)
+    return patched_scenarios
+
+
+def _scenario_horizon_summary(
+    scenarios: list[dict[str, Any]],
+    *,
+    schedule_path: Path | None,
+) -> dict[str, Any] | None:
+    """Summarize applied scenario-horizon metadata for preflight and manifest artifacts.
+
+    Returns:
+        Summary payload when a schedule is configured, otherwise ``None``.
+    """
+    if schedule_path is None:
+        return None
+
+    status_counts: dict[str, int] = {}
+    horizons: list[int] = []
+    for scenario in scenarios:
+        metadata = scenario.get("metadata")
+        horizon_meta = metadata.get("scenario_horizon") if isinstance(metadata, dict) else None
+        if not isinstance(horizon_meta, dict):
+            continue
+        status = str(horizon_meta.get("status", "unknown")).strip() or "unknown"
+        status_counts[status] = status_counts.get(status, 0) + 1
+        try:
+            horizons.append(int(horizon_meta["recommended_horizon_steps"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    return {
+        "path": _repo_relative(schedule_path),
+        "scenario_count": len(horizons),
+        "min_horizon_steps": min(horizons) if horizons else None,
+        "max_horizon_steps": max(horizons) if horizons else None,
+        "status_counts": {key: status_counts[key] for key in sorted(status_counts)},
+    }
+
+
 def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
     """Load campaign scenarios and apply optional seed override.
 
@@ -391,6 +529,10 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
         normalized.append(patched)
 
     scenario_dicts = normalized
+    scenario_dicts = _apply_scenario_horizon_schedule(
+        scenario_dicts,
+        schedule_path=cfg.scenario_horizons_path,
+    )
     seeds_override = _resolve_seed_override(cfg.seed_policy)
     if seeds_override is None:
         return scenario_dicts
@@ -780,6 +922,23 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
 
 def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912
     """Validate campaign-level invariants after config parsing."""
+    if cfg.scenario_horizons_path is not None and not cfg.scenario_horizons_path.is_file():
+        raise FileNotFoundError(
+            f"Scenario horizon schedule not found: {cfg.scenario_horizons_path}"
+        )
+    if cfg.scenario_horizons_path is not None:
+        if cfg.horizon is not None:
+            raise ValueError("scenario_horizons cannot be combined with fixed horizon")
+        planners_with_horizon_override = [
+            planner.key
+            for planner in cfg.planners
+            if planner.enabled and planner.horizon_override is not None
+        ]
+        if planners_with_horizon_override:
+            names = ", ".join(sorted(planners_with_horizon_override))
+            raise ValueError(
+                f"scenario_horizons cannot be combined with per-planner horizon overrides: {names}"
+            )
     enforcement = cfg.amv_profile.coverage_enforcement
     if enforcement not in _AMV_COVERAGE_ENFORCEMENT:
         known = ", ".join(sorted(_AMV_COVERAGE_ENFORCEMENT))
@@ -931,6 +1090,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
 
     snqi_weights = _resolve_path(payload.get("snqi_weights"), base_dir=config_path.parent)
     snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=config_path.parent)
+    scenario_horizons = _resolve_path(
+        payload.get("scenario_horizons"),
+        base_dir=config_path.parent,
+    )
     comparability_mapping_path = _resolve_path(
         payload.get("comparability_mapping"),
         base_dir=config_path.parent,
@@ -972,6 +1135,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
         name=name,
         scenario_matrix_path=scenario_matrix_path,
         planners=tuple(planner_specs),
+        scenario_horizons_path=scenario_horizons,
         seed_policy=SeedPolicy(
             mode=mode,
             seed_set=str(seed_set) if seed_set is not None else None,
@@ -1120,6 +1284,10 @@ def _build_matrix_summary_rows(
     matrix_path = _repo_relative(cfg.scenario_matrix_path)
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
     repeats = len(resolved_seeds)
+    horizon_mode = "scenario_horizons" if cfg.scenario_horizons_path is not None else "fixed"
+    scenario_horizons_path = (
+        _repo_relative(cfg.scenario_horizons_path) if cfg.scenario_horizons_path is not None else ""
+    )
     rows: list[dict[str, Any]] = []
     normalized_kinematics = _normalized_kinematics_matrix(cfg.kinematics_matrix)
     for planner in cfg.planners:
@@ -1140,6 +1308,9 @@ def _build_matrix_summary_rows(
                     "seed_policy.seed_set": cfg.seed_policy.seed_set,
                     "resolved_seeds": list(resolved_seeds),
                     "repeats": repeats,
+                    "horizon_mode": horizon_mode,
+                    "horizon": cfg.horizon,
+                    "scenario_horizons_path": scenario_horizons_path,
                     "paper_facing": bool(cfg.paper_facing),
                     "paper_profile_version": cfg.paper_profile_version,
                     "config_hash": config_hash,
@@ -1849,6 +2020,10 @@ def prepare_campaign_preflight(
     route_clearance_warnings = _build_route_clearance_warnings(scenarios)
     resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
+    scenario_horizons_summary = _scenario_horizon_summary(
+        scenarios,
+        schedule_path=cfg.scenario_horizons_path,
+    )
     git_meta = _git_context()
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
 
@@ -1910,6 +2085,8 @@ def prepare_campaign_preflight(
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
     }
+    if scenario_horizons_summary is not None:
+        validate_payload["scenario_horizons"] = scenario_horizons_summary
     preview_limit = max(0, int(cfg.preview_scenario_limit))
     preview_payload = {
         "schema_version": "benchmark-preflight-preview-scenarios.v1",
@@ -2026,6 +2203,7 @@ def prepare_campaign_preflight(
         ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "scenario_horizons": scenario_horizons_summary,
         "snqi_weights_path": (
             _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
         ),
@@ -2172,19 +2350,13 @@ def _planner_report_row(  # noqa: C901
             "snqi_mean": "snqi",
         }
         for field_name, metric_name in metric_sources.items():
-            if field_name in {
-                "success_mean",
-                "collisions_mean",
-                "total_collision_count_mean",
-            }:
-                resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
-                if field_name == "success_mean":
-                    success_ci = _episode_metric_ci(records, metric_name)
-                elif field_name == "collisions_mean":
-                    collision_ci = _episode_metric_ci(records, metric_name)
-                continue
-            if not math.isfinite(resolved_metrics[field_name]):
-                resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+            resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+            if field_name == "success_mean":
+                success_ci = _episode_metric_ci(records, metric_name)
+            elif field_name == "collisions_mean":
+                collision_ci = _episode_metric_ci(records, metric_name)
+            elif field_name == "snqi_mean":
+                snqi_ci = _episode_metric_ci(records, metric_name)
     episode_count = (
         len(records)
         if records is not None

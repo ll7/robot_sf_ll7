@@ -72,6 +72,7 @@ from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     build_guarded_ppo_config,
     build_guarded_ppo_fallback,
+    build_guarded_ppo_prior,
 )
 from robot_sf.planner.hybrid_orca_sampler import (
     HybridORCASamplerAdapter,
@@ -298,6 +299,8 @@ def _build_adapter_policy(
 
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
+    if hasattr(adapter, "bind_env"):
+        _policy._planner_bind_env = adapter.bind_env
     if hasattr(adapter, "close"):
         _policy._planner_close = adapter.close
     if hasattr(adapter, "diagnostics"):
@@ -423,6 +426,153 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError("Algorithm config must be a mapping (YAML dict).")
     return data
+
+
+def _deep_merge_config(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    """Merge nested planner config overrides without mutating either input.
+
+    Returns:
+        A new mapping containing ``base`` with ``overrides`` applied recursively.
+    """
+    merged = deepcopy(base)
+    for key, value in overrides.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_config(current, value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
+
+
+def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:
+    """Resolve candidate-manifest config paths from manifest-local or repo-root form.
+
+    Returns:
+        Resolved path, or ``None`` when the raw path is empty or not a string.
+    """
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path.resolve()
+    if anchor is not None:
+        anchored = (anchor / path).resolve()
+        if anchored.exists():
+            return anchored
+    return path.resolve()
+
+
+def _scenario_id(scenario: dict[str, Any]) -> str:
+    return str(
+        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
+    )
+
+
+def _scenario_family(scenario: dict[str, Any]) -> str:
+    scenario_id = _scenario_id(scenario)
+    if scenario_id.startswith("francis2023_"):
+        return "francis2023"
+    if scenario_id.startswith("classic_"):
+        return "classic"
+    return str(scenario.get("family") or scenario.get("metadata", {}).get("family") or "nominal")
+
+
+def _is_policy_search_candidate_manifest(config: dict[str, Any]) -> bool:
+    return any(
+        key in config
+        for key in (
+            "base_config_path",
+            "params",
+            "family_overrides",
+            "scenario_overrides",
+            "scenario_algo_overrides",
+        )
+    )
+
+
+def _load_base_candidate_config(
+    manifest: dict[str, Any],
+    *,
+    config_anchor: Path | None,
+) -> dict[str, Any]:
+    base_cfg: dict[str, Any] = {}
+    base_path = _resolve_config_path(config_anchor, manifest.get("base_config_path"))
+    if base_path is not None:
+        base_cfg = _parse_algo_config(str(base_path))
+    params = manifest.get("params") or {}
+    if not isinstance(params, dict):
+        raise TypeError("Policy-search candidate params must be a mapping.")
+    return _deep_merge_config(base_cfg, params)
+
+
+def _scenario_algo_override_runtime(
+    override: dict[str, Any],
+    *,
+    default_algo: str,
+    scenario_key: str,
+    config_anchor: Path | None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve one scenario-level algorithm override.
+
+    Returns:
+        Effective algorithm key and flattened runtime config for the scenario.
+    """
+    algo = str(override.get("algo", default_algo)).strip().lower()
+    if not algo:
+        raise ValueError(f"Scenario algo override is missing algo: {scenario_key}")
+    base_cfg: dict[str, Any] = {}
+    base_path = _resolve_config_path(config_anchor, override.get("base_config_path"))
+    if base_path is not None:
+        base_cfg = _parse_algo_config(str(base_path))
+    params = override.get("params") or {}
+    if not isinstance(params, dict):
+        raise TypeError("Policy-search scenario_algo_overrides params must be a mapping.")
+    return algo, _deep_merge_config(base_cfg, params)
+
+
+def _resolve_policy_search_candidate_runtime(
+    *,
+    default_algo: str,
+    algo_config_path: str | None,
+    scenario: dict[str, Any],
+    algo_config: dict[str, Any] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve a policy-search candidate manifest to the runtime algo/config for a scenario.
+
+    Returns:
+        Effective algorithm key and flattened runtime config for the scenario.
+    """
+    manifest = (
+        dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
+    )
+    if not _is_policy_search_candidate_manifest(manifest):
+        return default_algo, manifest
+
+    config_anchor = Path(algo_config_path).resolve().parent if algo_config_path else None
+    scenario_key = _scenario_id(scenario)
+    algo_overrides = manifest.get("scenario_algo_overrides")
+    if isinstance(algo_overrides, dict):
+        override = algo_overrides.get(scenario_key)
+        if isinstance(override, dict):
+            return _scenario_algo_override_runtime(
+                override,
+                default_algo=default_algo,
+                scenario_key=scenario_key,
+                config_anchor=config_anchor,
+            )
+
+    effective = _load_base_candidate_config(manifest, config_anchor=config_anchor)
+    family_overrides = manifest.get("family_overrides")
+    if isinstance(family_overrides, dict):
+        family_cfg = family_overrides.get(_scenario_family(scenario), {})
+        if isinstance(family_cfg, dict):
+            effective = _deep_merge_config(effective, family_cfg)
+    scenario_overrides = manifest.get("scenario_overrides")
+    if isinstance(scenario_overrides, dict):
+        scenario_cfg = scenario_overrides.get(scenario_key, {})
+        if isinstance(scenario_cfg, dict):
+            effective = _deep_merge_config(effective, scenario_cfg)
+    return default_algo, effective
 
 
 def _prediction_planner_metadata_overrides(
@@ -1473,6 +1623,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         guard_adapter = GuardedPPOAdapter(
             config=build_guarded_ppo_config(algo_config),
             fallback_adapter=build_guarded_ppo_fallback(algo_config),
+            prior_adapter=build_guarded_ppo_prior(algo_config),
         )
         planner_cfg = getattr(ppo_planner, "config", None)
         if isinstance(planner_cfg, dict):
@@ -1496,6 +1647,8 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "ppo_clear": 0,
             "ppo_safe": 0,
             "fallback_safe": 0,
+            "prior_blend_safe": 0,
+            "prior_safe": 0,
             "stop_safe": 0,
             "fallback_best_effort": 0,
             "stop_best_effort": 0,
@@ -1548,7 +1701,18 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
             return linear, angular
 
-        _policy._planner_close = ppo_planner.close
+        _attach_planner_reset(_policy, guard_adapter)
+
+        def _close_guarded_ppo() -> None:
+            ppo_planner.close()
+            guard_close = getattr(guard_adapter, "close", None)
+            if callable(guard_close):
+                guard_close()
+
+        _policy._planner_close = _close_guarded_ppo
+        guard_bind_env = getattr(guard_adapter, "bind_env", None)
+        if callable(guard_bind_env):
+            _policy._planner_bind_env = guard_bind_env
         meta.setdefault("algorithm", "guarded_ppo")
         meta.setdefault("status", "ok")
         meta.setdefault("config", algo_config)
@@ -2312,8 +2476,14 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     robot_command_mode = (
         str(getattr(getattr(config, "robot_config", None), "command_mode", "vx_vy")).strip().lower()
     )
-    policy_cfg = (
+    raw_policy_cfg = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
+    )
+    algo, policy_cfg = _resolve_policy_search_candidate_runtime(
+        default_algo=algo,
+        algo_config_path=algo_config_path,
+        algo_config=raw_policy_cfg,
+        scenario=scenario,
     )
     policy_fn, algo_meta = _build_policy(
         algo,
@@ -2596,6 +2766,7 @@ def _run_map_job_worker(
         snqi_baseline=params.get("snqi_baseline"),
         algo=str(params.get("algo", "goal")),
         algo_config=params.get("algo_config"),
+        algo_config_path=params.get("algo_config_path"),
         scenario_path=Path(params.get("scenario_path")),
         adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
     )
@@ -2788,7 +2959,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     schema = load_schema(schema_path)
-    policy_cfg = _parse_algo_config(algo_config_path)
+    raw_policy_cfg = _parse_algo_config(algo_config_path)
+    _, policy_cfg = _resolve_policy_search_candidate_runtime(
+        default_algo=algo,
+        algo_config_path=algo_config_path,
+        algo_config=raw_policy_cfg,
+        scenario={},
+    )
     robot_command_mode: str | None = None
     for scenario in filtered:
         robot_cfg = scenario.get("robot_config")
@@ -2852,10 +3029,16 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         if existing:
             filtered_jobs: list[tuple[dict[str, Any], int]] = []
             for sc, seed in jobs:
+                identity_algo, identity_cfg = _resolve_policy_search_candidate_runtime(
+                    default_algo=algo,
+                    algo_config_path=algo_config_path,
+                    algo_config=raw_policy_cfg,
+                    scenario=sc,
+                )
                 identity_payload = _scenario_identity_payload(
                     sc,
-                    algo=algo,
-                    algo_config=policy_cfg,
+                    algo=identity_algo,
+                    algo_config=identity_cfg,
                     horizon=horizon,
                     dt=dt,
                     record_forces=record_forces,
@@ -2871,7 +3054,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "snqi_weights": snqi_weights,
         "snqi_baseline": snqi_baseline,
         "algo": algo,
-        "algo_config": policy_cfg,
+        "algo_config": raw_policy_cfg,
+        "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),
         "adapter_impact_eval": bool(adapter_impact_eval),
     }

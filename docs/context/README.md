@@ -90,7 +90,12 @@ knowledge, not every transient iteration detail.
 
 * [Evidence Bundles](evidence/README.md) documents the narrow policy for promoting small generated
   artifacts out of `output/` into git. Current bundles include the
-  [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md) and the
+  [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md),
+  [issue 1023 candidate-augmented preflight](evidence/issue_1023_candidate_augmented_preflight_2026-05-06/README.md),
+  [issue 1023 candidate-augmented local full campaign](evidence/issue_1023_candidate_augmented_local_full_2026-05-06/README.md),
+  [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
+  [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
+  and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
 ## Benchmark Run Notes
@@ -98,6 +103,14 @@ knowledge, not every transient iteration detail.
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.
+* [Issue #1023 Scenario-Horizon Benchmark Surface](issue_1023_scenario_horizon_benchmark.md)
+  records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
+  full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
+  promotion boundary.
+* [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
+  records why `scenario_adaptive_hybrid_orca_v1` and
+  `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as
+  experimental candidates, plus their planner behavior and caveats.
 
 ## Feature Extractor Notes
 
@@ -184,8 +197,23 @@ knowledge, not every transient iteration detail.
   records the `corridor_following` atomic topology smoke that proves `policy_stack_v1` can reach a
   topology-heavy goal through the normal map-runner path with proposal diagnostics intact.
 * [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
-  records source-level hybrid-rule rejection diagnostics and two rejected classic-merging recovery
-  mechanisms; #884 remains unresolved until a route-completing corridor policy is proven.
+  records source-level hybrid-rule rejection diagnostics, rejected classic-merging recovery
+  mechanisms, and the later #1034 targeted recovery result.
+* [Issue #1027 Route-Corridor Attribution Diagnostics](issue_1027_route_corridor_attribution.md)
+  records additive route-corridor `last_decision()` diagnostics, five regenerated #884 traces, and
+  the geometry/dropout evidence needed before corridor-subgoal behavior work.
+* [Issue #1028 Corridor-Subgoal Recovery](issue_1028_corridor_subgoal_recovery.md)
+  records the disabled-by-default `corridor_subgoal` implementation, rejected enablement probes,
+  and final #1029 h500 validation showing no target collision regressions but no #884 recovery.
+* [Issue #1034 Continuous Corridor Maneuver](issue_1034_continuous_corridor_maneuver.md)
+  records the environment-bound continuous static checks, rollout-sequence corridor maneuver,
+  tracked candidate config, and h500 target/nominal/stress evidence for the #884 follow-up.
+* [Issue #1022 Route-Corridor Design Research](issue_1022_route_corridor_design_research.md)
+  records the research-first #884 follow-up: regenerated five-seed evidence, missing
+  route-corridor diagnostics, design options, and the recommended diagnostic-first split.
+  consolidates the #884 issue comments, rejected classic-merging recovery attempts, route-corridor
+  research hypothesis, diagnostic contract, proof boundary, and research-first deferral through
+  follow-up issue #1022.
 
 ## Map Coverage Notes
 
@@ -218,6 +246,9 @@ why a change was made rather than a full issue execution transcript.
 * [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+* [Issue #856 PPO All-Scenarios Full Budget](issue_856_ppo_all_scenarios_full_budget.md) -
+  broad-training PPO campaign record, camera-ready comparison, replica gate, and the horizon-500
+  best-checkpoint Slurm handoff after the local env22 OOM.
 * [Issue #845 Slurm Utilization Probe](issue_845_slurm_utilization_probe.md) - `sstat`/`sacct`/`seff`
   evidence collection path for diagnosing low CPU utilization without launching new jobs.
 * [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial

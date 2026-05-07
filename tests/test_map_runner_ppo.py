@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import numpy as np
 import pytest
 
@@ -194,18 +196,35 @@ def test_build_policy_ppo_dict_mode_passes_raw_observation(monkeypatch):
 class _DummyGuardedPPOAdapter:
     """Test double for guarded PPO arbitration."""
 
-    def __init__(self, config=None, *, fallback_adapter=None):
+    instances: ClassVar[list[_DummyGuardedPPOAdapter]] = []
+
+    def __init__(self, config=None, *, fallback_adapter=None, prior_adapter=None):
         self.config = config
         self.fallback_adapter = fallback_adapter
+        self.prior_adapter = prior_adapter
         self.last_command = None
+        self.bound_envs = []
+        self.reset_seeds = []
+        self.closed = False
+        self.__class__.instances.append(self)
 
     def choose_command(self, obs, ppo_command):
         self.last_command = (obs, ppo_command)
         return (0.1, -0.2), "fallback_safe"
 
+    def bind_env(self, env):
+        self.bound_envs.append(env)
+
+    def reset(self, *, seed=None):
+        self.reset_seeds.append(seed)
+
+    def close(self):
+        self.closed = True
+
 
 def test_build_policy_guarded_ppo_arbitrates_and_tracks_guard_stats(monkeypatch):
     """Guarded PPO should route PPO output through the guard and record intervention counts."""
+    _DummyGuardedPPOAdapter.instances = []
     monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
     monkeypatch.setattr(map_runner, "GuardedPPOAdapter", _DummyGuardedPPOAdapter)
     monkeypatch.setattr(map_runner, "build_guarded_ppo_fallback", lambda cfg: object())
@@ -223,6 +242,15 @@ def test_build_policy_guarded_ppo_arbitrates_and_tracks_guard_stats(monkeypatch)
     guard_stats = meta.get("guard_stats")
     assert isinstance(guard_stats, dict)
     assert guard_stats["fallback_safe"] == 1
+
+    guard = _DummyGuardedPPOAdapter.instances[-1]
+    env = object()
+    policy._planner_bind_env(env)
+    policy._planner_reset(seed=5)
+    policy._planner_close()
+    assert guard.bound_envs == [env]
+    assert guard.reset_seeds == [5]
+    assert guard.closed
 
 
 def test_obs_to_ppo_format_uses_ped_count_and_sim_timestep():

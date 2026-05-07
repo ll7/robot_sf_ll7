@@ -115,6 +115,9 @@ knowledge, not every transient iteration detail.
   classifies aggregate fixed-to-h500 timeout relief into clean budget relief, late completion,
   exposure-enabled completion, partial relief, and safety-regressed completion while marking
   wait-then-go explanations as trace-required.
+* [Issue #1054 Planner Readiness And Fallback Audit](issue_1054_planner_readiness_fallback_audit.md)
+  records the paper-matrix planner readiness table, dependency status, and fail-closed treatment of
+  fallback or degraded rows.
 * [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
   defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
   pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.

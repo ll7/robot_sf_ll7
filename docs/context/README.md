@@ -115,6 +115,9 @@ knowledge, not every transient iteration detail.
   classifies aggregate fixed-to-h500 timeout relief into clean budget relief, late completion,
   exposure-enabled completion, partial relief, and safety-regressed completion while marking
   wait-then-go explanations as trace-required.
+* [Issue #1051 Camera-Ready Evidence Provenance Audit](issue_1051_camera_ready_evidence_provenance_audit.md)
+  inventories PPO provenance, release inputs, SNQI assets, seed/bootstrap evidence, and durable
+  artifact gaps before the paper evidence trail is treated as archive-complete.
 * [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
   defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
   pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.

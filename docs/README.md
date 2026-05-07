@@ -97,6 +97,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 * **[Canonical PPO Training Workflow](./training/ppo_training_workflow.md)** - Config-driven PPO entrypoint, evaluation cadence semantics, and startup provenance logging.
+* **[Robot SF Environment Contract And Training Provenance](./training/environment_contract.md)** - Factory entrypoints, rollout ownership, reward-versus-benchmark boundary, and PPO run-record checklist.
 * **[Issue #1037 RL Environment Patterns](./context/issue_1037_rl_environment_patterns.md)** -
   Design note mapping May 2026 LLM-era RL environment patterns to Robot SF training, reward,
   rollout, benchmark, scaling, and provenance boundaries.

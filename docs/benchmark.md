@@ -12,6 +12,12 @@ The RobotSF benchmark system uses a consolidated schema management approach to e
 
 **See also**: [SNQI Weight Tools](./snqi-weight-tools/README.md) for weight recomputation and optimization, and [Distribution Plots](./distribution_plots.md) for visualization guidance.
 
+Benchmark outcomes are separate from dense training rewards. Benchmark claims must rely on
+schema-checked episode records, deterministic metrics, termination/outcome fields, and explicit
+runtime/readiness metadata; training reward totals are not benchmark-success evidence. See
+[Robot SF Environment Contract And Training Provenance](./training/environment_contract.md) and the
+[benchmark fallback policy](./context/issue_691_benchmark_fallback_policy.md).
+
 ### Canonical Schema Location
 
 **Single source of truth**: `robot_sf/benchmark/schemas/`

@@ -20,6 +20,10 @@ uv run python scripts/training/train_ppo.py \
 `scripts/training_ppo.py` entrypoint fails closed with a migration command so old notes or shell
 history cannot silently launch an unsupported run.
 
+For the environment boundary, reward ownership, benchmark-outcome distinction, and reviewer
+run-record checklist, see
+[Robot SF Environment Contract And Training Provenance](environment_contract.md).
+
 ## Evaluation Cadence
 
 PPO training YAML files loaded through `load_expert_training_config()` must define

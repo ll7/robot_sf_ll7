@@ -221,15 +221,19 @@ def test_policy_stack_map_runner_registration(monkeypatch: pytest.MonkeyPatch) -
     from robot_sf.benchmark.map_runner import _build_policy
 
     class _DummyStack:
+        """Minimal policy-stack adapter used to verify map-runner registration."""
+
         def __init__(self, *, config, risk_dwa) -> None:
             self.config = config
             self.risk_dwa = risk_dwa
 
         def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+            """Return a deterministic velocity command for registration checks."""
             _ = observation
             return (0.25, 0.0)
 
         def diagnostics(self) -> dict[str, object]:
+            """Return the minimal diagnostics contract expected by map-runner."""
             return {
                 "last_step": {
                     "selected_proposal_key": "goal",

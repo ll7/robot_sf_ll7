@@ -176,6 +176,7 @@ def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatc
     _patch_lightweight_batch(monkeypatch)
 
     def _mock_build_policy(_algo: str, cfg: dict[str, object]):
+        """Require allow_fallback before returning a lightweight policy stub."""
         if not cfg.get("allow_fallback", False):
             raise RuntimeError("missing socnav deps")
         return (lambda _obs: (0.0, 0.0), {"status": "ok"})
@@ -298,11 +299,14 @@ def test_sicnav_fails_closed_when_dependency_metadata_reports_missing(
     _patch_lightweight_batch(monkeypatch)
 
     class _DummyPlanner:
+        """Planner stub that reports missing dependency metadata."""
+
         def __init__(self, config, seed=None) -> None:
             self.config = config
             self.seed = seed
 
         def get_metadata(self):
+            """Return metadata that forces benchmark preflight to fail closed."""
             return {"status": "missing_dependency"}
 
     monkeypatch.setattr(map_runner, "SICNavPlanner", _DummyPlanner)

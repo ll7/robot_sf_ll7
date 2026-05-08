@@ -13,6 +13,7 @@ from robot_sf.benchmark.seed_variance import (
 
 
 def _sample_records() -> list[dict]:
+    """Return deterministic episode rows for seed-variance aggregation tests."""
     return [
         {
             "episode_id": "ep-b",

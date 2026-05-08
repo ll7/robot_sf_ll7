@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
+    """Write JSONL episode fixtures for collision-failure analysis."""
     path.write_text(
         "".join(json.dumps(record) + "\n" for record in records),
         encoding="utf-8",

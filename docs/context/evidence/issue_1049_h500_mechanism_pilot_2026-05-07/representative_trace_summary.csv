@@ -1,0 +1,7 @@
+mechanism_target,variant,trace_json,scenario_id,seed,horizon,steps_recorded,success,success_step,done_step,collision_step,near_miss_steps,force_exceed_step_count,first_force_exceed_step,comfort_exposure_sum,min_robot_ped_distance,start_goal_distance,end_goal_distance,wait_step_fraction,mean_abs_linear_action
+budget_limited_clean_completion,fixed_h100,traces/classic_bottleneck_low_seed111_fixed_h100_trace.json,classic_bottleneck_low,111,100,100,False,,,,[],0,,0.0,,2.000001,2.465151,0.98,0.02
+budget_limited_clean_completion,h500,traces/classic_bottleneck_low_seed111_h500_trace.json,classic_bottleneck_low,111,500,103,True,102,102,,[],0,,0.0,,2.000001,1.865305,0.980583,0.019417
+exposure_enabled_completion,fixed_h100,traces/classic_t_intersection_medium_seed111_fixed_h100_trace.json,classic_t_intersection_medium,111,100,100,False,,,,[],9,0,3.0,2.234511,2.000001,7.502796,0.93,0.037741
+exposure_enabled_completion,h500,traces/classic_t_intersection_medium_seed111_h500_trace.json,classic_t_intersection_medium,111,500,183,True,182,182,,[],50,0,16.666667,1.413267,2.000001,1.838045,0.710383,0.092002
+safety_regressed_completion,fixed_h100,traces/classic_merging_low_seed111_fixed_h100_trace.json,classic_merging_low,111,100,100,False,,,,[],0,,0.0,3.310095,5.219289,16.124415,0.81,0.04512
+safety_regressed_completion,h500,traces/classic_merging_low_seed111_h500_trace.json,classic_merging_low,111,500,273,False,,272,272,[],14,259,4.666667,1.393632,5.219289,21.268635,0.805861,0.054242

@@ -64,6 +64,14 @@ If the model is not present locally and W&B metadata is configured in
 `model/registry.yaml`, the helper will download the artifact into
 `output/model_cache/<model_id>/`.
 
+### Durable vs local cache fields
+
+Treat `wandb_artifact_path` as the preferred durable checkpoint pointer. Treat
+`local_path` under `output/model_cache/` as a cache location that may be absent in a fresh checkout.
+If a paper-facing registry entry still has `commit: null`, the W&B run or artifact pointer is the
+recoverable source, but the missing source commit should remain visible as a provenance caveat until
+it is repaired.
+
 ## Notes
 
 - Keep the per-model README in each model folder for deep context (observation,

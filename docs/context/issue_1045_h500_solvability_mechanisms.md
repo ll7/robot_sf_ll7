@@ -78,3 +78,8 @@ fixed-horizon failures are plausibly time-budget artifacts, but the same longer 
 creates more near misses and some collision regressions. The next paper-facing step is a trace-backed
 representative slice that tests whether the exposure-enabled cases are actually wait-then-go
 behaviors or simply longer interaction through dynamic obstacle fields.
+
+Issue #1049 adds that first representative trace slice in
+`docs/context/issue_1049_h500_mechanism_pilot.md`. The pilot supports clean budget relief,
+exposure/comfort-pressure increase, and safety-regressed long-horizon exposure examples, but it does
+not support a broad claim that h500 wins are mostly wait-then-go behavior.

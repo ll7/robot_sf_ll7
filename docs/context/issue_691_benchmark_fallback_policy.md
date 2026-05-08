@@ -23,7 +23,8 @@ This note defines the canonical benchmark-facing fallback policy for Robot SF.
   - `degraded`: runtime was skipped, failed, or otherwise could not satisfy the contract cleanly.
 - `availability_status`
   - `available`: benchmark-success capable.
-  - `partial-failure`: some jobs failed; the run is not benchmark-success.
+  - `partial-failure`: some jobs failed or only part of the requested campaign completed; the run
+    is not benchmark-success.
   - `failed`: the planner run failed.
   - `not_available`: the benchmark contract was not met, including fallback-only and skip cases.
 

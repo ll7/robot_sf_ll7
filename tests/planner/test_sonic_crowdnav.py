@@ -13,6 +13,7 @@ from robot_sf.planner.sonic_crowdnav import SonicCrowdNavAdapter, build_sonic_cr
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake SoNIC upstream source file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
@@ -25,6 +26,7 @@ def _write_fake_upstream_repo(
     missing_keys: list[str] | tuple[str, ...] | None = None,
     unexpected_keys: list[str] | tuple[str, ...] | None = None,
 ) -> None:
+    """Create the minimal SoNIC upstream tree and checkpoint loader stubs."""
     missing_keys = ["dist.logstd._bias"] if missing_keys is None else list(missing_keys)
     unexpected_keys = [] if unexpected_keys is None else list(unexpected_keys)
     _write(repo_root / "trained_models" / "__init__.py", "")

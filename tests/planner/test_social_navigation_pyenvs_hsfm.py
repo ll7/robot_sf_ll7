@@ -13,11 +13,13 @@ from robot_sf.planner.social_navigation_pyenvs_hsfm import (
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake upstream source file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_upstream_repo(repo_root: Path) -> None:
+    """Create the minimal H-SFM upstream module tree used by adapter tests."""
     _write(repo_root / "crowd_nav" / "__init__.py", "")
     _write(repo_root / "crowd_nav" / "policy_no_train" / "__init__.py", "")
     _write(

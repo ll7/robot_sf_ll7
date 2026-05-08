@@ -18,6 +18,7 @@ def _observation(
     radius: float = 0.3,
     occupied_cells: list[tuple[int, int]] | None = None,
 ) -> dict[str, object]:
+    """Build an occupancy-grid observation for grid-route tests."""
     grid = np.zeros((3, 21, 21), dtype=float)
     for row, col in occupied_cells or []:
         grid[0, row, col] = 1.0
@@ -269,6 +270,7 @@ def test_grid_route_reuses_cached_path_for_same_observation() -> None:
             goal: tuple[int, int],
             clearance_map: np.ndarray | None = None,
         ) -> list[tuple[int, int]]:
+            """Count and delegate A* route computations."""
             self.astar_calls += 1
             return super()._astar(blocked, start, goal, clearance_map=clearance_map)
 

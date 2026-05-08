@@ -8,6 +8,7 @@ from robot_sf.benchmark import map_runner
 
 
 def _make_obs(goal=(5.0, 0.0), heading=0.0):
+    """Build a compact map-runner observation for social-force policies."""
     return {
         "robot": {
             "position": np.array([0.0, 0.0], dtype=np.float32),
@@ -38,6 +39,7 @@ def _with_occupancy_grid(
     origin: tuple[float, float] = (-2.0, -2.0),
     size: tuple[float, float] = (4.0, 4.0),
 ):
+    """Attach occupancy-grid fields to an observation in place."""
     grid = np.zeros((4, 4, 4), dtype=np.float32)
     for row, col in obstacle_cells or []:
         if 0 <= row < grid.shape[1] and 0 <= col < grid.shape[2]:

@@ -12,10 +12,13 @@ from robot_sf.planner.stream_gap import StreamGapPlannerConfig
 
 
 class _StubHead:
+    """Planner head stub returning a fixed command."""
+
     def __init__(self, command: tuple[float, float]) -> None:
         self.command = command
 
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        """Return the configured command."""
         del observation
         return self.command
 

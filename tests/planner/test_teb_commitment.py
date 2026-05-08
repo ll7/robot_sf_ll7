@@ -12,6 +12,7 @@ from robot_sf.planner.teb_commitment import (
 
 
 def _obs(*, robot=(0.0, 0.0), heading=0.0, speed=0.0, goal=(2.0, 0.0), obstacle_cells=None):
+    """Build the compact observation payload used by TEB commitment tests."""
     obstacle_cells = obstacle_cells or []
     grid = np.zeros((4, 4, 4), dtype=np.float32)
     for row, col in obstacle_cells:
@@ -236,6 +237,7 @@ def test_teb_blocked_state_uses_grid_route_fallback(monkeypatch) -> None:
     }
 
     def _fake_plan(_self, _observation):
+        """Return a fixed route-guide command for commitment diagnostics."""
         return 0.0, 0.9
 
     monkeypatch.setattr(

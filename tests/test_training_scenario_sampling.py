@@ -24,14 +24,17 @@ class _DummyEnv(Env):
         self.state = SimpleNamespace(max_sim_steps=1)
 
     def reset(self, *, seed=None, options=None):
+        """Return a sampled observation for scenario-switching resets."""
         obs = self.observation_space.sample()
         return obs, {}
 
     def step(self, action):
+        """Return a terminal sampled observation for one-step smoke tests."""
         obs = self.observation_space.sample()
         return obs, 0.0, True, False, {}
 
     def close(self) -> None:
+        """Close the dummy environment without side effects."""
         return None
 
 
@@ -61,6 +64,7 @@ def test_scenario_switching_env_tracks_coverage() -> None:
     act_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
 
     def _factory(*, config, scenario_name, **kwargs):
+        """Create a dummy environment for the requested scenario name."""
         return _DummyEnv(obs_space, act_space, scenario_name)
 
     env = ScenarioSwitchingEnv(
@@ -91,6 +95,7 @@ def test_scenario_switching_env_allows_obs_bounds_mismatch() -> None:
     act_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
 
     def _factory(*, config, scenario_name, **kwargs):
+        """Create scenario-specific observation bounds for compatibility checks."""
         obs_space = obs_a if scenario_name == "sc_a" else obs_b
         return _DummyEnv(obs_space, act_space, scenario_name)
 
@@ -117,6 +122,7 @@ def test_scenario_switching_env_rejects_action_mismatch() -> None:
     act_b = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
 
     def _factory(*, config, scenario_name, **kwargs):
+        """Create scenario-specific action spaces to trigger mismatch handling."""
         act_space = act_a if scenario_name == "sc_a" else act_b
         return _DummyEnv(obs_space, act_space, scenario_name)
 

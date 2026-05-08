@@ -38,22 +38,30 @@ def test_high_performance_theta_star_forwards_to_upstream(monkeypatch):
     calls = {"plan": 0}
 
     class DummyGrid(types.SimpleNamespace):
+        """Grid stub exposing the minimal upstream Theta* map API."""
+
         def __init__(self):
             super().__init__(dim=2, type_map=None)
 
         def update_esdf(self):
+            """Record that the wrapper asked the grid to refresh ESDF state."""
             calls["plan"] += 1
 
         def get_neighbors(self, node):
+            """Return no neighbors because upstream planning is stubbed."""
             return []
 
         def is_expandable(self, *args, **kwargs):
+            """Treat all nodes as expandable for wrapper forwarding tests."""
             return True
 
     grid = DummyGrid()
 
     class DummyUpstream(HighPerformanceThetaStar):
+        """Upstream planner stub that confirms plan forwarding."""
+
         def plan(self):
+            """Return a fixed path and expansion payload."""
             calls["plan"] += 1
             return ([(0, 0), (1, 1)], {"expand": {}})
 

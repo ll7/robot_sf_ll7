@@ -11,6 +11,8 @@ from scripts.training.optuna_expert_ppo import _build_trial_config
 
 @dataclass
 class _BaseConfigStub:
+    """Minimal training config object consumed by trial-config construction."""
+
     policy_id: str = "ppo_expert_reference"
     best_checkpoint_metric: str = "success_rate"
     total_timesteps: int = 100_000
@@ -35,20 +37,26 @@ class _BaseConfigStub:
 
 
 class _FakeTrial:
+    """Optuna trial stub returning the lower or first suggested value."""
+
     def __init__(self, number: int = 3) -> None:
         self.number = number
 
     def suggest_categorical(self, _name: str, choices):
+        """Return the first categorical choice."""
         return choices[0]
 
     def suggest_float(self, _name: str, low: float, _high: float, **_kwargs):
+        """Return the lower float bound."""
         return low
 
     def suggest_int(self, _name: str, low: int, _high: int, **_kwargs):
+        """Return the lower integer bound."""
         return low
 
 
 def _args(*, disable_wandb: bool) -> argparse.Namespace:
+    """Build CLI-style arguments for W&B trial-config tests."""
     return argparse.Namespace(
         trial_timesteps=1_000_000,
         eval_episodes=10,

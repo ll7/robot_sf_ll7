@@ -115,6 +115,9 @@ knowledge, not every transient iteration detail.
   classifies aggregate fixed-to-h500 timeout relief into clean budget relief, late completion,
   exposure-enabled completion, partial relief, and safety-regressed completion while marking
   wait-then-go explanations as trace-required.
+* [Issue #1053 Durable Artifact Reference Audit](issue_1053_durable_artifact_references.md)
+  separates durable W&B/release/artifact-store pointers from local `output/` caches and records the
+  publication-bundle archive blocker.
 * [Issue #1054 Planner Readiness And Fallback Audit](issue_1054_planner_readiness_fallback_audit.md)
   records the paper-matrix planner readiness table, dependency status, and fail-closed treatment of
   fallback or degraded rows.

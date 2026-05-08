@@ -141,6 +141,11 @@ Primary artifact locations:
 - `output/benchmarks/publication/<bundle_name>/`
 - `output/benchmarks/publication/<bundle_name>.tar.gz`
 
+These paths are local generation outputs. A paper-facing handoff must additionally record a durable
+release asset, DOI, or artifact-store pointer for the archive, checksums, publication manifest, and
+required diagnostic reports. Do not treat the local `output/` paths above as recoverable evidence in
+a fresh checkout unless they are paired with such a durable pointer.
+
 ## Citation Surface
 
 Repository-level software citation is defined in:

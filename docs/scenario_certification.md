@@ -106,3 +106,10 @@ Programmatic tests can call `certify_map_definition(...)` directly with a `MapDe
 not generate adversarial scenarios, promote stress cases into headline benchmarks, or prove that a
 planner will solve a valid scenario. It only certifies that the scenario geometry and currently
 exposed robot/dynamic constraints are not malformed or impossible under the v1 checks.
+
+For h500 interpretation, layer planner-failure classification on top of certification rather than
+using h500 failures as certification evidence by themselves. Excluded or unresolved-certification
+scenarios cannot support planner-failure attribution. Eligible and `hard_but_solvable` scenarios may
+support planner follow-ups when the same mechanism recurs across seeds or planners. See
+`docs/context/issue_1056_h500_failure_classification.md` for the current h500 classification
+vocabulary.

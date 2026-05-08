@@ -14,11 +14,13 @@ from scripts.tools import probe_gym_collision_avoidance_side_env as probe
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake side-environment source file with parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_repo(repo_root: Path) -> None:
+    """Create the minimal source tree required by side-environment probes."""
     _write(repo_root / "README.md", "# stub\n")
     _write(
         repo_root / "gym_collision_avoidance" / "experiments" / "src" / "example.py",
@@ -70,6 +72,7 @@ def test_run_probe_preserves_venv_symlink_path(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Record explicit side-env commands while returning success."""
         seen_commands.append(command)
         return probe.CommandResult(
             name=name,
@@ -103,6 +106,7 @@ def test_run_probe_uses_repo_relative_default_side_env_python(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Record default side-env commands while returning success."""
         seen_commands.append(command)
         return probe.CommandResult(
             name=name,
@@ -327,6 +331,7 @@ def test_run_command_decodes_timeout_output_bytes(
     """Timeout handling should coerce byte outputs into safe text tails."""
 
     def fake_run(*args, **kwargs):
+        """Raise a timeout with byte output to verify decoding."""
         raise subprocess.TimeoutExpired(
             cmd=["python", "-c", "pass"],
             timeout=1,

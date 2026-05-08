@@ -29,10 +29,12 @@ from robot_sf.scenario_certification.v1 import (
 def _zone(
     x: float, y: float
 ) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+    """Return a small triangular zone centered near the given point."""
     return ((x - 0.2, y - 0.2), (x + 0.2, y - 0.2), (x + 0.2, y + 0.2))
 
 
 def _bounds(width: float, height: float) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """Return rectangular map bounds for certification fixtures."""
     return [
         ((0.0, 0.0), (width, 0.0)),
         ((width, 0.0), (width, height)),
@@ -47,6 +49,7 @@ def _obstacle(
     max_x: float,
     max_y: float,
 ) -> Obstacle:
+    """Return an axis-aligned rectangular obstacle fixture."""
     return Obstacle([(min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)])
 
 
@@ -58,6 +61,7 @@ def _map(
     obstacles: list[Obstacle] | None = None,
     pedestrians: list[SinglePedestrianDefinition] | None = None,
 ) -> MapDefinition:
+    """Build a minimal map definition around one robot route."""
     route = GlobalRoute(
         spawn_id=0,
         goal_id=0,
@@ -86,6 +90,7 @@ def _classify(
     *,
     robot_config: object | None = None,
 ) -> str:
+    """Return the scenario certification classification for a fixture map."""
     certificate = certify_map_definition(
         map_def,
         robot_config=robot_config or DifferentialDriveSettings(radius=0.4),

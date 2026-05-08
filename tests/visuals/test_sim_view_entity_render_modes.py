@@ -46,6 +46,7 @@ def test_robot_circle_mode_draws_circle(monkeypatch) -> None:
     draw_calls: list[tuple] = []
 
     def _spy_circle(*args: object, **kwargs: object) -> None:
+        """Record pygame circle draw calls."""
         draw_calls.append((args, kwargs))
 
     monkeypatch.setattr(pygame.draw, "circle", _spy_circle)
@@ -62,6 +63,7 @@ def test_robot_sprite_mode_uses_rotation(monkeypatch, tmp_path: Path) -> None:
     orig_rotate = pygame.transform.rotate
 
     def _spy_rotate(surface, angle):
+        """Record robot sprite rotation angles before delegating."""
         rotate_calls.append(float(angle))
         return orig_rotate(surface, angle)
 
@@ -83,6 +85,7 @@ def test_robot_sprite_heading_has_right_90deg_offset(monkeypatch, tmp_path: Path
     orig_rotate = pygame.transform.rotate
 
     def _spy_rotate(surface, angle):
+        """Record heading-offset rotation angles before delegating."""
         rotate_calls.append(float(angle))
         return orig_rotate(surface, angle)
 
@@ -102,6 +105,7 @@ def test_robot_sprite_missing_path_falls_back_to_circle(monkeypatch) -> None:
     draw_calls: list[tuple] = []
 
     def _spy_circle(*args: object, **kwargs: object) -> None:
+        """Record fallback circle draw calls."""
         draw_calls.append((args, kwargs))
 
     monkeypatch.setattr(pygame.draw, "circle", _spy_circle)
@@ -131,6 +135,7 @@ def test_pedestrian_sprite_mode_uses_sprite_branch(monkeypatch, tmp_path: Path) 
         radius_px: object,
         theta: float | None = None,
     ) -> None:
+        """Record pedestrian sprite rotation arguments."""
         del sprite, center, radius_px
         sprite_calls.append(theta)
 

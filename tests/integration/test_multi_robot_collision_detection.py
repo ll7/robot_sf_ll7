@@ -60,21 +60,26 @@ class _FakeMultiRobotSim:
 
     @property
     def robot_pos(self) -> list[tuple[float, float]]:
+        """Return current robot positions for collision checks."""
         return [robot.pose[0] for robot in self.robots]
 
     @property
     def goal_pos(self) -> list[tuple[float, float]]:
+        """Return robot goal positions for observation fusion."""
         return self._goal_pos
 
     @property
     def next_goal_pos(self) -> list[None]:
+        """Return absent intermediate goals for each robot."""
         return [None, None]
 
     @property
     def ped_pos(self) -> np.ndarray:
+        """Return no pedestrians for robot-robot collision isolation."""
         return np.empty((0, 2), dtype=np.float64)
 
     def get_obstacle_lines(self) -> np.ndarray:
+        """Return no obstacle segments for robot-robot collision isolation."""
         return np.empty((0, 4), dtype=np.float64)
 
 

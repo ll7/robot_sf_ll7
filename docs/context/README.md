@@ -115,6 +115,9 @@ knowledge, not every transient iteration detail.
   classifies aggregate fixed-to-h500 timeout relief into clean budget relief, late completion,
   exposure-enabled completion, partial relief, and safety-regressed completion while marking
   wait-then-go explanations as trace-required.
+* [Issue #1051 Camera-Ready Evidence Provenance Audit](issue_1051_camera_ready_evidence_provenance_audit.md)
+  inventories PPO provenance, release inputs, SNQI assets, seed/bootstrap evidence, and durable
+  artifact gaps before the paper evidence trail is treated as archive-complete.
 * [Issue #1053 Durable Artifact Reference Audit](issue_1053_durable_artifact_references.md)
   separates durable W&B/release/artifact-store pointers from local `output/` caches and records the
   publication-bundle archive blocker.

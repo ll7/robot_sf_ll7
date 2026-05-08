@@ -18,17 +18,21 @@ class _DummySACPlanner:
         self.last_obs = None
 
     def step(self, obs):
+        """Return the configured SAC action and remember the observation."""
         self.last_obs = obs
         return self.config.get("test_action", {"v": 0.5, "omega": 0.0})
 
     def close(self):
+        """Mark the planner as closed for lifecycle assertions."""
         self.closed = True
 
     def get_metadata(self):
+        """Return the metadata shape expected by map_runner."""
         return {"algorithm": "sac", "status": "ok", "config": dict(self.config)}
 
 
 def _sample_obs(heading: float = 0.0) -> dict:
+    """Return a map-runner observation payload with configurable heading."""
     return {
         "dt": 0.1,
         "robot": {

@@ -13,6 +13,7 @@ from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 
 
 def _make_robot_observation() -> dict[str, object]:
+    """Return a minimal robot observation accepted by external MPC wrappers."""
     return {
         "dt": 0.1,
         "robot": {
@@ -27,6 +28,7 @@ def _make_robot_observation() -> dict[str, object]:
 
 
 def _write(path, text: str) -> None:
+    """Write a fake external-package file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
@@ -123,11 +125,14 @@ def test_dr_mpc_planner_uses_external_policy(monkeypatch: pytest.MonkeyPatch) ->
     fake_module = types.ModuleType("dr_mpc")
 
     class FakePolicy:
+        """External DR-MPC policy stub returning a fixed action."""
+
         def __init__(self, checkpoint_path=None, device=None):
             self.checkpoint_path = checkpoint_path
             self.device = device
 
         def select_action(self, obs):
+            """Return the deterministic action expected by the wrapper test."""
             return {"v": 0.25, "omega": -0.05}
 
     fake_module.DRMPCPolicy = FakePolicy

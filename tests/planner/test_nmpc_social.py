@@ -25,6 +25,7 @@ def _obs(
     ped_velocities=None,
     obstacle_cells=None,
 ):
+    """Build the compact observation payload used by NMPC social planner tests."""
     ped_positions = [] if ped_positions is None else ped_positions
     ped_velocities = [] if ped_velocities is None else ped_velocities
     obstacle_cells = [] if obstacle_cells is None else obstacle_cells

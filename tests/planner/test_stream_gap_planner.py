@@ -10,6 +10,7 @@ from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, StreamGapPlanne
 def _obs(
     *, robot=(0.0, 0.0), heading=0.0, goal=(2.0, 0.0), ped_positions=None, ped_velocities=None
 ):
+    """Build the compact observation payload used by stream-gap tests."""
     ped_positions = [] if ped_positions is None else ped_positions
     ped_velocities = [] if ped_velocities is None else ped_velocities
     return {

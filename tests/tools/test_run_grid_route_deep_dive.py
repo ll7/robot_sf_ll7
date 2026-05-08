@@ -31,6 +31,7 @@ def test_main_returns_nonzero_when_any_set_errors(
     out_dir = tmp_path / "out"
 
     def _args():
+        """Build parser arguments for the mocked deep-dive command."""
         return type(
             "Args",
             (),

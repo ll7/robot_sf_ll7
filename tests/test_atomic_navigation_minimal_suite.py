@@ -83,6 +83,7 @@ ATOMIC_MAP_FILENAMES = [
 
 
 def _load(path: Path) -> list[dict]:
+    """Load scenarios from a manifest using its own path as base directory."""
     return list(load_scenarios(path, base_dir=path))
 
 

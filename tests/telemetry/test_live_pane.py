@@ -60,6 +60,7 @@ def test_live_pane_refresh_and_fps_budget(monkeypatch):
     calls = {"count": 0}
 
     def fake_render(series, metrics, width, height, dpi=100):
+        """Count pane render calls and return a transparent frame."""
         calls["count"] += 1
         return np.zeros((height, width, 4), dtype=np.uint8)
 

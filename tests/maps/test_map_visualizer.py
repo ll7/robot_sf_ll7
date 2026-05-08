@@ -24,6 +24,7 @@ from robot_sf.nav.obstacle import Obstacle
 
 
 def _map_def() -> MapDefinition:
+    """Build a compact map definition for visualizer tests."""
     width = 6.0
     height = 4.0
     spawn_zone: Rect = ((0.5, 0.5), (1.0, 0.5), (1.0, 1.0))

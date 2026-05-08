@@ -9,6 +9,7 @@ from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 
 
 def _make_map(label: str, x0: float) -> MapDefinition:
+    """Build a labeled map definition with shifted spawn and goal zones."""
     width = 4.0
     height = 4.0
     spawn_zone = ((x0, 0.5), (x0 + 0.5, 0.5), (x0 + 0.5, 1.0))

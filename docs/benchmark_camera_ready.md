@@ -128,6 +128,29 @@ probe to pass without fallback, complete all three probe episodes, show non-zero
 runtime within `3x` the `goal` row on the same slice before any broader paper-compatible subset is
 run. See `docs/context/issue_562_socnav_bench_reentry.md`.
 
+### Paper-Matrix Planner Readiness
+
+The frozen `paper_experiment_matrix_v1` profile has seven planner rows. Interpret them with the
+fallback policy in `docs/context/issue_691_benchmark_fallback_policy.md`: `native` and declared
+`adapter` rows can be benchmark evidence when the run reports `availability_status=available`;
+`fallback`, `degraded`, `failed`, `partial-failure`, and `not_available` rows are exclusions or
+caveats, not successful planner results.
+
+| Planner | Group | Expected mode | Readiness interpretation |
+| --- | --- | --- | --- |
+| `goal` | core | native | Baseline-ready control row. |
+| `social_force` | core | adapter | Baseline-ready force-based comparator through the declared adapter path. |
+| `orca` | core | adapter | Baseline-ready reciprocal-avoidance comparator when `rvo2` is available. |
+| `ppo` | learned baseline | native | Paper-facing PPO row when model provenance and benchmark-set claim caveats are satisfied. |
+| `prediction_planner` | experimental | adapter | Checkpoint-dependent experimental challenger row. |
+| `socnav_sampling` | experimental | adapter | In-repo sampling challenger; not upstream SocNavBench support and not a SocNavBench bridge result. |
+| `sacadrl` | experimental | adapter | Legacy adapter-sensitive challenger row; implementation evidence only. |
+
+`socnav_bench` is not part of this frozen paper matrix. The May 4 all-planners run recorded
+`socnav_bench` as `execution_mode=unknown`, `readiness_status=degraded`, and
+`availability_status=failed` because required SocNavBench assets were absent; that row must remain
+excluded until a focused fail-fast re-entry probe succeeds.
+
 ### Scenario-Horizon Change
 
 The long-horizon collection uses the h500-derived scenario schedule instead of a single fixed

@@ -62,7 +62,7 @@ Avoid these phrases unless a separate held-out study exists:
 Audit command:
 
 ```bash
-rtk rg -n "generaliz|transfer|unseen|OOD|DreamerV3|architecture.*lift" docs memory
+rtk rg -ni "generaliz|transfer|unseen|novel|OOD|DreamerV3|architecture.*(lift|causal)" docs memory
 ```
 
 The remaining matches after this audit are either canonical guardrails, historical engineering

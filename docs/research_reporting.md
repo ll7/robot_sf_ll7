@@ -195,8 +195,8 @@ Generated `report.md` includes:
 Generated or hand-written reports must keep benchmark evidence scoped to the evaluated matrix.
 When a policy is trained on the same scenario family or scenario set that appears in the benchmark
 surface, describe the result as benchmark-set performance, matrix coverage, or seed-stability
-evidence. Do not promote it to a generalization, transfer, unseen-environment, or architecture
-causality claim unless a separate held-out design and execution record exists.
+evidence. Do not promote it to a generalization, transfer, unseen-environment, or architecture-causality
+claim unless a separate held-out design and execution record exists.
 
 For issue-791 PPO reporting, the active boundary is recorded in
 `memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md`: the paper framing is a strong

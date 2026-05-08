@@ -10,6 +10,7 @@ from scripts.tools import probe_python_rvo2_integration as probe
 
 
 def _write(path: Path, content: str) -> None:
+    """Write a text fixture under a temporary upstream tree."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 

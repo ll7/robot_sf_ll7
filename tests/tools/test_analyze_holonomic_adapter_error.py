@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 def _write_json(path: Path, payload: dict) -> None:
+    """Write an indented JSON fixture for adapter-error analysis."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 

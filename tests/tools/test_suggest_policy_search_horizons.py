@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 def _write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
+    """Write policy-search episode records as JSONL."""
     path.write_text(
         "\n".join(json.dumps(record) for record in records) + "\n",
         encoding="utf-8",

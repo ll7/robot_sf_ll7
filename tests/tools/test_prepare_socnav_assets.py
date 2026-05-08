@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 
 def _mkdir(path: Path) -> None:
+    """Create an asset fixture directory tree."""
     path.mkdir(parents=True, exist_ok=True)
 
 

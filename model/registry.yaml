@@ -34,6 +34,9 @@ models:
         docs/context/issue_791_best_policy_verdict_2026_04_21.md
       - Narrow paper claim
         memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md
+      - Durable checkpoint source is the W&B artifact path above. The local_path
+        and best_summary references are cache paths under output/ and may be
+        absent in a fresh checkout.
       - Best summary
         output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/best_summary.json.
   - model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200

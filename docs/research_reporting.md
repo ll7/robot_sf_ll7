@@ -190,6 +190,19 @@ Generated `report.md` includes:
 6. **Conclusions**: Summary of key findings
 7. **Reproducibility**: Git hash, packages, hardware, commands to reproduce
 
+### Paper Claim Boundaries
+
+Generated or hand-written reports must keep benchmark evidence scoped to the evaluated matrix.
+When a policy is trained on the same scenario family or scenario set that appears in the benchmark
+surface, describe the result as benchmark-set performance, matrix coverage, or seed-stability
+evidence. Do not promote it to a generalization, transfer, unseen-environment, or architecture-causality
+claim unless a separate held-out design and execution record exists.
+
+For issue-791 PPO reporting, the active boundary is recorded in
+`memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md`: the paper framing is a strong
+policy on a broad scenario matrix, not OOD generalization. Internal engineering notes may still use
+distribution-alignment language to explain why one training recipe beat another, but manuscript,
+PR, and issue summary text should use the narrower benchmark-set wording.
 ## H500 Reporting Language
 
 Use h500 as a long-horizon sensitivity/report surface, not as a replacement for the fixed-horizon

@@ -1,5 +1,10 @@
 # Draft GitHub issue body - rerun camera-ready benchmark with issue-791 Wave-5 leader
 
+> Status: historical draft, superseded for paper-claim wording by
+> `memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md`.
+> Keep this note as the original rerun issue body, but do not reuse its OOD or held-out-suite
+> requirements as current manuscript scope without a new maintainer decision.
+
 `gh` CLI is not installed on the workstation that triaged this campaign, so this draft is
 checked in for someone with `gh` (or a GitHub MCP-equipped agent) to file. SLURM job 11798
 already exists as a fast in-cluster sanity benchmark; this issue tracks the publication-grade

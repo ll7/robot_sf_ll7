@@ -111,6 +111,15 @@ Issue #1049 now provides the first compact trace-backed pilot:
 The pilot supports clean budget relief, exposure/comfort-pressure increase, and safety-regressed
 long-horizon exposure examples for ORCA. It does not support a broad wait-then-go claim.
 
+Issue #1055 adds the first exposure-aware representative tables:
+
+* `docs/context/issue_1055_exposure_aware_h500_tables.md`
+* `docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/report.md`
+
+Issue #1058 adds reusable paper/report wording:
+
+* [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
+
 ## SNQI Contract
 
 Do not overwrite camera-ready v3 SNQI assets. If h500 SNQI is reported, use one of these safer

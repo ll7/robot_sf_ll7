@@ -125,6 +125,17 @@ def _obs_min_robot_ped_distance(obs: dict[str, Any]) -> float | None:
     return float(np.min(np.linalg.norm(ped_pos - robot_pos.reshape(1, 2), axis=1)))
 
 
+def _sim_min_robot_ped_distance(env: Any) -> float | None:
+    """Compute min robot-pedestrian distance from simulator state."""
+    robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float).reshape(-1)[:2]
+    ped_pos = np.asarray(getattr(env.simulator, "ped_pos", []), dtype=float)
+    if ped_pos.ndim == 1:
+        ped_pos = ped_pos.reshape(-1, 2) if ped_pos.size % 2 == 0 else np.zeros((0, 2), dtype=float)
+    if ped_pos.size == 0:
+        return None
+    return float(np.min(np.linalg.norm(ped_pos[:, :2] - robot_pos.reshape(1, 2), axis=1)))
+
+
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
     """Execute one step-trace diagnostics run and write trace/report artifacts."""
     args = parse_args()
@@ -206,7 +217,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
             goal_pos = np.array(env.simulator.goal_pos[0], dtype=float, copy=True)
             goal_distance = float(np.linalg.norm(goal_pos - robot_pos))
-            min_robot_ped_dist = _obs_min_robot_ped_distance(obs)
+            min_robot_ped_dist = _sim_min_robot_ped_distance(env)
+            if min_robot_ped_dist is None:
+                min_robot_ped_dist = _obs_min_robot_ped_distance(obs)
 
             policy_command = policy_fn(obs)
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
@@ -227,6 +240,13 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
 
             obs, reward, terminated, truncated, info = env.step(env_action)
             meta = info.get("meta", {}) if isinstance(info, dict) else {}
+            post_step_min_robot_ped_dist = _sim_min_robot_ped_distance(env)
+            post_step_goal_distance = float(
+                np.linalg.norm(
+                    np.array(env.simulator.goal_pos[0], dtype=float)
+                    - np.array(env.simulator.robot_pos[0], dtype=float)
+                )
+            )
             is_success = route_complete_success(info if isinstance(info, dict) else {})
             trace_rows.append(
                 {
@@ -235,7 +255,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "env_action": _json_ready(env_action),
                     "reward": float(reward),
                     "goal_distance": goal_distance,
+                    "post_step_goal_distance": post_step_goal_distance,
                     "min_robot_ped_distance": min_robot_ped_dist,
+                    "post_step_min_robot_ped_distance": post_step_min_robot_ped_dist,
+                    "meta": _json_ready(meta),
                     "planner_decision": _json_ready(planner_decision),
                     "terminated": bool(terminated),
                     "truncated": bool(truncated),

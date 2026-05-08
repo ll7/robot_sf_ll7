@@ -1,0 +1,4 @@
+mechanism_target,scenario_id,seed,fixed_success,h500_success,success_delta,fixed_collision,h500_collision,collision_delta,fixed_steps,h500_steps,step_delta,classification
+budget_limited_clean_completion,classic_bottleneck_low,111,0,1,1,0,0,0,100,103,3,time_budget_clean_relief
+exposure_enabled_completion,classic_t_intersection_medium,111,0,1,1,0,0,0,100,183,83,exposure_enabled_completion
+safety_regressed_completion,classic_merging_low,111,0,0,0,0,1,1,100,273,173,safety_regressed_long_horizon

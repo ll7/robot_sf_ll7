@@ -94,6 +94,11 @@ class SnqiContractEvaluation:
 
 
 def _is_finite(value: Any) -> bool:
+    """Check whether a payload value can be interpreted as a finite float.
+
+    Returns:
+        bool: ``True`` when ``value`` converts to a finite numeric value.
+    """
     try:
         return math.isfinite(float(value))
     except (TypeError, ValueError):
@@ -101,6 +106,11 @@ def _is_finite(value: Any) -> bool:
 
 
 def _quantile(values: Sequence[float], q: float) -> float:
+    """Compute an interpolated quantile without a NumPy dependency.
+
+    Returns:
+        float: Interpolated quantile value, or ``0.0`` for an empty input.
+    """
     if not values:
         return 0.0
     if len(values) == 1:
@@ -214,6 +224,11 @@ def compute_baseline_stats_from_episodes(
 
 
 def _rank(values: Sequence[float]) -> list[float]:
+    """Return one-based tie-aware ranks for Spearman correlation.
+
+    Returns:
+        list[float]: Ranks in the original value order, averaging ties.
+    """
     indexed = sorted(enumerate(values), key=lambda item: item[1])
     ranks = [0.0] * len(values)
     i = 0
@@ -229,6 +244,11 @@ def _rank(values: Sequence[float]) -> list[float]:
 
 
 def _pearson(x: Sequence[float], y: Sequence[float]) -> float:
+    """Compute Pearson correlation over two numeric sequences.
+
+    Returns:
+        float: Correlation coefficient, or ``0.0`` for degenerate inputs.
+    """
     if len(x) != len(y) or len(x) < 2:
         return 0.0
     mx = sum(x) / len(x)
@@ -253,6 +273,11 @@ def spearman_correlation(x: Sequence[float], y: Sequence[float]) -> float:
 
 
 def _target_quality(row: Mapping[str, Any]) -> float:
+    """Project planner aggregate metrics into the SNQI target-quality proxy.
+
+    Returns:
+        float: Higher-is-better quality score emphasizing success and safety.
+    """
     success = float(row.get("success_mean", 0.0) or 0.0)
     collisions = float(row.get("collisions_mean", 0.0) or 0.0)
     near_misses = float(row.get("near_misses_mean", 0.0) or 0.0)
@@ -262,6 +287,11 @@ def _target_quality(row: Mapping[str, Any]) -> float:
 
 
 def _planner_key(row: Mapping[str, Any]) -> str:
+    """Build the planner identity used when comparing aggregate rows.
+
+    Returns:
+        str: Planner key with kinematics suffix when available.
+    """
     planner = str(row.get("planner_key", "")).strip()
     kinematics = str(row.get("kinematics", "")).strip()
     if planner and kinematics:
@@ -270,6 +300,11 @@ def _planner_key(row: Mapping[str, Any]) -> str:
 
 
 def _episode_planner_key(episode: Mapping[str, Any]) -> str:
+    """Build the planner identity used when grouping episode-level scores.
+
+    Returns:
+        str: Planner key with kinematics suffix when available.
+    """
     planner = str(episode.get("planner_key", "")).strip()
     kinematics = str(episode.get("kinematics", "")).strip()
     if planner and kinematics:
@@ -283,6 +318,11 @@ def _episode_score(
     weights: Mapping[str, float],
     baseline: Mapping[str, Mapping[str, float]],
 ) -> float:
+    """Compute one episode's SNQI score using resolved weights and baseline stats.
+
+    Returns:
+        float: SNQI score for the episode metrics.
+    """
     return compute_snqi(metrics, weights, baseline)
 
 

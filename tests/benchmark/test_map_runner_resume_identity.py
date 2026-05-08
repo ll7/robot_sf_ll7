@@ -37,6 +37,7 @@ def test_resume_identity_is_algorithm_aware(
     monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
 
     def _fake_worker(job: tuple[dict, int, dict]) -> dict[str, str]:
+        """Compute the same episode identity that the real worker would return."""
         scenario, seed, params = job
         identity_payload = map_runner._scenario_identity_payload(
             scenario,
@@ -49,6 +50,7 @@ def test_resume_identity_is_algorithm_aware(
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
     def _fake_write(_out: Path, _schema: dict, record: dict[str, str]) -> None:
+        """Record written episode IDs without touching JSONL output."""
         written_ids.add(record["episode_id"])
 
     monkeypatch.setattr(map_runner, "_run_map_job_worker", _fake_worker)
@@ -89,6 +91,7 @@ def test_resume_identity_includes_algo_config_hash(
     monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
 
     def _fake_worker(job: tuple[dict, int, dict]) -> dict[str, str]:
+        """Compute episode identity including the algorithm configuration hash."""
         scenario, seed, params = job
         identity_payload = map_runner._scenario_identity_payload(
             scenario,
@@ -101,6 +104,7 @@ def test_resume_identity_includes_algo_config_hash(
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
     def _fake_write(_out: Path, _schema: dict, record: dict[str, str]) -> None:
+        """Record written episode IDs for resume-index simulation."""
         written_ids.add(record["episode_id"])
 
     monkeypatch.setattr(map_runner, "_run_map_job_worker", _fake_worker)

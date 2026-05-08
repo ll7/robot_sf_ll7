@@ -84,6 +84,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _scenario_id(scenario: dict[str, Any]) -> str:
+    """Resolve a scenario identifier from common manifest fields.
+
+    Returns:
+        str: Scenario identifier, or ``"unknown"``.
+    """
     return str(
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )

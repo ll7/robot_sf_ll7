@@ -87,17 +87,21 @@ class _FunctionVisitor(ast.NodeVisitor):
         self.functions: list[FunctionMetric] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """Track class nesting while visiting methods."""
         self.stack.append(node.name)
         self.generic_visit(node)
         self.stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Record a synchronous function definition."""
         self._record_function(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Record an asynchronous function definition."""
         self._record_function(node)
 
     def _record_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        """Store one qualified function span metric."""
         qualified_name = ".".join([*self.stack, node.name])
         length_lines = int((node.end_lineno or node.lineno) - node.lineno + 1)
         self.functions.append(

@@ -1,5 +1,4 @@
 """Lightweight performance sanity checks for planner (US4)."""
-# ruff: noqa: D103
 
 import statistics
 import time
@@ -9,6 +8,7 @@ from robot_sf.planner import GlobalPlanner, PlannerConfig
 
 
 def test_cached_planning_is_not_slower_than_first_call():
+    """Verify graph caching does not make repeated planning slower."""
     map_def = convert_map("tests/fixtures/test_maps/simple_corridor.svg")
     config = PlannerConfig(cache_graphs=True)
     start = (1.2, 4.5)

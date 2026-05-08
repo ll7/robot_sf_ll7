@@ -220,6 +220,7 @@ def _function_returns_value(node: ast.FunctionDef | ast.AsyncFunctionDef) -> boo
             self.returns_value = False
 
         def visit_Return(self, return_node: ast.Return) -> None:
+            """Record non-None return statements."""
             if return_node.value is not None:
                 if not (
                     isinstance(return_node.value, ast.Constant) and return_node.value.value is None
@@ -228,18 +229,23 @@ def _function_returns_value(node: ast.FunctionDef | ast.AsyncFunctionDef) -> boo
             self.generic_visit(return_node)
 
         def visit_Yield(self, node: ast.Yield) -> None:
+            """Record yield expressions as value-producing exits."""
             self.returns_value = True
 
         def visit_YieldFrom(self, node: ast.YieldFrom) -> None:
+            """Record yield-from expressions as value-producing exits."""
             self.returns_value = True
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            """Skip nested function definitions."""
             return
 
         def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            """Skip nested async function definitions."""
             return
 
         def visit_Lambda(self, node: ast.Lambda) -> None:
+            """Skip nested lambda bodies."""
             return
 
     visitor = ReturnVisitor()

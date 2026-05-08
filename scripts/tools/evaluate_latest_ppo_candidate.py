@@ -27,6 +27,7 @@ DEFAULT_BENCHMARK_SNQI_BASELINE = Path("configs/benchmarks/snqi_baseline_camera_
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for latest PPO candidate evaluation."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wandb-entity", default="ll7")
     parser.add_argument("--wandb-project", default="robot_sf")
@@ -85,6 +86,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _promotion_summary(summary_payload: dict[str, Any]) -> dict[str, Any]:
+    """Summarize benchmark promotion metrics from a policy-analysis payload."""
     summary = dict(summary_payload.get("summary") or {})
     aggregates = dict(summary_payload.get("aggregates") or {})
     problem_episodes = list(summary_payload.get("problem_episodes") or [])
@@ -152,6 +154,7 @@ def _build_benchmark_algo_config(
 
 
 def _load_jsonl_records(path: Path) -> list[dict[str, Any]]:
+    """Load benchmark records from JSONL."""
     records: list[dict[str, Any]] = []
     if not path.exists():
         raise FileNotFoundError(f"Expected benchmark JSONL missing: {path}")
@@ -194,6 +197,7 @@ def _resolve_benchmark_snqi_inputs(
 
 
 def _benchmark_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize benchmark records for promotion gates."""
     if not records:
         return {
             "episodes": 0,
@@ -343,6 +347,7 @@ def _registry_entry_from_candidate(
     wandb_entity: str,
     wandb_project: str,
 ) -> dict[str, Any]:
+    """Build a model-registry entry for a promoted PPO candidate."""
     try:
         local_path = str(checkpoint_path.relative_to(Path.cwd()))
     except ValueError:
@@ -378,6 +383,7 @@ def _write_promotion_report(
     benchmark_result: dict[str, Any],
     decision: dict[str, Any],
 ) -> tuple[Path, Path]:
+    """Write JSON and Markdown promotion reports."""
     json_path = output_root / "promotion_report.json"
     md_path = output_root / "promotion_report.md"
     payload = {

@@ -19,6 +19,7 @@ def _observation(
     radius: float = 0.3,
     occupied_cells: list[tuple[int, int]] | None = None,
 ) -> dict[str, object]:
+    """Build an occupancy-grid observation for safety-barrier tests."""
     grid = np.zeros((3, 21, 21), dtype=float)
     for row, col in occupied_cells or []:
         grid[0, row, col] = 1.0

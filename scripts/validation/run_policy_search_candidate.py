@@ -66,6 +66,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load a YAML mapping from disk.
+
+    Returns:
+        Parsed YAML mapping, defaulting empty files to an empty dict.
+    """
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise TypeError(f"Expected YAML mapping: {path}")
@@ -73,6 +78,11 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _resolve_path(anchor: Path, raw: str | Path | None) -> Path | None:
+    """Resolve a path relative to an anchor or the repository root.
+
+    Returns:
+        Resolved path, or ``None`` when no raw path is configured.
+    """
     if raw is None:
         return None
     path = Path(raw)
@@ -90,6 +100,11 @@ def _resolve_path(anchor: Path, raw: str | Path | None) -> Path | None:
 
 
 def _deep_merge(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge override values into a copied base mapping.
+
+    Returns:
+        Deep-merged mapping without mutating the inputs.
+    """
     merged = deepcopy(base)
     for key, value in overrides.items():
         current = merged.get(key)
@@ -219,6 +234,11 @@ def _prepare_scenarios_for_inline_run(
     *,
     scenario_root: Path,
 ) -> list[dict[str, Any]]:
+    """Convert scenario asset references to absolute paths for inline runs.
+
+    Returns:
+        Prepared scenario mappings with map and route override files resolved.
+    """
     prepared: list[dict[str, Any]] = []
     for scenario in scenarios:
         updated = deepcopy(dict(scenario))
@@ -295,6 +315,11 @@ def decide_stage_status(stage_name: str, stage_cfg: dict[str, Any], summary: dic
 
 
 def _git_hash() -> str | None:
+    """Read the current git commit for provenance metadata.
+
+    Returns:
+        Current HEAD SHA, or ``None`` when git is unavailable.
+    """
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -327,6 +352,11 @@ def _load_stage_scenarios(
 
 
 def _load_records(path: Path) -> list[dict[str, Any]]:
+    """Load policy-search episode records from JSONL.
+
+    Returns:
+        List of JSON object records, skipping blank lines.
+    """
     rows: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -338,6 +368,7 @@ def _load_records(path: Path) -> list[dict[str, Any]]:
 
 
 def _write_records(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Write episode records as sorted-key JSONL."""
     path.write_text(
         "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
         encoding="utf-8",
@@ -356,6 +387,12 @@ def _run_stage_eval(  # noqa: PLR0913
     workers: int,
     benchmark_profile: str,
 ) -> dict[str, Any]:
+    """Run one stage evaluation and collect records plus summary metadata.
+
+    Returns:
+        Mapping containing episode records, aggregate summary, artifact paths,
+        and the underlying batch summary.
+    """
     started = time.perf_counter()
     out_dir.mkdir(parents=True, exist_ok=True)
     algo_cfg_path = out_dir / f"{tag}_algo.yaml"
@@ -391,6 +428,11 @@ def _run_stage_eval(  # noqa: PLR0913
 def _baseline_deltas(
     summary: Mapping[str, Any], baselines_path: Path
 ) -> dict[str, dict[str, float]]:
+    """Compare stage summary metrics against configured baselines.
+
+    Returns:
+        Mapping from baseline name to available metric deltas.
+    """
     payload = _load_yaml(baselines_path)
     baselines = payload.get("baselines")
     if not isinstance(baselines, dict):
@@ -409,6 +451,11 @@ def _baseline_deltas(
 
 
 def _display_path(path: Path | None) -> str:
+    """Format paths for Markdown reports relative to the repository when possible.
+
+    Returns:
+        Repository-relative path, absolute/external path, or ``n/a``.
+    """
     if path is None:
         return "n/a"
     resolved = path.resolve()
@@ -455,6 +502,11 @@ def _write_markdown_report(  # noqa: PLR0913
     baselines_path: Path,
     summary_json_path: Path,
 ) -> Path:
+    """Write the candidate-stage Markdown report.
+
+    Returns:
+        Path to the generated report.
+    """
     docs_dir = docs_root / "reports"
     docs_dir.mkdir(parents=True, exist_ok=True)
     date_prefix = datetime.now(UTC).date().isoformat()

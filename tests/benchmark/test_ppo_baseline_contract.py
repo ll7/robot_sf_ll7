@@ -16,6 +16,7 @@ ISSUE_576_PPO_MODEL_ID = "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T07
 
 
 def _load_yaml(path: Path) -> dict:
+    """Load YAML from a repository fixture path."""
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 

@@ -78,6 +78,11 @@ class StepComparison:
 
 
 def _safe_float(value: Any) -> float | None:
+    """Parse a finite float from loose payload data.
+
+    Returns:
+        Parsed finite float, or ``None`` when unavailable.
+    """
     if value is None:
         return None
     try:
@@ -90,10 +95,20 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load a YAML mapping from disk.
+
+    Returns:
+        Parsed mapping, defaulting empty files to an empty dict.
+    """
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
 def _scenario_label(scenario: dict[str, Any]) -> str:
+    """Resolve a stable display label for a scenario definition.
+
+    Returns:
+        Scenario name/id string.
+    """
     return str(
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "scenario"
     )
@@ -141,6 +156,11 @@ def _structured_robot_goal(obs: dict[str, Any]) -> np.ndarray:
 
 
 def _robot_config_summary(config: Any) -> dict[str, Any]:
+    """Extract comparable robot configuration metadata.
+
+    Returns:
+        Compact robot config summary for reports.
+    """
     robot_cfg = getattr(config, "robot_config", None)
     if robot_cfg is None:
         return {"robot_config": None}
@@ -169,6 +189,11 @@ def _override_robot_config(
     *,
     kinematics: str,
 ) -> Any:
+    """Copy a base environment config with requested robot kinematics.
+
+    Returns:
+        Environment config with differential-drive or holonomic robot settings.
+    """
     config = deepcopy(base_config)
     robot_cfg = getattr(config, "robot_config", None)
     radius = float(getattr(robot_cfg, "radius", 1.0) or 1.0)
@@ -199,6 +224,11 @@ def _override_robot_config(
 def _extract_agent_contract(
     obs: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], np.ndarray, np.ndarray]:
+    """Extract normalized pedestrian and robot state from one observation.
+
+    Returns:
+        Pedestrian list, robot position vector, and robot velocity vector.
+    """
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
     agents = _structured_pedestrians(obs)
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float).reshape(-1)
@@ -294,6 +324,11 @@ def _compare_policy_inputs(
     *,
     algo: str,
 ) -> tuple[float, dict[str, float]]:
+    """Compare policy input vectors between paired rollout observations.
+
+    Returns:
+        Overall policy-input L2 distance and component-level differences.
+    """
     if str(algo).strip().lower() == "orca":
         diff_vec, diff_components = _flatten_orca_input(diff_obs)
         holo_vec, holo_components = _flatten_orca_input(holo_obs)
@@ -347,7 +382,18 @@ def _compare_ppo_inputs(
 
 
 def _raw_heading_abs(diff_obs: dict[str, Any], holo_obs: dict[str, Any]) -> float:
+    """Compute wrapped absolute robot-heading difference.
+
+    Returns:
+        Absolute heading delta in radians.
+    """
+
     def _heading(obs: dict[str, Any]) -> float:
+        """Read robot heading from one observation.
+
+        Returns:
+            Heading in radians, defaulting to zero.
+        """
         robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
         return float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
 
@@ -365,6 +411,11 @@ def _aligned_component_l2(diff_arr: np.ndarray, holo_arr: np.ndarray) -> float:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the paired-rollout comparison CLI parser.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--algo",
@@ -422,6 +473,11 @@ def _build_env_and_policy(
     algo: str,
     config_path: Path | None,
 ) -> tuple[Any, Any, dict[str, Any], Any]:
+    """Build one environment and matching planner policy for a rollout branch.
+
+    Returns:
+        Environment, policy object, policy metadata, and robot config.
+    """
     base_config = _build_env_config(scenario, scenario_path=scenario_path)
     config = _override_robot_config(base_config, kinematics=kinematics)
     env = make_robot_env(config=config, seed=0, debug=False)
@@ -585,6 +641,7 @@ def run_pairwise_rollout(
 
 
 def _write_artifacts(payload: dict[str, Any], output_dir: Path) -> None:
+    """Write optional plot and CSV time-series artifacts for a rollout diff."""
     rows = payload.get("rows", [])
     if not isinstance(rows, list) or not rows:
         return
@@ -634,6 +691,11 @@ def _write_artifacts(payload: dict[str, Any], output_dir: Path) -> None:
 
 
 def _render_markdown(payload: dict[str, Any]) -> str:
+    """Render the paired rollout comparison as Markdown.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     rows = payload.get("rows", [])
     lines = [
         "# Holonomic vs Differential Rollout Diff",

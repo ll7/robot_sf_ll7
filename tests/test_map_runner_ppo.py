@@ -20,13 +20,20 @@ class _DummyPPOPlanner:
         self.last_obs = None
 
     def step(self, _obs):
+        """Return the configured action and retain the received observation."""
         self.last_obs = _obs
         return self.config.get("test_action", {"v": 0.5, "omega": 0.0})
 
     def close(self):
+        """Mark the dummy planner as closed."""
         self.closed = True
 
     def get_metadata(self):
+        """Return map-runner metadata for the dummy planner.
+
+        Returns:
+            Metadata dictionary mirroring the planner contract.
+        """
         return {"algorithm": "ppo", "status": "ok", "config": dict(self.config)}
 
 
@@ -41,20 +48,33 @@ class _DummyDrlVoPlanner:
         self.last_obs = None
 
     def step(self, obs):
+        """Return the configured action and retain the received observation."""
         self.last_obs = obs
         return self.config.get("test_action", {"v": 0.5, "omega": 0.0})
 
     def close(self):
+        """Mark the dummy planner as closed."""
         self.closed = True
 
     def reset(self):
+        """Record that the dummy planner reset hook was invoked."""
         self.reset_called = True
 
     def get_metadata(self):
+        """Return map-runner metadata for the dummy planner.
+
+        Returns:
+            Metadata dictionary mirroring the planner contract.
+        """
         return {"algorithm": "drl_vo", "status": "ok", "config": dict(self.config)}
 
 
 def _sample_obs(heading: float = 0.0) -> dict:
+    """Build a minimal SocNav observation used by policy bridge tests.
+
+    Returns:
+        Structured observation dictionary.
+    """
     return {
         "dt": 0.1,
         "robot": {
@@ -209,16 +229,24 @@ class _DummyGuardedPPOAdapter:
         self.__class__.instances.append(self)
 
     def choose_command(self, obs, ppo_command):
+        """Return a fallback command while recording arbitration inputs.
+
+        Returns:
+            Guarded command and guard status.
+        """
         self.last_command = (obs, ppo_command)
         return (0.1, -0.2), "fallback_safe"
 
     def bind_env(self, env):
+        """Record the environment passed to the guard adapter."""
         self.bound_envs.append(env)
 
     def reset(self, *, seed=None):
+        """Record guard reset seed values."""
         self.reset_seeds.append(seed)
 
     def close(self):
+        """Mark the guard adapter as closed."""
         self.closed = True
 
 

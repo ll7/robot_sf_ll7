@@ -15,10 +15,20 @@ from typing import Any
 
 
 def _safe_read_text(path: Path) -> str:
+    """Read a source file as UTF-8 text.
+
+    Returns:
+        Decoded file contents.
+    """
     return path.read_text(encoding="utf-8")
 
 
 def _extract_remote_url(repo_root: Path) -> str:
+    """Read the origin URL from an upstream checkout.
+
+    Returns:
+        Remote URL, or ``unknown`` when unavailable.
+    """
     proc = subprocess.run(
         ["git", "remote", "get-url", "origin"],
         cwd=repo_root,
@@ -32,6 +42,11 @@ def _extract_remote_url(repo_root: Path) -> str:
 
 
 def _extract_requirement(requirements_path: Path, package: str) -> str | None:
+    """Extract a pinned package version from requirements.txt.
+
+    Returns:
+        Version string, or ``None`` when the package is not pinned.
+    """
     pattern = re.compile(rf"^{re.escape(package)}\s*==\s*(.+)$", re.MULTILINE)
     match = pattern.search(_safe_read_text(requirements_path))
     if not match:
@@ -40,6 +55,11 @@ def _extract_requirement(requirements_path: Path, package: str) -> str | None:
 
 
 def _extract_policy_names(policy_factory_path: Path) -> list[str]:
+    """Extract registered non-trainable policy names from the factory source.
+
+    Returns:
+        Sorted unique policy names.
+    """
     matches = re.findall(r"policy_factory\['([^']+)'\]\s*=", _safe_read_text(policy_factory_path))
     return sorted(set(matches))
 
@@ -54,6 +74,12 @@ def _find_line_matches(read_path: Path, display_path: Path, token: str) -> list[
 
 
 def _extract_contract(repo_root: Path) -> dict[str, Any]:
+    """Extract source-level runtime and planner contract metadata.
+
+    Returns:
+        Mapping describing dependencies, policies, robot actuation, and known
+        compatibility shims.
+    """
     requirements_path = repo_root / "requirements.txt"
     robot_agent_path = repo_root / "social_gym" / "src" / "robot_agent.py"
     motion_model_path = repo_root / "social_gym" / "src" / "motion_model_manager.py"
@@ -96,6 +122,12 @@ def _extract_contract(repo_root: Path) -> dict[str, Any]:
 
 
 def _detect_failure_summary(stdout: str, stderr: str) -> str:
+    """Summarize command output into a concise blocker message.
+
+    Returns:
+        Missing dependency, compatibility blocker, last output line, or unknown
+        failure summary.
+    """
     combined = "\n".join(part for part in [stderr, stdout] if part)
     missing_module = re.search(r"No module named '([^']+)'", combined)
     if missing_module:
@@ -142,6 +174,11 @@ class ProbeReport:
 
 
 def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int) -> CommandResult:
+    """Run one upstream source-harness command with timeout handling.
+
+    Returns:
+        Structured command result with bounded stdout and stderr tails.
+    """
     try:
         proc = subprocess.run(
             command,
@@ -174,6 +211,11 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
 
 
 def _uv_command() -> str:
+    """Locate the uv executable for isolated probe commands.
+
+    Returns:
+        PATH-resolved ``uv`` executable.
+    """
     uv = shutil.which("uv")
     if uv is None:
         raise RuntimeError("uv executable not found on PATH")
@@ -181,6 +223,11 @@ def _uv_command() -> str:
 
 
 def _validate_required_files(repo_root: Path) -> dict[str, str]:
+    """Validate required Social-Navigation-PyEnvs source files.
+
+    Returns:
+        Mapping from logical file role to resolved path string.
+    """
     required = {
         "readme": "README.md",
         "requirements": "requirements.txt",
@@ -209,6 +256,11 @@ def _validate_required_files(repo_root: Path) -> dict[str, str]:
 
 
 def _packaged_weights_present(repo_root: Path) -> bool:
+    """Check whether the upstream checkout contains packaged learned weights.
+
+    Returns:
+        True when common model/checkpoint file extensions are present.
+    """
     patterns = ("*.pt", "*.pth", "*.zip", "*.model", "*.onnx")
     for pattern in patterns:
         if any(repo_root.rglob(pattern)):
@@ -393,6 +445,11 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
 
 
 def _render_markdown(report: ProbeReport) -> str:
+    """Render the Social-Navigation-PyEnvs source-harness report.
+
+    Returns:
+        Markdown report text.
+    """
     lines = [
         "# Social-Navigation-PyEnvs Source Harness Probe",
         "",

@@ -44,6 +44,11 @@ class ParityReport:
 
 
 def _uv_command() -> str:
+    """Locate the uv executable used for child parity runs.
+
+    Returns:
+        Absolute or PATH-resolved ``uv`` executable string.
+    """
     uv = shutil.which("uv")
     if uv is None:
         raise RuntimeError("uv executable not found on PATH")
@@ -51,6 +56,11 @@ def _uv_command() -> str:
 
 
 def _extract_remote_url(repo_root: Path) -> str:
+    """Read the upstream repository remote URL.
+
+    Returns:
+        Origin URL or ``unknown`` when it cannot be resolved.
+    """
     proc = subprocess.run(
         ["git", "remote", "get-url", "origin"],
         cwd=repo_root,
@@ -64,6 +74,11 @@ def _extract_remote_url(repo_root: Path) -> str:
 
 
 def _scenario_specs() -> list[dict[str, Any]]:
+    """Return the fixed upstream scenarios used for ORCA parity.
+
+    Returns:
+        Scenario specifications passed to the child probe.
+    """
     return [
         {
             "name": "circular_crossing_hsfm_new_guo",
@@ -105,6 +120,11 @@ def _scenario_specs() -> list[dict[str, Any]]:
 
 
 def _child_script() -> str:
+    """Build the child Python script that samples upstream ORCA traces.
+
+    Returns:
+        Python source executed with the upstream checkout on ``sys.path``.
+    """
     return textwrap.dedent(
         r"""
         import json
@@ -222,6 +242,11 @@ def _child_script() -> str:
 def _run_child_scenario(
     repo_root: Path, spec: dict[str, Any], timeout_seconds: int
 ) -> dict[str, Any]:
+    """Execute one upstream scenario in a child process.
+
+    Returns:
+        Parsed JSON trace payload from the child process.
+    """
     env = os.environ.copy()
     env["SOCNAV_PARITY_SPEC"] = json.dumps(spec)
     env["SOCNAV_UPSTREAM_ROOT"] = str(repo_root.resolve())
@@ -249,12 +274,22 @@ def _run_child_scenario(
 
 
 def _xy_error(a: list[float], b: list[float]) -> float:
+    """Compute Euclidean error between two planar action vectors.
+
+    Returns:
+        Distance between ``a`` and ``b`` in XY action space.
+    """
     dx = float(a[0]) - float(b[0])
     dy = float(a[1]) - float(b[1])
     return float((dx * dx + dy * dy) ** 0.5)
 
 
 def _summarize_scenario(spec: dict[str, Any], payload: dict[str, Any]) -> ScenarioParitySummary:
+    """Summarize wrapper and oracle parity errors for one scenario trace.
+
+    Returns:
+        Scenario-level parity metrics and sample rows.
+    """
     rows = list(payload.get("rows", []))
     wrapper_errors = [
         _xy_error(row["upstream_action_xy"], row["wrapper_action_xy"]) for row in rows
@@ -286,6 +321,11 @@ def _summarize_scenario(spec: dict[str, Any], payload: dict[str, Any]) -> Scenar
 
 
 def _determine_verdict(scenarios: list[ScenarioParitySummary]) -> tuple[str, str, str]:
+    """Classify parity outcome across all sampled scenarios.
+
+    Returns:
+        Tuple of verdict, root-cause text, and projection-role text.
+    """
     if any(
         item.wrapper_mean_xy_error > 0.05 and item.oracle_mean_xy_error < 1e-4 for item in scenarios
     ):
@@ -337,6 +377,11 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ParityReport:
 
 
 def _render_markdown(report: ParityReport) -> str:
+    """Render the ORCA parity report as Markdown.
+
+    Returns:
+        Markdown report body.
+    """
     scenario_sections: list[str] = []
     for item in report.scenarios:
         sample_table = "\n".join(

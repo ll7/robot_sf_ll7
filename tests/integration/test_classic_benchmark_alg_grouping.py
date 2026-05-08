@@ -39,6 +39,7 @@ def test_smoke_aggregation_workflow():
     captured: list = []
 
     def capture_message(message):
+        """Collect Loguru warning records for missing-algorithm assertions."""
         captured.append(message)
 
     handle = logger.add(capture_message, level="WARNING")

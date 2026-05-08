@@ -734,6 +734,11 @@ class RobotEnv(BaseEnv):
         finfo_max = float(np.finfo(np.float32).max)
 
         def _nonneg(value: float) -> float:
+            """Clamp privileged scalar metadata into the declared non-negative Box range.
+
+            Returns:
+                float: Metadata value bounded to ``[0, finfo.max]``.
+            """
             return float(np.clip(value, 0.0, finfo_max))
 
         parts.extend(
@@ -1162,6 +1167,7 @@ class RobotEnv(BaseEnv):
         polygons: list[ShapelyPolygon] = []
 
         def _add_line(line) -> None:
+            """Append a malformed-tolerant line segment to the grid primitive list."""
             try:
                 start, end = line
                 line_segments.append((tuple(start), tuple(end)))

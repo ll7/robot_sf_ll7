@@ -56,6 +56,7 @@ def test_collect_hardware_profile_skip_gpu(monkeypatch):
     """Test that skip_gpu avoids the CUDA metadata probe."""
 
     def fail_probe():
+        """Fail if GPU probing is unexpectedly invoked."""
         raise AssertionError("GPU metadata should not be collected")
 
     monkeypatch.setattr(hardware_probe, "_collect_gpu_metadata", fail_probe)
@@ -112,6 +113,7 @@ def test_collect_gpu_metadata_import_runtime_failure(monkeypatch):
     """Test GPU metadata collection when importing torch raises at runtime."""
 
     def fail_load():
+        """Simulate torch import failing during CUDA initialization."""
         raise RuntimeError("CUDA runtime initialization failed")
 
     monkeypatch.setattr(hardware_probe, "_load_torch", fail_load)
@@ -123,6 +125,7 @@ def test_collect_gpu_metadata_device_runtime_failure(monkeypatch):
     """Test GPU metadata collection when querying the CUDA device fails."""
 
     def fail_device():
+        """Simulate CUDA device lookup failing at runtime."""
         raise RuntimeError("device unavailable")
 
     fake_cuda = SimpleNamespace(

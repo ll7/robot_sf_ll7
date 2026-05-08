@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 
 def _write_svg(path: Path, *, labeled: bool = True) -> Path:
+    """Write a minimal SVG fixture with optional obstacle layer labeling."""
     label_attr = 'inkscape:label="obstacles"' if labeled else ""
     path.write_text(
         f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -58,6 +59,7 @@ def test_validation_rule_apply_converts_exceptions_to_error_violation(tmp_path: 
     """ValidationRule.apply should convert check exceptions into deterministic violations."""
 
     def exploding_check(_path: Path):
+        """Raise an exception so ValidationRule.apply exercises error conversion."""
         raise RuntimeError("boom")
 
     rule = ValidationRule(
@@ -101,6 +103,7 @@ def test_check_valid_svg_parse_error_and_generic_error(
     assert parse_violations[0].rule_id == "R002"
 
     def raise_generic(_path: Path):
+        """Raise a generic parser error for SVG validation coverage."""
         raise OSError("io failure")
 
     monkeypatch.setattr("robot_sf.maps.verification.rules.ET.parse", raise_generic)
@@ -136,6 +139,7 @@ def test_check_required_layers_covers_warning_info_and_exception(
     assert any(v.rule_id == "R005" for v in labeled_violations)
 
     def raise_generic(_path: Path):
+        """Raise a generic parser error for required-layer coverage."""
         raise RuntimeError("cannot parse")
 
     monkeypatch.setattr("robot_sf.maps.verification.rules.ET.parse", raise_generic)

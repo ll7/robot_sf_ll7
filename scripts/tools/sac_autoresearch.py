@@ -20,6 +20,7 @@ VERIFIED_SIMPLE_SUBSET = ROOT / "configs" / "scenarios" / "sets" / "verified_sim
 
 
 def _resolve_path(path: str | Path, *, base: Path | None = None) -> Path:
+    """Resolve a path against the repository root or supplied base."""
     candidate = Path(path)
     if candidate.is_absolute():
         return candidate
@@ -29,11 +30,13 @@ def _resolve_path(path: str | Path, *, base: Path | None = None) -> Path:
 
 
 def _run_process(command: list[str], *, allow_failure: bool = False) -> int:
+    """Run a subprocess and return its exit code."""
     completed = subprocess.run(command, check=not allow_failure)
     return int(completed.returncode)
 
 
 def _load_experiment_list(path: Path) -> list[dict[str, str]]:
+    """Load SAC autoresearch experiment entries from YAML."""
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         raise ValueError("Experiment file must contain a YAML list of experiment entries.")
@@ -41,6 +44,7 @@ def _load_experiment_list(path: Path) -> list[dict[str, str]]:
 
 
 def _format_result_row(experiment: dict[str, str], summary: dict[str, object]) -> list[str]:
+    """Format one experiment result as a TSV row."""
     return [
         experiment.get("name", "unnamed"),
         experiment.get("config", ""),
@@ -56,6 +60,7 @@ def _format_result_row(experiment: dict[str, str], summary: dict[str, object]) -
 
 
 def _append_results(headers: list[str], rows: list[list[str]]) -> None:
+    """Append result rows to the autoresearch TSV file."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     write_header = not RESULTS_PATH.exists()
     with RESULTS_PATH.open("a", encoding="utf-8", newline="") as handle:
@@ -66,6 +71,7 @@ def _append_results(headers: list[str], rows: list[list[str]]) -> None:
 
 
 def _parse_summary(summary_path: Path) -> dict[str, object]:
+    """Parse a validation summary, returning conservative defaults when absent."""
     if not summary_path.exists():
         return {
             "success_rate": 0.0,

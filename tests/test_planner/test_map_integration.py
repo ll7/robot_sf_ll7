@@ -1,5 +1,4 @@
 """Integration tests for SVG parsing and planner compatibility (US2)."""
-# ruff: noqa: D103
 
 from pathlib import Path
 
@@ -11,6 +10,7 @@ FIXTURE_ROOT = Path(__file__).parent.parent / "fixtures" / "test_maps"
 
 
 def test_parse_poi_circles(tmp_path):
+    """SVG parser should preserve POI positions and labels from circle elements."""
     svg = tmp_path / "poi_map.svg"
     svg.write_text(
         """
@@ -31,6 +31,7 @@ def test_parse_poi_circles(tmp_path):
 
 
 def test_route_navigator_accepts_planner_path():
+    """RouteNavigator should accept a path produced by GlobalPlanner."""
     map_def = convert_map(str(FIXTURE_ROOT / "simple_corridor.svg"))
     planner = GlobalPlanner(map_def, PlannerConfig())
 
@@ -45,6 +46,7 @@ def test_route_navigator_accepts_planner_path():
 
 
 def test_planner_runs_on_example_fixtures():
+    """GlobalPlanner should produce an endpoint-preserving path on fixture maps."""
     map_def = convert_map(str(FIXTURE_ROOT / "complex_warehouse.svg"))
     planner = GlobalPlanner(map_def, PlannerConfig(fallback_on_failure=True))
 
@@ -57,6 +59,7 @@ def test_planner_runs_on_example_fixtures():
 
 
 def test_maps_without_pois_remain_backward_compatible():
+    """Maps without POI elements should expose empty POI collections."""
     map_def = convert_map(str(FIXTURE_ROOT / "simple_corridor.svg"))
 
     assert map_def.poi_positions == []

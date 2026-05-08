@@ -16,11 +16,13 @@ from robot_sf.planner.social_navigation_pyenvs_orca import (
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake upstream source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_upstream_repo(repo_root: Path) -> None:
+    """Create an upstream ORCA stub that moves directly toward the goal."""
     _write(repo_root / "crowd_nav" / "__init__.py", "")
     _write(
         repo_root / "crowd_nav" / "utils" / "action.py",
@@ -59,6 +61,7 @@ class ORCA:
 
 
 def _write_velocity_echo_upstream_repo(repo_root: Path) -> None:
+    """Create an upstream ORCA stub that echoes observed velocity fields."""
     _write(repo_root / "crowd_nav" / "__init__.py", "")
     _write(
         repo_root / "crowd_nav" / "utils" / "action.py",

@@ -79,6 +79,7 @@ def _plot_zones(
     *,
     label_zones: bool = True,
 ) -> None:
+    """Plot polygonal map zones and optional center labels onto an axis."""
     for idx, zone in enumerate(zones):
         polygon = _zone_to_polygon(zone)
         if len(polygon) < 3:
@@ -92,6 +93,7 @@ def _plot_zones(
 
 
 def _plot_routes(ax, routes: Iterable[GlobalRoute], color: str, prefix: str) -> None:
+    """Plot global route waypoint polylines with spawn-goal labels."""
     for route in routes:
         if not route.waypoints:
             continue
@@ -107,6 +109,7 @@ def _plot_routes(ax, routes: Iterable[GlobalRoute], color: str, prefix: str) -> 
 
 
 def _plot_pois(ax, map_def) -> None:
+    """Plot point-of-interest markers when a map definition provides them."""
     if not getattr(map_def, "poi_positions", None):
         return
     poi_labels = list(getattr(map_def, "poi_labels", {}).values())

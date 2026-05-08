@@ -66,6 +66,11 @@ def parse_args() -> argparse.Namespace:
 def _scenario_pairs(
     scenario_matrix: Path, seed_manifest: dict[str, list[int]]
 ) -> list[tuple[dict, int]]:
+    """Expand scenario and seed manifests into evaluation pairs.
+
+    Returns:
+        list[tuple[dict, int]]: Scenario payloads paired with integer seeds.
+    """
     from robot_sf.training.scenario_loader import load_scenarios
 
     scenarios = load_scenarios(scenario_matrix)
@@ -80,6 +85,11 @@ def _scenario_pairs(
 
 
 def _base_algo_cfg(checkpoint: Path) -> dict:
+    """Build the base predictive-planner algorithm config for diagnostics.
+
+    Returns:
+        dict: Algorithm config payload using a CPU checkpoint.
+    """
     return build_predictive_planner_algo_config(checkpoint_path=checkpoint, device="cpu")
 
 

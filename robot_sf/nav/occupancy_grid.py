@@ -480,6 +480,11 @@ class OccupancyGrid:
         if use_ego_frame:
 
             def _to_ego_point(point: tuple[float, float]) -> tuple[float, float]:
+                """Transform one world point into the robot ego frame.
+
+                Returns:
+                    tuple[float, float]: Ego-frame point coordinates.
+                """
                 return grid_utils.world_to_ego(point[0], point[1], self._last_robot_pose)  # type: ignore[arg-type]
 
             transformed_obstacles: list[Line2D] = [
@@ -488,6 +493,11 @@ class OccupancyGrid:
             transformed_polygons: list[Any] | None = None
 
             def _to_ego_polygon(polygon: Any) -> Any:
+                """Transform polygonal obstacle geometry into the robot ego frame.
+
+                Returns:
+                    Polygon-like geometry in ego-frame coordinates.
+                """
                 if isinstance(polygon, _ShapelyMultiPolygon):
                     return _ShapelyMultiPolygon(
                         [_to_ego_polygon(poly) for poly in polygon.geoms if not poly.is_empty]
@@ -767,6 +777,12 @@ class OccupancyGrid:
         )
 
     def _prepare_obstacles(self, polygons: list[Any]) -> list[PreparedGeometry] | None:
+        """Prepare Shapely obstacle geometries for repeated containment queries.
+
+        Returns:
+            list[PreparedGeometry] | None: Prepared polygon geometries, or ``None``
+            when no polygons are available.
+        """
         if not polygons:
             return None
         prepared: list[PreparedGeometry] = []
@@ -785,6 +801,7 @@ class OccupancyGrid:
         return prepared
 
     def _ensure_prepared_obstacles(self) -> None:
+        """Lazily build prepared obstacle geometry cache when polygons exist."""
         if self._prepared_obstacles is None and self._obstacle_polygons:
             self._prepared_obstacles = self._prepare_obstacles(self._obstacle_polygons)
 
@@ -1020,6 +1037,7 @@ class OccupancyGrid:
             raise RuntimeError("Grid has not been generated yet. Call generate() first.")
 
         def _channel_index(channel: GridChannel) -> int:
+            """Return configured channel index, or ``-1`` when absent."""
             return self.config.channels.index(channel) if channel in self.config.channels else -1
 
         channel_indices = [_channel_index(channel) for channel in OBSERVATION_CHANNEL_ORDER]

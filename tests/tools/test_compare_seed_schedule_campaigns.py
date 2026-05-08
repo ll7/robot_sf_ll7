@@ -19,11 +19,13 @@ if TYPE_CHECKING:
 
 
 def _write_json(path: Path, payload: dict) -> None:
+    """Write an indented JSON artifact fixture."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _campaign_summary(campaign_id: str, rows: list[dict]) -> dict:
+    """Build a compact campaign summary fixture."""
     return {
         "campaign": {
             "campaign_id": campaign_id,
@@ -44,6 +46,7 @@ def _campaign_summary(campaign_id: str, rows: list[dict]) -> dict:
 
 
 def _matrix_summary(seed_set: str, seeds: list[int]) -> dict:
+    """Build a matrix summary fixture with resolved seed metadata."""
     return {
         "rows": [
             {
@@ -65,6 +68,7 @@ def _seed_row(
     snqi: float,
     snqi_ci_half_width: float,
 ) -> dict:
+    """Build a seed-variability row for one scenario and planner."""
     return {
         "scenario_id": scenario_id,
         "planner_key": planner_key,
@@ -91,6 +95,7 @@ def _seed_row(
 
 
 def _seed_payload(rows: list[dict]) -> dict:
+    """Wrap seed-variability rows in the expected schema payload."""
     return {
         "schema_version": "benchmark-seed-variability-by-scenario.v1",
         "metrics": ["success", "snqi"],
@@ -107,6 +112,7 @@ def _write_campaign(
     planner_rows: list[dict],
     seed_rows: list[dict],
 ) -> None:
+    """Write the campaign artifacts required by the comparison helper."""
     _write_json(
         root / "reports" / "campaign_summary.json", _campaign_summary(campaign_id, planner_rows)
     )

@@ -670,6 +670,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         benchmark_profile,
         **kwargs,
     ):
+        """Write one episode record and return readiness/preflight metadata."""
         scenarios = list(scenarios_or_path) if isinstance(scenarios_or_path, list) else []
         _ = schema_path
         _ = kwargs
@@ -725,6 +726,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         bootstrap_confidence,
         bootstrap_seed,
     ):
+        """Return deterministic aggregate metrics for campaign report generation."""
         _ = records
         _ = group_by
         _ = bootstrap_samples
@@ -755,6 +757,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         doi,
         overwrite,
     ):
+        """Return a minimal publication bundle manifest payload."""
         _ = run_dir
         _ = out_dir
         _ = bundle_name
@@ -1113,6 +1116,7 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
         benchmark_profile,
         **kwargs,
     ):
+        """Record planner execution order while returning a successful batch."""
         _ = scenarios_or_path
         _ = out_path
         _ = schema_path
@@ -1187,6 +1191,7 @@ def test_run_campaign_stops_on_not_available_when_configured(tmp_path: Path, mon
         benchmark_profile,
         **kwargs,
     ):
+        """Fail the PPO planner to exercise fail-fast campaign behavior."""
         del scenarios_or_path, out_path, schema_path, benchmark_profile, kwargs
         call_order.append(algo)
         if algo == "ppo":
@@ -1263,6 +1268,7 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
         benchmark_profile,
         **kwargs,
     ):
+        """Fail the prediction planner to exercise core-planner fail-fast behavior."""
         del scenarios_or_path, out_path, schema_path, benchmark_profile, kwargs
         call_order.append(algo)
         if algo == "prediction_planner":
@@ -1346,6 +1352,7 @@ def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
         benchmark_profile,
         **kwargs,
     ):
+        """Write an episode artifact for release-readiness path tests."""
         del scenarios_or_path, schema_path, algo, benchmark_profile, kwargs
         Path(out_path).write_text(
             json.dumps(
@@ -1777,6 +1784,7 @@ def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) 
         benchmark_profile,
         **kwargs,
     ):
+        """Write an episode artifact under a sanitized planner output path."""
         del scenarios_or_path, schema_path, benchmark_profile, kwargs
         out_file = Path(out_path)
         out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1847,6 +1855,7 @@ def test_run_campaign_marks_skipped_preflight_as_not_available(tmp_path: Path, m
     cfg = load_campaign_config(config_path)
 
     def _fake_run_batch(*args, **kwargs):
+        """Return a skipped preflight result without writing episodes."""
         del args, kwargs
         return {
             "total_jobs": 0,
@@ -1960,6 +1969,7 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
     cfg = load_campaign_config(config_path)
 
     def _fake_run_batch(*args, **kwargs):
+        """Write an episode record whose benchmark metrics fail the gate."""
         del args
         out_path = Path(kwargs["out_path"])
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2056,6 +2066,7 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     cfg = load_campaign_config(config_path)
 
     def _fake_run_batch(*args, **kwargs):
+        """Write an episode record with failed status despite successful metrics."""
         del args
         out_path = Path(kwargs["out_path"])
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2130,6 +2141,7 @@ def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypat
     cfg = load_campaign_config(config_path)
 
     def _fake_run_batch(*args, **kwargs):
+        """Write a successful episode record for CI report rendering."""
         del args
         out_path = Path(kwargs["out_path"])
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2161,6 +2173,7 @@ def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypat
         }
 
     def _fake_compute_aggregates_with_ci(*args, **kwargs):
+        """Return aggregate metrics with confidence intervals for Markdown output."""
         del args, kwargs
         return {
             "mock_group": {

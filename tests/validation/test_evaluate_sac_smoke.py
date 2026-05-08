@@ -80,6 +80,7 @@ def test_evaluate_sac_quality_gate_failure(monkeypatch, tmp_path: Path) -> None:
     algo_cfg.write_text("model_path: stub\ndevice: auto\nobs_mode: dict\n", encoding="utf-8")
 
     def _fake_fail_batch(*args, **kwargs):
+        """Write one collision episode row for failure-summary assertions."""
         jsonl_path = Path(args[1])
         row = {
             "episode_id": "ep_001",

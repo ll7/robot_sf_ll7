@@ -31,9 +31,12 @@ def test_pedestrian_env_handles_mismatched_model_action_space() -> None:
     """Fallback to null action to avoid crashes when model outputs mismatch env."""
 
     class _BadModel:
+        """Model stub with an incompatible action-space shape."""
+
         action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
 
         def predict(self, _obs, **_kwargs):
+            """Return an action vector that does not match the environment contract."""
             return np.zeros(3, dtype=np.float32), None
 
     env = PedestrianEnv(robot_model=_BadModel())

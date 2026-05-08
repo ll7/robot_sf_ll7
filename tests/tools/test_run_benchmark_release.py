@@ -10,11 +10,13 @@ from scripts.tools import run_benchmark_release
 
 
 def _write_json(path: Path, payload: dict) -> None:
+    """Write an indented JSON release fixture."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _make_campaign_tree(tmp_path: Path) -> Path:
+    """Build the minimal campaign artifact tree expected by release checks."""
     campaign_root = tmp_path / "out" / "campaign_release"
     _write_json(campaign_root / "campaign_manifest.json", {"campaign_id": "campaign_release"})
     _write_json(campaign_root / "manifest.json", {"schema_version": "benchmark-run-manifest.v1"})

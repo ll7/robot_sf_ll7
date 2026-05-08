@@ -29,10 +29,20 @@ _LOWER_IS_BETTER = {
 
 
 def _read_json(path: Path) -> dict[str, Any]:
+    """Read a JSON object artifact.
+
+    Returns:
+        Parsed JSON payload.
+    """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _safe_float(value: Any) -> float | None:
+    """Parse a finite float from artifact data.
+
+    Returns:
+        Parsed finite float, or ``None`` when unavailable.
+    """
     try:
         parsed = float(value)
     except (TypeError, ValueError):
@@ -41,12 +51,22 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _mean(values: list[float]) -> float | None:
+    """Compute the arithmetic mean for non-empty values.
+
+    Returns:
+        Mean value, or ``None`` when no values are available.
+    """
     if not values:
         return None
     return float(sum(values) / len(values))
 
 
 def _fmt(value: Any, digits: int = 4) -> str:
+    """Format optional numeric values for Markdown tables.
+
+    Returns:
+        Fixed-precision string, or ``n/a`` when unavailable.
+    """
     numeric = _safe_float(value)
     if numeric is None:
         return "n/a"
@@ -54,10 +74,20 @@ def _fmt(value: Any, digits: int = 4) -> str:
 
 
 def _metric_direction(metric: str) -> str:
+    """Return whether higher or lower values are better for a metric.
+
+    Returns:
+        ``lower`` for cost/safety metrics, otherwise ``higher``.
+    """
     return "lower" if metric in _LOWER_IS_BETTER else "higher"
 
 
 def _metric_summary(row: dict[str, Any], metric: str) -> dict[str, Any]:
+    """Extract one metric summary mapping from a seed-variability row.
+
+    Returns:
+        Metric summary mapping, or an empty dict when absent.
+    """
     summary = row.get("summary")
     if not isinstance(summary, dict):
         return {}
@@ -66,10 +96,20 @@ def _metric_summary(row: dict[str, Any], metric: str) -> dict[str, Any]:
 
 
 def _metric_mean(row: dict[str, Any], metric: str) -> float | None:
+    """Read a metric mean from a seed-variability row.
+
+    Returns:
+        Mean value, or ``None`` when absent.
+    """
     return _safe_float(_metric_summary(row, metric).get("mean"))
 
 
 def _metric_ci(row: dict[str, Any], metric: str) -> tuple[float | None, float | None]:
+    """Read confidence interval bounds for a metric.
+
+    Returns:
+        Low and high CI bounds, each optional.
+    """
     summary = _metric_summary(row, metric)
     low = _safe_float(summary.get("ci_low"))
     high = _safe_float(summary.get("ci_high"))
@@ -77,6 +117,11 @@ def _metric_ci(row: dict[str, Any], metric: str) -> tuple[float | None, float | 
 
 
 def _ci_width(row: dict[str, Any], metric: str) -> float | None:
+    """Compute confidence interval width for one metric row.
+
+    Returns:
+        Non-negative CI width, or ``None`` when bounds are unavailable.
+    """
     low, high = _metric_ci(row, metric)
     if low is None or high is None:
         return None
@@ -86,6 +131,11 @@ def _ci_width(row: dict[str, Any], metric: str) -> float | None:
 def _ci_overlap(
     base_row: dict[str, Any], candidate_row: dict[str, Any], metric: str
 ) -> bool | None:
+    """Check whether base and candidate confidence intervals overlap.
+
+    Returns:
+        True/false when both intervals are available, otherwise ``None``.
+    """
     base_low, base_high = _metric_ci(base_row, metric)
     candidate_low, candidate_high = _metric_ci(candidate_row, metric)
     if None in (base_low, base_high, candidate_low, candidate_high):
@@ -94,6 +144,11 @@ def _ci_overlap(
 
 
 def _seed_row_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    """Build the scenario/planner/kinematics key for seed rows.
+
+    Returns:
+        Tuple key for matching seed-variability rows.
+    """
     return (
         str(row.get("scenario_id", "unknown")),
         str(row.get("planner_key", "unknown")),
@@ -102,6 +157,11 @@ def _seed_row_key(row: dict[str, Any]) -> tuple[str, str, str]:
 
 
 def _planner_key(row: dict[str, Any]) -> tuple[str, str]:
+    """Build the planner/kinematics key for planner summary rows.
+
+    Returns:
+        Tuple key for planner-level comparisons.
+    """
     return (
         str(row.get("planner_key", "unknown")),
         str(row.get("kinematics", "unknown")),
@@ -109,6 +169,11 @@ def _planner_key(row: dict[str, Any]) -> tuple[str, str]:
 
 
 def _load_campaign(campaign_root: Path) -> dict[str, Any]:
+    """Load all campaign artifacts needed for seed-schedule comparison.
+
+    Returns:
+        Campaign payload containing summary, seed variability, and matrix summary.
+    """
     summary = _read_json(campaign_root / "reports" / "campaign_summary.json")
     seed_variability = _read_json(campaign_root / "reports" / "seed_variability_by_scenario.json")
     matrix_path = campaign_root / "reports" / "matrix_summary.json"
@@ -122,6 +187,11 @@ def _load_campaign(campaign_root: Path) -> dict[str, Any]:
 
 
 def _campaign_metadata(campaign: dict[str, Any]) -> dict[str, Any]:
+    """Extract comparable campaign-level metadata.
+
+    Returns:
+        Metadata mapping for the comparison report.
+    """
     summary = dict(campaign.get("summary") or {})
     campaign_block = dict(summary.get("campaign") or {})
     matrix_rows = (
@@ -152,6 +222,11 @@ def _campaign_metadata(campaign: dict[str, Any]) -> dict[str, Any]:
 
 
 def _seed_rows_by_key(campaign: dict[str, Any]) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """Index seed-variability rows by scenario/planner/kinematics key.
+
+    Returns:
+        Mapping from seed row key to row payload.
+    """
     payload = campaign.get("seed_variability")
     rows = payload.get("rows") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
@@ -164,6 +239,11 @@ def _seed_rows_by_key(campaign: dict[str, Any]) -> dict[tuple[str, str, str], di
 
 
 def _planner_rows_by_key(campaign: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index planner summary rows by planner/kinematics key.
+
+    Returns:
+        Mapping from planner key to summary row.
+    """
     summary = campaign.get("summary")
     rows = summary.get("planner_rows") if isinstance(summary, dict) else None
     if not isinstance(rows, list):
@@ -176,6 +256,12 @@ def _planner_rows_by_key(campaign: dict[str, Any]) -> dict[tuple[str, str], dict
 
 
 def _relative_change(base: float | None, candidate: float | None) -> float | None:
+    """Compute relative change from base to candidate.
+
+    Returns:
+        Relative change, or ``None`` when base/candidate is unavailable or base
+        is effectively zero.
+    """
     if base is None or candidate is None or abs(base) <= 1e-12:
         return None
     return float((candidate - base) / abs(base))
@@ -186,6 +272,11 @@ def _build_interval_width_rows(
     candidate_rows: dict[tuple[str, str, str], dict[str, Any]],
     metrics: tuple[str, ...],
 ) -> list[dict[str, Any]]:
+    """Build per-row CI width and mean-delta comparison records.
+
+    Returns:
+        Seed-row metric comparison records for common rows.
+    """
     rows: list[dict[str, Any]] = []
     for key in sorted(set(base_rows) & set(candidate_rows)):
         base_row = base_rows[key]
@@ -235,6 +326,11 @@ def _summarize_interval_widths(
     *,
     target_reduction: float,
 ) -> dict[str, Any]:
+    """Aggregate confidence interval width changes by metric.
+
+    Returns:
+        Mapping from metric to aggregate width and target status.
+    """
     by_metric: dict[str, dict[str, Any]] = {}
     for metric in metrics:
         metric_rows = [row for row in interval_rows if row.get("metric") == metric]
@@ -281,6 +377,11 @@ def _aggregate_metric_means(
     relative_threshold: float,
     absolute_floor: float,
 ) -> dict[str, Any]:
+    """Aggregate planner mean drift across common seed rows.
+
+    Returns:
+        Drift summary with all rows and rows exceeding configured thresholds.
+    """
     grouped: dict[tuple[str, str], dict[str, dict[str, list[float]]]] = defaultdict(
         lambda: {"base": defaultdict(list), "candidate": defaultdict(list)}
     )
@@ -334,6 +435,11 @@ def _aggregate_metric_means(
 def _rank_values(
     values: dict[tuple[str, str], float], *, higher_is_better: bool
 ) -> dict[tuple[str, str], float]:
+    """Assign average ranks to planner values with tie handling.
+
+    Returns:
+        Mapping from planner key to rank.
+    """
     ordered = sorted(
         values.items(),
         key=lambda item: (-item[1] if higher_is_better else item[1], item[0][0], item[0][1]),
@@ -353,6 +459,11 @@ def _rank_values(
 
 
 def _pearson(xs: list[float], ys: list[float]) -> float | None:
+    """Compute Pearson correlation for paired values.
+
+    Returns:
+        Correlation coefficient, or ``None`` for insufficient/constant data.
+    """
     if len(xs) != len(ys) or len(xs) < 2:
         return None
     x_mean = sum(xs) / len(xs)
@@ -373,6 +484,11 @@ def _spearman(
     *,
     higher_is_better: bool,
 ) -> float | None:
+    """Compute Spearman rank correlation for paired planner metrics.
+
+    Returns:
+        Rank correlation, or ``None`` when unavailable.
+    """
     common = sorted(set(base_values) & set(candidate_values))
     if len(common) < 2:
         return None
@@ -393,6 +509,11 @@ def _kendall_tau(
     *,
     higher_is_better: bool,
 ) -> float | None:
+    """Compute Kendall tau over common planner metric values.
+
+    Returns:
+        Kendall tau, or ``None`` when there are no comparable pairs.
+    """
     common = sorted(set(base_values) & set(candidate_values))
     if len(common) < 2:
         return None
@@ -422,6 +543,11 @@ def _ranking_stability(
     metric: str,
     min_tau: float,
 ) -> dict[str, Any]:
+    """Assess planner ranking stability between seed schedules.
+
+    Returns:
+        Ranking stability payload with orderings and correlation metrics.
+    """
     higher_is_better = _metric_direction(metric.replace("_mean", "")) == "higher"
     common = sorted(set(base_planner_rows) & set(candidate_planner_rows))
     base_values = {
@@ -484,6 +610,11 @@ def _scenario_winner_stability(
     metric: str,
     change_threshold: float,
 ) -> dict[str, Any]:
+    """Assess whether scenario-level winning planners change across schedules.
+
+    Returns:
+        Winner stability payload with changed scenarios and status.
+    """
     direction = _metric_direction(metric)
     grouped: dict[tuple[str, str], dict[str, dict[str, float]]] = defaultdict(
         lambda: {"base": {}, "candidate": {}}
@@ -555,6 +686,11 @@ def _interpretation(
     ranking: dict[str, Any],
     scenario_winners: dict[str, Any],
 ) -> dict[str, Any]:
+    """Summarize whether the seed schedule changes headline interpretation.
+
+    Returns:
+        Interpretation status and review notes.
+    """
     notes: list[str] = []
     ranking_changed = ranking.get("status") == "unstable"
     scenario_changed = scenario_winners.get("status") == "unstable"
@@ -682,6 +818,11 @@ def compare_seed_schedules(  # noqa: PLR0913
 
 
 def _build_markdown(payload: dict[str, Any]) -> str:
+    """Render the seed-schedule comparison as Markdown.
+
+    Returns:
+        Markdown report text without a trailing newline.
+    """
     base = payload.get("base_campaign", {})
     candidate = payload.get("candidate_campaign", {})
     interpretation = payload.get("interpretation", {})
@@ -801,6 +942,11 @@ def _build_markdown(payload: dict[str, Any]) -> str:
 
 
 def _resolve_safe_output_path(path: Path, safe_root: Path) -> Path:
+    """Resolve an output path and require it to stay under the safe root.
+
+    Returns:
+        Resolved output path.
+    """
     resolved = path.resolve()
     if not resolved.is_relative_to(safe_root):
         raise ValueError(f"Unsafe output path outside {safe_root}: {path}")
@@ -808,6 +954,11 @@ def _resolve_safe_output_path(path: Path, safe_root: Path) -> Path:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the seed-schedule comparison CLI parser.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-campaign-root", type=Path, required=True)
     parser.add_argument("--candidate-campaign-root", type=Path, required=True)

@@ -13,11 +13,13 @@ if TYPE_CHECKING:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_repo(repo_root: Path) -> None:
+    """Create the minimal gym-collision-avoidance tree required by parity probes."""
     _write(repo_root / "README.md", "# stub\n")
     _write(
         repo_root / "gym_collision_avoidance" / "experiments" / "src" / "example.py",
@@ -179,6 +181,7 @@ def test_run_probe_uses_repo_root_for_local_stage(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Return staged upstream/local parity command results."""
         commands.append((name, command, cwd))
         if name == "upstream_native_observation_and_policy":
             return probe.CommandResult(

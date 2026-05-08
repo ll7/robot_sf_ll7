@@ -311,6 +311,11 @@ def _prepare_loaders(
         train_idx = val_idx
 
     def _ds(sel: np.ndarray) -> TensorDataset:
+        """Build one tensor dataset slice from selected row indices.
+
+        Returns:
+            TensorDataset: Dataset containing state, target, mask, and target mask tensors.
+        """
         return TensorDataset(
             torch.from_numpy(state[sel]).float(),
             torch.from_numpy(target[sel]).float(),

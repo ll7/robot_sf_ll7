@@ -12,6 +12,7 @@ Goal: 100% coverage on changed files. Minimum requirement: 80%.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import subprocess
 import sys
@@ -24,6 +25,11 @@ if TYPE_CHECKING:
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None) -> str:
+    """Run a command and return stripped stdout.
+
+    Returns:
+        Captured standard output with surrounding whitespace removed.
+    """
     proc = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd is not None else None,
@@ -39,10 +45,20 @@ def _run(cmd: list[str], *, cwd: Path | None = None) -> str:
 
 
 def _repo_root() -> Path:
+    """Resolve the current git repository root.
+
+    Returns:
+        Absolute repository root path.
+    """
     return Path(_run(["git", "rev-parse", "--show-toplevel"]))
 
 
 def _changed_files(base: str, repo_root: Path) -> list[Path]:
+    """List files changed relative to a base ref.
+
+    Returns:
+        Repository-relative paths changed in the comparison.
+    """
     output = _run(
         ["git", "diff", "--name-only", "--diff-filter=ACMRT", f"{base}...HEAD"],
         cwd=repo_root,
@@ -51,7 +67,111 @@ def _changed_files(base: str, repo_root: Path) -> list[Path]:
     return files
 
 
+def _file_at_ref(base: str, path: Path, repo_root: Path) -> str | None:
+    """Read a repository file at the merge-base for a comparison ref.
+
+    Returns:
+        File contents at the comparison base, or ``None`` when the file did not
+        exist there.
+    """
+    merge_base = _run(["git", "merge-base", base, "HEAD"], cwd=repo_root)
+    proc = subprocess.run(
+        ["git", "show", f"{merge_base}:{path.as_posix()}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+class _DocstringStripper(ast.NodeTransformer):
+    """Remove docstring expressions while preserving executable syntax."""
+
+    @staticmethod
+    def _strip_body(body: list[ast.stmt]) -> list[ast.stmt]:
+        """Drop a leading string expression from a Python statement body."""
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            return body[1:]
+        return body
+
+    def visit_Module(self, node: ast.Module) -> ast.Module:
+        """Strip module docstring before visiting child statements."""
+        node.body = self._strip_body(node.body)
+        self.generic_visit(node)
+        return node
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
+        """Strip class docstring before visiting child statements."""
+        node.body = self._strip_body(node.body)
+        self.generic_visit(node)
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        """Strip function docstring before visiting child statements."""
+        node.body = self._strip_body(node.body)
+        self.generic_visit(node)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        """Strip async-function docstring before visiting child statements."""
+        node.body = self._strip_body(node.body)
+        self.generic_visit(node)
+        return node
+
+
+def _normalized_python_ast(source: str) -> str | None:
+    """Parse Python source into a docstring-free AST dump.
+
+    Returns:
+        Attribute-free AST dump, or ``None`` when the source cannot be parsed.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    stripped = _DocstringStripper().visit(tree)
+    ast.fix_missing_locations(stripped)
+    return ast.dump(stripped, include_attributes=False)
+
+
+def _is_doc_or_comment_only_python_change(before: str, after: str) -> bool:
+    """Return whether a Python change only affects comments, formatting, or docstrings."""
+    before_ast = _normalized_python_ast(before)
+    after_ast = _normalized_python_ast(after)
+    if before_ast is None or after_ast is None:
+        return False
+    return before_ast == after_ast
+
+
+def _is_doc_or_comment_only_changed_file(path: Path, base: str, repo_root: Path) -> bool:
+    """Check whether a changed Python file has no executable AST changes."""
+    if path.suffix != ".py":
+        return False
+    before = _file_at_ref(base, path, repo_root)
+    if before is None:
+        return False
+    after_path = repo_root / path
+    try:
+        after = after_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return _is_doc_or_comment_only_python_change(before, after)
+
+
 def _normalize_path(path: Path, repo_root: Path) -> str:
+    """Normalize an absolute or relative path to repository POSIX form.
+
+    Returns:
+        Repository-relative path when possible, otherwise POSIX path text.
+    """
     if path.is_absolute():
         try:
             path = path.relative_to(repo_root)
@@ -61,6 +181,11 @@ def _normalize_path(path: Path, repo_root: Path) -> str:
 
 
 def _matches_any(path_str: str, patterns: Iterable[str]) -> bool:
+    """Check whether a path matches any glob pattern.
+
+    Returns:
+        True when at least one pattern matches.
+    """
     return any(fnmatch(path_str, pattern) for pattern in patterns)
 
 
@@ -68,6 +193,12 @@ def _resolve_coverage(
     path_str: str,
     coverage_index: dict[str, float],
 ) -> tuple[float | None, str | None]:
+    """Resolve coverage for a changed file from the coverage index.
+
+    Returns:
+        Pair of coverage percentage and matched coverage key, or ``(None,
+        None)`` when no unambiguous coverage row exists.
+    """
     if path_str in coverage_index:
         return coverage_index[path_str], path_str
     matches = [(k, v) for k, v in coverage_index.items() if k.endswith(path_str)]
@@ -78,6 +209,11 @@ def _resolve_coverage(
 
 
 def _load_coverage_index(coverage_path: Path, repo_root: Path) -> dict[str, float]:
+    """Load file coverage percentages from coverage.py JSON output.
+
+    Returns:
+        Mapping from normalized file path to percent covered.
+    """
     data = json.loads(coverage_path.read_text(encoding="utf-8"))
     index: dict[str, float] = {}
     for file_path, file_data in data.get("files", {}).items():
@@ -93,11 +229,17 @@ def _load_coverage_index(coverage_path: Path, repo_root: Path) -> dict[str, floa
 
 
 def _print_lines(lines: Iterable[str]) -> None:
+    """Print lines in order."""
     for line in lines:
         print(line)
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the changed-files coverage gate.
+
+    Returns:
+        Parsed argparse namespace.
+    """
     parser = argparse.ArgumentParser(
         description="Check per-file coverage for changed files relative to a base ref.",
     )
@@ -130,6 +272,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _resolve_coverage_path(coverage_arg: str, repo_root: Path) -> Path:
+    """Resolve the coverage JSON path relative to the repository root.
+
+    Returns:
+        Absolute coverage JSON path.
+    """
     coverage_path = Path(coverage_arg)
     if not coverage_path.is_absolute():
         coverage_path = repo_root / coverage_path
@@ -142,6 +289,11 @@ def _select_changed_files(
     include_patterns: Iterable[str],
     exclude_patterns: Iterable[str],
 ) -> tuple[list[str], list[str]]:
+    """Apply include and exclude patterns to changed files.
+
+    Returns:
+        Tuple of selected normalized paths and skipped normalized paths.
+    """
     selected: list[str] = []
     skipped: list[str] = []
     for path in changed_files:
@@ -162,6 +314,12 @@ def _build_results(
     selected: list[str],
     coverage_index: dict[str, float],
 ) -> list[dict[str, object]]:
+    """Attach coverage data to selected changed files.
+
+    Returns:
+        Result rows containing file path, coverage value, and resolved coverage
+        key.
+    """
     results: list[dict[str, object]] = []
     for path_str in selected:
         coverage, resolved = _resolve_coverage(path_str, coverage_index)
@@ -180,6 +338,11 @@ def _summarize_results(
     min_required: float,
     goal: float,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
+    """Partition coverage results by missing data, minimum failures, and goal warnings.
+
+    Returns:
+        Missing rows, rows below the required minimum, and rows below the goal.
+    """
     missing = [r for r in results if r["coverage"] is None]
     below_min = [r for r in results if r["coverage"] is not None and r["coverage"] < min_required]
     below_goal = [r for r in results if r["coverage"] is not None and r["coverage"] < goal]
@@ -191,6 +354,7 @@ def _print_results(
     min_required: float,
     goal: float,
 ) -> None:
+    """Print per-file coverage status rows."""
     for r in results:
         cov = r["coverage"]
         file_path = r["file"]
@@ -209,6 +373,7 @@ def _report_failures(
     missing: list[dict[str, object]],
     below_min: list[dict[str, object]],
 ) -> None:
+    """Print coverage failures that should fail the gate."""
     print("Test coverage requirement not met:")
     if missing:
         _print_lines(["- Missing coverage data for:"] + [f"  - {r['file']}" for r in missing])
@@ -220,6 +385,7 @@ def _report_failures(
 
 
 def _report_warnings(below_goal: list[dict[str, object]]) -> None:
+    """Print coverage rows below the aspirational goal."""
     _print_lines(
         ["Coverage goal not met (warning only):"]
         + [f"- {r['file']} ({r['coverage']:.1f}%)" for r in below_goal]
@@ -227,6 +393,11 @@ def _report_warnings(below_goal: list[dict[str, object]]) -> None:
 
 
 def _ensure_coverage_path(coverage_path: Path) -> bool:
+    """Check whether the requested coverage artifact exists.
+
+    Returns:
+        True when the coverage artifact can be read.
+    """
     if not coverage_path.exists():
         print(f"coverage.json not found at {coverage_path}", file=sys.stderr)
         return False
@@ -234,6 +405,7 @@ def _ensure_coverage_path(coverage_path: Path) -> bool:
 
 
 def _log_header(args: argparse.Namespace) -> None:
+    """Print the configured coverage check header."""
     print(
         "Changed files test coverage check "
         f"(base={args.base}, min={args.min:.1f}%, goal={args.goal:.1f}%)"
@@ -241,6 +413,7 @@ def _log_header(args: argparse.Namespace) -> None:
 
 
 def _report_skipped(skipped: list[str], show_skipped: bool) -> None:
+    """Optionally print files skipped by include/exclude filters."""
     if show_skipped and skipped:
         _print_lines(["Skipped:"] + [f"- {p}" for p in skipped])
 
@@ -249,6 +422,11 @@ def _handle_missing_or_below_min(
     missing: list[dict[str, object]],
     below_min: list[dict[str, object]],
 ) -> int:
+    """Return a failing exit code when hard coverage requirements are unmet.
+
+    Returns:
+        ``1`` for missing/below-minimum coverage, otherwise ``0``.
+    """
     if missing or below_min:
         _report_failures(missing, below_min)
         return 1
@@ -256,6 +434,11 @@ def _handle_missing_or_below_min(
 
 
 def _run_check(args: argparse.Namespace) -> int:
+    """Execute the changed-files coverage check.
+
+    Returns:
+        Process exit code for the configured coverage gate.
+    """
     repo_root = _repo_root()
     coverage_path = _resolve_coverage_path(args.coverage, repo_root)
     if not _ensure_coverage_path(coverage_path):
@@ -281,6 +464,21 @@ def _run_check(args: argparse.Namespace) -> int:
         return 0
 
     coverage_index = _load_coverage_index(coverage_path, repo_root)
+    doc_only = [
+        path_str
+        for path_str in selected
+        if _is_doc_or_comment_only_changed_file(Path(path_str), args.base, repo_root)
+    ]
+    if doc_only:
+        doc_only_set = set(doc_only)
+        selected = [path_str for path_str in selected if path_str not in doc_only_set]
+        skipped.extend(f"{path_str} (doc/comment-only)" for path_str in doc_only)
+
+    if not selected:
+        print("No changed files with executable Python changes matched include patterns.")
+        _report_skipped(skipped, args.show_skipped)
+        return 0
+
     results = _build_results(selected, coverage_index)
 
     _log_header(args)

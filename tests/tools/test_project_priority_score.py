@@ -75,10 +75,12 @@ class FakeGhProjectClient:
 
 
 def _field(name: str) -> dict:
+    """Return a minimal Project field fixture."""
     return {"id": f"field-{name}", "name": name, "type": "ProjectV2Field"}
 
 
 def _item(issue_number: int, **fields: object) -> dict:
+    """Return a minimal Project item fixture with optional field values."""
     payload = {
         "id": f"item-{issue_number}",
         "status": "Todo",
@@ -313,6 +315,7 @@ def test_gh_project_client_surfaces_actionable_auth_error(monkeypatch: pytest.Mo
     from scripts.tools.project_priority_score import GhProjectClient
 
     def _raise(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Raise an authentication failure from the gh CLI fallback."""
         raise subprocess.CalledProcessError(
             1,
             ["gh", "project", "item-list"],
@@ -344,6 +347,7 @@ def test_gh_project_client_retries_user_owned_project_commands_with_at_me(
     def _fake_run(
         args: list[str], *, check: bool, capture_output: bool, text: bool
     ) -> subprocess.CompletedProcess[str]:
+        """Fail for explicit user ownership and succeed for @me retry."""
         calls.append(args)
         if "--owner" in args and args[args.index("--owner") + 1] == "ll7":
             raise subprocess.CalledProcessError(
@@ -384,6 +388,7 @@ def test_gh_project_client_does_not_retry_unknown_owner_with_at_me(
     def _fake_run(
         args: list[str], *, check: bool, capture_output: bool, text: bool
     ) -> subprocess.CompletedProcess[str]:
+        """Always raise an owner-type failure for non-retriable owners."""
         calls.append(args)
         raise subprocess.CalledProcessError(
             1,

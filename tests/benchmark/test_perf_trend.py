@@ -12,6 +12,7 @@ from robot_sf.benchmark import perf_trend
 
 
 def _write_text(path: Path, text: str) -> None:
+    """Write a text fixture while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
@@ -334,6 +335,7 @@ def test_run_scenario_builds_perf_cold_warm_args(
     captured: dict[str, list[str]] = {}
 
     def _fake_main(argv: list[str]) -> int:
+        """Capture perf_cold_warm arguments and emit a passing JSON report."""
         captured["argv"] = list(argv)
         out_json = Path(argv[argv.index("--output-json") + 1])
         _write_text(
@@ -384,6 +386,7 @@ def test_run_scenario_uses_sanitized_slug_for_output_paths(
     captured: dict[str, list[str]] = {}
 
     def _fake_main(argv: list[str]) -> int:
+        """Capture sanitized output paths and emit a minimal passing report."""
         captured["argv"] = list(argv)
         out_json = Path(argv[argv.index("--output-json") + 1])
         _write_text(out_json, json.dumps({"comparison": {"status": "pass"}}))

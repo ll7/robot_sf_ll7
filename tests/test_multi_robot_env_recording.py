@@ -15,10 +15,13 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 @dataclass
 class _DummyMapPool:
+    """Minimal map pool exposing named map definitions."""
+
     map_defs: dict[str, object]
 
 
 def _build_config() -> SimpleNamespace:
+    """Build a minimal multi-robot env config namespace."""
     map_def = SimpleNamespace(obstacles=[])
     return SimpleNamespace(
         map_pool=_DummyMapPool(map_defs={"uni_campus_big": map_def}),
@@ -35,11 +38,16 @@ def _build_config() -> SimpleNamespace:
 
 
 class _FakeRobot:
+    """Robot stub that converts actions to arrays."""
+
     def parse_action(self, action):
+        """Return the action as a float array."""
         return np.asarray(action, dtype=float)
 
 
 class _FakeSimulator:
+    """Simulator stub exposing robots, poses, goals, and step tracking."""
+
     def __init__(self, num_robots: int):
         self.robots = [_FakeRobot() for _ in range(num_robots)]
         self.robot_navs = [object() for _ in range(num_robots)]
@@ -51,20 +59,26 @@ class _FakeSimulator:
 
     @property
     def robot_poses(self):
+        """Return current robot poses."""
         return self._robot_poses
 
     @property
     def goal_pos(self):
+        """Return robot goal positions."""
         return self._goal_pos
 
     def reset_state(self) -> None:
+        """Record simulator reset calls."""
         self.reset_calls += 1
 
     def step_once(self, actions) -> None:
+        """Record actions passed to the simulator step."""
         self.step_calls.append(list(actions))
 
 
 class _FakeRobotState:
+    """RobotState stub that emits deterministic observations and metadata."""
+
     def __init__(self, nav, occupancy, sensors, d_t: float, sim_time_limit: float):
         self.nav = nav
         self.occupancy = occupancy
@@ -79,9 +93,11 @@ class _FakeRobotState:
 
     @property
     def is_terminal(self) -> bool:
+        """Return whether the fake robot state is terminal."""
         return self._terminal
 
     def step(self):
+        """Advance one timestep and return updated observation channels."""
         self.timestep += 1
         self._step_counter += 1
         self._obs = {
@@ -91,6 +107,7 @@ class _FakeRobotState:
         return self._obs
 
     def reset(self):
+        """Reset timestep and observation channels."""
         self.timestep = 0
         self._terminal = False
         self._obs = {
@@ -100,6 +117,7 @@ class _FakeRobotState:
         return self._obs
 
     def meta_dict(self) -> dict:
+        """Return stable per-robot episode metadata."""
         return {
             "step": self._step_counter,
             "episode": 1,
@@ -115,6 +133,8 @@ class _FakeRobotState:
 
 
 class _FakeSimulationView:
+    """SimulationView stub that records render and exit calls."""
+
     instances: list[_FakeSimulationView] = []
 
     def __init__(self, **kwargs):
@@ -125,14 +145,19 @@ class _FakeSimulationView:
         _FakeSimulationView.instances.append(self)
 
     def render(self, _state) -> None:
+        """Record a render call."""
         self.render_calls += 1
 
     def exit_simulation(self) -> None:
+        """Record a render shutdown call."""
         self.exit_calls += 1
 
 
 def _patch_multi_robot_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch multi-robot dependencies with lightweight deterministic fakes."""
+
     def _fake_init_spaces(_cfg, _map_def):
+        """Return deterministic action and observation spaces."""
         action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
         observation_space = spaces.Dict(
             {
@@ -148,10 +173,12 @@ def _patch_multi_robot_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         return action_space, observation_space, observation_space
 
     def _fake_init_simulators(_cfg, _map_def, num_robots, random_start_pos=False):
+        """Return one fake simulator with the requested robot count."""
         _ = random_start_pos
         return [_FakeSimulator(int(num_robots))]
 
     def _fake_init_collision_and_sensors(sim, _cfg, _orig_obs_space):
+        """Return one occupancy and sensor placeholder per robot."""
         count = len(sim.robots)
         return [SimpleNamespace() for _ in range(count)], [SimpleNamespace() for _ in range(count)]
 

@@ -13,11 +13,13 @@ if TYPE_CHECKING:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_repo(repo_root: Path) -> None:
+    """Create the minimal gym-collision-avoidance tree required by the probe."""
     _write(repo_root / "README.md", "# stub\n")
     _write(
         repo_root / "gym_collision_avoidance" / "experiments" / "src" / "example.py",
@@ -97,6 +99,7 @@ def test_run_probe_preserves_venv_symlink_path(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Record staged commands while returning successful probe results."""
         seen_commands.append(command)
         return probe.CommandResult(
             name=name,

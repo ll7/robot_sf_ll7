@@ -89,27 +89,39 @@ def test_controlled_wrapper_inputs_match_source_inputs() -> None:
 
 
 class _FakeJnp:
+    """Small jax.numpy stand-in backed by NumPy."""
+
     @staticmethod
     def asarray(value: object) -> np.ndarray:
+        """Convert values to float NumPy arrays."""
         return np.asarray(value, dtype=float)
 
     @staticmethod
     def zeros(shape: tuple[int, ...]) -> np.ndarray:
+        """Return a float zeros array for model initialization."""
         return np.zeros(shape, dtype=float)
 
 
 class _FakeRandom:
+    """Small jax.random stand-in."""
+
     @staticmethod
     def PRNGKey(seed: int) -> int:
+        """Return the seed as a deterministic fake PRNG key."""
         return int(seed)
 
 
 class _FakePolicy:
+    """Fake SARL policy exposing the wrapper-required API."""
+
     vnet_input_size = 13
 
     class _Model:
+        """Fake policy model exposing init()."""
+
         @staticmethod
         def init(key: int, zeros: np.ndarray) -> dict[str, object]:
+            """Return initialization metadata for assertions."""
             return {"key": key, "shape": tuple(zeros.shape)}
 
     model = _Model()
@@ -120,6 +132,7 @@ class _FakePolicy:
         humans_obs: np.ndarray,
         info: dict[str, np.ndarray],
     ) -> np.ndarray:
+        """Build a flattened VNet input from robot, human, and goal data."""
         return np.concatenate([robot_obs.reshape(-1), humans_obs.reshape(-1), info["robot_goal"]])
 
     @staticmethod
@@ -130,10 +143,13 @@ class _FakePolicy:
         _params: dict[str, object],
         _epsilon: float,
     ) -> tuple[np.ndarray, int, np.ndarray, np.ndarray]:
+        """Return a deterministic source action and unchanged fake key."""
         return np.asarray([1.0, 0.0]), key, np.asarray([]), np.asarray([])
 
 
 class _FakeParityWrapper:
+    """Wrapper stub carrying fake JAX and policy dependencies."""
+
     def __init__(
         self, *, repo_root: object | None = None, max_humans: int = 1, seed: int = 0
     ) -> None:
@@ -164,15 +180,21 @@ def test_run_parity_probe_reports_controlled_input_match(
 
 
 class _FakeRobot:
+    """Placeholder robot consumed by the fake action adapter."""
+
     pass
 
 
 class _FakeSimulator:
+    """Simulator stub exposing one robot."""
+
     def __init__(self) -> None:
         self.robots = [_FakeRobot()]
 
 
 class _FakeEnv:
+    """Robot SF env stub returning one deterministic structured observation."""
+
     def __init__(self) -> None:
         self.simulator = _FakeSimulator()
         self.action_space = object()
@@ -197,27 +219,35 @@ class _FakeEnv:
         }
 
     def reset(self, seed: int | None = None) -> tuple[dict[str, Any], dict[str, int | None]]:
+        """Return the deterministic observation and seed metadata."""
         return self.obs, {"seed": seed}
 
     def step(self, action: np.ndarray) -> tuple[dict[str, Any], float, bool, bool, dict[str, Any]]:
+        """Record the action and keep the fake episode alive."""
         self.latest_action = np.asarray(action, dtype=float)
         return self.obs, 0.0, False, False, {"action": self.latest_action}
 
     def close(self) -> None:
+        """Close the fake environment without side effects."""
         return None
 
 
 class _FakePlannerActionAdapter:
+    """Action adapter stub converting velocity commands to arrays."""
+
     def __init__(self, robot: object, action_space: object, time_step: float) -> None:
         self.robot = robot
         self.action_space = action_space
         self.time_step = time_step
 
     def from_velocity_command(self, command: tuple[float, float]) -> np.ndarray:
+        """Return the command as a NumPy action array."""
         return np.asarray(command, dtype=float)
 
 
 class _FakeWrapper:
+    """Social-Jym wrapper stub returning a deterministic holonomic action."""
+
     def __init__(
         self, *, repo_root: object | None = None, max_humans: int = 1, seed: int = 0
     ) -> None:
@@ -226,6 +256,7 @@ class _FakeWrapper:
         self.seed = seed
 
     def act(self, obs: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]]:
+        """Return a fixed source action and lightweight diagnostics."""
         return np.asarray([1.0, 0.0], dtype=float), {
             "observation_keys": sorted(obs.keys()),
             "source_action_xy": [1.0, 0.0],
@@ -237,6 +268,7 @@ def test_run_probe_executes_one_robot_sf_step(monkeypatch: pytest.MonkeyPatch) -
     captured: dict[str, Any] = {}
 
     def fake_make_robot_env(config: object, debug: bool = False) -> _FakeEnv:
+        """Capture env factory inputs and return the fake environment."""
         captured["config"] = config
         captured["debug"] = debug
         return _FakeEnv()

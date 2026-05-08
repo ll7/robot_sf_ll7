@@ -48,6 +48,11 @@ class ProbeReport:
 
 
 def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int) -> CommandResult:
+    """Run one side-environment command and retain bounded output tails.
+
+    Returns:
+        Structured command result with timeout and failure-summary handling.
+    """
     try:
         result = subprocess.run(
             command,
@@ -93,6 +98,11 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
 
 
 def _detect_failure_summary(stdout: str, stderr: str) -> str:
+    """Classify the most likely side-environment blocker.
+
+    Returns:
+        Short failure category suitable for reports.
+    """
     text = f"{stdout}\n{stderr}"
     lowered = text.lower()
     if "failed to import tkagg backend" in lowered:
@@ -135,6 +145,11 @@ def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
 
 
 def _versions_script() -> str:
+    """Build the child script that prints key dependency versions.
+
+    Returns:
+        Python source for the side-environment version check.
+    """
     return (
         "import gym, json, tensorflow as tf; "
         "print(json.dumps({'gym': gym.__version__, 'tensorflow': tf.__version__}))"
@@ -142,6 +157,11 @@ def _versions_script() -> str:
 
 
 def _ga3c_script() -> str:
+    """Build the child script that initializes the GA3C-CADRL policy.
+
+    Returns:
+        Python source for the learned-policy smoke check.
+    """
     return (
         "from gym_collision_avoidance.envs.policies.GA3CCADRLPolicy import GA3CCADRLPolicy; "
         "policy = GA3CCADRLPolicy(); "
@@ -151,6 +171,11 @@ def _ga3c_script() -> str:
 
 
 def _blocker_category(failure_summary: str | None) -> str:
+    """Map a failure summary onto the report's stable blocker taxonomy.
+
+    Returns:
+        Stable blocker category key.
+    """
     if failure_summary is None:
         return "success"
     lowered = failure_summary.lower()
@@ -168,6 +193,11 @@ def _blocker_category(failure_summary: str | None) -> str:
 
 
 def _extract_source_contract(failure_summary: str | None) -> dict[str, Any]:
+    """Build the source-contract metadata for the current blocker category.
+
+    Returns:
+        Mapping describing policy semantics and remaining side-env blocker.
+    """
     blocker_category = _blocker_category(failure_summary)
     blocker_by_category = {
         "success": "no remaining blocker in the isolated side environment",
@@ -198,6 +228,11 @@ def _extract_source_contract(failure_summary: str | None) -> dict[str, Any]:
 
 
 def _resolve_side_env_python(repo_root: Path, side_env_python: Path | None) -> Path:
+    """Resolve the side-environment Python interpreter path.
+
+    Returns:
+        Absolute or repository-relative interpreter path to validate and execute.
+    """
     if side_env_python is None:
         return repo_root / DEFAULT_SIDE_ENV_PYTHON_RELATIVE
     return side_env_python if side_env_python.is_absolute() else Path.cwd() / side_env_python
@@ -282,6 +317,11 @@ def run_probe(repo_root: Path, side_env_python: Path | None, timeout_seconds: in
 
 
 def _interpretation_lines(report: ProbeReport) -> list[str]:
+    """Choose report interpretation bullets for the observed blocker class.
+
+    Returns:
+        Markdown bullet lines for the report interpretation section.
+    """
     blocker_category = _blocker_category(report.failure_summary)
     if blocker_category == "success":
         return [
@@ -335,6 +375,11 @@ def _interpretation_lines(report: ProbeReport) -> list[str]:
 
 
 def _render_markdown(report: ProbeReport) -> str:
+    """Render the side-environment probe report as Markdown.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     lines = [
         "# gym-collision-avoidance Side-Environment Probe",
         "",

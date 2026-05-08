@@ -286,6 +286,11 @@ class SocNavObservationFusion:
         position_cap = _map_position_cap(self.simulator.map_def)
 
         def _clip_positions(values: np.ndarray) -> np.ndarray:
+            """Clip world positions into the representable map extent.
+
+            Returns:
+                np.ndarray: Positions clipped to the map coordinate range.
+            """
             return np.clip(values, 0.0, position_cap)
 
         robot_pos_clipped = _clip_positions(robot_pos)

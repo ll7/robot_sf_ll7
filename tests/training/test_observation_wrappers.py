@@ -158,9 +158,12 @@ def test_legacy_run023_obs_adapter_flattens_drive_and_ray_state() -> None:
     captured: dict[str, object] = {}
 
     class _Model:
+        """Model stub that records adapted observations."""
+
         action_space = "stub"
 
         def predict(self, obs, deterministic: bool = True):
+            """Record predict inputs and return a sentinel action."""
             captured["obs"] = obs
             captured["deterministic"] = deterministic
             return "action", None

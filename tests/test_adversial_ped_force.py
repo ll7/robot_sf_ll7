@@ -27,12 +27,15 @@ class _DummyPedState:
         self.max_speeds = max_speeds
 
     def size(self) -> int:
+        """Return the number of pedestrian states in the stub."""
         return int(self._positions.shape[0])
 
     def pos(self) -> np.ndarray:
+        """Return pedestrian positions for the force wrapper."""
         return self._positions
 
     def vel(self) -> np.ndarray:
+        """Return pedestrian velocities for the force wrapper."""
         return self._velocities
 
 

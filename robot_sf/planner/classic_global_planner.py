@@ -91,6 +91,11 @@ class ClassicPlanVisualizer(Visualizer):
     def _resolve_meters_per_cell(
         self, grid_map: Grid, meters_per_cell: float | None
     ) -> float | None:
+        """Resolve world-scale metadata for axis labels.
+
+        Returns:
+            float | None: Meters-per-cell scale, or ``None`` when unavailable.
+        """
         if meters_per_cell is not None:
             return meters_per_cell
         if self._meters_per_cell is not None:
@@ -106,6 +111,7 @@ class ClassicPlanVisualizer(Visualizer):
         return None
 
     def _set_world_axis_formatters(self, grid_map: Grid, meters_per_cell: float | None) -> None:
+        """Install meter-based axis formatters when grid scale metadata exists."""
         scale_factor = self._resolve_meters_per_cell(grid_map, meters_per_cell)
         if scale_factor is None or grid_map.dim != 2:
             return
@@ -179,6 +185,11 @@ class MotionPlanningGridConfig:
 
 
 def _world_to_grid(value: float, cells_per_meter: float) -> int:
+    """Convert a world coordinate to the containing grid-cell index.
+
+    Returns:
+        int: Floored grid-cell coordinate.
+    """
     return math.floor(value * cells_per_meter)
 
 
@@ -187,6 +198,7 @@ def _mark_obstacle_cells(
     polygon: Polygon,
     cells_per_meter: float,
 ) -> None:
+    """Rasterize one polygon into the planner grid's obstacle cells."""
     if polygon.is_empty:
         return
 

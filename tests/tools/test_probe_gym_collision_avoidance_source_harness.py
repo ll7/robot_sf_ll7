@@ -14,11 +14,13 @@ if TYPE_CHECKING:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_repo(repo_root: Path) -> None:
+    """Create the minimal gym-collision-avoidance tree required by source probes."""
     _write(repo_root / "README.md", "# stub\n")
     _write(
         repo_root / "gym_collision_avoidance" / "__init__.py",
@@ -119,6 +121,7 @@ def test_run_probe_captures_missing_dependency(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Return a missing-dependency result for the first upstream command."""
         return probe.CommandResult(
             name=name,
             command=command,
@@ -150,6 +153,7 @@ def test_run_probe_marks_success_when_all_commands_pass(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Return successful results for every source-harness command."""
         return probe.CommandResult(
             name=name,
             command=command,

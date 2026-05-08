@@ -68,6 +68,13 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
     def _extract_state(
         self, observation: dict[str, Any]
     ) -> tuple[np.ndarray, float, float, np.ndarray, np.ndarray, np.ndarray]:
+        """Extract robot, goal, and pedestrian state from a SocNav observation.
+
+        Returns:
+            tuple[np.ndarray, float, float, np.ndarray, np.ndarray, np.ndarray]:
+            Robot position, heading, speed, goal, pedestrian positions, and
+            pedestrian velocities.
+        """
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = self._as_1d_float(robot_state.get("position", [0.0, 0.0]), pad=2)[:2]
         heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
@@ -88,6 +95,11 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         return robot_pos, heading, speed, goal, ped_pos, ped_vel
 
     def _crowd_speed_cap(self, robot_pos: np.ndarray, ped_pos: np.ndarray) -> float:
+        """Reduce maximum rollout speed as near-field pedestrian density increases.
+
+        Returns:
+            float: Density-adjusted speed cap.
+        """
         if ped_pos.size == 0:
             return float(self.config.max_linear_speed)
         dists = np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)
@@ -100,6 +112,11 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
     def _predict_ped_positions(
         self, ped_pos: np.ndarray, ped_vel: np.ndarray, t: float
     ) -> np.ndarray:
+        """Predict pedestrian positions at one rollout timestamp.
+
+        Returns:
+            np.ndarray: Predicted pedestrian positions in world coordinates.
+        """
         backend = str(self.config.prediction_backend).strip().lower()
         if backend in {"constant_velocity", "learned"}:
             # `learned` currently falls back to CV in this adapter implementation.
@@ -109,6 +126,11 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         return ped_pos + ped_vel * float(t)
 
     def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
+        """Estimate grid-obstacle clearance around one rollout point.
+
+        Returns:
+            float: Approximate obstacle clearance in meters, ``inf`` when unknown.
+        """
         payload = self._extract_grid_payload(observation)
         if payload is None:
             return float("inf")
@@ -154,6 +176,11 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         ped_vel: np.ndarray,
         observation: dict[str, Any],
     ) -> float:
+        """Evaluate one sampled MPPI control sequence.
+
+        Returns:
+            float: Lower-is-better rollout cost.
+        """
         dt = float(self.config.rollout_dt)
         x = np.array(robot_pos, dtype=float)
         theta = float(heading)

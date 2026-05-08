@@ -14,11 +14,13 @@ if TYPE_CHECKING:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_repo(repo_root: Path) -> None:
+    """Create the minimal upstream SocialForce policy file for runtime probes."""
     _write(
         repo_root / "crowd_nav" / "policy_no_train" / "socialforce.py",
         """
@@ -107,6 +109,7 @@ def test_run_probe_marks_blocked_when_compat_probe_fails(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Return command results for backend and compatibility probe stages."""
         if name == "backend_signature":
             return probe.CommandResult(
                 name,

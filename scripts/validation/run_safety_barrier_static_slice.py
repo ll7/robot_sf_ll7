@@ -39,6 +39,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_rows(path: Path) -> list[dict[str, Any]]:
+    """Load episode rows from a JSONL file.
+
+    Returns:
+        list[dict[str, Any]]: Parsed JSON object rows.
+    """
     rows: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -50,6 +55,11 @@ def _load_rows(path: Path) -> list[dict[str, Any]]:
 
 
 def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate static-slice episode outcomes by scenario.
+
+    Returns:
+        dict[str, Any]: Overall and per-scenario summary metrics.
+    """
     by_scenario: dict[str, list[dict[str, Any]]] = defaultdict(list)
     reasons = Counter()
     successes = 0
@@ -99,6 +109,7 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _write_markdown(summary: dict[str, Any], path: Path) -> None:
+    """Write the static-slice summary as Markdown."""
     lines = [
         "# Safety Barrier Static Slice",
         "",

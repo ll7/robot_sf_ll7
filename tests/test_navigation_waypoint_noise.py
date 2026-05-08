@@ -9,6 +9,7 @@ from robot_sf.nav.svg_map_parser import convert_map
 
 
 def _make_noise_test_map(tmp_path):
+    """Create a minimal SVG map with intermediate waypoints for noise tests."""
     svg = tmp_path / "waypoint_noise_map.svg"
     svg.write_text(
         """
@@ -64,6 +65,7 @@ def test_sample_route_applies_noise_only_to_intermediate_waypoints(
     noise_values = itertools.cycle([0.1, -0.1, 0.2, -0.2, 0.3, -0.3])
 
     def _mock_normal(mean, std, size=None):
+        """Return deterministic waypoint-noise samples with the requested shape."""
         del mean, std
         assert size == (3, 2)
         return [[next(noise_values), next(noise_values)] for _ in range(size[0])]

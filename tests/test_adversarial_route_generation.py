@@ -61,6 +61,7 @@ def test_generate_candidate_rejects_invalid_points_with_feasibility_filter(
     )
 
     def _raise_invalid(_point, grid=None):  # type: ignore[no-untyped-def]
+        """Simulate planner rejection of sampled start or goal points."""
         raise PlanningError("point invalid")
 
     monkeypatch.setattr(test_planner, "validate_point", _raise_invalid)
@@ -85,6 +86,7 @@ def test_generate_candidate_raises_invalid_points_when_feasibility_filter_disabl
     )
 
     def _raise_invalid(_point, grid=None):  # type: ignore[no-untyped-def]
+        """Simulate planner rejection that should propagate."""
         raise PlanningError("point invalid")
 
     monkeypatch.setattr(test_planner, "validate_point", _raise_invalid)

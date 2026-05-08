@@ -1,5 +1,4 @@
 """Tests for visibility graph caching and performance (US4)."""
-# ruff: noqa: D103
 
 from shapely.geometry import Polygon
 
@@ -7,10 +6,12 @@ from robot_sf.planner.visibility_graph import VisibilityGraph
 
 
 def _square(x: float, y: float, size: float = 1.0) -> Polygon:
+    """Return a square obstacle polygon anchored at the given coordinates."""
     return Polygon([(x, y), (x + size, y), (x + size, y + size), (x, y + size)])
 
 
 def test_graph_reuse_after_build():
+    """Rebuilding should replace the graph while leaving the cache populated."""
     vg = VisibilityGraph()
     vg.build([_square(0, 0)])
 
@@ -22,6 +23,7 @@ def test_graph_reuse_after_build():
 
 
 def test_cache_helper_returns_same_instance():
+    """Repeated networkx_graph access should return the cached graph instance."""
     vg = VisibilityGraph()
     vg.build([_square(0, 0)])
     assert vg.networkx_graph is not None

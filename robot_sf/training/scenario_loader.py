@@ -697,6 +697,7 @@ def _validate_map_reference(
     source: Path,
     index: int,
 ) -> None:
+    """Validate that a scenario has a usable map reference shape."""
     map_id = scenario.get("map_id")
     map_file = scenario.get("map_file")
     if map_id is None and map_file is None:
@@ -804,6 +805,11 @@ def _resolve_map_with_search_paths(
     root: Path,
     source: Path,
 ) -> Path | None:
+    """Resolve a map path relative to the manifest root or configured search paths.
+
+    Returns:
+        Path | None: Existing map path, or ``None`` when no candidate resolves.
+    """
     candidate = Path(map_file)
     if candidate.is_absolute():
         return candidate if candidate.exists() else None
@@ -830,6 +836,7 @@ def _emit_map_resolution_error(
     root: Path,
     source: Path,
 ) -> None:
+    """Log an actionable warning for a map path that could not be resolved."""
     search_desc = ", ".join(str(path) for path in map_search_paths) if map_search_paths else "-"
     logger.warning(
         "Could not resolve map_file '{}' from '{}'. Tried root '{}' and map_search_paths [{}]. "
@@ -848,6 +855,7 @@ def _validate_optional_mapping(
     source: Path,
     index: int,
 ) -> None:
+    """Validate that an optional scenario section is a mapping when present."""
     value = scenario.get(key)
     if value is not None and not isinstance(value, Mapping):
         raise ValueError(f"{key} must be a mapping in '{source}' at index {index}.")
@@ -859,6 +867,7 @@ def _validate_seed_list(
     source: Path,
     index: int,
 ) -> None:
+    """Validate optional scenario seed overrides."""
     seeds = scenario.get("seeds")
     if seeds is None:
         return
@@ -941,6 +950,7 @@ def _validate_platform_semantic_polygon(
     source: Path,
     index: int,
 ) -> None:
+    """Validate polygon platform semantics and point coordinates."""
     points = region.get("points")
     if not isinstance(points, list) or len(points) < 3:
         raise ValueError(
@@ -960,6 +970,7 @@ def _validate_platform_semantic_bbox(
     source: Path,
     index: int,
 ) -> None:
+    """Validate bounding-box platform semantics and coordinate ordering."""
     bounds = region.get("bounds")
     if not isinstance(bounds, (list, tuple)) or len(bounds) != 4:
         raise ValueError(f"{prefix}.bounds must be [min_x, min_y, max_x, max_y].")

@@ -530,6 +530,11 @@ def _apply_nested_overrides(  # noqa: C901
     )
 
     def _coerce_from_annotation(annotation: object, value: object) -> object:
+        """Coerce override values using dataclass field annotations.
+
+        Returns:
+            object: Coerced value when the annotation is actionable.
+        """
         if annotation in {Any, object}:
             return value
         origin = get_origin(annotation)
@@ -559,6 +564,11 @@ def _apply_nested_overrides(  # noqa: C901
         *,
         field_annotation: object | None,
     ) -> object:
+        """Coerce one override value using current attribute and field type.
+
+        Returns:
+            object: Override value converted to enum/dataclass/list shape when needed.
+        """
         if field_annotation is not None:
             coerced = _coerce_from_annotation(field_annotation, value)
             if coerced is not value:
@@ -623,6 +633,11 @@ def _make_env_creator(config: DreamerRunConfig) -> Any:
     )
 
     def _creator(worker_env_config: dict[str, object] | None = None) -> Any:
+        """Create one RLlib worker environment.
+
+        Returns:
+            Any: DreamerV3-compatible wrapped Robot SF environment.
+        """
         worker_payload = dict(worker_env_config or {})
         worker_overrides = {
             key: value
@@ -647,6 +662,11 @@ def _make_env_creator(config: DreamerRunConfig) -> Any:
             )
 
             def _config_builder(scenario: dict[str, object]) -> RobotSimulationConfig:
+                """Build an env config for the selected scenario.
+
+                Returns:
+                    RobotSimulationConfig: Scenario-specific env config with overrides applied.
+                """
                 scenario_config = build_robot_config_from_scenario(
                     scenario,
                     scenario_path=scenario_matrix.path,
@@ -895,6 +915,7 @@ def _find_nonfinite_scalars(  # noqa: C901
     findings: list[dict[str, object]] = []
 
     def _visit(current: Any, path: str) -> None:
+        """Visit nested result payloads and collect non-finite scalar paths."""
         if len(findings) >= limit:
             return
         if isinstance(current, int | float):

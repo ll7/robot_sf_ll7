@@ -56,6 +56,11 @@ class DRMPCPlanner:
         self._seed = seed
 
     def _parse_config(self, config: dict[str, Any] | DRMPCPlannerConfig) -> DRMPCPlannerConfig:
+        """Normalize accepted config payloads into the dataclass contract.
+
+        Returns:
+            DRMPCPlannerConfig: Planner configuration used by the wrapper.
+        """
         if isinstance(config, dict):
             return build_dr_mpc_config(config)
         if isinstance(config, DRMPCPlannerConfig):
@@ -76,6 +81,11 @@ class DRMPCPlanner:
         self._module = None
 
     def _import_dr_mpc_module(self) -> Any:
+        """Import and cache the first supported DR-MPC module name.
+
+        Returns:
+            Any: Imported upstream module exposing the DR-MPC policy API.
+        """
         if self._module is not None:
             return self._module
 
@@ -93,6 +103,11 @@ class DRMPCPlanner:
         )
 
     def _build_policy(self) -> Any:
+        """Construct the upstream policy through a supported factory hook.
+
+        Returns:
+            Any: Policy object exposing ``select_action``.
+        """
         try:
             module = self._import_dr_mpc_module()
         except ImportError as exc:
@@ -139,6 +154,12 @@ class DRMPCPlanner:
         return action
 
     def _clamp_action(self, action: dict[str, float]) -> None:
+        """Clamp mutable action payloads to the configured velocity limits.
+
+        This safety clamp keeps external policies within the benchmark action
+        envelope without changing the action representation selected by the
+        upstream implementation.
+        """
         if self.config.safety_clamp:
             if "vx" in action and "vy" in action:
                 speed = float(np.hypot(action["vx"], action["vy"]))

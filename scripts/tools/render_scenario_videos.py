@@ -454,6 +454,11 @@ def _build_orca_policy_variant(
     orca_time_horizon: float | None = None,
     orca_neighbor_dist: float | None = None,
 ) -> SocNavPlannerPolicy:
+    """Build an ORCA policy variant with optional parameter overrides.
+
+    Returns:
+        SocNavPlannerPolicy: Configured ORCA policy callable.
+    """
     policy = make_orca_policy()
     if policy_name in _ORCA_POLICY_VARIANT_CONFIGS:
         for field, value in _ORCA_POLICY_VARIANT_CONFIGS[policy_name].items():

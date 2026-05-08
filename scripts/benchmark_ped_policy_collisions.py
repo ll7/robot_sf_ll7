@@ -72,18 +72,38 @@ class PedPolicyMetrics:
 
 
 def _safe_mean(values: list[float]) -> float:
+    """Compute a mean with an empty-list default.
+
+    Returns:
+        Mean value, or ``0.0`` when no values are available.
+    """
     return float(np.mean(values)) if values else 0.0
 
 
 def _safe_std(values: list[float]) -> float:
+    """Compute a standard deviation with an empty-list default.
+
+    Returns:
+        Standard deviation, or ``0.0`` when no values are available.
+    """
     return float(np.std(values)) if values else 0.0
 
 
 def _safe_rate(count: int, total: int) -> float:
+    """Compute a safe count ratio.
+
+    Returns:
+        ``count / total`` or ``0.0`` when total is zero.
+    """
     return float(count / total) if total > 0 else 0.0
 
 
 def _safe_avg_or_none(values: list[float]) -> float | None:
+    """Compute an average over finite values.
+
+    Returns:
+        Mean of finite values, or ``None`` when unavailable.
+    """
     if not values:
         return None
     clean = [v for v in values if math.isfinite(v)]
@@ -91,6 +111,11 @@ def _safe_avg_or_none(values: list[float]) -> float | None:
 
 
 def _safe_std_or_none(values: list[float]) -> float | None:
+    """Compute standard deviation over finite values.
+
+    Returns:
+        Standard deviation of finite values, or ``None`` when unavailable.
+    """
     if not values:
         return None
     clean = [v for v in values if math.isfinite(v)]
@@ -98,6 +123,11 @@ def _safe_std_or_none(values: list[float]) -> float | None:
 
 
 def _resolve_model_path(path_or_name: str, base_dir_name: str) -> Path:
+    """Resolve a model checkpoint path from a path or pinned model name.
+
+    Returns:
+        Existing checkpoint path.
+    """
     candidate = Path(path_or_name)
     if candidate.suffix == ".zip" and candidate.exists():
         return candidate
@@ -117,6 +147,11 @@ def _resolve_model_path(path_or_name: str, base_dir_name: str) -> Path:
 
 
 def _latest_ped_model_path() -> Path:
+    """Find the latest pedestrian model checkpoint by modification time.
+
+    Returns:
+        Most recently modified checkpoint under ``model_ped``.
+    """
     model_dir = Path(__file__).resolve().parents[1] / "model_ped"
     if not model_dir.exists():
         raise FileNotFoundError(f"Directory not found: {model_dir}")
@@ -128,6 +163,11 @@ def _latest_ped_model_path() -> Path:
 
 
 def _make_env(svg_map_path: str, robot_model_name_or_path: str):
+    """Create the benchmark environment and load the fixed robot policy.
+
+    Returns:
+        Pedestrian benchmark environment and resolved robot model path string.
+    """
     map_definition = convert_map(svg_map_path)
     robot_model_path = _resolve_model_path(robot_model_name_or_path, base_dir_name="model")
     robot_model = load_trained_policy(str(robot_model_path))
@@ -157,6 +197,11 @@ def _make_env(svg_map_path: str, robot_model_name_or_path: str):
 
 
 def _get_meta(info: Any) -> dict[str, Any]:
+    """Extract terminal metadata from a Gym info payload.
+
+    Returns:
+        Metadata mapping, or an empty dict when absent.
+    """
     if isinstance(info, dict):
         meta = info.get("meta", {})
         if isinstance(meta, dict):
@@ -165,6 +210,11 @@ def _get_meta(info: Any) -> dict[str, Any]:
 
 
 def _extract_robot_speed(meta: dict[str, Any], env: Any) -> float:
+    """Extract robot linear speed from the simulator.
+
+    Returns:
+        Robot linear speed, or NaN when unavailable.
+    """
     del meta
     return _extract_linear_speed(getattr(env.simulator.robots[0], "current_speed", math.nan))
 
@@ -188,6 +238,11 @@ def _extract_linear_speed(speed_like: Any) -> float:
 
 
 def _extract_ped_speed(env: Any) -> float:
+    """Extract ego pedestrian linear speed from the simulator.
+
+    Returns:
+        Pedestrian linear speed, or NaN when unavailable.
+    """
     return _extract_linear_speed(getattr(env.simulator.ego_ped, "current_speed", math.nan))
 
 
@@ -227,6 +282,11 @@ def _run_single_episode(env: Any, ped_model: Any, seed: int) -> tuple[dict[str, 
 
 
 def _is_robot_collision(meta: dict[str, Any]) -> bool:
+    """Read the generic robot-collision terminal flag.
+
+    Returns:
+        True when metadata marks a robot collision.
+    """
     return bool(meta.get("is_robot_collision", False))
 
 
@@ -248,6 +308,7 @@ def _collect_collision_samples(
     impact_angle_deg_at_collision: list[float],
     zone_counts: dict[str, int],
 ) -> None:
+    """Collect speed, impact-angle, and hit-zone samples for robot-ped collisions."""
     if not _is_robot_pedestrian_collision(meta):
         return
     robot_speed_at_collision.append(_extract_robot_speed(meta, env))
@@ -260,6 +321,7 @@ def _collect_collision_samples(
 
 
 def _update_outcome_counts(meta: dict[str, Any], counts: dict[str, int]) -> None:
+    """Increment aggregate outcome counters from terminal metadata."""
     counts["timeout"] += int(bool(meta.get("is_timesteps_exceeded", False)))
     counts["ped_collision"] += int(bool(meta.get("is_pedestrian_collision", False)))
     counts["obst_collision"] += int(bool(meta.get("is_obstacle_collision", False)))
@@ -425,6 +487,11 @@ def _print_results(metrics: PedPolicyMetrics) -> None:
 
 
 def _default_output_path() -> Path:
+    """Build the default benchmark JSON output path.
+
+    Returns:
+        Timestamped path under the canonical benchmark artifact category.
+    """
     ensure_canonical_tree(categories=("benchmarks",))
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return get_artifact_category_path("benchmarks") / f"ped_policy_collision_benchmark_{stamp}.json"

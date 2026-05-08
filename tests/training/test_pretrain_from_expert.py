@@ -165,6 +165,7 @@ def test_require_imitation_bc_warns_and_raises_when_import_fails(
     real_import = builtins.__import__
 
     def fake_import(name: str, *args: object, **kwargs: object):
+        """Raise for imitation algorithms and delegate other imports."""
         if name == "imitation.algorithms":
             raise ImportError("forced missing imitation")
         return real_import(name, *args, **kwargs)

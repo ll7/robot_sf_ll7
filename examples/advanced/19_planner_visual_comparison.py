@@ -128,6 +128,7 @@ def make_policies(max_speed: float, max_turn: float) -> OrderedDict[str, SocNavP
     """Build planners with shared speed limits for a fair comparison."""
 
     def cfg() -> SocNavPlannerConfig:
+        """Create a planner config with the shared comparison limits."""
         return SocNavPlannerConfig(
             max_linear_speed=max_speed,
             max_angular_speed=max_turn,

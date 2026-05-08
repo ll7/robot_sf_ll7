@@ -188,10 +188,18 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
             bench = ModuleType("baselines.bench")
 
             class _Monitor:
+                """Minimal OpenAI Baselines Monitor shim for upstream imports."""
+
                 def __init__(self, env, *_args, **_kwargs):
+                    """Store wrapped environment while accepting unused Monitor args."""
                     self.env = env
 
                 def __getattr__(self, name):
+                    """Forward unknown attributes to the wrapped environment.
+
+                    Returns:
+                        Attribute value from the wrapped environment.
+                    """
                     return getattr(self.env, name)
 
             bench.Monitor = _Monitor
@@ -202,37 +210,57 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
             vec_env = ModuleType("baselines.common.vec_env")
 
             class _VecEnvWrapper:
+                """Minimal VecEnvWrapper shim carrying the wrapped vector env."""
+
                 def __init__(self, venv, observation_space=None):
+                    """Store vector env and optional observation space metadata."""
                     self.venv = venv
                     self.observation_space = observation_space
 
             class _VecEnv:
+                """Minimal VecEnv shim exposing space and environment-count fields."""
+
                 def __init__(self, num_envs, observation_space, action_space):
+                    """Store vector-env sizing and space metadata."""
                     self.num_envs = num_envs
                     self.observation_space = observation_space
                     self.action_space = action_space
 
             class _CloudpickleWrapper:
+                """Compatibility wrapper matching Baselines' constructor shape."""
+
                 def __init__(self, x):
+                    """Store the wrapped callable/object for upstream code paths."""
                     self.x = x
 
             def _clear_mpi_env_vars():
+                """Return a no-op context manager for Baselines MPI cleanup hooks."""
                 return nullcontext()
 
             class _DummyVecEnv:
+                """Single-process vector-env shim sufficient for CrowdNav imports."""
+
                 def __init__(self, env_fns):
+                    """Instantiate wrapped environments from callables."""
                     self.envs = [fn() for fn in env_fns]
                     self.num_envs = len(self.envs)
                     self.observation_space = self.envs[0].observation_space
                     self.action_space = self.envs[0].action_space
 
                 def reset(self):
+                    """Reset the first wrapped environment.
+
+                    Returns:
+                        Observation returned by the wrapped environment.
+                    """
                     return self.envs[0].reset()
 
                 def step_async(self, _actions):
+                    """Accept asynchronous-step calls without scheduling work."""
                     return None
 
                 def step_wait(self):
+                    """Raise because the import shim does not execute vector steps."""
                     raise NotImplementedError
 
             vec_env.VecEnvWrapper = _VecEnvWrapper
@@ -245,7 +273,10 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
             vec_normalize = ModuleType("baselines.common.vec_env.vec_normalize")
 
             class _VecNormalize:
+                """Minimal VecNormalize shim exposing the training flag."""
+
                 def __init__(self, *args, **kwargs):
+                    """Accept unused constructor args and default to training mode."""
                     del args, kwargs
                     self.training = True
 
@@ -253,12 +284,27 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
             util = ModuleType("baselines.common.vec_env.util")
 
             def _obs_to_dict(obs):
+                """Pass through observations for Baselines utility compatibility.
+
+                Returns:
+                    Original observation payload.
+                """
                 return obs
 
             def _dict_to_obs(obs):
+                """Pass through dict observations for Baselines utility compatibility.
+
+                Returns:
+                    Original observation payload.
+                """
                 return obs
 
             def _obs_space_info(space):
+                """Extract keys, shapes, and dtypes from dict-like spaces.
+
+                Returns:
+                    tuple[list, dict, dict]: Space keys, shape mapping, and dtype mapping.
+                """
                 if hasattr(space, "spaces"):
                     keys = list(space.spaces.keys())
                     shapes = {k: space.spaces[k].shape for k in keys}

@@ -290,6 +290,11 @@ def _build_adapter_policy(
     )
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run an adapter-backed planner and project command feasibility.
+
+        Returns:
+            tuple[float, float]: Projected linear and angular command.
+        """
         linear, angular = adapter.plan(obs)
         return _project_with_feasibility(
             model=adapter_kinematics_model,
@@ -306,6 +311,11 @@ def _build_adapter_policy(
     if hasattr(adapter, "diagnostics"):
 
         def _planner_stats() -> dict[str, Any]:
+            """Expose adapter diagnostics for episode metadata.
+
+            Returns:
+                dict[str, Any]: Adapter diagnostic payload.
+            """
             return adapter.diagnostics()
 
         _policy._planner_stats = _planner_stats
@@ -320,6 +330,7 @@ def _attach_planner_reset(policy: Callable[..., Any], adapter: Any) -> None:
         return
 
     def _planner_reset(seed: int | None = None) -> None:
+        """Reset an adapter, using seed-aware reset when supported."""
         if seed is None:
             reset()
             return
@@ -417,6 +428,11 @@ class _ExternalMPCAdapter:
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
+    """Load an optional planner YAML config.
+
+    Returns:
+        dict[str, Any]: Parsed config mapping, or an empty mapping when omitted.
+    """
     if not algo_config_path:
         return {}
     path = Path(algo_config_path)
@@ -463,12 +479,22 @@ def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:
 
 
 def _scenario_id(scenario: dict[str, Any]) -> str:
+    """Resolve a scenario identifier from common manifest fields.
+
+    Returns:
+        str: Scenario id string, or ``"unknown"``.
+    """
     return str(
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )
 
 
 def _scenario_family(scenario: dict[str, Any]) -> str:
+    """Classify a scenario into the report family used by benchmark summaries.
+
+    Returns:
+        str: Scenario family label.
+    """
     scenario_id = _scenario_id(scenario)
     if scenario_id.startswith("francis2023_"):
         return "francis2023"
@@ -478,6 +504,7 @@ def _scenario_family(scenario: dict[str, Any]) -> str:
 
 
 def _is_policy_search_candidate_manifest(config: dict[str, Any]) -> bool:
+    """Return whether a config has policy-search candidate manifest fields."""
     return any(
         key in config
         for key in (
@@ -495,6 +522,11 @@ def _load_base_candidate_config(
     *,
     config_anchor: Path | None,
 ) -> dict[str, Any]:
+    """Load and merge a policy-search candidate's base config and params.
+
+    Returns:
+        dict[str, Any]: Effective candidate planner config.
+    """
     base_cfg: dict[str, Any] = {}
     base_path = _resolve_config_path(config_anchor, manifest.get("base_config_path"))
     if base_path is not None:
@@ -606,6 +638,7 @@ def _prediction_planner_metadata_overrides(
 
 
 def _is_socnav_algorithm(algo: str) -> bool:
+    """Return whether an algorithm key routes through the SocNav planner family."""
     return algo.strip().lower() in _SOCNAV_ALGO_KEYS
 
 
@@ -738,6 +771,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
         )
 
     def _build_and_close(cfg: dict[str, Any]) -> None:
+        """Instantiate then close a SocNav planner for dependency preflight."""
         effective_kinematics = robot_kinematics
         if effective_kinematics is None:
             effective_kinematics = str(
@@ -850,6 +884,11 @@ def _preflight_policy(  # noqa: C901, PLR0915
 
 
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
+    """Build a SocNav planner config from a loose mapping.
+
+    Returns:
+        SocNavPlannerConfig: Filtered planner configuration.
+    """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
     allowed = {f.name for f in fields(SocNavPlannerConfig)}
@@ -858,6 +897,11 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
 
 
 def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float, float]:
+    """Compute a simple goal-directed unicycle command from benchmark observations.
+
+    Returns:
+        tuple[float, float]: Linear and angular command.
+    """
     robot = obs.get("robot")
     goal = obs.get("goal")
 
@@ -1034,6 +1078,11 @@ class _GoalFallbackAdapter:
         self._max_speed = float(max_speed)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+        """Return the configured goal fallback command.
+
+        Returns:
+            tuple[float, float]: Linear and angular command.
+        """
         return _goal_policy(observation, max_speed=self._max_speed)
 
 
@@ -1175,6 +1224,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            """Run the built-in goal policy with feasibility projection.
+
+            Returns:
+                tuple[float, float]: Projected linear and angular command.
+            """
             linear, angular = _goal_policy(obs, max_speed=float(algo_config.get("max_speed", 1.0)))
             return _project_with_feasibility(
                 model=goal_kinematics_model,
@@ -1326,6 +1380,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            """Run a SocNav adapter and project command feasibility.
+
+            Returns:
+                tuple[float, float]: Projected linear and angular command.
+            """
             linear, angular = adapter.plan(obs)
             return _project_with_feasibility(
                 model=adapter_kinematics_model,
@@ -1440,6 +1499,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            """Run PPO planner inference and convert output into benchmark command space.
+
+            Returns:
+                tuple[float, float]: Linear and angular command after conversion/projection.
+            """
             if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
                 ppo_obs = obs
             else:
@@ -1521,6 +1585,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         _sac_can_be_native = sac_action_semantics == "delta" and sac_action_space == "unicycle"
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            """Run SAC planner inference and handle native-vs-fallback action semantics.
+
+            Returns:
+                tuple[float, float]: Linear and angular command for the environment.
+            """
             if sac_obs_mode in {"dict", "native_dict", "multi_input"}:
                 sac_obs = obs
             else:
@@ -1588,6 +1657,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            """Run DRL-VO inference through the PPO-format observation adapter.
+
+            Returns:
+                tuple[float, float]: Linear and angular command after conversion/projection.
+            """
             drl_obs = _obs_to_ppo_format(obs)
             action = drl_planner.step(drl_obs)
             if not isinstance(action, dict):
@@ -1667,6 +1741,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            """Run Guarded PPO and apply the short-horizon safety gate.
+
+            Returns:
+                tuple[float, float]: Selected and projected command.
+            """
             if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
                 ppo_obs = obs
             else:
@@ -1704,6 +1783,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         _attach_planner_reset(_policy, guard_adapter)
 
         def _close_guarded_ppo() -> None:
+            """Close PPO and guard adapter resources when present."""
             ppo_planner.close()
             guard_close = getattr(guard_adapter, "close", None)
             if callable(guard_close):
@@ -1803,6 +1883,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
         def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+            """Run SONIC behind the short-horizon safety guard.
+
+            Returns:
+                tuple[float, float]: Guard-selected and projected command.
+            """
             sonic_command = sonic_adapter.plan(obs)
             chosen, decision = guard_adapter.choose_command(
                 obs,
@@ -1994,6 +2079,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     if algo_key in {"hrvo", "socnav_hrvo"} and hasattr(adapter, "bind_static_obstacle_points"):
 
         def _bind_env(env: Any) -> None:
+            """Bind sampled static obstacle points from the environment to HRVO."""
             simulator = getattr(env, "simulator", None)
             if simulator is None or not hasattr(simulator, "iter_obstacle_segments"):
                 return
@@ -2093,6 +2179,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         _apply_direct_world_velocity_metadata(meta, adapter_boundary=adapter_boundary)
 
         def _policy(obs: dict[str, Any]) -> dict[str, float | str]:
+            """Run holonomic upstream ORCA and return world-velocity action payload.
+
+            Returns:
+                dict[str, float | str]: Holonomic world-velocity command.
+            """
             velocity_world = np.asarray(adapter.plan_velocity_world(obs), dtype=float).reshape(-1)
             if velocity_world.size < 2:
                 raise ValueError(
@@ -2110,6 +2201,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         return _policy, meta
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run a generic SocNav adapter and project command feasibility.
+
+        Returns:
+            tuple[float, float]: Projected linear and angular command.
+        """
         linear, angular = adapter.plan(obs)
         return _project_with_feasibility(
             model=adapter_kinematics_model,
@@ -2124,6 +2220,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     if hasattr(adapter, "diagnostics"):
 
         def _planner_stats() -> dict[str, Any]:
+            """Expose generic adapter diagnostics for episode metadata.
+
+            Returns:
+                dict[str, Any]: Adapter diagnostic payload.
+            """
             return adapter.diagnostics()
 
         _policy._planner_stats = _planner_stats
@@ -2131,6 +2232,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
 
 def _resolve_seed_list(path: Path) -> dict[str, list[int]]:
+    """Load named benchmark seed lists from YAML.
+
+    Returns:
+        dict[str, list[int]]: Seed lists keyed by suite name.
+    """
     if not path.exists():
         return {}
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -2140,6 +2246,11 @@ def _resolve_seed_list(path: Path) -> dict[str, list[int]]:
 
 
 def _suite_key(scenario_path: Path) -> str:
+    """Infer the seed-suite key from a scenario config filename.
+
+    Returns:
+        str: Suite key used for seed-list lookup.
+    """
     stem = scenario_path.stem.lower()
     if "classic" in stem:
         return "classic_interactions"
@@ -2154,6 +2265,11 @@ def _select_seeds(
     suite_seeds: dict[str, list[int]],
     suite_key: str,
 ) -> list[int]:
+    """Resolve per-scenario seeds with suite and default fallbacks.
+
+    Returns:
+        list[int]: Seeds to run for the scenario.
+    """
     seeds = scenario.get("seeds")
     if isinstance(seeds, list) and seeds:
         return [int(s) for s in seeds]
@@ -2213,6 +2329,11 @@ def _compute_map_episode_id(identity_payload: dict[str, Any], seed: int) -> str:
 
 
 def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
+    """Check behavior metadata has the fields needed by pedestrian definitions.
+
+    Returns:
+        list[str]: Non-fatal behavior sanity errors.
+    """
     errors: list[str] = []
     meta = scenario.get("metadata") if isinstance(scenario.get("metadata"), dict) else {}
     behavior = str(meta.get("behavior") or "").strip().lower()
@@ -2245,6 +2366,11 @@ def _build_env_config(
     *,
     scenario_path: Path,
 ) -> RobotSimulationConfig:
+    """Build the benchmark environment config for one scenario.
+
+    Returns:
+        RobotSimulationConfig: Config with SocNav structured observations and grid enabled.
+    """
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
     config.observation_mode = ObservationMode.SOCNAV_STRUCT
     config.use_occupancy_grid = True
@@ -2320,6 +2446,11 @@ def _scenario_robot_kinematics_label(scenario: dict[str, Any]) -> str:
 
 
 def _vel_and_acc(positions: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
+    """Compute finite-difference velocity and acceleration arrays.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Velocity and acceleration with input shape.
+    """
     if positions.shape[0] < 2:
         return np.zeros_like(positions), np.zeros_like(positions)
     vel = np.gradient(positions, dt, axis=0)
@@ -2328,6 +2459,11 @@ def _vel_and_acc(positions: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarr
 
 
 def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) -> np.ndarray:
+    """Stack variable-count pedestrian position arrays into one padded tensor.
+
+    Returns:
+        np.ndarray: Array shaped ``(time, max_pedestrians, 2)``.
+    """
     if not traj:
         return np.zeros((0, 0, 2), dtype=float)
     max_k = max(p.shape[0] for p in traj)
@@ -2461,6 +2597,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
 ) -> dict[str, Any]:
+    """Run one scenario/seed episode and return a benchmark JSONL record.
+
+    Returns:
+        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+    """
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
     scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
@@ -2744,6 +2885,7 @@ def _scenario_with_episode_seed_defaults(
 
 
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
+    """Validate an episode record and append it as JSONL."""
     violations = validate_episode_success_integrity(record)
     if violations:
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
@@ -2755,6 +2897,11 @@ def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, A
 def _run_map_job_worker(
     job: tuple[dict[str, Any], int, dict[str, Any]],
 ) -> dict[str, Any]:
+    """Execute one serialized map-runner job.
+
+    Returns:
+        dict[str, Any]: Episode record returned by ``_run_map_episode``.
+    """
     scenario, seed, params = job
     return _run_map_episode(
         scenario,
@@ -2830,6 +2977,7 @@ def _merge_runtime_algorithm_contract(  # noqa: C901
         return base_contract
 
     def _merge_mapping(target: dict[str, Any], source: dict[str, Any]) -> None:
+        """Merge authoritative runtime contract values into a nested mapping."""
         authoritative_keys = {
             "robot_kinematics",
             "execution_mode",
@@ -2842,6 +2990,7 @@ def _merge_runtime_algorithm_contract(  # noqa: C901
         }
 
         def _is_placeholder(value: Any) -> bool:
+            """Return whether a contract value should be replaced by runtime data."""
             if value is None:
                 return True
             if isinstance(value, str):

@@ -14,6 +14,7 @@ from robot_sf.planner.predictive_foresight import (
 
 
 def _make_obs() -> dict[str, object]:
+    """Build a compact observation for predictive foresight feature tests."""
     return {
         "robot": {
             "position": np.array([1.0, 1.0], dtype=np.float32),
@@ -130,6 +131,8 @@ def test_predictive_foresight_config_preserves_default_model_id_for_empty_overri
     """Empty source model ids should not overwrite the default predictor id."""
 
     class _Source:
+        """Config source stub with an empty model id override."""
+
         predictive_foresight_enabled = True
         predictive_foresight_model_id = ""
 

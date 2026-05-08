@@ -27,9 +27,11 @@ class _FakeClip:
         self.closed = False
 
     def write_videofile(self, path: str, codec: str, fps: int) -> None:
+        """Write a sentinel MP4 payload for successful encode tests."""
         Path(path).write_bytes(b"fake-mp4")
 
     def close(self) -> None:
+        """Record clip closure after encoding."""
         self.closed = True
 
 
@@ -57,6 +59,7 @@ def test_load_baseline_planner_covers_import_and_config_branches(
         runner_mod._load_baseline_planner("dummy", str(bad_config), seed=7)
 
     def _raise_unknown(_: str) -> type[_DummyPlanner]:
+        """Simulate a baseline registry miss."""
         raise KeyError("unknown")
 
     monkeypatch.setattr(runner_mod, "get_baseline", _raise_unknown)
@@ -141,6 +144,7 @@ def test_emit_video_skip_appends_notes_when_logging_fails(
     record = {"notes": "existing"}
 
     def _raise_type_error(*args: object, **kwargs: object) -> None:
+        """Simulate Loguru warning failure."""
         raise TypeError("logger unavailable")
 
     monkeypatch.setattr(runner_mod.logger, "warning", _raise_type_error)
@@ -179,6 +183,7 @@ def test_try_encode_synthetic_video_handles_missing_moviepy_and_unwritable_path(
     monkeypatch.setattr(runner_mod, "ImageSequenceClip", _FakeClip)
 
     def _raise_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        """Simulate an unwritable video output directory."""
         raise OSError("blocked")
 
     monkeypatch.setattr(Path, "mkdir", _raise_mkdir)
@@ -207,7 +212,10 @@ def test_try_encode_synthetic_video_reports_encoder_failures(
     """Synthetic video helper should convert encoder exceptions into structured skip info."""
 
     class _ExplodingClip(_FakeClip):
+        """Clip stub that raises during video writing."""
+
         def write_videofile(self, path: str, codec: str, fps: int) -> None:
+            """Raise the parametrized encoder exception."""
             raise raised
 
     monkeypatch.setattr(runner_mod, "ImageSequenceClip", _ExplodingClip)
@@ -276,6 +284,7 @@ def test_maybe_encode_video_swallow_value_errors(
     def _raise_value_error(
         *args: object, **kwargs: object
     ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+        """Simulate a non-runtime encoder state error."""
         raise ValueError("bad encoder state")
 
     monkeypatch.setattr(runner_mod, "_try_encode_synthetic_video", _raise_value_error)

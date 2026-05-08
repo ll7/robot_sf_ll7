@@ -42,11 +42,18 @@ class FixedCandidate:
 
 
 def _sanitize_name(raw: str, fallback: str = "feat_fixed") -> str:
+    """Convert a user-provided study name into a filesystem-safe stem.
+
+    Returns:
+        Sanitized non-empty name, or ``fallback`` when the input has no safe
+        characters.
+    """
     sanitized = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in raw.strip())
     return sanitized.strip("._") or fallback
 
 
 def _ensure_sqlite_parent(storage: str, *, allowed_root: Path | None = None) -> None:
+    """Create the parent directory for a sqlite storage URL when it is allowed."""
     try:
         url = make_url(storage)
     except Exception:
@@ -65,6 +72,12 @@ def _ensure_sqlite_parent(storage: str, *, allowed_root: Path | None = None) -> 
 
 
 def _resolve_storage(study_name: str, storage: str | None) -> str:
+    """Resolve the Optuna storage URL for a fixed-candidate study.
+
+    Returns:
+        User-provided storage URL or the default sqlite URL derived from
+        ``study_name``.
+    """
     if storage is not None:
         _ensure_sqlite_parent(storage, allowed_root=_ALLOWED_SQLITE_ROOT)
         return storage
@@ -75,6 +88,11 @@ def _resolve_storage(study_name: str, storage: str | None) -> str:
 
 
 def _load_matrix(path: Path) -> dict[str, Any]:
+    """Load and validate the fixed-candidate YAML matrix.
+
+    Returns:
+        Parsed matrix mapping with a non-empty ``candidates`` list.
+    """
     with path.open("r", encoding="utf-8") as handle:
         raw = yaml.safe_load(handle) or {}
     if not isinstance(raw, dict):
@@ -86,6 +104,11 @@ def _load_matrix(path: Path) -> dict[str, Any]:
 
 
 def _candidate_from_raw(raw: dict[str, Any], *, index: int) -> FixedCandidate:
+    """Parse one candidate row from the YAML matrix.
+
+    Returns:
+        Validated fixed candidate with normalized scalar and mapping fields.
+    """
     required = {
         "id",
         "extractor_type",
@@ -125,6 +148,12 @@ def _configure_candidate(
     study_name: str,
     disable_wandb: bool,
 ) -> Any:
+    """Build the concrete training config for one fixed candidate.
+
+    Returns:
+        Deep-copied training config with candidate hyperparameters and tracking
+        metadata applied.
+    """
     config = copy.deepcopy(base_config)
     config.policy_id = f"{base_config.policy_id}_12m_{candidate.candidate_id}"
     config.total_timesteps = int(matrix["total_timesteps"])
@@ -190,6 +219,12 @@ def _record_params(trial: optuna.Trial, candidate: FixedCandidate) -> None:
 
 
 def _metric_from_result(result: Any, *, metric_name: str) -> float:
+    """Extract the Optuna objective metric from a completed training result.
+
+    Returns:
+        Last-window objective value for ``metric_name``, falling back to the
+        aggregate mean when no episode series objective is available.
+    """
     from robot_sf.training.optuna_objective import (
         eval_metric_series,
         load_episode_records,

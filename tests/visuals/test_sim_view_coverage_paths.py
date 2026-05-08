@@ -266,6 +266,7 @@ def test_sim_view_sprite_helpers_and_camera(monkeypatch, tmp_path) -> None:
     draw_calls: list[float | None] = []
 
     def _spy_draw_sprite(_sprite, _center, _radius, theta=None) -> None:
+        """Record sprite rotation values passed by ego-ped rendering."""
         draw_calls.append(theta)
 
     monkeypatch.setattr(view, "_draw_sprite", _spy_draw_sprite)
@@ -285,6 +286,7 @@ def test_sim_view_sprite_helpers_and_camera(monkeypatch, tmp_path) -> None:
     load_calls: list[str] = []
 
     def _raise_load(path: str):
+        """Record attempted sprite loads and simulate pygame failure."""
         load_calls.append(path)
         raise pygame.error("load failed")
 
@@ -316,6 +318,7 @@ def test_robot_action_uses_speed_times_horizon_without_extra_scaling(monkeypatch
     original_line = pygame.draw.line
 
     def _spy_line(_screen, _color, start, end, width=1):
+        """Record line geometry while preserving the original draw behavior."""
         line_calls.append((start, end, width))
         return original_line(_screen, _color, start, end, width)
 
@@ -352,6 +355,7 @@ def test_robot_measured_kinematics_draws_speed_and_acceleration(monkeypatch) -> 
     ] = []
 
     def _spy_line(_screen, color, start, end, width=1):
+        """Record measured-kinematics overlay lines."""
         line_calls.append((color, start, end, width))
 
     monkeypatch.setattr(pygame.draw, "line", _spy_line)
@@ -389,6 +393,7 @@ def test_robot_measured_kinematics_resets_on_episode_start(monkeypatch) -> None:
     line_calls: list[tuple[tuple[float, float], tuple[float, float], int]] = []
 
     def _spy_line(_screen, _color, start, end, width=1):
+        """Record reset-frame line geometry."""
         line_calls.append((start, end, width))
 
     monkeypatch.setattr(pygame.draw, "line", _spy_line)
@@ -419,6 +424,7 @@ def test_robot_rotation_action_draws_clamped_directional_arc(monkeypatch) -> Non
     arc_calls: list[tuple[list[tuple[float, float]], int]] = []
 
     def _spy_lines(_screen, _color, _closed, points, width=1):
+        """Record rotation arc point sequences."""
         arc_calls.append((list(points), int(width)))
 
     monkeypatch.setattr(pygame.draw, "lines", _spy_lines)
@@ -454,6 +460,7 @@ def test_ped_action_direction_line_persists_when_speed_zero(monkeypatch) -> None
     draw_calls: list[tuple[tuple[float, float], tuple[float, float], int]] = []
 
     def _spy_line(_screen, _color, start, end, width=1):
+        """Record pedestrian action line geometry."""
         draw_calls.append((start, end, width))
 
     monkeypatch.setattr(pygame.draw, "line", _spy_line)

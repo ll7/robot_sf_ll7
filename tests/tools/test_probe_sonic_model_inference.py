@@ -52,16 +52,20 @@ def test_run_model_probe_reports_direct_and_shimmed_paths(
     )
 
     class FakePolicy:
+        """Policy stub that fails direct CUDA init and succeeds after shim adjustment."""
+
         def __init__(self, *_args, **_kwargs):
             if config.policy.constant_std:
                 raise AssertionError("Torch not compiled with CUDA enabled")
             self.base = SimpleNamespace(human_node_rnn_size=128, human_human_edge_rnn_size=256)
 
         def load_state_dict(self, _state, strict=False):
+            """Return missing bias keys to mirror the compatible checkpoint path."""
             assert strict is False
             return ["dist.logstd._bias"], []
 
         def act(self, _obs, rnn_hxs, _masks, deterministic=False):
+            """Return a deterministic action/value sample for model-only inference."""
             assert deterministic is True
             return (
                 torch.zeros((1, 1), dtype=torch.float32),
@@ -71,6 +75,7 @@ def test_run_model_probe_reports_direct_and_shimmed_paths(
             )
 
     def fake_import_module(name: str):
+        """Provide the minimal upstream modules imported by the probe."""
         if name.endswith(".arguments"):
             return SimpleNamespace(get_args=lambda: args)
         if name.endswith(".configs.config"):
@@ -216,15 +221,19 @@ def test_run_model_probe_restores_import_state(
     )
 
     class FakePolicy:
+        """Policy stub for verifying import-state cleanup after shimmed probing."""
+
         def __init__(self, *_args, **_kwargs):
             if config.policy.constant_std:
                 raise AssertionError("Torch not compiled with CUDA enabled")
             self.base = SimpleNamespace(human_node_rnn_size=128, human_human_edge_rnn_size=256)
 
         def load_state_dict(self, _state, strict=False):
+            """Accept checkpoint state without missing or unexpected keys."""
             return [], []
 
         def act(self, _obs, rnn_hxs, _masks, deterministic=False):
+            """Return a deterministic action/value sample for cleanup assertions."""
             return (
                 torch.zeros((1, 1), dtype=torch.float32),
                 torch.tensor([[-2.7, -0.28]], dtype=torch.float32),
@@ -233,6 +242,7 @@ def test_run_model_probe_restores_import_state(
             )
 
     def fake_import_module(name: str):
+        """Provide the minimal upstream modules without leaking them globally."""
         if name.endswith(".arguments"):
             return SimpleNamespace(get_args=lambda: args)
         if name.endswith(".configs.config"):

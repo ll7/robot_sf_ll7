@@ -11,11 +11,15 @@ from robot_sf.models import registry
 
 
 class _FakeFile:
+    """W&B file stub exposing a name."""
+
     def __init__(self, name: str) -> None:
         self.name = name
 
 
 class _FakeRun:
+    """W&B run stub exposing metadata and file listing."""
+
     def __init__(
         self,
         *,
@@ -38,6 +42,7 @@ class _FakeRun:
         self._files = files
 
     def files(self):
+        """Return fake W&B files for this run."""
         return [_FakeFile(name) for name in self._files]
 
 
@@ -45,7 +50,10 @@ def test_find_latest_wandb_model_filters_and_picks_newest(monkeypatch) -> None:
     """Latest W&B model selection should honor filters and choose the newest matching run."""
 
     class _Api:
+        """W&B API stub returning several candidate runs."""
+
         def runs(self, path: str):
+            """Return runs for latest-model filtering tests."""
             assert path == "ll7/robot_sf"
             return [
                 _FakeRun(
@@ -129,7 +137,10 @@ def test_find_latest_wandb_model_raises_when_no_run_matches(monkeypatch) -> None
     """Latest selection should fail cleanly when no run exposes the requested model file."""
 
     class _Api:
+        """W&B API stub returning no usable model files."""
+
         def runs(self, path: str):
+            """Return runs that should not match the requested file."""
             assert path == "ll7/robot_sf"
             return [
                 _FakeRun(
@@ -269,7 +280,10 @@ def test_download_from_wandb_uses_cached_path(monkeypatch, tmp_path: Path) -> No
     api_called = {"value": False}
 
     class _Api:
+        """W&B API stub that should not be called on cache hits."""
+
         def run(self, path: str):
+            """Fail if a cached download still hits the API."""
             api_called["value"] = True
             raise AssertionError(path)
 
@@ -293,10 +307,14 @@ def test_download_from_wandb_logs_cached_path_once(monkeypatch, tmp_path: Path) 
     messages: list[str] = []
 
     def _fake_info(message: str, *args) -> None:
+        """Record formatted cache-hit log messages."""
         messages.append(message.format(*args) if args else message)
 
     class _Api:
+        """W&B API stub that should not be called for cached artifacts."""
+
         def run(self, path: str):
+            """Fail if the cache-hit path asks W&B for a run."""
             raise AssertionError(path)
 
     monkeypatch.setattr(registry, "wandb", SimpleNamespace(Api=_Api))
@@ -324,19 +342,28 @@ def test_download_from_wandb_builds_run_path_from_split_fields(monkeypatch, tmp_
     downloaded = tmp_path / "cache" / "demo" / "model.zip"
 
     class _RunFile:
+        """W&B run-file stub that writes a model file on download."""
+
         def download(self, *, root: str, replace: bool):
+            """Write the requested model file into the cache root."""
             assert replace is True
             path = Path(root) / "model.zip"
             path.write_text("checkpoint", encoding="utf-8")
             return path
 
     class _Run:
+        """W&B run stub exposing a named file."""
+
         def file(self, name: str):
+            """Return the fake run file for model.zip."""
             assert name == "model.zip"
             return _RunFile()
 
     class _Api:
+        """W&B API stub resolving split entity/project/run fields."""
+
         def run(self, path: str):
+            """Return the fake run for the expected path."""
             assert path == "ll7/robot_sf/demo"
             return _Run()
 
@@ -359,17 +386,24 @@ def test_download_from_wandb_prefers_artifact_path(monkeypatch, tmp_path: Path) 
     calls: list[tuple[str, str]] = []
 
     class _Artifact:
+        """W&B artifact stub that writes a model file on download."""
+
         def download(self, *, root: str):
+            """Write the model file and return the artifact root."""
             path = Path(root) / "model.zip"
             path.write_text("checkpoint", encoding="utf-8")
             return str(Path(root))
 
     class _Api:
+        """W&B API stub preferring artifact downloads."""
+
         def artifact(self, path: str):
+            """Record and return the requested artifact."""
             calls.append(("artifact", path))
             return _Artifact()
 
         def run(self, path: str):  # pragma: no cover - should not be reached
+            """Fail if artifact download falls back to run download."""
             calls.append(("run", path))
             raise AssertionError(path)
 

@@ -100,6 +100,7 @@ def get_obs_adapter(model_name: str):
     if model_name == "run_023":
 
         def adapt_obs_run_023(obs_dict):
+            """Adapt current dict observations to the legacy run_023 flat input."""
             if isinstance(obs_dict, dict):
                 drive_state = np.asarray(obs_dict[OBS_DRIVE_STATE])
                 ray_state = np.asarray(obs_dict[OBS_RAYS])
@@ -139,18 +140,26 @@ def make_env(svg_map_path: str, model_name: str, apf_enabled: bool, apf_offset: 
 
 
 def _safe_mean(values: list[float]) -> float:
+    """Return the mean of values, or zero for an empty list."""
     return float(np.mean(values)) if values else 0.0
 
 
 def _safe_std(values: list[float]) -> float:
+    """Return the population standard deviation, or zero for an empty list."""
     return float(np.std(values)) if values else 0.0
 
 
 def _safe_rate(count: int, total: int) -> float:
+    """Return a count/total rate with zero-total protection."""
     return float(count / total) if total > 0 else 0.0
 
 
 def _safe_avg_distance(values: list[float]) -> float | None:
+    """Return the average of finite distance values.
+
+    Returns:
+        float | None: Mean finite distance, or ``None`` when no finite values exist.
+    """
     clean = [v for v in values if math.isfinite(v)]
     if not clean:
         return None
@@ -328,6 +337,7 @@ def build_comparison(results: list[ConditionMetrics]) -> dict[str, dict[str, flo
 
 
 def _default_output_path() -> Path:
+    """Return a timestamped benchmark output path under the canonical artifact tree."""
     ensure_canonical_tree(categories=("benchmarks",))
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return get_artifact_category_path("benchmarks") / f"ped_apf_models_benchmark_{stamp}.json"

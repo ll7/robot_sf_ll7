@@ -30,6 +30,7 @@ from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 
 
 def _minimal_map_def() -> MapDefinition:
+    """Build a compact map definition shared by environment helper tests."""
     width = 10.0
     height = 8.0
     spawn_zone: Rect = ((1.0, 1.0), (2.0, 1.0), (1.0, 2.0))
@@ -124,14 +125,18 @@ def test_prepare_pedestrian_actions_vectorizes_positions() -> None:
     """Confirm pedestrian action vectors combine position and velocity."""
 
     class _DummyPeds:
+        """Pedestrian container stub exposing SocialForce-style arrays."""
+
         def __init__(self, pos: np.ndarray, vel: np.ndarray) -> None:
             self._pos = pos
             self._vel = vel
 
         def pos(self) -> np.ndarray:
+            """Return pedestrian positions as an array."""
             return self._pos
 
         def vel(self) -> np.ndarray:
+            """Return pedestrian velocities as an array."""
             return self._vel
 
     peds = _DummyPeds(np.array([[1.0, 2.0], [3.0, 4.0]]), np.array([[0.5, 0.0], [0.0, 0.5]]))
@@ -177,13 +182,17 @@ def test_robot_env_flatten_helpers() -> None:
     assert info["step"] == 5
 
     class _DummyFusion:
+        """Sensor-fusion stub for flattening wrapper coverage."""
+
         def __init__(self) -> None:
             self.reset_called = False
 
         def reset_cache(self) -> None:
+            """Record that cached observations were cleared."""
             self.reset_called = True
 
         def next_obs(self) -> dict:
+            """Return a nested observation for flattening."""
             return {"robot": {"pos": np.array([1.0, 2.0])}}
 
     wrapper = _FlatteningObservationWrapper(_DummyFusion())

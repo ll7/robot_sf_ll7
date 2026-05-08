@@ -47,6 +47,11 @@ class ProbeReport:
 
 
 def _extract_remote_url(repo_root: Path) -> str | None:
+    """Read the origin URL for an upstream checkout when available.
+
+    Returns:
+        Remote origin URL, or ``None`` when unavailable.
+    """
     try:
         result = subprocess.run(
             ["git", "-C", str(repo_root), "config", "--get", "remote.origin.url"],
@@ -63,6 +68,11 @@ def _extract_remote_url(repo_root: Path) -> str | None:
 
 
 def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int) -> CommandResult:
+    """Run one runtime probe command with timeout handling.
+
+    Returns:
+        Structured command result including stdout, stderr, and failure summary.
+    """
     try:
         result = subprocess.run(
             command,
@@ -96,6 +106,11 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
 
 
 def _detect_failure_summary(stdout: str, stderr: str) -> str:
+    """Classify the runtime probe failure from captured output.
+
+    Returns:
+        Short failure category for reports and issue comments.
+    """
     text = f"{stdout}\n{stderr}"
     lowered = text.lower()
     if "modulenotfounderror" in lowered and "socialforce" in lowered:
@@ -108,6 +123,11 @@ def _detect_failure_summary(stdout: str, stderr: str) -> str:
 
 
 def _compat_probe_script(repo_root: Path) -> str:
+    """Build the child script that exercises the CrowdNav compatibility shim.
+
+    Returns:
+        Python source executed with the requested external ``socialforce`` package.
+    """
     repo = str(repo_root.resolve())
     return f"""
 import importlib
@@ -171,6 +191,11 @@ finally:
 
 
 def _backend_signature_script() -> str:
+    """Build the child script that records backend simulator metadata.
+
+    Returns:
+        Python source that prints the backend version and constructor signature.
+    """
     return """
 import inspect
 import json
@@ -184,6 +209,12 @@ print(json.dumps({
 
 
 def _extract_source_contract(repo_root: Path) -> dict[str, Any]:
+    """Extract the upstream SocialForce policy contract from source.
+
+    Returns:
+        Mapping that describes the action/state contract and expected simulator
+        keyword arguments.
+    """
     policy_path = repo_root / EXPECTED_POLICY_FILE
     text = policy_path.read_text(encoding="utf-8")
     expected_kwargs = [
@@ -299,6 +330,11 @@ def run_probe(
 
 
 def _render_markdown(report: ProbeReport) -> str:
+    """Render the runtime probe report as Markdown.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     lines = [
         f"# Issue {report.issue} Social-Navigation-PyEnvs SocialForce Runtime Probe",
         "",
@@ -354,6 +390,7 @@ def _render_markdown(report: ProbeReport) -> str:
 
 
 def _write_outputs(report: ProbeReport, *, output_json: Path, output_md: Path) -> None:
+    """Write structured JSON and Markdown artifacts for the probe."""
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_md.parent.mkdir(parents=True, exist_ok=True)
     output_json.write_text(json.dumps(asdict(report), indent=2) + "\n", encoding="utf-8")

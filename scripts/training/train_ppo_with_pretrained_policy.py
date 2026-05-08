@@ -297,6 +297,11 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
     base_dir = config_path.parent
 
     def _resolve_optional_path(name: str) -> Path | None:
+        """Resolve an optional config path relative to the config file.
+
+        Returns:
+            Path | None: Resolved path, or ``None`` for blank/missing values.
+        """
         raw_value = raw.get(name)
         if raw_value is None:
             return None

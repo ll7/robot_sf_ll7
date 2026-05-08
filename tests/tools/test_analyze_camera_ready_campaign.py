@@ -21,11 +21,13 @@ if TYPE_CHECKING:
 
 
 def _write_json(path: Path, payload: dict) -> None:
+    """Write an indented JSON artifact fixture."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
+    """Write episode rows as a JSONL artifact fixture."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "\n".join(json.dumps(row) for row in rows) + "\n",
@@ -34,6 +36,7 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
 
 
 def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
+    """Write CSV rows using the keys from the first fixture row."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
@@ -42,6 +45,7 @@ def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
 
 
 def _write_scenario_difficulty_campaign(campaign_root: Path) -> None:
+    """Create a compact campaign tree with enough data for difficulty analysis."""
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     episodes_goal = campaign_root / "runs" / "goal" / "episodes.jsonl"
     episodes_orca = campaign_root / "runs" / "orca" / "episodes.jsonl"

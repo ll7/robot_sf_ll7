@@ -26,6 +26,7 @@ def _meta(
     step: int = 50,
     max_steps: int = 100,
 ) -> dict:
+    """Build a reward metadata payload with common collision and route flags."""
     return {
         "step_of_episode": step,
         "max_sim_steps": max_steps,
@@ -82,9 +83,12 @@ def test_make_robot_env_builds_reward_func_from_reward_name(monkeypatch):
     captured: dict[str, object] = {}
 
     class _DummyEnv:
+        """Minimal environment returned by the patched factory."""
+
         pass
 
     def _fake_create_robot_env(**kwargs):
+        """Capture factory kwargs and return a dummy environment."""
         captured.update(kwargs)
         return _DummyEnv()
 
@@ -140,9 +144,12 @@ def test_make_robot_env_supports_reward_curriculum(monkeypatch):
     captured: dict[str, object] = {}
 
     class _DummyEnv:
+        """Minimal environment returned by the patched curriculum factory."""
+
         pass
 
     def _fake_create_robot_env(**kwargs):
+        """Capture curriculum factory kwargs and return a dummy environment."""
         captured.update(kwargs)
         return _DummyEnv()
 

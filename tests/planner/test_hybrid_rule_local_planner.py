@@ -22,6 +22,7 @@ def _obs(
     ped_positions: list[tuple[float, float]] | None = None,
     ped_velocities: list[tuple[float, float]] | None = None,
 ) -> dict:
+    """Build a compact observation payload for hybrid-rule planner tests."""
     ped_positions = [] if ped_positions is None else ped_positions
     ped_velocities = [] if ped_velocities is None else ped_velocities
     return {
@@ -52,6 +53,7 @@ def _obs_with_grid(
     goal: tuple[float, float] = (2.0, 0.0),
     occupied_cells: list[tuple[int, int]] | None = None,
 ) -> dict:
+    """Build an observation with occupancy-grid metadata attached."""
     obs = _obs(robot=robot, heading=heading, goal=goal)
     grid = np.zeros((3, 21, 21), dtype=float)
     for row, col in occupied_cells or []:
@@ -77,6 +79,7 @@ def _route_corridor_payload(
     route_progress_3s: float = 0.0,
     lateral_offset: float = 0.0,
 ) -> dict:
+    """Build route-corridor diagnostics for guide and subgoal tests."""
     return {
         "route_start_world": [0.0, 0.0],
         "route_next_world": [1.0, 0.0],
@@ -110,13 +113,13 @@ def _bind_continuous_static_env(
     """Bind a minimal environment-shaped continuous obstacle surface."""
 
     class _MapDef:
-        pass
+        """Map shell carrying dimensions for static-obstacle queries."""
 
     class _Simulator:
-        pass
+        """Simulator shell exposing map definition and obstacle lines."""
 
     class _Env:
-        pass
+        """Environment shell exposing the simulator to the planner."""
 
     map_def = _MapDef()
     map_def.width = width
@@ -1165,6 +1168,7 @@ def test_hybrid_rule_goal_stop_skips_route_corridor_diagnostics(monkeypatch) -> 
     planner = HybridRuleLocalPlannerAdapter(cfg)
 
     def fail_route_geometry(_observation: dict) -> dict:
+        """Fail if route geometry is evaluated during goal-stop handling."""
         raise AssertionError("route geometry should not run for goal stop")
 
     monkeypatch.setattr(planner._route_guide, "route_geometry", fail_route_geometry)
@@ -1286,6 +1290,7 @@ def test_hybrid_rule_rejection_diagnostics_include_moving_and_source_counts(monk
         route_corridor=None,
         strict_static_clearance=False,
     ):
+        """Return controlled candidate evaluations for rejection diagnostics."""
         if candidate == blocked_forward:
             return {
                 "accepted": False,

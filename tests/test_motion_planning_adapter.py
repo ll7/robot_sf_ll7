@@ -33,6 +33,7 @@ from robot_sf.nav.obstacle import Obstacle
 
 
 def _map_def_with_obstacle() -> MapDefinition:
+    """Build a small square map with one obstacle and one route."""
     width = 4.0
     height = 4.0
     spawn_zone: Rect = ((0.5, 0.5), (1.0, 0.5), (0.5, 1.0))
@@ -116,6 +117,7 @@ def test_visualization_helpers_forward_output_dpi(
     original = Figure.savefig
 
     def _savefig_spy(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        """Record forwarded savefig DPI values before delegating."""
         calls.append(kwargs.get("dpi"))
         return original(self, *args, **kwargs)
 

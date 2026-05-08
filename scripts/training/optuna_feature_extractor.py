@@ -144,11 +144,13 @@ def _extractor_kwargs(extractor_type: str, arch_size: str, dropout_rate: float) 
 
 
 def _sanitize_name(raw: str, fallback: str = "optuna_feat") -> str:
+    """Return a filesystem-safe study name."""
     sanitized = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in raw.strip())
     return sanitized.strip("._") or fallback
 
 
 def _ensure_sqlite_parent(storage: str, *, allowed_root: Path | None = None) -> None:
+    """Create the parent directory for SQLite storage URLs."""
     try:
         url = make_url(storage)
     except Exception:
@@ -167,6 +169,7 @@ def _ensure_sqlite_parent(storage: str, *, allowed_root: Path | None = None) -> 
 
 
 def _configure_optuna_verbosity(log_level: str) -> None:
+    """Map Loguru-style levels onto Optuna verbosity."""
     normalized = log_level.upper()
     if normalized in {"TRACE", "DEBUG"}:
         optuna.logging.set_verbosity(optuna.logging.DEBUG)
@@ -295,6 +298,8 @@ def _apply_trial_spec(
 
 @dataclass(slots=True)
 class _ObjectiveContext:
+    """Static context captured by the Optuna objective closure."""
+
     args: argparse.Namespace
     base_config: Any
     config_path: Path
@@ -312,6 +317,7 @@ def _make_objective(ctx: _ObjectiveContext):
     """
 
     def objective(trial: optuna.Trial) -> float:
+        """Train and score one Optuna trial."""
         spec = _suggest_trial(trial)
         config = _apply_trial_spec(
             ctx.base_config,
@@ -634,6 +640,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _resolve_storage(study_name: str, storage: str | None) -> str:
+    """Resolve explicit or default Optuna storage URL."""
     if storage is not None:
         _ensure_sqlite_parent(storage, allowed_root=_ALLOWED_SQLITE_ROOT)
         return storage

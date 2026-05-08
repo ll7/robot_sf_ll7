@@ -8,6 +8,7 @@ from scripts.dev.ci_timing_summary import format_markdown, main, summarize_run
 
 
 def _sample_run_payload() -> dict[str, object]:
+    """Return a compact GitHub Actions run payload with timed steps."""
     return {
         "databaseId": 123,
         "displayTitle": "sample",

@@ -19,6 +19,7 @@ def _scenario(
     oracle_max: float,
     mismatch_steps: int,
 ) -> probe.ScenarioParitySummary:
+    """Build a scenario parity summary fixture."""
     return probe.ScenarioParitySummary(
         name=name,
         scenario=name,

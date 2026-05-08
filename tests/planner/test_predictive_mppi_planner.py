@@ -13,6 +13,7 @@ from robot_sf.planner.predictive_mppi import (
 def _obs(
     *, robot=(0.0, 0.0), heading=0.0, goal=(2.0, 0.0), ped_positions=None, ped_velocities=None
 ) -> dict[str, object]:
+    """Build the compact observation payload consumed by predictive MPPI tests."""
     ped_positions = [] if ped_positions is None else ped_positions
     ped_velocities = [] if ped_velocities is None else ped_velocities
     return {
@@ -36,15 +37,19 @@ def _obs(
 
 
 class _StubPredictor:
+    """Predictor test double exposing the subset used by the MPPI adapter."""
+
     def __init__(self, future: np.ndarray, *, anchor: tuple[float, float] = (0.3, 0.0)) -> None:
         self.future = future
         self.anchor = anchor
         self.config = type("Cfg", (), {"predictive_rollout_dt": 0.2})
 
     def _socnav_fields(self, observation: dict[str, object]) -> tuple[dict, dict, dict]:
+        """Return robot, goal, and pedestrian dictionaries from the observation."""
         return observation["robot"], observation["goal"], observation["pedestrians"]  # type: ignore[index]
 
     def _as_1d_float(self, values: object, *, pad: int | None = None) -> np.ndarray:
+        """Convert values to a one-dimensional float array with optional padding."""
         arr = np.atleast_1d(np.asarray(values, dtype=float))
         if pad is not None and arr.size < pad:
             arr = np.pad(arr, (0, pad - arr.size), constant_values=0.0)
@@ -53,6 +58,7 @@ class _StubPredictor:
     def _build_model_input(
         self, observation: dict[str, object]
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        """Build zeroed model inputs sized to the pedestrian count."""
         ped = observation["pedestrians"]  # type: ignore[index]
         count = int(np.asarray(ped["count"], dtype=float)[0])  # type: ignore[index]
         return (
@@ -63,18 +69,22 @@ class _StubPredictor:
         )
 
     def _predict_trajectories(self, state: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """Return the configured future trajectories."""
         del state, mask
         return self.future
 
     def _effective_rollout_steps(self, *, future_peds: np.ndarray, mask: np.ndarray) -> int:
+        """Use the full configured future horizon."""
         del mask
         return int(future_peds.shape[1])
 
     def _risk_speed_cap_ratio(self, *, future_peds: np.ndarray, mask: np.ndarray) -> float:
+        """Disable speed capping in tests unless the adapter applies it."""
         del future_peds, mask
         return 1.0
 
     def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, object]) -> float:
+        """Return a large obstacle clearance for pedestrian-focused tests."""
         del point, observation
         return 10.0
 
@@ -87,10 +97,12 @@ class _StubPredictor:
         base_distance: float,
         num_samples: int,
     ) -> tuple[float, float]:
+        """Return no path penalty for deterministic candidate scoring."""
         del robot_pos, direction, observation, base_distance, num_samples
         return 0.0, 0.0
 
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        """Return the configured fallback anchor command."""
         del observation
         return self.anchor
 

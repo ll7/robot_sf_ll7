@@ -45,6 +45,11 @@ def _resolve_worker_spec(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for pytest worker resolution.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--requested",

@@ -59,6 +59,11 @@ class StreamGapPlannerAdapter:
 
     @staticmethod
     def _as_xy(values: Any) -> np.ndarray:
+        """Coerce optional pedestrian arrays to an ``(N, 2)`` float matrix.
+
+        Returns:
+            np.ndarray: Valid XY matrix, or an empty matrix for malformed input.
+        """
         arr = np.asarray([] if values is None else values, dtype=float)
         if arr.ndim != 2 or arr.shape[-1] != 2:
             return np.zeros((0, 2), dtype=float)
@@ -67,6 +72,12 @@ class StreamGapPlannerAdapter:
     def _extract_state(
         self, observation: dict[str, Any]
     ) -> tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray]:
+        """Extract robot, goal, and bounded pedestrian state from an observation.
+
+        Returns:
+            tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray]: Robot
+            position, heading, goal position, pedestrian positions, and velocities.
+        """
         robot = observation.get("robot") if isinstance(observation.get("robot"), dict) else {}
         goal = observation.get("goal") if isinstance(observation.get("goal"), dict) else {}
         pedestrians = (
@@ -106,6 +117,12 @@ class StreamGapPlannerAdapter:
         ped_pos: np.ndarray,
         ped_vel: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Project pedestrians into the goal-aligned longitudinal/lateral frame.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray, np.ndarray]: Along-track offsets,
+            lateral offsets, and velocities in the goal frame.
+        """
         goal_vec = goal_pos - robot_pos
         goal_dist = float(np.linalg.norm(goal_vec))
         if goal_dist <= 1e-6:
@@ -126,6 +143,11 @@ class StreamGapPlannerAdapter:
         along: np.ndarray,
         cross: np.ndarray,
     ) -> np.ndarray:
+        """Return which pedestrians currently occupy the crossing corridor.
+
+        Returns:
+            np.ndarray: Boolean mask over pedestrian rows.
+        """
         return (
             (along >= -float(self.config.rear_margin))
             & (along <= float(self.config.forward_lookahead))
@@ -139,6 +161,12 @@ class StreamGapPlannerAdapter:
         cross: np.ndarray,
         vel_goal_frame: np.ndarray,
     ) -> tuple[float | None, bool, float]:
+        """Find the first future time with a continuously safe crossing gap.
+
+        Returns:
+            tuple[float | None, bool, float]: Gap start time, whether the
+            corridor is blocked now, and nearest blocked pedestrian distance.
+        """
         dt = max(float(self.config.sample_dt), 1e-3)
         horizon = max(float(self.config.sample_horizon), dt)
         times = np.arange(0.0, horizon + dt * 0.5, dt, dtype=float)
@@ -171,6 +199,11 @@ class StreamGapPlannerAdapter:
     def _heading_command(
         self, robot_pos: np.ndarray, heading: float, goal_pos: np.ndarray
     ) -> tuple[float, float]:
+        """Compute heading error and bounded angular velocity toward the goal.
+
+        Returns:
+            tuple[float, float]: Heading error and angular command.
+        """
         goal_heading = float(np.arctan2(goal_pos[1] - robot_pos[1], goal_pos[0] - robot_pos[0]))
         heading_err = _wrap_angle(goal_heading - heading)
         angular = float(

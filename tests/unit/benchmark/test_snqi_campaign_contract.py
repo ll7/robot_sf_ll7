@@ -20,6 +20,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
 
 
 def _sample_rows() -> list[dict[str, object]]:
+    """Return planner summary rows with contrasting safety outcomes."""
     return [
         {
             "planner_key": "goal",
@@ -41,6 +42,7 @@ def _sample_rows() -> list[dict[str, object]]:
 
 
 def _sample_episodes() -> list[dict[str, object]]:
+    """Return episode rows for a safe planner and a risky planner."""
     return [
         {
             "planner_key": "goal",
@@ -72,6 +74,7 @@ def _sample_episodes() -> list[dict[str, object]]:
 
 
 def _baseline() -> dict[str, dict[str, float]]:
+    """Return non-degenerate baseline stats for SNQI component normalization."""
     return {
         "time_to_goal_norm": {"med": 0.1, "p95": 1.0},
         "collisions": {"med": 0.0, "p95": 1.0},

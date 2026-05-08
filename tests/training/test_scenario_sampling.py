@@ -47,6 +47,7 @@ class _DummyEnv(Env):
 
 
 def _env_factory(*, config: dict[str, Any], **_kwargs) -> Env:
+    """Create a dummy environment from scenario sampling bounds."""
     low = np.asarray(config["low"], dtype=np.float32)
     high = np.asarray(config["high"], dtype=np.float32)
     obs_space = spaces.Box(low=low, high=high, dtype=np.float32)

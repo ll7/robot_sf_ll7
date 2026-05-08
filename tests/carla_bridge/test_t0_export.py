@@ -449,6 +449,7 @@ def test_build_export_payloads_from_scenario_file_preserves_manifest_order(
     )
 
     def fake_entry_export(scenario, *, scenario_path, provenance, **kwargs):
+        """Build a minimal per-scenario export payload for CLI batch tests."""
         payload = _minimal_payload()
         payload["scenario"]["id"] = scenario["name"]
         payload["scenario"]["source_config"] = Path(scenario_path).as_posix()
@@ -735,17 +736,23 @@ def test_write_export_payload_normalizes_json_like_values(tmp_path) -> None:
     from robot_sf_carla_bridge.export import validate_export_payload, write_export_payload
 
     class _ArrayLike:
+        """Array-like test value exposing a tolist conversion."""
+
         def __init__(self, values) -> None:
             self._values = values
 
         def tolist(self):
+            """Return values as a plain list for JSON normalization."""
             return list(self._values)
 
     class _ScalarLike:
+        """Scalar-like test value exposing an item conversion."""
+
         def __init__(self, value) -> None:
             self._value = value
 
         def item(self):
+            """Return the wrapped scalar for JSON normalization."""
             return self._value
 
     payload = _minimal_payload()

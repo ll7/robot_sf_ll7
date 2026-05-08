@@ -19,6 +19,7 @@ PHASE_PATTERN = re.compile(
 
 
 def _driver_phases() -> set[str]:
+    """Return phases advertised by the shell CI driver."""
     result = subprocess.run(
         [str(CI_DRIVER), "--list-phases"],
         check=False,
@@ -47,6 +48,7 @@ def _extract_workflow_phases(run_text: str) -> set[str]:
 
 
 def _workflow_phases() -> set[str]:
+    """Return CI driver phases referenced by the GitHub Actions workflow."""
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["ci"]["steps"]
 

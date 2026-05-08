@@ -46,6 +46,11 @@ class PlannerDiagnostics:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the camera-ready campaign analysis CLI parser.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--campaign-root",
@@ -75,6 +80,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _safe_float(value: Any) -> float | None:
+    """Parse a finite float from campaign artifacts.
+
+    Returns:
+        Parsed float, or ``None`` when missing, invalid, or NaN.
+    """
     if value is None:
         return None
     try:
@@ -87,6 +97,11 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _mean(values: list[float]) -> float:
+    """Compute a safe arithmetic mean.
+
+    Returns:
+        Mean value, or ``0.0`` for empty input.
+    """
     if not values:
         return 0.0
     return float(sum(values) / len(values))
@@ -103,15 +118,30 @@ def _percentile(values: list[float], q: float) -> float:
 
 
 def _read_json(path: Path) -> dict[str, Any]:
+    """Read a JSON object artifact.
+
+    Returns:
+        Parsed JSON payload.
+    """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
+    """Read a CSV artifact as dictionaries.
+
+    Returns:
+        CSV rows keyed by header.
+    """
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read JSONL episode records from an artifact.
+
+    Returns:
+        Parsed JSON object rows, or an empty list for missing/empty files.
+    """
     if not path.exists() or path.stat().st_size == 0:
         return []
     return [
@@ -155,6 +185,11 @@ def _infer_campaign_repository_root(campaign_root: Path) -> Path:
 
 
 def _planner_row_index(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index planner summary rows by planner key.
+
+    Returns:
+        Mapping from planner key to planner row payload.
+    """
     rows = payload.get("planner_rows")
     if not isinstance(rows, list):
         return {}
@@ -217,6 +252,11 @@ def _resolve_safe_artifact_path(campaign_root: Path, raw_path: str) -> Path:
 def _load_optional_json_artifact(
     campaign_root: Path, raw_path: str | None
 ) -> dict[str, Any] | None:
+    """Load an optional JSON artifact referenced by a campaign summary.
+
+    Returns:
+        Parsed JSON payload, or ``None`` when the artifact is absent.
+    """
     if not isinstance(raw_path, str) or not raw_path.strip():
         return None
     path = _resolve_safe_artifact_path(campaign_root, raw_path)
@@ -229,6 +269,11 @@ def _load_optional_csv_artifact(
     campaign_root: Path,
     raw_path: str | None,
 ) -> list[dict[str, str]]:
+    """Load an optional CSV artifact referenced by a campaign summary.
+
+    Returns:
+        CSV rows, or an empty list when the artifact is absent.
+    """
     if not isinstance(raw_path, str) or not raw_path.strip():
         return []
     path = _resolve_safe_artifact_path(campaign_root, raw_path)
@@ -238,6 +283,11 @@ def _load_optional_csv_artifact(
 
 
 def _default_verified_simple_manifest_path() -> Path | None:
+    """Resolve the default verified-simple scenario manifest when present.
+
+    Returns:
+        Manifest path, or ``None`` when unavailable.
+    """
     path = (
         _get_repository_root() / "configs" / "scenarios" / "sets" / "verified_simple_subset_v1.yaml"
     ).resolve()
@@ -245,6 +295,11 @@ def _default_verified_simple_manifest_path() -> Path | None:
 
 
 def _format_float(value: Any, *, digits: int = 4) -> str:
+    """Format an optional float for Markdown tables.
+
+    Returns:
+        Fixed-precision string, or ``nan`` when unavailable.
+    """
     parsed = _safe_float(value)
     if parsed is None:
         return "nan"
@@ -255,6 +310,11 @@ def _load_scenario_difficulty_analysis(
     campaign_root: Path,
     summary_payload: dict[str, Any],
 ) -> dict[str, Any]:
+    """Build scenario-difficulty diagnostics from optional campaign artifacts.
+
+    Returns:
+        Scenario difficulty analysis payload.
+    """
     artifacts = summary_payload.get("artifacts")
     if not isinstance(artifacts, dict):
         artifacts = {}
@@ -279,13 +339,18 @@ def _load_scenario_difficulty_analysis(
     )
 
 
-def _analyze_planner(  # noqa: C901
+def _analyze_planner(  # noqa: C901, PLR0915
     run_entry: dict[str, Any],
     row_entry: dict[str, Any] | None,
     campaign_root: Path,
     *,
     tolerance: float,
 ) -> PlannerDiagnostics:
+    """Analyze one planner run against its summary row and episode records.
+
+    Returns:
+        Planner diagnostics with consistency findings and runtime hotspots.
+    """
     planner = run_entry.get("planner", {}) if isinstance(run_entry, dict) else {}
     planner_key = str(planner.get("key", "unknown"))
     algo = str(planner.get("algo", "unknown"))
@@ -433,6 +498,11 @@ def _scenario_difficulty_markdown_lines(  # noqa: C901
     *,
     heading_prefix: str,
 ) -> list[str]:
+    """Render scenario-difficulty analysis as Markdown lines.
+
+    Returns:
+        Markdown lines using the requested heading prefix.
+    """
     title = f"{heading_prefix} Scenario Difficulty"
     lines = [title, ""]
     scenario_rows = payload.get("scenario_rows")
@@ -555,10 +625,20 @@ def _scenario_difficulty_markdown_lines(  # noqa: C901
 
 
 def _build_scenario_difficulty_markdown(payload: dict[str, Any]) -> str:
+    """Render the standalone scenario-difficulty Markdown report.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     return "\n".join(_scenario_difficulty_markdown_lines(payload, heading_prefix="#")) + "\n"
 
 
 def _build_markdown_report(payload: dict[str, Any]) -> str:
+    """Render the full camera-ready campaign analysis report.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     campaign = payload.get("campaign", {})
     planners = payload.get("planners", [])
     runtime_hotspots = payload.get("runtime_hotspots", {})

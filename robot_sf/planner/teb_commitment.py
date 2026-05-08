@@ -237,6 +237,11 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         ped_positions: np.ndarray,
         observation: dict[str, Any],
     ) -> int:
+        """Choose and persist a lateral passing side for the commitment horizon.
+
+        Returns:
+            int: ``1`` for left-side commitment, ``-1`` for right-side commitment.
+        """
         if self._commit_ttl > 0:
             self._commit_ttl -= 1
         if self._commit_ttl > 0:

@@ -61,10 +61,12 @@ class _KinematicsStub:
         self.calls: list[tuple[float, float]] = []
 
     def is_feasible(self, command: tuple[float, float]) -> bool:
+        """Return whether the supplied command is feasible for the stub."""
         del command
         return self._feasible
 
     def project(self, command: tuple[float, float]) -> tuple[float, float]:
+        """Project and record the supplied command."""
         self.calls.append((float(command[0]), float(command[1])))
         return self._projected
 
@@ -73,6 +75,7 @@ class _KinematicsStub:
         command: tuple[float, float],
         projected: tuple[float, float],
     ) -> dict[str, object]:
+        """Return empty kinematics diagnostics for the stub."""
         del command, projected
         return {}
 
@@ -257,12 +260,17 @@ def test_build_policy_hybrid_rule_attaches_env_bind_for_static_geometry() -> Non
     )
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         map_def = SimpleNamespace(width=4.0, height=4.0)
 
         def get_obstacle_lines(self):
+            """Return static obstacle lines for env binding tests."""
             return np.asarray([[0.2, -1.0, 0.2, 1.0]], dtype=float)
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         simulator = _DummySim()
 
     assert hasattr(policy, "_planner_bind_env")
@@ -281,10 +289,13 @@ def test_build_policy_teb_wires_teb_adapter(
     """The TEB-inspired key should build the new adapter instead of placeholder sampling."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.4, 0.2)
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.TEBCommitmentPlannerAdapter", _DummyAdapter)
@@ -304,10 +315,13 @@ def test_build_policy_nmpc_social_wires_nmpc_adapter(
     """The NMPC key should build the native optimizer adapter."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.3, -0.1)
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.NMPCSocialPlannerAdapter", _DummyAdapter)
@@ -329,11 +343,14 @@ def test_build_policy_socnav_bench_forwards_allow_fallback(
     captured: dict[str, bool] = {}
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config, allow_fallback: bool = False) -> None:
             del config
             captured["allow_fallback"] = bool(allow_fallback)
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.0, 0.0)
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SocNavBenchSamplingAdapter", _DummyAdapter)
@@ -351,19 +368,25 @@ def test_build_policy_socnav_sampling_uses_local_adapter(
     calls: dict[str, int] = {"local": 0, "upstream": 0}
 
     class _DummyLocalAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             del config
             calls["local"] += 1
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.0, 0.0)
 
     class _DummyUpstreamAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config, allow_fallback: bool = False) -> None:
             del config, allow_fallback
             calls["upstream"] += 1
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.0, 0.0)
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SamplingPlannerAdapter", _DummyLocalAdapter)
@@ -427,23 +450,33 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
     bind_calls: list[tuple[np.ndarray, float]] = []
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = SimpleNamespace(orca_obstacle_margin=0.15)
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             raise AssertionError("Holonomic HRVO should not call plan() in vx_vy mode.")
 
         def plan_velocity_world(self, _obs):
+            """Return a deterministic world-frame velocity command."""
             return np.array([0.3, 0.4], dtype=float)
 
         def bind_static_obstacle_points(self, points, *, spacing):
+            """Record bound static obstacle samples."""
             bind_calls.append((np.asarray(points, dtype=float), float(spacing)))
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def iter_obstacle_segments(self):
+            """Return obstacle segments exposed by the simulator stub."""
             return [((0.0, 0.0), (1.0, 0.0))]
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         simulator = _DummySim()
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
@@ -481,13 +514,17 @@ def test_build_policy_hrvo_reset_hook_tolerates_adapters_without_seed(
     reset_calls: list[str] = []
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return 0.1, 0.2
 
         def reset(self) -> None:
+            """Record or accept reset propagation from map-runner code."""
             reset_calls.append("reset")
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
@@ -507,13 +544,17 @@ def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(
     """Holonomic ORCA should expose an explicit world-frame velocity command payload."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config, allow_fallback: bool = False) -> None:
             del config, allow_fallback
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             raise AssertionError("Holonomic ORCA should not call plan() in vx_vy mode.")
 
         def plan_velocity_world(self, _obs):
+            """Return a deterministic world-frame velocity command."""
             return np.array([0.6, -0.2], dtype=float)
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.ORCAPlannerAdapter", _DummyAdapter)
@@ -541,10 +582,13 @@ def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadat
     """Ensure external ORCA prototype metadata carries explicit upstream provenance."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.2, 0.1)
 
     monkeypatch.setattr(
@@ -578,13 +622,17 @@ def test_build_policy_crowdnav_height_preserves_checkpoint_provenance(
     """Experimental CrowdNav_HEIGHT wiring should expose the upstream checkpoint boundary."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def bind_env(self, env) -> None:
+            """Record the environment bound to the adapter."""
             del env
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.15, 0.05)
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.CrowdNavHeightAdapter", _DummyAdapter)
@@ -615,15 +663,19 @@ def test_build_policy_sonic_crowdnav_wires_external_checkpoint_adapter(
     planners: list[object] = []
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
 
         def plan(self, obs):
+            """Return a deterministic planner command for the wiring test."""
             assert obs["goal"]["current"] == [1.0, 0.0]
             return (0.4, 0.1)
 
         def reset(self, *, seed: int | None = None) -> None:
+            """Record or accept reset propagation from map-runner code."""
             del seed
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
@@ -661,15 +713,19 @@ def test_build_policy_gensafenav_ours_wires_external_checkpoint_adapter(
     planners: list[object] = []
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
 
         def plan(self, obs):
+            """Return a deterministic planner command for the wiring test."""
             assert obs["goal"]["current"] == [1.0, 0.0]
             return (0.35, 0.2)
 
         def reset(self, *, seed: int | None = None) -> None:
+            """Record or accept reset propagation from map-runner code."""
             del seed
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
@@ -703,15 +759,19 @@ def test_build_policy_gensafenav_gst_predictor_rand_wires_external_checkpoint_ad
     planners: list[object] = []
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
 
         def plan(self, obs):
+            """Return a deterministic planner command for the wiring test."""
             assert obs["goal"]["current"] == [1.0, 0.0]
             return (0.25, -0.1)
 
         def reset(self, *, seed: int | None = None) -> None:
+            """Record or accept reset propagation from map-runner code."""
             del seed
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
@@ -745,22 +805,29 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
     planners: list[object] = []
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.35, 0.2)
 
         def reset(self, *, seed: int | None = None) -> None:
+            """Record or accept reset propagation from map-runner code."""
             del seed
 
     class _DummyGuard:
+        """Guard test double for fallback selection."""
+
         def __init__(self, config, *, fallback_adapter) -> None:
             del config
             self.fallback_adapter = fallback_adapter
 
         def choose_command(self, observation, ppo_command):
+            """Select the guard fallback command for the test."""
             del ppo_command
             return self.fallback_adapter.plan(observation), "fallback_safe"
 
@@ -802,21 +869,28 @@ def test_build_policy_gensafenav_gst_predictor_rand_guarded_defaults_checkpoint(
     planners: list[object] = []
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.25, -0.1)
 
         def reset(self, *, seed: int | None = None) -> None:
+            """Record or accept reset propagation from map-runner code."""
             del seed
 
     class _DummyGuard:
+        """Guard test double for fallback selection."""
+
         def __init__(self, config, *, fallback_adapter) -> None:
             del config, fallback_adapter
 
         def choose_command(self, observation, ppo_command):
+            """Select the guard fallback command for the test."""
             del observation
             return ppo_command, "ppo_safe"
 
@@ -853,17 +927,22 @@ def test_build_policy_sonic_gst_holonomic_vx_vy_uses_direct_world_velocity(
     """Holonomic SoNIC runs should forward ActionXY directly instead of round-tripping via `(v, w)`."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.4, 0.1)
 
         def plan_velocity_world(self, obs):
+            """Return a deterministic world-frame velocity command."""
             assert obs["goal"]["current"] == [1.0, 0.0]
             return (0.6, -0.2)
 
         def reset(self, *, seed: int | None = None) -> None:
+            """Record or accept reset propagation from map-runner code."""
             del seed
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
@@ -909,6 +988,8 @@ def test_build_policy_sicnav_wires_external_mpc_adapter(
     planners: list[object] = []
 
     class _DummyPlanner:
+        """External planner test double for provenance wiring."""
+
         def __init__(self, config, seed=None) -> None:
             self.config = config
             self.seed = seed
@@ -916,16 +997,20 @@ def test_build_policy_sicnav_wires_external_mpc_adapter(
             planners.append(self)
 
         def get_metadata(self):
+            """Return external-planner metadata for provenance assertions."""
             return {"status": "ok"}
 
         def step(self, obs):
+            """Return a deterministic external-planner or env step result."""
             assert obs["robot"]["goal"] == [1.0, 0.0]
             return {"v": 0.3, "omega": 0.2}
 
         def reset(self, *, seed: int | None = None) -> None:
+            """Record or accept reset propagation from map-runner code."""
             self.reset_calls.append(seed)
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SICNavPlanner", _DummyPlanner)
@@ -955,18 +1040,23 @@ def test_build_policy_dr_mpc_wires_external_mpc_adapter(
     """The DR-MPC key should build the external residual-MPC wrapper path."""
 
     class _DummyPlanner:
+        """External planner test double for provenance wiring."""
+
         def __init__(self, config, seed=None) -> None:
             self.config = config
             self.seed = seed
 
         def get_metadata(self):
+            """Return external-planner metadata for provenance assertions."""
             return {"status": "ok"}
 
         def step(self, obs):
+            """Return a deterministic external-planner or env step result."""
             assert obs["robot"]["goal"] == [1.0, 0.0]
             return {"vx": 0.25, "vy": -0.05}
 
         def reset(self) -> None:
+            """Record or accept reset propagation from map-runner code."""
             pass
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.DRMPCPlanner", _DummyPlanner)
@@ -995,13 +1085,17 @@ def test_build_policy_social_navigation_pyenvs_orca_holonomic_vx_vy_uses_world_v
     """Holonomic Social-Navigation-PyEnvs ORCA should forward upstream ActionXY as world velocity."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             raise AssertionError("Holonomic upstream ORCA should not call plan() in vx_vy mode.")
 
         def plan_velocity_world(self, _obs):
+            """Return a deterministic world-frame velocity command."""
             return np.array([0.3, 0.7], dtype=float)
 
     monkeypatch.setattr(
@@ -1033,15 +1127,19 @@ def test_build_policy_social_force_holonomic_vx_vy_uses_world_velocity_command(
     """Holonomic local SocialForce should forward world-frame velocity directly."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             raise AssertionError(
                 "Holonomic social-force path should not call plan() in vx_vy mode."
             )
 
         def plan_velocity_world(self, _obs):
+            """Return a deterministic world-frame velocity command."""
             return np.array([0.15, 0.45], dtype=float)
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SocialForcePlannerAdapter", _DummyAdapter)
@@ -1070,10 +1168,13 @@ def test_build_policy_social_navigation_pyenvs_force_models_preserve_provenance_
     """Ensure external force-model prototype metadata carries explicit upstream provenance."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.2, 0.1)
 
     monkeypatch.setattr(
@@ -1127,13 +1228,17 @@ def test_build_policy_social_navigation_pyenvs_force_models_holonomic_vx_vy_use_
     """Holonomic force-model wrappers should forward upstream ActionXY as world velocity."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             raise AssertionError("Holonomic force-model path should not call plan() in vx_vy mode.")
 
         def plan_velocity_world(self, _obs):
+            """Return a deterministic world-frame velocity command."""
             return np.array([0.25, -0.4], dtype=float)
 
     monkeypatch.setattr(
@@ -1165,10 +1270,13 @@ def test_build_policy_social_navigation_pyenvs_hsfm_preserves_provenance_metadat
     """Ensure external HSFM prototype metadata carries explicit upstream provenance."""
 
     class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
         def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
             return (0.2, 0.1)
 
     monkeypatch.setattr(
@@ -1201,6 +1309,7 @@ def test_preflight_policy_treats_social_navigation_pyenvs_force_models_as_socnav
     """Permissive prereq policies should apply to the new Social-Navigation-PyEnvs aliases."""
 
     def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        """Replace policy construction for the preflight test."""
         del cfg, robot_kinematics, adapter_impact_eval
         raise RuntimeError(f"missing upstream prereq for {algo}")
 
@@ -1231,6 +1340,7 @@ def test_preflight_policy_treats_social_navigation_pyenvs_hsfm_as_socnav(
     """Permissive prereq policies should apply to the HSFM alias too."""
 
     def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        """Replace policy construction for the preflight test."""
         del cfg, robot_kinematics, adapter_impact_eval
         raise RuntimeError(f"missing upstream prereq for {algo}")
 
@@ -1353,9 +1463,13 @@ def test_map_runner_metadata_and_normalization_helpers() -> None:
     assert trimmed.shape == (1, 2)
 
     class DifferentialDriveSettings:
+        """Minimal differential-drive settings fixture."""
+
         max_linear_speed = 2.5
 
     class BicycleDriveSettings:
+        """Minimal bicycle-drive settings fixture."""
+
         max_velocity = 3.5
 
     diff = type("Cfg", (), {"robot_config": DifferentialDriveSettings()})()
@@ -1530,10 +1644,13 @@ def test_build_policy_for_portfolio_adapters_tracks_feasibility(
     """Adapter-backed planner policies should expose feasibility metadata and callable output."""
 
     class _GapPredictionStub:
+        """Prediction adapter stub with feasibility metadata."""
+
         def __init__(self, *args, **kwargs) -> None:
             pass
 
         def plan(self, _observation: dict[str, object]) -> tuple[float, float]:
+            """Return a deterministic planner command for the wiring test."""
             return 0.2, 0.0
 
     monkeypatch.setattr(
@@ -1590,6 +1707,7 @@ def test_ppo_action_to_unicycle_uses_kinematics_contract(
     resolver_calls: list[dict[str, object]] = []
 
     def _resolver(**kwargs):
+        """Return a kinematics resolver fixture."""
         resolver_calls.append(dict(kwargs))
         return model
 
@@ -1620,6 +1738,7 @@ def test_build_policy_goal_path_uses_kinematics_contract(
     resolver_calls: list[dict[str, object]] = []
 
     def _resolver(**kwargs):
+        """Return a kinematics resolver fixture."""
         resolver_calls.append(dict(kwargs))
         return model
 
@@ -1667,12 +1786,14 @@ def test_preflight_policy_passes_robot_kinematics_to_build_policy(
     captured: dict[str, object] = {}
 
     def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        """Replace policy construction for the preflight test."""
         del adapter_impact_eval
         captured["algo"] = algo
         captured["cfg"] = cfg
         captured["robot_kinematics"] = robot_kinematics
 
         def _policy(_obs):
+            """Return a policy callable for preflight wiring."""
             return (0.0, 0.0)
 
         return _policy, {}
@@ -1696,6 +1817,7 @@ def test_preflight_policy_treats_social_navigation_pyenvs_orca_as_socnav(
     """Permissive prereq policies should apply to the Social-Navigation-PyEnvs ORCA alias."""
 
     def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        """Replace policy construction for the preflight test."""
         del cfg, robot_kinematics, adapter_impact_eval
         raise RuntimeError(f"missing upstream prereq for {algo}")
 
@@ -1719,6 +1841,7 @@ def test_preflight_policy_treats_crowdnav_height_as_socnav(
     """Permissive prereq policies should apply to CrowdNav_HEIGHT as a structured external wrapper."""
 
     def _fake_build_policy(algo, cfg, *, robot_kinematics=None, adapter_impact_eval=False):
+        """Replace policy construction for the preflight test."""
         del cfg, robot_kinematics, adapter_impact_eval
         raise RuntimeError(f"missing upstream prereq for {algo}")
 
@@ -1756,6 +1879,7 @@ def test_build_socnav_config_and_seed_loading(tmp_path: Path) -> None:
 
 
 def _minimal_map_def() -> MapDefinition:
+    """Build a minimal map definition fixture with one route."""
     width = 5.0
     height = 4.0
     spawn_zone: Rect = ((0.5, 0.5), (1.0, 0.5), (0.5, 1.0))
@@ -1793,6 +1917,8 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     """Run a stubbed map episode and ensure record fields are produced."""
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -1801,10 +1927,13 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
             self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
                 "goal": {"current": [1.0, 1.0]},
@@ -1812,6 +1941,7 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
                 "goal": {"current": [1.0, 1.0]},
@@ -1819,6 +1949,7 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
             return obs, 0.0, True, False, {"success": True}
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     map_def = _minimal_map_def()
@@ -1874,6 +2005,8 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
     """Episode start should reset stateful planner adapters before stepping."""
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -1882,10 +2015,13 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
             self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
                 "goal": {"current": [1.0, 1.0]},
@@ -1893,6 +2029,7 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
                 "goal": {"current": [1.0, 1.0]},
@@ -1900,15 +2037,18 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
             return obs, 0.0, True, False, {"success": True}
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
     reset_calls: list[int] = []
 
     def _build_policy_stub(*args, **kwargs):
+        """Return a policy stub for episode-runtime tests."""
         _ = args, kwargs
 
         def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            """Return a policy callable for preflight wiring."""
             _ = obs
             return 0.0, 0.0
 
@@ -1959,6 +2099,8 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
     """Episode records should include optional planner runtime diagnostics when available."""
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -1967,10 +2109,13 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
             self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             _ = seed
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
@@ -1979,6 +2124,7 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             _ = action
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
@@ -1987,14 +2133,17 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
             return obs, 0.0, True, False, {"success": False}
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
 
     def _build_policy_stub(*args, **kwargs):
+        """Return a policy stub for episode-runtime tests."""
         _ = args, kwargs
 
         def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            """Return a policy callable for preflight wiring."""
             _ = obs
             return 0.0, 0.0
 
@@ -2049,6 +2198,8 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
     """Planner runtime stats should be captured before planner teardown mutates state."""
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2057,10 +2208,13 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
             self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             _ = seed
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
@@ -2069,6 +2223,7 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             _ = action
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
@@ -2077,15 +2232,18 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
             return obs, 0.0, True, False, {"success": False}
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
 
     def _build_policy_stub(*args, **kwargs):
+        """Return a policy stub for episode-runtime tests."""
         _ = args, kwargs
         closed = {"value": False}
 
         def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            """Return a policy callable for preflight wiring."""
             _ = obs
             return 0.0, 0.0
 
@@ -2140,6 +2298,8 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
     """Waypoint-only success flags must not trigger map-runner early success stop."""
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2148,11 +2308,14 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
             self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.step_calls = 0
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
                 "goal": {"current": [1.0, 1.0]},
@@ -2160,6 +2323,7 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             self.step_calls += 1
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
@@ -2173,6 +2337,7 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
             return obs, 0.0, False, False, info
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     map_def = _minimal_map_def()
@@ -2225,6 +2390,8 @@ def test_run_map_episode_stops_immediately_on_route_complete(
     """Route completion should trigger early success stop immediately."""
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2233,11 +2400,14 @@ def test_run_map_episode_stops_immediately_on_route_complete(
             self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.step_calls = 0
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
                 "goal": {"current": [1.0, 1.0]},
@@ -2245,6 +2415,7 @@ def test_run_map_episode_stops_immediately_on_route_complete(
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             self.step_calls += 1
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
@@ -2254,6 +2425,7 @@ def test_run_map_episode_stops_immediately_on_route_complete(
             return obs, 0.0, False, False, info
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     map_def = _minimal_map_def()
@@ -2306,6 +2478,8 @@ def test_run_map_episode_collision_wins_over_route_complete(
     """Collision + route-complete in same terminal step must resolve as collision."""
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2314,11 +2488,14 @@ def test_run_map_episode_collision_wins_over_route_complete(
             self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.step_calls = 0
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
                 "goal": {"current": [1.0, 1.0]},
@@ -2326,6 +2503,7 @@ def test_run_map_episode_collision_wins_over_route_complete(
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             self.step_calls += 1
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0]},
@@ -2341,6 +2519,7 @@ def test_run_map_episode_collision_wins_over_route_complete(
             return obs, 0.0, True, False, info
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     map_def = _minimal_map_def()
@@ -2451,12 +2630,14 @@ def test_run_map_batch_parallel_writes_results_in_job_order(
     monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
 
     def fake_run(job):
+        """Capture batch execution order for the parallel test."""
         scenario, seed, _ = job
         if scenario["name"] == "slow":
             time.sleep(0.05)
         return {"episode_id": f"{scenario['name']}-{seed}"}
 
     def fake_write(out_path_arg, schema, record):
+        """Capture JSONL writes for the parallel test."""
         out_path_arg.parent.mkdir(parents=True, exist_ok=True)
         with out_path_arg.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
@@ -2501,6 +2682,7 @@ def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
     )
 
     def fake_run(job):
+        """Capture batch execution order for the parallel test."""
         scenario, seed, _ = job
         return {
             "scenario_id": f"record-{scenario['name']}",
@@ -2509,6 +2691,7 @@ def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
         }
 
     def fake_write(*_args, **_kwargs):
+        """Capture JSONL writes for the parallel test."""
         raise RuntimeError("forced write failure")
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
@@ -2620,6 +2803,7 @@ def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
     )
 
     def _fake_worker(job):
+        """Return a worker result with planner runtime metadata."""
         del job
         return {
             "episode_id": "ep1",
@@ -2668,6 +2852,8 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
     monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
@@ -2676,14 +2862,18 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
             self.last_ped_forces = np.zeros((1, 2), dtype=float)
 
         def iter_obstacle_segments(self):
+            """Return obstacle segments exposed by the simulator stub."""
             return [((0.5, -0.5), (0.5, 0.5))]
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.action_space = None
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             _ = seed
             obs = {
                 "robot": {
@@ -2708,11 +2898,13 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             _ = action
             obs, _ = self.reset()
             return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     dummy_config = type(
@@ -2782,6 +2974,7 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
 
 
 def _normalize_episode_record(record: dict[str, object]) -> dict[str, object]:
+    """Drop nondeterministic timing fields from an episode record."""
     normalized = dict(record)
     normalized.pop("timestamps", None)
     normalized.pop("wall_time_sec", None)
@@ -2797,6 +2990,8 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
     monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
 
     class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
@@ -2805,14 +3000,18 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
             self.last_ped_forces = np.zeros((1, 2), dtype=float)
 
         def iter_obstacle_segments(self):
+            """Return obstacle segments exposed by the simulator stub."""
             return [((0.5, -0.5), (0.5, 0.5))]
 
     class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.action_space = None
 
         def reset(self, seed: int | None = None):
+            """Record or accept reset propagation from map-runner code."""
             _ = seed
             obs = {
                 "robot": {
@@ -2837,11 +3036,13 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
             return obs, {}
 
         def step(self, action):
+            """Return a deterministic external-planner or env step result."""
             _ = action
             obs, _ = self.reset()
             return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
 
         def close(self) -> None:
+            """Record or accept cleanup from map-runner code."""
             return None
 
     dummy_config = type(
@@ -2949,6 +3150,8 @@ def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() ->
     """Holonomic vx/vy conversion should include angular intent via midpoint heading."""
 
     class HolonomicConfig:
+        """Holonomic command-space fixture."""
+
         command_mode = "vx_vy"
 
     robot = SimpleNamespace(pose=((0.0, 0.0), 0.0))

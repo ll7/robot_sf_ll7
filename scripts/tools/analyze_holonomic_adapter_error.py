@@ -103,6 +103,11 @@ class PlannerCampaignSummary:
 
 
 def _safe_float(value: Any) -> float | None:
+    """Parse a finite float from campaign or metric payload data.
+
+    Returns:
+        Parsed finite float, or ``None`` for missing/invalid values.
+    """
     if value is None:
         return None
     try:
@@ -126,10 +131,20 @@ def _first_metric_value(payload: dict[str, Any] | None, *keys: str) -> float | N
 
 
 def _read_json(path: Path) -> dict[str, Any]:
+    """Read a JSON object artifact.
+
+    Returns:
+        Parsed JSON payload.
+    """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _read_summary(campaign_root: Path) -> dict[str, Any]:
+    """Read the campaign summary artifact from a campaign root.
+
+    Returns:
+        Parsed campaign summary payload.
+    """
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     return _read_json(summary_path)
 
@@ -143,6 +158,11 @@ def _planner_composite_key(planner_key: str, kinematics: Any) -> str:
 
 
 def _planner_rows_by_key(summary_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index planner summary rows by planner and kinematics key.
+
+    Returns:
+        Mapping from composite planner key to planner summary row.
+    """
     rows = summary_payload.get("planner_rows")
     if not isinstance(rows, list):
         return {}
@@ -158,6 +178,11 @@ def _planner_rows_by_key(summary_payload: dict[str, Any]) -> dict[str, dict[str,
 
 
 def _run_entries_by_key(summary_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index campaign run entries by planner and kinematics key.
+
+    Returns:
+        Mapping from composite planner key to run entry.
+    """
     runs = summary_payload.get("runs")
     if not isinstance(runs, list):
         return {}
@@ -332,6 +357,11 @@ def _planner_summary(
     row: dict[str, Any] | None,
     run_entry: dict[str, Any] | None,
 ) -> PlannerCampaignSummary:
+    """Summarize adapter-related campaign metadata for one planner.
+
+    Returns:
+        Normalized planner campaign summary.
+    """
     summary = (run_entry or {}).get("summary", {}) if isinstance(run_entry, dict) else {}
     contract = summary.get("algorithm_metadata_contract") or {}
     planner_contract = contract.get("planner_kinematics") or {}
@@ -384,6 +414,11 @@ def _compare_campaigns(
     base_summary: dict[str, Any],
     candidate_summary: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    """Compare baseline and candidate campaign metrics for common planners.
+
+    Returns:
+        Planner comparison rows with metric deltas and adapter metadata.
+    """
     base_rows = _planner_rows_by_key(base_summary)
     candidate_rows = _planner_rows_by_key(candidate_summary)
     run_lookup = _run_entries_by_key(candidate_summary)
@@ -624,6 +659,11 @@ def _render_markdown(payload: dict[str, Any]) -> str:
 
 
 def _format_optional(value: Any) -> str:
+    """Format an optional numeric value for Markdown tables.
+
+    Returns:
+        Six-decimal string, or ``N/A`` when unavailable.
+    """
     parsed = _safe_float(value)
     if parsed is None:
         return "N/A"
@@ -764,6 +804,11 @@ def analyze(  # noqa: PLR0913
 def _build_interpretation(
     planners: list[dict[str, Any]], comparison: list[dict[str, Any]]
 ) -> list[str]:
+    """Build campaign-level interpretation bullets for adapter error evidence.
+
+    Returns:
+        Markdown-ready interpretation lines.
+    """
     lines: list[str] = []
     adapter_sensitive = [
         p
@@ -816,6 +861,11 @@ def _build_interpretation(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the holonomic adapter analysis CLI parser.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--v", type=float, default=1.0, help="Command linear speed.")
     parser.add_argument("--omega", type=float, default=1.0, help="Command angular speed.")

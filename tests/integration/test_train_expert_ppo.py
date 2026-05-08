@@ -954,6 +954,7 @@ def test_resolve_resume_checkpoint_prefers_model_registry(monkeypatch) -> None:
     called: dict[str, object] = {}
 
     def _fake_resolve(model_id: str, *, allow_download: bool = True):
+        """Return the expected registry path while recording resolver inputs."""
         called["model_id"] = model_id
         called["allow_download"] = allow_download
         return expected
@@ -1038,7 +1039,10 @@ def test_direct_wandb_training_callback_logs_after_train(monkeypatch) -> None:
     logged: list[tuple[dict[str, float | int], int]] = []
 
     class _WandbRunStub:
+        """W&B run stub that records logged training metrics."""
+
         def log(self, payload: dict[str, float | int], *, step: int) -> None:
+            """Record a direct W&B log payload and step."""
             logged.append((payload, step))
 
     callback = _DirectWandbTrainingMetricsCallback(
@@ -1085,10 +1089,13 @@ def test_direct_wandb_metrics_callback_logs_core_training_series() -> None:
     """Direct W&B callback should mirror key SB3 metrics without waiting for eval checkpoints."""
 
     class _Run:
+        """W&B run stub storing metric payloads."""
+
         def __init__(self) -> None:
             self.payloads: list[tuple[dict[str, float | int], int]] = []
 
         def log(self, payload, step):
+            """Record a metric payload at the given step."""
             self.payloads.append((dict(payload), int(step)))
 
     run = _Run()
@@ -1194,6 +1201,8 @@ def test_upload_wandb_best_checkpoint_artifact_logs_model_with_aliases(
     """Best checkpoint upload should publish a W&B model artifact with stable aliases."""
 
     class _Artifact:
+        """W&B artifact stub that records metadata and attached files."""
+
         def __init__(self, name, artifact_type=None, metadata=None, **kwargs):
             if artifact_type is None:
                 artifact_type = kwargs.get("type")
@@ -1204,13 +1213,17 @@ def test_upload_wandb_best_checkpoint_artifact_logs_model_with_aliases(
             self.files: list[tuple[str, str | None]] = []
 
         def add_file(self, path, name=None):
+            """Record an artifact file attachment."""
             self.files.append((str(path), name))
 
     class _Run:
+        """W&B run stub that records logged artifacts and aliases."""
+
         def __init__(self) -> None:
             self.logged: list[tuple[object, list[str] | None]] = []
 
         def log_artifact(self, artifact, aliases=None):
+            """Record an artifact upload."""
             self.logged.append((artifact, aliases))
 
     model_path = tmp_path / "model_best.zip"
@@ -1255,6 +1268,8 @@ def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkey
     """Best checkpoints should be persisted as soon as a new best eval appears."""
 
     class _Artifact:
+        """W&B artifact stub for immediate checkpoint upload tests."""
+
         def __init__(self, name, artifact_type=None, metadata=None, **kwargs):
             if artifact_type is None:
                 artifact_type = kwargs.get("type")
@@ -1265,14 +1280,18 @@ def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkey
             self.files: list[tuple[str, str | None]] = []
 
         def add_file(self, path, name=None):
+            """Record an artifact file attachment."""
             self.files.append((str(path), name))
 
     class _Run:
+        """W&B run stub with summary and artifact logging state."""
+
         def __init__(self) -> None:
             self.summary: dict[str, object] = {}
             self.logged: list[tuple[object, list[str] | None]] = []
 
         def log_artifact(self, artifact, aliases=None):
+            """Record an artifact upload."""
             self.logged.append((artifact, aliases))
 
     checkpoint_dir = tmp_path / "checkpoints"

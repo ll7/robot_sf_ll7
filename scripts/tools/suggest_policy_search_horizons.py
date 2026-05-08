@@ -38,6 +38,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    """Load a summary JSON object from disk.
+
+    Returns:
+        Parsed JSON object.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise TypeError(f"Expected JSON object: {path}")
@@ -45,6 +50,11 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Load episode records from a JSONL artifact.
+
+    Returns:
+        List of JSON object rows, skipping blank lines.
+    """
     rows: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -56,6 +66,11 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _resolve_jsonl_path(summary_path: Path, payload: dict[str, Any]) -> Path:
+    """Resolve the episode JSONL path referenced by a summary payload.
+
+    Returns:
+        Absolute or best-effort relative JSONL path.
+    """
     raw = payload.get("jsonl_path")
     if not isinstance(raw, str) or not raw.strip():
         raise ValueError(f"Summary is missing jsonl_path: {summary_path}")
@@ -78,6 +93,11 @@ def _portable_summary_reference(summary_path: Path) -> tuple[str | None, str]:
 
 
 def _summary_metrics(payload: dict[str, Any]) -> dict[str, float]:
+    """Extract selection metrics from a policy-search summary.
+
+    Returns:
+        Rounded success, collision, and near-miss rates.
+    """
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     return {
         "success_rate": _round_float(float(summary.get("success_rate", 0.0))),
@@ -87,6 +107,11 @@ def _summary_metrics(payload: dict[str, Any]) -> dict[str, float]:
 
 
 def _quantile(values: list[float], q: float) -> float | None:
+    """Compute a linearly interpolated quantile.
+
+    Returns:
+        Quantile value, or ``None`` when no values are available.
+    """
     if not values:
         return None
     ordered = sorted(values)
@@ -107,17 +132,32 @@ def _round_float(value: float | None, digits: int = 6) -> float | None:
 
 
 def _is_success(record: dict[str, Any]) -> bool:
+    """Determine whether one episode record is a success.
+
+    Returns:
+        True when ``metrics.success`` is explicitly true.
+    """
     metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
     return bool(metrics.get("success") is True)
 
 
 def _is_timeout(record: dict[str, Any]) -> bool:
+    """Determine whether one failed episode ended by timeout or max steps.
+
+    Returns:
+        True when outcome or termination metadata indicates a timeout.
+    """
     outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
     termination = str(record.get("termination_reason", "")).strip().lower()
     return bool(outcome.get("timeout_event")) or termination in {"max_steps", "timeout"}
 
 
 def _scenario_id(record: dict[str, Any]) -> str:
+    """Read the scenario id from one episode record.
+
+    Returns:
+        Scenario identifier string, or ``unknown`` when absent.
+    """
     return str(record.get("scenario_id") or "unknown")
 
 
@@ -130,6 +170,11 @@ def _recommend_horizon(
     cap_steps: int,
     near_cap_margin: int,
 ) -> tuple[int, str]:
+    """Recommend a horizon from successful episode step counts.
+
+    Returns:
+        Recommended horizon and status label.
+    """
     p95 = _quantile(success_steps, 0.95)
     if p95 is None:
         return int(cap_steps), "planner_blocked"
@@ -142,6 +187,11 @@ def _recommend_horizon(
 
 
 def _bucket(recommended: int, status: str) -> str:
+    """Place a recommended horizon into a coarse runtime bucket.
+
+    Returns:
+        Bucket label for reporting.
+    """
     if status == "planner_blocked":
         return "planner_blocked"
     if recommended <= 150:

@@ -25,6 +25,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    """Load a JSON object from disk.
+
+    Returns:
+        dict[str, Any]: Parsed JSON mapping.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise TypeError(f"Expected JSON object: {path}")
@@ -32,6 +37,11 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load a YAML mapping from disk.
+
+    Returns:
+        dict[str, Any]: Parsed YAML mapping.
+    """
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise TypeError(f"Expected YAML mapping: {path}")

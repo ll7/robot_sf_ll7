@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 
 def _write_yaml(path: Path, content: str) -> None:
+    """Write a YAML fixture for scenario-cache profile tests."""
     path.write_text(content, encoding="utf-8")
 
 
@@ -34,6 +35,7 @@ def _make_report(
     evictions: int = 0,
     total_scenarios: int = 3,
 ) -> CacheProfileReport:
+    """Build a cache profile report fixture with configurable counters."""
     timings = [
         ScenarioTiming(
             scenario_id=f"sc_{i}",

@@ -1,3 +1,5 @@
+"""Tests for adversarial scenario search, materialization, and certification."""
+
 from __future__ import annotations
 
 import csv
@@ -55,6 +57,7 @@ _MULTI_PED_FAMILY_FIXTURES = (
 
 
 def _write_template(path: Path) -> None:
+    """Write a minimal scenario template fixture."""
     path.write_text(
         yaml.safe_dump(
             {
@@ -76,6 +79,7 @@ def _write_template(path: Path) -> None:
 
 
 def _write_space(path: Path, *, min_distance: float = 0.5) -> None:
+    """Write a search-space fixture with a configurable distance constraint."""
     path.write_text(
         yaml.safe_dump(
             {
@@ -103,6 +107,7 @@ def _config(
     require_certification: bool = False,
     workers: int = 1,
 ) -> SearchConfig:
+    """Build a search config backed by temporary template and space files."""
     template = tmp_path / "template.yaml"
     search_space = tmp_path / "space.yaml"
     _write_template(template)
@@ -121,14 +126,18 @@ def _config(
 
 
 class _SequenceSampler:
+    """Sampler that returns a prepared candidate sequence."""
+
     def __init__(self, candidates: list[CandidateSpec]) -> None:
         self._candidates = list(candidates)
 
     def sample(self) -> CandidateSpec:
+        """Return the next prepared candidate."""
         return self._candidates.pop(0)
 
 
 def _candidate(seed: int, *, goal_x: float = 5.0) -> CandidateSpec:
+    """Build a candidate fixture with configurable seed and goal x-coordinate."""
     return CandidateSpec(
         start=Pose2D(1.0, 2.0),
         goal=Pose2D(goal_x, 2.0),
@@ -140,6 +149,7 @@ def _candidate(seed: int, *, goal_x: float = 5.0) -> CandidateSpec:
 
 
 def _runtime_base_map(*, obstacles: list[Obstacle] | None = None) -> MapDefinition:
+    """Build a compact map fixture for multi-pedestrian runtime checks."""
     width, height = 8.0, 6.0
     robot_spawn_zones = [((0.5, 0.5), (1.0, 0.5), (1.0, 1.0))]
     robot_goal_zones = [((7.0, 5.0), (7.5, 5.0), (7.5, 5.5))]
@@ -178,6 +188,7 @@ def _runtime_multi_ped_config(
     second_start_y: float = 3.2,
     first_start: Pose2D | None = None,
 ) -> MultiPedAdversarialConfig:
+    """Build a two-pedestrian adversarial runtime config."""
     return MultiPedAdversarialConfig(
         family="group_squeeze",
         scenario_seed=41,
@@ -204,6 +215,7 @@ def _runtime_multi_ped_config(
 
 
 def test_search_config_from_files_validates_candidate(tmp_path: Path) -> None:
+    """SearchConfig should load files and validate a sampled candidate."""
     config = _config(tmp_path)
 
     candidate = config.search_space.sample_candidate(__import__("random").Random(1))
@@ -213,6 +225,7 @@ def test_search_config_from_files_validates_candidate(tmp_path: Path) -> None:
 
 
 def test_search_space_validates_all_configured_candidate_ranges(tmp_path: Path) -> None:
+    """Search-space validation should flag every out-of-range candidate field."""
     config = _config(tmp_path)
 
     errors = config.search_space.validate_candidate(
@@ -233,6 +246,7 @@ def test_search_space_validates_all_configured_candidate_ranges(tmp_path: Path) 
 
 
 def test_search_space_rejects_invalid_min_start_goal_distance() -> None:
+    """Search-space config should reject negative min-distance constraints."""
     payload = {
         "variables": {
             "start_x": {"min": 0, "max": 1},
@@ -679,6 +693,7 @@ def test_multi_ped_adversarial_family_fixtures_reset_step_deterministically(
         action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)
 
         def rollout_positions() -> list[np.ndarray]:
+            """Roll out the env and capture pedestrian positions per step."""
             env.reset(seed=config.scenario_seed)
             positions = [env.simulator.ped_pos.copy()]
             for _ in range(2):
@@ -715,6 +730,7 @@ def test_multi_ped_adversarial_runtime_rejects_obstacle_intersection() -> None:
 
 
 def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path) -> None:
+    """Programmatic search should score candidates through injected evaluator hooks."""
     config = _config(tmp_path)
     scores = [0.8, 0.2]
 
@@ -724,6 +740,7 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
         scenario_yaml_path: Path,
         candidate_dir: Path,
     ) -> CandidateEvaluation:
+        """Write one successful episode record and return candidate evaluation."""
         snqi = scores.pop(0)
         record: dict[str, Any] = {
             "episode_id": f"episode-{candidate.scenario_seed}",
@@ -807,6 +824,7 @@ def test_coordinate_refinement_sampler_improves_synthetic_objective(tmp_path: Pa
         scenario_yaml_path: Path,
         candidate_dir: Path,
     ) -> CandidateEvaluation:
+        """Record sampled candidates and score them by start position."""
         sampled.append(candidate)
         record: dict[str, Any] = {
             "episode_id": f"candidate-{len(sampled)}",
@@ -848,6 +866,8 @@ def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Pa
     config = _config(tmp_path)
 
     class InvalidThenValidSampler:
+        """Sampler that emits one invalid candidate before a valid one."""
+
         def __init__(self) -> None:
             self._candidates = [
                 CandidateSpec(
@@ -863,9 +883,11 @@ def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Pa
             self.observed: list[CandidateEvaluation] = []
 
         def sample(self) -> CandidateSpec:
+            """Return the next invalid-or-valid candidate."""
             return self._candidates.pop(0)
 
         def observe(self, evaluation: CandidateEvaluation) -> None:
+            """Record evaluations observed by the optimizer."""
             self.observed.append(evaluation)
 
     sampler = InvalidThenValidSampler()
@@ -877,6 +899,7 @@ def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Pa
         scenario_yaml_path: Path,
         candidate_dir: Path,
     ) -> CandidateEvaluation:
+        """Evaluate only valid candidates for invalid-proposal tests."""
         evaluated.append(candidate)
         record: dict[str, Any] = {
             "episode_id": "valid",
@@ -930,6 +953,7 @@ def test_default_search_keeps_candidate_evaluation_sequential(
         workers: int,
         **_kwargs: object,
     ) -> dict[str, object]:
+        """Write a successful episode record and record worker usage."""
         call_order.append((out_path.parent, workers))
         record: dict[str, Any] = {
             "episode_id": out_path.parent.name,
@@ -959,6 +983,7 @@ def test_default_search_keeps_candidate_evaluation_sequential(
 
 
 def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path) -> None:
+    """Required certification should stop search before evaluation when unavailable."""
     config = _config(tmp_path, require_certification=True)
     config = SearchConfig.from_files(
         policy=config.policy,
@@ -972,6 +997,7 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     )
 
     def evaluator(*_args: object, **_kwargs: object) -> CandidateEvaluation:
+        """Fail if evaluation runs after unavailable strict certification."""
         raise AssertionError("strict certification should reject before evaluation")
 
     result = search.run_adversarial_search(
@@ -1041,6 +1067,7 @@ def test_required_certification_uses_real_scenario_certification_api(tmp_path: P
         scenario_yaml_path: Path,
         candidate_dir: Path,
     ) -> CandidateEvaluation:
+        """Evaluate strict-certification candidates after valid certification."""
         evaluated.append(candidate)
         record: dict[str, Any] = {
             "episode_id": "strict-cert-valid",
@@ -1096,6 +1123,7 @@ def test_default_evaluator_treats_failures_as_failed_jobs(
     config = _config(tmp_path)
 
     def fake_run_batch(*_args: object, **_kwargs: object) -> dict[str, object]:
+        """Return benchmark failures without writing episode records."""
         return {"failures": [{"scenario_id": "candidate", "error": "boom"}]}
 
     monkeypatch.setattr(search, "run_batch", fake_run_batch)
@@ -1270,6 +1298,7 @@ def test_certification_adapter_handles_missing_and_mocked_backends(
     ]
 
     def fake_certify_scenario(*_args: object, **_kwargs: object) -> object:
+        """Return queued legacy certification payloads."""
         return responses.pop(0)
 
     fake_module.certify_scenario = fake_certify_scenario
@@ -1302,9 +1331,11 @@ def test_certification_adapter_uses_current_scenario_certification_file_api(
     fake_module = types.ModuleType("robot_sf.scenario_certification")
 
     def fake_certify_scenario_file(*_args: object, **_kwargs: object) -> list[object]:
+        """Return one opaque certificate for file-API normalization."""
         return [object()]
 
     def fake_certificate_to_dict(_certificate: object) -> dict[str, object]:
+        """Return a valid certificate payload."""
         return {
             "classification": "valid",
             "benchmark_eligibility": "eligible",
@@ -1331,6 +1362,7 @@ def test_certification_adapter_preserves_worst_file_api_eligibility(
     fake_module = types.ModuleType("robot_sf.scenario_certification")
 
     def fake_certify_scenario_file(*_args: object, **_kwargs: object) -> list[object]:
+        """Return opaque certificates for worst-eligibility normalization."""
         return [object(), object(), object()]
 
     payloads: list[dict[str, object]] = [
@@ -1352,6 +1384,7 @@ def test_certification_adapter_preserves_worst_file_api_eligibility(
     ]
 
     def fake_certificate_to_dict(_certificate: object) -> dict[str, object]:
+        """Return queued certificate payloads."""
         return payloads.pop(0)
 
     fake_module.certify_scenario_file = fake_certify_scenario_file

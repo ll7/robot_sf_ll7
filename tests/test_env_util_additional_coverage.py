@@ -147,9 +147,12 @@ def test_init_collision_and_sensors_supports_custom_registry_sensors(monkeypatch
     dummy_sensor = object()
 
     def _fake_create_sensors(_sensor_cfgs):
+        """Return the dummy custom sensor requested by the config."""
         return [dummy_sensor]
 
     class _WrappedFusion:
+        """Observation fusion stub that records constructor inputs."""
+
         def __init__(self, base_fusion, sensors, names, sim, robot_id) -> None:
             self.base_fusion = base_fusion
             self.sensors = sensors
@@ -249,11 +252,15 @@ def test_init_collision_and_sensors_with_image_uses_default_image_settings(monke
     from robot_sf.gym_env import env_util as env_util_mod
 
     class _DummyImageSensor:
+        """Image sensor stub that records image configuration and sim view."""
+
         def __init__(self, image_config, sim_view) -> None:
             self.image_config = image_config
             self.sim_view = sim_view
 
     class _DummyImageFusion:
+        """Image fusion stub that records constructor dependencies."""
+
         def __init__(
             self,
             ray_sensor,

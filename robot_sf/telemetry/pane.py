@@ -50,6 +50,7 @@ if TYPE_CHECKING:
 
 
 def _timestamp_ms() -> int:
+    """Return the current wall-clock timestamp in milliseconds."""
     return int(time.time() * 1000)
 
 

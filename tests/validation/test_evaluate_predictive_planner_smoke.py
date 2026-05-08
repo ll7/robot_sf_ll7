@@ -17,6 +17,7 @@ def test_evaluate_predictive_planner_smoke(monkeypatch, tmp_path: Path) -> None:
     output_dir = tmp_path / "eval_out"
 
     def _fake_run_map_batch(*args, **kwargs):
+        """Write one successful episode row instead of running map evaluation."""
         jsonl_path = Path(args[1])
         row = {
             "episode_id": "episode_001",

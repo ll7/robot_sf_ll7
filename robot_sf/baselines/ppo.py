@@ -393,6 +393,11 @@ class PPOPlanner:
             return obs
 
         def _arr(key: str, default: list[float] | list[list[float]], *, dtype=float) -> np.ndarray:
+            """Read one observation field as a NumPy array with a fallback default.
+
+            Returns:
+                np.ndarray: Array view of the observation value or default.
+            """
             return np.asarray(obs.get(key, default), dtype=dtype)
 
         return {

@@ -9,9 +9,11 @@ class _DummySensors:
     """Minimal sensor wrapper used by RobotState tests."""
 
     def reset_cache(self) -> None:
+        """Match the sensor wrapper reset interface."""
         return None
 
     def next_obs(self) -> dict[str, float]:
+        """Return a tiny observation payload."""
         return {"ok": 1.0}
 
 

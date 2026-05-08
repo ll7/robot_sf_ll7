@@ -851,6 +851,11 @@ def _git_context() -> dict[str, str]:
     """
 
     def _run(args: list[str]) -> str:
+        """Run a git command and degrade to ``unknown`` when provenance is unavailable.
+
+        Returns:
+            str: Decoded command output, or ``"unknown"`` on command failure.
+        """
         try:
             out = subprocess.check_output(args, stderr=subprocess.DEVNULL)
             return out.decode("utf-8", errors="replace").strip()
@@ -2463,11 +2468,17 @@ def _build_breakdown_rows(  # noqa: C901
     per_family: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     def _add_metric(bucket: dict[str, Any], metric: str, value: float | None) -> None:
+        """Append one finite metric sample to an aggregation bucket."""
         if value is None:
             return
         bucket.setdefault(metric, []).append(value)
 
     def _mean(values: list[float]) -> str:
+        """Return the report-formatted arithmetic mean for a metric bucket.
+
+        Returns:
+            str: Formatted finite mean, or ``"nan"`` for an empty bucket.
+        """
         # Return a display-formatted value via _safe_float for table rendering.
         if not values:
             return "nan"
@@ -2520,6 +2531,11 @@ def _build_breakdown_rows(  # noqa: C901
                 _add_metric(family_bucket, metric, value)
 
     def _finalize(row: dict[str, Any]) -> dict[str, Any]:
+        """Replace metric sample lists with report-ready mean fields.
+
+        Returns:
+            dict[str, Any]: Finalized per-scenario or per-family summary row.
+        """
         finalized = dict(row)
         for metric in _REPORT_METRICS:
             values = finalized.pop(metric, [])
@@ -2861,6 +2877,11 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         *,
         kinematics: str,
     ) -> dict[str, Any]:
+        """Return a scenario copy patched for one robot kinematics mode.
+
+        Returns:
+            dict[str, Any]: Scenario payload with ``robot_config.type`` set.
+        """
         patched = dict(scenario)
         robot_cfg = (
             dict(scenario.get("robot_config"))

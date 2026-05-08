@@ -352,6 +352,7 @@ class SvgMapConverter:
             return ()
 
         def is_command(token: str) -> bool:
+            """Return whether a path token is an SVG command letter."""
             return len(token) == 1 and token.isalpha()
 
         idx = 0
@@ -363,6 +364,11 @@ class SvgMapConverter:
         points: list[tuple[float, float]] = []
 
         def read_number() -> float:
+            """Read the next numeric path parameter and advance the token cursor.
+
+            Returns:
+                float: Parsed SVG path parameter.
+            """
             nonlocal idx
             if idx >= len(tokens):
                 raise ValueError("Unexpected end of path data while reading numeric parameter.")
@@ -373,6 +379,7 @@ class SvgMapConverter:
             return float(token)
 
         def has_more_numbers() -> bool:
+            """Return whether the current command still has numeric parameters."""
             return idx < len(tokens) and not is_command(tokens[idx])
 
         while idx < len(tokens):
@@ -1420,6 +1427,11 @@ class SvgMapConverter:
         """
 
         def _parse_svg_length(value: str | None) -> float | None:
+            """Parse numeric SVG length attributes while tolerating unit suffixes.
+
+            Returns:
+                float | None: Leading numeric value, or ``None`` when absent/invalid.
+            """
             if value is None:
                 return None
             try:

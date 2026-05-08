@@ -171,6 +171,8 @@ class TestEnvironmentInstantiation:
         from robot_sf.maps.verification import runner
 
         class TinyTimeoutContext(VerificationContext):
+            """Verification context with an immediate soft-timeout budget."""
+
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
                 self.soft_timeout_s = 0.0

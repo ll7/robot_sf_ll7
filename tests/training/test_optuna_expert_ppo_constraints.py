@@ -23,16 +23,22 @@ from scripts.training.optuna_expert_ppo import (
 
 @dataclass
 class _MetricAggregateStub:
+    """Minimal aggregate object exposing a mean metric value."""
+
     mean: float
 
 
 @dataclass
 class _BestCheckpointStub:
+    """Minimal checkpoint object exposing resolved metric values."""
+
     metrics: dict[str, float]
 
 
 @dataclass
 class _ResultStub:
+    """Minimal Optuna objective result used by constraint handling tests."""
+
     metrics: dict[str, _MetricAggregateStub]
     best_checkpoint: _BestCheckpointStub | None = None
 
@@ -42,6 +48,7 @@ def _constraint_args(
     collision: float | None = None,
     comfort: float | None = None,
 ) -> argparse.Namespace:
+    """Build CLI-style constraint arguments for tests."""
     return argparse.Namespace(
         constraint_collision_rate_max=collision,
         constraint_comfort_exposure_max=comfort,

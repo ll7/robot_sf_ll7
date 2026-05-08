@@ -18,6 +18,7 @@ def _capture_registry_entry(target: dict[str, object]):
     """Return a test helper that stores the most recent registry entry payload."""
 
     def _capture(entry: dict[str, object]) -> None:
+        """Store the registry entry in the provided target dict."""
         target.update(entry)
 
     return _capture

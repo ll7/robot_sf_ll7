@@ -362,6 +362,11 @@ class SearchSpaceConfig:
             raise ValueError("search-space variables must be a mapping")
 
         def _range(name: str, default: tuple[float, float] | None = None) -> RangeConfig:
+            """Read one named range from the variables mapping.
+
+            Returns:
+                RangeConfig: Explicit or defaulted range config.
+            """
             raw_value = variables.get(name)
             if raw_value is None:
                 if default is None:

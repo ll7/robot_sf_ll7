@@ -54,6 +54,11 @@ class SACPlanner:
         self._load_model()
 
     def _parse_config(self, cfg: SACPlannerConfig | dict[str, Any]) -> SACPlannerConfig:
+        """Normalize loose config payloads into the SAC dataclass contract.
+
+        Returns:
+            SACPlannerConfig: Filtered planner configuration.
+        """
         if isinstance(cfg, SACPlannerConfig):
             return cfg
         if isinstance(cfg, dict):
@@ -62,6 +67,7 @@ class SACPlanner:
         raise TypeError(f"Invalid config type: {type(cfg)}")
 
     def _load_model(self) -> None:
+        """Load the configured SAC checkpoint or enter explicit fallback mode."""
         if SAC is None:  # pragma: no cover - runtime dependency
             if self.config.fallback_to_goal:
                 warn_soft_degrade(
@@ -167,9 +173,15 @@ class SACPlanner:
             raise
 
     def _uses_dict_observation(self) -> bool:
+        """Return whether this planner expects native dict observations."""
         return str(self.config.obs_mode).strip().lower() in {"dict", "native_dict", "multi_input"}
 
     def _step_dict_obs(self, obs: dict[str, Any]) -> dict[str, float]:
+        """Predict an action from a native dict observation.
+
+        Returns:
+            dict[str, float]: Benchmark action payload, with fallback when configured.
+        """
         try:
             model_obs = self._build_model_obs_dict(obs)
             action_vec = self._predict_action(model_obs)
@@ -186,6 +198,11 @@ class SACPlanner:
             raise
 
     def _predict_action(self, model_obs: np.ndarray | dict[str, np.ndarray]) -> np.ndarray | None:
+        """Run SAC model prediction and normalize to a flat action vector.
+
+        Returns:
+            np.ndarray | None: Predicted action, or ``None`` when prediction fails.
+        """
         if self._model is None:
             return None
         try:
@@ -196,6 +213,11 @@ class SACPlanner:
             return None
 
     def _build_model_obs_dict(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
+        """Build the dict observation payload expected by the loaded SAC model.
+
+        Returns:
+            dict[str, np.ndarray]: Coerced and transformed model observation.
+        """
         obs_transform = self._effective_obs_transform()
         if self._model is None:
             converted = {str(k): np.asarray(v) for k, v in obs.items()}
@@ -252,6 +274,7 @@ class SACPlanner:
         converted = dict(obs)
 
         def _shift_xy(key: str) -> None:
+            """Translate one position-like observation key relative to the robot."""
             if key not in converted:
                 return
             arr = np.asarray(converted[key], dtype=np.float32)
@@ -296,6 +319,7 @@ class SACPlanner:
         sin_h = float(np.sin(heading))
 
         def _rotate_key(key: str) -> None:
+            """Rotate one translated position-like key into the robot heading frame."""
             if key not in converted:
                 return
             arr = np.asarray(converted[key], dtype=np.float32)
@@ -404,6 +428,11 @@ class SACPlanner:
         return arr
 
     def _vectorize(self, obs: Observation) -> np.ndarray:
+        """Flatten legacy observation objects into the vector SAC observation.
+
+        Returns:
+            np.ndarray: Fixed-width vector observation.
+        """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rv = np.asarray(obs.robot["velocity"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
@@ -428,6 +457,11 @@ class SACPlanner:
         return np.concatenate([rel_goal, rv, ped_flat]).astype(float)
 
     def _action_vec_to_dict(self, act: np.ndarray) -> dict[str, float]:
+        """Convert SAC action vectors into the configured benchmark action space.
+
+        Returns:
+            dict[str, float]: Velocity or unicycle action dictionary.
+        """
         if self.config.action_space == "unicycle":
             v = float(act[0]) if act.size >= 1 else 0.0
             w = float(act[1]) if act.size >= 2 else 0.0
@@ -448,6 +482,11 @@ class SACPlanner:
         return {"vx": vx, "vy": vy}
 
     def _fallback_action(self, obs: Observation) -> dict[str, float]:
+        """Compute goal-seeking fallback action from legacy observation objects.
+
+        Returns:
+            dict[str, float]: Velocity or unicycle fallback action.
+        """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
         vec = rg - rp
@@ -471,6 +510,11 @@ class SACPlanner:
         }
 
     def _fallback_action_dict(self, obs: dict[str, Any]) -> dict[str, float]:
+        """Compute goal-seeking fallback action from native dict observations.
+
+        Returns:
+            dict[str, float]: Velocity or unicycle fallback action.
+        """
         position = np.asarray(obs.get("robot_position", [0.0, 0.0]), dtype=float)
         goal = np.asarray(obs.get("goal_current", [0.0, 0.0]), dtype=float)
         vec = goal - position

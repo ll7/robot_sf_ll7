@@ -33,6 +33,7 @@ def _obs(
     ped_positions=None,
     ped_velocities=None,
 ):
+    """Build a planner observation fixture with optional pedestrian state."""
     ped_positions = [] if ped_positions is None else ped_positions
     ped_velocities = [] if ped_velocities is None else ped_velocities
     return {
@@ -238,6 +239,8 @@ def test_mppi_progress_escape_breaks_stall() -> None:
 
 
 class _DummyHead:
+    """Planner head test double that tracks plan and reset calls."""
+
     def __init__(self, name: str) -> None:
         self.name = name
         self.calls = 0
@@ -328,7 +331,10 @@ def test_hybrid_fallback_on_exception_and_config_defaults() -> None:
     """Hybrid should fallback to ORCA on exception or re-raise when disabled."""
 
     class _FailingHead(_DummyHead):
+        """Planner head that raises on every plan call."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Raise a deterministic planner failure."""
             raise RuntimeError("boom")
 
     risk = _FailingHead("risk")
@@ -431,7 +437,10 @@ def test_hybrid_portfolio_records_fallback_diagnostics() -> None:
     """Fallback diagnostics should explain degraded ORCA selection after head failure."""
 
     class _FailingHead(_DummyHead):
+        """Planner head that always fails for fallback diagnostics."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Raise a deterministic planner failure."""
             raise RuntimeError("boom")
 
     risk = _FailingHead("risk")
@@ -462,7 +471,10 @@ def test_hybrid_portfolio_preserves_fallback_diagnostics_if_orca_raises() -> Non
     """Fallback intent should still be recorded when the ORCA fallback raises."""
 
     class _FailingHead(_DummyHead):
+        """Planner head that raises after recording the attempted call."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Record the call and raise a named failure."""
             _ = observation
             self.calls += 1
             raise RuntimeError(f"{self.name} boom")
@@ -541,12 +553,18 @@ def test_hybrid_orca_sampler_prefers_sampler_when_orca_progress_is_low(
     """Hybrid ORCA sampler should choose MPPI when ORCA is safe but stalls."""
 
     class _PrimaryHead:
+        """Primary ORCA head test double with low progress."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a low-progress primary command."""
             _ = observation
             return 0.1, 0.0
 
     class _SamplerHead:
+        """Sampler head test double with higher progress."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a higher-progress sampler command."""
             _ = observation
             return 0.6, 0.0
 
@@ -557,6 +575,7 @@ def test_hybrid_orca_sampler_prefers_sampler_when_orca_progress_is_low(
     )
 
     def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        """Score low primary commands below the sampler progress threshold."""
         if command[0] < 0.2:
             return {"safe": True, "progress": 0.01, "min_ped_clear": 1.0}
         return {"safe": True, "progress": 0.25, "min_ped_clear": 1.0}
@@ -570,12 +589,18 @@ def test_hybrid_orca_sampler_keeps_orca_when_scene_is_clear(monkeypatch) -> None
     """Hybrid ORCA sampler should keep ORCA in open scenes with safe progress."""
 
     class _PrimaryHead:
+        """Primary ORCA head test double for clear-scene checks."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a safe primary command."""
             _ = observation
             return 0.4, 0.1
 
     class _SamplerHead:
+        """Sampler head test double for clear-scene checks."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a sampler command that should not be selected."""
             _ = observation
             return 0.7, 0.0
 
@@ -602,12 +627,18 @@ def test_hybrid_orca_sampler_uses_sampler_in_clear_scene_when_orca_stalls(
     """Hybrid ORCA sampler should still repair low-progress ORCA in open scenes."""
 
     class _PrimaryHead:
+        """Primary ORCA head test double that stalls in open space."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a low-progress primary command."""
             _ = observation
             return 0.1, 0.0
 
     class _SamplerHead:
+        """Sampler head test double for open-space repair."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a higher-progress sampler command."""
             _ = observation
             return 0.7, 0.0
 
@@ -618,6 +649,7 @@ def test_hybrid_orca_sampler_uses_sampler_in_clear_scene_when_orca_stalls(
     )
 
     def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        """Score primary commands as stalled and sampler commands as progressing."""
         if command[0] < 0.2:
             return {"safe": True, "progress": 0.01, "min_ped_clear": 3.0}
         return {"safe": True, "progress": 0.25, "min_ped_clear": 3.0}
@@ -631,19 +663,27 @@ def test_hybrid_orca_sampler_records_diagnostics_and_reset(monkeypatch) -> None:
     """Hybrid ORCA sampler should expose last-step diagnostics and clear them on reset."""
 
     class _PrimaryHead:
+        """Primary ORCA head test double with reset support."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a low-progress primary command."""
             _ = observation
             return 0.1, 0.0
 
         def reset(self) -> None:
+            """Accept reset propagation from the hybrid wrapper."""
             return None
 
     class _SamplerHead:
+        """Sampler head test double with reset support."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a higher-progress sampler command."""
             _ = observation
             return 0.7, 0.0
 
         def reset(self) -> None:
+            """Accept reset propagation from the hybrid wrapper."""
             return None
 
     planner = HybridORCASamplerAdapter(
@@ -653,6 +693,7 @@ def test_hybrid_orca_sampler_records_diagnostics_and_reset(monkeypatch) -> None:
     )
 
     def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        """Score diagnostic commands for sampler repair selection."""
         if command[0] < 0.2:
             return {"safe": True, "progress": 0.01, "min_ped_clear": 3.0}
         return {"safe": True, "progress": 0.25, "min_ped_clear": 3.0}
@@ -682,12 +723,18 @@ def test_hybrid_orca_sampler_uses_sampler_after_route_goal_regression(
     """Route-goal regression should disable the clear-scene ORCA fast path."""
 
     class _PrimaryHead:
+        """Primary ORCA head test double for route-regression checks."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return the primary command before route regression."""
             _ = observation
             return 0.4, 0.0
 
     class _SamplerHead:
+        """Sampler head test double for route-regression repair."""
+
         def plan(self, observation: dict) -> tuple[float, float]:
+            """Return the sampler command after route regression."""
             _ = observation
             return 0.7, 0.0
 
@@ -704,6 +751,7 @@ def test_hybrid_orca_sampler_uses_sampler_after_route_goal_regression(
     )
 
     def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        """Score primary and sampler commands for route-regression repair."""
         if command[0] < 0.5:
             return {"safe": True, "progress": 0.2, "min_ped_clear": 3.0}
         return {"safe": True, "progress": 0.35, "min_ped_clear": 3.0}

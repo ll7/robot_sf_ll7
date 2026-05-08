@@ -15,6 +15,7 @@ from scripts.training.launch_optuna_expert_ppo import (
 
 
 def _make_args(**overrides: object) -> argparse.Namespace:
+    """Build launch arguments with optional override values."""
     defaults = {
         "base_config": None,
         "trials": None,

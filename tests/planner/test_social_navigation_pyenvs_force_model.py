@@ -18,11 +18,13 @@ from robot_sf.planner.social_navigation_pyenvs_force_model import (
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake upstream source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_upstream_repo(repo_root: Path) -> None:
+    """Create a minimal Social-Navigation-PyEnvs force-model package."""
     _write(repo_root / "crowd_nav" / "__init__.py", "")
     _write(repo_root / "crowd_nav" / "policy_no_train" / "__init__.py", "")
     _write(
@@ -76,21 +78,30 @@ def _install_fake_socialforce_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     backend.__version__ = "0.2.3"
 
     class FakeSimulator:
+        """Fake socialforce simulator returning tensor-like output."""
+
         def __init__(self, *, delta_t: float = 0.4) -> None:
             self.delta_t = delta_t
 
         def forward(self, state):
+            """Return a deterministic simulator state update."""
+
             class FakeTensor:
+                """Tensor-like wrapper exposing detach/cpu/numpy conversions."""
+
                 def __init__(self, value):
                     self._value = value
 
                 def detach(self):
+                    """Return self for detach chaining."""
                     return self
 
                 def cpu(self):
+                    """Return self for CPU conversion chaining."""
                     return self
 
                 def numpy(self):
+                    """Return the wrapped Python value."""
                     return self._value
 
             value = [[0.5, 0.0, 0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 0.0]]
@@ -170,6 +181,7 @@ def test_socialforce_adapter_requires_external_runtime_dependency(tmp_path: Path
     real_import_module = importlib.import_module
 
     def fake_import_module(name: str, package: str | None = None):
+        """Raise only for the external socialforce import."""
         if name == "socialforce":
             raise ModuleNotFoundError("No module named 'socialforce'", name="socialforce")
         return real_import_module(name, package)
@@ -197,10 +209,13 @@ def test_socialforce_compat_simulator_detaches_state_before_caching() -> None:
     backend = types.ModuleType("socialforce")
 
     class FakeSimulator:
+        """Fake backend simulator that returns gradient-tracking tensors."""
+
         def __init__(self, *, delta_t: float = 0.4) -> None:
             self.delta_t = delta_t
 
         def forward(self, state):
+            """Return a cloned tensor with autograd history."""
             tracked_state = state.clone().detach().requires_grad_(True)
             return tracked_state * 2.0
 
@@ -224,6 +239,7 @@ def test_socialforce_adapter_propagates_transitive_import_errors(
     real_import_module = importlib.import_module
 
     def fake_import_module(name: str, package: str | None = None):
+        """Raise a transitive import failure from the socialforce backend."""
         if name == "socialforce":
             raise ModuleNotFoundError("No module named 'missing_backend_dep'")
         return real_import_module(name, package)
@@ -248,9 +264,13 @@ def test_socialforce_adapter_rejects_unvalidated_backend_version(tmp_path: Path)
     _write_fake_upstream_repo(repo_root)
 
     class FakeBackend:
+        """Fake socialforce backend with an unsupported version."""
+
         __version__ = "0.2.4"
 
         class Simulator:
+            """Simulator placeholder for unsupported-version checks."""
+
             def __init__(self, *, delta_t: float = 0.4) -> None:
                 self.delta_t = delta_t
 

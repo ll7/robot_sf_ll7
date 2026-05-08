@@ -87,6 +87,11 @@ def _sample_points_near_anchor(
     max_attempts = num_samples * 50
 
     def clip_spread(v):
+        """Clamp lateral sample spread to the sidewalk half-width.
+
+        Returns:
+            Clamped scalar or NumPy array with the same shape as the input.
+        """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
     while len(samples) < num_samples and attempts < max_attempts:

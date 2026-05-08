@@ -66,6 +66,7 @@ def _make_minimal_map() -> MapDefinition:
 
 
 def _write_perf_snapshot(output_path: Path, payload: dict) -> None:
+    """Write a JSON performance snapshot for local inspection."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)

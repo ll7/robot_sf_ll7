@@ -11,11 +11,13 @@ if TYPE_CHECKING:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write text while creating parent directories for fake repositories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_repo(repo_root: Path) -> None:
+    """Create the minimal SoNIC repository layout required by probe tests."""
     _write(repo_root / "Dockerfile", "FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel\n")
     _write(repo_root / "gst_updated" / "requirements.txt", "gym==0.26.0\nnumpy==1.26.4\n")
     _write(repo_root / "Python-RVO2" / "requirements.txt", "Cython==0.21.1\n")

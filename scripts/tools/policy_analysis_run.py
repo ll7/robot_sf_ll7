@@ -205,6 +205,11 @@ class PolicyAdapter:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for policy-analysis runs.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--training-config",
@@ -483,6 +488,11 @@ def _build_orca_policy_variant(
     orca_time_horizon: float | None,
     orca_neighbor_dist: float | None,
 ) -> SocNavPlannerPolicy:
+    """Build an ORCA policy variant with optional runtime overrides.
+
+    Returns:
+        SocNavPlannerPolicy: Configured ORCA policy wrapper.
+    """
     policy = make_orca_policy()
     if policy_name in _ORCA_POLICY_VARIANT_CONFIGS:
         for field, value in _ORCA_POLICY_VARIANT_CONFIGS[policy_name].items():
@@ -1030,6 +1040,11 @@ def _finalize_run(
     write_plausibility_metrics: bool,
     seed_set_name: str | None,
 ) -> dict[str, Any]:
+    """Write final policy-analysis summaries and return their locations.
+
+    Returns:
+        dict[str, Any]: Summary metrics and artifact paths.
+    """
     summary = _summarize_records(records)
     aggregates = compute_aggregates(
         records, group_by="scenario_id", fallback_group_by="scenario_id"
@@ -1080,6 +1095,7 @@ def _finalize_run(
 
 
 def _write_jsonl(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
+    """Validate and append one policy-analysis episode record."""
     violations = validate_episode_success_integrity(record)
     if violations:
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
@@ -1094,6 +1110,7 @@ def _collect_scenario_source_files(path: Path) -> list[Path]:
     visited: set[Path] = set()
 
     def _walk(file_path: Path, sources: set[Path]) -> None:
+        """Recursively collect scenario source files through include directives."""
         candidate = file_path.resolve()
         if candidate in visited:
             return

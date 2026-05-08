@@ -12,6 +12,7 @@ def test_make_multi_robot_env_forwards_recording_args() -> None:
     captured: dict[str, object] = {}
 
     def _fake_create_multi_robot_env(**kwargs):
+        """Capture factory kwargs and return an environment-shaped stub."""
         captured.update(kwargs)
         return SimpleNamespace(reset=lambda *a, **k: None, step=lambda *a, **k: None)
 

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 
 def _write_yaml(path: Path, payload: object) -> None:
+    """Write a YAML fixture with stable key ordering."""
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 

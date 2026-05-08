@@ -19,9 +19,19 @@ def _iter_line_segments(
     obstacles: Iterable[Obstacle | Line2D],
     bounds: Iterable[Line2D] | None = None,
 ) -> list[Line2D]:
+    """Normalize obstacle and bound geometry into explicit line segments.
+
+    The benchmark metrics accept both parsed ``Obstacle`` instances and raw
+    line tuples. Malformed entries are ignored so optional obstacle sources do
+    not break metrics aggregation for otherwise valid episodes.
+
+    Returns:
+        list[Line2D]: Valid obstacle and bound line segments with float coordinates.
+    """
     segments: list[Line2D] = []
 
     def _add_line(line: Line2D) -> None:
+        """Append a line after coercing coordinates to plain floats."""
         try:
             (x1, y1), (x2, y2) = line
             segments.append(((float(x1), float(y1)), (float(x2), float(y2))))

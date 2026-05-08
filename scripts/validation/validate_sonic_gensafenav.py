@@ -17,6 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _sample_observation() -> dict[str, object]:
+    """Return a minimal SocNav observation for SONIC validation.
+
+    Returns:
+        dict[str, object]: Synthetic Robot SF observation.
+    """
     return {
         "robot": {
             "position": [0.0, 0.0],
@@ -34,6 +39,7 @@ def _sample_observation() -> dict[str, object]:
 
 
 def _run_case(*, label: str, repo_root: Path, model_name: str | None, checkpoint_name: str) -> None:
+    """Validate one SONIC checkpoint/configuration case."""
     payload: dict[str, object] = {
         "repo_root": str(repo_root),
         "checkpoint_name": checkpoint_name,

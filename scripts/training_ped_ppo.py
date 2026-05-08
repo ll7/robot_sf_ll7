@@ -52,6 +52,11 @@ def training(svg_map_path: str):
     difficulty = 0
 
     def make_env():
+        """Construct one pedestrian PPO training environment.
+
+        Returns:
+            RobotNavigationEnv: Configured training environment instance.
+        """
         map_definition = convert_map(svg_map_path)
         robot_model = PPO.load("./model/run_043", env=None)
 

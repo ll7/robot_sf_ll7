@@ -26,6 +26,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _read_records(jsonl_path: Path) -> list[dict[str, Any]]:
+    """Read JSON object records from a JSONL file.
+
+    Returns:
+        list[dict[str, Any]]: Parsed records, skipping blank lines.
+    """
     records: list[dict[str, Any]] = []
     for line in jsonl_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():

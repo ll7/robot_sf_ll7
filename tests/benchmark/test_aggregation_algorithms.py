@@ -64,6 +64,7 @@ def test_warns_and_flags_missing_algorithms():
     captured: list = []
 
     def capture_message(message):
+        """Collect Loguru warning records for assertion."""
         captured.append(message)
 
     handle = logger.add(capture_message, level="WARNING")

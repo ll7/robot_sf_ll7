@@ -12,6 +12,7 @@ SCRIPT = Path("scripts/dev/pr_ready_freshness.py")
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run the PR-readiness freshness helper as a subprocess."""
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         check=False,

@@ -14,11 +14,13 @@ if TYPE_CHECKING:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_repo(repo_root: Path) -> None:
+    """Create a minimal Social-Navigation-PyEnvs tree for source probes."""
     _write(repo_root / "README.md", "# stub\n")
     _write(repo_root / "requirements.txt", "gymnasium==0.29.1\nnumpy==1.26.1\ntorch==2.1.1\n")
     _write(repo_root / "setup.py", "from setuptools import setup\n")
@@ -135,6 +137,7 @@ def test_run_probe_marks_partial_reproducibility(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Return staged probe results from the prepared lookup table."""
         return results[name]
 
     monkeypatch.setattr(probe, "_run_command", fake_run)
@@ -171,6 +174,7 @@ def test_run_probe_marks_blocked_when_simulator_fails(
     def fake_run(
         name: str, command: list[str], cwd: Path, timeout_seconds: int
     ) -> probe.CommandResult:
+        """Return a simulator failure after recording the stage order."""
         called.append(name)
         if name == "simulator_core_with_socialforce":
             return probe.CommandResult(

@@ -86,6 +86,11 @@ class HybridPortfolioAdapter:
         return near_count, float(np.min(dists))
 
     def _desired_head(self, observation: dict[str, Any]) -> str:
+        """Choose the planner head that best matches current crowd clearance.
+
+        Returns:
+            str: Name of the desired portfolio head.
+        """
         near_count, min_clearance = self._extract_ped_clearance(observation)
         if min_clearance <= float(self.config.emergency_clearance):
             return "orca"
@@ -104,6 +109,7 @@ class HybridPortfolioAdapter:
         return "risk_dwa"
 
     def _switch_head(self, desired: str) -> None:
+        """Apply hysteresis when switching active planner heads."""
         emergency = desired == "orca"
         if self._active_head == desired:
             return
@@ -114,6 +120,11 @@ class HybridPortfolioAdapter:
         self._hold_remaining = max(int(self.config.hysteresis_steps), 0)
 
     def _call_head(self, head: str, observation: dict[str, Any]) -> tuple[float, float]:
+        """Dispatch planning to one portfolio head.
+
+        Returns:
+            tuple[float, float]: Unicycle command returned by the selected head.
+        """
         if head == "risk_dwa":
             return self.risk_dwa.plan(observation)
         if head == "mppi" and self.mppi is not None:

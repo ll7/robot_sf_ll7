@@ -12,6 +12,7 @@ def test_require_carla_raises_clear_error_when_api_is_missing(monkeypatch) -> No
     from robot_sf_carla_bridge.availability import CarlaUnavailableError, require_carla
 
     def fake_import_module(name):
+        """Simulate a missing CARLA module import."""
         if name == "carla":
             raise ModuleNotFoundError("No module named 'carla'", name="carla")
         raise AssertionError(f"unexpected import: {name}")
@@ -29,6 +30,7 @@ def test_require_carla_returns_imported_api_module(monkeypatch) -> None:
     fake_carla = ModuleType("carla")
 
     def fake_import_module(name):
+        """Return the fake CARLA module for strict import checks."""
         if name == "carla":
             return fake_carla
         raise AssertionError(f"unexpected import: {name}")

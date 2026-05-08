@@ -20,11 +20,13 @@ if TYPE_CHECKING:
 
 
 def _write_summary(path: Path, payload: dict) -> None:
+    """Write an indented campaign summary fixture."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_csv(path: Path, payload: str) -> None:
+    """Write a CSV fixture for campaign comparison tests."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(payload, encoding="utf-8")
 

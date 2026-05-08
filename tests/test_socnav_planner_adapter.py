@@ -25,6 +25,7 @@ from robot_sf.planner.socnav import (
 
 
 def _make_obs(goal=(5.0, 0.0), heading=0.0):
+    """Build a minimal SocNav observation with configurable goal and heading."""
     return {
         "robot": {
             "position": np.array([0.0, 0.0], dtype=np.float32),
@@ -451,6 +452,7 @@ def test_sacadrl_adapter(monkeypatch):
     """SA-CADRL adapter can fall back when the model is unavailable (guards tests without TF)."""
 
     def _boom(self):
+        """Simulate a missing SA-CADRL model."""
         raise RuntimeError("missing model")
 
     monkeypatch.setattr(SACADRLPlannerAdapter, "_build_model", _boom)
@@ -465,6 +467,7 @@ def test_sacadrl_adapter_requires_model_when_fallback_disabled(monkeypatch):
     adapter = SACADRLPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
 
     def _boom(self):
+        """Simulate a missing SA-CADRL model when fallback is disabled."""
         raise RuntimeError("missing model")
 
     monkeypatch.setattr(SACADRLPlannerAdapter, "_build_model", _boom)
@@ -491,6 +494,7 @@ def test_prediction_adapter_fallback_when_model_missing(monkeypatch):
     """Predictive adapter can fall back to constant-velocity prediction when model is unavailable."""
 
     def _boom(self):
+        """Simulate a missing predictive model for fallback planning."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -505,6 +509,7 @@ def test_prediction_adapter_requires_model_when_fallback_disabled(monkeypatch):
     """Predictive adapter fails fast when checkpoint/model loading fails and fallback is disabled."""
 
     def _boom(self):
+        """Simulate a missing predictive model when fallback is disabled."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -518,6 +523,7 @@ def test_prediction_adapter_ttc_penalty_reduces_speed(monkeypatch):
     """High TTC weight should bias the predictive planner toward slower commands."""
 
     def _boom(self):
+        """Force the predictive adapter onto heuristic prediction paths."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -544,6 +550,7 @@ def test_prediction_adapter_speed_clearance_gain_reduces_speed(monkeypatch):
     """Speed-adaptive safety margin should discourage aggressive forward speed."""
 
     def _boom(self):
+        """Force the predictive adapter onto speed-clearance heuristic paths."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -577,6 +584,7 @@ def test_prediction_adapter_progress_risk_penalty_reduces_speed(monkeypatch):
     """Progress-risk coupling should discourage fast progress through tight clearances."""
 
     def _boom(self):
+        """Force the predictive adapter onto progress-risk heuristic paths."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -606,6 +614,7 @@ def test_prediction_adapter_adaptive_lattice_expands_near_field(monkeypatch):
     """Near-field context should produce an expanded candidate lattice."""
 
     def _boom(self):
+        """Force candidate-set construction without a learned predictive model."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -632,6 +641,7 @@ def test_prediction_adapter_reverse_candidates_appear_in_near_field(monkeypatch)
     """Reverse candidates should be added when explicitly enabled in close-contact regimes."""
 
     def _boom(self):
+        """Force reverse-candidate construction without a learned model."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -657,6 +667,7 @@ def test_prediction_adapter_progress_escape_injects_motion_in_clear_space(monkey
     """Progress-escape should avoid stationary commands when far from goal and safe."""
 
     def _boom(self):
+        """Force progress-escape planning without a learned model."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -678,6 +689,7 @@ def test_prediction_adapter_progress_escape_respects_clearance_gate(monkeypatch)
     """Progress-escape should not force motion when predicted clearance is too low."""
 
     def _boom(self):
+        """Force the progress-escape clearance gate onto heuristic prediction."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -708,6 +720,7 @@ def test_prediction_adapter_progress_escape_keeps_lower_cost_rollout(monkeypatch
     """Progress-escape should not replace a safer rollout with a worse scored command."""
 
     def _boom(self):
+        """Force lower-cost rollout selection without learned predictions."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -733,6 +746,7 @@ def test_prediction_adapter_sequence_search_is_deterministic(monkeypatch):
     """Sequence search should stay deterministic for the same observation and config."""
 
     def _boom(self):
+        """Force deterministic sequence search without learned predictions."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -754,6 +768,7 @@ def test_prediction_adapter_sequence_search_keeps_progress_escape(monkeypatch):
     """Sequence search should still allow progress-escape recovery in clear space."""
 
     def _boom(self):
+        """Force sequence-search progress escape without learned predictions."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -776,6 +791,7 @@ def test_prediction_adapter_probabilistic_risk_mode_is_deterministic(monkeypatch
     """Probabilistic rollout scoring should stay deterministic for a fixed seed."""
 
     def _boom(self):
+        """Force probabilistic risk scoring onto heuristic predictions."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
@@ -813,6 +829,7 @@ def test_prediction_adapter_mcts_mode_is_deterministic(monkeypatch):
     """MCTS-lite search should stay deterministic under a fixed planner seed."""
 
     def _boom(self):
+        """Force MCTS-lite search onto heuristic predictions."""
         raise RuntimeError("missing predictive model")
 
     monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)

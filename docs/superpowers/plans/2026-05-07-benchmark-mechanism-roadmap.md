@@ -490,7 +490,11 @@ Expected: the table contains one clean budget-relief row, one exposure-enabled r
 First confirm the target section still exists:
 
 ```bash
-rg -n "^## Benchmark Run Notes" docs/context/README.md
+if rg -n "^## Benchmark Run Notes" docs/context/README.md; then
+  echo "Success: target section found. Add the bullet under Benchmark Run Notes."
+else
+  echo "Warning: target section not found. Place the bullet near the other h500 notes."
+fi
 ```
 
 If the section is present, add this bullet under it. If the README has since reorganized,

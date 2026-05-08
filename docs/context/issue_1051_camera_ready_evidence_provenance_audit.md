@@ -31,8 +31,8 @@ Gaps:
 * `docs/context/evidence/camera_ready_all_planners_2026-05-04/` does not include
   `reports/snqi_diagnostics.json`;
 * several context notes still cite publication bundles only as local `output/` paths;
-* the canonical PPO registry entry still has `commit: null` and points one note at a local
-  `output/model_cache/.../best_summary.json` file.
+* the canonical PPO registry entry still has `commit: null`, a local `local_path`, and one note
+  pointing at a local `output/model_cache/.../best_summary.json` file.
 
 Use issue `#1053` to repair durable artifact references and archive pointers before treating this
 as a complete paper evidence trail.
@@ -50,7 +50,7 @@ as a complete paper evidence trail.
 | Seed policy | `configs/benchmarks/seed_sets_v1.yaml` and `configs/benchmarks/paper_experiment_matrix_v1.yaml` | present | Canonical S3 `eval` seed set and bootstrap settings are explicit. |
 | Seed/bootstrap evidence | `docs/context/issue_832_paper_matrix_extended_seed_schedule.md` | present with caveat | Records S3/S5 execution and comparison, but output paths are worktree-local. |
 | PPO baseline config | `configs/baselines/ppo_15m_grid_socnav.yaml` | present | Points at the issue-791 model id and includes paper-claim caveats. |
-| PPO model registry | `model/registry.yaml` | partial | Has W&B run/artifact pointer, but `commit: null`, `local_path` points at worktree-local `output/model_cache/...`, and a note points at local `output/model_cache/.../best_summary.json`. The non-portable `local_path` should be folded into the #1053 follow-up. |
+| PPO model registry | `model/registry.yaml` | partial | Has W&B run/artifact pointer, but `commit: null`, `local_path` points at worktree-local `output/model_cache/...`, and the `Best summary` note points at local `output/model_cache/.../best_summary.json`. Both non-portable registry fields should be folded into the #1053 follow-up. |
 | SNQI v3 contract note | `docs/context/issue_635_snqi_v3_paper_contract.md` | present with caveat | Provides the contract, but its canonical publication bundle paths are local `output/` paths. |
 | Publication bundle workflow | `docs/benchmark_camera_ready_release.md` | present | Defines GitHub release upload, checksums, and manifest validation. |
 | Tracked compact evidence | `docs/context/evidence/camera_ready_all_planners_2026-05-04/` | partial | Useful internal evidence, but `benchmark_success=false` and publication bundle was skipped. |
@@ -95,7 +95,6 @@ payload with weights, baseline, rank alignment, outcome separation, and dominanc
 
 No benchmark rerun is required by this audit alone. The next paper-critical action is issue `#1053`:
 replace or supplement local `output/` publication-bundle references with durable archive pointers,
-fold the `model/registry.yaml` `local_path` field into the same durable-reference repair so the PPO
-checkpoint carries no worktree-local fallback, and include the required SNQI diagnostics payload
-when promoting any compact evidence bundle as paper support.
-
+fold the `model/registry.yaml` `local_path` and `Best summary` note fields into the same
+durable-reference repair so the PPO checkpoint carries no worktree-local fallback, and include the
+required SNQI diagnostics payload when promoting any compact evidence bundle as paper support.

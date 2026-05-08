@@ -235,6 +235,8 @@ def test_build_env_switches_across_loaded_scenarios(monkeypatch: pytest.MonkeyPa
     """SAC training env should sample across the loaded scenario list per reset."""
 
     class _DummyEnv(gymnasium.Env):
+        """Dummy SAC env that records scenario identity and seed."""
+
         metadata: ClassVar[dict[str, object]] = {}
 
         def __init__(
@@ -257,6 +259,7 @@ def test_build_env_switches_across_loaded_scenarios(monkeypatch: pytest.MonkeyPa
             self.config = config
 
         def reset(self, *, seed: int | None = None, options: dict | None = None):
+            """Return a deterministic observation and scenario metadata."""
             if seed is not None:
                 self.applied_seed = seed
             obs = {
@@ -266,6 +269,7 @@ def test_build_env_switches_across_loaded_scenarios(monkeypatch: pytest.MonkeyPa
             return obs, {"scenario_name": self.scenario_name}
 
         def step(self, action: np.ndarray):
+            """Return a nonterminal transition with scenario metadata."""
             obs = {
                 "robot_position": np.zeros(2, dtype=np.float32),
                 "goal_current": np.ones(2, dtype=np.float32),
@@ -273,6 +277,7 @@ def test_build_env_switches_across_loaded_scenarios(monkeypatch: pytest.MonkeyPa
             return obs, 0.0, False, False, {"scenario_name": self.scenario_name}
 
     def _fake_build_robot_config_from_scenario(scenario: dict[str, object], *, scenario_path: Path):
+        """Build a lightweight robot config from a scenario row."""
         return SimpleNamespace(
             scenario_name=scenario["name"],
             scenario_path=scenario_path,
@@ -313,6 +318,8 @@ def test_build_env_uses_subproc_vec_env_for_multi_env(
     """SAC training env should use subprocess vectorization when num_envs > 1."""
 
     class _DummyEnv(gymnasium.Env):
+        """Dummy SAC env used by subprocess-vectorization tests."""
+
         metadata: ClassVar[dict[str, object]] = {}
 
         def __init__(
@@ -335,6 +342,7 @@ def test_build_env_uses_subproc_vec_env_for_multi_env(
             self.config = config
 
         def reset(self, *, seed: int | None = None, options: dict | None = None):
+            """Return a deterministic observation and scenario metadata."""
             if seed is not None:
                 self.applied_seed = seed
             obs = {
@@ -344,6 +352,7 @@ def test_build_env_uses_subproc_vec_env_for_multi_env(
             return obs, {"scenario_name": self.scenario_name}
 
         def step(self, action: np.ndarray):
+            """Return a nonterminal transition with scenario metadata."""
             obs = {
                 "robot_position": np.zeros(2, dtype=np.float32),
                 "goal_current": np.ones(2, dtype=np.float32),
@@ -351,18 +360,22 @@ def test_build_env_uses_subproc_vec_env_for_multi_env(
             return obs, 0.0, False, False, {"scenario_name": self.scenario_name}
 
     class _FakeSubprocVecEnv:
+        """SubprocVecEnv stub that eagerly builds envs from factories."""
+
         def __init__(self, env_fns: list[object]) -> None:
             self.envs = [fn() for fn in env_fns]
             self.observation_space = self.envs[0].observation_space
             self.action_space = self.envs[0].action_space
 
         def close(self) -> None:
+            """Close any child envs that expose close()."""
             for env in self.envs:
                 close = getattr(env, "close", None)
                 if callable(close):
                     close()
 
     def _fake_build_robot_config_from_scenario(scenario: dict[str, object], *, scenario_path: Path):
+        """Build a lightweight robot config from a scenario row."""
         return SimpleNamespace(
             scenario_name=scenario["name"],
             scenario_path=scenario_path,
@@ -658,23 +671,30 @@ def test_periodic_eval_callback_runs_wrapper_and_logs(
     """Periodic callback should save a checkpoint and call the reusable eval wrapper."""
 
     class _DummyModel:
+        """Model stub that records saved checkpoint paths."""
+
         def __init__(self) -> None:
             self.saved_paths: list[Path] = []
 
         def save(self, path: str) -> None:
+            """Write a stub checkpoint and record its path."""
             self.saved_paths.append(Path(path))
             Path(path).write_text("stub", encoding="utf-8")
 
     class _DummyWandb:
+        """W&B run stub that records logged payloads."""
+
         def __init__(self) -> None:
             self.logs: list[dict[str, float]] = []
 
         def log(self, payload, step=None):
+            """Record a W&B log payload."""
             self.logs.append(dict(payload))
 
     eval_calls: list[dict[str, object]] = []
 
     def _fake_eval(**kwargs):
+        """Record eval wrapper arguments and return passing metrics."""
         eval_calls.append(kwargs)
         return {
             "success_rate": 0.75,

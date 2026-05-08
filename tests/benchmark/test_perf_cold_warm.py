@@ -18,6 +18,7 @@ def _sample(
     episode: float,
     sps: float,
 ) -> perf_cold_warm.PhaseMetrics:
+    """Build a PhaseMetrics sample for aggregation and regression tests."""
     return perf_cold_warm.PhaseMetrics(
         env_create_sec=create,
         first_step_sec=first,
@@ -250,22 +251,27 @@ def test_measure_once_with_fake_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Measurement should compute metrics and close env even with resets during loop."""
 
     class _FakeEnv:
+        """Environment stub that tracks reset, step, and close calls."""
+
         def __init__(self) -> None:
             self.closed = False
             self.reset_calls = 0
             self.step_calls = 0
 
         def reset(self, seed: int) -> tuple[dict, dict]:
+            """Record resets and return an empty observation."""
             self.reset_calls += 1
             return {}, {}
 
         def step(self, _action: tuple[float, float]) -> tuple[dict, float, bool, bool, dict]:
+            """Record steps and force a truncated first step."""
             self.step_calls += 1
             if self.step_calls == 1:
                 return {}, 0.0, False, True, {}
             return {}, 0.0, False, False, {}
 
         def close(self) -> None:
+            """Record that the fake environment was closed."""
             self.closed = True
 
     fake_env = _FakeEnv()
@@ -274,6 +280,7 @@ def test_measure_once_with_fake_env(monkeypatch: pytest.MonkeyPatch) -> None:
     tick = {"value": 0.0}
 
     def _next_tick() -> float:
+        """Advance deterministic perf-counter time by one tick."""
         tick["value"] += 0.1
         return tick["value"]
 
@@ -303,6 +310,7 @@ def test_run_suite_uses_warmup_then_warm_samples(monkeypatch: pytest.MonkeyPatch
     )
 
     def _fake_measure_once(*, config, seed, episode_steps):
+        """Record warm measurement seeds and return a stable sample."""
         call_log.append(seed)
         return _sample(create=1.0, first=0.1, episode=1.0, sps=10.0)
 
@@ -370,11 +378,15 @@ def test_load_scenario_config_and_not_found(monkeypatch: pytest.MonkeyPatch) -> 
     """Scenario loader should resolve named scenario and set sim-time override."""
 
     class _SimConfig:
+        """Simulation config stub with mutable timing fields."""
+
         def __init__(self) -> None:
             self.time_per_step_in_secs = 0.2
             self.sim_time_in_secs = 0.0
 
     class _Config:
+        """Scenario config stub exposing a simulation config."""
+
         def __init__(self) -> None:
             self.sim_config = _SimConfig()
 
@@ -405,6 +417,8 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
     """Subprocess helper should parse JSON payloads and raise on failure modes."""
 
     class _Completed:
+        """Subprocess result stub used by cold-measurement parsing tests."""
+
         def __init__(self, *, returncode: int, stdout: str, stderr: str) -> None:
             self.returncode = returncode
             self.stdout = stdout
@@ -457,6 +471,7 @@ def test_measure_cold_subprocess_success_and_failures(monkeypatch: pytest.Monkey
         )
 
     def _raise_timeout(*args, **kwargs) -> _Completed:
+        """Raise a subprocess timeout from the cold-measurement helper."""
         raise perf_cold_warm.subprocess.TimeoutExpired(cmd="python", timeout=300)
 
     monkeypatch.setattr(
@@ -538,6 +553,7 @@ def test_main_non_internal_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     out_md = tmp_path / "out.md"
 
     def _common_args() -> Namespace:
+        """Return shared CLI arguments for non-internal main tests."""
         return Namespace(
             internal_measure_once=False,
             scenario_config=Path("configs/scenarios/archetypes/classic_cross_trap.yaml"),

@@ -258,6 +258,7 @@ def test_run_benchmark_gate_returns_summary_when_runner_fails_with_jsonl(
     )
 
     def _raise(*_args, **_kwargs) -> None:
+        """Simulate a benchmark subprocess failure after JSONL was written."""
         raise subprocess.CalledProcessError(2, ["benchmark"])
 
     monkeypatch.setattr(latest_eval.subprocess, "run", _raise)
@@ -275,6 +276,7 @@ def test_run_benchmark_gate_returns_failed_empty_summary_when_runner_fails_witho
     """Benchmark subprocess failures without JSONL should still produce a failed gate summary."""
 
     def _raise(*_args, **_kwargs) -> None:
+        """Simulate a benchmark subprocess failure without JSONL output."""
         raise subprocess.CalledProcessError(3, ["benchmark"])
 
     monkeypatch.setattr(latest_eval.subprocess, "run", _raise)

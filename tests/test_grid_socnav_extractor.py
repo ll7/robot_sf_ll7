@@ -10,6 +10,7 @@ from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtracto
 
 
 def _make_obs_dict(space: spaces.Dict, batch: int = 2) -> dict:
+    """Sample a batched observation dictionary from a Gymnasium Dict space."""
     obs = {}
     for key, subspace in space.spaces.items():
         sample = subspace.sample()
@@ -106,6 +107,7 @@ def test_grid_socnav_extractor_can_include_privileged_state_for_critic() -> None
 
 
 def _make_ped_obs_space(max_peds: int = 4) -> spaces.Dict:
+    """Create an observation space with pedestrian slots and count metadata."""
     return spaces.Dict(
         {
             "occupancy_grid": spaces.Box(low=0.0, high=1.0, shape=(3, 32, 32), dtype=np.float32),

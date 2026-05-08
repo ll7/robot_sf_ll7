@@ -23,10 +23,12 @@ def test_main_preflight_mode_emits_preflight_payload(
     called: dict[str, bool] = {"preflight": False, "run": False}
 
     def _fake_load_campaign_config(path: Path):
+        """Return the sentinel config only for the requested config path."""
         assert path == config_path
         return sentinel_cfg
 
     def _fake_prepare_campaign_preflight(cfg, **kwargs):
+        """Return preflight artifact paths and record that preflight ran."""
         assert cfg is sentinel_cfg
         assert kwargs["campaign_id"] == "fixed-campaign"
         called["preflight"] = True
@@ -68,6 +70,7 @@ def test_main_preflight_mode_emits_preflight_payload(
         }
 
     def _fake_run_campaign(*args, **kwargs):
+        """Fail if run mode is invoked while testing preflight mode."""
         del args, kwargs
         called["run"] = True
         raise AssertionError("run_campaign should not be called in preflight mode")
@@ -118,15 +121,18 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
     called: dict[str, bool] = {"preflight": False, "run": False}
 
     def _fake_load_campaign_config(path: Path):
+        """Return the sentinel config only for the requested run-mode path."""
         assert path == config_path
         return sentinel_cfg
 
     def _fake_prepare_campaign_preflight(*args, **kwargs):
+        """Fail if preflight is invoked while testing run mode."""
         del args, kwargs
         called["preflight"] = True
         raise AssertionError("prepare_campaign_preflight should not be called in run mode")
 
     def _fake_run_campaign(cfg, **kwargs):
+        """Return a minimal successful campaign payload for run mode."""
         assert cfg is sentinel_cfg
         assert isinstance(kwargs.get("invoked_command"), str)
         assert kwargs["campaign_id"] == "fixed-campaign"

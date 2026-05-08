@@ -106,6 +106,7 @@ def test_run_frame_extraction_logs_timeout(monkeypatch, tmp_path: Path):
     report_json.write_text("{}", encoding="utf-8")
 
     def _boom(*_args, **_kwargs):
+        """Raise a timeout from frame extraction."""
         exc = subprocess.TimeoutExpired(
             cmd="extract_failure_frames.py",
             timeout=60,
@@ -494,6 +495,8 @@ def test_build_episode_record_collision_overrides_route_complete_flag(monkeypatc
     monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
 
     class _Map:
+        """Minimal map fixture for collision termination records."""
+
         obstacles = []
         bounds = ((0.0, 0.0), (1.0, 1.0))
 
@@ -545,6 +548,8 @@ def test_build_episode_record_route_complete_success_without_terminal_flags(monk
     monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
 
     class _Map:
+        """Minimal map fixture for route-complete records."""
+
         obstacles = []
         bounds = ((0.0, 0.0), (1.0, 1.0))
 
@@ -596,6 +601,8 @@ def test_build_episode_record_preserves_multi_ped_adversarial_metadata(monkeypat
     monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
 
     class _Map:
+        """Minimal map fixture for adversarial metadata records."""
+
         obstacles = []
         bounds = ((0.0, 0.0), (1.0, 1.0))
 
@@ -742,6 +749,8 @@ def test_build_episode_record_metric_collision_overrides_route_complete(monkeypa
     monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
 
     class _Map:
+        """Minimal map fixture for collision-metric override records."""
+
         obstacles = []
         bounds = ((0.0, 0.0), (1.0, 1.0))
 
@@ -800,6 +809,8 @@ def test_build_episode_record_backfills_collision_split_metrics_from_meta(monkey
     monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
 
     class _Map:
+        """Minimal map fixture for collision split backfill records."""
+
         obstacles = []
         bounds = ((0.0, 0.0), (1.0, 1.0))
 
@@ -865,6 +876,8 @@ def test_build_episode_record_backfills_split_metrics_when_total_collision_is_pr
     monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
 
     class _Map:
+        """Minimal map fixture for terminal collision split records."""
+
         obstacles = []
         bounds = ((0.0, 0.0), (1.0, 1.0))
 
@@ -931,6 +944,8 @@ def test_build_episode_record_backfills_missing_terminal_split_when_other_splits
     monkeypatch.setattr(policy_analysis_run, "compute_shortest_path_length", lambda *args: 1.0)
 
     class _Map:
+        """Minimal map fixture for mixed collision split records."""
+
         obstacles = []
         bounds = ((0.0, 0.0), (1.0, 1.0))
 
@@ -973,6 +988,8 @@ def test_collect_episode_trajectories_snapshots_mutable_simulator_buffers() -> N
     """Trajectory collection must copy mutable simulator arrays per timestep."""
 
     class _Sim:
+        """Simulator stub with mutable arrays to test trajectory snapshots."""
+
         def __init__(self) -> None:
             self._robot = np.array([0.0, 0.0], dtype=float)
             self._peds = np.array([[0.0, 0.0]], dtype=float)
@@ -980,22 +997,28 @@ def test_collect_episode_trajectories_snapshots_mutable_simulator_buffers() -> N
 
         @property
         def robot_pos(self):
+            """Return the mutable robot position buffer."""
             return [self._robot]
 
         @property
         def ped_pos(self):
+            """Return the mutable pedestrian position buffer."""
             return self._peds
 
         @property
         def last_ped_forces(self):
+            """Return the mutable pedestrian force buffer."""
             return self._forces
 
     class _Env:
+        """Environment stub that mutates simulator buffers on each step."""
+
         def __init__(self) -> None:
             self.simulator = _Sim()
             self._step = 0
 
         def step(self, _action):
+            """Mutate shared buffers and terminate after three steps."""
             self._step += 1
             # Mutate shared arrays in-place (aliasing hazard).
             self.simulator._robot[:] = [float(self._step), 0.0]
@@ -1006,10 +1029,14 @@ def test_collect_episode_trajectories_snapshots_mutable_simulator_buffers() -> N
             return {}, 0.0, terminated, False, info
 
         def render(self):
+            """No-op render hook for trajectory collection."""
             return None
 
     class _Adapter:
+        """Policy adapter stub returning a zero action."""
+
         def action(self, _obs, _env, *, robot_speed: float):
+            """Return a zero action while accepting robot speed."""
             _ = robot_speed
             return np.zeros(2, dtype=float)
 
@@ -1038,7 +1065,10 @@ def test_reset_env_aligns_dict_observation_to_loaded_policy_space() -> None:
     """Policy-analysis reset path should trim extra dict keys for MultiInput PPO."""
 
     class _Env:
+        """Environment stub returning a dict observation with extra keys."""
+
         def reset(self, *, seed: int):
+            """Return a reset observation that must be trimmed to policy space."""
             assert seed == 123
             return (
                 {

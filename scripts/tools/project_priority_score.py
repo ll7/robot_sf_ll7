@@ -514,6 +514,11 @@ def sync_scores(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for priority-score project commands.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 

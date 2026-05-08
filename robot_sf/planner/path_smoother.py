@@ -30,6 +30,7 @@ def douglas_peucker(path: Sequence[Vec2D], epsilon: float) -> list[Vec2D]:
     pts = np.array(path, dtype=float)
 
     def _recursive(start_idx: int, end_idx: int, keep: list[int]) -> None:
+        """Mark interior points that exceed the Douglas-Peucker tolerance."""
         segment = pts[end_idx] - pts[start_idx]
         seg_len = np.linalg.norm(segment)
         if seg_len == 0:

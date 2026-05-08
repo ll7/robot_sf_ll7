@@ -25,6 +25,11 @@ _METRICS: tuple[str, ...] = (
 
 
 def _safe_float(value: Any) -> float | None:
+    """Parse a finite float from loose CSV or JSON input.
+
+    Returns:
+        Parsed finite float, or ``None`` when the value is missing or invalid.
+    """
     if value is None:
         return None
     if isinstance(value, str):
@@ -51,11 +56,21 @@ def _metric_value(row: dict[str, Any], metric: str) -> float | None:
 
 
 def _read_summary(campaign_root: Path) -> dict[str, Any]:
+    """Read a campaign summary JSON artifact.
+
+    Returns:
+        Parsed campaign summary payload.
+    """
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     return json.loads(summary_path.read_text(encoding="utf-8"))
 
 
 def _planner_rows_by_key(summary_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index planner summary rows by planner key.
+
+    Returns:
+        Mapping from planner key to planner row payload.
+    """
     rows = summary_payload.get("planner_rows")
     if not isinstance(rows, list):
         return {}
@@ -100,6 +115,11 @@ def _read_optional_csv_rows(path: Path) -> list[dict[str, str]]:
 def _breakdown_rows_by_key(
     rows: list[dict[str, str]], key_fields: tuple[str, ...]
 ) -> dict[tuple[str, ...], dict[str, str]]:
+    """Index scenario or family breakdown rows by their configured key fields.
+
+    Returns:
+        Mapping from key tuple to the latest row with that key.
+    """
     out: dict[tuple[str, ...], dict[str, str]] = {}
     for row in rows:
         key = tuple(str(row.get(field) or "") for field in key_fields)
@@ -109,6 +129,11 @@ def _breakdown_rows_by_key(
 
 
 def _row_episodes(row: dict[str, Any]) -> int:
+    """Extract an episode count from a summary or breakdown row.
+
+    Returns:
+        Integer episode count, or zero when absent or invalid.
+    """
     value = _safe_float(row.get("episodes"))
     if value is None:
         return 0
@@ -130,6 +155,11 @@ def _breakdown_row_signature(row: dict[str, Any], key_fields: tuple[str, ...]) -
 
 
 def _key_to_payload(key_fields: tuple[str, ...], key: tuple[str, ...]) -> dict[str, str]:
+    """Convert a tuple key back into a named JSON payload.
+
+    Returns:
+        Mapping from each key field name to its tuple value.
+    """
     return {field: key[index] for index, field in enumerate(key_fields)}
 
 
@@ -190,6 +220,11 @@ def _compare_breakdown_artifact(
 
 
 def _success_delta_sort_key(row: dict[str, Any]) -> tuple[float, str]:
+    """Build a stable sort key that prioritizes success-rate drift.
+
+    Returns:
+        Tuple sorted by descending absolute success delta, then row identity.
+    """
     metrics = row.get("metrics")
     success = metrics.get("success_mean") if isinstance(metrics, dict) else None
     delta = success.get("delta") if isinstance(success, dict) else 0.0
@@ -215,6 +250,7 @@ def _append_breakdown_markdown(
     missing_in_candidate: list[dict[str, str]],
     row_limit: int = 40,
 ) -> None:
+    """Append scenario or family breakdown comparison tables to Markdown output."""
     if not deltas and not missing_in_base and not missing_in_candidate:
         return
     lines.extend(["", f"## {title}", ""])
@@ -283,6 +319,11 @@ def _append_breakdown_markdown(
 
 
 def _build_markdown(payload: dict[str, Any]) -> str:
+    """Render a camera-ready campaign comparison report.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     lines = [
         "# Camera-Ready Campaign Comparison",
         "",
@@ -460,6 +501,11 @@ def _resolve_safe_output_path(path: Path, safe_root: Path) -> Path:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the campaign comparison CLI parser.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-campaign-root", type=Path, required=True)
     parser.add_argument("--candidate-campaign-root", type=Path, required=True)

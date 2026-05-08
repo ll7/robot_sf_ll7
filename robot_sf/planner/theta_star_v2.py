@@ -88,6 +88,7 @@ if njit:
     def _numba_los_blocks(
         type_map, x0, y0, x1, y1, free_vals
     ) -> bool:  # pragma: no cover - exercised via python wrapper
+        """Return whether a grid line of sight crosses blocked cells."""
         width, height = type_map.shape
         if x0 < 0 or x0 >= width or y0 < 0 or y0 >= height:
             return True
@@ -131,6 +132,11 @@ def _bind_fast_in_collision(grid: Grid) -> None:
     if njit:
 
         def fast_in_collision(self, p1, p2):
+            """Run Numba-backed line-of-sight collision checking.
+
+            Returns:
+                bool: ``True`` when the segment intersects a blocked grid cell.
+            """
             x0, y0 = p1
             x1, y1 = p2
             return _numba_los_blocks(self.type_map.array, x0, y0, x1, y1, free_vals)
@@ -138,6 +144,11 @@ def _bind_fast_in_collision(grid: Grid) -> None:
     else:
 
         def fast_in_collision(self, p1, p2):
+            """Run Python fallback line-of-sight collision checking.
+
+            Returns:
+                bool: ``True`` when the segment intersects a blocked grid cell.
+            """
             x0, y0 = p1
             x1, y1 = p2
             return _python_los_blocks(self.type_map.array, x0, y0, x1, y1, free_vals)

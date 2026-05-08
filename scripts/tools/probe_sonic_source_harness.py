@@ -18,14 +18,29 @@ if TYPE_CHECKING:
 
 
 def _repository_root() -> Path:
+    """Resolve the local repository root.
+
+    Returns:
+        Repository root inferred from this script path.
+    """
     return Path(__file__).resolve().parents[2]
 
 
 def _safe_read_text(path: Path) -> str:
+    """Read UTF-8 text from a source file.
+
+    Returns:
+        File contents decoded as UTF-8.
+    """
     return path.read_text(encoding="utf-8")
 
 
 def _load_module(module_path: Path, module_name: str) -> ModuleType:
+    """Load a Python module from an arbitrary source path.
+
+    Returns:
+        Imported module object.
+    """
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load module from {module_path}")
@@ -35,6 +50,11 @@ def _load_module(module_path: Path, module_name: str) -> ModuleType:
 
 
 def _load_args_defaults(arguments_path: Path) -> dict[str, Any]:
+    """Load default CLI arguments from an upstream arguments module.
+
+    Returns:
+        Argument defaults keyed by argparse destination.
+    """
     module = _load_module(arguments_path, f"sonic_args_{arguments_path.stem}")
     get_args = getattr(module, "get_args", None)
     if not callable(get_args):
@@ -49,6 +69,11 @@ def _load_args_defaults(arguments_path: Path) -> dict[str, Any]:
 
 
 def _extract_contract(config_path: Path) -> dict[str, Any]:
+    """Extract the SoNIC policy and environment contract from config.py.
+
+    Returns:
+        Mapping of robot, human, sensor, prediction, and action settings.
+    """
     module = _load_module(config_path, f"sonic_config_{config_path.stem}")
     config_cls = getattr(module, "Config", None)
     if config_cls is None:
@@ -65,6 +90,11 @@ def _extract_contract(config_path: Path) -> dict[str, Any]:
 
 
 def _extract_docker_base_image(dockerfile_path: Path) -> str | None:
+    """Read the base image from an upstream Dockerfile.
+
+    Returns:
+        Docker ``FROM`` image string, or ``None`` when absent.
+    """
     for line in _safe_read_text(dockerfile_path).splitlines():
         stripped = line.strip()
         if stripped.startswith("FROM "):
@@ -73,6 +103,11 @@ def _extract_docker_base_image(dockerfile_path: Path) -> str | None:
 
 
 def _read_requirements(requirements_path: Path) -> list[str]:
+    """Read non-comment dependency lines from a requirements file.
+
+    Returns:
+        Requirement specifier lines.
+    """
     lines: list[str] = []
     for line in _safe_read_text(requirements_path).splitlines():
         stripped = line.strip()
@@ -82,6 +117,11 @@ def _read_requirements(requirements_path: Path) -> list[str]:
 
 
 def _default_checkpoint(checkpoints_dir: Path) -> str:
+    """Choose the latest checkpoint file from a model directory.
+
+    Returns:
+        Lexicographically latest ``.pt`` checkpoint filename.
+    """
     candidates = sorted(path.name for path in checkpoints_dir.glob("*.pt"))
     if not candidates:
         raise FileNotFoundError(f"No .pt checkpoints found in {checkpoints_dir}")
@@ -89,6 +129,11 @@ def _default_checkpoint(checkpoints_dir: Path) -> str:
 
 
 def _detect_failure_summary(stderr: str) -> str:
+    """Summarize the source-harness stderr into a short blocker.
+
+    Returns:
+        Missing dependency, GPU-runtime, first-line, or unknown failure summary.
+    """
     missing_module = re.search(r"No module named '([^']+)'", stderr)
     if missing_module:
         return f"missing python dependency: {missing_module.group(1)}"
@@ -287,6 +332,11 @@ def run_probe(
 
 
 def _render_markdown(report: ProbeReport) -> str:
+    """Render a Markdown report for the SoNIC source-harness probe.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     contract = report.source_contract
     defaults = report.training_defaults
     lines = [

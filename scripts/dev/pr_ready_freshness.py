@@ -24,30 +24,61 @@ def _run_git(args: list[str]) -> str:
 
 
 def _current_branch() -> str:
+    """Read the current git branch name.
+
+    Returns:
+        Active branch name, or an empty string when git reports detached HEAD.
+    """
     return _run_git(["branch", "--show-current"])
 
 
 def _head_sha() -> str:
+    """Read the current HEAD commit SHA.
+
+    Returns:
+        Full git SHA for HEAD.
+    """
     return _run_git(["rev-parse", "HEAD"])
 
 
 def _sanitize_branch(branch: str) -> str:
+    """Convert a branch name into a safe readiness-stamp filename stem.
+
+    Returns:
+        Sanitized branch name or ``detached-head`` for empty input.
+    """
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", branch).strip("-") or "detached-head"
 
 
 def _default_stamp_path(branch: str) -> Path:
+    """Build the default readiness stamp path for a branch.
+
+    Returns:
+        Path under ``output/validation/pr_ready`` for the branch stamp.
+    """
     return Path("output/validation/pr_ready") / f"{_sanitize_branch(branch)}.json"
 
 
 def _resolve_stamp_path(stamp_path: str | None, branch: str) -> Path:
+    """Resolve an explicit or default readiness stamp path.
+
+    Returns:
+        Caller-provided path, or the branch-specific default stamp path.
+    """
     return Path(stamp_path) if stamp_path else _default_stamp_path(branch)
 
 
 def _json_dump(payload: dict[str, Any]) -> None:
+    """Print a JSON payload with stable formatting."""
     print(json.dumps(payload, indent=2, sort_keys=True))
 
 
 def _load_stamp(path: Path) -> dict[str, Any]:
+    """Load a readiness stamp from disk.
+
+    Returns:
+        Parsed readiness stamp payload.
+    """
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
@@ -60,6 +91,11 @@ def _write_stamp(
     head_sha: str,
     status: str,
 ) -> dict[str, Any]:
+    """Write a readiness stamp for the current branch and HEAD.
+
+    Returns:
+        Stamp payload written to disk.
+    """
     payload = {
         "branch": branch,
         "base_ref": base_ref,
@@ -80,6 +116,11 @@ def _freshness_result(
     head_sha: str,
     max_age_hours: float,
 ) -> tuple[bool, dict[str, Any]]:
+    """Check whether an existing readiness stamp matches the current context.
+
+    Returns:
+        Tuple of freshness boolean and detailed status payload.
+    """
     result: dict[str, Any] = {
         "fresh": False,
         "stamp_path": str(path),
@@ -132,6 +173,11 @@ def _freshness_result(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the readiness freshness CLI parser.
+
+    Returns:
+        Configured argument parser with ``status`` and ``write`` subcommands.
+    """
     parser = argparse.ArgumentParser(
         description="Record and verify local PR readiness evidence for the current branch."
     )

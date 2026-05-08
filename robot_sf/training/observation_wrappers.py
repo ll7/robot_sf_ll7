@@ -121,6 +121,11 @@ def _make_drive_state_adapter(
     """
 
     def _adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
+        """Extract and reshape one drive-state observation.
+
+        Returns:
+            np.ndarray: Drive-state array matching the expected Box shape.
+        """
         drive_state = np.asarray(orig_obs[OBS_DRIVE_STATE])
         return _reshape_box_obs(drive_state, expected_shape)
 
@@ -137,6 +142,11 @@ def _make_ray_obs_adapter(
     """
 
     def _adapter(orig_obs: Mapping[str, Any]) -> np.ndarray:
+        """Extract and reshape one ray observation.
+
+        Returns:
+            np.ndarray: Ray array matching the expected Box shape.
+        """
         ray_state = np.asarray(orig_obs[OBS_RAYS])
         return _reshape_box_obs(ray_state, expected_shape)
 

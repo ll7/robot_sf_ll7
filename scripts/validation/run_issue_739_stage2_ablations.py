@@ -33,6 +33,11 @@ class AblationRunSummary:
 
 
 def _metric_mean(metrics: dict[str, Any], key: str) -> float | None:
+    """Extract a metric mean from aggregate-like payloads.
+
+    Returns:
+        float | None: Metric mean, or ``None`` when unavailable.
+    """
     aggregate = metrics.get(key)
     if aggregate is None:
         return None
@@ -40,6 +45,11 @@ def _metric_mean(metrics: dict[str, Any], key: str) -> float | None:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for stage-2 ablation validation.
+
+    Returns:
+        argparse.Namespace: Parsed configs and output directory.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
@@ -57,6 +67,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _write_markdown(path: Path, rows: list[AblationRunSummary]) -> None:
+    """Write stage-2 ablation summaries as Markdown."""
     lines = [
         "# Issue 739 Stage-2 Ablations",
         "",

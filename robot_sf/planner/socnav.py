@@ -4564,6 +4564,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         untried: dict[tuple[int, ...], list[int]] = {(): list(range(len(stage_candidates)))}
 
         def _uct(parent: tuple[int, ...], child: tuple[int, ...]) -> float:
+            """Compute upper-confidence tree score for one child node.
+
+            Returns:
+                float: UCT value, or ``inf`` for an unvisited child.
+            """
             child_visits = visits.get(child, 0)
             if child_visits == 0:
                 return float("inf")

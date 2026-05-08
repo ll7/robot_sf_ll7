@@ -107,6 +107,11 @@ class SocialNavigationPyEnvsORCAWrapper:
         self._policy = policy_mod.ORCA()
 
     def _joint_state(self, observation: dict[str, Any]) -> Any:
+        """Convert a Robot SF observation into upstream CrowdNav JointState.
+
+        Returns:
+            Any: Upstream JointState instance.
+        """
         if "robot" in observation:
             robot_state = observation.get("robot", {})
             goal_state = observation.get("goal", {})
@@ -281,6 +286,11 @@ def run_probe(repo_root: Path, *, seed: int, max_steps: int) -> WrapperProbeRepo
 
 
 def _render_markdown(report: WrapperProbeReport) -> str:
+    """Render the wrapper probe result as Markdown.
+
+    Returns:
+        str: Markdown report body.
+    """
     return "\n".join(
         [
             "# Social-Navigation-PyEnvs ORCA Wrapper Probe",

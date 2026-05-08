@@ -115,6 +115,11 @@ class CoordinateRefinementSampler:
         """Return ``candidate`` with one coordinate moved within configured bounds."""
 
         def move(value: float, bounds: RangeConfig) -> float:
+            """Move a scalar by one normalized step while respecting bounds.
+
+            Returns:
+                float: Clamped coordinate value.
+            """
             span = bounds.max - bounds.min
             if span <= 0.0:
                 return float(value)

@@ -18,6 +18,11 @@ from robot_sf.training.scenario_split import split_scenarios
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for scenario split generation.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--scenario",

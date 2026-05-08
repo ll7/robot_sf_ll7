@@ -75,6 +75,11 @@ def _patched_clip_grad_norm(
         *args: Any,
         **kwargs: Any,
     ) -> th.Tensor:
+        """Record gradient parameters before delegating to Torch clipping.
+
+        Returns:
+            th.Tensor: Result from ``torch.nn.utils.clip_grad_norm_``.
+        """
         parameter_list = list(parameters)
         callback(parameter_list)
         return original_clip_grad_norm(parameter_list, max_norm, *args, **kwargs)
@@ -110,6 +115,11 @@ class DiagnosticPPO(PPO):
         super().__init__(*args, **kwargs)
 
     def _collect_batch_diagnostics(self, parameters: Iterable[th.nn.Parameter]) -> dict[str, float]:
+        """Collect gradient and activation diagnostics for the current PPO batch.
+
+        Returns:
+            dict[str, float]: Numeric diagnostic summary for logging/persistence.
+        """
         policy = self.policy
         mlp_extractor = getattr(policy, "mlp_extractor", None)
         action_net = getattr(policy, "action_net", None)

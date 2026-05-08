@@ -253,6 +253,11 @@ def _certify_routes_for_map(
     config: RobotSimulationConfig,
     settings: CertificationSettings,
 ) -> list[RouteCertificate]:
+    """Certify the scenario-relevant robot routes for one parsed map.
+
+    Returns:
+        list[RouteCertificate]: Per-route certification records.
+    """
     routes = _applicable_routes(map_def, scenario)
     return [
         _certify_route(
@@ -274,6 +279,11 @@ def _certify_route(
     config: RobotSimulationConfig,
     settings: CertificationSettings,
 ) -> RouteCertificate:
+    """Run geometric, kinodynamic, and dynamic checks for one route.
+
+    Returns:
+        RouteCertificate: Route classification, eligibility, checks, and evidence.
+    """
     route_id = route.source_label or f"robot_route_{route.spawn_id}_{route.goal_id}"
     reasons: list[str] = []
     checks: dict[str, Any] = {"map_name": map_name}
@@ -410,6 +420,11 @@ def _aggregate_scenario_certificate(
     route_certs: list[RouteCertificate],
     settings: CertificationSettings,
 ) -> ScenarioCertificate:
+    """Aggregate per-route certificates into one scenario-level certificate.
+
+    Returns:
+        ScenarioCertificate: Scenario classification and route evidence summary.
+    """
     status = max(route_certs, key=lambda cert: _STATUS_SEVERITY[cert.classification]).classification
     reasons = sorted({reason for cert in route_certs for reason in cert.reasons})
     checks = {
@@ -440,6 +455,11 @@ def _invalid_scenario_certificate(
     source: str,
     reason: str,
 ) -> ScenarioCertificate:
+    """Build an excluded scenario certificate when route certification cannot run.
+
+    Returns:
+        ScenarioCertificate: Invalid certificate carrying the supplied exclusion reason.
+    """
     return ScenarioCertificate(
         schema_version=CERT_SCHEMA_VERSION,
         scenario_id=scenario_id,
@@ -462,6 +482,11 @@ def _route_certificate(
     checks: dict[str, Any],
     evidence: dict[str, Any],
 ) -> RouteCertificate:
+    """Build a route certificate with benchmark eligibility derived from status.
+
+    Returns:
+        RouteCertificate: JSON-safe route certification payload.
+    """
     return RouteCertificate(
         route_id=route_id,
         spawn_id=int(route.spawn_id),
@@ -475,6 +500,11 @@ def _route_certificate(
 
 
 def _benchmark_eligibility(status: str) -> str:
+    """Map a certification status to benchmark eligibility.
+
+    Returns:
+        str: ``excluded``, ``stress_only``, or ``eligible``.
+    """
     if status in EXCLUDED_STATUSES:
         return "excluded"
     if status == KNIFE_EDGE:
@@ -483,11 +513,21 @@ def _benchmark_eligibility(status: str) -> str:
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Resolve the stable scenario identifier from common manifest fields.
+
+    Returns:
+        str: Non-empty scenario id, or ``"unknown"``.
+    """
     raw = scenario.get("name") or scenario.get("scenario_id") or scenario.get("id")
     return str(raw or "unknown").strip() or "unknown"
 
 
 def _scenario_evidence(scenario: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract reusable provenance and plausibility evidence from a scenario.
+
+    Returns:
+        dict[str, Any]: JSON-safe evidence block for scenario certificates.
+    """
     metadata = scenario.get("metadata")
     evidence: dict[str, Any] = {"scenario_fingerprint": _fingerprint_mapping(scenario)}
     if isinstance(metadata, Mapping):
@@ -505,11 +545,21 @@ def _scenario_evidence(scenario: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _fingerprint_mapping(payload: Mapping[str, Any]) -> str:
+    """Fingerprint a mapping after JSON-safe normalization.
+
+    Returns:
+        str: Short SHA-256 fingerprint for provenance comparisons.
+    """
     encoded = json.dumps(_sanitize_json_value(dict(payload)), sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
 def _applicable_routes(map_def: MapDefinition, scenario: Mapping[str, Any]) -> list[GlobalRoute]:
+    """Select routes that apply to the scenario override or full map.
+
+    Returns:
+        list[GlobalRoute]: Scenario-specific route when configured, otherwise all robot routes.
+    """
     spawn_id = scenario.get("robot_spawn_id")
     goal_id = scenario.get("robot_goal_id")
     if isinstance(spawn_id, int) and isinstance(goal_id, int):
@@ -519,6 +569,11 @@ def _applicable_routes(map_def: MapDefinition, scenario: Mapping[str, Any]) -> l
 
 
 def _route_start_goal(route: GlobalRoute) -> tuple[Vec2D | None, Vec2D | None]:
+    """Return start and goal waypoints when a route has enough points.
+
+    Returns:
+        tuple[Vec2D | None, Vec2D | None]: Start and goal, or ``None`` pair.
+    """
     if len(route.waypoints) < 2:
         return None, None
     return tuple(route.waypoints[0]), tuple(route.waypoints[-1])
@@ -531,6 +586,11 @@ def _validate_route_shape(
     map_bounds: Polygon,
     obstacle_union: Any,
 ) -> list[str]:
+    """Validate basic route geometry before planner-based certification.
+
+    Returns:
+        list[str]: Invalidity reasons; empty when the route shape is usable.
+    """
     reasons: list[str] = []
     if start is None or goal is None:
         return ["route_requires_at_least_two_waypoints"]
@@ -549,10 +609,16 @@ def _validate_route_shape(
 
 
 def _finite_point(point: Vec2D) -> bool:
+    """Return whether a point has two finite coordinates."""
     return len(point) == 2 and all(math.isfinite(float(coord)) for coord in point)
 
 
 def _obstacle_union(map_def: MapDefinition) -> Any:
+    """Union all obstacle polygons from a map definition.
+
+    Returns:
+        Geometry collection or unioned polygonal geometry.
+    """
     polygons = []
     for obstacle in map_def.obstacles:
         polygons.extend(obstacle.iter_polygons())
@@ -562,6 +628,11 @@ def _obstacle_union(map_def: MapDefinition) -> Any:
 
 
 def _line_from_points(points: list[Vec2D]) -> LineString | None:
+    """Build a valid Shapely line from route points.
+
+    Returns:
+        LineString | None: Valid route line, or ``None`` when unusable.
+    """
     if len(points) < 2:
         return None
     line = LineString(points)
@@ -576,6 +647,11 @@ def _minimum_static_clearance(
     obstacle_union: Any,
     robot_radius: float,
 ) -> float | None:
+    """Compute route clearance from static obstacles after robot-radius inflation.
+
+    Returns:
+        float | None: Clearance margin in meters, or ``None`` without obstacles.
+    """
     if obstacle_union.is_empty:
         return None
     return float(line.distance(obstacle_union) - robot_radius)
@@ -589,6 +665,12 @@ def _plan_inflated_shortest_path(
     robot_radius: float,
     settings: CertificationSettings,
 ) -> tuple[list[Vec2D] | None, dict[str, Any], str | None]:
+    """Plan an inflated A* path used as geometric feasibility proof.
+
+    Returns:
+        tuple[list[Vec2D] | None, dict[str, Any], str | None]: Planned path,
+        planner metadata, and optional error text.
+    """
     planner_config = ClassicPlannerConfig(
         cells_per_meter=settings.planner_cells_per_meter,
         inflate_radius_meters=robot_radius,
@@ -617,6 +699,11 @@ def _kinodynamic_checks(
     *,
     robot_config: DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings,
 ) -> tuple[list[str], dict[str, Any]]:
+    """Check route compatibility with the configured robot kinematics.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Infeasibility reasons and check metadata.
+    """
     checks: dict[str, Any] = {
         "robot_model": type(robot_config).__name__,
         "command_limits_valid": True,
@@ -653,6 +740,11 @@ def _kinodynamic_checks(
 
 
 def _minimum_route_turn_radius(points: list[Vec2D]) -> float | None:
+    """Estimate the tightest turn radius across route triplets.
+
+    Returns:
+        float | None: Minimum finite circumradius, or ``None`` for straight/short routes.
+    """
     radii: list[float] = []
     for p0, p1, p2 in zip(points[:-2], points[1:-1], points[2:], strict=False):
         radius = _circumradius(p0, p1, p2)
@@ -662,6 +754,11 @@ def _minimum_route_turn_radius(points: list[Vec2D]) -> float | None:
 
 
 def _circumradius(p0: Vec2D, p1: Vec2D, p2: Vec2D) -> float | None:
+    """Compute the circumradius through three route points.
+
+    Returns:
+        float | None: Circumradius, or ``None`` for degenerate triplets.
+    """
     a = math.dist(p1, p2)
     b = math.dist(p0, p2)
     c = math.dist(p0, p1)
@@ -678,6 +775,11 @@ def _dynamic_checks(
     robot_radius: float,
     ped_radius: float,
 ) -> tuple[list[str], dict[str, Any]]:
+    """Check static pedestrian blockers and dynamic interaction presence.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Dynamic overconstraint reasons and diagnostics.
+    """
     pedestrians = list(getattr(map_def, "single_pedestrians", []))
     checks = {
         "single_pedestrian_count": len(pedestrians),
@@ -702,6 +804,7 @@ def _dynamic_checks(
 
 
 def _pedestrian_is_static(pedestrian: SinglePedestrianDefinition) -> bool:
+    """Return whether a pedestrian definition has no dynamic target or role."""
     return (
         pedestrian.goal is None
         and pedestrian.trajectory is None
@@ -710,6 +813,11 @@ def _pedestrian_is_static(pedestrian: SinglePedestrianDefinition) -> bool:
 
 
 def _classify_solvable_route(checks: Mapping[str, Any], *, settings: CertificationSettings) -> str:
+    """Classify a feasible route by clearance, detour, turns, and dynamics.
+
+    Returns:
+        str: Certification status for a solvable route.
+    """
     clearance = checks.get("minimum_static_clearance_m")
     ratio = checks.get("path_length_ratio")
     dynamic = checks.get("dynamic")
@@ -738,6 +846,11 @@ def _solvable_reasons(
     *,
     settings: CertificationSettings,
 ) -> list[str]:
+    """Explain why a solvable route received its hardness classification.
+
+    Returns:
+        list[str]: Human-readable certification reasons.
+    """
     if status == VALID:
         return ["inflated_path_found_with_nominal_clearance"]
     if status == KNIFE_EDGE:
@@ -758,12 +871,22 @@ def _solvable_reasons(
 
 
 def _polyline_length(points: list[Vec2D]) -> float:
+    """Compute total route polyline length.
+
+    Returns:
+        float: Sum of consecutive segment lengths.
+    """
     if len(points) < 2:
         return 0.0
     return float(sum(math.dist(a, b) for a, b in pairwise(points)))
 
 
 def _turn_count(points: list[Vec2D]) -> int:
+    """Count non-collinear interior turns in a waypoint sequence.
+
+    Returns:
+        int: Number of detected turns.
+    """
     turns = 0
     for p0, p1, p2 in zip(points[:-2], points[1:-1], points[2:], strict=False):
         dx1 = p1[0] - p0[0]
@@ -776,12 +899,22 @@ def _turn_count(points: list[Vec2D]) -> int:
 
 
 def _safe_ratio(numerator: float, denominator: float) -> float | None:
+    """Divide two positive-scale quantities with zero-denominator protection.
+
+    Returns:
+        float | None: Ratio, or ``None`` when the denominator is effectively zero.
+    """
     if denominator <= 1e-9:
         return None
     return float(numerator / denominator)
 
 
 def _sanitize_json_value(value: Any) -> Any:
+    """Convert values into JSON-safe primitives for certificates.
+
+    Returns:
+        Any: JSON-safe representation with non-finite floats replaced by ``None``.
+    """
     if isinstance(value, Mapping):
         return {str(key): _sanitize_json_value(val) for key, val in value.items()}
     if isinstance(value, list | tuple):

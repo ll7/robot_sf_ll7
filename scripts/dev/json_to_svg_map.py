@@ -108,6 +108,11 @@ def _rect_elem(
     stroke: str = "black",
     stroke_width: float = 0.5,
 ) -> str:
+    """Render one SVG rectangle element.
+
+    Returns:
+        str: Serialized SVG ``rect`` element.
+    """
     x, y, w, h = rect
     return (
         f'    <rect id="{_esc(elem_id)}" inkscape:label="{_esc(label)}"'
@@ -124,6 +129,11 @@ def _path_elem(
     stroke: str = "black",
     stroke_width: float = 0.5,
 ) -> str:
+    """Render one SVG path element.
+
+    Returns:
+        str: Serialized SVG ``path`` element.
+    """
     return (
         f'    <path id="{_esc(elem_id)}" inkscape:label="{_esc(label)}"'
         f' d="{_esc(d)}"'

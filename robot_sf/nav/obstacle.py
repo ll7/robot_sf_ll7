@@ -154,6 +154,11 @@ class Obstacle:
 
     @staticmethod
     def _normalize_geometry(geometry: Polygon | MultiPolygon) -> Polygon | MultiPolygon | None:
+        """Accept only non-empty polygonal Shapely obstacle geometry.
+
+        Returns:
+            Polygon | MultiPolygon | None: Valid polygon geometry, or ``None`` when unusable.
+        """
         if geometry.is_empty:
             return None
         if isinstance(geometry, (Polygon, MultiPolygon)):
@@ -162,6 +167,11 @@ class Obstacle:
 
     @staticmethod
     def _representative_vertices(geometry: Polygon | MultiPolygon) -> list[Vec2D]:
+        """Extract legacy vertices from the first non-empty polygon exterior.
+
+        Returns:
+            list[Vec2D]: Exterior coordinates without the closing duplicate point.
+        """
         polygons: list[Polygon]
         if isinstance(geometry, Polygon):
             polygons = [geometry]
@@ -176,6 +186,11 @@ class Obstacle:
 
     @staticmethod
     def _ring_to_lines(ring) -> list[Line2D]:
+        """Convert one Shapely ring into legacy line tuples.
+
+        Returns:
+            list[Line2D]: Non-degenerate closed-ring edges.
+        """
         coords = [tuple(point) for point in ring.coords]
         if len(coords) < 2:
             return []
@@ -187,11 +202,21 @@ class Obstacle:
         return [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges if p1 != p2]
 
     def _lines_from_vertices(self) -> list[Line2D]:
+        """Build legacy line tuples from stored representative vertices.
+
+        Returns:
+            list[Line2D]: Non-degenerate edges closing the vertex loop.
+        """
         edges = [*pairwise(self.vertices), (self.vertices[-1], self.vertices[0])]
         edges = list(filter(lambda edge: edge[0] != edge[1], edges))
         return [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
 
     def _lines_from_geometry(self) -> list[Line2D]:
+        """Build legacy line tuples from polygon exteriors and holes.
+
+        Returns:
+            list[Line2D]: Obstacle boundary and interior-hole segments.
+        """
         lines: list[Line2D] = []
         for polygon in self.iter_polygons():
             lines.extend(self._ring_to_lines(polygon.exterior))

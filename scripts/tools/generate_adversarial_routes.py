@@ -25,6 +25,11 @@ from robot_sf.training.scenario_loader import (
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for adversarial route generation.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
@@ -42,6 +47,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load a YAML mapping from disk.
+
+    Returns:
+        dict[str, Any]: Parsed YAML mapping.
+    """
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise ValueError(f"Expected mapping at config root: {path}")
@@ -49,6 +59,11 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _dict_section(data: dict[str, Any], key: str) -> dict[str, Any]:
+    """Return a named mapping section from config data.
+
+    Returns:
+        dict[str, Any]: Section mapping, or an empty mapping when absent.
+    """
     section = data.get(key, {})
     if not isinstance(section, dict):
         raise ValueError(f"'{key}' must be a mapping")
@@ -56,6 +71,11 @@ def _dict_section(data: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def _resolve_map_file(scenario_file: Path, scenario_entry: dict[str, Any]) -> str:
+    """Resolve the selected scenario's map file path.
+
+    Returns:
+        str: Absolute or scenario-file-relative map path.
+    """
     map_file = scenario_entry.get("map_file")
     if not isinstance(map_file, str) or not map_file.strip():
         raise ValueError("Selected scenario has no map_file")

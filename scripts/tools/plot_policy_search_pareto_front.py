@@ -31,6 +31,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    """Load a JSON object from disk.
+
+    Returns:
+        dict[str, Any]: Parsed JSON object.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise TypeError(f"Expected JSON object: {path}")

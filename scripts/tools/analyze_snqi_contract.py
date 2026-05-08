@@ -31,6 +31,11 @@ from robot_sf.common.artifact_paths import get_repository_root
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse and validate SNQI contract CLI arguments.
+
+    Returns:
+        argparse.Namespace: Parsed argument namespace with threshold invariants checked.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--campaign-root", type=Path, required=True)
     parser.add_argument("--weights", type=Path, default=None)
@@ -81,6 +86,7 @@ def _payload_hash(payload: dict[str, Any]) -> str:
 
 
 def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
+    """Write a Markdown summary of SNQI contract diagnostics."""
     dominance = payload.get("component_dominance", {})
     positioning = payload.get("positioning") if isinstance(payload, dict) else {}
     correlations = payload.get("component_correlations") if isinstance(payload, dict) else {}
@@ -171,6 +177,7 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _write_csv(path: Path, payload: dict[str, Any]) -> None:
+    """Write SNQI component sensitivity and calibration rows as CSV."""
     headers = (
         "component",
         "metric_name",

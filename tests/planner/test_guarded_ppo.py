@@ -20,6 +20,7 @@ def _obs(
     ped_positions=None,
     ped_velocities=None,
 ) -> dict[str, object]:
+    """Build the minimal observation payload consumed by the guard tests."""
     ped_positions = [] if ped_positions is None else ped_positions
     ped_velocities = [] if ped_velocities is None else ped_velocities
     return {
@@ -40,21 +41,26 @@ def _obs(
 
 
 class _FallbackAdapter:
+    """Planner adapter stub that returns a fixed fallback command."""
+
     def __init__(self, command: tuple[float, float]) -> None:
         self.command = command
         self.plan_calls = 0
 
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        """Return the configured command and count the request."""
         del observation
         self.plan_calls += 1
         return self.command
 
 
 class _PriorAdapter(_FallbackAdapter):
-    pass
+    """Marker subclass used when the guard distinguishes prior adapters."""
 
 
 class _LifecycleAdapter(_FallbackAdapter):
+    """Adapter stub that records lifecycle hook propagation."""
+
     def __init__(self, command: tuple[float, float]) -> None:
         super().__init__(command)
         self.bound_envs: list[object] = []
@@ -62,12 +68,15 @@ class _LifecycleAdapter(_FallbackAdapter):
         self.closed = False
 
     def bind_env(self, env: object) -> None:
+        """Record bound environments for propagation assertions."""
         self.bound_envs.append(env)
 
     def reset(self, *, seed: int | None = None) -> None:
+        """Record reset seeds for propagation assertions."""
         self.reset_seeds.append(seed)
 
     def close(self) -> None:
+        """Record that the adapter was closed."""
         self.closed = True
 
 

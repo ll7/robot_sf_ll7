@@ -390,6 +390,11 @@ def _build_env(
     obs_transform = config.obs_transform.strip().lower()
 
     def _build_robot_config_for_sampling(scenario: Mapping[str, Any]) -> Any:
+        """Build a robot config for one sampled scenario.
+
+        Returns:
+            Robot environment config with SAC overrides applied.
+        """
         robot_config = build_robot_config_from_scenario(
             scenario,
             scenario_path=config.scenario_config,
@@ -398,6 +403,11 @@ def _build_env(
         return robot_config
 
     def _make(env_index: int) -> Any:
+        """Build one vector-environment member.
+
+        Returns:
+            Wrapped scenario-switching environment for the requested index.
+        """
         base_seed = config.seed
         env_seed = None if base_seed is None else int(base_seed) + int(env_index)
         env = ScenarioSwitchingEnv(
@@ -456,6 +466,7 @@ def _flatten_nested_dict_spaces(obs_space: gym_spaces.Dict) -> gym_spaces.Dict:
     flattened: dict[str, gym_spaces.Space] = {}
 
     def _walk(space_dict: dict[str, gym_spaces.Space], prefix: str = "") -> None:
+        """Collect nested observation spaces into the flattened mapping."""
         for key, subspace in space_dict.items():
             full_key = f"{prefix}{key}" if not prefix else f"{prefix}_{key}"
             if isinstance(subspace, gym_spaces.Dict):
@@ -472,6 +483,7 @@ def _flatten_nested_dict_obs(obs: Mapping[str, Any]) -> dict[str, Any]:
     flattened: dict[str, Any] = {}
 
     def _walk(obs_dict: Mapping[str, Any], prefix: str = "") -> None:
+        """Collect nested observation values into the flattened mapping."""
         for key, value in obs_dict.items():
             full_key = f"{prefix}{key}" if not prefix else f"{prefix}_{key}"
             if isinstance(value, Mapping):
@@ -491,6 +503,11 @@ class _FlattenNestedDictObservation(ObservationWrapper):
         self.observation_space = _flatten_nested_dict_spaces(env.observation_space)
 
     def observation(self, observation: Mapping[str, Any]) -> dict[str, Any]:
+        """Flatten one nested dictionary observation.
+
+        Returns:
+            Flat observation dictionary matching the wrapped observation space.
+        """
         return _flatten_nested_dict_obs(observation)
 
 
@@ -527,6 +544,7 @@ def _relative_socnav_obs(observation: Mapping[str, Any]) -> dict[str, Any]:
     robot_xy = robot_position[:2]
 
     def _shift_xy(key: str) -> None:
+        """Translate one position-like observation field by the robot position."""
         if key not in converted:
             return
         arr = np.asarray(converted[key], dtype=np.float32)
@@ -578,6 +596,7 @@ def _ego_socnav_obs(observation: Mapping[str, Any]) -> dict[str, Any]:
     heading = float(heading_arr[0])
 
     def _rotate_key(key: str) -> None:
+        """Rotate one position-like observation field into the robot frame."""
         if key not in converted:
             return
         arr = np.asarray(converted[key], dtype=np.float32)
@@ -617,10 +636,20 @@ class _RelativeSocNavObservation(ObservationWrapper):
         return getattr(self.env, name)
 
     def observation(self, observation: Mapping[str, Any]) -> dict[str, Any]:
+        """Convert one observation to the robot-relative frame.
+
+        Returns:
+            Robot-relative observation dictionary.
+        """
         return _relative_socnav_obs(observation)
 
     @staticmethod
     def _relative_observation_space(obs_space: gym_spaces.Space) -> gym_spaces.Space:
+        """Build the observation-space bounds for robot-relative features.
+
+        Returns:
+            Adjusted Dict observation space, or the original non-Dict space.
+        """
         if not isinstance(obs_space, gym_spaces.Dict):
             return obs_space
 
@@ -655,6 +684,11 @@ class _EgoSocNavObservation(_RelativeSocNavObservation):
     """Rotate relative SocNav observations into the robot ego frame."""
 
     def observation(self, observation: Mapping[str, Any]) -> dict[str, Any]:
+        """Convert one observation to the robot ego frame.
+
+        Returns:
+            Ego-frame observation dictionary.
+        """
         return _ego_socnav_obs(observation)
 
 
@@ -800,6 +834,11 @@ class _PeriodicSACEvaluationCallback(BaseCallback):
         self._eval_index = 0
 
     def _on_step(self) -> bool:
+        """Trigger periodic evaluation when the configured step interval elapses.
+
+        Returns:
+            Always true so SB3 training continues.
+        """
         if not self._evaluation_config.enabled:
             return True
         frequency = int(self._evaluation_config.frequency_steps)
@@ -812,6 +851,7 @@ class _PeriodicSACEvaluationCallback(BaseCallback):
         return True
 
     def _run_periodic_evaluation(self) -> None:
+        """Save a temporary checkpoint and run the configured SAC evaluation."""
         scenario_matrix = (
             self._evaluation_config.scenario_matrix or self._training_config.scenario_config
         )

@@ -84,6 +84,8 @@ def _build_socialforce_compat_module(backend_socialforce: Any) -> types.ModuleTy
     compat.__dict__["__version__"] = getattr(backend_socialforce, "__version__", "unknown")
 
     class CompatSimulator:
+        """Adapter matching the legacy socialforce simulator constructor."""
+
         def __init__(
             self,
             state: Any,
@@ -101,6 +103,11 @@ def _build_socialforce_compat_module(backend_socialforce: Any) -> types.ModuleTy
             self.sigma = sigma
 
         def step(self) -> np.ndarray:
+            """Advance the backend simulator and expose NumPy state.
+
+            Returns:
+                np.ndarray: Updated simulator state.
+            """
             out = self._sim.forward(self._state)
             self._state = out.detach().clone()
             self.state = _backend_to_numpy(out)

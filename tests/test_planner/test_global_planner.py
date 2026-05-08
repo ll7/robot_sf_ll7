@@ -1,5 +1,4 @@
 """Tests for the basic global planner path generation (US1)."""
-# ruff: noqa: D103
 
 from pathlib import Path
 
@@ -13,15 +12,18 @@ FIXTURE_ROOT = Path(__file__).parent.parent / "fixtures" / "test_maps"
 
 
 def _load_map(name: str):
+    """Load a planner fixture map by filename."""
     map_path = FIXTURE_ROOT / name
     return convert_map(str(map_path))
 
 
 def _inflate_obstacles(map_def, margin: float) -> list[Polygon]:
+    """Return obstacle polygons inflated by the planner clearance margin."""
     return [Polygon(obs.vertices).buffer(margin) for obs in map_def.obstacles]
 
 
 def test_basic_path_generation_avoids_obstacles():
+    """Verify global paths preserve endpoints and stay outside inflated obstacles."""
     map_def = _load_map("simple_corridor.svg")
     config = PlannerConfig(robot_radius=0.4, min_safe_clearance=0.3, fallback_on_failure=False)
     planner = GlobalPlanner(map_def, config=config)
@@ -43,6 +45,7 @@ def test_basic_path_generation_avoids_obstacles():
 
 
 def test_clearance_respected_in_narrow_passage():
+    """Verify clearance constraints fail closed when a passage is too narrow."""
     map_def = _load_map("narrow_passage.svg")
     config = PlannerConfig(robot_radius=0.4, min_safe_clearance=0.2, fallback_on_failure=False)
     planner = GlobalPlanner(map_def, config=config)
@@ -55,6 +58,7 @@ def test_clearance_respected_in_narrow_passage():
 
 
 def test_returns_straight_line_on_empty_map(tmp_path):
+    """Verify empty maps use the direct start-to-goal route."""
     svg = tmp_path / "empty.svg"
     svg.write_text(
         """
@@ -77,6 +81,7 @@ def test_returns_straight_line_on_empty_map(tmp_path):
 
 
 def test_raises_when_no_path_exists():
+    """Verify disconnected maps raise instead of returning a fallback route."""
     map_def = _load_map("no_path.svg")
     config = PlannerConfig(fallback_on_failure=False)
     planner = GlobalPlanner(map_def, config=config)
@@ -89,6 +94,7 @@ def test_raises_when_no_path_exists():
 
 
 def test_plan_respects_via_pois(tmp_path):
+    """Verify via POIs are inserted into the planned route."""
     svg = tmp_path / "via.svg"
     svg.write_text(
         """
@@ -113,6 +119,7 @@ def test_plan_respects_via_pois(tmp_path):
 
 
 def test_plan_allows_dynamic_start_not_in_spawn_zone():
+    """Verify runtime starts may be outside spawn zones when inside the map."""
     map_def = _load_map("simple_corridor.svg")
     planner = GlobalPlanner(map_def)
 
@@ -126,6 +133,7 @@ def test_plan_allows_dynamic_start_not_in_spawn_zone():
 
 
 def test_invalidate_cache_clears_graph():
+    """Verify cache invalidation clears the planner graph for rebuilds."""
     map_def = _load_map("simple_corridor.svg")
     planner = GlobalPlanner(map_def)
 
@@ -137,6 +145,7 @@ def test_invalidate_cache_clears_graph():
 
 
 def test_smoothing_keeps_endpoints():
+    """Verify smoothing does not move the requested start or goal."""
     map_def = _load_map("simple_corridor.svg")
     config = PlannerConfig(enable_smoothing=True, smoothing_epsilon=0.5)
     planner = GlobalPlanner(map_def, config=config)

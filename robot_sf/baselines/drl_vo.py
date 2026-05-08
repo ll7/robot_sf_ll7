@@ -63,6 +63,11 @@ class DrlVoPlanner:
         self._load_model()
 
     def _parse_config(self, cfg: DrlVoPlannerConfig | dict[str, Any]) -> DrlVoPlannerConfig:
+        """Normalize loose config payloads into the DRL-VO dataclass contract.
+
+        Returns:
+            DrlVoPlannerConfig: Filtered planner configuration.
+        """
         if isinstance(cfg, DrlVoPlannerConfig):
             return cfg
         if isinstance(cfg, dict):
@@ -72,6 +77,11 @@ class DrlVoPlanner:
         raise TypeError(f"Invalid config type: {type(cfg)}")
 
     def _torch_device(self) -> str:
+        """Resolve the Torch inference device from config and CUDA availability.
+
+        Returns:
+            str: Concrete Torch device name.
+        """
         if self.config.device != "auto":
             return self.config.device
         if torch is not None and torch.cuda.is_available():
@@ -79,11 +89,17 @@ class DrlVoPlanner:
         return "cpu"
 
     def _resolve_model_path(self) -> Path:
+        """Resolve the configured model identifier or filesystem path.
+
+        Returns:
+            Path: Local model path used for inference.
+        """
         if self.config.model_id:
             return resolve_model_path(self.config.model_id)
         return Path(self.config.model_path)
 
     def _load_model(self) -> None:
+        """Load the DRL-VO policy model or enter documented fallback mode."""
         if torch is None:
             warn_soft_degrade(
                 "DRL-VO",
@@ -197,6 +213,11 @@ class DrlVoPlanner:
         return self._goal_seeking_action(obs)
 
     def _predict_action(self, obs: Observation) -> dict[str, float]:
+        """Run model inference and normalize the returned action payload.
+
+        Returns:
+            dict[str, float]: Velocity or unicycle command.
+        """
         model_input = self._build_model_input(obs)
         if torch is None:
             raise RuntimeError("PyTorch is required for DRL-VO model inference")
@@ -230,6 +251,11 @@ class DrlVoPlanner:
         return self._parse_model_action(raw_action)
 
     def _build_model_input(self, obs: Observation) -> np.ndarray:
+        """Flatten robot goal, velocity, and nearest-agent state for DRL-VO.
+
+        Returns:
+            np.ndarray: Fixed-width model input vector.
+        """
         robot_pos = np.asarray(obs.robot["position"], dtype=float)
         robot_vel = np.asarray(obs.robot["velocity"], dtype=float)
         robot_goal = np.asarray(obs.robot["goal"], dtype=float)
@@ -253,6 +279,11 @@ class DrlVoPlanner:
         return np.concatenate(parts, axis=0)
 
     def _parse_model_action(self, raw_action: Any) -> dict[str, float]:
+        """Normalize raw policy output into the configured benchmark action space.
+
+        Returns:
+            dict[str, float]: Velocity or unicycle action dictionary.
+        """
         if isinstance(raw_action, dict):
             if self.config.action_space == "velocity" and {"vx", "vy"}.issubset(raw_action):
                 return {"vx": float(raw_action["vx"]), "vy": float(raw_action["vy"])}
@@ -277,6 +308,11 @@ class DrlVoPlanner:
         )
 
     def _goal_seeking_action(self, obs: Observation) -> dict[str, float]:
+        """Compute deterministic fallback action toward the current goal.
+
+        Returns:
+            dict[str, float]: Velocity or unicycle command bounded by config limits.
+        """
         robot_pos = np.asarray(obs.robot["position"], dtype=float)
         goal = np.asarray(obs.robot["goal"], dtype=float)
         delta = goal - robot_pos

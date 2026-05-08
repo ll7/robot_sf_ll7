@@ -17,6 +17,7 @@ from robot_sf.planner.socnav import ORCAPlannerAdapter, SocNavPlannerConfig
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for Python-RVO2 integration probing."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--rvo2-root",
@@ -40,6 +41,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _make_obs() -> dict[str, Any]:
+    """Return a minimal Robot SF observation for ORCA adapter probing."""
     return {
         "robot": {
             "position": np.array([0.0, 0.0], dtype=np.float32),
@@ -63,6 +65,7 @@ def _make_obs() -> dict[str, Any]:
 
 
 def _validate_required_files(rvo2_root: Path) -> dict[str, str]:
+    """Validate expected files in the vendored Python-RVO2 checkout."""
     required = {
         "upstream_note": "UPSTREAM.md",
         "readme": "README.md",
@@ -85,6 +88,7 @@ def _validate_required_files(rvo2_root: Path) -> dict[str, str]:
 
 
 def _run_upstream_example(rvo2_root: Path) -> dict[str, Any]:
+    """Run the upstream Python-RVO2 example and capture previews."""
     example_path = rvo2_root / "example.py"
     proc = subprocess.run(
         [sys.executable, str(example_path)],
@@ -101,6 +105,7 @@ def _run_upstream_example(rvo2_root: Path) -> dict[str, Any]:
 
 
 def _probe_adapter() -> dict[str, Any]:
+    """Run the Robot SF ORCA adapter against a synthetic observation."""
     adapter = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
     v, w = adapter.plan(_make_obs())
     metadata = enrich_algorithm_metadata(
@@ -172,6 +177,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def _write_optional(path: Path | None, content: str) -> None:
+    """Write optional report content when a path is supplied."""
     if path is None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)

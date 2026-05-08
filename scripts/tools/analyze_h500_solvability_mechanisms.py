@@ -30,6 +30,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    """Load a JSON object artifact.
+
+    Returns:
+        Parsed JSON object.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise TypeError(f"Expected JSON object: {path}")
@@ -37,6 +42,11 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _metric(row: dict[str, Any], metric: str, field: str) -> float:
+    """Read one nested comparison metric field.
+
+    Returns:
+        Metric field as a float, or ``0.0`` when unavailable.
+    """
     metrics = row.get("metrics")
     if not isinstance(metrics, dict):
         return 0.0
@@ -51,10 +61,20 @@ def _metric(row: dict[str, Any], metric: str, field: str) -> float:
 
 
 def _round(value: float, digits: int = 6) -> float:
+    """Round numeric output values for stable artifacts.
+
+    Returns:
+        Rounded float.
+    """
     return round(float(value), digits)
 
 
 def _mechanism(row: dict[str, Any], args: argparse.Namespace) -> tuple[str, str]:
+    """Classify the aggregate fixed-vs-h500 solvability mechanism.
+
+    Returns:
+        Mechanism label and interpretation text.
+    """
     collision_delta = _metric(row, "collisions_mean", "delta")
     near_delta = _metric(row, "near_misses_mean", "delta")
     candidate_time = _metric(row, "time_to_goal_norm_mean", "candidate")
@@ -88,6 +108,11 @@ def _mechanism(row: dict[str, Any], args: argparse.Namespace) -> tuple[str, str]
 
 
 def _eligible(row: dict[str, Any], args: argparse.Namespace) -> bool:
+    """Determine whether a comparison row is a timeout-to-success candidate.
+
+    Returns:
+        True when the row meets configured success and unfinished thresholds.
+    """
     return (
         _metric(row, "success_mean", "delta") >= float(args.success_delta_min)
         and _metric(row, "unfinished_mean", "base") >= float(args.base_unfinished_min)
@@ -96,6 +121,11 @@ def _eligible(row: dict[str, Any], args: argparse.Namespace) -> bool:
 
 
 def _case_record(row: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    """Build a normalized mechanism case record from one scenario delta row.
+
+    Returns:
+        JSON-serializable case payload with rounded evidence metrics.
+    """
     mechanism, interpretation = _mechanism(row, args)
     return {
         "planner_key": str(row.get("planner_key", "unknown")),
@@ -121,6 +151,11 @@ def _case_record(row: dict[str, Any], args: argparse.Namespace) -> dict[str, Any
 
 
 def _sort_key(row: dict[str, Any]) -> tuple[float, float, float, str, str]:
+    """Build the stable sort key for case prioritization.
+
+    Returns:
+        Tuple prioritizing larger success gain, lower safety deltas, and identity.
+    """
     return (
         -float(row["success_delta"]),
         float(row["collision_delta"]),
@@ -131,6 +166,11 @@ def _sort_key(row: dict[str, Any]) -> tuple[float, float, float, str, str]:
 
 
 def _family_rollup(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate mechanism cases by scenario family.
+
+    Returns:
+        Scenario-family summary rows.
+    """
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for case in cases:
         grouped[str(case["scenario_family"])].append(case)
@@ -158,6 +198,11 @@ def _family_rollup(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _representatives(cases: list[dict[str, Any]], per_mechanism: int = 3) -> list[dict[str, Any]]:
+    """Select representative cases for each mechanism bucket.
+
+    Returns:
+        Sorted representative case records, capped per mechanism.
+    """
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for case in sorted(cases, key=_sort_key):
         grouped[str(case["mechanism"])].append(case)
@@ -168,6 +213,7 @@ def _representatives(cases: list[dict[str, Any]], per_mechanism: int = 3) -> lis
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Write rows to a CSV artifact, preserving empty outputs as empty files."""
     if not rows:
         path.write_text("", encoding="utf-8")
         return
@@ -178,6 +224,11 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _format_delta(value: Any) -> str:
+    """Format a numeric delta for Markdown tables.
+
+    Returns:
+        Fixed-width four-decimal string.
+    """
     return f"{float(value):.4f}"
 
 
@@ -189,6 +240,7 @@ def _write_markdown(
     reps: list[dict[str, Any]],
     family_rows: list[dict[str, Any]],
 ) -> None:
+    """Write the h500 solvability mechanism Markdown report."""
     mechanism_counts = Counter(str(case["mechanism"]) for case in cases)
     lines = [
         "# H500 Solvability Mechanism Analysis",

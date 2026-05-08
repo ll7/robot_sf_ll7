@@ -67,6 +67,11 @@ class SICNavPlanner:
         self._seed = seed
 
     def _parse_config(self, config: dict[str, Any] | SICNavPlannerConfig) -> SICNavPlannerConfig:
+        """Normalize accepted config payloads into the dataclass contract.
+
+        Returns:
+            SICNavPlannerConfig: Planner configuration used by the wrapper.
+        """
         if isinstance(config, dict):
             return build_sicnav_config(config)
         if isinstance(config, SICNavPlannerConfig):
@@ -143,6 +148,15 @@ class SICNavPlanner:
         self._module = None
 
     def _import_sicnav_module(self) -> Any:
+        """Import and cache the configured SICNav upstream module.
+
+        The import context isolates transient upstream modules so Robot SF can
+        probe different dependency states without leaking incompatible module
+        objects into later imports.
+
+        Returns:
+            Any: Imported upstream module exposing a supported policy API.
+        """
         with _SICNAV_IMPORT_LOCK:
             if self._module is not None:
                 return self._module
@@ -181,6 +195,11 @@ class SICNavPlanner:
                 return
 
     def _build_policy(self) -> Any:
+        """Construct the upstream SICNav policy through a supported factory hook.
+
+        Returns:
+            Any: Policy object exposing ``select_action``.
+        """
         try:
             module = self._import_sicnav_module()
         except ImportError as exc:
@@ -237,6 +256,12 @@ class SICNavPlanner:
         return action
 
     def _clamp_action(self, action: dict[str, float]) -> None:
+        """Clamp mutable action payloads to the configured velocity limits.
+
+        This safety clamp keeps external policies within the benchmark action
+        envelope without changing the action representation selected by the
+        upstream implementation.
+        """
         if self.config.safety_clamp:
             if "vx" in action and "vy" in action:
                 speed = float(np.hypot(action["vx"], action["vy"]))

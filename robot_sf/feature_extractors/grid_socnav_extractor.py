@@ -265,6 +265,11 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
         kernels: list[int],
         dropout_rate: float,
     ) -> nn.Sequential:
+        """Build the convolutional branch for occupancy/grid observations.
+
+        Returns:
+            nn.Sequential: CNN feature extractor ending in a flatten layer.
+        """
         layers: list[nn.Module] = []
         for idx, (out_ch, kernel) in enumerate(zip(channels, kernels, strict=False)):
             conv = nn.Conv2d(
@@ -285,6 +290,11 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
         hidden_dims: list[int],
         dropout_rate: float,
     ) -> nn.Sequential:
+        """Build the MLP branch for vector SocNav observations.
+
+        Returns:
+            nn.Sequential: MLP feature extractor, or identity when no hidden dims are configured.
+        """
         if not hidden_dims:
             return nn.Sequential(nn.Identity())
         layers: list[nn.Module] = []
@@ -297,6 +307,11 @@ class GridSocNavExtractor(BaseFeaturesExtractor):
 
     @staticmethod
     def _infer_grid_output_dim(grid_extractor: nn.Sequential, grid_shape: tuple[int, ...]) -> int:
+        """Infer flattened CNN output dimension from a dummy grid sample.
+
+        Returns:
+            int: Number of features produced by the grid extractor.
+        """
         sample = th.zeros((1, *grid_shape), dtype=th.float32)
         with th.no_grad():
             out = grid_extractor(sample)

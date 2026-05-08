@@ -16,6 +16,7 @@ from robot_sf.benchmark.constants import COLLISION_DIST, NEAR_MISS_DIST
 
 
 def _as_float(value: Any) -> float | None:
+    """Coerce a value to float while preserving missing/invalid as None."""
     try:
         if value is None or value == "":
             return None
@@ -25,6 +26,7 @@ def _as_float(value: Any) -> float | None:
 
 
 def _metrics(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return the metrics mapping from an episode row."""
     metrics = row.get("metrics")
     return metrics if isinstance(metrics, Mapping) else {}
 
@@ -62,6 +64,7 @@ def normalize_scenario_exclusion(row: Mapping[str, Any]) -> dict[str, Any] | Non
 
 
 def _count_configured_pedestrians(row: Mapping[str, Any]) -> int:
+    """Count configured pedestrians from scenario params when present."""
     scenario_params = row.get("scenario_params")
     if not isinstance(scenario_params, Mapping):
         return 0
@@ -204,6 +207,11 @@ def summarize_policy_search_records(  # noqa: C901
             avg_speed_values.append(avg_speed)
 
     def _suite_summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+        """Summarize outcome rates for one row group.
+
+        Returns:
+            dict[str, Any]: Episode count and success/collision/near-miss rates.
+        """
         episodes = len(rows)
         collisions = sum(
             1

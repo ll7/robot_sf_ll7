@@ -250,6 +250,11 @@ def render_osm_background(
 
     # Translate to a local frame so pixel→world transforms align with MapDefinition.
     def _shift_geometry(geom):
+        """Shift one geometry into the local map frame.
+
+        Returns:
+            Geometry object translated to local coordinates, or the original empty value.
+        """
         if geom is None or geom.is_empty:
             return geom
         return translate(geom, xoff=-minx, yoff=-miny)

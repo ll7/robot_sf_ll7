@@ -203,6 +203,11 @@ class PolicyStackV1Adapter:
         }
 
     def _collect_proposals(self, observation: dict[str, Any]) -> list[_Proposal]:
+        """Collect one normalized proposal from each configured source.
+
+        Returns:
+            list[_Proposal]: Proposal records in configured source order.
+        """
         proposals: list[_Proposal] = []
         for source in self.config.proposal_sources:
             key = _normalize_source(source)
@@ -217,6 +222,11 @@ class PolicyStackV1Adapter:
         return proposals
 
     def _proposal_from_source(self, key: str, observation: dict[str, Any]) -> _Proposal:
+        """Build a proposal from one named source.
+
+        Returns:
+            _Proposal: Command proposal or diagnostic status for the source.
+        """
         status = self._source_mode(key)
         if key == "goal":
             return self._command_proposal(
@@ -266,6 +276,11 @@ class PolicyStackV1Adapter:
         return _Proposal(key=key, status=status, command=(linear, angular))
 
     def _source_mode(self, key: str) -> str:
+        """Resolve benchmark provenance mode for a proposal source.
+
+        Returns:
+            str: One of native, adapter, fallback, or degraded.
+        """
         if key in self.config.fallback_sources:
             return "fallback"
         if key in self.config.degraded_sources:
@@ -275,6 +290,11 @@ class PolicyStackV1Adapter:
         return "adapter"
 
     def _goal_command(self, observation: dict[str, Any]) -> tuple[float, float]:
+        """Compute the native goal-seeking proposal command.
+
+        Returns:
+            tuple[float, float]: Linear and angular command.
+        """
         robot_pos, heading, goal = _robot_goal_heading(observation)
         to_goal = goal - robot_pos
         distance = float(np.linalg.norm(to_goal))
@@ -298,6 +318,11 @@ class PolicyStackV1Adapter:
         command: tuple[float, float],
         observation: dict[str, Any],
     ) -> dict[str, float]:
+        """Score one candidate command by progress, heading, clearance, and smoothness.
+
+        Returns:
+            dict[str, float]: Total score and component diagnostics.
+        """
         robot_pos, heading, goal = _robot_goal_heading(observation)
         goal_vec = goal - robot_pos
         distance = float(np.linalg.norm(goal_vec))
@@ -335,6 +360,7 @@ class PolicyStackV1Adapter:
         observation: dict[str, Any],
         command: tuple[float, float],
     ) -> bool:
+        """Return whether a moving command violates hard-stop clearance."""
         if float(self.config.hard_stop_clearance) <= 0.0:
             return False
         moving = abs(float(command[0])) > 1e-6 or abs(float(command[1])) > 1e-6
@@ -343,6 +369,7 @@ class PolicyStackV1Adapter:
         return _min_ped_clearance(observation) < float(self.config.hard_stop_clearance)
 
     def _raise_no_candidate(self, proposals: list[_Proposal]) -> None:
+        """Raise an error summarizing why no proposal could be selected."""
         reasons = {
             proposal.key: proposal.reason or proposal.status
             for proposal in proposals
@@ -394,6 +421,11 @@ def build_policy_stack_v1_build_config(
 
 
 def _robot_goal_heading(observation: dict[str, Any]) -> tuple[np.ndarray, float, np.ndarray]:
+    """Extract robot position, heading, and active goal from a SocNav observation.
+
+    Returns:
+        tuple[np.ndarray, float, np.ndarray]: Robot XY, heading, and goal XY.
+    """
     robot = observation.get("robot") if isinstance(observation.get("robot"), dict) else {}
     goal_state = observation.get("goal") if isinstance(observation.get("goal"), dict) else {}
     robot_pos = _as_vector(robot.get("position"), pad=2)[:2]
@@ -405,6 +437,11 @@ def _robot_goal_heading(observation: dict[str, Any]) -> tuple[np.ndarray, float,
 
 
 def _min_ped_clearance(observation: dict[str, Any]) -> float:
+    """Return nearest pedestrian distance from the robot.
+
+    Returns:
+        float: Minimum pedestrian clearance, or ``inf`` when no valid pedestrians exist.
+    """
     robot = observation.get("robot") if isinstance(observation.get("robot"), dict) else {}
     pedestrians = (
         observation.get("pedestrians") if isinstance(observation.get("pedestrians"), dict) else {}
@@ -420,6 +457,11 @@ def _min_ped_clearance(observation: dict[str, Any]) -> float:
 
 
 def _as_vector(value: Any, *, pad: int) -> np.ndarray:
+    """Coerce optional payloads to a flat vector with zero padding.
+
+    Returns:
+        np.ndarray: One-dimensional vector with at least ``pad`` values.
+    """
     arr = np.asarray([] if value is None else value, dtype=float).reshape(-1)
     if arr.size < pad:
         arr = np.pad(arr, (0, pad - arr.size), constant_values=0.0)
@@ -427,10 +469,20 @@ def _as_vector(value: Any, *, pad: int) -> np.ndarray:
 
 
 def _wrap_angle(angle: float) -> float:
+    """Wrap an angle to the ``[-pi, pi)`` interval.
+
+    Returns:
+        float: Wrapped angle in radians.
+    """
     return float((float(angle) + np.pi) % (2.0 * np.pi) - np.pi)
 
 
 def _tuple_of_strings(value: Any, *, default: tuple[str, ...] = ()) -> tuple[str, ...]:
+    """Normalize scalar or sequence config values into source-key tuples.
+
+    Returns:
+        tuple[str, ...]: Normalized source identifiers, or ``default``.
+    """
     if value is None:
         return default
     if isinstance(value, str):
@@ -441,14 +493,25 @@ def _tuple_of_strings(value: Any, *, default: tuple[str, ...] = ()) -> tuple[str
 
 
 def _normalize_source(value: Any) -> str:
+    """Normalize one proposal source identifier.
+
+    Returns:
+        str: Lowercase stripped source key.
+    """
     return str(value).strip().lower()
 
 
 def _empty_status_counts() -> dict[str, int]:
+    """Create a zero-valued status counter mapping.
+
+    Returns:
+        dict[str, int]: Status keys initialized to zero.
+    """
     return dict.fromkeys(_STATUS_KEYS, 0)
 
 
 def _accumulate_counts(target: dict[str, int], delta: dict[str, int]) -> None:
+    """Add one status counter mapping into another in place."""
     for key in _STATUS_KEYS:
         target[key] = int(target.get(key, 0)) + int(delta.get(key, 0))
 

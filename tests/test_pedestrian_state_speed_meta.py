@@ -13,12 +13,23 @@ class _DummySensors:
         self._angular_speed = angular_speed
 
     def reset_cache(self) -> None:
+        """Match the sensor API without retaining cached state."""
         return None
 
     def next_obs(self) -> dict[str, float]:
+        """Return a minimal observation payload.
+
+        Returns:
+            Dummy observation dictionary.
+        """
         return {"ok": 1.0}
 
     def robot_speed_sensor(self) -> tuple[float, float]:
+        """Return configured linear and angular speeds.
+
+        Returns:
+            Speed tuple consumed by ``PedestrianState``.
+        """
         return (self._speed, self._angular_speed)
 
 
@@ -34,24 +45,46 @@ class _DummyRobotOccupancy:
         self._heading = 0.0
 
     def get_agent_coords(self) -> tuple[float, float]:
+        """Return the robot coordinates.
+
+        Returns:
+            Current robot coordinate pair.
+        """
         return self._agent
 
     def set_agent_coords(self, x: float, y: float) -> None:
+        """Set the robot coordinates for impact-geometry checks."""
         self._agent = (x, y)
 
     def set_heading(self, heading: float | None) -> None:
+        """Set the robot heading used by impact-zone classification."""
         self._heading = heading
 
     @property
     def obstacle_coords(self):
+        """Return no obstacle coordinates for the stub.
+
+        Returns:
+            Empty obstacle list.
+        """
         return []
 
     @property
     def pedestrian_coords(self):
+        """Return no pedestrian coordinates for the robot occupancy stub.
+
+        Returns:
+            Empty pedestrian list.
+        """
         return []
 
     @property
     def agent_heading(self) -> float | None:
+        """Return the configured robot heading.
+
+        Returns:
+            Heading in radians, or ``None`` for unknown heading.
+        """
         return self._heading
 
 
@@ -68,20 +101,41 @@ class _DummyEgoPedOccupancy:
         self._enemy = (3.0, 0.0)
 
     def get_agent_coords(self) -> tuple[float, float]:
+        """Return ego-pedestrian coordinates.
+
+        Returns:
+            Current ego-pedestrian coordinate pair.
+        """
         return self._agent
 
     def set_agent_coords(self, x: float, y: float) -> None:
+        """Set ego-pedestrian coordinates for impact-geometry checks."""
         self._agent = (x, y)
 
     def get_enemy_coords(self) -> tuple[float, float]:
+        """Return robot coordinates from the ego-pedestrian perspective.
+
+        Returns:
+            Current robot coordinate pair.
+        """
         return self._enemy
 
     @property
     def obstacle_coords(self):
+        """Return no obstacle coordinates for the stub.
+
+        Returns:
+            Empty obstacle list.
+        """
         return []
 
     @property
     def pedestrian_coords(self):
+        """Return no extra pedestrian coordinates for the stub.
+
+        Returns:
+            Empty pedestrian list.
+        """
         return []
 
 

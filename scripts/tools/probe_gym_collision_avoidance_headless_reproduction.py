@@ -48,6 +48,7 @@ class ProbeReport:
 
 
 def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
+    """Validate required upstream files and side-environment interpreter."""
     required = [repo_root / "README.md", repo_root / EXAMPLE_PATH]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
@@ -57,6 +58,7 @@ def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
 
 
 def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int) -> CommandResult:
+    """Run a probe command and capture bounded output tails."""
     try:
         result = subprocess.run(
             command,
@@ -90,6 +92,7 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
 
 
 def _detect_failure_summary(stdout: str, stderr: str) -> str:
+    """Extract a concise known-failure label from command output."""
     text = f"{stdout}\n{stderr}"
     lowered = text.lower()
     if "failed to import tkagg backend" in lowered:
@@ -103,6 +106,7 @@ def _detect_failure_summary(stdout: str, stderr: str) -> str:
 
 
 def _headless_script(repo_root: Path, *, patch_bool8: bool, skip_animation: bool) -> str:
+    """Build the Python snippet used for headless upstream reproduction."""
     return f"""
 import os
 os.environ['MPLBACKEND'] = 'Agg'
@@ -127,6 +131,7 @@ run_path({EXAMPLE_PATH!r}, run_name='__main__')
 
 
 def _extract_source_contract() -> dict[str, Any]:
+    """Return the upstream contract documented by the reproduction probe."""
     return {
         "learned_policy": "GA3C_CADRL",
         "action_space": "speed_delta_heading",
@@ -196,6 +201,7 @@ def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> P
 
 
 def _render_markdown(report: ProbeReport) -> str:
+    """Render the headless reproduction probe report as Markdown."""
     lines = [
         "# gym-collision-avoidance Headless Reproduction Probe",
         "",

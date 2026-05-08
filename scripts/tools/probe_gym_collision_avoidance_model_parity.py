@@ -54,6 +54,11 @@ class ProbeReport:
 
 
 def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int) -> CommandResult:
+    """Run one parity-stage subprocess and capture a bounded result record.
+
+    Returns:
+        Command result with tail output and a normalized failure summary.
+    """
     try:
         result = subprocess.run(
             command,
@@ -86,6 +91,11 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
 
 
 def _detect_failure_summary(stdout: str, stderr: str) -> str:
+    """Classify the most actionable failure message from command output.
+
+    Returns:
+        Short human-readable failure summary.
+    """
     text = f"{stdout}\n{stderr}"
     lowered = text.lower()
     if "no such file or directory" in lowered and "network_01900000.meta" in lowered:
@@ -97,6 +107,7 @@ def _detect_failure_summary(stdout: str, stderr: str) -> str:
 
 
 def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
+    """Fail fast when the upstream checkout or side-env interpreter is missing."""
     required = [repo_root / "README.md", repo_root / EXAMPLE_PATH]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
@@ -106,6 +117,11 @@ def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
 
 
 def _upstream_payload_script(checkpoint_prefix_relative: Path = CHECKPOINT_PREFIX_RELATIVE) -> str:
+    """Build the child Python script that samples upstream GA3C-CADRL inference.
+
+    Returns:
+        Python source executed inside the upstream side environment.
+    """
     checkpoint_prefix_relative_str = checkpoint_prefix_relative.as_posix()
     return """
 import json
@@ -169,6 +185,11 @@ with tf.Session():
 
 
 def _local_payload_script(payload_file: Path) -> str:
+    """Build the child Python script that replays the upstream observation locally.
+
+    Returns:
+        Python source executed with the local Robot SF environment.
+    """
     return f"""
 import json
 from pathlib import Path
@@ -190,6 +211,11 @@ print(json.dumps({{
 
 
 def _parse_json_stdout(result: CommandResult) -> dict[str, Any]:
+    """Extract the last JSON object emitted by a command.
+
+    Returns:
+        Parsed JSON payload from the command stdout tail.
+    """
     lines = [line for line in result.stdout_tail.splitlines() if line.strip()]
     for line in reversed(lines):
         try:
@@ -200,6 +226,11 @@ def _parse_json_stdout(result: CommandResult) -> dict[str, Any]:
 
 
 def _extract_source_contract() -> dict[str, Any]:
+    """Describe the source-level parity boundary for the generated report.
+
+    Returns:
+        Mapping of policy, action, checkpoint, and benchmark-boundary metadata.
+    """
     return {
         "learned_policy": "GA3C_CADRL",
         "action_space": "speed_delta_heading",
@@ -300,6 +331,11 @@ def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> P
 
 
 def _render_markdown(report: ProbeReport) -> str:
+    """Render a human-readable Markdown report from the structured probe result.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     lines = [
         "# gym-collision-avoidance Model Parity Probe",
         "",

@@ -218,6 +218,7 @@ def _handle_run(args) -> int:
     """
 
     def _emit_structured(event_payload: dict[str, Any]) -> None:
+        """Emit machine-readable run events when structured output is enabled."""
         mode = str(getattr(args, "structured_output", "none")).lower()
         if mode not in {"json", "jsonl"}:
             return
@@ -849,6 +850,11 @@ def _summarize_scenarios(scenarios: list[dict[str, Any]]) -> dict[str, object]:
     """
 
     def _pick_meta_value(scenario: dict[str, Any], key: str) -> str:
+        """Resolve a summary field from metadata first, then scenario top level.
+
+        Returns:
+            str: Non-empty metadata/top-level value, or ``"unknown"``.
+        """
         meta = scenario.get("metadata")
         if isinstance(meta, Mapping):
             value = meta.get(key)
@@ -889,6 +895,7 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
     """
 
     def warn(index: int, scenario_id: str, message: str, path: str) -> None:
+        """Append one non-fatal scenario validation warning record."""
         warnings.append(
             {
                 "index": index,

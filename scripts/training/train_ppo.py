@@ -181,6 +181,11 @@ class _DirectWandbMetricsCallback(BaseCallback):
         self._last_logged_step = -1
 
     def _on_step(self) -> bool:
+        """Log direct W&B metrics at the configured timestep interval.
+
+        Returns:
+            Always true so SB3 training continues.
+        """
         if int(self.num_timesteps) - self._last_logged_step < self._log_every_steps:
             return True
         values = getattr(self.logger, "name_to_value", {}) or {}
@@ -213,6 +218,11 @@ def _constant_schedule(value: float) -> Callable[[float], float]:
     scalar = float(value)
 
     def _schedule(_progress_remaining: float) -> float:
+        """Return the configured scalar for every training progress value.
+
+        Returns:
+            Constant schedule value.
+        """
         return scalar
 
     return _schedule
@@ -292,16 +302,27 @@ class _TeeStream:
         self._streams = streams
 
     def write(self, data: str) -> int:
+        """Write data to every wrapped stream.
+
+        Returns:
+            Number of characters accepted.
+        """
         for stream in self._streams:
             stream.write(data)
         return len(data)
 
     def flush(self) -> None:
+        """Flush wrapped streams that expose a flush method."""
         for stream in self._streams:
             if hasattr(stream, "flush"):
                 stream.flush()
 
     def isatty(self) -> bool:
+        """Report whether any wrapped stream is attached to a terminal.
+
+        Returns:
+            True when any stream reports TTY status.
+        """
         for stream in self._streams:
             if hasattr(stream, "isatty") and stream.isatty():
                 return True
@@ -737,6 +758,11 @@ class _BestCheckpointTracker:
     def _is_better(
         self, candidate: _BestCheckpointCandidate, current: _BestCheckpointCandidate | None
     ) -> bool:
+        """Compare checkpoint candidates according to the configured metric direction.
+
+        Returns:
+            True when ``candidate`` should replace ``current``.
+        """
         if current is None:
             return True
         if self.higher_is_better:
@@ -1044,7 +1070,18 @@ def _make_training_env(  # noqa: PLR0913
     """Create a training environment factory (seeded when provided)."""
 
     def _factory() -> Any:
+        """Build one training environment instance.
+
+        Returns:
+            Robot training environment or scenario-switching wrapper.
+        """
+
         def _build_config(scenario_def: Mapping[str, Any]):
+            """Build an environment config for one scenario definition.
+
+            Returns:
+                Robot environment config with training overrides applied.
+            """
             env_config = build_robot_config_from_scenario(scenario_def, scenario_path=scenario_path)
             _apply_env_overrides(env_config, env_overrides)
             return env_config
@@ -1478,9 +1515,15 @@ class _DirectWandbTrainingMetricsCallback(BaseCallback):
         )
 
     def _on_step(self) -> bool:
+        """Allow SB3 training to continue for every step.
+
+        Returns:
+            Always true so training continues.
+        """
         return True
 
     def _on_rollout_end(self) -> None:
+        """Count completed rollouts for direct W&B timing metrics."""
         self._rollout_iterations += 1
 
     def log_after_train(self) -> None:

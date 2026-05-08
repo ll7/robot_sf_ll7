@@ -75,6 +75,11 @@ class ScenarioStats:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the collision-analysis CLI parser.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "run_roots",
@@ -102,11 +107,21 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _metrics(record: dict[str, Any]) -> dict[str, Any]:
+    """Extract the metrics mapping from one episode record.
+
+    Returns:
+        Metrics dictionary, or an empty mapping for malformed records.
+    """
     metrics = record.get("metrics")
     return metrics if isinstance(metrics, dict) else {}
 
 
 def _metric_value(metrics: dict[str, Any], key: str) -> float:
+    """Read one numeric metric with a forgiving default.
+
+    Returns:
+        Metric value as float, or ``0.0`` when missing or invalid.
+    """
     try:
         return float(metrics.get(key, 0.0) or 0.0)
     except (TypeError, ValueError):
@@ -114,11 +129,21 @@ def _metric_value(metrics: dict[str, Any], key: str) -> float:
 
 
 def _termination_reason(record: dict[str, Any]) -> str:
+    """Extract the episode termination reason.
+
+    Returns:
+        Termination reason string, falling back to status or ``unknown``.
+    """
     reason = record.get("termination_reason") or record.get("status") or "unknown"
     return str(reason)
 
 
 def _scenario(record: dict[str, Any]) -> str:
+    """Extract a stable scenario identifier from an episode record.
+
+    Returns:
+        Scenario id/name string, or ``unknown`` when absent.
+    """
     for key in ("scenario_id", "scenario", "scenario_name"):
         value = record.get(key)
         if value:
@@ -127,6 +152,11 @@ def _scenario(record: dict[str, Any]) -> str:
 
 
 def _seed(record: dict[str, Any]) -> str:
+    """Extract a seed identifier from an episode record.
+
+    Returns:
+        Seed string, or an empty string when absent.
+    """
     for key in ("seed", "scenario_seed", "episode_seed"):
         value = record.get(key)
         if value is not None:
@@ -135,6 +165,11 @@ def _seed(record: dict[str, Any]) -> str:
 
 
 def _is_collision(record: dict[str, Any]) -> bool:
+    """Determine whether an episode record represents a collision.
+
+    Returns:
+        True when termination or collision metrics indicate a collision.
+    """
     if _termination_reason(record) == "collision":
         return True
     metrics = _metrics(record)
@@ -144,10 +179,20 @@ def _is_collision(record: dict[str, Any]) -> bool:
 
 
 def _rate(numerator: int, denominator: int) -> float:
+    """Compute a safe ratio for report rates.
+
+    Returns:
+        ``numerator / denominator`` or ``0.0`` for empty denominators.
+    """
     return float(numerator / denominator) if denominator else 0.0
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read episode records from a JSONL file.
+
+    Returns:
+        List of JSON object records.
+    """
     records: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
@@ -199,6 +244,11 @@ def analyze_runs(run_roots: list[Path]) -> dict[str, Any]:
 
 
 def _format_table(headers: list[str], rows: list[list[str]]) -> list[str]:
+    """Format rows as a Markdown table.
+
+    Returns:
+        Markdown table lines.
+    """
     lines = ["| " + " | ".join(headers) + " |"]
     lines.append("| " + " | ".join("---" for _ in headers) + " |")
     lines.extend("| " + " | ".join(row) + " |" for row in rows)

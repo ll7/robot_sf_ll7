@@ -70,6 +70,11 @@ class ProbeReport:
 
 
 def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int) -> CommandResult:
+    """Run one parity-probe subprocess with timeout handling.
+
+    Returns:
+        Structured command result with bounded output tails.
+    """
     try:
         result = subprocess.run(
             command,
@@ -112,12 +117,22 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
 
 
 def _detect_failure_summary(stdout: str, stderr: str) -> str:
+    """Summarize command output into a concise failure message.
+
+    Returns:
+        Last non-empty output line, or ``unknown failure``.
+    """
     text = f"{stdout}\n{stderr}"
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     return lines[-1][:240] if lines else "unknown failure"
 
 
 def _parse_json_stdout(result: CommandResult) -> dict[str, Any]:
+    """Parse the last JSON payload emitted by a command.
+
+    Returns:
+        Parsed JSON object from command stdout.
+    """
     lines = [line for line in result.stdout_tail.splitlines() if line.strip()]
     for line in reversed(lines):
         try:
@@ -128,6 +143,7 @@ def _parse_json_stdout(result: CommandResult) -> dict[str, Any]:
 
 
 def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
+    """Validate required upstream files and the side-environment interpreter."""
     required = [repo_root / "README.md", repo_root / EXAMPLE_PATH]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
@@ -137,6 +153,11 @@ def _validate_paths(repo_root: Path, side_env_python: Path) -> None:
 
 
 def _upstream_live_payload_script() -> str:
+    """Build the child script that extracts an upstream native SACADRL state.
+
+    Returns:
+        Python source executed inside the upstream side environment.
+    """
     return """
 \"\"\"Prepare a headless Gym/TF runtime, patch legacy matplotlib/NumPy quirks,
 build the upstream env/policies, and print the native observation payload.\"\"\"
@@ -193,6 +214,11 @@ print(json.dumps({'native_state': payload}))
 
 
 def _extract_source_contract() -> dict[str, Any]:
+    """Describe the source-level boundary covered by the parity probe.
+
+    Returns:
+        Mapping of policy, state-order, action, and interpretation metadata.
+    """
     return {
         "learned_policy": "GA3C_CADRL",
         "state_order": list(_SACADRL_STATE_ORDER),
@@ -206,6 +232,11 @@ def _extract_source_contract() -> dict[str, Any]:
 
 
 def _as_float_array(value: Any, *, shape: tuple[int, ...] | None = None) -> np.ndarray:
+    """Convert a value to a float32 array, optionally reshaping it.
+
+    Returns:
+        NumPy float32 array.
+    """
     arr = np.asarray(value, dtype=np.float32)
     if shape is not None:
         arr = arr.reshape(shape)
@@ -213,6 +244,11 @@ def _as_float_array(value: Any, *, shape: tuple[int, ...] | None = None) -> np.n
 
 
 def _flatten_native_state(native_state: dict[str, Any]) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Flatten an upstream native state according to SACADRL state order.
+
+    Returns:
+        Network input vector and component arrays keyed by state name.
+    """
     components = {
         "num_other_agents": _as_float_array([native_state["num_other_agents"]]),
         "dist_to_goal": _as_float_array([native_state["dist_to_goal"]]),
@@ -228,6 +264,11 @@ def _flatten_native_state(native_state: dict[str, Any]) -> tuple[np.ndarray, dic
 
 
 def _inverse_rotate_to_ego(robot_heading: float, velocities_world: np.ndarray) -> np.ndarray:
+    """Rotate world-frame pedestrian velocities into the robot ego frame.
+
+    Returns:
+        Ego-frame velocity array.
+    """
     cos_h = np.cos(robot_heading)
     sin_h = np.sin(robot_heading)
     ego = np.zeros_like(velocities_world, dtype=np.float32)
@@ -238,6 +279,11 @@ def _inverse_rotate_to_ego(robot_heading: float, velocities_world: np.ndarray) -
 
 
 def _shared_ped_radius(other_states: np.ndarray, active_count: int) -> tuple[float, list[str]]:
+    """Infer the shared pedestrian radius expected by Robot SF observations.
+
+    Returns:
+        Radius value and notes about non-shared upstream radii.
+    """
     notes: list[str] = []
     if active_count <= 0:
         return 0.3, notes
@@ -251,6 +297,11 @@ def _shared_ped_radius(other_states: np.ndarray, active_count: int) -> tuple[flo
 def _robot_sf_observation_from_native_state(
     native_state: dict[str, Any],
 ) -> tuple[dict[str, Any], list[str]]:
+    """Reconstruct a Robot SF structured observation from upstream native state.
+
+    Returns:
+        Robot SF observation payload and interpretation notes.
+    """
     other_states = _as_float_array(native_state["other_agents_states"])
     active_count = int(native_state["num_other_agents"])
     heading = float(native_state["heading_ego_frame"])
@@ -290,6 +341,11 @@ def _robot_sf_observation_from_native_state(
 def _component_diffs(
     local_vec: np.ndarray, native_components: dict[str, np.ndarray]
 ) -> dict[str, float]:
+    """Compute per-state max absolute differences against native components.
+
+    Returns:
+        Mapping from SACADRL state component to maximum absolute difference.
+    """
     offset = 0
     diffs: dict[str, float] = {}
     for state in _SACADRL_STATE_ORDER:
@@ -301,6 +357,11 @@ def _component_diffs(
 
 
 def _run_native_roundtrip_case(name: str, native_state: dict[str, Any]) -> CaseResult:
+    """Run a parity case from upstream native state through the local adapter.
+
+    Returns:
+        Case result with global and component-wise differences.
+    """
     expected_vec, native_components = _flatten_native_state(native_state)
     observation, notes = _robot_sf_observation_from_native_state(native_state)
     other_rows = int(np.asarray(native_state["other_agents_states"]).shape[0])
@@ -325,6 +386,11 @@ def _run_native_roundtrip_case(name: str, native_state: dict[str, Any]) -> CaseR
 
 
 def _run_controlled_rotated_case() -> CaseResult:
+    """Run a deterministic rotated multi-agent parity case.
+
+    Returns:
+        Case result for a controlled native-state fixture.
+    """
     robot_radius = 0.35
     ped_radius = 0.25
     rows = []
@@ -358,6 +424,11 @@ def _run_controlled_rotated_case() -> CaseResult:
 
 
 def _run_socnav_fusion_case() -> CaseResult:
+    """Run a parity case through Robot SF SocNav observation fusion.
+
+    Returns:
+        Case result for the local observation-builder integration path.
+    """
     robot = SimpleNamespace(
         pose=(np.array([1.0, 1.0], dtype=np.float32), np.pi / 2),
         current_speed=np.array([0.0, 0.0], dtype=np.float32),
@@ -494,6 +565,11 @@ def run_probe(repo_root: Path, side_env_python: Path, timeout_seconds: int) -> P
 
 
 def _render_markdown(report: ProbeReport) -> str:
+    """Render the SACADRL observation parity report as Markdown.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     lines = [
         f"# Issue {report.issue} SACADRL Observation Parity Probe",
         "",

@@ -14,6 +14,12 @@ import yaml
 
 
 def _safe_float(value: Any) -> float | None:
+    """Parse a finite float from benchmark payload data.
+
+    Returns:
+        Parsed finite float, or ``None`` for missing, invalid, NaN, or infinite
+        values.
+    """
     if value is None:
         return None
     try:
@@ -26,10 +32,20 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _read_json(path: Path) -> dict[str, Any]:
+    """Read a JSON object artifact.
+
+    Returns:
+        Parsed JSON payload.
+    """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read JSONL episode records when an artifact exists.
+
+    Returns:
+        Parsed JSON object rows, or an empty list for missing/empty files.
+    """
     if not path.exists() or path.stat().st_size == 0:
         return []
     return [
@@ -38,6 +54,11 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
+    """Read a YAML mapping artifact.
+
+    Returns:
+        Parsed mapping, defaulting empty files to an empty dict.
+    """
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
@@ -47,6 +68,11 @@ def _repository_root() -> Path:
 
 
 def _planner_rows(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index campaign planner summary rows by planner key.
+
+    Returns:
+        Mapping from planner key to summary row.
+    """
     rows = summary.get("planner_rows")
     if not isinstance(rows, list):
         return {}
@@ -61,6 +87,11 @@ def _planner_rows(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _runs_by_planner(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index campaign run entries by planner key.
+
+    Returns:
+        Mapping from planner key to run payload.
+    """
     runs = summary.get("runs")
     if not isinstance(runs, list):
         return {}
@@ -85,6 +116,11 @@ def _format_source_list(value: Any) -> str:
 
 
 def _load_termination_counts(run_entry: dict[str, Any], campaign_root: Path) -> dict[str, int]:
+    """Load termination-reason counts for a planner run.
+
+    Returns:
+        Mapping from termination reason to episode count.
+    """
     episodes_path_value = run_entry.get("episodes_path")
     if not isinstance(episodes_path_value, str) or not episodes_path_value:
         return {}
@@ -107,6 +143,11 @@ def _load_termination_counts(run_entry: dict[str, Any], campaign_root: Path) -> 
 
 
 def _primary_failure_mode(termination_counts: dict[str, int]) -> str:
+    """Choose the dominant non-success termination reason.
+
+    Returns:
+        Primary failure mode, or ``none`` when no failures are present.
+    """
     non_success = {k: v for k, v in termination_counts.items() if k != "success" and v > 0}
     if not non_success:
         return "none"
@@ -114,6 +155,11 @@ def _primary_failure_mode(termination_counts: dict[str, int]) -> str:
 
 
 def _headline_recommendation_bucket(value: str) -> str:
+    """Normalize a planner headline recommendation to an output bucket.
+
+    Returns:
+        One of ``headline_suite``, ``control_only``, or ``non_headline``.
+    """
     mapping = {
         "keep": "headline_suite",
         "control-only": "control_only",
@@ -123,6 +169,11 @@ def _headline_recommendation_bucket(value: str) -> str:
 
 
 def _build_markdown(payload: dict[str, Any]) -> str:
+    """Render the planner-quality audit payload as Markdown.
+
+    Returns:
+        Markdown report body.
+    """
     lines = [
         "# Planner Quality Audit",
         "",
@@ -290,6 +341,11 @@ def build_audit(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the planner-quality audit CLI parser.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hard-matrix-root", type=Path, required=True)
     parser.add_argument("--sanity-matrix-root", type=Path, required=True)

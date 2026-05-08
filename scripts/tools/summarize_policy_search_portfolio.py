@@ -97,6 +97,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load a YAML mapping from disk.
+
+    Returns:
+        Parsed YAML mapping, defaulting empty files to an empty dict.
+    """
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise TypeError(f"Expected YAML mapping: {path}")
@@ -104,6 +109,11 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _parse_optional_float(raw: str) -> float | None:
+    """Parse a report table cell as an optional float.
+
+    Returns:
+        Parsed float, or ``None`` for empty/non-numeric sentinel values.
+    """
     value = raw.strip().strip("`")
     if not value or value.lower() in {"n/a", "nan", "none"}:
         return None
@@ -114,6 +124,11 @@ def _parse_optional_float(raw: str) -> float | None:
 
 
 def _parse_optional_int(raw: str) -> int | None:
+    """Parse a report table cell as an optional integer.
+
+    Returns:
+        Parsed integer, or ``None`` for empty/non-numeric sentinel values.
+    """
     value = raw.strip().strip("`")
     if not value or value.lower() in {"n/a", "nan", "none"}:
         return None
@@ -124,6 +139,11 @@ def _parse_optional_int(raw: str) -> int | None:
 
 
 def _section_after(lines: list[str], heading: str) -> list[str]:
+    """Return the body lines following a second-level Markdown heading.
+
+    Returns:
+        Section body lines up to the next ``##`` heading.
+    """
     try:
         start = next(index for index, line in enumerate(lines) if line.strip() == heading)
     except StopIteration:
@@ -137,6 +157,11 @@ def _section_after(lines: list[str], heading: str) -> list[str]:
 
 
 def _first_nonempty(lines: list[str]) -> str | None:
+    """Find the first non-empty Markdown line.
+
+    Returns:
+        First non-empty line stripped of surrounding backticks, or ``None``.
+    """
     for line in lines:
         stripped = line.strip()
         if stripped:
@@ -145,6 +170,11 @@ def _first_nonempty(lines: list[str]) -> str | None:
 
 
 def _parse_metadata(lines: list[str], label: str) -> str | None:
+    """Extract a bullet metadata value by label.
+
+    Returns:
+        Metadata value, or ``None`` when absent.
+    """
     prefix = f"- {label}:"
     for line in lines:
         stripped = line.strip()
@@ -154,6 +184,12 @@ def _parse_metadata(lines: list[str], label: str) -> str | None:
 
 
 def _report_name_parts(path: Path) -> tuple[date | None, str, str] | None:
+    """Parse date, candidate, and stage from a report filename.
+
+    Returns:
+        Tuple of report date, candidate name, and stage, or ``None`` when the
+        filename does not match the report convention.
+    """
     stem = path.stem
     match = re.match(r"^(\d{4}-\d{2}-\d{2})_(.+)$", stem)
     if match is None:
@@ -171,6 +207,11 @@ def _report_name_parts(path: Path) -> tuple[date | None, str, str] | None:
 
 
 def _parse_aggregate(lines: list[str]) -> dict[str, Any]:
+    """Parse the aggregate results table from a candidate report.
+
+    Returns:
+        Mapping of aggregate metric names to parsed values.
+    """
     for index, line in enumerate(lines):
         if not line.strip().startswith("| Episodes | Success | Collision | Near Miss |"):
             continue
@@ -191,6 +232,11 @@ def _parse_aggregate(lines: list[str]) -> dict[str, Any]:
 
 
 def _parse_failure_counts(lines: list[str]) -> dict[str, int]:
+    """Parse failure taxonomy counts from a candidate report.
+
+    Returns:
+        Mapping from failure mode to count.
+    """
     counts: dict[str, int] = {}
     for line in _section_after(lines, "## Failure Taxonomy"):
         stripped = line.strip()
@@ -203,6 +249,11 @@ def _parse_failure_counts(lines: list[str]) -> dict[str, int]:
 
 
 def _parse_family_runs(lines: list[str]) -> list[str]:
+    """Parse family override run summaries from a candidate report.
+
+    Returns:
+        Markdown bullet text for family override runs.
+    """
     rows: list[str] = []
     for line in _section_after(lines, "## Family Override Runs"):
         stripped = line.strip()
@@ -243,6 +294,11 @@ def parse_report(path: Path) -> CandidateReport | None:
 
 
 def _candidate_entries(registry: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Extract candidate registry entries.
+
+    Returns:
+        Mapping from candidate name to registry entry.
+    """
     raw = registry.get("candidates")
     if not isinstance(raw, dict):
         raise TypeError("Registry is missing a 'candidates' mapping")
@@ -255,6 +311,11 @@ def _candidate_names_for_stage(
     *,
     all_implemented: bool = False,
 ) -> list[str]:
+    """Filter implemented candidates for a requested stage.
+
+    Returns:
+        Candidate names that are implemented and stage-eligible.
+    """
     names: list[str] = []
     for name, entry in sorted(entries.items()):
         if str(entry.get("status", "")).strip() != "implemented":
@@ -268,6 +329,11 @@ def _candidate_names_for_stage(
 
 
 def _best_report(reports: list[CandidateReport]) -> CandidateReport | None:
+    """Select the best available report by stage strength and recency.
+
+    Returns:
+        Best report, or ``None`` when no reports exist.
+    """
     if not reports:
         return None
     return max(
@@ -282,6 +348,12 @@ def _best_report(reports: list[CandidateReport]) -> CandidateReport | None:
 
 
 def _strongest_report(reports: list[CandidateReport]) -> CandidateReport | None:
+    """Select the strongest observed report by metrics.
+
+    Returns:
+        Strongest metric report, falling back to best report when metrics are
+        unavailable.
+    """
     comparable = [
         report
         for report in reports
@@ -300,6 +372,11 @@ def _strongest_report(reports: list[CandidateReport]) -> CandidateReport | None:
 
 
 def _fmt(value: float | int | None, digits: int = 4) -> str:
+    """Format optional report metrics for Markdown tables.
+
+    Returns:
+        Formatted value or ``n/a``.
+    """
     if value is None:
         return "n/a"
     if isinstance(value, int):
@@ -308,11 +385,21 @@ def _fmt(value: float | int | None, digits: int = 4) -> str:
 
 
 def _candidate_hypothesis(entry: dict[str, Any]) -> str:
+    """Normalize a candidate hypothesis sentence.
+
+    Returns:
+        Hypothesis without trailing period.
+    """
     hypothesis = " ".join(str(entry.get("hypothesis", "")).split())
     return hypothesis.rstrip(".")
 
 
 def _evidence_strengths(report: CandidateReport) -> list[str]:
+    """Describe the main strengths visible in a candidate report.
+
+    Returns:
+        Human-readable evidence strength phrases.
+    """
     strengths: list[str] = []
     success = report.success_rate
     collision = report.collision_rate
@@ -342,6 +429,11 @@ def _evidence_strengths(report: CandidateReport) -> list[str]:
 
 
 def _failure_note(report: CandidateReport) -> str:
+    """Summarize the dominant remaining failure mode.
+
+    Returns:
+        Sentence fragment for the candidate explanation.
+    """
     if not report.failure_counts:
         return ""
     top_failure, top_count = max(report.failure_counts.items(), key=lambda item: item[1])
@@ -349,6 +441,11 @@ def _failure_note(report: CandidateReport) -> str:
 
 
 def _explain_candidate(entry: dict[str, Any], report: CandidateReport | None) -> str:
+    """Build a compact candidate evidence explanation.
+
+    Returns:
+        Human-readable explanation for the overview table.
+    """
     hypothesis = _candidate_hypothesis(entry)
     if report is None:
         return hypothesis or "No tracked evaluation report yet."
@@ -362,6 +459,11 @@ def _explain_candidate(entry: dict[str, Any], report: CandidateReport | None) ->
 
 
 def _report_record(report: CandidateReport | None) -> dict[str, Any] | None:
+    """Convert a candidate report dataclass to a JSON-compatible record.
+
+    Returns:
+        Report record, or ``None`` when no report is available.
+    """
     if report is None:
         return None
     return {
@@ -440,6 +542,7 @@ def build_overview(
 
 
 def _write_markdown(overview: dict[str, Any], output_md: Path) -> None:
+    """Write the policy-search portfolio overview Markdown report."""
     rows = overview["rows"]
     leaders = [
         row

@@ -285,6 +285,7 @@ def load_snapshot(path: Path) -> SuiteSnapshot | None:
         return None
 
     def _extract_phase(phase: str) -> dict[str, Any]:
+        """Return phase metrics from either raw or median-wrapped snapshots."""
         phase_payload = payload.get(phase, {})
         if isinstance(phase_payload, dict) and isinstance(phase_payload.get("median"), dict):
             return phase_payload["median"]

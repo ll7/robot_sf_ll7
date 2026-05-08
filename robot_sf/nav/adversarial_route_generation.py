@@ -581,6 +581,11 @@ def optimize_route_set(
     failed_trials = 0
 
     def objective(trial: optuna.Trial) -> float:
+        """Evaluate one Optuna route candidate trial.
+
+        Returns:
+            float: Trial objective score, with rejected candidates scoring zero.
+        """
         nonlocal failed_trials
         # Per-trial RNG avoids shared-state races when Optuna runs trials in parallel.
         trial_rng = random.Random(config.seed + trial.number)

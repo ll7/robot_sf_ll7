@@ -32,6 +32,11 @@ class DefInfo:
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None) -> str:
+    """Run a command and return stdout.
+
+    Returns:
+        Captured standard output.
+    """
     proc = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd is not None else None,
@@ -47,14 +52,29 @@ def _run(cmd: list[str], *, cwd: Path | None = None) -> str:
 
 
 def _repo_root() -> Path:
+    """Resolve the current git repository root.
+
+    Returns:
+        Absolute repository root path.
+    """
     return Path(_run(["git", "rev-parse", "--show-toplevel"]).strip())
 
 
 def _diff_text(base: str, repo_root: Path) -> str:
+    """Read zero-context Python diff text against a base ref.
+
+    Returns:
+        Git diff text for changed Python files.
+    """
     return _run(["git", "diff", "--unified=0", f"{base}...HEAD", "--", "*.py"], cwd=repo_root)
 
 
 def _parse_changed_line_ranges(diff_text: str) -> dict[str, list[tuple[int, int]]]:
+    """Parse changed line ranges from unified diff text.
+
+    Returns:
+        Mapping from repository-relative path to changed new-file line ranges.
+    """
     current_file: str | None = None
     ranges: dict[str, list[tuple[int, int]]] = {}
     for line in diff_text.splitlines():
@@ -86,10 +106,20 @@ def _parse_changed_line_ranges(diff_text: str) -> dict[str, list[tuple[int, int]
 
 
 def _matches_any(path_str: str, patterns: Iterable[str]) -> bool:
+    """Check whether a path matches any glob pattern.
+
+    Returns:
+        True when at least one pattern matches.
+    """
     return any(fnmatch(path_str, pattern) for pattern in patterns)
 
 
 def _parse_source(source: str, path: Path) -> ast.AST | None:
+    """Parse Python source, reporting syntax errors without aborting the scan.
+
+    Returns:
+        Parsed AST, or ``None`` when parsing fails.
+    """
     try:
         return ast.parse(source)
     except SyntaxError as exc:
@@ -98,16 +128,29 @@ def _parse_source(source: str, path: Path) -> ast.AST | None:
 
 
 def _collect_defs(tree: ast.AST) -> list[DefInfo]:
+    """Collect definitions that have docstrings from a parsed AST.
+
+    Returns:
+        Definition metadata with qualified names and source spans.
+    """
     defs: list[DefInfo] = []
 
     class Visitor(ast.NodeVisitor):
+        """AST visitor that records docstring-bearing definitions."""
+
         def __init__(self) -> None:
             self._stack: list[str] = []
 
         def _qual(self, name: str) -> str:
+            """Build a dotted name from the current class stack.
+
+            Returns:
+                Qualified definition name.
+            """
             return ".".join(self._stack + [name]) if self._stack else name
 
         def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            """Record a class definition and visit nested members."""
             doc = ast.get_docstring(node) or ""
             if doc:
                 defs.append(
@@ -123,6 +166,7 @@ def _collect_defs(tree: ast.AST) -> list[DefInfo]:
             self._stack.pop()
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            """Record a function definition and visit nested definitions."""
             doc = ast.get_docstring(node) or ""
             if doc:
                 defs.append(
@@ -136,6 +180,7 @@ def _collect_defs(tree: ast.AST) -> list[DefInfo]:
             self.generic_visit(node)
 
         def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            """Record an async function definition and visit nested definitions."""
             doc = ast.get_docstring(node) or ""
             if doc:
                 defs.append(
@@ -153,6 +198,11 @@ def _collect_defs(tree: ast.AST) -> list[DefInfo]:
 
 
 def _read_defs(path: Path) -> list[DefInfo]:
+    """Read and parse definitions from one source file.
+
+    Returns:
+        Definition metadata, or an empty list for missing/unparseable files.
+    """
     try:
         source = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -164,6 +214,11 @@ def _read_defs(path: Path) -> list[DefInfo]:
 
 
 def _overlaps(ranges: list[tuple[int, int]], start: int, end: int) -> bool:
+    """Check whether a definition span overlaps any changed line range.
+
+    Returns:
+        True when any changed range intersects ``start`` through ``end``.
+    """
     for r_start, r_end in ranges:
         if r_start <= end and r_end >= start:
             return True
@@ -171,6 +226,11 @@ def _overlaps(ranges: list[tuple[int, int]], start: int, end: int) -> bool:
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI options for the TODO-docstring checker.
+
+    Returns:
+        Parsed argparse namespace.
+    """
     parser = argparse.ArgumentParser(
         description="Warn on TODO docstrings in touched definitions (diff-only).",
     )

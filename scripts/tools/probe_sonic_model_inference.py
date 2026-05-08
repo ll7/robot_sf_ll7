@@ -17,10 +17,12 @@ from gymnasium import spaces
 
 
 def _repository_root() -> Path:
+    """Return the repository root for this probe script."""
     return Path(__file__).resolve().parents[2]
 
 
 def _default_checkpoint(checkpoints_dir: Path) -> str:
+    """Select the latest checkpoint filename from a checkpoint directory."""
     candidates = sorted(path.name for path in checkpoints_dir.glob("*.pt"))
     if not candidates:
         raise FileNotFoundError(f"No .pt checkpoints found in {checkpoints_dir}")
@@ -28,6 +30,7 @@ def _default_checkpoint(checkpoints_dir: Path) -> str:
 
 
 def _minimal_spaces(config: Any) -> tuple[spaces.Dict, spaces.Box]:
+    """Build minimal observation/action spaces required for SoNIC policy construction."""
     human_num = config.sim.human_num + config.sim.human_num_range
     predict_steps = config.sim.predict_steps
     spatial_edge_dim = int(2 * (predict_steps + 1))
@@ -69,6 +72,7 @@ def _minimal_spaces(config: Any) -> tuple[spaces.Dict, spaces.Box]:
 def _synthetic_inputs(
     config: Any, policy: Any
 ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor], torch.Tensor]:
+    """Build zero-valued synthetic inputs matching the SoNIC policy contract."""
     human_num = config.sim.human_num + config.sim.human_num_range
     predict_steps = config.sim.predict_steps
     spatial_edge_dim = int(2 * (predict_steps + 1))
@@ -92,6 +96,7 @@ def _synthetic_inputs(
 
 
 def _extract_contract(config: Any, args: Any) -> dict[str, Any]:
+    """Extract key source-model contract fields for the probe report."""
     robot = getattr(config, "robot", object())
     humans = getattr(config, "humans", object())
     sim = getattr(config, "sim", object())
@@ -278,6 +283,7 @@ def run_model_probe(  # noqa: PLR0915
 
 
 def _render_markdown(report: ModelProbeReport) -> str:
+    """Render the SoNIC model-inference probe as Markdown."""
     contract = report.source_contract
     interpretation_line = (
         "- Model-only reuse is technically possible, but only with narrow compatibility shims."

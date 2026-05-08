@@ -92,6 +92,7 @@ class RewardCurriculumReward:
 
     @staticmethod
     def _is_terminal(meta: Mapping[str, object]) -> bool:
+        """Return whether route, timeout, or collision metadata ends the episode."""
         return bool(
             meta.get("is_route_complete")
             or meta.get("is_timesteps_exceeded")

@@ -58,6 +58,7 @@ def _resolve(path_raw: str | Path, *, base: Path) -> Path:
 
 
 def _run(cmd: list[str], *, log_level: str = "INFO") -> None:
+    """Run one pipeline command with repository-local environment defaults."""
     logger.info("Running: {}", " ".join(cmd))
     env = dict(os.environ)
     env.setdefault("LOGURU_LEVEL", str(log_level).upper())
@@ -163,6 +164,11 @@ def _run_capture_json(
     log_level: str = "INFO",
     allow_failure: bool = False,
 ) -> dict[str, Any]:
+    """Run a command and parse a JSON object from stdout when available.
+
+    Returns:
+        dict[str, Any]: Status payload from command output or execution result.
+    """
     logger.info("Running: {}", " ".join(cmd))
     env = dict(os.environ)
     env.setdefault("LOGURU_LEVEL", str(log_level).upper())
@@ -237,6 +243,11 @@ def _paths_from_config(
     base_dir: Path,
     output_base_dir: Path,
 ) -> PipelinePaths:
+    """Resolve all predictive-pipeline output paths for a run.
+
+    Returns:
+        PipelinePaths: Canonical path bundle for pipeline artifacts.
+    """
     out_cfg = cfg.get("output", {})
     if not isinstance(out_cfg, dict):
         raise TypeError("output must be a mapping")
@@ -265,6 +276,11 @@ def _paths_from_config(
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse predictive training pipeline CLI arguments.
+
+    Returns:
+        argparse.Namespace: Parsed config path and execution options.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",

@@ -439,6 +439,7 @@ def _summarize_sensitivity(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     all_nonbaseline = [row for row in rows if row.get("variant_type") != "baseline"]
 
     def _min(rows_in: Sequence[Mapping[str, Any]], key: str, default: float = 1.0) -> float:
+        """Return the minimum finite row value for a sensitivity metric."""
         values = [float(row.get(key, default)) for row in rows_in if _is_finite(row.get(key))]
         return min(values) if values else default
 

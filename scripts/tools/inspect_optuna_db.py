@@ -17,6 +17,11 @@ from optuna.trial import TrialState
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI options for Optuna database inspection.
+
+    Returns:
+        Parsed argparse namespace.
+    """
     parser = argparse.ArgumentParser(description="Inspect Optuna sqlite study databases.")
     parser.add_argument("--db", required=True, help="Path to the Optuna sqlite database file.")
     parser.add_argument(
@@ -38,16 +43,27 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _storage_url(db_path: Path) -> str:
+    """Convert a sqlite database path into an Optuna storage URL.
+
+    Returns:
+        SQLite storage URL for ``db_path``.
+    """
     return f"sqlite:///{db_path}"
 
 
 def _format_value(value: float | None) -> str:
+    """Format an optional objective value for terminal output.
+
+    Returns:
+        Compact numeric string or ``n/a`` for missing values.
+    """
     if value is None:
         return "n/a"
     return f"{value:.6g}"
 
 
 def _print_study_list(summaries: list[optuna.study.StudySummary]) -> None:
+    """Print available studies and best values from Optuna summaries."""
     if not summaries:
         print("No studies found in the database.")
         return
@@ -63,6 +79,11 @@ def _select_study(
     summaries: list[optuna.study.StudySummary],
     requested_name: str | None,
 ) -> str | None:
+    """Select the requested study or default to the first available study.
+
+    Returns:
+        Study name to inspect, or ``None`` when the database has no studies.
+    """
     if not summaries:
         return None
     if requested_name:
@@ -75,6 +96,11 @@ def _select_study(
 
 
 def _completed_trials(study: optuna.study.Study) -> list[optuna.trial.FrozenTrial]:
+    """Filter a study down to completed trials.
+
+    Returns:
+        Trials whose state is ``COMPLETE``.
+    """
     return [trial for trial in study.trials if trial.state == TrialState.COMPLETE]
 
 
@@ -82,6 +108,11 @@ def _sort_trials(
     trials: list[optuna.trial.FrozenTrial],
     direction: optuna.study.StudyDirection,
 ) -> list[optuna.trial.FrozenTrial]:
+    """Sort completed trials according to the study optimization direction.
+
+    Returns:
+        Trials ordered from best to worst for the study direction.
+    """
     if direction == optuna.study.StudyDirection.MINIMIZE:
         return sorted(trials, key=lambda t: float("inf") if t.value is None else t.value)
     return sorted(trials, key=lambda t: float("-inf") if t.value is None else t.value, reverse=True)
@@ -93,6 +124,7 @@ def _print_study_summary(
     top_n: int,
     show_params: bool,
 ) -> None:
+    """Print the selected study summary and top completed trials."""
     print(f"\nStudy: {study.study_name}")
     direction_label = getattr(study.direction, "name", str(study.direction))
     print(f"Direction: {direction_label}")
@@ -125,6 +157,7 @@ def _export_csv(
     study: optuna.study.Study,
     output_path: Path,
 ) -> None:
+    """Export all study trials to a reviewable CSV file."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 
 def _path_length(points: Iterable[tuple[float, float]]) -> float:
+    """Return total polyline length, or NaN when no segment exists."""
     pts = list(points)
     if len(pts) < 2:
         return float("nan")

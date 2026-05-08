@@ -31,6 +31,11 @@ from robot_sf.benchmark.termination_reason import (
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for episode-schema migration.
+
+    Returns:
+        argparse.Namespace: Parsed input and output paths.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path, help="Input JSONL path")
     parser.add_argument(
@@ -43,6 +48,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _to_iso(ts: float) -> str:
+    """Convert a Unix timestamp to an ISO-8601 UTC string.
+
+    Returns:
+        str: UTC timestamp string.
+    """
     return datetime.fromtimestamp(ts, tz=UTC).isoformat()
 
 
@@ -156,6 +166,11 @@ def _infer_termination_reason(record: dict[str, Any], outcome: dict[str, bool]) 
 
 
 def _migrate_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Migrate one episode record to schema v1 fields.
+
+    Returns:
+        dict[str, Any]: Migrated episode record.
+    """
     updated = dict(record)
     if "version" not in updated:
         updated["version"] = "v1"

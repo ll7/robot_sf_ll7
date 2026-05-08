@@ -54,6 +54,11 @@ def training(svg_map_path: str) -> None:
     difficulty = 0
 
     def make_env():
+        """Construct one differential-drive pedestrian PPO training environment.
+
+        Returns:
+            RobotNavigationEnv: Configured training environment instance.
+        """
         map_definition = convert_map(svg_map_path)
         robot_model = LegacyRun023ObsAdapter(PPO.load("./model/run_023", env=None))
 

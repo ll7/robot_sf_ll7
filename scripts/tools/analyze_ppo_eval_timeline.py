@@ -22,6 +22,11 @@ _CORE_KEYS = (
 
 
 def _resolve_path(path_value: str | None) -> Path:
+    """Resolve a manifest path against the artifact root.
+
+    Returns:
+        Path: Absolute path to the timeline artifact.
+    """
     if not path_value:
         raise ValueError("Manifest does not include eval_timeline_path.")
     candidate = Path(path_value)
@@ -31,6 +36,11 @@ def _resolve_path(path_value: str | None) -> Path:
 
 
 def _load_manifest(run_id: str) -> dict[str, Any]:
+    """Load a training run manifest by run id.
+
+    Returns:
+        dict[str, Any]: Manifest payload.
+    """
     manifest_path = get_training_run_manifest_path(run_id)
     if not manifest_path.exists():
         raise FileNotFoundError(
@@ -43,6 +53,11 @@ def _load_manifest(run_id: str) -> dict[str, Any]:
 
 
 def _analyze_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize eval-timeline ordering and missing core fields.
+
+    Returns:
+        dict[str, Any]: Timeline diagnostics.
+    """
     steps = [int(row.get("eval_step", 0)) for row in rows]
     monotonic = steps == sorted(steps)
     unique = len(set(steps)) == len(steps)
@@ -67,6 +82,7 @@ def _analyze_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def _write_markdown(
     path: Path, *, run_id: str, timeline_path: Path, analysis: dict[str, Any]
 ) -> None:
+    """Write eval-timeline diagnostics as Markdown."""
     lines = [
         f"# PPO Eval Timeline Analysis: `{run_id}`",
         "",

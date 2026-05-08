@@ -274,9 +274,16 @@ def save_zones_yaml(config: OSMZonesConfig, yaml_file: str) -> None:
 
     # Custom YAML Dumper for deterministic output without mutating global state
     class SortedDumper(yaml.SafeDumper):
+        """Safe YAML dumper with deterministic mapping key order."""
+
         pass
 
     def represent_dict_sorted(dumper, data):
+        """Represent dictionaries with sorted keys for reproducible YAML output.
+
+        Returns:
+            YAML mapping node with keys sorted by Python's default item ordering.
+        """
         return dumper.represent_mapping("tag:yaml.org,2002:map", sorted(data.items()))
 
     SortedDumper.add_representer(dict, represent_dict_sorted)

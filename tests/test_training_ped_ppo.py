@@ -14,27 +14,37 @@ def test_training_closes_vectorized_env_after_success(monkeypatch) -> None:
     save_paths: list[str] = []
 
     class _EnvStub:
+        """Vectorized environment stub that records close calls."""
+
         def close(self) -> None:
+            """Record that the training routine closed the environment."""
             close_calls.append("closed")
 
     class _CallbackListStub(tuple):
+        """Tuple-backed callback list stub matching Stable-Baselines construction."""
+
         def __new__(cls, callbacks):
             return super().__new__(cls, callbacks)
 
     class _ModelStub:
+        """PPO model stub that records training and save operations."""
+
         @staticmethod
         def load(*_args, **_kwargs):
+            """Return a sentinel robot model for pedestrian environment construction."""
             return "robot-model"
 
         def __init__(self, *_args, **_kwargs) -> None:
             pass
 
         def learn(self, *, total_timesteps: int, progress_bar: bool, callback) -> None:
+            """Record the requested training length and validate callback wiring."""
             assert progress_bar is True
             assert callback is not None
             learn_calls.append(total_timesteps)
 
         def save(self, path: str) -> None:
+            """Record the model output path."""
             save_paths.append(path)
 
     monkeypatch.setattr(mod, "convert_map", lambda _path: "map-def")

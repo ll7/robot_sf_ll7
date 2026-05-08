@@ -15,10 +15,21 @@ from typing import Any
 
 
 def _safe_read_text(path: Path) -> str:
+    """Read a source file as UTF-8 text.
+
+    Returns:
+        Decoded file contents.
+    """
     return path.read_text(encoding="utf-8")
 
 
 def _extract_simple_assignment(text: str, attribute: str) -> Any | None:
+    """Extract a literal ``self.<attribute>`` assignment from source text.
+
+    Returns:
+        Parsed literal value, or ``None`` when the assignment is absent or
+        dynamic.
+    """
     guarded_match = re.search(
         rf'if not hasattr\(self, "{attribute}"\):\s*\n\s*self\.{attribute}\s*=\s*(.+)',
         text,
@@ -44,6 +55,11 @@ def _extract_simple_assignment(text: str, attribute: str) -> Any | None:
 
 
 def _extract_default_policies(test_cases_path: Path) -> list[str]:
+    """Extract the default policies used by the upstream two-agent testcase.
+
+    Returns:
+        Default policy names, or an empty list when parsing fails.
+    """
     text = _safe_read_text(test_cases_path)
     match = re.search(r"def get_testcase_two_agents\(policies=(\[[^\]]+\])\):", text)
     if not match:
@@ -55,6 +71,11 @@ def _extract_default_policies(test_cases_path: Path) -> list[str]:
 
 
 def _extract_discrete_actions(network_path: Path) -> int | None:
+    """Extract the upstream discrete action count from network source text.
+
+    Returns:
+        Number of discrete actions, or ``None`` when unknown.
+    """
     text = _safe_read_text(network_path)
     match = re.search(r"Define\s+(\d+)\s+choices of actions", text)
     if match:
@@ -70,6 +91,11 @@ def _extract_contract(
     ga3c_policy_path: Path,
     network_path: Path,
 ) -> dict[str, Any]:
+    """Extract the upstream learned-policy source contract.
+
+    Returns:
+        Mapping of observation, action, checkpoint, and kinematics metadata.
+    """
     config_text = _safe_read_text(config_path)
     states_in_obs = _extract_simple_assignment(config_text, "STATES_IN_OBS") or []
     states_not_used = _extract_simple_assignment(config_text, "STATES_NOT_USED_IN_POLICY") or []
@@ -97,6 +123,11 @@ def _extract_contract(
 
 
 def _detect_failure_summary(stdout: str, stderr: str) -> str:
+    """Summarize command output into a concise blocker message.
+
+    Returns:
+        Missing dependency, last output line, or unknown failure summary.
+    """
     combined = "\n".join(part for part in [stderr, stdout] if part)
     missing_module = re.search(r"No module named '([^']+)'", combined)
     if missing_module:
@@ -135,6 +166,11 @@ class ProbeReport:
 
 
 def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int) -> CommandResult:
+    """Run one upstream source-harness command with timeout handling.
+
+    Returns:
+        Structured command result with bounded stdout and stderr tails.
+    """
     try:
         proc = subprocess.run(
             command,
@@ -167,6 +203,11 @@ def _run_command(name: str, command: list[str], cwd: Path, timeout_seconds: int)
 
 
 def _validate_required_files(repo_root: Path) -> dict[str, str]:
+    """Validate that the upstream checkout contains all required probe files.
+
+    Returns:
+        Mapping from logical file role to resolved path string.
+    """
     required = {
         "readme": "README.md",
         "package_init": "gym_collision_avoidance/__init__.py",
@@ -268,6 +309,11 @@ def run_probe(repo_root: Path, timeout_seconds: int) -> ProbeReport:
 
 
 def _render_markdown(report: ProbeReport) -> str:
+    """Render the gym-collision-avoidance source-harness report.
+
+    Returns:
+        Markdown report text ending with a newline.
+    """
     lines = [
         "# gym-collision-avoidance Source Harness Probe",
         "",
@@ -332,6 +378,7 @@ def _render_markdown(report: ProbeReport) -> str:
 
 
 def _write_optional(path: Path | None, content: str) -> None:
+    """Write an optional report artifact when a path was provided."""
     if path is None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -339,6 +386,11 @@ def _write_optional(path: Path | None, content: str) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the source-harness probe CLI parser.
+
+    Returns:
+        Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--repo-root",

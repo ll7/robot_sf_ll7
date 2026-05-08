@@ -41,6 +41,11 @@ _BENCHMARK_EXCLUDED_STATUSES = frozenset(
 
 
 def _safe_float(value: Any) -> float | None:
+    """Coerce finite numeric payload values while treating blanks as missing.
+
+    Returns:
+        float | None: Parsed finite value, or ``None`` when the payload is absent/invalid.
+    """
     if value is None:
         return None
     if isinstance(value, str) and not value.strip():
@@ -53,6 +58,11 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _mean(values: Sequence[float | None]) -> float | None:
+    """Return the arithmetic mean of finite values, preserving all-missing as None.
+
+    Returns:
+        float | None: Mean of finite values, or ``None`` when no finite value is present.
+    """
     finite = [float(value) for value in values if value is not None and math.isfinite(float(value))]
     if not finite:
         return None
@@ -60,6 +70,11 @@ def _mean(values: Sequence[float | None]) -> float | None:
 
 
 def _max(values: Sequence[float | None]) -> float | None:
+    """Return the maximum finite value, preserving all-missing as None.
+
+    Returns:
+        float | None: Maximum finite value, or ``None`` when no finite value is present.
+    """
     finite = [float(value) for value in values if value is not None and math.isfinite(float(value))]
     if not finite:
         return None
@@ -67,6 +82,11 @@ def _max(values: Sequence[float | None]) -> float | None:
 
 
 def _metric_range(values: Sequence[float | None]) -> float | None:
+    """Return the finite max-min spread for a metric series.
+
+    Returns:
+        float | None: Finite metric spread, or ``None`` when no finite value is present.
+    """
     finite = [float(value) for value in values if value is not None and math.isfinite(float(value))]
     if not finite:
         return None
@@ -74,6 +94,11 @@ def _metric_range(values: Sequence[float | None]) -> float | None:
 
 
 def _percentile(values: Sequence[float], q: float) -> float | None:
+    """Return a nearest-rank percentile with q clamped into the [0, 1] interval.
+
+    Returns:
+        float | None: Selected percentile value, or ``None`` for an empty input.
+    """
     if not values:
         return None
     ordered = sorted(float(value) for value in values)
@@ -85,6 +110,11 @@ def _percentile(values: Sequence[float], q: float) -> float | None:
 
 
 def _scenario_keys(scenario: Mapping[str, Any]) -> list[str]:
+    """Collect stable aliases that may identify one scenario across artifacts.
+
+    Returns:
+        list[str]: Unique non-empty scenario identifiers in precedence order.
+    """
     keys: list[str] = []
     for field in ("scenario_id", "name", "id"):
         value = scenario.get(field)
@@ -94,6 +124,11 @@ def _scenario_keys(scenario: Mapping[str, Any]) -> list[str]:
 
 
 def _scenario_family(row: Mapping[str, Any]) -> str:
+    """Resolve the scenario family label used for grouped difficulty summaries.
+
+    Returns:
+        str: Explicit family/archetype value, scenario id fallback, or ``"unknown"``.
+    """
     for field in ("scenario_family", "archetype", "family"):
         value = row.get(field)
         if isinstance(value, str) and value.strip():
@@ -109,6 +144,15 @@ def _normalized_ranks(
     *,
     higher_is_harder: bool,
 ) -> dict[str, float]:
+    """Convert metric values into tie-aware normalized difficulty ranks.
+
+    The returned values span 0.0 to 1.0 when multiple scenarios are present.
+    ``higher_is_harder`` controls whether larger raw metrics should sort later
+    or earlier in the difficulty ordering.
+
+    Returns:
+        dict[str, float]: Scenario key to normalized rank, with tied values averaged.
+    """
     if not values_by_key:
         return {}
     if higher_is_harder:
@@ -133,6 +177,11 @@ def _normalized_ranks(
 
 
 def _planner_row_index(planner_rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Index planner summary rows by non-empty planner key.
+
+    Returns:
+        dict[str, dict[str, Any]]: Planner-key lookup containing shallow row copies.
+    """
     out: dict[str, dict[str, Any]] = {}
     for row in planner_rows:
         planner_key = row.get("planner_key")
@@ -142,6 +191,14 @@ def _planner_row_index(planner_rows: Sequence[Mapping[str, Any]]) -> dict[str, d
 
 
 def _is_benchmark_success(row: Mapping[str, Any]) -> bool:
+    """Interpret permissive benchmark-success payload values.
+
+    Missing values are treated as successful so older campaign summaries without
+    this field remain eligible for analysis.
+
+    Returns:
+        bool: Whether the row should count as benchmark-successful.
+    """
     value = row.get("benchmark_success")
     if value is None:
         return True
@@ -151,6 +208,11 @@ def _is_benchmark_success(row: Mapping[str, Any]) -> bool:
 
 
 def _is_consensus_planner(row: Mapping[str, Any]) -> bool:
+    """Decide whether a planner row is eligible for consensus difficulty scoring.
+
+    Returns:
+        bool: ``True`` for core planners that are not fallback, degraded, or failed.
+    """
     planner_group = str(row.get("planner_group", "")).strip().lower()
     if not planner_group:
         return False
@@ -168,6 +230,12 @@ def _is_consensus_planner(row: Mapping[str, Any]) -> bool:
 def _build_seed_index(
     seed_payload: Mapping[str, Any] | None,
 ) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index seed-variability rows by scenario and planner.
+
+    Returns:
+        dict[tuple[str, str], dict[str, Any]]: Shallow row copies keyed by
+        ``(scenario_id, planner_key)``.
+    """
     rows = seed_payload.get("rows") if isinstance(seed_payload, Mapping) else None
     if not isinstance(rows, list):
         return {}
@@ -190,6 +258,11 @@ def _seed_field(
     metric: str,
     field: str,
 ) -> float | None:
+    """Read one numeric field from a nested seed-variability metric summary.
+
+    Returns:
+        float | None: Finite metric field value, or ``None`` when unavailable.
+    """
     if not isinstance(seed_row, Mapping):
         return None
     summary = seed_row.get("summary")
@@ -204,6 +277,16 @@ def _seed_field(
 def _preview_metadata_lookup(  # noqa: C901
     preview_payload: Mapping[str, Any] | None,
 ) -> tuple[dict[str, dict[str, Any]], bool]:
+    """Build scenario metadata lookup rows from preflight-preview output.
+
+    Route-clearance warnings are folded into the scenario rows so downstream
+    difficulty summaries can explain static map or route caveats alongside
+    outcome metrics.
+
+    Returns:
+        tuple[dict[str, dict[str, Any]], bool]: Scenario-id metadata lookup and
+        whether the source preview was truncated.
+    """
     if not isinstance(preview_payload, Mapping):
         return {}, False
     warnings = preview_payload.get("route_clearance_warnings")
@@ -258,6 +341,12 @@ def _preview_metadata_lookup(  # noqa: C901
 
 
 def _load_verified_simple_ids(path: Path | None) -> tuple[set[str], str | None]:
+    """Load scenario aliases from the optional verified-simple manifest.
+
+    Returns:
+        tuple[set[str], str | None]: Scenario ids/aliases and the manifest path text
+        when a manifest path was supplied.
+    """
     if path is None or not path.exists():
         return set(), None
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -277,6 +366,12 @@ def _difficulty_weighted_score(
     scenario_id: str,
     component_ranks: Mapping[str, Mapping[str, float]],
 ) -> tuple[float | None, dict[str, float]]:
+    """Combine primary proxy ranks into one scenario difficulty score.
+
+    Returns:
+        tuple[float | None, dict[str, float]]: Weighted score plus the component
+        ranks that contributed to it.
+    """
     components: dict[str, float] = {}
     weighted_sum = 0.0
     total_weight = 0.0
@@ -295,6 +390,11 @@ def _difficulty_weighted_score(
 def _planner_quality_rows(
     rows: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
+    """Aggregate scenario rows into sortable planner-quality summaries.
+
+    Returns:
+        list[dict[str, Any]]: Planner rows sorted by success, safety, speed, and key.
+    """
     grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
         planner_key = row.get("planner_key")
@@ -343,6 +443,12 @@ def _spearman_rank_correlation(
     full_rows: Sequence[Mapping[str, Any]],
     subset_rows: Sequence[Mapping[str, Any]],
 ) -> float | None:
+    """Compare planner ordering between full and subset summary rows.
+
+    Returns:
+        float | None: Spearman rank correlation, or ``None`` with fewer than two
+        overlapping planner keys.
+    """
     full_ranks = {
         str(row.get("planner_key")): index + 1
         for index, row in enumerate(full_rows)
@@ -365,6 +471,12 @@ def _planner_selection_rows(
     scenario_rows: Sequence[Mapping[str, Any]],
     planner_index: Mapping[str, Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], str]:
+    """Select comparable planner rows for verified-simple subset assessment.
+
+    Returns:
+        tuple[list[dict[str, Any]], str]: Selected row copies and a human-readable
+        reason describing the selection policy.
+    """
     core_keys = {key for key, row in planner_index.items() if _is_consensus_planner(row)}
     selected = [
         dict(row)
@@ -382,6 +494,12 @@ def _verified_simple_assessment(
     *,
     manifest_path: Path | None,
 ) -> dict[str, Any]:
+    """Assess whether a verified-simple scenario subset is calibration-worthy.
+
+    Returns:
+        dict[str, Any]: JSON-serializable assessment with status, evidence fields,
+        and an interpretation recommendation.
+    """
     subset_ids, manifest_path_text = _load_verified_simple_ids(manifest_path)
     if not subset_ids:
         return {

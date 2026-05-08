@@ -53,6 +53,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_rows(path: Path) -> list[dict[str, Any]]:
+    """Load JSONL episode rows from a path."""
     rows: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -64,6 +65,7 @@ def _load_rows(path: Path) -> list[dict[str, Any]]:
 
 
 def _set_paths(args: argparse.Namespace) -> list[Path]:
+    """Resolve scenario-set manifest paths from CLI args."""
     if args.scenario_sets:
         return [Path(item).resolve() for item in args.scenario_sets]
     return [(args.scenario_dir / name).resolve() for name in DEFAULT_SET_NAMES]
@@ -78,6 +80,7 @@ def _manifest_path_label(path: Path) -> str:
 
 
 def _scenario_name(row: dict[str, Any]) -> str:
+    """Resolve a display scenario name from an episode row."""
     scenario_payload = row.get("scenario")
     if isinstance(scenario_payload, dict) and scenario_payload.get("name"):
         return str(scenario_payload["name"])
@@ -85,6 +88,7 @@ def _scenario_name(row: dict[str, Any]) -> str:
 
 
 def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate episode rows by scenario and termination reason."""
     by_scenario: dict[str, list[dict[str, Any]]] = defaultdict(list)
     reasons = Counter()
     successes = 0
@@ -129,6 +133,7 @@ def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _overall_summary(set_summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate per-set summaries into one overall result."""
     total_episodes = 0
     total_successes = 0.0
     total_collisions = 0.0
@@ -157,6 +162,7 @@ def _overall_summary(set_summaries: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _write_markdown(payload: dict[str, Any], path: Path) -> None:
+    """Write the grid-route deep-dive summary as Markdown."""
     lines = [
         "# Grid Route Deep Dive",
         "",

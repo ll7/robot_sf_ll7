@@ -26,6 +26,11 @@ from robot_sf.common.artifact_paths import get_repository_root
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for SNQI calibration analysis.
+
+    Returns:
+        argparse.Namespace: Parsed paths and calibration settings.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument(
@@ -63,6 +68,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _sha256_file(path: Path) -> str:
+    """Return a SHA-256 digest for one file."""
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -71,6 +77,11 @@ def _sha256_file(path: Path) -> str:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    """Load a JSON object from disk.
+
+    Returns:
+        dict[str, Any]: Parsed JSON object.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"Expected object JSON in {path}")
@@ -78,6 +89,12 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _load_campaign(campaign_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
+    """Load campaign summary and episode rows from a campaign root.
+
+    Returns:
+        tuple[list[dict[str, Any]], list[dict[str, Any]], str]: Planner rows,
+        episode rows, and source description.
+    """
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     if not summary_path.exists():
         raise FileNotFoundError(f"Missing campaign summary: {summary_path}")

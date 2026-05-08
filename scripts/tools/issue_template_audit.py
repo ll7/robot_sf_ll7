@@ -140,6 +140,11 @@ def audit_issue_body(body: str) -> IssueAuditResult:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for issue-template auditing.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--body-file", type=Path, required=True, help="Issue body markdown file.")
     parser.add_argument(

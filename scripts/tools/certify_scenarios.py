@@ -15,6 +15,11 @@ from robot_sf.scenario_certification import (
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for scenario certification.
+
+    Returns:
+        argparse.ArgumentParser: Configured argument parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario_config", type=Path, help="Scenario YAML manifest to certify.")
     parser.add_argument("--scenario-id", help="Optional scenario id/name selector.")

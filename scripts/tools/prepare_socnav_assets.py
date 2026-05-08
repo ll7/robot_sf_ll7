@@ -86,6 +86,7 @@ SOURCE_CANDIDATES: dict[str, tuple[str, ...]] = {
 
 
 def _required(asset: AssetPath, render_mode: str) -> bool:
+    """Return whether an asset is required for the selected render mode."""
     if render_mode == "full-render":
         return asset.required_for_full_render
     return asset.required_for_schematic
@@ -120,6 +121,11 @@ def evaluate_assets(socnav_root: Path, *, render_mode: str) -> dict[str, Any]:
 
 
 def _find_source(source_root: Path, key: str) -> Path | None:
+    """Find the first known source directory for an asset key.
+
+    Returns:
+        Path | None: Existing source directory, or ``None`` when unavailable.
+    """
     candidates = SOURCE_CANDIDATES.get(key, ())
     for rel in candidates:
         candidate = source_root / rel
@@ -166,6 +172,7 @@ def copy_available_assets(
 
 
 def _print_report(report: dict[str, Any]) -> None:
+    """Print a human-readable SocNav asset validation report."""
     status = "OK" if report["ok"] else "MISSING_REQUIRED_ASSETS"
     print(f"[socnav-assets] status={status}")
     print(f"[socnav-assets] socnav_root={report['socnav_root']}")

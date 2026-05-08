@@ -72,6 +72,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _episode_success(row: dict[str, Any]) -> bool:
+    """Interpret one episode JSONL row as a binary success.
+
+    Returns:
+        True when the row's ``metrics.success`` value is at least 0.5.
+    """
     metrics = row.get("metrics", {}) if isinstance(row.get("metrics"), dict) else {}
     value = metrics.get("success", 0.0)
     if isinstance(value, bool):
@@ -82,6 +87,11 @@ def _episode_success(row: dict[str, Any]) -> bool:
 
 
 def _bootstrap_ci(values: np.ndarray, n_samples: int, seed: int) -> tuple[float, float]:
+    """Estimate a percentile bootstrap confidence interval for binary values.
+
+    Returns:
+        Lower and upper 95 percent interval bounds.
+    """
     if values.size == 0:
         return 0.0, 0.0
     rng = np.random.default_rng(seed)
@@ -95,6 +105,11 @@ def _bootstrap_ci(values: np.ndarray, n_samples: int, seed: int) -> tuple[float,
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load a YAML mapping from disk.
+
+    Returns:
+        Parsed YAML mapping, defaulting empty files to an empty dict.
+    """
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise TypeError(f"Expected YAML mapping: {path}")
@@ -102,6 +117,11 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _load_grid(path: Path) -> list[dict[str, Any]]:
+    """Load valid planner variants from a portfolio sweep grid.
+
+    Returns:
+        Non-empty list of variant mappings that have both name and algorithm.
+    """
     payload = _load_yaml(path)
     variants = payload.get("variants", [])
     if not isinstance(variants, list):
@@ -121,12 +141,22 @@ def _load_grid(path: Path) -> list[dict[str, Any]]:
 
 
 def _load_algo_config(path: Path | None) -> dict[str, Any]:
+    """Load an optional planner algorithm config.
+
+    Returns:
+        Parsed config mapping, or an empty mapping when no path is configured.
+    """
     if path is None:
         return {}
     return _load_yaml(path)
 
 
 def _nan_to_none(value: object) -> object:
+    """Convert NaN values to JSON-safe ``None`` recursively.
+
+    Returns:
+        JSON-serializable object with NaN floats replaced by ``None``.
+    """
     if isinstance(value, float) and math.isnan(value):
         return None
     if isinstance(value, dict):
@@ -146,6 +176,12 @@ def _run_eval(
     output_dir: Path,
     args: argparse.Namespace,
 ) -> EvalResult:
+    """Run one candidate on one scenario suite and summarize episode metrics.
+
+    Returns:
+        Aggregate evaluation result with success, failure, clearance, and runtime
+        metrics.
+    """
     started = time.perf_counter()
     cfg_hash = hashlib.sha1(
         json.dumps({"algo": algo, "cfg": algo_cfg}, sort_keys=True).encode("utf-8")
@@ -237,6 +273,12 @@ def _run_eval(
 
 
 def _rank_key(hard: EvalResult, global_res: EvalResult) -> tuple[float, float, float, float]:
+    """Build the portfolio ranking key from hard and global suite results.
+
+    Returns:
+        Tuple ordered by hard success, global success, hard clearance, and global
+        clearance.
+    """
     hard_clear = hard.mean_min_distance if np.isfinite(hard.mean_min_distance) else float("-inf")
     global_clear = (
         global_res.mean_min_distance if np.isfinite(global_res.mean_min_distance) else float("-inf")
@@ -252,6 +294,11 @@ def _write_progress_report(
     portfolio_grid: str,
     ranked: list[dict[str, Any]],
 ) -> tuple[Path, Path]:
+    """Write incremental progress artifacts for completed portfolio candidates.
+
+    Returns:
+        Paths to the JSON and Markdown progress reports.
+    """
     progress = {
         "generated_at": datetime.now(UTC).isoformat(),
         "scenario_matrix": scenario_matrix,

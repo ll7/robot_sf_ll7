@@ -9,12 +9,14 @@ from typing import Any
 
 
 def _coerce_float(value: object) -> float | None:
+    """Coerce numeric summary values to float."""
     if isinstance(value, int | float):
         return float(value)
     return None
 
 
 def _coerce_int(value: object) -> int | None:
+    """Coerce integral summary/config values to int while rejecting bools."""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -25,11 +27,13 @@ def _coerce_int(value: object) -> int | None:
 
 
 def _extract_num_envs(run: Any) -> int | None:
+    """Extract the configured vector-environment count from a W&B run."""
     config = getattr(run, "config", {}) or {}
     return _coerce_int(config.get("num_envs"))
 
 
 def _row_from_run(run: Any) -> dict[str, object]:
+    """Build one compact benchmark row from a W&B run object."""
     summary = dict(getattr(run, "summary", {}) or {})
     return {
         "run_id": run.id,
@@ -46,6 +50,7 @@ def _row_from_run(run: Any) -> dict[str, object]:
 
 
 def _format_value(value: object) -> str:
+    """Format optional numeric values for Markdown tables."""
     if isinstance(value, float):
         return f"{value:.4f}"
     if isinstance(value, int):
@@ -54,6 +59,7 @@ def _format_value(value: object) -> str:
 
 
 def _write_markdown(path: Path, rows: list[dict[str, object]]) -> None:
+    """Write PPO num_envs benchmark rows as Markdown."""
     lines = [
         "# PPO num_envs benchmark summary",
         "",

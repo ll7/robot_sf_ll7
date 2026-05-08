@@ -61,6 +61,7 @@ def test_run_capture_json_anchors_subprocess_to_repo_root(monkeypatch) -> None:
     called: dict[str, object] = {}
 
     def _fake_run(cmd, **kwargs):
+        """Capture subprocess invocation details and return empty JSON output."""
         called["cmd"] = cmd
         called["cwd"] = kwargs.get("cwd")
         called["env"] = kwargs.get("env")
@@ -160,6 +161,7 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
 
     def _fake_build_random_seed_manifest(**kwargs) -> Path:
+        """Write the seed manifest path requested by the pipeline."""
         output_path = Path(kwargs["output_path"])
         output_path.write_text("scenario: [1]\n", encoding="utf-8")
         return output_path
@@ -167,6 +169,7 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     monkeypatch.setattr(pipeline, "_build_random_seed_manifest", _fake_build_random_seed_manifest)
 
     def _fake_dataset(path: Path, *, state_dim: int) -> None:
+        """Write a predictive dataset fixture with the requested state dimension."""
         np.savez(
             path,
             state=np.zeros((2, 3, state_dim), dtype=np.float32),
@@ -179,6 +182,7 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     invoked: list[list[str]] = []
 
     def _fake_run(cmd: list[str], *, log_level: str) -> None:
+        """Simulate pipeline commands and materialize expected stage artifacts."""
         invoked.append(list(cmd))
         if any("collect_predictive_hardcase_data.py" in part for part in cmd):
             output = Path(cmd[cmd.index("--output") + 1])
@@ -290,6 +294,7 @@ def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
     monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
 
     def _fake_build_seed_manifest(**kwargs) -> Path:
+        """Write the seed manifest path requested by the promotion pipeline."""
         output_path = Path(kwargs["output_path"])
         output_path.write_text("scenario: [1]\n", encoding="utf-8")
         return output_path
@@ -297,6 +302,7 @@ def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
     monkeypatch.setattr(pipeline, "_build_random_seed_manifest", _fake_build_seed_manifest)
 
     def _fake_dataset(path: Path) -> None:
+        """Write a default predictive dataset fixture."""
         np.savez(
             path,
             state=np.zeros((2, 3, 4), dtype=np.float32),
@@ -309,6 +315,7 @@ def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
     invoked: list[list[str]] = []
 
     def _fake_run(cmd: list[str], *, log_level: str) -> None:
+        """Simulate promotion pipeline commands and materialize expected artifacts."""
         invoked.append(list(cmd))
         if any("collect_predictive_hardcase_data.py" in part for part in cmd):
             output = Path(cmd[cmd.index("--output") + 1])
@@ -342,6 +349,7 @@ def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
         raise AssertionError(f"Unexpected command: {cmd}")
 
     def _fake_run_capture_json(cmd: list[str], **_kwargs):
+        """Return a failed registry response only for checkpoint registration."""
         if "--checkpoint-only-register" in cmd:
             return {"status": "failed", "return_code": 2}
         return {"status": "ok", "return_code": 0}

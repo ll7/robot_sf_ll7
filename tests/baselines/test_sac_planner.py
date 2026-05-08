@@ -22,6 +22,7 @@ class _DummySACModel:
         self.last_obs = None
 
     def predict(self, obs, deterministic: bool = True):
+        """Record the observation and return the configured action."""
         self.last_obs = obs
         return self.action, None
 
@@ -43,6 +44,7 @@ def _make_observation() -> Observation:
 
 
 def _planner_without_model(*, relative_obs: bool = True) -> SACPlanner:
+    """Create a SAC planner with fallback enabled and no loaded model."""
     planner = SACPlanner(
         {
             "model_path": "output/models/sac/does_not_exist.zip",
@@ -63,8 +65,11 @@ def test_planner_loads_from_dict_config_and_reports_metadata(
     fake_model = _DummySACModel(action=np.array([0.4, -0.2], dtype=np.float32))
 
     class _FakeSAC:
+        """SAC loader stub that returns the prepared model."""
+
         @staticmethod
         def load(*_args, **_kwargs):
+            """Assert load arguments and return the fake model."""
             assert Path(_args[0]) == model_path
             assert _kwargs["device"] == "cpu"
             return fake_model
@@ -113,8 +118,11 @@ def test_planner_missing_model_fails_closed_without_fallback(
     missing_path = tmp_path / "missing.zip"
 
     class _FakeSAC:
+        """SAC loader stub that should not be reached for missing files."""
+
         @staticmethod
         def load(*_args, **_kwargs):  # pragma: no cover - not reached
+            """Fail if the planner attempts to load a missing checkpoint."""
             raise AssertionError("load should not be called for a missing file")
 
     monkeypatch.setattr(sac_mod, "SAC", _FakeSAC)
@@ -135,8 +143,11 @@ def test_planner_load_failure_can_fallback(monkeypatch: pytest.MonkeyPatch, tmp_
     model_path.write_text("stub", encoding="utf-8")
 
     class _FakeSAC:
+        """SAC loader stub that raises a checkpoint load error."""
+
         @staticmethod
         def load(*_args, **_kwargs):
+            """Simulate an invalid SAC checkpoint."""
             raise ValueError("bad checkpoint")
 
     monkeypatch.setattr(sac_mod, "SAC", _FakeSAC)
@@ -155,8 +166,11 @@ def test_planner_load_failure_fails_closed_when_fallback_disabled(
     model_path.write_text("stub", encoding="utf-8")
 
     class _FakeSAC:
+        """SAC loader stub that raises when fallback is disabled."""
+
         @staticmethod
         def load(*_args, **_kwargs):
+            """Simulate an invalid SAC checkpoint."""
             raise ValueError("bad checkpoint")
 
     monkeypatch.setattr(sac_mod, "SAC", _FakeSAC)
@@ -179,8 +193,11 @@ def test_step_vector_mode_uses_model_prediction_and_fallback_action(
     fake_model = _DummySACModel(action=np.array([3.5, 1.4], dtype=np.float32))
 
     class _FakeSAC:
+        """SAC loader stub for vector-observation tests."""
+
         @staticmethod
         def load(*_args, **_kwargs):
+            """Return the fake vector-mode model."""
             return fake_model
 
     monkeypatch.setattr(sac_mod, "SAC", _FakeSAC)
@@ -232,8 +249,11 @@ def test_step_dict_mode_applies_transform_and_aliases(
     )
 
     class _FakeSAC:
+        """SAC loader stub for dict-observation tests."""
+
         @staticmethod
         def load(*_args, **_kwargs):
+            """Return the fake dict-mode model."""
             return fake_model
 
     monkeypatch.setattr(sac_mod, "SAC", _FakeSAC)
@@ -305,8 +325,11 @@ def test_build_model_obs_dict_raises_on_missing_key(
     )
 
     class _FakeSAC:
+        """SAC loader stub for missing-key validation tests."""
+
         @staticmethod
         def load(*_args, **_kwargs):
+            """Return the fake dict-mode model."""
             return fake_model
 
     monkeypatch.setattr(sac_mod, "SAC", _FakeSAC)
@@ -335,8 +358,11 @@ def test_build_model_obs_dict_raises_on_shape_mismatch(
     )
 
     class _FakeSAC:
+        """SAC loader stub for shape-mismatch validation tests."""
+
         @staticmethod
         def load(*_args, **_kwargs):
+            """Return the fake dict-mode model."""
             return fake_model
 
     monkeypatch.setattr(sac_mod, "SAC", _FakeSAC)

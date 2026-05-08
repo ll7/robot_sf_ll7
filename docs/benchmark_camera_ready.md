@@ -133,17 +133,17 @@ run. See `docs/context/issue_562_socnav_bench_reentry.md`.
 The frozen `paper_experiment_matrix_v1` profile has seven planner rows. Interpret them with the
 fallback policy in `docs/context/issue_691_benchmark_fallback_policy.md`: `native` and declared
 `adapter` rows can be benchmark evidence when the run reports `availability_status=available`;
-`fallback`, `degraded`, `failed`, and `not_available` rows are exclusions or caveats, not successful
-planner results.
+`fallback`, `degraded`, `failed`, `partial-failure`, and `not_available` rows are exclusions or
+caveats, not successful planner results.
 
 | Planner | Group | Expected mode | Readiness interpretation |
 | --- | --- | --- | --- |
 | `goal` | core | native | Baseline-ready control row. |
 | `social_force` | core | adapter | Baseline-ready force-based comparator through the declared adapter path. |
 | `orca` | core | adapter | Baseline-ready reciprocal-avoidance comparator when `rvo2` is available. |
-| `ppo` | experimental | native | Paper-facing learned row only with current model provenance and claim caveats. |
+| `ppo` | experimental | native | Learned paper-facing row with model-provenance and claim caveats. |
 | `prediction_planner` | experimental | adapter | Checkpoint-dependent experimental challenger row. |
-| `socnav_sampling` | experimental | adapter | Legacy adapter-sensitive challenger row; not a SocNavBench family claim. |
+| `socnav_sampling` | experimental | adapter | In-repo sampling adapter, not upstream SocNavBench support. |
 | `sacadrl` | experimental | adapter | Legacy adapter-sensitive challenger row; implementation evidence only. |
 
 `socnav_bench` is not part of this frozen paper matrix. The May 4 all-planners run recorded

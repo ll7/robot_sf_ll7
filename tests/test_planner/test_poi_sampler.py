@@ -1,5 +1,4 @@
 """Tests for POI sampling strategies (US3)."""
-# ruff: noqa: D103
 
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from robot_sf.planner.poi_sampler import POISampler
 
 
 def _make_poi_map(tmp_path: Path) -> str:
+    """Create a temporary SVG map with west, center, and east POIs."""
     svg = tmp_path / "poi_map.svg"
     svg.write_text(
         """
@@ -27,6 +27,7 @@ def _make_poi_map(tmp_path: Path) -> str:
 
 
 def test_random_sampling_reproducible(tmp_path):
+    """Random POI sampling should replay deterministically for a fixed seed."""
     map_def = convert_map(_make_poi_map(tmp_path))
     sampler = POISampler(map_def, seed=123)
 
@@ -42,6 +43,7 @@ def test_random_sampling_reproducible(tmp_path):
 
 
 def test_nearest_and_farthest(tmp_path):
+    """Nearest and farthest strategies should order POIs by distance from start."""
     map_def = convert_map(_make_poi_map(tmp_path))
     sampler = POISampler(map_def, seed=42)
     start = (0.0, 5.0)
@@ -62,6 +64,7 @@ def test_nearest_and_farthest(tmp_path):
 
 
 def test_sampler_requires_pois(tmp_path):
+    """Sampling should fail clearly when a map does not define any POIs."""
     svg = tmp_path / "no_poi.svg"
     svg.write_text(
         """

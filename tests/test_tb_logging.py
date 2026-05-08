@@ -40,9 +40,11 @@ class _RecordingWriter:
         self.flush_calls = 0
 
     def add_scalar(self, tag: str, value: float, step: int) -> None:
+        """Record a scalar write for later assertions."""
         self.scalars.append((tag, value, step))
 
     def flush(self) -> None:
+        """Record a flush request without touching TensorBoard files."""
         self.flush_calls += 1
 
 
@@ -59,6 +61,7 @@ class _DrivingMetricsStub:
         self.updated_with: list[dict] | None = None
 
     def update(self, meta_dicts: list[dict]) -> None:
+        """Capture metadata passed into the driving metrics stub."""
         self.updated_with = meta_dicts
 
 
@@ -80,6 +83,7 @@ class _PedMetricsStub:
         self.updated_with: list[dict] | None = None
 
     def update(self, meta_dicts: list[dict]) -> None:
+        """Capture metadata passed into the pedestrian metrics stub."""
         self.updated_with = meta_dicts
 
 

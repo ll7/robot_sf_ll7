@@ -30,6 +30,7 @@ def _obs(
     agents: list[dict] | None = None,
     pedestrians: dict | None = None,
 ) -> dict:
+    """Build a compact observation payload for policy-input comparison tests."""
     return {
         "dt": 0.1,
         "robot": {
@@ -133,6 +134,8 @@ def test_raw_heading_abs_wraps_across_pi_boundary() -> None:
 
 @dataclass
 class _StubRobotCfg:
+    """Minimal robot config object required by the rollout helper."""
+
     radius: float = 0.3
     max_linear_speed: float = 2.0
     max_angular_speed: float = 1.0
@@ -140,21 +143,26 @@ class _StubRobotCfg:
 
 
 class _StubEnv:
+    """Deterministic environment stub that replays observations by step."""
+
     def __init__(self, observations: list[dict[str, object]]) -> None:
         self._observations = observations
         self._index = 0
 
     def reset(self, seed: int | None = None):
+        """Reset replay to the first observation."""
         self._index = 0
         return self._observations[0], {}
 
     def step(self, action):
+        """Advance to the next replayed observation and finish at the end."""
         self._index += 1
         obs = self._observations[min(self._index, len(self._observations) - 1)]
         done = self._index >= len(self._observations) - 1
         return obs, 0.0, done, False, {}
 
     def close(self) -> None:
+        """Match the Gym environment close interface."""
         return None
 
 
@@ -187,6 +195,7 @@ def test_run_pairwise_rollout_writes_artifacts_and_flags_first_divergence(
     }
 
     def _fake_build_env_and_policy(*, scenario, scenario_path, kinematics, algo, config_path):
+        """Return the replay environment matching the requested kinematics."""
         del scenario, scenario_path, algo, config_path
         return (
             stub_envs[kinematics],

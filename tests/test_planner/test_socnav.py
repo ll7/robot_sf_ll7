@@ -1,6 +1,4 @@
 """Unit tests for SocNav planner adapters and occupancy helpers."""
-# ruff: noqa: D103
-
 import configparser
 import importlib
 import sys
@@ -19,6 +17,7 @@ from robot_sf.planner.socnav import (
 
 
 def _base_observation() -> dict:
+    """Build a baseline structured SocNav observation with occupancy metadata."""
     obs = {
         "robot": {
             "position": np.array([0.0, 0.0]),
@@ -47,12 +46,14 @@ def _base_observation() -> dict:
 
 
 def _with_grid(observation: dict, grid: np.ndarray) -> dict:
+    """Attach an occupancy grid to an observation copy."""
     obs = dict(observation)
     obs["occupancy_grid"] = grid
     return obs
 
 
 def test_extract_grid_payload_handles_flattened_meta():
+    """Grid extraction should recover flattened occupancy metadata fields."""
     adapter = SamplingPlannerAdapter()
     obs = _base_observation()
     grid = np.zeros((4, 3, 3), dtype=float)
@@ -67,6 +68,7 @@ def test_extract_grid_payload_handles_flattened_meta():
 
 
 def test_path_penalty_increases_when_obstacle_present():
+    """Path penalty should increase when the combined grid channel is occupied."""
     adapter = SamplingPlannerAdapter()
     obs = _base_observation()
     clear_grid = np.zeros((4, 3, 3), dtype=float)
@@ -93,6 +95,7 @@ def test_path_penalty_increases_when_obstacle_present():
 
 
 def test_select_safe_heading_deflects_from_occupied_direction():
+    """Safe-heading search should deflect away from an occupied forward ray."""
     adapter = SamplingPlannerAdapter(SocNavPlannerConfig(occupancy_weight=3.0))
     obs = _base_observation()
     grid = np.zeros((4, 3, 3), dtype=float)
@@ -116,6 +119,7 @@ def test_select_safe_heading_deflects_from_occupied_direction():
 
 
 def test_sampling_planner_respects_goal_tolerance_and_occupancy():
+    """Sampling planner should stop near the goal and slow for occupied grids."""
     adapter = SamplingPlannerAdapter()
     # Within tolerance → zero command
     near_goal_obs = _base_observation()
@@ -169,16 +173,21 @@ def test_socnavbench_adapter_loads_vendored_upstream(monkeypatch):
     cp = importlib.import_module("control_pipelines.control_pipeline_v0")
 
     class FakePipeline:
+        """Control-pipeline stub that skips expensive generation."""
+
         def __init__(self, params):
             self.params = params
 
         def does_pipeline_exist(self):
+            """Report that the pipeline already exists."""
             return True
 
         def load_control_pipeline(self):
+            """Skip loading side effects for smoke tests."""
             return None
 
         def generate_control_pipeline(self):
+            """Fail if smoke tests try to generate an upstream pipeline."""
             raise AssertionError("Pipeline generation should be skipped in smoke tests.")
 
     monkeypatch.setattr(
@@ -205,6 +214,8 @@ def test_load_upstream_planner_preserves_control_pipeline_singleton(monkeypatch,
     monkeypatch.setattr(adapter, "_is_trusted_socnav_root", lambda _root: True)
 
     class FakeControlPipelineV0:
+        """Control-pipeline singleton stub with an existing pipeline."""
+
         pipeline = object()
 
     cp_mod = types.ModuleType("control_pipelines.control_pipeline_v0")
@@ -213,8 +224,11 @@ def test_load_upstream_planner_preserves_control_pipeline_singleton(monkeypatch,
     monkeypatch.setitem(sys.modules, "control_pipelines.control_pipeline_v0", cp_mod)
 
     class FakeSP:
+        """SocNav sampling planner namespace stub."""
+
         @staticmethod
         def SamplingPlanner(*, obj_fn, params):
+            """Return planner construction arguments."""
             assert cp_mod.ControlPipelineV0.pipeline is not None
             return {"obj_fn": obj_fn, "params": params}
 
@@ -242,6 +256,8 @@ def test_load_upstream_planner_resets_singleton_on_assertion_retry(monkeypatch, 
     monkeypatch.setattr(adapter, "_is_trusted_socnav_root", lambda _root: True)
 
     class FakeControlPipelineV0:
+        """Control-pipeline singleton stub reset during retry."""
+
         pipeline = object()
 
     cp_mod = types.ModuleType("control_pipelines.control_pipeline_v0")
@@ -252,8 +268,11 @@ def test_load_upstream_planner_resets_singleton_on_assertion_retry(monkeypatch, 
     call_count = {"n": 0}
 
     class FakeSP:
+        """SocNav sampling planner namespace stub that fails once."""
+
         @staticmethod
         def SamplingPlanner(*, obj_fn, params):
+            """Raise once for stale singleton, then return planner arguments."""
             call_count["n"] += 1
             if call_count["n"] == 1:
                 raise AssertionError("stale singleton")
@@ -295,6 +314,7 @@ def test_socnavbench_upstream_end_to_end_when_data_present(monkeypatch):
 
 
 def test_socnav_fields_supports_flattened_observation():
+    """SocNav field extraction should accept flattened observation keys."""
     adapter = SamplingPlannerAdapter()
     flat_obs = {
         "robot_position": np.array([1.0, 2.0]),
@@ -316,6 +336,7 @@ def test_socnav_fields_supports_flattened_observation():
 
 
 def test_grid_helpers_handle_missing_channels_and_oob():
+    """Grid helper should handle disabled channels and out-of-bounds samples."""
     adapter = SamplingPlannerAdapter()
     obs = _base_observation()
     grid = np.zeros((4, 3, 3), dtype=float)
@@ -329,6 +350,7 @@ def test_grid_helpers_handle_missing_channels_and_oob():
 
 
 def test_select_safe_heading_returns_base_when_direction_tiny():
+    """Safe-heading search should return the base direction for zero-length input."""
     adapter = SamplingPlannerAdapter()
     obs = _with_grid(_base_observation(), np.zeros((4, 3, 3), dtype=float))
 
@@ -348,6 +370,7 @@ def test_select_safe_heading_returns_base_when_direction_tiny():
 
 
 def test_social_force_and_variants_produce_actions():
+    """Social-force adapter variants should produce deterministic action tuples."""
     obs = _with_grid(_base_observation(), np.zeros((4, 3, 3), dtype=float))
 
     sf_adapter = SamplingPlannerAdapter()
@@ -360,6 +383,7 @@ def test_social_force_and_variants_produce_actions():
 
 
 def test_policy_wrappers_and_factory_helpers():
+    """Policy wrappers and factory helpers should expose expected adapter types."""
     from robot_sf.planner.socnav import (
         ORCAPlannerAdapter,
         SACADRLPlannerAdapter,
@@ -397,6 +421,8 @@ def test_prediction_adapter_builds_ego_conditioned_state_from_model_dim():
     }
 
     class _FakeModel:
+        """Predictive model stub advertising ego-conditioned input size."""
+
         config = type("Cfg", (), {"input_dim": 9})()
 
     adapter._model = _FakeModel()
@@ -412,22 +438,32 @@ def test_prediction_adapter_builds_ego_conditioned_state_from_model_dim():
 
 
 def test_socnavbench_adapter_uses_upstream_when_available():
+    """SocNavBench adapter should use upstream planner output when available."""
     class FakeTraj:
+        """Trajectory stub returning one waypoint."""
+
         def position_nk2(self):
+            """Return a single waypoint in SocNavBench trajectory shape."""
             return np.array([[[1.0, 0.0]]])
 
     class FakeOpt:
+        """Optimization waypoint stub used for start and goal configs."""
+
         @classmethod
         def from_pos3(cls, arr):
+            """Build an option object from a position array."""
             inst = cls()
             inst.arr = np.array(arr)
             return inst
 
     class FakePlanner:
+        """Upstream planner stub returning a fake trajectory."""
+
         def __init__(self):
             self.opt_waypt = FakeOpt()
 
         def optimize(self, start_config, goal_config):
+            """Assert config types and return the fake trajectory."""
             # Ensure called with provided configs
             assert isinstance(start_config, FakeOpt)
             assert isinstance(goal_config, FakeOpt)

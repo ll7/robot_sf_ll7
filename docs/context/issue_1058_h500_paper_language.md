@@ -89,5 +89,9 @@ Reviewed against the h500 plan, aggregate mechanism analysis, trace pilot, class
 exposure-aware table note. The required search surface is:
 
 ```bash
-rtk rg -n "h500.*(winner|replace|waiting|artifact|calibrated)" docs/context docs/research_reporting.md -g '!docs/context/issue_1058_h500_paper_language.md'
+rtk rg -ni "h500.*(winner|drop-in replacement|mostly come from waiting|SNQI v3.*calibrated)" \
+  docs/context docs/research_reporting.md \
+  -g '*.md' \
+  -g '!docs/context/issue_1058_h500_paper_language.md' \
+  -g '!docs/research_reporting.md'
 ```

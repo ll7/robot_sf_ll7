@@ -12,11 +12,11 @@ table.
 
 ## Evidence Inputs
 
-* `docs/context/issue_1044_h500_followup_benchmark_plan.md`
-* `docs/context/issue_1045_h500_solvability_mechanisms.md`
-* `docs/context/issue_1049_h500_mechanism_pilot.md`
-* `docs/context/issue_1056_h500_failure_classification.md`
-* `docs/context/issue_1055_exposure_aware_h500_tables.md`
+* [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
+* [Issue #1045 H500 Solvability Mechanisms](issue_1045_h500_solvability_mechanisms.md)
+* [Issue #1049 H500 Mechanism Pilot](issue_1049_h500_mechanism_pilot.md)
+* [Issue #1056 H500 Failure Classification](issue_1056_h500_failure_classification.md)
+* [Issue #1055 Exposure-Aware H500 Tables](issue_1055_exposure_aware_h500_tables.md)
 
 ## Reusable Language
 
@@ -89,5 +89,5 @@ Reviewed against the h500 plan, aggregate mechanism analysis, trace pilot, class
 exposure-aware table note. The required search surface is:
 
 ```bash
-rtk rg -n "h500.*winner|drop-in replacement|waiting" docs/context docs/research_reporting.md
+rtk rg -n "h500.*(winner|replace|waiting|artifact|calibrated)" docs/context docs/research_reporting.md -g '!docs/context/issue_1058_h500_paper_language.md'
 ```

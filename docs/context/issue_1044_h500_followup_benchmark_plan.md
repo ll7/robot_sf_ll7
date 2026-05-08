@@ -118,7 +118,7 @@ Issue #1055 adds the first exposure-aware representative tables:
 
 Issue #1058 adds reusable paper/report wording:
 
-* `docs/context/issue_1058_h500_paper_language.md`
+* [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
 
 ## SNQI Contract
 

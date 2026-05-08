@@ -216,8 +216,8 @@ reported, should be labeled as sensitivity values unless a separately versioned 
 is calibrated. Prefer reporting the underlying success, collision, near-miss, comfort, exposure, and
 duration terms.
 
-See `docs/context/issue_1058_h500_paper_language.md` for reusable wording and unsafe claims to
-avoid.
+See [H500 Paper Language](context/issue_1058_h500_paper_language.md) for reusable wording and
+unsafe claims to avoid.
 
 ## Architecture
 

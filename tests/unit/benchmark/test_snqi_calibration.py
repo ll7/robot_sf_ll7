@@ -11,6 +11,7 @@ from robot_sf.benchmark.snqi.calibration import (
 
 
 def _weights() -> dict[str, float]:
+    """Return a representative SNQI weight vector for calibration tests."""
     return {
         "w_success": 0.20,
         "w_time": 0.10,
@@ -23,6 +24,7 @@ def _weights() -> dict[str, float]:
 
 
 def _baseline() -> dict[str, dict[str, float]]:
+    """Return baseline normalization anchors for calibration tests."""
     return {
         "time_to_goal_norm": {"med": 0.5, "p95": 1.0},
         "collisions": {"med": 0.0, "p95": 1.0},
@@ -33,6 +35,7 @@ def _baseline() -> dict[str, dict[str, float]]:
 
 
 def _episodes() -> list[dict[str, object]]:
+    """Return paired safe and risky planner episode rows."""
     rows: list[dict[str, object]] = []
     for idx in range(4):
         rows.append(

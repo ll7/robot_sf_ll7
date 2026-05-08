@@ -16,11 +16,13 @@ from robot_sf.planner.crowdnav_height import CrowdNavHeightAdapter, build_crowdn
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake upstream file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_upstream_repo(repo_root: Path) -> None:
+    """Create the minimal CrowdNav_HEIGHT source tree used by adapter imports."""
     _write(repo_root / "training" / "__init__.py", "")
     _write(repo_root / "training" / "networks" / "__init__.py", "")
     _write(
@@ -60,6 +62,7 @@ class Policy(nn.Module):
 
 
 def _write_fake_checkpoint_dir(model_dir: Path, *, action_index: int) -> None:
+    """Create a fake checkpoint directory with configurable discrete action output."""
     _write(model_dir / "configs" / "__init__.py", "")
     _write(
         model_dir / "configs" / "config.py",

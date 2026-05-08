@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 
 def _planner_rows() -> list[dict[str, str]]:
+    """Return planner metadata rows used by difficulty-analysis fixtures."""
     return [
         {
             "planner_key": "goal",
@@ -63,6 +64,7 @@ def _planner_rows() -> list[dict[str, str]]:
 
 
 def _seed_payload() -> dict[str, object]:
+    """Return seed-stability payload rows for easy and hard scenarios."""
     return {
         "rows": [
             {
@@ -110,6 +112,7 @@ def _seed_payload() -> dict[str, object]:
 
 
 def _preview_payload() -> dict[str, object]:
+    """Return preview metadata with scenario families and clearance warnings."""
     return {
         "truncated": False,
         "route_clearance_warnings": [

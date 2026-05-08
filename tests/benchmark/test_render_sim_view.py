@@ -12,6 +12,7 @@ from robot_sf.benchmark.full_classic import render_sim_view
 
 
 def _step(**kwargs):
+    """Build a lightweight episode step namespace with render defaults."""
     defaults = {
         "x": 0.0,
         "y": 0.0,
@@ -27,6 +28,7 @@ def _step(**kwargs):
 
 
 def _episode(steps, dt=0.1):
+    """Build a lightweight episode namespace for render helpers."""
     return SimpleNamespace(steps=steps, dt=dt, map_path=None)
 
 
@@ -42,6 +44,8 @@ def test_generate_frames_uses_dummy_view(monkeypatch) -> None:
     """Verify frame generator yields fixed-size RGB arrays."""
 
     class _DummyView:
+        """SimulationView stub accepted by frame generation."""
+
         def __init__(self, **_kwargs) -> None:
             self.kwargs = _kwargs
 
@@ -59,17 +63,22 @@ def test_generate_video_file_writes_stub_video(tmp_path, monkeypatch) -> None:
     """Check video export helper reports success when file is written."""
 
     class _DummyView:
+        """SimulationView stub that writes a nonempty video file on exit."""
+
         def __init__(self, video_path: str) -> None:
             self._video_path = video_path
 
         def render(self, _state) -> None:
+            """Accept rendered states without side effects."""
             return None
 
         def exit_simulation(self) -> None:
+            """Write a byte so the video export reports success."""
             with open(self._video_path, "wb") as handle:
                 handle.write(b"1")
 
     def _build_view(_episode, _fps, video_path: str):
+        """Return the dummy video-writing view."""
         return _DummyView(video_path)
 
     monkeypatch.setattr(render_sim_view, "_assert_ready", lambda: None)
@@ -96,6 +105,7 @@ def test_load_map_def_cache(monkeypatch) -> None:
     calls = {"count": 0}
 
     def _convert_map(path: str):
+        """Record map conversion calls and return a map sentinel."""
         calls["count"] += 1
         return {"map": path}
 
@@ -111,6 +121,8 @@ def test_build_view_includes_map_def(monkeypatch) -> None:
     """Ensure build_view passes map_def and obstacles into SimulationView."""
 
     class _DummyView:
+        """SimulationView stub that captures build kwargs."""
+
         def __init__(self, **kwargs) -> None:
             self.kwargs = kwargs
 
@@ -127,16 +139,21 @@ def test_generate_video_file_skipped_when_empty(tmp_path, monkeypatch) -> None:
     """Verify empty video output reports a skipped status."""
 
     class _DummyView:
+        """SimulationView stub that creates an empty output file."""
+
         def __init__(self, video_path: str) -> None:
             self._video_path = video_path
 
         def render(self, _state) -> None:
+            """Accept rendered states without side effects."""
             return None
 
         def exit_simulation(self) -> None:
+            """Create an empty video file to trigger skipped status."""
             Path(self._video_path).touch()
 
     def _build_view(_episode, _fps, video_path: str):
+        """Return the dummy empty-video view."""
         return _DummyView(video_path)
 
     monkeypatch.setattr(render_sim_view, "_assert_ready", lambda: None)
@@ -160,26 +177,37 @@ def test_generate_frames_uses_screen_surface(monkeypatch) -> None:
     """Exercise the pygame surface capture branch."""
 
     class DummySurface:
+        """Pygame surface placeholder for surfarray capture."""
+
         pass
 
     class DummyPygame:
+        """Pygame module stub exposing Surface and surfarray.array3d."""
+
         Surface = DummySurface
 
         class surfarray:
+            """Pygame surfarray namespace stub."""
+
             @staticmethod
             def array3d(_surf):
+                """Return a fixed RGB array in pygame orientation."""
                 return np.zeros((640, 360, 3), dtype=np.uint8)
 
     class _DummyView:
+        """SimulationView stub exposing a screen surface."""
+
         def __init__(self, **_kwargs) -> None:
             self.screen = DummySurface()
 
         def render(self, _state) -> None:
+            """Accept rendered states without side effects."""
             return None
 
     original_import = render_sim_view.importlib.import_module
 
     def _import_module(name: str):
+        """Return the pygame stub while delegating other imports."""
         if name == "pygame":
             return DummyPygame
         return original_import(name)

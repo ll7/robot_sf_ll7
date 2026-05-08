@@ -49,9 +49,9 @@ dependency-blocked here.
 | `goal` | core | native | Baseline-ready control. | Valid if run availability is `available`. |
 | `social_force` | core | adapter | Baseline-ready force-based comparator through declared adapter metadata. | Valid if run availability is `available`. |
 | `orca` | core | adapter | Baseline-ready reciprocal-avoidance comparator, dependency-sensitive to `rvo2`. | Valid if `rvo2` is present and run availability is `available`. |
-| `ppo` | experimental | native | Learned paper-facing row with model-provenance and claim caveats. | Valid as benchmark-set evidence, not OOD/generalization evidence. |
+| `ppo` | learned baseline | native | Paper-facing PPO row when model provenance and benchmark-set claim caveats are satisfied. | Valid as benchmark-set evidence, not OOD/generalization evidence. |
 | `prediction_planner` | experimental | adapter | Checkpoint-dependent prediction-aware challenger. | Experimental challenger only. |
-| `socnav_sampling` | experimental | adapter | In-repo sampling adapter, not upstream SocNavBench support. | Experimental challenger only. |
+| `socnav_sampling` | experimental | adapter | In-repo sampling challenger; not upstream SocNavBench support and not a SocNavBench bridge result. | Experimental challenger only. |
 | `sacadrl` | experimental | adapter | Legacy adapter-sensitive challenger. | Implementation-level evidence only. |
 | `socnav_bench` | outside frozen paper matrix | unknown/degraded in May 4 all-planners run | Dependency-blocked until issue-562 re-entry succeeds. | Exclude; do not count as fallback/degraded success. |
 
@@ -77,4 +77,3 @@ No new metadata issue is required from this audit. Current configs and reports e
 benchmark profile, execution mode, readiness status, availability status, and failure reason. The
 known SocNavBench dependency blocker is already represented by issue `#562` and the re-entry probe
 workflow.
-

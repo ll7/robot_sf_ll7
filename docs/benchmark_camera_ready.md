@@ -141,9 +141,9 @@ caveats, not successful planner results.
 | `goal` | core | native | Baseline-ready control row. |
 | `social_force` | core | adapter | Baseline-ready force-based comparator through the declared adapter path. |
 | `orca` | core | adapter | Baseline-ready reciprocal-avoidance comparator when `rvo2` is available. |
-| `ppo` | experimental | native | Learned paper-facing row with model-provenance and claim caveats. |
+| `ppo` | learned baseline | native | Paper-facing PPO row when model provenance and benchmark-set claim caveats are satisfied. |
 | `prediction_planner` | experimental | adapter | Checkpoint-dependent experimental challenger row. |
-| `socnav_sampling` | experimental | adapter | In-repo sampling adapter, not upstream SocNavBench support. |
+| `socnav_sampling` | experimental | adapter | In-repo sampling challenger; not upstream SocNavBench support and not a SocNavBench bridge result. |
 | `sacadrl` | experimental | adapter | Legacy adapter-sensitive challenger row; implementation evidence only. |
 
 `socnav_bench` is not part of this frozen paper matrix. The May 4 all-planners run recorded

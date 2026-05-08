@@ -118,6 +118,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1053 Durable Artifact Reference Audit](issue_1053_durable_artifact_references.md)
   separates durable W&B/release/artifact-store pointers from local `output/` caches and records the
   publication-bundle archive blocker.
+* [Issue #1054 Planner Readiness And Fallback Audit](issue_1054_planner_readiness_fallback_audit.md)
+  records the paper-matrix planner readiness table, dependency status, and fail-closed treatment of
+  fallback or degraded rows.
 * [Issue #1049 H500 Mechanism Pilot](issue_1049_h500_mechanism_pilot.md)
   records compact fixed-h100 versus h500 ORCA traces for clean budget relief, exposure/comfort
   pressure, and safety-regressed long-horizon behavior.
@@ -127,6 +130,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1055 Exposure-Aware H500 Tables](issue_1055_exposure_aware_h500_tables.md)
   defines and populates representative h500 reporting tables that place completion gains beside
   duration, collision, near-miss, force-exposure, and comfort-exposure rates.
+* [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
+  classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
+  status, and live route-clearance warnings before planner-failure attribution.
 * [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
   provides reusable paper/report wording for h500 as a long-horizon sensitivity surface and marks
   unsafe winner-table, wait-then-go, and SNQI calibration claims.

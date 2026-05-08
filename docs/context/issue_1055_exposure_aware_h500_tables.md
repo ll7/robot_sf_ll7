@@ -75,13 +75,10 @@ Purpose: make runtime exposure visible so h500 is not reduced to a single winner
 
 Manual report path:
 
-```bash
-uv run python - <<'PY'
-# Generated from
-# docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv
-# into docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/
-PY
-```
+Tables were manually generated from
+`docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv`
+into `docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/` (evidence directory
+date format: YYYY-MM-DD).
 
 Validation commands:
 

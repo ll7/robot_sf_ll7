@@ -155,6 +155,7 @@ class _FakeSimulationView:
 
 def _patch_multi_robot_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch multi-robot dependencies with lightweight deterministic fakes."""
+
     def _fake_init_spaces(_cfg, _map_def):
         """Return deterministic action and observation spaces."""
         action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)

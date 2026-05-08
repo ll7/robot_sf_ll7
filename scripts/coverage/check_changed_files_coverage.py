@@ -12,6 +12,7 @@ Goal: 100% coverage on changed files. Minimum requirement: 80%.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import subprocess
 import sys
@@ -64,6 +65,105 @@ def _changed_files(base: str, repo_root: Path) -> list[Path]:
     )
     files = [Path(line.strip()) for line in output.splitlines() if line.strip()]
     return files
+
+
+def _file_at_ref(base: str, path: Path, repo_root: Path) -> str | None:
+    """Read a repository file at the merge-base for a comparison ref.
+
+    Returns:
+        File contents at the comparison base, or ``None`` when the file did not
+        exist there.
+    """
+    merge_base = _run(["git", "merge-base", base, "HEAD"], cwd=repo_root)
+    proc = subprocess.run(
+        ["git", "show", f"{merge_base}:{path.as_posix()}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+class _DocstringStripper(ast.NodeTransformer):
+    """Remove docstring expressions while preserving executable syntax."""
+
+    @staticmethod
+    def _strip_body(body: list[ast.stmt]) -> list[ast.stmt]:
+        """Drop a leading string expression from a Python statement body."""
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            return body[1:]
+        return body
+
+    def visit_Module(self, node: ast.Module) -> ast.Module:
+        """Strip module docstring before visiting child statements."""
+        node.body = self._strip_body(node.body)
+        self.generic_visit(node)
+        return node
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
+        """Strip class docstring before visiting child statements."""
+        node.body = self._strip_body(node.body)
+        self.generic_visit(node)
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        """Strip function docstring before visiting child statements."""
+        node.body = self._strip_body(node.body)
+        self.generic_visit(node)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        """Strip async-function docstring before visiting child statements."""
+        node.body = self._strip_body(node.body)
+        self.generic_visit(node)
+        return node
+
+
+def _normalized_python_ast(source: str) -> str | None:
+    """Parse Python source into a docstring-free AST dump.
+
+    Returns:
+        Attribute-free AST dump, or ``None`` when the source cannot be parsed.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    stripped = _DocstringStripper().visit(tree)
+    ast.fix_missing_locations(stripped)
+    return ast.dump(stripped, include_attributes=False)
+
+
+def _is_doc_or_comment_only_python_change(before: str, after: str) -> bool:
+    """Return whether a Python change only affects comments, formatting, or docstrings."""
+    before_ast = _normalized_python_ast(before)
+    after_ast = _normalized_python_ast(after)
+    if before_ast is None or after_ast is None:
+        return False
+    return before_ast == after_ast
+
+
+def _is_doc_or_comment_only_changed_file(path: Path, base: str, repo_root: Path) -> bool:
+    """Check whether a changed Python file has no executable AST changes."""
+    if path.suffix != ".py":
+        return False
+    before = _file_at_ref(base, path, repo_root)
+    if before is None:
+        return False
+    after_path = repo_root / path
+    try:
+        after = after_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return _is_doc_or_comment_only_python_change(before, after)
 
 
 def _normalize_path(path: Path, repo_root: Path) -> str:
@@ -364,6 +464,21 @@ def _run_check(args: argparse.Namespace) -> int:
         return 0
 
     coverage_index = _load_coverage_index(coverage_path, repo_root)
+    doc_only = [
+        path_str
+        for path_str in selected
+        if _is_doc_or_comment_only_changed_file(Path(path_str), args.base, repo_root)
+    ]
+    if doc_only:
+        doc_only_set = set(doc_only)
+        selected = [path_str for path_str in selected if path_str not in doc_only_set]
+        skipped.extend(f"{path_str} (doc/comment-only)" for path_str in doc_only)
+
+    if not selected:
+        print("No changed files with executable Python changes matched include patterns.")
+        _report_skipped(skipped, args.show_skipped)
+        return 0
+
     results = _build_results(selected, coverage_index)
 
     _log_header(args)

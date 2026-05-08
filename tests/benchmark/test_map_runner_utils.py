@@ -261,6 +261,7 @@ def test_build_policy_hybrid_rule_attaches_env_bind_for_static_geometry() -> Non
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         map_def = SimpleNamespace(width=4.0, height=4.0)
 
         def get_obstacle_lines(self):
@@ -269,6 +270,7 @@ def test_build_policy_hybrid_rule_attaches_env_bind_for_static_geometry() -> Non
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         simulator = _DummySim()
 
     assert hasattr(policy, "_planner_bind_env")
@@ -288,6 +290,7 @@ def test_build_policy_teb_wires_teb_adapter(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -313,6 +316,7 @@ def test_build_policy_nmpc_social_wires_nmpc_adapter(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -340,6 +344,7 @@ def test_build_policy_socnav_bench_forwards_allow_fallback(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config, allow_fallback: bool = False) -> None:
             del config
             captured["allow_fallback"] = bool(allow_fallback)
@@ -364,6 +369,7 @@ def test_build_policy_socnav_sampling_uses_local_adapter(
 
     class _DummyLocalAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             del config
             calls["local"] += 1
@@ -374,6 +380,7 @@ def test_build_policy_socnav_sampling_uses_local_adapter(
 
     class _DummyUpstreamAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config, allow_fallback: bool = False) -> None:
             del config, allow_fallback
             calls["upstream"] += 1
@@ -444,6 +451,7 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = SimpleNamespace(orca_obstacle_margin=0.15)
 
@@ -461,12 +469,14 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def iter_obstacle_segments(self):
             """Return obstacle segments exposed by the simulator stub."""
             return [((0.0, 0.0), (1.0, 0.0))]
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         simulator = _DummySim()
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
@@ -505,6 +515,7 @@ def test_build_policy_hrvo_reset_hook_tolerates_adapters_without_seed(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -534,6 +545,7 @@ def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config, allow_fallback: bool = False) -> None:
             del config, allow_fallback
 
@@ -571,6 +583,7 @@ def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadat
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -610,6 +623,7 @@ def test_build_policy_crowdnav_height_preserves_checkpoint_provenance(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -650,6 +664,7 @@ def test_build_policy_sonic_crowdnav_wires_external_checkpoint_adapter(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
@@ -699,6 +714,7 @@ def test_build_policy_gensafenav_ours_wires_external_checkpoint_adapter(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
@@ -744,6 +760,7 @@ def test_build_policy_gensafenav_gst_predictor_rand_wires_external_checkpoint_ad
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
@@ -789,6 +806,7 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
@@ -803,6 +821,7 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
 
     class _DummyGuard:
         """Guard test double for fallback selection."""
+
         def __init__(self, config, *, fallback_adapter) -> None:
             del config
             self.fallback_adapter = fallback_adapter
@@ -851,6 +870,7 @@ def test_build_policy_gensafenav_gst_predictor_rand_guarded_defaults_checkpoint(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
             planners.append(self)
@@ -865,6 +885,7 @@ def test_build_policy_gensafenav_gst_predictor_rand_guarded_defaults_checkpoint(
 
     class _DummyGuard:
         """Guard test double for fallback selection."""
+
         def __init__(self, config, *, fallback_adapter) -> None:
             del config, fallback_adapter
 
@@ -907,6 +928,7 @@ def test_build_policy_sonic_gst_holonomic_vx_vy_uses_direct_world_velocity(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -967,6 +989,7 @@ def test_build_policy_sicnav_wires_external_mpc_adapter(
 
     class _DummyPlanner:
         """External planner test double for provenance wiring."""
+
         def __init__(self, config, seed=None) -> None:
             self.config = config
             self.seed = seed
@@ -1018,6 +1041,7 @@ def test_build_policy_dr_mpc_wires_external_mpc_adapter(
 
     class _DummyPlanner:
         """External planner test double for provenance wiring."""
+
         def __init__(self, config, seed=None) -> None:
             self.config = config
             self.seed = seed
@@ -1062,6 +1086,7 @@ def test_build_policy_social_navigation_pyenvs_orca_holonomic_vx_vy_uses_world_v
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -1103,6 +1128,7 @@ def test_build_policy_social_force_holonomic_vx_vy_uses_world_velocity_command(
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -1143,6 +1169,7 @@ def test_build_policy_social_navigation_pyenvs_force_models_preserve_provenance_
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -1202,6 +1229,7 @@ def test_build_policy_social_navigation_pyenvs_force_models_holonomic_vx_vy_use_
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -1243,6 +1271,7 @@ def test_build_policy_social_navigation_pyenvs_hsfm_preserves_provenance_metadat
 
     class _DummyAdapter:
         """Planner adapter test double for policy wiring."""
+
         def __init__(self, config) -> None:
             self.config = config
 
@@ -1435,10 +1464,12 @@ def test_map_runner_metadata_and_normalization_helpers() -> None:
 
     class DifferentialDriveSettings:
         """Minimal differential-drive settings fixture."""
+
         max_linear_speed = 2.5
 
     class BicycleDriveSettings:
         """Minimal bicycle-drive settings fixture."""
+
         max_velocity = 3.5
 
     diff = type("Cfg", (), {"robot_config": DifferentialDriveSettings()})()
@@ -1614,6 +1645,7 @@ def test_build_policy_for_portfolio_adapters_tracks_feasibility(
 
     class _GapPredictionStub:
         """Prediction adapter stub with feasibility metadata."""
+
         def __init__(self, *args, **kwargs) -> None:
             pass
 
@@ -1886,6 +1918,7 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -1895,6 +1928,7 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
 
@@ -1972,6 +2006,7 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -1981,6 +2016,7 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
 
@@ -2064,6 +2100,7 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2073,6 +2110,7 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
 
@@ -2161,6 +2199,7 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2170,6 +2209,7 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
 
@@ -2259,6 +2299,7 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2268,6 +2309,7 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.step_calls = 0
@@ -2349,6 +2391,7 @@ def test_run_map_episode_stops_immediately_on_route_complete(
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2358,6 +2401,7 @@ def test_run_map_episode_stops_immediately_on_route_complete(
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.step_calls = 0
@@ -2435,6 +2479,7 @@ def test_run_map_episode_collision_wins_over_route_complete(
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.zeros((0, 2), dtype=float)
@@ -2444,6 +2489,7 @@ def test_run_map_episode_collision_wins_over_route_complete(
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.step_calls = 0
@@ -2807,6 +2853,7 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
@@ -2820,6 +2867,7 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.action_space = None
@@ -2943,6 +2991,7 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
             self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
@@ -2956,6 +3005,7 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
 
     class _DummyEnv:
         """Environment stub for map-runner episode tests."""
+
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.action_space = None
@@ -3101,6 +3151,7 @@ def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() ->
 
     class HolonomicConfig:
         """Holonomic command-space fixture."""
+
         command_mode = "vx_vy"
 
     robot = SimpleNamespace(pose=((0.0, 0.0), 0.0))

@@ -1,4 +1,5 @@
 """Unit tests for SocNav planner adapters and occupancy helpers."""
+
 import configparser
 import importlib
 import sys
@@ -439,6 +440,7 @@ def test_prediction_adapter_builds_ego_conditioned_state_from_model_dim():
 
 def test_socnavbench_adapter_uses_upstream_when_available():
     """SocNavBench adapter should use upstream planner output when available."""
+
     class FakeTraj:
         """Trajectory stub returning one waypoint."""
 

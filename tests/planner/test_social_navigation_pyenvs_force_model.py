@@ -85,6 +85,7 @@ def _install_fake_socialforce_backend(monkeypatch: pytest.MonkeyPatch) -> None:
 
         def forward(self, state):
             """Return a deterministic simulator state update."""
+
             class FakeTensor:
                 """Tensor-like wrapper exposing detach/cpu/numpy conversions."""
 

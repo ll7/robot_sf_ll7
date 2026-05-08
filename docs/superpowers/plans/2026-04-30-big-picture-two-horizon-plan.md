@@ -5,6 +5,11 @@
 > **Status:** Implemented in commit `80a8ad7a` (`docs: refine big-picture plan into two horizons`).
 > This file is retained as the execution record and reference plan; unchecked boxes reflect the
 > original implementation checklist, not active unexecuted work.
+>
+> **Successor plan:** active execution against the Horizon A / Horizon B sequencing now happens via
+> [`2026-05-07-benchmark-mechanism-roadmap.md`](2026-05-07-benchmark-mechanism-roadmap.md) and the
+> queue order in [`../specs/2026-05-07_goal_sequence.md`](../specs/2026-05-07_goal_sequence.md).
+> Read those before re-opening any unchecked box here.
 
 **Goal:** Revise `docs/plan/plan_big_picture_2026-04-30.md` into a two-horizon strategy that supports near-term paper delivery and long-term research roadmap quality.
 

@@ -108,7 +108,14 @@ Expected: the branch may be ahead by the roadmap spec commit and this plan may b
 
 - [ ] **Step 1: Create the strategy comment body**
 
-Create a local temporary file at `output/tmp/issue_1049_strategy_comment.md` with this exact content:
+Ensure the temporary directory exists, then create a local temporary file at
+`output/tmp/issue_1049_strategy_comment.md` with this exact content. Tasks 2-4 all reuse
+`output/tmp/`, so creating it once here is sufficient for the rest of the plan:
+
+```bash
+mkdir -p output/tmp
+```
+
 
 ```markdown
 ## Strategy alignment
@@ -290,15 +297,15 @@ Why not now:
 Roadmap source: `docs/superpowers/specs/2026-05-07-benchmark-mechanism-roadmap-design.md`.
 ```
 
-Run:
+Run (replace `<NUMBER>` with the matching issue number from Step 1; do not use `1049`,
+which is the primary execution issue, not a deferred planner-improvement issue):
 
 ```bash
-EXISTING_ISSUE_NUMBER=1049
+EXISTING_ISSUE_NUMBER=<NUMBER>
 rtk gh issue comment "$EXISTING_ISSUE_NUMBER" --body-file output/tmp/deferred_planner_improvement_comment.md
 ```
 
-Expected: replace `1049` with the matching issue number found in Step 1 before running; GitHub
-returns the comment URL.
+Expected: GitHub returns the comment URL for the deferred planner-improvement issue.
 
 - [ ] **Step 5: Remove temporary issue files**
 
@@ -393,13 +400,19 @@ Expected: the temporary file is removed.
 
 - [ ] **Step 1: Inspect the mechanism evidence bundle**
 
-Run:
+Run (the directory may not exist on a fresh checkout if `#1045` evidence has not been
+generated yet; the existence guard prevents a misleading error):
 
 ```bash
-find docs/context/evidence/issue_1045_h500_solvability_mechanisms_2026-05-07 -maxdepth 2 -type f | sort
+EV_DIR=docs/context/evidence/issue_1045_h500_solvability_mechanisms_2026-05-07
+if [ -d "$EV_DIR" ]; then
+  find "$EV_DIR" -maxdepth 2 -type f | sort
+else
+  echo "missing: $EV_DIR — confirm #1045 evidence is on this branch before continuing"
+fi
 ```
 
-Expected: output lists the compact evidence files generated for `#1045`, including summaries or case records.
+Expected: output lists the compact evidence files generated for `#1045`, including summaries or case records. If the directory is missing, stop and confirm the branch state before selecting cells.
 
 - [ ] **Step 2: Inspect candidate rows for the required mechanism classes**
 
@@ -474,7 +487,20 @@ Expected: the table contains one clean budget-relief row, one exposure-enabled r
 
 - [ ] **Step 5: Link the pilot note from the context README**
 
-Add this bullet under the `Benchmark Run Notes` section of `docs/context/README.md`:
+First confirm the target section still exists:
+
+```bash
+if rg -n "^## Benchmark Run Notes" docs/context/README.md; then
+  echo "Success: target section found. Add the bullet under Benchmark Run Notes."
+else
+  echo "Warning: target section not found. Place the bullet near the other h500 notes."
+fi
+```
+
+If the section is present, add this bullet under it. If the README has since reorganized,
+place the bullet near the other h500 notes (`issue_1044_h500_followup_benchmark_plan.md`,
+`issue_1045_h500_solvability_mechanisms.md`) and record the new section name in the pilot
+note's handoff:
 
 ```markdown
 * [Issue #1049 H500 Mechanism Pilot](issue_1049_h500_mechanism_pilot.md)

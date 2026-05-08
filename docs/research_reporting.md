@@ -190,6 +190,35 @@ Generated `report.md` includes:
 6. **Conclusions**: Summary of key findings
 7. **Reproducibility**: Git hash, packages, hardware, commands to reproduce
 
+## H500 Reporting Language
+
+Use h500 as a long-horizon sensitivity/report surface, not as a replacement for the fixed-horizon
+camera-ready benchmark. Fixed horizons test strict-time-budget navigation. H500 asks what happens
+when planners are allowed to remain in the interaction long enough to finish.
+
+Recommended paper/report wording:
+
+> We report h500 as a long-horizon sensitivity analysis rather than as a replacement for the fixed
+> camera-ready benchmark. The longer horizon separates clean time-budget artifacts from persistent
+> planner failures, but it also exposes additional safety and comfort costs.
+
+When reporting h500, include success together with collision, near-miss, comfort/exposure, and
+duration terms. Do not publish a single h500 winner table unless safety/exposure caveats and planner
+execution modes are visible. Treat fallback or degraded rows as exclusions or caveated limitations,
+not as successful benchmark evidence.
+
+Trace-backed mechanism language is allowed only when retained per-step traces or videos show the
+behavior. Aggregate fixed-to-h500 deltas can identify candidate cells, but they do not prove that
+h500 successes mostly come from waiting until pedestrians pass.
+
+Camera-ready SNQI v3 remains calibrated for the fixed-horizon benchmark. H500 SNQI values, if
+reported, should be labeled as sensitivity values unless a separately versioned h500 SNQI contract
+is calibrated. Prefer reporting the underlying success, collision, near-miss, comfort, exposure, and
+duration terms.
+
+See [H500 Paper Language](context/issue_1058_h500_paper_language.md) for reusable wording and
+unsafe claims to avoid.
+
 ## Architecture
 
 ### Module Structure

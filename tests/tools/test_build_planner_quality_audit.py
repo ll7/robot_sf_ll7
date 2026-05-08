@@ -13,11 +13,13 @@ if TYPE_CHECKING:
 
 
 def _write_json(path: Path, payload: dict) -> None:
+    """Write an indented JSON fixture."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
+    """Write JSONL rows for planner quality inputs."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 

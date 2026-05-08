@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 def _write_assets(tmp_path: Path) -> tuple[Path, Path]:
+    """Write calibration weight and baseline fixtures."""
     weights = {
         "w_success": 0.20,
         "w_time": 0.10,
@@ -38,6 +39,7 @@ def _write_assets(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _episode(planner: str, success: float, near: float) -> dict[str, object]:
+    """Build one episode record for SNQI calibration analysis."""
     return {
         "planner_key": planner,
         "kinematics": "differential_drive",

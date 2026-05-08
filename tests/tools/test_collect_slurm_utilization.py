@@ -13,6 +13,7 @@ def test_collect_job_reports_runs_accounting_commands(monkeypatch) -> None:
     calls: list[tuple[str, ...]] = []
 
     def fake_run(command, *, capture_output, text, check):
+        """Record Slurm command invocations and return a successful result."""
         calls.append(tuple(command))
         return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
 
@@ -37,6 +38,7 @@ def test_collect_job_reports_records_missing_tools(monkeypatch) -> None:
     """Missing Slurm helpers should be explicit evidence instead of hard crashes."""
 
     def fake_run(command, *, capture_output, text, check):
+        """Raise for sstat and succeed for other Slurm commands."""
         if command[0] == "sstat":
             raise FileNotFoundError("sstat")
         return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")

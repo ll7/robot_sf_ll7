@@ -80,12 +80,14 @@ def test_run_batch_parallel_writes_output_in_job_order(tmp_path: Path, monkeypat
     out_file = tmp_path / "episodes.jsonl"
 
     def fake_worker(job):
+        """Return a deterministic episode record for each queued job."""
         scenario, seed, _ = job
         if scenario["id"] == "job-a":
             time.sleep(0.05)
         return {"episode_id": f"{scenario['id']}-{seed}"}
 
     def fake_write(out_path, schema, record):
+        """Append records as JSONL without schema validation."""
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")

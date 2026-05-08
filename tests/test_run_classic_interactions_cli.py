@@ -14,6 +14,7 @@ def test_run_classic_interactions_accepts_custom_scenario_matrix(monkeypatch, tm
     captured = {}
 
     def fake_run_batch(scenario_matrix: Path, **kwargs):
+        """Capture benchmark runner arguments without executing episodes."""
         captured["scenario_matrix"] = scenario_matrix
         captured.update(kwargs)
         return {"episodes": 0, "status": "mocked"}

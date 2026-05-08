@@ -53,6 +53,7 @@ def test_logs_warning_on_mismatch():
     captured: list = []
 
     def capture_message(message):
+        """Collect Loguru warning records for mismatch assertions."""
         captured.append(message)
 
     handle = logger.add(capture_message, level="WARNING")

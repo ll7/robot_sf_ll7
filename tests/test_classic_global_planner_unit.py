@@ -12,6 +12,7 @@ from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig, Plannin
 
 
 def _make_basic_map(tmp_path):
+    """Create a minimal unobstructed SVG map fixture for planner tests."""
     svg = tmp_path / "basic_planner.svg"
     svg.write_text(
         """
@@ -26,6 +27,7 @@ def _make_basic_map(tmp_path):
 
 
 def _make_map_with_obstacle(tmp_path):
+    """Create a compact SVG map fixture with one blocking obstacle."""
     svg = tmp_path / "blocked.svg"
     svg.write_text(
         """
@@ -123,10 +125,13 @@ def test_visualize_path_calls_fill_expands(monkeypatch, tmp_path):
     )
 
     class DummyGrid:
+        """Grid stub that records expand-overlay writes."""
+
         def __init__(self):
             self.expands = None
 
         def fill_expands(self, expands):
+            """Record the expands payload passed by the visualization path."""
             self.expands = expands
 
     dummy_grid = DummyGrid()
@@ -135,6 +140,7 @@ def test_visualize_path_calls_fill_expands(monkeypatch, tmp_path):
     captured = {}
 
     def fake_render_path(grid, path, **kwargs):
+        """Capture renderer inputs without opening a visualization window."""
         captured["grid"] = grid
         captured["path"] = path
 
@@ -184,21 +190,27 @@ def test_plan_accepts_algorithm_override(monkeypatch, tmp_path):
     calls = {"a": 0, "theta": 0}
 
     class DummyAStar:
+        """A* stub that records algorithm selection and returns endpoint path."""
+
         def __init__(self, map_, start, goal):
             calls["a"] += 1
             self.start = start
             self.goal = goal
 
         def plan(self):
+            """Return a direct path with minimal expand metadata."""
             return [self.start, self.goal], {"expand": {}}
 
     class DummyThetaStar:
+        """Theta* stub that records whether the default algorithm was used."""
+
         def __init__(self, map_, start, goal):
             calls["theta"] += 1
             self.start = start
             self.goal = goal
 
         def plan(self):
+            """Return a direct path with minimal expand metadata."""
             return [self.start, self.goal], {"expand": {}}
 
     monkeypatch.setattr("robot_sf.planner.classic_global_planner.AStar", DummyAStar)
@@ -333,6 +345,7 @@ def test_plan_random_path_selects_longer_candidate(tmp_path, monkeypatch):
     )
 
     def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        """Replay candidate endpoints for longest-path selection."""
         try:
             return next(sampled_points)
         except StopIteration:
@@ -345,6 +358,7 @@ def test_plan_random_path_selects_longer_candidate(tmp_path, monkeypatch):
     }
 
     def fake_plan(start, goal, algorithm=None, allow_inflation_fallback=True):  # type: ignore[no-untyped-def]
+        """Return predefined path scores for candidate comparison."""
         return scores[(start, goal)]
 
     monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
@@ -371,6 +385,7 @@ def test_plan_random_path_breaks_ties_with_waypoints(tmp_path, monkeypatch):
     sampled_points = iter([(0.0, 0.0), (1.0, 1.0), (0.0, 0.0), (2.0, 2.0)])
 
     def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        """Replay candidate endpoints for waypoint-count tie breaking."""
         try:
             return next(sampled_points)
         except StopIteration:
@@ -382,6 +397,7 @@ def test_plan_random_path_breaks_ties_with_waypoints(tmp_path, monkeypatch):
     }
 
     def fake_plan(start, goal, algorithm=None, allow_inflation_fallback=True):  # type: ignore[no-untyped-def]
+        """Return predefined equal-length paths for tie-break assertions."""
         return scores[(start, goal)]
 
     monkeypatch.setattr(planner, "random_valid_point_on_grid", fake_random_valid_point_on_grid)
@@ -408,6 +424,7 @@ def test_plan_random_path_can_disable_inflation_fallback(tmp_path, monkeypatch):
     sampled_points = iter([(0.0, 0.0), (1.0, 1.0)])
 
     def fake_random_valid_point_on_grid(rng=None, max_attempts=100):  # type: ignore[no-untyped-def]
+        """Return one deterministic random-path candidate pair."""
         try:
             return next(sampled_points)
         except StopIteration:
@@ -418,6 +435,7 @@ def test_plan_random_path_can_disable_inflation_fallback(tmp_path, monkeypatch):
     def fake_plan(  # type: ignore[no-untyped-def]
         start, goal, algorithm=None, allow_inflation_fallback=True
     ):
+        """Capture the inflation fallback flag forwarded by random planning."""
         observed["allow_inflation_fallback"] = allow_inflation_fallback
         return [start, goal], {"length": 1.0}
 

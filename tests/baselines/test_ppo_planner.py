@@ -14,6 +14,7 @@ from robot_sf.baselines.social_force import Observation
 
 
 def _planner_config(**overrides):
+    """Build a fallback-enabled PPO planner config with optional overrides."""
     payload = {
         "model_path": "/nonexistent/model.zip",
         "fallback_to_goal": True,
@@ -23,6 +24,7 @@ def _planner_config(**overrides):
 
 
 def _obs() -> Observation:
+    """Build a compact social-force observation for PPO helper tests."""
     return Observation(
         dt=0.1,
         robot={"position": [1.0, 2.0], "velocity": [0.2, 0.1], "goal": [4.0, 6.0]},
@@ -98,7 +100,10 @@ def test_build_model_obs_dict_backfills_predictive_features(monkeypatch):
     seen: dict[str, object] = {}
 
     class _DummyEncoder:
+        """Predictive encoder stub that records the normalized observation."""
+
         def encode(self, obs):
+            """Return deterministic predictive features for model backfill."""
             seen.update(obs)
             return {
                 "min_clearance": np.array([1.5], dtype=np.float32),
@@ -131,7 +136,10 @@ def test_build_model_obs_dict_preserves_existing_predictive_features() -> None:
     )
 
     class _DummyEncoder:
+        """Predictive encoder stub that should not overwrite existing fields."""
+
         def encode(self, _obs):
+            """Return a sentinel feature value for overwrite detection."""
             return {"min_clearance": np.array([9.0], dtype=np.float32)}
 
     planner._predictive_foresight = _DummyEncoder()
@@ -146,6 +154,8 @@ def test_configure_rebuilds_predictive_foresight_encoder(monkeypatch) -> None:
     built: list[tuple[str, int]] = []
 
     class _DummyEncoder:
+        """Predictive encoder constructor stub that records rebuild settings."""
+
         def __init__(self, config):
             built.append((config.model_id, config.horizon_steps))
 
@@ -261,6 +271,7 @@ def test_load_model_resolves_registry_model_id(monkeypatch, tmp_path):
     called = {}
 
     def _fake_resolve(model_id: str):
+        """Resolve registry ids to the temporary checkpoint path."""
         called["model_id"] = model_id
         return resolved_model
 
@@ -283,6 +294,7 @@ def test_issue_791_portable_baseline_uses_registry_and_auto_device(monkeypatch, 
     called = {}
 
     def _fake_resolve(model_id: str):
+        """Resolve the portable baseline model id to the temporary checkpoint."""
         called["model_id"] = model_id
         return resolved_model
 

@@ -17,9 +17,11 @@ class _FakeTensor:
         self.value = value
 
     def dim(self):
+        """Return a one-dimensional tensor rank."""
         return 1
 
     def unsqueeze(self, _dim):
+        """Return self for batch-dimension expansion tests."""
         return self
 
 
@@ -28,6 +30,7 @@ class _FakeCuda:
 
     @staticmethod
     def is_available():
+        """Report CUDA as unavailable for deterministic CPU tests."""
         return False
 
 
@@ -41,10 +44,12 @@ class _FakeTorch:
 
     @classmethod
     def tensor(cls, value, **_kwargs):
+        """Wrap values in the fake tensor type."""
         return _FakeTensor(value)
 
     @classmethod
     def load(cls, _path, **_kwargs):
+        """Return the configured checkpoint payload or raise the configured error."""
         if cls.load_error is not None:
             raise cls.load_error
         return cls.load_result
@@ -124,10 +129,13 @@ def test_drl_vo_predict_passes_deterministic_flag() -> None:
         pytest.skip("PyTorch is required for tensor-backed DRL-VO prediction")
 
     class _PredictModel:
+        """Model stub that records the deterministic prediction flag."""
+
         def __init__(self) -> None:
             self.deterministic = None
 
         def predict(self, _tensor, *, deterministic: bool):
+            """Record deterministic mode and return a fixed action."""
             self.deterministic = deterministic
             return [0.1, 0.2]
 

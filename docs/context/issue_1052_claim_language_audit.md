@@ -54,7 +54,7 @@ Avoid these phrases unless a separate held-out study exists:
 * OOD generalization
 * transfer
 * unseen or novel environments
-* architecture-caused lift
+* architecture-causality lift claim
 * fixed generalization gap
 
 ## Validation
@@ -62,7 +62,7 @@ Avoid these phrases unless a separate held-out study exists:
 Audit command:
 
 ```bash
-rtk rg -ni "generaliz|transfer|unseen|novel|OOD|DreamerV3|architecture.*(lift|causal)" docs memory
+rtk rg -ni "generaliz|transfer|unseen|novel|OOD|DreamerV3|architecture[- ].*(lift|causal|caused|causality)" docs memory
 ```
 
 The remaining matches after this audit are either canonical guardrails, historical engineering

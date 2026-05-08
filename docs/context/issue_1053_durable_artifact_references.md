@@ -39,8 +39,12 @@ The missing paper-critical source is a durable publication bundle and diagnostic
 | Scenario matrix | `configs/scenarios/classic_interactions_francis2023.yaml` | durable | tracked and hash-pinned by the release manifest. |
 | SNQI weights/baseline | `configs/benchmarks/snqi_weights_camera_ready_v3.json`, `configs/benchmarks/snqi_baseline_camera_ready_v3.json` | durable | tracked and hash-pinned by the release manifest. |
 | SNQI diagnostics | `reports/snqi_diagnostics.{json,md}` inside campaign/publication bundles | blocked for current paper archive | compact evidence bundles may include diagnostics, but the current paper bundle still needs a durable archive pointer. |
-| Publication bundle archive | `output/benchmarks/publication/<bundle>.tar.gz` | blocked | local path only unless uploaded; tracked by follow-up `#1062`. |
+| Publication bundle archive | `output/benchmarks/publication/<bundle_name>.tar.gz` | blocked | local path only unless uploaded; tracked by follow-up `#1062`. |
 | Compact evidence bundles | `docs/context/evidence/` | partial durable summaries | acceptable for small review evidence, not a replacement for the full publication bundle. |
+
+Date suffixes embedded in artifact identifiers and bundle names follow the `YYYYMMDD` format (for
+example `20260417` in the PPO checkpoint id). Future-dated entries such as `2026...` are
+intentional and reflect planned or future-dated promotion.
 
 ## Local Output Check
 

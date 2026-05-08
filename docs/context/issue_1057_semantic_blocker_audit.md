@@ -4,11 +4,11 @@ Date: 2026-05-07
 
 Related issues:
 
-* `ll7/robot_sf_ll7#1057`
-* Route handoff: `ll7/robot_sf_ll7#730`
-* Invalid SVG repair: `ll7/robot_sf_ll7#837`
-* SNQI metric drift: `ll7/robot_sf_ll7#455`
-* Follow-up blocker: `ll7/robot_sf_ll7#1065`
+* [Issue #1057](https://github.com/ll7/robot_sf_ll7/issues/1057)
+* Route handoff: [Issue #730](https://github.com/ll7/robot_sf_ll7/issues/730)
+* Invalid SVG repair: [Issue #837](https://github.com/ll7/robot_sf_ll7/issues/837)
+* SNQI metric drift: [Issue #455](https://github.com/ll7/robot_sf_ll7/issues/455)
+* Follow-up blocker: [Issue #1065](https://github.com/ll7/robot_sf_ll7/issues/1065)
 
 ## Goal
 
@@ -49,7 +49,7 @@ route-clearance warnings remain present in tracked evidence.
 
 ## Follow-Up Boundary
 
-Issue `#1065` now tracks the unresolved route-clearance warning audit. That issue should classify
-each current warning before affected scenario failures are used as policy or planner mechanism
-evidence. No broad benchmark rerun is required by this semantic-blocker audit itself.
-
+[Issue #1065](https://github.com/ll7/robot_sf_ll7/issues/1065) now tracks the unresolved
+route-clearance warning audit. That issue should classify each current warning before affected
+scenario failures are used as policy or planner mechanism evidence. No broad benchmark rerun is
+required by this semantic-blocker audit itself.

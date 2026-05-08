@@ -27,10 +27,12 @@ def test_export_t0_scenarios_main_writes_records_and_prints_manifest(
     calls = {}
 
     def fake_build_records(path, *, provenance):
+        """Capture export-build arguments and return one valid payload record."""
         calls["build"] = {"path": Path(path), "provenance": dict(provenance)}
         return [{"scenario_id": "unit", "payload": {"schema_version": "carla-replay-export.v1"}}]
 
     def fake_write_records(records, target_dir):
+        """Capture export-write arguments and return an empty manifest."""
         calls["write"] = {"records": list(records), "target_dir": Path(target_dir)}
         return {"schema_version": "carla-replay-export-manifest.v1", "exports": []}
 
@@ -103,6 +105,7 @@ def test_validate_t0_manifest_main_reads_manifest_and_prints_count(
     calls = {}
 
     def fake_read_manifest(path):
+        """Capture manifest path and return a single-export manifest."""
         calls["path"] = Path(path)
         return {
             "schema_version": "carla-replay-export-manifest.v1",
@@ -151,6 +154,7 @@ def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
     calls = {"resolved": [], "validated": []}
 
     def fake_resolve_payloads(path):
+        """Return two payload paths resolved from the manifest."""
         calls["path"] = Path(path)
         return [
             {"scenario_id": "first", "path": tmp_path / "first.json"},
@@ -158,6 +162,7 @@ def test_validate_t0_export_batch_main_loads_payloads_and_prints_count(
         ]
 
     def fake_read_payload(path):
+        """Record each payload read and return a valid payload shell."""
         calls["validated"].append(Path(path))
         return {"schema_version": "carla-replay-export.v1"}
 
@@ -186,6 +191,7 @@ def test_validate_t0_export_batch_main_prints_json_summary(
     calls = {"validated": []}
 
     def fake_resolve_payloads(path):
+        """Return two payload paths for JSON summary generation."""
         assert Path(path) == manifest_path
         return [
             {"scenario_id": "first", "path": tmp_path / "first.json"},
@@ -193,6 +199,7 @@ def test_validate_t0_export_batch_main_prints_json_summary(
         ]
 
     def fake_read_payload(path):
+        """Record payload validation reads for the JSON summary path."""
         calls["validated"].append(Path(path))
         return {"schema_version": "carla-replay-export.v1"}
 
@@ -225,6 +232,7 @@ def test_validate_t0_export_batch_main_json_summary_validates_against_schema(
     manifest_path.write_text("{}", encoding="utf-8")
 
     def fake_load_payloads(path):
+        """Return one loaded manifest payload for schema validation."""
         assert Path(path) == manifest_path
         return [{"scenario_id": "unit", "path": tmp_path / "unit.json", "payload": {}}]
 
@@ -427,11 +435,13 @@ def test_export_t0_scenarios_main_rejects_parent_relative_paths(
     write_called = False
 
     def fake_build_records(path, *, provenance):
+        """Record whether unsafe paths reached export building."""
         nonlocal build_called
         build_called = True
         return []
 
     def fake_write_records(records, target_dir):
+        """Record whether unsafe paths reached manifest writing."""
         nonlocal write_called
         write_called = True
         return {"schema_version": "carla-replay-export-manifest.v1", "exports": []}

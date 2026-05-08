@@ -81,11 +81,14 @@ def test_ped_simulator_reset_uses_npc_velocity_for_ego_heading(monkeypatch) -> N
     """When the ego pedestrian respawns independently, use NPC velocity instead of tau."""
 
     class _EgoPedStub:
+        """Ego pedestrian stub that records reset poses."""
+
         def __init__(self) -> None:
             self.pose = ((0.0, 0.0), 0.25)
             self.reset_calls: list[tuple[tuple[float, float], float]] = []
 
         def reset_state(self, new_pose) -> None:
+            """Record the pose passed by PedSimulator.reset_state."""
             self.reset_calls.append(new_pose)
             self.pose = new_pose
 
@@ -120,10 +123,13 @@ def test_ped_simulator_reset_requires_spawn_zone_when_spawn_near_robot_disabled(
     """The explicit random-zone spawn mode should fail clearly without pedestrian zones."""
 
     class _EgoPedStub:
+        """Ego pedestrian stub that should not be reset in failure paths."""
+
         def __init__(self) -> None:
             self.pose = ((0.0, 0.0), 0.25)
 
         def reset_state(self, new_pose) -> None:
+            """Fail if reset_state is called when spawn zones are unavailable."""
             raise AssertionError(f"unexpected reset_state call: {new_pose}")
 
     sim = object.__new__(simulator_module.PedSimulator)

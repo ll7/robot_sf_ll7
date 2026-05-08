@@ -125,6 +125,7 @@ def test_aggregate_rows_tolerates_missing_metrics_payloads(tmp_path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     def _fake_run_map_batch(*args, **kwargs):
+        """Write successful and missing-metric rows for aggregation tests."""
         jsonl_path = args[1]
         jsonl_path.write_text(
             "\n".join(

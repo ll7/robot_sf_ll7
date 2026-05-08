@@ -22,6 +22,7 @@ from robot_sf.robot.differential_drive import DifferentialDriveRobot, Differenti
 
 
 def _make_basic_map(tmp_path):
+    """Create a minimal SVG map fixture for planner-adapter tests."""
     svg = tmp_path / "planner_adapter_basic.svg"
     svg.write_text(
         """

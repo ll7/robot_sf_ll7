@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 
 def _write_yaml(path: Path, content: str) -> None:
+    """Write a YAML fixture file."""
     path.write_text(content, encoding="utf-8")
 
 

@@ -73,6 +73,7 @@ def test_main_uses_config_eval_settings_and_writes_results(
     commands: list[list[str]] = []
 
     def _fake_run_process(command: list[str], *, allow_failure: bool = False) -> int:
+        """Simulate training and evaluation subprocess calls."""
         commands.append(command)
         if any("train_sac_sb3.py" in part for part in command):
             output_dir.mkdir(parents=True, exist_ok=True)

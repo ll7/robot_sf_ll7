@@ -17,6 +17,7 @@ def _frame(
     ped_positions: list[tuple[float, float]] | None = None,
     ped_velocities: list[tuple[float, float]] | None = None,
 ) -> collect.Frame:
+    """Build one rollout frame for predictive-planner dataset tests."""
     positions_source = [(1.0, 0.0)] if ped_positions is None else ped_positions
     if ped_velocities is None:
         velocities_source = [(0.1, 0.0)] * len(positions_source)

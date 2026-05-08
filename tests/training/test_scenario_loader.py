@@ -15,6 +15,7 @@ from robot_sf.training.scenario_loader import (
 
 
 def _write_yaml(path: Path, content: str) -> None:
+    """Write a YAML fixture file."""
     path.write_text(content, encoding="utf-8")
 
 

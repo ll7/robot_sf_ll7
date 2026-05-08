@@ -71,6 +71,7 @@ def test_publish_camera_ready_release_executes_upload(tmp_path: Path, monkeypatc
     calls: list[list[str]] = []
 
     def _fake_run(cmd, check):
+        """Capture upload commands without invoking subprocesses."""
         assert check is True
         calls.append(list(cmd))
 

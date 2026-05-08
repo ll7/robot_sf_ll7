@@ -39,6 +39,7 @@ def test_submit_slurm_jobs_passes_distinct_worker_indices(monkeypatch, tmp_path)
         text: bool,
         check: bool,
     ) -> SimpleNamespace:
+        """Capture submitted Slurm commands and return a fake job id."""
         commands.append(cmd)
         assert capture_output is True
         assert text is True

@@ -53,6 +53,7 @@ def test_runner_single_episode_tmp(tmp_path: Path):
 
 
 def _normalize_episode_record(record: dict[str, object]) -> dict[str, object]:
+    """Remove runtime-only fields before comparing deterministic episode records."""
     normalized = dict(record)
     normalized.pop("timestamps", None)
     normalized.pop("wall_time_sec", None)

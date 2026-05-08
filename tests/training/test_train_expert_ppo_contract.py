@@ -26,6 +26,7 @@ def test_warn_frequency_episodes_deprecated_warns_once(monkeypatch) -> None:
     calls: list[str] = []
 
     def _fake_warning(msg: str, *_args) -> None:
+        """Record deprecation warning messages."""
         calls.append(msg)
 
     monkeypatch.setattr(train_ppo.logger, "warning", _fake_warning)
@@ -44,9 +45,11 @@ def test_prepare_seed_state_relaxes_determinism_for_lightweight_cnn(monkeypatch,
     seed_calls: list[tuple[int, bool]] = []
 
     def _fake_warning(message: str, *args) -> None:
+        """Record formatted warning messages from seed preparation."""
         warnings.append(message.format(*args) if args else message)
 
     def _fake_set_global_seed(seed: int, deterministic: bool = True):
+        """Record seed and determinism settings without touching global RNG state."""
         seed_calls.append((seed, deterministic))
         return object()
 
@@ -100,6 +103,7 @@ def _capture_startup_summary(monkeypatch, tmp_path: Path) -> str:
     messages: list[str] = []
 
     def _fake_info(message: str, *args) -> None:
+        """Record formatted startup summary info logs."""
         try:
             messages.append(message.format(*args) if args else message)
         except (IndexError, KeyError, ValueError):
@@ -215,6 +219,7 @@ def test_init_training_model_quiets_loguru_while_spawning_subproc_workers(
     monkeypatch.setattr(train_ppo, "_resolve_worker_mode", lambda _config, _num_envs: "subproc")
 
     def _fake_make_training_env(*args, **kwargs):
+        """Return a placeholder env factory for vectorized env construction."""
         return object
 
     monkeypatch.setattr(train_ppo, "_make_training_env", _fake_make_training_env)
@@ -227,11 +232,15 @@ def test_init_training_model_quiets_loguru_while_spawning_subproc_workers(
     monkeypatch.setattr(train_ppo, "_resolve_ppo_hyperparams", lambda _config: {})
 
     class _FakeSubprocVecEnv:
+        """SubprocVecEnv stub that records inherited LOGURU level."""
+
         def __init__(self, env_fns):
             observed_levels.append(train_ppo.os.environ.get("LOGURU_LEVEL"))
             self.env_fns = env_fns
 
     class _FakePPO:
+        """PPO constructor stub that records initialization arguments."""
+
         def __init__(self, *args, **kwargs) -> None:
             self.args = args
             self.kwargs = kwargs
@@ -424,25 +433,36 @@ def _capture_evaluate_policy_info_logs(monkeypatch, tmp_path: Path, *, episodes:
     messages: list[str] = []
 
     def _fake_info(message: str, *args) -> None:
+        """Record formatted evaluation info logs."""
         messages.append(message.format(*args) if args else message)
 
     class _FakeState:
+        """Environment state stub exposing max episode steps."""
+
         max_sim_steps = 2
 
     class _FakeEnv:
+        """Evaluation environment stub with one successful step."""
+
         state = _FakeState()
 
         def reset(self):
+            """Return an initial observation for evaluation."""
             return [0.0], {}
 
         def step(self, _action):
+            """Return a successful terminal transition."""
             return [0.0], 1.0, True, False, {"success": True}
 
         def close(self) -> None:
+            """Close the fake evaluation environment without side effects."""
             return None
 
     class _FakeModel:
+        """Model stub returning a deterministic action."""
+
         def predict(self, obs, deterministic: bool):
+            """Assert deterministic prediction and return a dummy action."""
             assert deterministic is True
             return 0, None
 

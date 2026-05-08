@@ -15,11 +15,13 @@ if TYPE_CHECKING:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_repo(repo_root: Path) -> None:
+    """Create the minimal gym-collision-avoidance tree required by SACADRL probes."""
     _write(repo_root / "README.md", "# stub\n")
     _write(
         repo_root / "gym_collision_avoidance" / "experiments" / "src" / "example.py",
@@ -131,6 +133,7 @@ def test_run_command_decodes_timeout_bytes(monkeypatch: pytest.MonkeyPatch, tmp_
     """Timeout output should be decoded to text before being stored in the report."""
 
     def fake_run(*args, **kwargs):
+        """Raise a timeout with byte output to exercise decoder handling."""
         raise subprocess.TimeoutExpired(
             cmd=["python"],
             timeout=0.1,

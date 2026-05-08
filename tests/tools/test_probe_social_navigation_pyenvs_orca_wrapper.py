@@ -19,11 +19,13 @@ if TYPE_CHECKING:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a fake upstream source file while creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_fake_upstream_repo(repo_root: Path) -> None:
+    """Create the minimal upstream ORCA package layout used by wrapper probes."""
     _write(
         repo_root / "crowd_nav" / "utils" / "action.py",
         "from collections import namedtuple\nActionXY = namedtuple('ActionXY', ['vx', 'vy'])\n",
@@ -140,15 +142,21 @@ def test_wrapper_fails_fast_on_missing_required_fields(tmp_path: Path) -> None:
 
 
 class _FakeRobot:
+    """Placeholder robot object consumed by PlannerActionAdapter."""
+
     pass
 
 
 class _FakeSimulator:
+    """Simulator stub exposing one robot for the wrapper loop."""
+
     def __init__(self) -> None:
         self.robots = [_FakeRobot()]
 
 
 class _FakeEnv:
+    """Robot SF environment stub returning deterministic observations."""
+
     def __init__(self) -> None:
         self.simulator = _FakeSimulator()
         self.action_space = object()
@@ -172,20 +180,26 @@ class _FakeEnv:
         }
 
     def reset(self, seed: int | None = None) -> tuple[dict, dict]:
+        """Return the deterministic observation and seed metadata."""
         return dict(self._obs), {"seed": seed}
 
     def step(self, action: dict) -> tuple[dict, float, bool, bool, dict]:
+        """Echo the action in info while keeping the episode alive."""
         return dict(self._obs), 0.0, False, False, {"action": action}
 
     def close(self) -> None:
+        """Close the fake environment without side effects."""
         return None
 
 
 class _FakePlannerActionAdapter:
+    """Adapter stub converting velocity tuples into Robot SF actions."""
+
     def __init__(self, robot: object, action_space: object, time_step: float) -> None:
         self.time_step = time_step
 
     def from_velocity_command(self, command: tuple[float, float]) -> dict[str, float]:
+        """Convert the velocity command into an action mapping."""
         return {"v": float(command[0]), "omega": float(command[1])}
 
 
@@ -196,6 +210,7 @@ def test_run_probe_executes_robot_sf_loop(monkeypatch: pytest.MonkeyPatch, tmp_p
     captured: dict[str, object] = {}
 
     def fake_make_robot_env(config: object, debug: bool = False) -> _FakeEnv:
+        """Capture the wrapper config and return the fake environment."""
         captured["config"] = config
         return _FakeEnv()
 

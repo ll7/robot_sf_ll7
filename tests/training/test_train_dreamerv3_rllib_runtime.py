@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 
 def _write_yaml(path: Path, content: str) -> Path:
+    """Write a YAML fixture and return its path."""
     path.write_text(content, encoding="utf-8")
     return path
 
@@ -76,13 +77,16 @@ class _FakeRay:
         self.init_kwargs: dict[str, object] | None = None
 
     def init(self, **kwargs) -> None:
+        """Record Ray init kwargs and mark the fake runtime initialized."""
         self._initialized = True
         self.init_kwargs = dict(kwargs)
 
     def is_initialized(self) -> bool:
+        """Return whether the fake Ray runtime is initialized."""
         return self._initialized
 
     def shutdown(self) -> None:
+        """Record shutdown and clear initialized state."""
         self.shutdown_called = True
         self._initialized = False
 
@@ -102,6 +106,7 @@ class _FakeAlgo:
         self.stop_called = False
 
     def train(self) -> dict[str, object]:
+        """Return a deterministic RLlib-style training result."""
         if self.fail_on_train:
             raise RuntimeError("train failed")
         self.train_calls += 1
@@ -123,11 +128,13 @@ class _FakeAlgo:
         }
 
     def save_to_path(self, checkpoint_dir: str) -> str:
+        """Create and return a fake checkpoint directory path."""
         path = Path(checkpoint_dir) / f"checkpoint_{self.train_calls}"
         path.mkdir(parents=True, exist_ok=True)
         return str(path)
 
     def stop(self) -> None:
+        """Record algorithm shutdown."""
         self.stop_called = True
 
 
@@ -149,12 +156,15 @@ class _FakeEvalTensor:
         self._value = np.asarray(value)
 
     def detach(self):
+        """Return self to mimic tensor detachment."""
         return self
 
     def cpu(self):
+        """Return self to mimic CPU tensor transfer."""
         return self
 
     def numpy(self):
+        """Return the wrapped NumPy value."""
         return self._value
 
 
@@ -226,6 +236,7 @@ class _FrozenDateTime:
 
     @classmethod
     def now(cls, tz=None):
+        """Return a fixed timestamp regardless of timezone argument."""
         if tz is None:
             return datetime(2026, 2, 11, 12, 0, 0, tzinfo=UTC)
         return datetime(2026, 2, 11, 12, 0, 0, tzinfo=UTC)

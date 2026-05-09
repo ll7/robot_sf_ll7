@@ -392,6 +392,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1000 CARLA Bridge Schema Catalog Schema CLI](issue_1000_carla_schema_catalog_schema_cli.md)
   exposes the CARLA bridge schema catalog JSON Schema through
   `robot-sf-catalog-carla-schemas --schema`.
+- [Issue #1076 AMV Paper-Defense Backlog Tracker](issue_1076_amv_paper_defense_backlog.md)
+  records the approved AMV backlog child issues, filing waves, dependency notes, and the current
+  Wave 1 PR linkage without treating follow-up waves as submission blockers.
 
 ## DreamerV3 Notes
 

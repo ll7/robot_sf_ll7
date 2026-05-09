@@ -116,6 +116,19 @@ Expected behavior:
 - With complete assets, `socnav_bench` preflight does not fail due to missing data.
 - Without required assets, run fails fast with explicit missing path errors.
 
+## 6. SocNavBench Map Import Batches
+
+Issue #334 uses a staged map-import manifest instead of bulk asset ingestion:
+
+```bash
+uv run python scripts/tools/validate_socnav_map_batch.py --batch-id eth_first
+```
+
+The first batch is `ETH` and is defined in
+`configs/maps/socnavbench_import_batches.yaml`. This command validates that the exact source
+mesh/traversible inputs are staged locally before any converted Robot SF SVG or scenario wiring is
+accepted. Missing required source assets fail closed.
+
 ## Licensing and Repository Hygiene
 
 - Do not commit downloaded dataset assets.

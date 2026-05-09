@@ -5,11 +5,17 @@
 **Date**: 2026-04-16
 
 > **Superseded recommendation, 2026-04-28:** the 32 K result below is useful historical
-> pre-screening evidence, but it is no longer the promotion recommendation.  The later Optuna and
+> pre-screening evidence, but it is no longer the promotion recommendation. The later Optuna and
 > 12 M fixed-candidate study in
 > `docs/context/issue_193_feature_extractor_optuna_study.md` selects `dyn_large_med` as the
 > preferred architecture candidate and rejects default promotion until collision failures are fixed
 > in follow-up issue #850.
+>
+> **Issue #834 status, 2026-05-10:** do not promote `mlp_small` as the new PPO default from this
+> note alone. The owner comment on #834 says the evidence is not sufficient for promotion, and the
+> current evidence trail has moved from `mlp_small` to the still-blocked `dyn_large_med` safety
+> follow-up. #834 should stay decision-required unless maintainers explicitly choose an interim
+> `mlp_small` default despite the newer evidence.
 **Machine**: imech156-u — AMD Ryzen 9 3950X, RTX 3070 8 GB, CUDA 12.8, Ubuntu 24.04
 
 ---
@@ -20,7 +26,7 @@ Four extractors were compared: the original `DynamicsExtractor` against `MLPFeat
 `LightweightCNNExtractor`, and `AttentionFeatureExtractor`. Both a static GPU throughput
 microbenchmark and a 32 000-step PPO training run (seed 42) were executed on the same machine.
 
-**Recommendation: replace the default with `mlp_small` for new PPO training runs.**
+**Historical recommendation: replace the default with `mlp_small` for new PPO training runs.**
 The original `DynamicsExtractor` remains the only safe choice when loading pre-trained checkpoints
 (the module path is hard-coded into SB3 policy files).
 
@@ -146,7 +152,7 @@ cuda_version = getattr(version_mod, "cuda", None) if version_mod is not None els
 
 ---
 
-## Recommendation
+## Historical Recommendation
 
 | Criterion                  | `dynamics_original` | `mlp_small`     |
 |----------------------------|---------------------|-----------------|
@@ -155,20 +161,25 @@ cuda_version = getattr(version_mod, "cuda", None) if version_mod is not None els
 | Training stability         | variable            | **improving**   |
 | Backward compat (checkpts) | **required**        | new runs only   |
 
-**Decision**:
-- **For new PPO training runs**: use `mlp_small` as the default feature extractor.
+**Historical decision at 32 K only**:
+- **For new PPO training runs**: the early-screen recommendation was to use `mlp_small` as the
+  default feature extractor.
 - **For loading existing checkpoints**: keep `DynamicsExtractor` as-is (module path is embedded in
   serialised policy files — changing it breaks loading).
 - **Defer** `lightweight_cnn` and `attention_small` promotion to dedicated follow-up issues with
   longer training campaigns and multi-seed comparisons.
 
+Current default-promotion status is superseded by the 2026-04-28 note at the top of this file:
+neither `mlp_small` nor `dyn_large_med` should be treated as promoted until the later safety
+blocker is resolved or a maintainer explicitly accepts an interim default.
+
 ---
 
 ## Follow-up Issues Needed
 
-1. **Promote `mlp_small` as the new default** in `environment_factory.py` and canonical PPO
-   configs — requires updating `policy_kwargs` defaults and verifying backward compat shims for
-   checkpoint loading.
+1. **Resolve #834 default-promotion decision** before changing PPO defaults. If maintainers accept
+   `mlp_small` as an interim default, update the current `scripts/training/train_ppo.py` default
+   resolution path and canonical configs, not only the older `environment_factory.py` wording.
 2. **Investigate `lightweight_cnn` divergence** at ≥28 K steps (potential learning-rate or
    gradient-norm interaction with large feature dim).
 3. **Full multi-seed evaluation campaign** (3 seeds × 500 K steps) to validate `mlp_small`

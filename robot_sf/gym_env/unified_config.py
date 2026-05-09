@@ -33,6 +33,25 @@ from robot_sf.sim.sim_config import SimulationSettings
 
 
 @dataclass
+class ObservationVisibilitySettings:
+    """Opt-in geometric visibility limits for planner-facing observations."""
+
+    enabled: bool = False
+    fov_degrees: float = 360.0
+    max_range_m: float | None = None
+    static_occlusion: bool = False
+
+    def to_metadata(self) -> dict[str, bool | float | None]:
+        """Return JSON-safe visibility settings metadata."""
+        return {
+            "enabled": bool(self.enabled),
+            "fov_degrees": float(self.fov_degrees),
+            "max_range_m": None if self.max_range_m is None else float(self.max_range_m),
+            "static_occlusion": bool(self.static_occlusion),
+        }
+
+
+@dataclass
 class BaseSimulationConfig(TelemetryConfigMixin):
     """
     Core simulation configuration shared by all environments.
@@ -52,6 +71,9 @@ class BaseSimulationConfig(TelemetryConfigMixin):
     backend: str = "fast-pysf"
     sensors: list[dict] = field(default_factory=list)
     observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
+    observation_visibility: ObservationVisibilitySettings = field(
+        default_factory=ObservationVisibilitySettings,
+    )
     sample_positions_globally: bool = field(
         default=False,
         metadata={

@@ -1094,6 +1094,23 @@ Output format
 - For each group and metric, the aggregator returns mean, median, p95.
 - When CIs are enabled, additional keys are included: mean_ci, median_ci, p95_ci as [low, high].
 
+## Planner Inclusion Gate
+
+Run the planner inclusion check when a planner is being considered for promotion from
+experimental/testing-only status into a promoted benchmark set:
+
+```bash
+uv run robot_sf_bench planner-inclusion-check \
+  --algo orca \
+  --matrix configs/scenarios/planner_sanity_matrix_v1.yaml \
+  --output-dir output/planner_inclusion/orca
+```
+
+The command writes `<algo>_episodes.jsonl` plus `<algo>_inclusion_report.json`. The report is a
+review artifact, not an automatic status update. It fails closed with explicit reasons for runner
+or schema failures, NaN/infinite aggregates, slow runtime, too few episodes, low success rate, or
+excess collision rate.
+
 Programmatic usage
 
 ```python

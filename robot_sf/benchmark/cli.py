@@ -33,6 +33,11 @@ from robot_sf.benchmark.distributions import collect_grouped_values as _dist_col
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
+from robot_sf.benchmark.planner_inclusion import (
+    DEFAULT_INCLUSION_MATRIX,
+    InclusionCriteria,
+    run_planner_inclusion_check,
+)
 from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
 from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
@@ -1080,6 +1085,41 @@ def _handle_preview_scenarios(args) -> int:
         return 2
 
 
+def _handle_planner_inclusion_check(args) -> int:
+    """Run one planner through the mechanical inclusion-review gate.
+
+    Returns:
+        Exit code 0 for pass, 1 for gate revision, 2 for execution error.
+    """
+    try:
+        report = run_planner_inclusion_check(
+            algo=str(args.algo),
+            matrix=Path(args.matrix),
+            schema=Path(args.schema),
+            output_dir=Path(args.output_dir),
+            algo_config=Path(args.algo_config) if args.algo_config else None,
+            benchmark_profile=str(args.benchmark_profile),
+            base_seed=int(args.base_seed),
+            repeats=args.repeats,
+            horizon=int(args.horizon),
+            dt=float(args.dt),
+            workers=int(args.workers),
+            record_forces=bool(args.record_forces),
+            socnav_missing_prereq_policy=str(args.socnav_missing_prereq_policy),
+            resume=bool(args.resume),
+            criteria=InclusionCriteria(
+                min_episodes=int(args.min_episodes),
+                min_success_rate=float(args.min_success_rate),
+                max_collision_rate=float(args.max_collision_rate),
+                max_runtime_sec=float(args.max_runtime_sec),
+            ),
+        )
+        print(json.dumps(report, indent=2))
+        return 0 if report.get("decision") == "pass" else 1
+    except Exception:  # pragma: no cover - error path
+        return 2
+
+
 def _add_baseline_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -1285,6 +1325,52 @@ def _add_list_subparser(
     )
     p4.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
     p4.set_defaults(cmd="preview-scenarios")
+
+
+def _add_planner_inclusion_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the planner inclusion-check subcommand parser."""
+    p = subparsers.add_parser(
+        "planner-inclusion-check",
+        help="Run one planner through the promotion inclusion-review gate",
+    )
+    p.add_argument("--algo", required=True, help="Planner algorithm key to evaluate")
+    p.add_argument("--algo-config", default=None, help="Optional planner config YAML")
+    p.add_argument(
+        "--matrix",
+        default=str(DEFAULT_INCLUSION_MATRIX),
+        help="Reference scenario matrix YAML",
+    )
+    p.add_argument("--schema", default=DEFAULT_SCHEMA_PATH, help="Episode schema path")
+    p.add_argument(
+        "--output-dir",
+        default="output/planner_inclusion",
+        help="Directory for episodes JSONL and inclusion report",
+    )
+    p.add_argument("--base-seed", type=int, default=0)
+    p.add_argument("--repeats", type=int, default=1)
+    p.add_argument("--horizon", type=int, default=250)
+    p.add_argument("--dt", type=float, default=0.1)
+    p.add_argument("--workers", type=int, default=1)
+    p.add_argument("--record-forces", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--resume", action="store_true", default=False)
+    p.add_argument(
+        "--benchmark-profile",
+        choices=["baseline-safe", "paper-baseline", "experimental"],
+        default="experimental",
+        help="Planner readiness profile used for the run",
+    )
+    p.add_argument(
+        "--socnav-missing-prereq-policy",
+        choices=["fail-fast", "skip-with-warning", "fallback"],
+        default="fail-fast",
+    )
+    p.add_argument("--min-episodes", type=int, default=1)
+    p.add_argument("--min-success-rate", type=float, default=0.5)
+    p.add_argument("--max-collision-rate", type=float, default=0.0)
+    p.add_argument("--max-runtime-sec", type=float, default=60.0)
+    p.set_defaults(cmd="planner-inclusion-check")
 
 
 def _add_summary_subparser(
@@ -1717,6 +1803,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_plot_distributions_subparser(subparsers)
     _add_plot_scenarios_subparser(subparsers)
     _add_list_subparser(subparsers)
+    _add_planner_inclusion_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
         help="SNQI weight tooling (optimize / recompute)",
@@ -2150,6 +2237,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "list-scenarios": _handle_list_scenarios,
         "validate-config": _handle_validate_config,
         "preview-scenarios": _handle_preview_scenarios,
+        "planner-inclusion-check": _handle_planner_inclusion_check,
         "run": _handle_run,
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,

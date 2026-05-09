@@ -2506,6 +2506,92 @@ def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     assert manifest_payload["route_clearance_warnings"] == warnings
 
 
+def test_prepare_campaign_preflight_attaches_route_clearance_certifications(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Preflight should expose accepted route-clearance interpretations per warning row."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    map_path = (get_repository_root() / "maps/svg_maps/classic_crossing.svg").resolve()
+    scenario_path.write_text(
+        "\n".join(
+            [
+                "- name: certified_clearance_warn",
+                f"  map_file: {map_path.as_posix()}",
+                "  seeds: [111]",
+                "  robot_config:",
+                "    radius: 0.8",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        "\n".join(
+            [
+                "schema_version: route-clearance-certifications.v1",
+                "certifications:",
+                "  certified_clearance_warn:",
+                "    status: certified_stress_geometry",
+                "    claim_scope: benchmark-ready stress geometry with caveat",
+                "    rationale: Intentionally tight corridor fixture.",
+                "    reviewed_on: '2026-05-09'",
+                "    reviewed_by: ll7",
+                "    issue: '1105'",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: clearance_certification_contract",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"route_clearance_certifications: {certification_path.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    fake_map_def = SimpleNamespace(
+        robot_routes=[SimpleNamespace(waypoints=[(0.0, 0.0), (1.0, 0.0)])],
+        obstacles=[SimpleNamespace(vertices=[(1.0, -0.1), (2.0, -0.1), (2.0, 0.1), (1.0, 0.1)])],
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.convert_map",
+        lambda _path: fake_map_def,
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="clearance")
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+
+    warning = validate_payload["route_clearance_warnings"][0]
+    assert warning["certification_status"] == "certified_stress_geometry"
+    assert warning["certification_claim_scope"] == "benchmark-ready stress geometry with caveat"
+    assert warning["certification_issue"] == "1105"
+    assert validate_payload["route_clearance_warning_summary"] == {
+        "warning_count": 1,
+        "certified_warning_count": 1,
+        "unresolved_warning_count": 0,
+        "status_counts": {"certified_stress_geometry": 1},
+        "unresolved_scenarios": [],
+    }
+    assert (
+        validate_payload["route_clearance_certifications_path"]
+        == certification_path.resolve().as_posix()
+    )
+
+
 def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Path) -> None:
     """Matrix summary row ordering should be deterministic by group/key/kinematics."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")

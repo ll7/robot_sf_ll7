@@ -151,7 +151,11 @@ Full details live in
 * `time_to_goal_norm_success_only`: same normalization, but only valid for successful episodes.
 * `time_to_goal_ideal_ratio`: success-only ratio of achieved time to ideal time
   (`shortest_path_len / robot_max_speed`).
-* `collisions`,  `near_misses`: counts based on distance thresholds.
+* `outcome.collision_event`: canonical per-episode collision event flag for new episode outputs.
+* `metrics.collisions`: collision count metric based on distance thresholds. For schema v1 episode
+  outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
+  and zero when the canonical event is false.
+* `near_misses`: count based on distance thresholds.
 * `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
 
 **Force/comfort**
@@ -210,6 +214,12 @@ Each episode record is schema-validated against
 * `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
   for threshold provenance and reproducibility
 * Git/config hashes for reproducibility
+
+Collision compatibility: schema v1 consumers should read `outcome.collision_event` for the
+canonical per-episode collision status and treat `metrics.collisions` as the agreeing count metric.
+Older bundles that only carry legacy `status`, `collision_rate`, or inconsistent collision counts
+should be migrated with `scripts/tools/migrate_episode_schema_v1.py`; new bundles fail validation
+when `outcome.collision_event` and `metrics.collisions` disagree.
 
 Batch/campaign-level metadata returned by `run_map_batch` (not individual
 records from `_run_map_episode`) includes:

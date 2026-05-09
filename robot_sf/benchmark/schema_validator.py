@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.termination_reason import outcome_contradictions
+
 try:
     import jsonschema
 except ImportError as e:  # pragma: no cover
@@ -33,6 +35,16 @@ def load_schema(path: str | Path) -> dict[str, Any]:
 def validate_episode(record: dict[str, Any], schema: dict[str, Any]) -> None:
     """Validate a single episode record.
 
-    Raises jsonschema.ValidationError if invalid.
+    Raises:
+        jsonschema.ValidationError: If the record violates the JSON schema.
+        ValueError: If schema-valid fields contradict the canonical outcome contract.
     """
     jsonschema.validate(instance=record, schema=schema)
+    contradictions = outcome_contradictions(
+        termination_reason=str(record.get("termination_reason", "")),
+        outcome=record.get("outcome", {}),
+        metrics=record.get("metrics"),
+    )
+    if contradictions:
+        joined = "; ".join(contradictions)
+        raise ValueError(f"episode semantic validation failed: {joined}")

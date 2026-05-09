@@ -76,3 +76,18 @@ def test_migrate_record_normalizes_existing_termination_reason_token() -> None:
     }
     migrated = migrate_episode_schema_v1._migrate_record(record)
     assert migrated["termination_reason"] == "collision"
+
+
+def test_migrate_record_backfills_collision_count_for_legacy_collision_status() -> None:
+    """Legacy collision-only records should migrate to the canonical collision contract."""
+    record = {
+        "scenario_id": "s4",
+        "seed": 10,
+        "metrics": {"success": 0.0},
+        "status": "collision",
+    }
+    migrated = migrate_episode_schema_v1._migrate_record(record)
+    assert migrated["termination_reason"] == "collision"
+    assert migrated["outcome"]["collision_event"] is True
+    assert migrated["metrics"]["collisions"] == 1.0
+    assert migrated["integrity"]["contradictions"] == []

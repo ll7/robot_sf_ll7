@@ -90,6 +90,39 @@ def _metric_scalar(metrics: Mapping[str, Any], *keys: str) -> float:
     return metric_scalar(metrics, *keys, default=0.0)
 
 
+def _collision_metric_value(metrics: Mapping[str, Any]) -> float:
+    """Return the strongest collision signal from canonical and legacy metric keys."""
+    return max(
+        _metric_scalar(metrics, "collisions"),
+        _metric_scalar(metrics, "collision_rate"),
+    )
+
+
+def _metric_outcome_contradictions(
+    *,
+    route_complete: bool,
+    collision: bool,
+    metrics: Mapping[str, Any],
+) -> list[str]:
+    """Return contradictions between outcome flags and metric values."""
+    contradictions: list[str] = []
+    success_metric = _metric_scalar(metrics, "success", "success_rate")
+    collision_metric = _collision_metric_value(metrics)
+    if collision and success_metric > 0.0:
+        contradictions.append("collision outcome but metrics.success > 0")
+    if collision and collision_metric <= 0.0:
+        contradictions.append("outcome.collision_event=true but metrics.collisions <= 0")
+    if (not collision) and collision_metric > 0.0:
+        contradictions.append("outcome.collision_event=false but metrics.collisions > 0")
+    if route_complete and collision_metric > 0.0:
+        contradictions.append("route_complete outcome but metrics.collisions > 0")
+    if route_complete and success_metric <= 0.0:
+        contradictions.append("outcome.route_complete=true but metrics.success <= 0")
+    if (not route_complete) and success_metric > 0.0:
+        contradictions.append("outcome.route_complete=false but metrics.success > 0")
+    return contradictions
+
+
 def outcome_contradictions(
     *,
     termination_reason: str,
@@ -111,16 +144,13 @@ def outcome_contradictions(
         contradictions.append("termination_reason=success but outcome.collision_event=true")
 
     if metrics is not None:
-        success_metric = _metric_scalar(metrics, "success", "success_rate")
-        collision_metric = _metric_scalar(metrics, "collisions", "collision_rate")
-        if collision and success_metric > 0.0:
-            contradictions.append("collision outcome but metrics.success > 0")
-        if route_complete and collision_metric > 0.0:
-            contradictions.append("route_complete outcome but metrics.collisions > 0")
-        if route_complete and success_metric <= 0.0:
-            contradictions.append("outcome.route_complete=true but metrics.success <= 0")
-        if (not route_complete) and success_metric > 0.0:
-            contradictions.append("outcome.route_complete=false but metrics.success > 0")
+        contradictions.extend(
+            _metric_outcome_contradictions(
+                route_complete=route_complete,
+                collision=collision,
+                metrics=metrics,
+            )
+        )
     return contradictions
 
 

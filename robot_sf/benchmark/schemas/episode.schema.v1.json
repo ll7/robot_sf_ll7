@@ -14,6 +14,79 @@
         "outcome",
         "integrity"
     ],
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": true
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "required": [
+                            "collisions"
+                        ],
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "exclusiveMinimum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": false
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "maximum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
     "properties": {
         "version": {
             "const": "v1"
@@ -246,6 +319,22 @@
         "metrics": {
             "type": "object",
             "minProperties": 1,
+            "properties": {
+                "collisions": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "collision_rate": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                }
+            },
             "additionalProperties": {
                 "type": [
                     "number",

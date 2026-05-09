@@ -146,3 +146,20 @@ def test_outcome_contradictions_detect_success_mismatch() -> None:
         metrics={"success": 1.0, "collisions": 0.0},
     )
     assert contradictions
+
+
+def test_outcome_contradictions_detect_collision_metric_drift() -> None:
+    """Collision event outcome and collision count metric should agree."""
+    missing_collision_metric = outcome_contradictions(
+        termination_reason="collision",
+        outcome={"route_complete": False, "collision_event": True, "timeout_event": False},
+        metrics={"success": 0.0, "collisions": 0.0},
+    )
+    assert "outcome.collision_event=true but metrics.collisions <= 0" in missing_collision_metric
+
+    stale_collision_metric = outcome_contradictions(
+        termination_reason="max_steps",
+        outcome={"route_complete": False, "collision_event": False, "timeout_event": True},
+        metrics={"success": 0.0, "collisions": 1.0},
+    )
+    assert "outcome.collision_event=false but metrics.collisions > 0" in stale_collision_metric

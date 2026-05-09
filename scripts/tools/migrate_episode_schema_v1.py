@@ -105,11 +105,9 @@ def _infer_outcome(record: dict[str, Any], termination_reason: str) -> dict[str,
 
     metrics = record.get("metrics")
     collision_metric = (
-        _metric_scalar(
-            metrics,
-            "collisions",
-            "collision_rate",
-            default=0.0,
+        max(
+            _metric_scalar(metrics, "collisions", default=0.0),
+            _metric_scalar(metrics, "collision_rate", default=0.0),
         )
         > 0.0
     )
@@ -165,6 +163,23 @@ def _infer_termination_reason(record: dict[str, Any], outcome: dict[str, bool]) 
     )
 
 
+def _collision_metric_value(metrics: dict[str, Any]) -> float:
+    """Return the strongest collision signal from canonical and legacy metric keys."""
+    return max(
+        _metric_scalar(metrics, "collisions", default=0.0),
+        _metric_scalar(metrics, "collision_rate", default=0.0),
+    )
+
+
+def _canonicalize_collision_metrics(metrics: dict[str, Any], outcome: dict[str, bool]) -> None:
+    """Backfill the canonical collision count required by schema v1."""
+    collision_metric = _collision_metric_value(metrics)
+    if outcome["collision_event"] and collision_metric <= 0.0:
+        metrics["collisions"] = 1.0
+    elif (not outcome["collision_event"]) and "collisions" not in metrics:
+        metrics["collisions"] = 0.0
+
+
 def _migrate_record(record: dict[str, Any]) -> dict[str, Any]:
     """Migrate one episode record to schema v1 fields.
 
@@ -191,6 +206,7 @@ def _migrate_record(record: dict[str, Any]) -> dict[str, Any]:
     outcome = _infer_outcome(updated, termination_reason="")
     termination_reason = _infer_termination_reason(updated, outcome)
     outcome = _infer_outcome(updated, termination_reason=termination_reason)
+    _canonicalize_collision_metrics(metrics, outcome)
     updated["termination_reason"] = termination_reason
     updated["outcome"] = outcome
     integrity = updated.get("integrity")

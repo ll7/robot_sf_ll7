@@ -133,6 +133,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1055 Exposure-Aware H500 Tables](issue_1055_exposure_aware_h500_tables.md)
   defines and populates representative h500 reporting tables that place completion gains beside
   duration, collision, near-miss, force-exposure, and comfort-exposure rates.
+* [Issue #1073 Robot SF Empirical-Expansion Gate](issue_1073_empirical_expansion_gate_2026_06_08.md)
+  defines the June 8 checkpoint rule for promoting Robot SF beyond dissertation-floor examples,
+  including counted improvement units, proof surfaces, and decline criteria.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.

@@ -20,6 +20,7 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
     PedestrianWaitRule,
     SinglePedestrianDefinition,
+    serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
@@ -1018,6 +1019,12 @@ def _load_map_definition(map_path: str) -> MapDefinition | None:
         return None
     if path.suffix.lower() == ".svg":
         return convert_map(str(path))
+    if path.suffix.lower() in {".json", ".yaml", ".yml"}:
+        data = _load_yaml_documents(path)
+        if not isinstance(data, dict):
+            logger.warning("Map definition '{}' must contain a mapping.", path)
+            return None
+        return serialize_map(data)
     logger.warning("Unsupported map extension '{}' for scenario maps", path.suffix)
     return None
 

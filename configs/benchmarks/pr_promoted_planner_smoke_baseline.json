@@ -1,0 +1,45 @@
+{
+  "schema_version": "pr-promoted-planner-smoke-baseline.v1",
+  "scenario_matrix": "configs/scenarios/single/pr_promoted_planner_smoke.yaml",
+  "seed": 101,
+  "horizon": 300,
+  "dt": 0.1,
+  "planners": {
+    "goal": {
+      "minimum_success_mean": 1.0,
+      "maximum_collisions_mean": 0.0,
+      "maximum_near_misses_mean": 0.0,
+      "reference_metrics": {
+        "success.mean": 1.0,
+        "collisions.mean": 0.0,
+        "near_misses.mean": 0.0,
+        "time_to_goal_norm.mean": 0.43,
+        "path_efficiency.mean": 1.0
+      }
+    },
+    "social_force": {
+      "minimum_success_mean": 0.0,
+      "maximum_collisions_mean": 0.0,
+      "maximum_near_misses_mean": 0.0,
+      "reference_metrics": {
+        "success.mean": 0.0,
+        "collisions.mean": 0.0,
+        "near_misses.mean": 0.0,
+        "time_to_goal_norm.mean": 1.0,
+        "path_efficiency.mean": 0.4494523127222878
+      }
+    },
+    "orca": {
+      "minimum_success_mean": 1.0,
+      "maximum_collisions_mean": 0.0,
+      "maximum_near_misses_mean": 0.0,
+      "reference_metrics": {
+        "success.mean": 1.0,
+        "collisions.mean": 0.0,
+        "near_misses.mean": 0.0,
+        "time_to_goal_norm.mean": 0.24333333333333335,
+        "path_efficiency.mean": 1.0
+      }
+    }
+  }
+}

@@ -145,6 +145,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1052 Claim-Language Audit](issue_1052_claim_language_audit.md)
   records the benchmark-set claim boundary for issue-791 paper wording and marks stale OOD /
   transfer language as historical rather than current manuscript scope.
+* [Issue #1074 Robot-SF Worked-Example Pack](issue_1074_robot_sf_worked_example_pack.md)
+  curates three retained h500 examples that map scenario class, actor mix, metric layer,
+  failure-pattern vocabulary, durable evidence, and claim/non-claim boundaries.
 * [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as

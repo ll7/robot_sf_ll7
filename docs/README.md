@@ -158,7 +158,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
+* **[Planner Adapter Starter Template](./dev/planner_adapter_template.md)** - Copy-and-adapt path plus a diagnostic reference adapter for new local planner contributions
 * **[Issue #589 Public Leaderboard MVP Boundary](./context/issue_589_public_leaderboard_mvp.md)** - Conservative no-implementation-now decision and future PR-based leaderboard prerequisites
+* **[Issue #1087 Planner Adapter Starter Template](./context/issue_1087_planner_adapter_template.md)** - Decision record for the reference adapter, docs, and validation path
 * **[Policy Search Context](./context/policy_search/README.md)** - File-based local policy-search workflow with candidate registry, staged evaluation funnel, emitted reports, and SLURM handoff notes for expensive follow-up work
 * **[Issue #1023 Scenario-Horizon Benchmark Surface](./context/issue_1023_scenario_horizon_benchmark.md)** - Runnable h500 scenario-horizon benchmark config, local non-Slurm full campaign evidence, fixed-vs-scenario comparison, and conservative promotion boundary
 * **[Issue #1023 Experimental Benchmark Candidates](./context/issue_1023_experimental_benchmark_candidates.md)** - Rationale and caveats for adding `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress_static_escape` to the long-horizon benchmark as experimental challengers

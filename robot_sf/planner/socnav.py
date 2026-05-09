@@ -538,6 +538,101 @@ class SocNavPlannerConfig:
     predictive_phase_recover_weight: float = 1.5
 
 
+class TrivialReferencePlannerAdapter(OccupancyAwarePlannerMixin):
+    """Minimal deterministic adapter for contributor templates and smoke tests.
+
+    This adapter exists to document the real Robot SF local-planner adapter
+    contract: accept a SocNav structured observation and return a bounded
+    ``(linear_velocity, angular_velocity)`` command. It is diagnostic only and
+    must not be cited as benchmark planner evidence.
+    """
+
+    def __init__(self, config: SocNavPlannerConfig | None = None) -> None:
+        """Initialize the reference adapter with normal SocNav speed limits."""
+        self.config = config or SocNavPlannerConfig()
+        self._steps = 0
+
+    def reset(self, *, seed: int | None = None) -> None:
+        """Reset deterministic runtime counters.
+
+        The optional seed is accepted for compatibility with stateful adapters.
+        """
+        del seed
+        self._steps = 0
+
+    def configure(self, config: SocNavPlannerConfig | None = None) -> None:
+        """Replace the adapter configuration."""
+        self.config = config or SocNavPlannerConfig()
+
+    def close(self) -> None:
+        """Release adapter resources.
+
+        The reference adapter holds no external resources, but real adapters
+        should use this hook for model sessions, files, or simulator handles.
+        """
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return lightweight runtime diagnostics for episode metadata."""
+        return {
+            "adapter": "TrivialReferencePlannerAdapter",
+            "steps": self._steps,
+            "contract": "diagnostic_reference_only",
+        }
+
+    @staticmethod
+    def _wrap_angle(angle: float) -> float:
+        """Wrap an angle to the ``[-pi, pi]`` interval.
+
+        Returns:
+            float: Wrapped angle in radians.
+        """
+        while angle > pi:
+            angle -= 2 * pi
+        while angle < -pi:
+            angle += 2 * pi
+        return angle
+
+    def plan(self, observation: dict) -> tuple[float, float]:
+        """Return a bounded goal-facing command from a SocNav observation.
+
+        Args:
+            observation: SocNav structured observation with ``robot`` and
+                ``goal`` fields, or the flattened map-runner equivalent.
+
+        Returns:
+            tuple[float, float]: Bounded ``(v, omega)`` command.
+        """
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = self._as_1d_float(robot_state.get("position", [0.0, 0.0]), pad=2)[:2]
+        heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        goal = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
+
+        goal_delta = goal - robot_pos
+        distance = float(np.linalg.norm(goal_delta))
+        self._steps += 1
+        if distance <= float(self.config.goal_tolerance):
+            return 0.0, 0.0
+
+        desired_heading = float(atan2(goal_delta[1], goal_delta[0]))
+        heading_error = self._wrap_angle(desired_heading - heading)
+        angular = float(
+            np.clip(
+                float(self.config.angular_gain) * heading_error,
+                -float(self.config.max_angular_speed),
+                float(self.config.max_angular_speed),
+            )
+        )
+        alignment = max(0.0, 1.0 - abs(heading_error) / pi)
+        linear = float(
+            np.clip(
+                distance * alignment,
+                0.0,
+                float(self.config.max_linear_speed),
+            )
+        )
+        return linear, angular
+
+
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
     """
     Minimal waypoint-to-velocity adapter inspired by the SocNavBench sampling planner.

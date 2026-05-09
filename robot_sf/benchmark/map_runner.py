@@ -132,6 +132,7 @@ from robot_sf.planner.socnav import (
     SocialForcePlannerAdapter,
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
+    TrivialReferencePlannerAdapter,
 )
 from robot_sf.planner.sonic_crowdnav import (
     SonicCrowdNavAdapter,
@@ -192,6 +193,8 @@ _SOCNAV_ALGO_KEYS = {
     "gst_predictor_rand_guarded",
     "sicnav",
     "dr_mpc",
+    "trivial_reference",
+    "reference_adapter",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -1248,6 +1251,22 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="RiskDWAPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key in {"trivial_reference", "reference_adapter"}:
+        adapter = TrivialReferencePlannerAdapter(config=_build_socnav_config(algo_config))
+        meta["algorithm"] = "trivial_reference"
+        return _build_adapter_policy(
+            algo_key="trivial_reference",
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="TrivialReferencePlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations=(
+                "Diagnostic adapter template only; do not use as benchmark planner evidence."
+            ),
         )
 
     if algo_key == "policy_stack_v1":

@@ -133,6 +133,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1055 Exposure-Aware H500 Tables](issue_1055_exposure_aware_h500_tables.md)
   defines and populates representative h500 reporting tables that place completion gains beside
   duration, collision, near-miss, force-exposure, and comfort-exposure rates.
+* [Issue #1059 Deferred Planner-Improvement Program](issue_1059_deferred_planner_improvement_program.md)
+  links the #1049/#1056 trace evidence to the first targeted planner child (#1034/#1036), records
+  the strict h500 incumbent envelope, and keeps full-matrix promotion deferred to #1113.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.

@@ -153,3 +153,102 @@ def test_compute_aggregates_with_ci_shape_and_determinism(tmp_path: Path):
         bootstrap_seed=123,
     )
     assert summary_ci == summary_ci_2
+
+
+def test_compute_aggregates_flattens_pedestrian_impact_block() -> None:
+    """Schema-backed pedestrian-impact reductions should aggregate without custom parsing."""
+    records = [
+        {
+            "episode_id": "ep-1",
+            "scenario_id": "sc-1",
+            "seed": 1,
+            "algo": "planner-a",
+            "metric_parameters": {
+                "threshold_signature": "default",
+                "threshold_profile": {
+                    "profile_id": "default",
+                    "collision_distance_m": 0.3,
+                    "near_miss_distance_m": 0.6,
+                    "comfort_force_threshold": 2.0,
+                },
+            },
+            "metrics": {
+                "success": True,
+                "pedestrian_impact": {
+                    "schema_version": "pedestrian-impact.v1",
+                    "parameters": {"near_radius_m": 2.0, "window_steps": 1.0},
+                    "units": {
+                        "accel": "m/s^2",
+                        "turn_rate": "rad/s",
+                        "near_radius": "m",
+                        "sample_counts": "samples",
+                        "sample_fraction": "fraction",
+                    },
+                    "sample_counts": {
+                        "pedestrians": 1.0,
+                        "near_samples": 4.0,
+                        "far_samples": 5.0,
+                        "near_sample_frac": 4.0 / 9.0,
+                    },
+                    "canonical_reductions": {
+                        "accel_delta_mean": 0.5,
+                        "accel_delta_median": 0.4,
+                        "accel_delta_valid_pedestrians": 1.0,
+                        "turn_rate_delta_mean": 0.2,
+                        "turn_rate_delta_median": 0.1,
+                        "turn_rate_delta_valid_pedestrians": 1.0,
+                    },
+                },
+            },
+        },
+        {
+            "episode_id": "ep-2",
+            "scenario_id": "sc-1",
+            "seed": 2,
+            "algo": "planner-a",
+            "metric_parameters": {
+                "threshold_signature": "default",
+                "threshold_profile": {
+                    "profile_id": "default",
+                    "collision_distance_m": 0.3,
+                    "near_miss_distance_m": 0.6,
+                    "comfort_force_threshold": 2.0,
+                },
+            },
+            "metrics": {
+                "success": True,
+                "pedestrian_impact": {
+                    "schema_version": "pedestrian-impact.v1",
+                    "parameters": {"near_radius_m": 2.0, "window_steps": 1.0},
+                    "units": {
+                        "accel": "m/s^2",
+                        "turn_rate": "rad/s",
+                        "near_radius": "m",
+                        "sample_counts": "samples",
+                        "sample_fraction": "fraction",
+                    },
+                    "sample_counts": {
+                        "pedestrians": 1.0,
+                        "near_samples": 6.0,
+                        "far_samples": 6.0,
+                        "near_sample_frac": 0.5,
+                    },
+                    "canonical_reductions": {
+                        "accel_delta_mean": 1.5,
+                        "accel_delta_median": 1.4,
+                        "accel_delta_valid_pedestrians": 1.0,
+                        "turn_rate_delta_mean": 0.6,
+                        "turn_rate_delta_median": 0.5,
+                        "turn_rate_delta_valid_pedestrians": 1.0,
+                    },
+                },
+            },
+        },
+    ]
+
+    summary = compute_aggregates(records, group_by="algo")
+
+    metrics = summary["planner-a"]
+    assert metrics["ped_impact_accel_delta_mean"]["mean"] == 1.0
+    assert metrics["ped_impact_turn_rate_delta_mean"]["mean"] == 0.4
+    assert metrics["ped_impact_near_samples"]["mean"] == 5.0

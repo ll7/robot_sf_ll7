@@ -2596,6 +2596,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -2779,6 +2782,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             horizon=horizon_val,
             shortest_path_len=shortest_path,
             robot_max_speed=_robot_max_speed(config),
+            experimental_ped_impact=experimental_ped_impact,
+            ped_impact_radius_m=ped_impact_radius_m,
+            ped_impact_window_steps=ped_impact_window_steps,
         )
     impact = algo_meta.get("adapter_impact")
     if isinstance(impact, dict) and bool(impact.get("requested", False)):
@@ -2916,6 +2922,9 @@ def _run_map_job_worker(
         algo_config_path=params.get("algo_config_path"),
         scenario_path=Path(params.get("scenario_path")),
         adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
+        experimental_ped_impact=bool(params.get("experimental_ped_impact", False)),
+        ped_impact_radius_m=float(params.get("ped_impact_radius_m", 2.0)),
+        ped_impact_window_steps=int(params.get("ped_impact_window_steps", 5)),
     )
 
 
@@ -3047,6 +3056,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_profile: BenchmarkProfile = "baseline-safe",
     socnav_missing_prereq_policy: str = "fail-fast",
     adapter_impact_eval: bool = False,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -3207,6 +3219,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),
         "adapter_impact_eval": bool(adapter_impact_eval),
+        "experimental_ped_impact": bool(experimental_ped_impact),
+        "ped_impact_radius_m": float(ped_impact_radius_m),
+        "ped_impact_window_steps": int(ped_impact_window_steps),
     }
 
     total_jobs = len(jobs)

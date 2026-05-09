@@ -474,6 +474,7 @@ Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_m
 
 * [Per-pedestrian force quantiles demo](../examples/benchmarks/per_ped_force_quantiles_demo.py) - Script comparing aggregated vs per-ped force quantiles
 * [**Issue 503 Pedestrian-Impact Metrics Notes**](./context/issue_503_pedestrian_impact_metrics.md) - Execution notes for the optional experimental `ped_impact_*` metric group
+* [**Issue 1085 Pedestrian-Impact Aggregate Metrics**](./context/issue_1085_pedestrian_impact_metrics.md) - Schema-backed `pedestrian-impact.v1` block, aggregate reduction path, and opt-in CLI contract
 
 ### 📁 Media Resources
 

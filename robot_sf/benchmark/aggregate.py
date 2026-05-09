@@ -165,10 +165,34 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     }
     metrics = dict(rec.get("metrics") or {})
     fq = metrics.pop("force_quantiles", {}) or {}
+    ped_impact = metrics.pop("pedestrian_impact", {}) or {}
     # Flatten known force quantiles
     for qk in ("q50", "q90", "q95"):
         key = f"force_{qk}"
         base[key] = fq.get(qk)
+    # Flatten the schema-backed pedestrian-impact block for records that do not also carry
+    # legacy flat ped_impact_* keys.
+    if isinstance(ped_impact, dict):
+        reductions = ped_impact.get("canonical_reductions") or {}
+        if isinstance(reductions, dict):
+            for source_key, target_key in (
+                ("accel_delta_mean", "ped_impact_accel_delta_mean"),
+                ("accel_delta_median", "ped_impact_accel_delta_median"),
+                ("accel_delta_valid_pedestrians", "ped_impact_accel_delta_valid"),
+                ("turn_rate_delta_mean", "ped_impact_turn_rate_delta_mean"),
+                ("turn_rate_delta_median", "ped_impact_turn_rate_delta_median"),
+                ("turn_rate_delta_valid_pedestrians", "ped_impact_turn_rate_delta_valid"),
+            ):
+                base[target_key] = reductions.get(source_key)
+        sample_counts = ped_impact.get("sample_counts") or {}
+        if isinstance(sample_counts, dict):
+            for source_key, target_key in (
+                ("pedestrians", "ped_impact_ped_count"),
+                ("near_samples", "ped_impact_near_samples"),
+                ("far_samples", "ped_impact_far_samples"),
+                ("near_sample_frac", "ped_impact_near_sample_frac"),
+            ):
+                base[target_key] = sample_counts.get(source_key)
     # Remainder metrics (flat numbers)
     base.update(metrics)
     return base

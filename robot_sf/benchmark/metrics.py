@@ -2376,6 +2376,7 @@ def post_process_metrics(
     if snqi_weights is not None:
         snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
         metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
+    _attach_pedestrian_impact_block(metrics)
     for count_key in (
         "collisions",
         "ped_collision_count",
@@ -2397,6 +2398,51 @@ def post_process_metrics(
             except Exception:  # pragma: no cover
                 pass
     return _sanitize_metrics(metrics)
+
+
+def _attach_pedestrian_impact_block(metrics: dict[str, Any]) -> None:
+    """Attach a schema-backed pedestrian-impact block when flat opt-in metrics are present."""
+    if "ped_impact_radius_m" not in metrics:
+        return
+
+    metrics["pedestrian_impact"] = {
+        "schema_version": "pedestrian-impact.v1",
+        "parameters": {
+            "near_radius_m": metrics.get("ped_impact_radius_m"),
+            "window_steps": metrics.get("ped_impact_window_steps"),
+        },
+        "units": {
+            "accel": "m/s^2",
+            "turn_rate": "rad/s",
+            "near_radius": "m",
+            "sample_counts": "samples",
+            "sample_fraction": "fraction",
+        },
+        "sample_counts": {
+            "pedestrians": metrics.get("ped_impact_ped_count"),
+            "near_samples": metrics.get("ped_impact_near_samples"),
+            "far_samples": metrics.get("ped_impact_far_samples"),
+            "near_sample_frac": metrics.get("ped_impact_near_sample_frac"),
+        },
+        "canonical_reductions": {
+            "accel_delta_mean": metrics.get("ped_impact_accel_delta_mean"),
+            "accel_delta_median": metrics.get("ped_impact_accel_delta_median"),
+            "accel_delta_valid_pedestrians": metrics.get("ped_impact_accel_delta_valid"),
+            "turn_rate_delta_mean": metrics.get("ped_impact_turn_rate_delta_mean"),
+            "turn_rate_delta_median": metrics.get("ped_impact_turn_rate_delta_median"),
+            "turn_rate_delta_valid_pedestrians": metrics.get("ped_impact_turn_rate_delta_valid"),
+        },
+        "component_means": {
+            "accel_near_mean": metrics.get("ped_impact_accel_near_mean"),
+            "accel_far_mean": metrics.get("ped_impact_accel_far_mean"),
+            "turn_rate_near_mean": metrics.get("ped_impact_turn_rate_near_mean"),
+            "turn_rate_far_mean": metrics.get("ped_impact_turn_rate_far_mean"),
+        },
+        "interpretation": (
+            "Near-vs-far pedestrian motion deltas; positive deltas mean larger values while "
+            "pedestrians are within the configured near radius than while farther away."
+        ),
+    }
 
 
 def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:

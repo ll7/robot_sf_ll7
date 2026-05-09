@@ -1994,6 +1994,9 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert record["metrics"]["success"] == 0.0
     algo_md = record["algorithm_metadata"]
     assert algo_md["baseline_category"] == "classical"
+    assert record["observation_mode"] == "goal_state"
+    assert record["scenario_params"]["observation_mode"] == "goal_state"
+    assert algo_md["observation_spec"]["active_mode"] == "goal_state"
     assert algo_md["planner_kinematics"]["robot_kinematics"] in {"unknown", "differential_drive"}
     feasibility = algo_md.get("kinematics_feasibility")
     assert isinstance(feasibility, dict)
@@ -2576,9 +2579,17 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
     )
     monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    captured_params: list[dict[str, object]] = []
+
+    def _fake_run_map_job_worker(job):
+        """Capture fixed params propagated to map workers."""
+        _scenario, _seed, params = job
+        captured_params.append(dict(params))
+        return {"episode_id": "ep1"}
+
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner._run_map_job_worker",
-        lambda job: {"episode_id": "ep1"},
+        _fake_run_map_job_worker,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner._write_validated",
@@ -2590,10 +2601,15 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         [scenario],
         out_path,
         schema_path=tmp_path / "schema.json",
+        observation_mode="socnav_state",
         workers=1,
         resume=False,
     )
     assert result["written"] == 1
+    assert captured_params[0]["observation_mode"] == "socnav_state"
+    assert result["algorithm_metadata_contract"]["observation_spec"]["active_mode"] == (
+        "socnav_state"
+    )
     assert result["algorithm_metadata_contract"]["baseline_category"] == "classical"
     assert result["algorithm_metadata_contract"]["planner_kinematics"]["robot_kinematics"] in {
         "unknown",
@@ -2614,6 +2630,27 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         resume=True,
     )
     assert result["written"] == 0
+
+
+def test_run_map_batch_rejects_unsupported_observation_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unsupported planner observation-mode overrides should fail before writing episodes."""
+    scenario = {"name": "s1", "metadata": {"supported": True}}
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+
+    with pytest.raises(ValueError, match="Observation mode 'goal_state' is not supported"):
+        run_map_batch(
+            [scenario],
+            tmp_path / "episodes.jsonl",
+            schema_path=tmp_path / "schema.json",
+            algo="orca",
+            observation_mode="goal_state",
+            workers=1,
+            resume=False,
+        )
 
 
 def test_run_map_batch_parallel_writes_results_in_job_order(

@@ -46,6 +46,7 @@ def test_resume_identity_is_algorithm_aware(
             horizon=params.get("horizon"),
             dt=params.get("dt"),
             record_forces=bool(params.get("record_forces", True)),
+            observation_mode=params.get("observation_mode"),
         )
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
@@ -100,6 +101,7 @@ def test_resume_identity_includes_algo_config_hash(
             horizon=params.get("horizon"),
             dt=params.get("dt"),
             record_forces=bool(params.get("record_forces", True)),
+            observation_mode=params.get("observation_mode"),
         )
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
@@ -166,3 +168,30 @@ def test_scenario_identity_ignores_seed_schedule_fields() -> None:
     episode_a = map_runner._compute_map_episode_id(payload_a, seed=1)
     episode_b = map_runner._compute_map_episode_id(payload_b, seed=1)
     assert episode_a == episode_b
+
+
+def test_scenario_identity_includes_observation_mode() -> None:
+    """Observation-mode parity runs should not collide in resume identity."""
+    scenario = _minimal_map_scenario()
+    goal_state_payload = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        observation_mode="goal_state",
+    )
+    socnav_state_payload = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        observation_mode="socnav_state",
+    )
+
+    assert map_runner._compute_map_episode_id(goal_state_payload, seed=1) != (
+        map_runner._compute_map_episode_id(socnav_state_payload, seed=1)
+    )

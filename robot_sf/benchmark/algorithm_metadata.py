@@ -106,6 +106,111 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "nmpc_social": "nonlinear_model_predictive_local_planner",
 }
 
+_DEFAULT_OBSERVATION_SPEC: dict[str, Any] = {
+    "default_mode": "socnav_state",
+    "supported_modes": ("socnav_state",),
+    "inputs": ("robot_state", "goal", "pedestrians"),
+    "notes": (
+        "Structured Robot SF social-navigation state: robot pose/velocity, route goal, "
+        "and pedestrian state when present."
+    ),
+}
+
+_OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
+    "goal": {
+        "default_mode": "goal_state",
+        "supported_modes": ("goal_state", "socnav_state"),
+        "inputs": ("robot_state", "goal"),
+        "notes": (
+            "Goal baseline consumes robot and goal state only; it can run under socnav_state "
+            "as a parity control because extra pedestrian channels are ignored."
+        ),
+    },
+    "social_force": _DEFAULT_OBSERVATION_SPEC,
+    "orca": _DEFAULT_OBSERVATION_SPEC,
+    "hrvo": _DEFAULT_OBSERVATION_SPEC,
+    "socnav_orca_nonholonomic": _DEFAULT_OBSERVATION_SPEC,
+    "socnav_orca_dd": _DEFAULT_OBSERVATION_SPEC,
+    "socnav_orca_relaxed": _DEFAULT_OBSERVATION_SPEC,
+    "socnav_hrvo": _DEFAULT_OBSERVATION_SPEC,
+    "social_navigation_pyenvs_orca": _DEFAULT_OBSERVATION_SPEC,
+    "social_navigation_pyenvs_socialforce": _DEFAULT_OBSERVATION_SPEC,
+    "social_navigation_pyenvs_sfm_helbing": _DEFAULT_OBSERVATION_SPEC,
+    "social_navigation_pyenvs_hsfm_new_guo": {
+        "default_mode": "headed_socnav_state",
+        "supported_modes": ("headed_socnav_state",),
+        "inputs": ("robot_state", "robot_heading", "goal", "pedestrians"),
+        "notes": "Structured headed social-navigation state for HSFM-style adapters.",
+    },
+    "stream_gap": _DEFAULT_OBSERVATION_SPEC,
+    "gap_prediction": _DEFAULT_OBSERVATION_SPEC,
+    "risk_dwa": _DEFAULT_OBSERVATION_SPEC,
+    "mppi_social": _DEFAULT_OBSERVATION_SPEC,
+    "hybrid_portfolio": _DEFAULT_OBSERVATION_SPEC,
+    "hybrid_orca_sampler": _DEFAULT_OBSERVATION_SPEC,
+    "policy_stack_v1": _DEFAULT_OBSERVATION_SPEC,
+    "prediction_planner": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians", "history"),
+        "notes": "Predictive planner consumes structured SocNav state plus short history features.",
+    },
+    "predictive_mppi": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians", "prediction_model"),
+        "notes": "Predictive MPPI consumes SocNav state and learned prediction features.",
+    },
+    "ppo": {
+        "default_mode": "sensor_fusion_state",
+        "supported_modes": ("sensor_fusion_state",),
+        "inputs": ("robot_state", "goal", "lidar_rays", "history"),
+        "notes": "PPO checkpoint inference uses the configured sensor-fusion observation stack.",
+    },
+    "guarded_ppo": {
+        "default_mode": "sensor_fusion_state",
+        "supported_modes": ("sensor_fusion_state",),
+        "inputs": ("robot_state", "goal", "lidar_rays", "history", "safety_guard"),
+        "notes": "Guarded PPO uses sensor-fusion policy inputs plus a local safety guard.",
+    },
+    "crowdnav_height": {
+        "default_mode": "lidar_human_state",
+        "supported_modes": ("lidar_human_state",),
+        "inputs": ("robot_state", "goal", "lidar_rays", "humans"),
+        "notes": "CrowdNav HEIGHT wrapper reconstructs the upstream lidar-plus-human dict input.",
+    },
+    "sonic_crowdnav": {
+        "default_mode": "gst_human_state",
+        "supported_modes": ("gst_human_state",),
+        "inputs": ("robot_state", "goal", "humans"),
+        "notes": "SoNIC/GenSafeNav-style GST checkpoint input contract.",
+    },
+    "gensafenav_ours_gst": {
+        "default_mode": "gst_human_state",
+        "supported_modes": ("gst_human_state",),
+        "inputs": ("robot_state", "goal", "humans"),
+        "notes": "GenSafeNav Ours_GST checkpoint input contract.",
+    },
+    "gensafenav_ours_gst_guarded": {
+        "default_mode": "gst_human_state",
+        "supported_modes": ("gst_human_state",),
+        "inputs": ("robot_state", "goal", "humans", "safety_guard"),
+        "notes": "Guarded GenSafeNav Ours_GST checkpoint input contract.",
+    },
+    "gensafenav_gst_predictor_rand": {
+        "default_mode": "gst_human_state",
+        "supported_modes": ("gst_human_state",),
+        "inputs": ("robot_state", "goal", "humans"),
+        "notes": "GenSafeNav GST_predictor_rand checkpoint input contract.",
+    },
+    "gensafenav_gst_predictor_rand_guarded": {
+        "default_mode": "gst_human_state",
+        "supported_modes": ("gst_human_state",),
+        "inputs": ("robot_state", "goal", "humans", "safety_guard"),
+        "notes": "Guarded GenSafeNav GST_predictor_rand checkpoint input contract.",
+    },
+}
+
 _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "orca": {
         "repo_url": "https://github.com/mit-acl/Python-RVO2",
@@ -750,6 +855,49 @@ def canonical_algorithm_name(algo: str) -> str:
     return readiness.canonical_name if readiness is not None else alias
 
 
+def observation_spec_for_algorithm(algo: str) -> dict[str, Any]:
+    """Return the declared observation contract for an algorithm.
+
+    Returns:
+        dict[str, Any]: Stable observation-spec payload with default and supported modes.
+    """
+    canonical = canonical_algorithm_name(algo)
+    spec = _OBSERVATION_SPEC_BY_CANONICAL.get(canonical, _DEFAULT_OBSERVATION_SPEC)
+    return {
+        "default_mode": str(spec["default_mode"]),
+        "supported_modes": [str(mode) for mode in spec["supported_modes"]],
+        "inputs": [str(value) for value in spec.get("inputs", ())],
+        "notes": str(spec.get("notes", "")),
+    }
+
+
+def resolve_observation_mode(algo: str, requested_mode: str | None = None) -> str:
+    """Resolve and validate the active observation mode for an algorithm.
+
+    Args:
+        algo: Algorithm label or alias.
+        requested_mode: Optional explicit observation mode override.
+
+    Returns:
+        The active observation mode.
+
+    Raises:
+        ValueError: If ``requested_mode`` is unsupported for ``algo``.
+    """
+    spec = observation_spec_for_algorithm(algo)
+    default_mode = str(spec["default_mode"])
+    requested = str(requested_mode).strip() if requested_mode is not None else ""
+    active_mode = requested or default_mode
+    supported = tuple(str(mode) for mode in spec["supported_modes"])
+    if active_mode not in supported:
+        supported_text = ", ".join(supported)
+        raise ValueError(
+            f"Observation mode '{active_mode}' is not supported by algorithm "
+            f"'{canonical_algorithm_name(algo)}'. Supported modes: {supported_text}."
+        )
+    return active_mode
+
+
 def _base_kinematics_metadata(
     canonical_algo: str,
     *,
@@ -793,6 +941,7 @@ def enrich_algorithm_metadata(
     adapter_name: str | None = None,
     robot_kinematics: str | None = None,
     adapter_impact_requested: bool | None = None,
+    observation_mode: str | None = None,
 ) -> dict[str, Any]:
     """Return metadata enriched with baseline category and compatibility fields.
 
@@ -803,6 +952,7 @@ def enrich_algorithm_metadata(
         adapter_name: Optional runtime adapter override.
         robot_kinematics: Optional robot kinematics tag for this episode/run.
         adapter_impact_requested: Optional marker that adapter-impact probing was requested.
+        observation_mode: Optional runtime observation-mode override.
 
     Returns:
         A metadata dictionary with stable benchmark contract keys.
@@ -825,6 +975,16 @@ def enrich_algorithm_metadata(
     upstream_reference = _UPSTREAM_REFERENCE_BY_CANONICAL.get(canonical)
     if upstream_reference is not None:
         enriched.setdefault("upstream_reference", dict(upstream_reference))
+
+    active_observation_mode = resolve_observation_mode(canonical, observation_mode)
+    observation_spec = observation_spec_for_algorithm(canonical)
+    observation_spec["active_mode"] = active_observation_mode
+    observation_spec["override_applied"] = bool(
+        observation_mode is not None
+        and str(observation_mode).strip()
+        and active_observation_mode != observation_spec["default_mode"]
+    )
+    enriched["observation_spec"] = observation_spec
 
     current_kinematics = enriched.get("planner_kinematics")
     base_kinematics = _base_kinematics_metadata(
@@ -881,4 +1041,6 @@ __all__ = [
     "canonical_algorithm_name",
     "enrich_algorithm_metadata",
     "infer_execution_mode_from_counts",
+    "observation_spec_for_algorithm",
+    "resolve_observation_mode",
 ]

@@ -145,3 +145,6 @@ uv run python scripts/tools/policy_analysis_run.py \
 - `sets/station_platform_candidate_pack_issue736.yaml` is an exploratory station-platform
   variant pack. Keep it out of the default classic matrix until a benchmark run shows
   distinct value beyond corridor, bottleneck, doorway, and group-crossing controls.
+- `sanity_v1.yaml` is a non-paper-facing nominal calibration manifest for issue #1083. It selects
+  four low-ambiguity scenes from existing validated surfaces so `goal` and `orca` can be checked
+  on easy deployment-like cases before hard-matrix failures are interpreted.

@@ -97,6 +97,12 @@ Current promoted all-planners baseline run:
     `hybrid_rule_v3_fast_progress_static_escape`
   + disables publication bundle export because the candidate-augmented local full run completed but
     has SNQI contract status `fail` under warn enforcement
+* `configs/benchmarks/sanity_v1_smoke.yaml`
+  + non-paper-facing nominal calibration smoke for issue #1083
+  + runs `configs/scenarios/sanity_v1.yaml` with fixed seed `111`, differential-drive kinematics,
+    and the baseline-safe `goal` plus `orca` planners
+  + use it to confirm baseline competence on easier deployment-like scenes before interpreting
+    hard-matrix failures; it is not a replacement for the paper or h500 stress surfaces
 * `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
   + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
   + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,

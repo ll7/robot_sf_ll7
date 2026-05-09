@@ -139,6 +139,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
   provides reusable paper/report wording for h500 as a long-horizon sensitivity surface and marks
   unsafe winner-table, wait-then-go, and SNQI calibration claims.
+* [Issue #1083 Sanity V1 Nominal Matrix](issue_1083_sanity_v1_nominal_matrix.md)
+  records the non-paper-facing nominal calibration matrix, smoke config, baseline threshold, and
+  local proof run for easier deployment-like scenes.
 * [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
   defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
   pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.

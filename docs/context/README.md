@@ -139,6 +139,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
   provides reusable paper/report wording for h500 as a long-horizon sensitivity surface and marks
   unsafe winner-table, wait-then-go, and SNQI calibration claims.
+* [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
+  records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
+  fleet-integration boundary.
 * [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
   defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
   pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.

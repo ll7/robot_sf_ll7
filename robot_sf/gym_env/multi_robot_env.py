@@ -81,7 +81,10 @@ class MultiRobotEnv(MultiAgentEnv):
         self.sim_worker_pool = None  # type: ignore[assignment]
         self.obs_worker_pool = None  # type: ignore[assignment]
 
-        map_def = env_config.map_pool.map_defs["uni_campus_big"]  # info: only use first map
+        if getattr(env_config, "map_id", None) in env_config.map_pool.map_defs:
+            map_def = env_config.map_pool.map_defs[env_config.map_id]
+        else:
+            map_def = next(iter(env_config.map_pool.map_defs.values()))
         action_space, observation_space, orig_obs_space = init_spaces(env_config, map_def)
 
         # Keep a reference to the per-agent spaces for later composition

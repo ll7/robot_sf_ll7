@@ -97,6 +97,13 @@ Current promoted all-planners baseline run:
     `hybrid_rule_v3_fast_progress_static_escape`
   + disables publication bundle export because the candidate-augmented local full run completed but
     has SNQI contract status `fail` under warn enforcement
+* `configs/benchmarks/paper_cross_kinematics_v1.yaml`
+  + issue #1082 cross-kinematics parity smoke surface
+  + uses `paper_profile_version=paper-cross-kinematics-v1` and exactly
+    `differential_drive`, `bicycle_drive`, and `holonomic`
+  + runs only the first supported core rows (`goal`, `social_force`, `orca`) on one
+    `classic_cross_trap_low` seed, with deferred planner coverage recorded in
+    `configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml`
 * `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
   + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
   + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,

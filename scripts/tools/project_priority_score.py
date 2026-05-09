@@ -45,6 +45,7 @@ MIN_IMPROVEMENT = MIN_SCORE_MULTIPLIER
 MAX_IMPROVEMENT = MAX_SCORE_MULTIPLIER
 MIN_SUCCESS_PROBABILITY = 0.0
 MAX_SUCCESS_PROBABILITY = 1.0
+SUCCESS_PROBABILITY_PERCENT_SCALE = 100.0
 
 EFFORT_FIELD = "Expected Duration in Hours"
 PRIORITY_SCORE_FIELD = "Priority Score"
@@ -138,6 +139,16 @@ def field_value(item: dict[str, Any], name: str) -> object:
     return None
 
 
+def _normalize_success_probability(raw: float | None) -> float:
+    """Return a 0-1 probability, accepting whole-percent project-field inputs."""
+
+    if raw is None:
+        return DEFAULT_SUCCESS_PROBABILITY
+    if raw > MAX_SUCCESS_PROBABILITY:
+        return raw / SUCCESS_PROBABILITY_PERCENT_SCALE
+    return raw
+
+
 def normalize_inputs(item: dict[str, Any]) -> ScoreInputs:
     """Extract and clamp score inputs from a project item payload."""
 
@@ -154,7 +165,7 @@ def normalize_inputs(item: dict[str, Any]) -> ScoreInputs:
             upper=MAX_IMPROVEMENT,
         ),
         success_probability=clamp(
-            success_probability if success_probability is not None else DEFAULT_SUCCESS_PROBABILITY,
+            _normalize_success_probability(success_probability),
             lower=MIN_SUCCESS_PROBABILITY,
             upper=MAX_SUCCESS_PROBABILITY,
         ),
@@ -342,6 +353,7 @@ class GhProjectClient:
     ) -> None:
         """Write a numeric field value back to the project item."""
 
+        number_literal = format(number, ".8g")
         self.run(
             "project",
             "item-edit",
@@ -352,7 +364,7 @@ class GhProjectClient:
             "--field-id",
             field_id,
             "--number",
-            f"{number:.6f}",
+            number_literal,
         )
 
 

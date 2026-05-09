@@ -113,7 +113,7 @@ def test_normalize_inputs_clamps_and_defaults() -> None:
 
     assert inputs == ScoreInputs(
         improvement=10.0,
-        success_probability=1.0,
+        success_probability=0.017,
         effort_hours=0.1,
         time_criticality=9.0,
         unlock_factor=0.1,
@@ -132,6 +132,20 @@ def test_normalize_inputs_clamps_and_defaults() -> None:
     defaulted = normalize_inputs({})
     assert defaulted.success_probability == DEFAULT_SUCCESS_PROBABILITY
     assert defaulted.effort_hours == 1.0
+
+
+def test_normalize_inputs_accepts_percent_scale_success_probability() -> None:
+    """Verify whole-percent inputs normalize without breaking 0-1 probabilities.
+
+    This matters because GitHub project number fields may be entered as either
+    fractional probabilities or whole percentages, and the scoring model needs
+    one consistent 0-1 representation before ranking work.
+    """
+
+    assert normalize_inputs({"success probability": 1.0}).success_probability == 1.0
+    assert normalize_inputs({"success probability": 1.7}).success_probability == 0.017
+    assert normalize_inputs({"success probability": 5}).success_probability == 0.05
+    assert normalize_inputs({"success probability": 60}).success_probability == 0.6
 
 
 def test_build_previews_skips_done_and_rounds_scores() -> None:

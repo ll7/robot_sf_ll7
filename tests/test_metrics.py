@@ -19,6 +19,7 @@ from robot_sf.benchmark.metrics import (
     snqi,
     time_to_goal,
 )
+from robot_sf.benchmark.termination_reason import canonicalize_collision_metrics
 
 
 def _make_episode(T: int, K: int) -> EpisodeData:
@@ -416,7 +417,14 @@ def test_episode_schema_accepts_ped_force_metrics():
 
     ep = _make_episode(T=3, K=1)
     ep.ped_forces[..., 0] = 2.0  # ensure finite force data
-    metrics = compute_all_metrics(ep, horizon=5)
+    metrics = canonicalize_collision_metrics(
+        post_process_metrics(
+            compute_all_metrics(ep, horizon=5),
+            snqi_weights=None,
+            snqi_baseline=None,
+        ),
+        collision=False,
+    )
     record = {
         "version": "v1",
         "episode_id": "demo-1",

@@ -79,6 +79,16 @@ class TestValidateEpisodeSuccessIntegrity:
         violations = validate_episode_success_integrity(record)
         assert violations
 
+    def test_outcome_collision_flag_requires_canonical_metric(self):
+        """A collision outcome without the canonical metric flag should be rejected."""
+        record = {
+            "termination_reason": "collision",
+            "metrics": {"success": 0.0, "collisions": 0.0},
+            "outcome": {"route_complete": False, "collision_event": True, "timeout_event": False},
+        }
+        violations = validate_episode_success_integrity(record)
+        assert "outcome.collision_event=true but metrics.collisions <= 0" in violations
+
     def test_consistent_record_has_no_violations(self):
         """Consistent success/collision combinations should pass integrity checks."""
         record = {

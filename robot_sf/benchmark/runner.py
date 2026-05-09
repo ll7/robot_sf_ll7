@@ -57,6 +57,7 @@ from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
     build_outcome_payload,
+    canonicalize_collision_metrics,
     metric_scalar,
     outcome_contradictions,
     resolve_termination_reason,
@@ -1002,6 +1003,7 @@ def run_episode(  # noqa: PLR0913
         collision=collision,
         timeout=not ended,
     )
+    metrics = canonicalize_collision_metrics(metrics, collision=collision)
 
     # Build record
     scenario_params_record = dict(scenario_params)

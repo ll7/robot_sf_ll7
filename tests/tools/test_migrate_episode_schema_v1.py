@@ -76,3 +76,19 @@ def test_migrate_record_normalizes_existing_termination_reason_token() -> None:
     }
     migrated = migrate_episode_schema_v1._migrate_record(record)
     assert migrated["termination_reason"] == "collision"
+
+
+def test_migrate_record_preserves_legacy_collision_counts_under_explicit_key() -> None:
+    """Legacy count-style collision values should survive under total_collision_count."""
+    record = {
+        "scenario_id": "s4",
+        "seed": 5,
+        "metrics": {"collisions": 3.0},
+        "status": "collision",
+    }
+
+    migrated = migrate_episode_schema_v1._migrate_record(record)
+
+    assert migrated["metrics"]["collisions"] == 1
+    assert migrated["metrics"]["total_collision_count"] == 3
+    assert migrated["outcome"]["collision_event"] is True

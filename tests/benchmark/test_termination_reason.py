@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from robot_sf.benchmark.termination_reason import (
+    canonicalize_collision_metrics,
     collision_event,
     outcome_contradictions,
     resolve_termination_reason,
@@ -136,6 +137,23 @@ def test_collision_event_reads_info_and_meta_flags() -> None:
     assert collision_event({"collision": True}) is True
     assert collision_event({"meta": {"is_obstacle_collision": True}}) is True
     assert collision_event({"meta": {"is_route_complete": True}}) is False
+
+
+def test_canonicalize_collision_metrics_preserves_explicit_counts() -> None:
+    """Canonical collision flag should keep richer count metrics on a separate key."""
+    metrics = canonicalize_collision_metrics(
+        {
+            "collisions": 3,
+            "ped_collision_count": 2,
+            "obstacle_collision_count": 1,
+        },
+        collision=True,
+    )
+
+    assert metrics["collisions"] == 1
+    assert metrics["total_collision_count"] == 3
+    assert metrics["ped_collision_count"] == 2
+    assert metrics["obstacle_collision_count"] == 1
 
 
 def test_outcome_contradictions_detect_success_mismatch() -> None:

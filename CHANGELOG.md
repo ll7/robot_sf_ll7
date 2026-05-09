@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+* Canonicalized benchmark episode collision encoding for new schema-v1 outputs: `metrics.collisions`
+  is now the authoritative 0/1 event flag matching `outcome.collision_event`, richer count-style
+  data remains under `total_collision_count` and component count fields, schema/integrity checks
+  now reject non-canonical payloads, and the migration tool preserves legacy count values when
+  rewriting older bundles.
+
 * Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`
   support in `robot_sf/training/scenario_loader.py`, the new
   `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` eval/training surface,

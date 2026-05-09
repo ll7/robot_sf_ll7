@@ -97,6 +97,31 @@ class TestSchemaConsolidationIntegration:
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(instance=invalid_episode, schema=schema)
 
+    def test_schema_rejects_noncanonical_collision_metric_value(self):
+        """Canonical collisions metric should be constrained to the episode-level event flag."""
+        import jsonschema
+
+        from robot_sf.benchmark.schema_loader import load_schema
+
+        schema = load_schema("episode.schema.v1.json")
+        invalid_episode = {
+            "version": "v1",
+            "episode_id": "test-episode-002",
+            "scenario_id": "test-scenario-002",
+            "seed": 99,
+            "metrics": {"collisions": 2, "total_collision_count": 2},
+            "termination_reason": "collision",
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "integrity": {"contradictions": []},
+        }
+
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(instance=invalid_episode, schema=schema)
+
     def test_schema_version_can_be_extracted(self):
         """Test that schema version can be extracted (FR-007)."""
         from robot_sf.benchmark.schema_loader import get_schema_version_string

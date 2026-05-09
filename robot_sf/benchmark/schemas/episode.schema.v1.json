@@ -246,6 +246,29 @@
         "metrics": {
             "type": "object",
             "minProperties": 1,
+            "properties": {
+                "collisions": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "ped_collision_count": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "obstacle_collision_count": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "agent_collision_count": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "total_collision_count": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            },
             "additionalProperties": {
                 "type": [
                     "number",

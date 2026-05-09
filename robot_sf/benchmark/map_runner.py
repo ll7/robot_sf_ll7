@@ -42,6 +42,7 @@ from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
     build_outcome_payload,
+    canonicalize_collision_metrics,
     collision_event,
     outcome_contradictions,
     resolve_termination_reason,
@@ -2830,6 +2831,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         collision=collision_seen,
         timeout=timeout_event,
     )
+    metrics = canonicalize_collision_metrics(metrics, collision=collision_seen)
     status = status_from_termination_reason(termination_reason)
     contradictions = outcome_contradictions(
         termination_reason=termination_reason,

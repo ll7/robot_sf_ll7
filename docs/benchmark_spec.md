@@ -151,7 +151,11 @@ Full details live in
 * `time_to_goal_norm_success_only`: same normalization, but only valid for successful episodes.
 * `time_to_goal_ideal_ratio`: success-only ratio of achieved time to ideal time
   (`shortest_path_len / robot_max_speed`).
-* `collisions`,  `near_misses`: counts based on distance thresholds.
+* `collisions`: canonical per-episode collision event flag (`0` or `1`) that must mirror
+  `outcome.collision_event` in new episode artifacts.
+* `total_collision_count`,  `ped_collision_count`,  `obstacle_collision_count`,
+  `agent_collision_count`: explicit count-style collision metrics preserved for richer analysis.
+* `near_misses`: count based on distance thresholds.
 * `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
 
 **Force/comfort**
@@ -193,6 +197,10 @@ Full details live in
   pedestrian has only near or only far samples.
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
+* Older bundles that stored count-like data in `metrics.collisions` should be migrated into a new
+  copy with `uv run python scripts/tools/migrate_episode_schema_v1.py --input <old.jsonl> --output <new.jsonl>`.
+  The migrated copy preserves the legacy count under `metrics.total_collision_count` while
+  rewriting `metrics.collisions` to the canonical event flag.
 
 ## Expected Schema & Provenance
 

@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.termination_reason import (
+    canonicalize_collision_metrics,
     outcome_contradictions,
     resolve_termination_reason,
 )
@@ -191,6 +192,10 @@ def _migrate_record(record: dict[str, Any]) -> dict[str, Any]:
     outcome = _infer_outcome(updated, termination_reason="")
     termination_reason = _infer_termination_reason(updated, outcome)
     outcome = _infer_outcome(updated, termination_reason=termination_reason)
+    updated["metrics"] = canonicalize_collision_metrics(
+        updated.get("metrics"),
+        collision=bool(outcome.get("collision_event")),
+    )
     updated["termination_reason"] = termination_reason
     updated["outcome"] = outcome
     integrity = updated.get("integrity")

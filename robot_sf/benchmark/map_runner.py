@@ -36,6 +36,14 @@ from robot_sf.benchmark.metrics import (
     compute_all_metrics,
     post_process_metrics,
 )
+from robot_sf.benchmark.observation_noise import (
+    apply_observation_noise,
+    make_observation_noise_rng,
+    merge_observation_noise_stats,
+    new_observation_noise_stats,
+    normalize_observation_noise_spec,
+    observation_noise_hash,
+)
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
@@ -2288,6 +2296,7 @@ def _scenario_identity_payload(
     horizon: int | None,
     dt: float | None,
     record_forces: bool,
+    observation_noise: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
 
@@ -2305,6 +2314,10 @@ def _scenario_identity_payload(
     payload["algo"] = str(algo)
     payload["algo_config_hash"] = _config_hash(algo_config)
     payload["record_forces"] = bool(record_forces)
+    noise_spec = normalize_observation_noise_spec(observation_noise)
+    if bool(noise_spec["enabled"]):
+        payload["observation_noise_profile"] = str(noise_spec["profile"])
+        payload["observation_noise_hash"] = observation_noise_hash(noise_spec)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
     if dt is not None and float(dt) > 0.0:
@@ -2596,6 +2609,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
+    observation_noise: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -2605,6 +2619,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
     scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
+    scenario_id = str(
+        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
+    )
+    noise_spec = normalize_observation_noise_spec(observation_noise)
+    noise_rng = make_observation_noise_rng(noise_spec, seed=seed, scenario_id=scenario_id)
+    noise_stats = new_observation_noise_stats()
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
@@ -2660,7 +2680,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     goal_vec = np.zeros(2, dtype=float)
     try:
         for step_idx in range(horizon_val):
-            policy_command = policy_fn(obs)
+            policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
+            merge_observation_noise_stats(noise_stats, step_noise_stats)
+            policy_command = policy_fn(policy_obs)
             # Use per-step flag when available (e.g. SAC with fallback); fall back to the
             # static cached value for planners that set _planner_native_env_action once.
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
@@ -2809,9 +2831,6 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
 
     ts_end = datetime.now(UTC).isoformat()
-    scenario_id = str(
-        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
-    )
     scenario_params = _scenario_identity_payload(
         scenario,
         algo=algo,
@@ -2819,6 +2838,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         horizon=horizon,
         dt=dt,
         record_forces=record_forces,
+        observation_noise=noise_spec,
     )
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - start_time))
@@ -2849,6 +2869,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "scenario_params": scenario_params,
         "metrics": metrics,
         "algorithm_metadata": algo_meta,
+        "observation_noise": noise_spec,
+        "observation_noise_hash": observation_noise_hash(noise_spec),
+        "observation_noise_stats": noise_stats,
         "algo": algo,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
@@ -2916,6 +2939,7 @@ def _run_map_job_worker(
         algo_config_path=params.get("algo_config_path"),
         scenario_path=Path(params.get("scenario_path")),
         adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
+        observation_noise=params.get("observation_noise"),
     )
 
 
@@ -3047,6 +3071,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_profile: BenchmarkProfile = "baseline-safe",
     socnav_missing_prereq_policy: str = "fail-fast",
     adapter_impact_eval: bool = False,
+    observation_noise: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -3069,6 +3094,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
 
     suite_seeds = _resolve_seed_list(Path("configs/benchmarks/seed_list_v1.yaml"))
     suite_key = _suite_key(scenario_path)
+    noise_spec = normalize_observation_noise_spec(observation_noise)
+    noise_hash = observation_noise_hash(noise_spec)
 
     filtered: list[dict[str, Any]] = []
     for scenario in scenarios:
@@ -3169,6 +3196,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             },
             "algorithm_metadata_contract": algo_contract,
             "preflight": preflight,
+            "observation_noise": noise_spec,
+            "observation_noise_hash": noise_hash,
         }
         summary["benchmark_availability"] = availability_payload(summary)
         return summary
@@ -3191,6 +3220,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     horizon=horizon,
                     dt=dt,
                     record_forces=record_forces,
+                    observation_noise=noise_spec,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
                     filtered_jobs.append((sc, seed))
@@ -3207,6 +3237,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),
         "adapter_impact_eval": bool(adapter_impact_eval),
+        "observation_noise": noise_spec,
     }
 
     total_jobs = len(jobs)
@@ -3380,6 +3411,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         },
         "algorithm_metadata_contract": algo_contract,
         "preflight": preflight,
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
     }
     summary["benchmark_availability"] = availability_payload(summary)
     return summary

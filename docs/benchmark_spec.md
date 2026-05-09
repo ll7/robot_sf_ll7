@@ -136,9 +136,51 @@ Each episode identity includes:
 * algorithm (`algo`)
 * algorithm config hash (`algo_config_hash`)
 * run-shaping overrides when provided (`run_horizon`, `run_dt`, `record_forces`)
+* observation-noise profile/hash when enabled (`observation_noise_profile`,
+  `observation_noise_hash`)
 
 This guarantees that resuming across mixed algorithm/config batches does not accidentally skip
 jobs that belong to a different algorithm or planner configuration.
+
+## Observation Noise Profiles
+
+Benchmark map runs can inject controlled planner-input observation noise without changing the
+simulator state or ground-truth metric computation. This is intended for robustness checks only; the
+profile is not calibrated to any real sensor model and should be reported with that caveat.
+
+Direct run usage:
+
+```bash
+robot_sf_bench run \
+  --matrix configs/scenarios/planner_sanity_matrix_v1.yaml \
+  --out output/benchmarks/noise_smoke/episodes.jsonl \
+  --algo goal \
+  --benchmark-profile baseline-safe \
+  --observation-noise configs/benchmarks/observation_noise/robustness_smoke_v1.yaml \
+  --horizon 5 \
+  --workers 1 \
+  --no-video \
+  --no-resume
+```
+
+Campaign configs can set the same profile with a top-level block or path:
+
+```yaml
+observation_noise: configs/benchmarks/observation_noise/robustness_smoke_v1.yaml
+```
+
+Supported fields include:
+* `profile`, `enabled`, and optional deterministic `seed`
+* `pose_noise_std_m` and `heading_noise_std_rad`
+* `lidar_dropout_prob` and `lidar_dropout_value`
+* `pedestrian_false_negative_prob`
+* `pedestrian_false_positive_prob`, `pedestrian_false_positive_radius_m`, and
+  `pedestrian_false_positive_radius`
+
+Episode records include `observation_noise`, `observation_noise_hash`, and
+`observation_noise_stats`. Campaign preflight, matrix summaries, manifests, and campaign summaries
+also record the profile/hash. Absent or all-zero settings normalize to `profile: none` and leave
+planner observations unchanged.
 
 ## Metrics: Definitions + Caveats (Summary)
 

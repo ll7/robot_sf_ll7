@@ -108,6 +108,9 @@ knowledge, not every transient iteration detail.
   records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
   full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
   promotion boundary.
+* [Issue #1081 Observation Noise](issue_1081_observation_noise.md) records the opt-in benchmark
+  observation-noise profile contract, provenance fields, resume identity behavior, and
+  non-calibrated robustness interpretation limit.
 * [Issue #1038 H500 SNQI Contract Decision](issue_1038_h500_snqi_contract.md)
   records the h500 scenario-horizon SNQI failure decomposition and the decision to keep the surface
   experimental instead of overwriting the camera-ready v3 SNQI assets.

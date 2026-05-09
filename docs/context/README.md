@@ -136,6 +136,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.
+* [Issue #1065 Route-Clearance Warning Audit](issue_1065_route_clearance_warning_audit.md)
+  lists all current paper and h500 route-clearance warnings, classifies their attribution boundary,
+  and opens the route repair/certification follow-up.
 * [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
   provides reusable paper/report wording for h500 as a long-horizon sensitivity surface and marks
   unsafe winner-table, wait-then-go, and SNQI calibration claims.

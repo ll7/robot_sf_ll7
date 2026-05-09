@@ -392,6 +392,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1000 CARLA Bridge Schema Catalog Schema CLI](issue_1000_carla_schema_catalog_schema_cli.md)
   exposes the CARLA bridge schema catalog JSON Schema through
   `robot-sf-catalog-carla-schemas --schema`.
+- [Issue #1003 CARLA T1 Oracle Replay Smoke](issue_1003_carla_t1_oracle_smoke.md)
+  adds a setup-only T1 oracle replay smoke command for one T0 export manifest payload, with
+  schema-catalog validation and fail-closed `not-available` behavior when CARLA is absent.
 
 ## DreamerV3 Notes
 

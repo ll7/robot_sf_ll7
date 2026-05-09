@@ -96,6 +96,7 @@ knowledge, not every transient iteration detail.
   [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
+  [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
@@ -149,6 +150,10 @@ knowledge, not every transient iteration detail.
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as
   experimental candidates, plus their planner behavior and caveats.
+* [Issue #1113 Continuous H500 Promotion Matrix](issue_1113_continuous_h500_promotion.md)
+  records the full `full_matrix_h500` run for
+  `hybrid_rule_v3_fast_progress_static_escape_continuous`, promotion-gate outcome, comparator
+  deltas, remaining failure taxonomy, and artifact persistence boundary.
 
 ## Feature Extractor Notes
 

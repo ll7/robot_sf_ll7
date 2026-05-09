@@ -1,0 +1,64 @@
+{
+  "rows": [
+    {
+      "candidate": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "stage": "full_matrix_h500",
+      "success_rate": 0.9166666666666666,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.3958333333333333,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape_continuous/full_matrix_h500/issue1113_continuous_h500/summary.json"
+    },
+    {
+      "candidate": "scenario_adaptive_hybrid_orca_v1",
+      "stage": "full_matrix_h500",
+      "success_rate": 0.9097222222222222,
+      "collision_rate": 0.020833333333333332,
+      "near_miss_rate": 0.4236111111111111,
+      "classic_collision_rate": 0.028985507246376812,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "docs/context/evidence/policy_search_h500_2026-05-06/summaries/scenario_adaptive_hybrid_orca_v1_full_matrix_h500_leaders_clean_summary.json"
+    },
+    {
+      "candidate": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "stage": "full_matrix_h500",
+      "success_rate": 0.9027777777777778,
+      "collision_rate": 0.013888888888888888,
+      "near_miss_rate": 0.4236111111111111,
+      "classic_collision_rate": 0.014492753623188406,
+      "francis_collision_rate": 0.013333333333333334,
+      "summary_json": "docs/context/evidence/policy_search_h500_2026-05-06/summaries/scenario_adaptive_hybrid_orca_v2_collision_guard_full_matrix_h500_collision_guard_summary.json"
+    },
+    {
+      "candidate": "ppo",
+      "stage": "baseline_reference",
+      "success_rate": 0.2482,
+      "collision_rate": 0.0993,
+      "near_miss_rate": null,
+      "classic_collision_rate": null,
+      "francis_collision_rate": null,
+      "summary_json": null
+    },
+    {
+      "candidate": "orca",
+      "stage": "baseline_reference",
+      "success_rate": 0.1844,
+      "collision_rate": 0.0355,
+      "near_miss_rate": null,
+      "classic_collision_rate": 0.03,
+      "francis_collision_rate": 0.04,
+      "summary_json": null
+    },
+    {
+      "candidate": "goal",
+      "stage": "baseline_reference",
+      "success_rate": 0.0142,
+      "collision_rate": 0.2411,
+      "near_miss_rate": null,
+      "classic_collision_rate": null,
+      "francis_collision_rate": null,
+      "summary_json": null
+    }
+  ]
+}

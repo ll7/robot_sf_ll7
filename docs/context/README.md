@@ -145,6 +145,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1052 Claim-Language Audit](issue_1052_claim_language_audit.md)
   records the benchmark-set claim boundary for issue-791 paper wording and marks stale OOD /
   transfer language as historical rather than current manuscript scope.
+* [Issue #1075 Operating Envelope And Non-Claims](issue_1075_operating_envelope.md)
+  defines the current Robot-SF dissertation-floor evidence envelope, supported evidence types,
+  non-claims, and future-work boundaries for CARLA, physical validation, and broader empirical use.
 * [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as

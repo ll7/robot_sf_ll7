@@ -134,6 +134,13 @@ def test_normalize_inputs_clamps_and_defaults() -> None:
     assert defaulted.effort_hours == 1.0
 
 
+def test_normalize_inputs_accepts_percent_scale_success_probability() -> None:
+    """GitHub percentage-style project fields should normalize to probability."""
+    inputs = normalize_inputs({"success probability": 60})
+
+    assert inputs.success_probability == 0.6
+
+
 def test_build_previews_skips_done_and_rounds_scores() -> None:
     """Verify preview generation respects project status and score rounding.
 

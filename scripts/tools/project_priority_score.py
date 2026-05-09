@@ -154,7 +154,13 @@ def normalize_inputs(item: dict[str, Any]) -> ScoreInputs:
             upper=MAX_IMPROVEMENT,
         ),
         success_probability=clamp(
-            success_probability if success_probability is not None else DEFAULT_SUCCESS_PROBABILITY,
+            (
+                success_probability / 100.0
+                if success_probability is not None and success_probability > 10.0
+                else success_probability
+                if success_probability is not None
+                else DEFAULT_SUCCESS_PROBABILITY
+            ),
             lower=MIN_SUCCESS_PROBABILITY,
             upper=MAX_SUCCESS_PROBABILITY,
         ),
@@ -342,17 +348,19 @@ class GhProjectClient:
     ) -> None:
         """Write a numeric field value back to the project item."""
 
+        number_literal = format(number, ".8g")
         self.run(
-            "project",
-            "item-edit",
-            "--id",
-            item_id,
-            "--project-id",
-            project_id,
-            "--field-id",
-            field_id,
-            "--number",
-            f"{number:.6f}",
+            "api",
+            "graphql",
+            "-f",
+            (
+                "query=mutation{updateProjectV2ItemFieldValue(input:{"
+                f'projectId:"{project_id}",'
+                f'itemId:"{item_id}",'
+                f'fieldId:"{field_id}",'
+                f"value:{{number:{number_literal}}}"
+                "}){projectV2Item{id}}}"
+            ),
         )
 
 

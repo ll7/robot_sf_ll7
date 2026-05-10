@@ -13,9 +13,9 @@ Next actionable follow-up: <https://github.com/ll7/robot_sf_ll7/issues/1136>
 Issue #589 was reopened as a future planned idea after the original MVP-boundary PR merged. Keep it
 as a parent/backlog concept, not a direct implementation request.
 
-The next actionable slice is #1136: draft the external planner submission manifest schema and
-validator. That issue is intentionally narrower than a leaderboard website, public upload endpoint,
-or arbitrary-code execution service.
+The next actionable slice is #1136: draft the external planner submission manifest schema,
+validator, and maintainer-reviewed smoke path. That issue is intentionally narrower than a
+leaderboard website, public upload endpoint, or execution of arbitrary user code.
 
 ## Current Decision
 

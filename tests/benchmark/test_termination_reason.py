@@ -146,3 +146,15 @@ def test_outcome_contradictions_detect_success_mismatch() -> None:
         metrics={"success": 1.0, "collisions": 0.0},
     )
     assert contradictions
+
+
+def test_outcome_contradictions_uses_success_rate_alias_and_generic_messages() -> None:
+    """Outcome contradictions should honor success aliases and generic metric wording."""
+    contradictions = outcome_contradictions(
+        termination_reason="collision",
+        outcome={"route_complete": False, "collision_event": True, "timeout_event": False},
+        metrics={"success": 0.0, "success_rate": 1.0, "collisions": 0.0},
+    )
+
+    assert "collision outcome but success metrics > 0" in contradictions
+    assert "outcome.collision_event=true but collision metrics <= 0" in contradictions

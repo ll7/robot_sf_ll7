@@ -193,8 +193,6 @@ def _migrate_record(record: dict[str, Any]) -> dict[str, Any]:
     outcome = _infer_outcome(updated, termination_reason=termination_reason)
     updated["termination_reason"] = termination_reason
     updated["outcome"] = outcome
-    if outcome["collision_event"] and _metric_scalar(metrics, "collisions", default=0.0) <= 0.0:
-        metrics["collisions"] = max(1.0, _metric_scalar(metrics, "collision_rate", default=0.0))
     integrity = updated.get("integrity")
     if isinstance(integrity, dict) and isinstance(integrity.get("contradictions"), list):
         updated["integrity"] = integrity

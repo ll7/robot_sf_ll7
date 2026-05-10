@@ -28,21 +28,6 @@ def test_migrate_record_backfills_new_required_v1_fields() -> None:
     assert "timestamps" in migrated
 
 
-def test_migrate_record_backfills_missing_collision_flag_from_collision_rate() -> None:
-    """Legacy collision-rate-only records should gain schema-v1 collisions when outcome collides."""
-    record = {
-        "scenario_id": "s4",
-        "seed": 4,
-        "status": "collision",
-        "metrics": {"collision_rate": 0.25},
-    }
-
-    migrated = migrate_episode_schema_v1._migrate_record(record)
-
-    assert migrated["outcome"]["collision_event"] is True
-    assert migrated["metrics"]["collisions"] == 1.0
-
-
 def test_migrate_record_preserves_existing_contract_fields() -> None:
     """Records that already satisfy the new contract should keep their explicit values."""
     record = {

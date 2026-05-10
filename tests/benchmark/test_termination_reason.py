@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from robot_sf.benchmark.termination_reason import (
+    canonicalize_collision_metrics,
     collision_event,
     outcome_contradictions,
     resolve_termination_reason,
@@ -138,17 +139,54 @@ def test_collision_event_reads_info_and_meta_flags() -> None:
     assert collision_event({"meta": {"is_route_complete": True}}) is False
 
 
+def test_canonicalize_collision_metrics_preserves_explicit_counts() -> None:
+    """Canonical collision flag should keep richer count metrics on a separate key."""
+    metrics = canonicalize_collision_metrics(
+        {
+            "collisions": 3,
+            "ped_collision_count": 2,
+            "obstacle_collision_count": 1,
+        },
+        collision=True,
+    )
+
+    assert metrics["collisions"] == 1
+    assert metrics["total_collision_count"] == 3
+    assert metrics["ped_collision_count"] == 2
+    assert metrics["obstacle_collision_count"] == 1
+
+
+def test_canonicalize_collision_metrics_coerces_non_finite_counts_to_zero() -> None:
+    """Canonical collision encoding should fail closed on non-finite count payloads."""
+    fallback_metrics = canonicalize_collision_metrics(
+        {"collisions": float("inf")},
+        collision=False,
+    )
+    component_metrics = canonicalize_collision_metrics(
+        {"ped_collision_count": float("inf")},
+        collision=False,
+    )
+
+    assert fallback_metrics["total_collision_count"] == 0
+    assert fallback_metrics["collisions"] == 0
+    assert component_metrics["total_collision_count"] == 0
+    assert component_metrics["collisions"] == 0
+
+
 def test_outcome_contradictions_detect_success_mismatch() -> None:
     """Outcome integrity checks should flag success/outcome mismatches."""
     contradictions = outcome_contradictions(
         termination_reason="max_steps",
-        outcome={"route_complete": False, "collision_event": False, "timeout_event": True},
+        outcome={
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
         metrics={"success": 1.0, "collisions": 0.0},
     )
     assert contradictions
 
 
-<<<<<<< HEAD
 def test_outcome_contradictions_detect_collision_metric_drift() -> None:
     """Collision event outcome and collision count metric should agree."""
     missing_collision_metric = outcome_contradictions(
@@ -156,15 +194,16 @@ def test_outcome_contradictions_detect_collision_metric_drift() -> None:
         outcome={"route_complete": False, "collision_event": True, "timeout_event": False},
         metrics={"success": 0.0, "collisions": 0.0},
     )
-    assert "outcome.collision_event=true but metrics.collisions <= 0" in missing_collision_metric
+    assert "outcome.collision_event=true but collision metrics <= 0" in missing_collision_metric
 
     stale_collision_metric = outcome_contradictions(
         termination_reason="max_steps",
         outcome={"route_complete": False, "collision_event": False, "timeout_event": True},
         metrics={"success": 0.0, "collisions": 1.0},
     )
-    assert "outcome.collision_event=false but metrics.collisions > 0" in stale_collision_metric
-=======
+    assert "outcome.collision_event=false but collision metrics > 0" in stale_collision_metric
+
+
 def test_outcome_contradictions_uses_success_rate_alias_and_generic_messages() -> None:
     """Outcome contradictions should honor success aliases and generic metric wording."""
     contradictions = outcome_contradictions(
@@ -175,4 +214,3 @@ def test_outcome_contradictions_uses_success_rate_alias_and_generic_messages() -
 
     assert "collision outcome but success metrics > 0" in contradictions
     assert "outcome.collision_event=true but collision metrics <= 0" in contradictions
->>>>>>> 7171dbea (fix: preserve collision aliases in migration)

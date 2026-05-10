@@ -943,7 +943,7 @@ def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | 
         return normalize_observation_noise_spec(raw)
     if isinstance(raw, str) and raw.strip():
         path = _resolve_path(raw, base_dir=base_dir)
-        if path is None:
+        if path is None or not path.is_file():
             raise FileNotFoundError(f"Could not resolve observation_noise '{raw}'")
         return load_observation_noise_spec(path)
     raise ValueError("observation_noise must be a mapping or YAML file path")

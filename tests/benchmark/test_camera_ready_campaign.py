@@ -121,6 +121,44 @@ def test_load_campaign_config_resolves_observation_noise_profile(tmp_path: Path)
     assert cfg.observation_noise["enabled"] is True
 
 
+def test_load_campaign_config_rejects_directory_observation_noise_profile(
+    tmp_path: Path,
+) -> None:
+    """Campaign configs should fail closed when observation_noise points at a directory."""
+    config_dir = tmp_path / "cfg"
+    config_dir.mkdir(parents=True)
+    matrix_path = config_dir / "matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "s1",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "simulation_config": {"max_episode_steps": 1},
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    noise_dir = config_dir / "noise_dir"
+    noise_dir.mkdir()
+    cfg_path = config_dir / "campaign.yaml"
+    cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "noise_campaign",
+                "scenario_matrix": "matrix.yaml",
+                "observation_noise": "noise_dir",
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileNotFoundError, match="Could not resolve observation_noise"):
+        load_campaign_config(cfg_path)
+
+
 def test_scenario_horizon_schedule_applies_to_loaded_campaign_scenarios(
     tmp_path: Path,
 ) -> None:

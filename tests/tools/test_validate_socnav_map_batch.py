@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from scripts.tools.validate_socnav_map_batch import validate_batch
@@ -90,3 +91,51 @@ def test_validate_batch_accepts_staged_eth_assets(tmp_path: Path) -> None:
     assert report["ok"] is True
     assert report["missing_required"] == []
     assert report["maps"][0]["map_id"] == "socnavbench_eth"
+
+
+def test_validate_batch_rejects_empty_relative_path(tmp_path: Path) -> None:
+    """Validator should fail fast when a source asset omits its relative path."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_manifest(manifest)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["batches"][0]["maps"][0]["source_assets"][0]["relative_path"] = ""
+    manifest.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="non-empty relative path"):
+        validate_batch(
+            manifest_path=manifest,
+            socnav_root=tmp_path / "socnavbench",
+            batch_id="eth_first",
+        )
+
+
+def test_validate_batch_rejects_parent_relative_path(tmp_path: Path) -> None:
+    """Validator should reject parent-relative source asset paths before resolution."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_manifest(manifest)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["batches"][0]["maps"][0]["source_assets"][0]["relative_path"] = "../secret"
+    manifest.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="relative path within the root"):
+        validate_batch(
+            manifest_path=manifest,
+            socnav_root=tmp_path / "socnavbench",
+            batch_id="eth_first",
+        )
+
+
+def test_validate_batch_rejects_absolute_relative_path(tmp_path: Path) -> None:
+    """Validator should reject absolute source asset paths before resolution."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_manifest(manifest)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["batches"][0]["maps"][0]["source_assets"][0]["relative_path"] = "/tmp/eth"
+    manifest.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="relative path within the root"):
+        validate_batch(
+            manifest_path=manifest,
+            socnav_root=tmp_path / "socnavbench",
+            batch_id="eth_first",
+        )

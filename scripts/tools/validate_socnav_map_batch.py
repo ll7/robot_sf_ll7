@@ -43,6 +43,18 @@ def _asset_exists(path: Path, kind: str) -> bool:
     raise ValueError(f"Unsupported asset kind: {kind}")
 
 
+def _validated_relative_asset_path(asset: dict[str, Any]) -> str:
+    """Return a safe non-empty relative path from one asset manifest entry."""
+    rel_val = asset.get("relative_path")
+    if not isinstance(rel_val, str) or not rel_val.strip():
+        raise ValueError(f"Asset '{asset.get('key')}' must have a non-empty relative path")
+    rel = rel_val.strip()
+    rel_path = Path(rel)
+    if rel_path.is_absolute() or ".." in rel_path.parts:
+        raise ValueError(f"Asset '{asset.get('key')}' must be a relative path within the root")
+    return rel
+
+
 def validate_batch(
     *,
     manifest_path: Path,
@@ -68,8 +80,8 @@ def validate_batch(
         for asset in assets:
             if not isinstance(asset, dict):
                 raise TypeError(f"Source asset in map '{map_entry.get('map_id')}' is invalid")
-            rel = str(asset.get("relative_path", "")).strip()
-            kind = str(asset.get("kind", "")).strip()
+            rel = _validated_relative_asset_path(asset)
+            kind = str(asset.get("kind") or "").strip()
             required = bool(asset.get("required_for_conversion", False))
             path = socnav_root / rel
             exists = _asset_exists(path, kind)

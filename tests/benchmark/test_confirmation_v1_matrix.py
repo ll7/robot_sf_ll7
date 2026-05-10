@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -10,9 +13,16 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIRMATION_MATRIX = ROOT / "configs" / "scenarios" / "confirmation_v1.yaml"
 
 
-def test_confirmation_v1_matrix_loads_expected_distinct_scenarios() -> None:
+@pytest.fixture(scope="module")
+def scenarios() -> list[dict[str, Any]]:
+    """Load the confirmation matrix scenarios once for the module."""
+    return load_scenarios(CONFIRMATION_MATRIX)
+
+
+def test_confirmation_v1_matrix_loads_expected_distinct_scenarios(
+    scenarios: list[dict[str, Any]],
+) -> None:
     """Confirmation v1 should expose the curated eight-scenario robustness set."""
-    scenarios = load_scenarios(CONFIRMATION_MATRIX, base_dir=CONFIRMATION_MATRIX)
     names = [scenario["name"] for scenario in scenarios]
     assert names == [
         "empty_map_8_directions_east",
@@ -28,9 +38,10 @@ def test_confirmation_v1_matrix_loads_expected_distinct_scenarios() -> None:
     assert all(len(scenario.get("seeds", [])) >= 3 for scenario in scenarios)
 
 
-def test_confirmation_v1_matrix_has_design_rationale_metadata() -> None:
+def test_confirmation_v1_matrix_has_design_rationale_metadata(
+    scenarios: list[dict[str, Any]],
+) -> None:
     """Each confirmation scenario should carry provenance and interpretation metadata."""
-    scenarios = load_scenarios(CONFIRMATION_MATRIX, base_dir=CONFIRMATION_MATRIX)
     for scenario in scenarios:
         metadata = scenario["metadata"]
         assert metadata.get("purpose")

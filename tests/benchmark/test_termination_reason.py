@@ -148,6 +148,7 @@ def test_outcome_contradictions_detect_success_mismatch() -> None:
     assert contradictions
 
 
+<<<<<<< HEAD
 def test_outcome_contradictions_detect_collision_metric_drift() -> None:
     """Collision event outcome and collision count metric should agree."""
     missing_collision_metric = outcome_contradictions(
@@ -163,3 +164,15 @@ def test_outcome_contradictions_detect_collision_metric_drift() -> None:
         metrics={"success": 0.0, "collisions": 1.0},
     )
     assert "outcome.collision_event=false but metrics.collisions > 0" in stale_collision_metric
+=======
+def test_outcome_contradictions_uses_success_rate_alias_and_generic_messages() -> None:
+    """Outcome contradictions should honor success aliases and generic metric wording."""
+    contradictions = outcome_contradictions(
+        termination_reason="collision",
+        outcome={"route_complete": False, "collision_event": True, "timeout_event": False},
+        metrics={"success": 0.0, "success_rate": 1.0, "collisions": 0.0},
+    )
+
+    assert "collision outcome but success metrics > 0" in contradictions
+    assert "outcome.collision_event=true but collision metrics <= 0" in contradictions
+>>>>>>> 7171dbea (fix: preserve collision aliases in migration)

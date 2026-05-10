@@ -179,7 +179,7 @@ blocker is resolved or a maintainer explicitly accepts an interim default.
 
 1. **Resolve #834 default-promotion decision** before changing PPO defaults. If maintainers accept
    `mlp_small` as an interim default, update the current `scripts/training/train_ppo.py` default
-   resolution path and canonical configs, not only the older `environment_factory.py` wording.
+   resolution path and canonical configs.
 2. **Investigate `lightweight_cnn` divergence** at ≥28 K steps (potential learning-rate or
    gradient-norm interaction with large feature dim).
 3. **Full multi-seed evaluation campaign** (3 seeds × 500 K steps) to validate `mlp_small`

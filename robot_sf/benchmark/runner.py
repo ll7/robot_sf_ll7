@@ -51,7 +51,11 @@ from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.map_runner import run_map_batch
-from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
+from robot_sf.benchmark.metrics import (
+    EpisodeData,
+    compute_all_metrics,
+    post_process_metrics,
+)
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode

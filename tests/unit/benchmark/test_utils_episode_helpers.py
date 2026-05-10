@@ -33,7 +33,11 @@ class TestDetermineEpisodeOutcome:
 
     def test_waypoint_only_is_not_success(self):
         """Waypoint completion alone must not count as success."""
-        info = {"collision": False, "success": True, "meta": {"is_waypoint_complete": True}}
+        info = {
+            "collision": False,
+            "success": True,
+            "meta": {"is_waypoint_complete": True},
+        }
         assert determine_episode_outcome(info) == "done"
 
     def test_timeout_outcome(self):
@@ -64,7 +68,11 @@ class TestValidateEpisodeSuccessIntegrity:
         record = {
             "termination_reason": "collision",
             "metrics": {"success": 1.0, "collisions": 0.0},
-            "outcome": {"route_complete": False, "collision_event": True, "timeout_event": False},
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
         }
         violations = validate_episode_success_integrity(record)
         assert violations
@@ -74,7 +82,11 @@ class TestValidateEpisodeSuccessIntegrity:
         record = {
             "termination_reason": "success",
             "metrics": {"success": 1.0, "collisions": 1.0},
-            "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
         }
         violations = validate_episode_success_integrity(record)
         assert violations
@@ -84,7 +96,11 @@ class TestValidateEpisodeSuccessIntegrity:
         record = {
             "termination_reason": "collision",
             "metrics": {"success": 0.0, "collisions": 0.0},
-            "outcome": {"route_complete": False, "collision_event": True, "timeout_event": False},
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
         }
         violations = validate_episode_success_integrity(record)
         assert "outcome.collision_event=true but metrics.collisions <= 0" in violations
@@ -94,7 +110,11 @@ class TestValidateEpisodeSuccessIntegrity:
         record = {
             "termination_reason": "success",
             "metrics": {"success": 1.0, "collisions": 0.0},
-            "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
         }
         assert validate_episode_success_integrity(record) == []
 

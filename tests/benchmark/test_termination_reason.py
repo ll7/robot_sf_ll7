@@ -156,11 +156,32 @@ def test_canonicalize_collision_metrics_preserves_explicit_counts() -> None:
     assert metrics["obstacle_collision_count"] == 1
 
 
+def test_canonicalize_collision_metrics_coerces_non_finite_counts_to_zero() -> None:
+    """Canonical collision encoding should fail closed on non-finite count payloads."""
+    fallback_metrics = canonicalize_collision_metrics(
+        {"collisions": float("inf")},
+        collision=False,
+    )
+    component_metrics = canonicalize_collision_metrics(
+        {"ped_collision_count": float("inf")},
+        collision=False,
+    )
+
+    assert fallback_metrics["total_collision_count"] == 0
+    assert fallback_metrics["collisions"] == 0
+    assert component_metrics["total_collision_count"] == 0
+    assert component_metrics["collisions"] == 0
+
+
 def test_outcome_contradictions_detect_success_mismatch() -> None:
     """Outcome integrity checks should flag success/outcome mismatches."""
     contradictions = outcome_contradictions(
         termination_reason="max_steps",
-        outcome={"route_complete": False, "collision_event": False, "timeout_event": True},
+        outcome={
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
         metrics={"success": 1.0, "collisions": 0.0},
     )
     assert contradictions

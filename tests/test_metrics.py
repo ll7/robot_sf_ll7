@@ -977,7 +977,11 @@ def test_velocity_statistics():
 
 def test_acceleration_statistics():
     """Test acceleration_min, acceleration_avg, acceleration_max metrics."""
-    from robot_sf.benchmark.metrics import acceleration_avg, acceleration_max, acceleration_min
+    from robot_sf.benchmark.metrics import (
+        acceleration_avg,
+        acceleration_max,
+        acceleration_min,
+    )
 
     ep = _make_episode(T=10, K=0)
     ep.robot_acc[:5, 0] = 0.5

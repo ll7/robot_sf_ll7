@@ -78,11 +78,15 @@ def _resolved_total_collision_count(metrics: Mapping[str, Any]) -> float:
         if key not in metrics:
             continue
         saw_component = True
-        component_total += max(0.0, metric_scalar(metrics, key, default=0.0))
+        component_value = metric_scalar(metrics, key, default=0.0)
+        if not math.isfinite(component_value):
+            continue
+        component_total += max(0.0, component_value)
     if saw_component:
-        return component_total
+        return component_total if math.isfinite(component_total) else 0.0
 
-    return max(0.0, metric_scalar(metrics, "collisions", default=0.0))
+    fallback = metric_scalar(metrics, "collisions", default=0.0)
+    return max(0.0, fallback) if math.isfinite(fallback) else 0.0
 
 
 def canonicalize_collision_metrics(

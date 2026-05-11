@@ -102,6 +102,16 @@ _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
 _ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
 
 
+def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
+    """Return a normalized observation-mode override, rejecting blank strings."""
+    if raw is None:
+        return None
+    normalized = str(raw).strip()
+    if not normalized:
+        raise ValueError(f"{label} cannot be empty when provided")
+    return normalized
+
+
 @dataclass(frozen=True)
 class AmvProfileConfig:
     """AMV paper-profile scope contract settings."""
@@ -1067,10 +1077,9 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
                     entry.get("socnav_missing_prereq_policy", "fail-fast"),
                 ),
                 adapter_impact_eval=bool(entry.get("adapter_impact_eval", False)),
-                observation_mode=(
-                    str(entry.get("observation_mode")).strip()
-                    if entry.get("observation_mode") is not None
-                    else None
+                observation_mode=_normalize_observation_mode(
+                    entry.get("observation_mode"),
+                    label="Planner entry 'observation_mode'",
                 ),
                 workers_override=(
                     int(entry["workers"]) if entry.get("workers") is not None else None
@@ -1181,10 +1190,9 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             if str(value).strip()
         ),
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
-        observation_mode=(
-            str(payload.get("observation_mode")).strip()
-            if payload.get("observation_mode") is not None
-            else None
+        observation_mode=_normalize_observation_mode(
+            payload.get("observation_mode"),
+            label="Campaign 'observation_mode'",
         ),
         paper_facing=bool(payload.get("paper_facing", False)),
         paper_profile_version=(

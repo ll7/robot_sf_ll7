@@ -81,6 +81,74 @@ def test_resume_identity_is_algorithm_aware(
     assert second["written"] == 1
 
 
+def test_resume_identity_uses_identity_algo_observation_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Resume skipping should resolve observation mode per resolved scenario algorithm."""
+    scenarios = [
+        {"name": "goal", "metadata": {"supported": True}, "simulation_config": {}},
+        {"name": "ppo", "metadata": {"supported": True}, "simulation_config": {}},
+    ]
+    runs: list[dict[str, object]] = []
+
+    monkeypatch.setattr(map_runner, "validate_scenario_list", lambda _scenarios: [])
+    monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
+    monkeypatch.setattr(
+        map_runner,
+        "_select_seeds",
+        lambda _scenario, suite_seeds=None, suite_key=None: [1],
+    )
+    monkeypatch.setattr(
+        map_runner,
+        "_compute_map_episode_id",
+        lambda payload, seed: (
+            f"{payload.get('id')}--{payload.get('algo')}--{payload.get('observation_mode')}"
+        ),
+    )
+
+    def fake_resolve(
+        default_algo: str, algo_config_path: str | None, algo_config: dict, scenario: dict
+    ):
+        if scenario.get("name") == "goal":
+            return "goal", {}
+        return "ppo", {}
+
+    monkeypatch.setattr(
+        map_runner,
+        "_resolve_policy_search_candidate_runtime",
+        fake_resolve,
+    )
+    monkeypatch.setattr(
+        map_runner,
+        "_run_map_job_worker",
+        lambda job: runs.append(job) or {"algorithm_metadata": {}},
+    )
+    monkeypatch.setattr(map_runner, "_write_validated", lambda *args, **kwargs: None)
+
+    monkeypatch.setattr(
+        map_runner,
+        "index_existing",
+        lambda _path: {
+            "goal--goal--goal_state",
+            "ppo--ppo--sensor_fusion_state",
+        },
+    )
+
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text("", encoding="utf-8")
+
+    result = map_runner.run_map_batch(
+        scenarios,
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        resume=True,
+    )
+
+    assert result["written"] == 0
+    assert runs == []
+
+
 def test_resume_identity_includes_algo_config_hash(
     tmp_path: Path,
     monkeypatch,

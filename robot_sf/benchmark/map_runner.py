@@ -3108,12 +3108,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         kinematics_tag = scenario_kinematics[0]
     else:
         kinematics_tag = "mixed"
+    batch_observation_mode = str(observation_mode).strip() if observation_mode is not None else None
     algo_contract = enrich_algorithm_metadata(
         algo=algo,
         metadata={},
         robot_kinematics=kinematics_tag,
         adapter_impact_requested=adapter_impact_eval,
-        observation_mode=observation_mode,
+        observation_mode=batch_observation_mode,
     )
     active_observation_mode = str(algo_contract["observation_spec"]["active_mode"])
     planner_meta = algo_contract.get("planner_kinematics")
@@ -3203,6 +3204,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     algo_config=raw_policy_cfg,
                     scenario=sc,
                 )
+                identity_observation_mode = resolve_observation_mode(
+                    identity_algo,
+                    batch_observation_mode,
+                )
                 identity_payload = _scenario_identity_payload(
                     sc,
                     algo=identity_algo,
@@ -3210,7 +3215,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     horizon=horizon,
                     dt=dt,
                     record_forces=record_forces,
-                    observation_mode=active_observation_mode,
+                    observation_mode=identity_observation_mode,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
                     filtered_jobs.append((sc, seed))
@@ -3227,7 +3232,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),
         "adapter_impact_eval": bool(adapter_impact_eval),
-        "observation_mode": active_observation_mode,
+        "observation_mode": batch_observation_mode,
     }
 
     total_jobs = len(jobs)

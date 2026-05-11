@@ -2637,6 +2637,7 @@ def test_run_map_batch_rejects_unsupported_observation_override(
 ) -> None:
     """Unsupported planner observation-mode overrides should fail before writing episodes."""
     scenario = {"name": "s1", "metadata": {"supported": True}}
+    out_path = tmp_path / "episodes.jsonl"
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
     )
@@ -2644,13 +2645,14 @@ def test_run_map_batch_rejects_unsupported_observation_override(
     with pytest.raises(ValueError, match="Observation mode 'goal_state' is not supported"):
         run_map_batch(
             [scenario],
-            tmp_path / "episodes.jsonl",
+            out_path,
             schema_path=tmp_path / "schema.json",
             algo="orca",
             observation_mode="goal_state",
             workers=1,
             resume=False,
         )
+    assert not out_path.exists()
 
 
 def test_run_map_batch_parallel_writes_results_in_job_order(

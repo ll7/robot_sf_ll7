@@ -116,6 +116,60 @@ def test_load_campaign_config_parses_observation_mode_overrides(tmp_path: Path) 
     assert cfg.planners[1].observation_mode == "goal_state"
 
 
+def test_load_campaign_config_rejects_blank_planner_observation_mode(tmp_path: Path) -> None:
+    """Blank planner-level observation-mode overrides should be rejected."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: observation_blank_planner",
+                f"scenario_matrix: {scenario_path.name}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    observation_mode: '   '",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Planner entry 'observation_mode' cannot be empty"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_blank_global_observation_mode(tmp_path: Path) -> None:
+    """Blank campaign-level observation-mode overrides should be rejected."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: observation_blank_global",
+                f"scenario_matrix: {scenario_path.name}",
+                "observation_mode: '   '",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Campaign 'observation_mode' cannot be empty"):
+        load_campaign_config(config_path)
+
+
 def test_scenario_horizon_schedule_applies_to_loaded_campaign_scenarios(
     tmp_path: Path,
 ) -> None:

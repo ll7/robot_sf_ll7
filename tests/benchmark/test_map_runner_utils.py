@@ -228,6 +228,30 @@ def test_goal_policy_and_build_policy() -> None:
     assert abs(angular) <= 1.0
 
 
+def test_build_policy_trivial_reference_adapter_exposes_template_contract() -> None:
+    """The documented reference adapter should build through the real map-runner seam."""
+    policy, meta = _build_policy(
+        "reference_adapter",
+        {"allow_testing_algorithms": True, "max_linear_speed": 0.75},
+    )
+
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [1.0, 0.0]},
+    }
+    linear, angular = policy(obs)
+    assert linear > 0.0
+    assert abs(angular) <= 1.0
+    assert meta["algorithm"] == "trivial_reference"
+    assert meta["canonical_algorithm"] == "trivial_reference"
+    assert meta["baseline_category"] == "diagnostic"
+    assert meta["policy_semantics"] == "diagnostic_adapter_template"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+    assert meta["planner_kinematics"]["adapter_name"] == "TrivialReferencePlannerAdapter"
+    assert meta["planner_kinematics"]["diagnostic_reference_only"] is True
+    assert "Diagnostic adapter template only" in meta["planner_kinematics"]["limitations"]
+
+
 def test_goal_policy_supports_flat_map_runner_observation() -> None:
     """Goal baseline should work with the flat observation keys emitted by the env."""
     obs = {

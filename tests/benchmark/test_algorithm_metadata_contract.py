@@ -97,6 +97,23 @@ def test_grid_route_metadata_marks_testing_only_route_spike() -> None:
     assert planner["adapter_name"] == "GridRoutePlannerAdapter"
 
 
+def test_trivial_reference_metadata_marks_diagnostic_template() -> None:
+    """Reference adapter metadata should prevent benchmark-evidence overclaiming."""
+    meta = enrich_algorithm_metadata(
+        algo="reference_adapter",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["canonical_algorithm"] == "trivial_reference"
+    assert meta["baseline_category"] == "diagnostic"
+    assert meta["policy_semantics"] == "diagnostic_adapter_template"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "TrivialReferencePlannerAdapter"
+    assert planner["diagnostic_reference_only"] is True
+
+
 def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> None:
     """ORCA metadata should make the upstream source and projection policy explicit."""
     meta = enrich_algorithm_metadata(

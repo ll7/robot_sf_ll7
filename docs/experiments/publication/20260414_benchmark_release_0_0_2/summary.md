@@ -10,7 +10,7 @@ without committing the raw publication bundle under `output/`.
 Release `0.0.2` is the scoped seven-planner benchmark release. It excludes `socnav_bench` because
 the licensed SocNavBench dataset assets were not staged for the release run. The scope decision is
 documented in
-[`docs/context/benchmark_release_0_0_2_scoped_rationale.md`](../../context/benchmark_release_0_0_2_scoped_rationale.md).
+[`docs/context/benchmark_release_0_0_2_scoped_rationale.md`](../../../context/benchmark_release_0_0_2_scoped_rationale.md).
 
 ## Public Endpoints
 

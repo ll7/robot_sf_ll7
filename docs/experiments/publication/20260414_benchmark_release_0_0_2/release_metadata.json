@@ -37,7 +37,7 @@
     "campaign_id": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316",
     "name": "paper_experiment_matrix_7planners_v1",
     "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
-    "scenario_matrix_hash": "6bfb216f1c48",
+    "scenario_matrix_hash": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
     "git_hash": "f7ebdcae2375d085e925213197a75a386e26a79c",
     "total_episodes": 987,
     "successful_runs": 7,

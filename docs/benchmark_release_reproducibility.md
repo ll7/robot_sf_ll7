@@ -135,6 +135,34 @@ Non-comparable:
 The benchmark release artifact is the publication bundle generated from the
 release workflow, not the raw source checkout alone.
 
+For the current scoped seven-planner paper release, use the tracked publication snapshot:
+
+- `docs/experiments/publication/20260414_benchmark_release_0_0_2/summary.md`
+- `docs/experiments/publication/20260414_benchmark_release_0_0_2/release_metadata.json`
+
+Durable endpoints:
+
+- Release: `https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2`
+- DOI: `https://doi.org/10.5281/zenodo.19563812`
+- Archive:
+  `https://github.com/ll7/robot_sf_ll7/releases/download/0.0.2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz`
+
+Release `0.0.2` publishes the publication manifest, checksums, and SNQI diagnostics inside the
+archive rather than as separate release assets. A fresh checkout can recover them with:
+
+```bash
+mkdir -p output/benchmark_release_0_0_2
+gh release download 0.0.2 \
+  --pattern 'paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz' \
+  --dir output/benchmark_release_0_0_2
+sha256sum output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz
+tar -tzf output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz \
+  | rg 'publication_manifest.json|checksums.sha256|snqi_diagnostics\.(json|md)'
+```
+
+The expected archive SHA-256 is:
+`64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90`.
+
 Primary artifact locations:
 
 - `output/benchmarks/camera_ready/<campaign_id>/`

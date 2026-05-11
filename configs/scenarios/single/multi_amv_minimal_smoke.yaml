@@ -1,0 +1,21 @@
+scenarios:
+- name: multi_amv_minimal_smoke
+  map_file: ../../../maps/svg_maps/planner_sanity_open.svg
+  simulation_config:
+    max_episode_steps: 80
+    ped_density: 0.0
+  multi_amv:
+    num_robots: 2
+    near_miss_distance_m: 1.0
+    collision_distance_m: 0.4
+    deadlock_speed_mps: 0.05
+    deadlock_window_steps: 8
+  single_pedestrians: []
+  robot_config: {}
+  metadata:
+    archetype: multi_amv_minimal
+    flow: none
+    behavior: none
+    purpose: minimal_multi_amv_smoke
+  seeds:
+  - 0

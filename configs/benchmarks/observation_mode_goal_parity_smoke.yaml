@@ -1,0 +1,33 @@
+name: observation_mode_goal_parity_smoke
+paper_facing: false
+scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+
+seed_policy:
+  mode: fixed-list
+  seeds: [1080]
+
+workers: 1
+horizon: 80
+dt: 0.1
+record_forces: false
+resume: true
+stop_on_failure: false
+bootstrap_samples: 50
+bootstrap_confidence: 0.95
+bootstrap_seed: 1080
+
+kinematics_matrix:
+  - differential_drive
+
+planners:
+  - key: goal_state_goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+    observation_mode: goal_state
+
+  - key: socnav_state_goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+    observation_mode: socnav_state

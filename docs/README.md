@@ -6,6 +6,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 **Artifact root**: All generated artifacts (JSONL, figures, videos) must live under the git-ignored `output/` directory. Legacy `results/` paths have been migrated; update commands accordingly when running examples or scripts. Small, reviewable copies of durable evidence may be promoted into [docs/context/evidence](./context/evidence/README.md); do not mirror `output/` wholesale.
 
+**Route-clearance caveats**: paper-facing preflights expose route-clearance certifications from
+[`configs/benchmarks/route_clearance_certifications_v1.yaml`](../configs/benchmarks/route_clearance_certifications_v1.yaml);
+see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_clearance_certification.md).
+
 ## 🚀 Social Navigation Benchmark Platform (Complete)
 
 **The Social Navigation Benchmark Platform is now fully operational!**
@@ -113,6 +117,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
 * **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Final no-promotion recommendation for the issue-708 PPO campaign family, plus the original retrain config, SLURM submission path, deterministic eval surface, and provenance record.
+* **[Issue #749 BC-Preinitialized PPO Launch Packet](./context/issue_749_bc_preinit_ppo_launch_packet.md)** - Config-first BC warm-start PPO challenger path, artifact boundary, and follow-up execution gate for the v10 fine-tune contract
 * **[Issue 791 Promotion Campaign](./context/issue_791_promotion_campaign_128k_256k.md)** - Medium- and long-horizon ablation campaign status, GPU predictive-foresight fix, active long runs, and follow-up boundaries.
 * **[Issue 856 PPO All-Scenarios Full-Budget Campaign](./context/issue_856_ppo_all_scenarios_full_budget.md)** - Seed-123 broad-training submission, replica gate, and benchmark-comparison plan against the eval-aligned leader.
 * **[Issue 863 SVG/Model Log Spam](./context/issue_863_svg_model_log_spam.md)** - Log dedupe and PPO evaluation phase-marker decision for issue-791 long-run triage.
@@ -135,11 +140,17 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
+* **[Issue #1073 Robot SF Empirical-Expansion Gate](./context/issue_1073_empirical_expansion_gate_2026_06_08.md)** - June 8 checkpoint rule for deciding whether Robot SF can move beyond dissertation-floor examples into bounded empirical expansion
+* **[Benchmark Static Dashboard](./benchmark_static_dashboard.md)** - Self-contained static HTML dashboard generation from camera-ready benchmark bundles
+* **[PR Promoted Planner Smoke](./benchmark_pr_promoted_planner_smoke.md)** - Pull-request micro-benchmark workflow, runtime target, and fail-closed summary contract
+* **[Issue #1065 Route-Clearance Warning Audit](./context/issue_1065_route_clearance_warning_audit.md)** - Paper and h500 route-clearance warning classification, planner-attribution boundary, and repair/certification follow-up
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
 * **[Issue #832 Paper-Matrix Extended Seed Schedule](./context/issue_832_paper_matrix_extended_seed_schedule.md)** - Staged S5/S10/S20 seed extension policy, runtime estimates, tmux commands, and comparison artifact contract for the frozen paper matrix
 * **[Issue #821 Paper Evidence Upgrade](./context/issue_821_paper_evidence_upgrade.md)** - Extended camera-ready matrix with guarded PPO, TEB, and SNQI ranking ablation evidence
 * **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
 * **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
+* **[Benchmark Release 0.0.2 Publication Snapshot](./experiments/publication/20260414_benchmark_release_0_0_2/summary.md)** - Durable scoped seven-planner release pointer with DOI, archive checksum, embedded manifest/checksum/SNQI paths, and fresh-checkout recovery command
+* **[Issue #1062 Paper Evidence Archive Pointer](./context/issue_1062_paper_evidence_archive.md)** - Paper evidence archive recovery note for the scoped `0.0.2` bundle without committing raw benchmark outputs
 * **[Issue #435 Map Coverage Flow](./context/issue_435_map_coverage_flow.md)** - Parent flow state for map coverage, SocNavBench import, and map-quality child issues
 * **[Issue #328 Real-World Map Parent Tracker](./context/issue_328_real_world_map_parent.md)** - Parent/child map-coverage split, child issue status, and shared validation contract for real-world benchmark maps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
@@ -157,10 +168,13 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Benchmark Release Reproducibility](./benchmark_release_reproducibility.md)** - Reproduce a benchmark release from a tag, canonical manifest, and reduced smoke validation path
 * **[Benchmark Docker Reproduction Path](./benchmark_docker_repro.md)** - Build a pinned Docker image and run the canonical small benchmark artifact smoke with one command
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
+* **[Benchmark Observation Visibility](./benchmark_observation_visibility.md)** - Configurable planner-facing FOV, range, and static-occlusion filtering for partial-observability experiments
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
+* **[Planner Adapter Starter Template](./dev/planner_adapter_template.md)** - Copy-and-adapt path plus a diagnostic reference adapter for new local planner contributions
 * **[Issue #589 Public Leaderboard MVP Boundary](./context/issue_589_public_leaderboard_mvp.md)** - Conservative no-implementation-now decision and future PR-based leaderboard prerequisites
 * **[Issue #1086 Docker Reproduction Path](./context/issue_1086_docker_reproduction_path.md)** - Decision record and validation boundary for the pinned Docker benchmark smoke path
+* **[Issue #1087 Planner Adapter Starter Template](./context/issue_1087_planner_adapter_template.md)** - Decision record for the reference adapter, docs, and validation path
 * **[Policy Search Context](./context/policy_search/README.md)** - File-based local policy-search workflow with candidate registry, staged evaluation funnel, emitted reports, and SLURM handoff notes for expensive follow-up work
 * **[Issue #1023 Scenario-Horizon Benchmark Surface](./context/issue_1023_scenario_horizon_benchmark.md)** - Runnable h500 scenario-horizon benchmark config, local non-Slurm full campaign evidence, fixed-vs-scenario comparison, and conservative promotion boundary
 * **[Issue #1023 Experimental Benchmark Candidates](./context/issue_1023_experimental_benchmark_candidates.md)** - Rationale and caveats for adding `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress_static_escape` to the long-horizon benchmark as experimental challengers
@@ -169,13 +183,22 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Issue #1023 Candidate-Augmented Preflight Evidence Bundle](./context/evidence/issue_1023_candidate_augmented_preflight_2026-05-06/README.md)** - Compact preflight proof for the 9-planner long-horizon matrix with the two experimental candidates
 * **[Issue #1023 Candidate-Augmented Local Full Evidence Bundle](./context/evidence/issue_1023_candidate_augmented_local_full_2026-05-06/README.md)** - Compact 9-planner local full-campaign reports showing both experimental candidates execute, with SNQI release caveat
 * **[Issue #1023 Scenario-Horizon Local Full Evidence Bundle](./context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md)** - Compact local full-campaign reports, analyzer output, and fixed-vs-scenario comparison for the paper-facing scenario-horizon matrix
+* **[Issue #1059 Deferred Planner-Improvement Program](./context/issue_1059_deferred_planner_improvement_program.md)** - Trace-to-child routing for the deferred h500 planner-improvement program, including #1034 targeted recovery evidence and the #1113 full-matrix boundary
+* **[Issue #1074 Robot-SF Worked-Example Pack](./context/issue_1074_robot_sf_worked_example_pack.md)** - Three retained h500 examples mapped to scenario class, actor mix, metric layer, failure-pattern vocabulary, and explicit claim boundaries
+* **[Issue #1075 Operating Envelope And Non-Claims](./context/issue_1075_operating_envelope.md)** - Canonical Robot-SF dissertation-floor evidence envelope, supported evidence types, non-claims, and future-work boundaries
+* **[Issue #1083 Sanity V1 Nominal Matrix](./context/issue_1083_sanity_v1_nominal_matrix.md)** - Non-paper-facing nominal calibration matrix and smoke command for easier deployment-like scenes
+* **[Issue #1082 Paper Cross-Kinematics Parity Sweep](./context/issue_1082_paper_cross_kinematics_v1.md)** - Versioned paper-facing cross-kinematics smoke profile, compatibility manifest, and interpretation boundary
+* **[Issue #1084 Planner Inclusion Gate](./context/issue_1084_planner_inclusion_gate.md)** - Mechanical `planner-inclusion-check` command, report schema, thresholds, and pass/revise proof cases for promotion review
 * **[Benchmark Mechanism Roadmap Plan (2026-05-07)](./superpowers/plans/2026-05-07-benchmark-mechanism-roadmap.md)** - Agent-executable plan for the trace-backed h500 mechanism pilot, deferred planner-improvement capture, and deferred CARLA-transfer capture
 * **[Goal Sequence Spec (2026-05-07)](./superpowers/specs/2026-05-07_goal_sequence.md)** - Issue sequencing rationale that keeps paper evidence first, h500 mechanism interpretation next, and deferred strategic alternatives explicit
+* **[Issue #872 CARLA Oracle Replay Bridge Status](./context/issue_872_carla_oracle_replay_bridge_status.md)** - Parent-epic status for the CARLA bridge, current T0/T1 claim boundaries, and live replay / metric-parity follow-up issues
 * **[Camera-Ready All-Planners SLURM Check (2026-05-04)](./context/camera_ready_all_planners_slurm_2026-05-04.md)** - Failed `rsf-allbench` job, partial all-planners evidence, asset blocker, and rerun boundary
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow
+* **[Multi-AMV Benchmark First Slice](./multi_amv_benchmark.md)** - Minimal multi-robot scenario surface, validation smoke, and inter-robot metric block
+* **[Real-World Trajectory Import](./real_world_trajectory_import.md)** - Narrow Stanford Drone Dataset annotation importer, normalization contract, and provenance workflow
 * **[Benchmark Visual Artifacts](./benchmark_visuals.md)** - SimulationView & synthetic video pipeline, performance metrics
 * **[Metrics Specification](./dev/issues/social-navigation-benchmark/metrics_spec.md)** - Formal definitions of benchmark metrics (includes per-pedestrian force quantiles)
 * **[Local Navigation Benchmark Gap Analysis (2026-01-14)](./dev/benchmark_plan_2026-01-14.md)** - Current-state inventory, missing pieces, and open questions for local planner benchmarking
@@ -476,6 +499,7 @@ Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_m
 
 * [Per-pedestrian force quantiles demo](../examples/benchmarks/per_ped_force_quantiles_demo.py) - Script comparing aggregated vs per-ped force quantiles
 * [**Issue 503 Pedestrian-Impact Metrics Notes**](./context/issue_503_pedestrian_impact_metrics.md) - Execution notes for the optional experimental `ped_impact_*` metric group
+* [**Issue 1085 Pedestrian-Impact Aggregate Metrics**](./context/issue_1085_pedestrian_impact_metrics.md) - Schema-backed `pedestrian-impact.v1` block, aggregate reduction path, and opt-in CLI contract
 
 ### 📁 Media Resources
 

@@ -18,6 +18,7 @@ import csv
 import json
 import math
 from collections import defaultdict
+from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -165,10 +166,34 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     }
     metrics = dict(rec.get("metrics") or {})
     fq = metrics.pop("force_quantiles", {}) or {}
+    ped_impact = metrics.pop("pedestrian_impact", {}) or {}
     # Flatten known force quantiles
     for qk in ("q50", "q90", "q95"):
         key = f"force_{qk}"
         base[key] = fq.get(qk)
+    # Flatten the schema-backed pedestrian-impact block for records that do not also carry
+    # legacy flat ped_impact_* keys.
+    if isinstance(ped_impact, dict):
+        reductions = ped_impact.get("canonical_reductions") or {}
+        if isinstance(reductions, dict):
+            for source_key, target_key in (
+                ("accel_delta_mean", "ped_impact_accel_delta_mean"),
+                ("accel_delta_median", "ped_impact_accel_delta_median"),
+                ("accel_delta_valid_pedestrians", "ped_impact_accel_delta_valid"),
+                ("turn_rate_delta_mean", "ped_impact_turn_rate_delta_mean"),
+                ("turn_rate_delta_median", "ped_impact_turn_rate_delta_median"),
+                ("turn_rate_delta_valid_pedestrians", "ped_impact_turn_rate_delta_valid"),
+            ):
+                base[target_key] = reductions.get(source_key)
+        sample_counts = ped_impact.get("sample_counts") or {}
+        if isinstance(sample_counts, dict):
+            for source_key, target_key in (
+                ("pedestrians", "ped_impact_ped_count"),
+                ("near_samples", "ped_impact_near_samples"),
+                ("far_samples", "ped_impact_far_samples"),
+                ("near_sample_frac", "ped_impact_near_sample_frac"),
+            ):
+                base[target_key] = sample_counts.get(source_key)
     # Remainder metrics (flat numbers)
     base.update(metrics)
     return base
@@ -440,6 +465,166 @@ def _attach_ci_for_group(
         dst_group[metric_name]["p95_ci"] = [float(lo_hi_p95[0]), float(lo_hi_p95[1])]
 
 
+def _pair_identity(row: dict[str, Any]) -> tuple[str, str] | None:
+    """Return the shared episode identity used for paired planner contrasts."""
+    scenario_id = row.get("scenario_id")
+    seed = row.get("seed", row.get("seed_index"))
+    if scenario_id is None or seed is None:
+        return None
+    return (str(scenario_id), str(seed))
+
+
+def _paired_metric_differences(
+    left_rows: list[dict[str, Any]],
+    right_rows: list[dict[str, Any]],
+) -> dict[str, np.ndarray]:
+    """Return paired ``right - left`` metric differences keyed by metric name."""
+    left_by_id = {
+        identity: _numeric_items(row)
+        for row in left_rows
+        if (identity := _pair_identity(row)) is not None
+    }
+    right_by_id = {
+        identity: _numeric_items(row)
+        for row in right_rows
+        if (identity := _pair_identity(row)) is not None
+    }
+    paired_ids = sorted(set(left_by_id) & set(right_by_id))
+    diffs: dict[str, list[float]] = defaultdict(list)
+    for identity in paired_ids:
+        left_metrics = left_by_id[identity]
+        right_metrics = right_by_id[identity]
+        for metric_name in sorted(set(left_metrics) & set(right_metrics)):
+            diffs[metric_name].append(right_metrics[metric_name] - left_metrics[metric_name])
+    return {name: np.asarray(values, dtype=float) for name, values in diffs.items()}
+
+
+def _bootstrap_delta_stats(
+    differences: np.ndarray,
+    *,
+    bootstrap_samples: int,
+    bootstrap_confidence: float,
+    bootstrap_seed: int | None,
+) -> dict[str, Any]:
+    """Summarize paired differences with percentile bootstrap and effect size metadata.
+
+    Returns:
+        Pairwise contrast statistics, or an empty mapping when no pairs are available.
+    """
+    clean = np.asarray(differences, dtype=float)
+    clean = clean[~np.isnan(clean)]
+    n_pairs = int(clean.size)
+    if n_pairs == 0:
+        return {}
+
+    delta_mean = float(np.mean(clean))
+    delta_median = float(np.median(clean))
+    sd = float(np.std(clean, ddof=1)) if n_pairs > 1 else float("nan")
+    effect_size = delta_mean / sd if sd > 0.0 and math.isfinite(sd) else None
+    rng = np.random.default_rng(bootstrap_seed)
+    boot_means = np.empty(int(bootstrap_samples), dtype=float)
+    for i in range(int(bootstrap_samples)):
+        idx = rng.integers(0, n_pairs, size=n_pairs)
+        boot_means[i] = float(np.mean(clean[idx]))
+
+    alpha = (1.0 - bootstrap_confidence) / 2.0
+    ci = [
+        float(np.percentile(boot_means, 100.0 * alpha)),
+        float(np.percentile(boot_means, 100.0 * (1.0 - alpha))),
+    ]
+    p_lower = float(np.mean(boot_means <= 0.0))
+    p_upper = float(np.mean(boot_means >= 0.0))
+    p_value = float(min(1.0, 2.0 * min(p_lower, p_upper)))
+    return {
+        "n_pairs": n_pairs,
+        "delta_mean": delta_mean,
+        "delta_median": delta_median,
+        "delta_ci": ci,
+        "p_value": p_value,
+        "effect_size": {
+            "type": "paired_cohens_dz",
+            "value": None if effect_size is None else float(effect_size),
+        },
+    }
+
+
+def _holm_adjust(p_values: list[tuple[str, str, float]]) -> dict[tuple[str, str], float]:
+    """Return Holm-adjusted p-values keyed by ``(comparison_key, metric_name)``."""
+    adjusted: dict[tuple[str, str], float] = {}
+    m = len(p_values)
+    running_max = 0.0
+    for rank, (comparison_key, metric_name, p_value) in enumerate(
+        sorted(p_values, key=lambda item: item[2]),
+        start=1,
+    ):
+        raw_adjusted = min(1.0, (m - rank + 1) * p_value)
+        running_max = max(running_max, raw_adjusted)
+        adjusted[(comparison_key, metric_name)] = running_max
+    return adjusted
+
+
+def _compute_pairwise_contrasts(
+    groups: dict[str, list[dict[str, Any]]],
+    *,
+    bootstrap_samples: int,
+    bootstrap_confidence: float,
+    bootstrap_seed: int | None,
+) -> dict[str, Any]:
+    """Compute paired planner contrasts for every group pair and metric.
+
+    Returns:
+        Additive ``pairwise_contrasts`` payload, or an empty mapping when unavailable.
+    """
+    if bootstrap_samples <= 0 or len(groups) < 2:
+        return {}
+
+    contrasts: dict[str, Any] = {
+        "_meta": {
+            "method": "paired_bootstrap_mean_delta",
+            "delta": "right_minus_left",
+            "pairing_keys": ["scenario_id", "seed_or_seed_index"],
+            "bootstrap_samples": int(bootstrap_samples),
+            "bootstrap_confidence": float(bootstrap_confidence),
+            "bootstrap_seed": bootstrap_seed,
+            "p_value_method": "two_sided_bootstrap_sign",
+            "p_value_correction": "holm",
+            "correction_family": ["family", "metric"],
+            "family": "all",
+        }
+    }
+    p_values_by_metric: dict[str, list[tuple[str, str, float]]] = defaultdict(list)
+
+    for left_name, right_name in combinations(sorted(groups), 2):
+        comparison_key = f"{left_name}__vs__{right_name}"
+        metric_diffs = _paired_metric_differences(groups[left_name], groups[right_name])
+        metric_stats: dict[str, dict[str, Any]] = {}
+        for metric_name, differences in metric_diffs.items():
+            stats = _bootstrap_delta_stats(
+                differences,
+                bootstrap_samples=bootstrap_samples,
+                bootstrap_confidence=bootstrap_confidence,
+                bootstrap_seed=bootstrap_seed,
+            )
+            if not stats:
+                continue
+            metric_stats[metric_name] = stats
+            p_values_by_metric[metric_name].append((comparison_key, metric_name, stats["p_value"]))
+        if metric_stats:
+            contrasts[comparison_key] = {
+                "left": left_name,
+                "right": right_name,
+                "metrics": metric_stats,
+            }
+
+    for metric_name, p_values in p_values_by_metric.items():
+        adjusted = _holm_adjust(p_values)
+        for comparison_key, _, _ in p_values:
+            contrasts[comparison_key]["metrics"][metric_name]["p_value_holm"] = adjusted[
+                (comparison_key, metric_name)
+            ]
+    return contrasts if len(contrasts) > 1 else {}
+
+
 def compute_aggregates_with_ci(  # noqa: PLR0913
     records: list[dict[str, Any]],
     *,
@@ -481,6 +666,12 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
     groups = _group_flattened(records, group_by=group_by, fallback_group_by=fallback_group_by)
+    pairwise_contrasts = _compute_pairwise_contrasts(
+        groups,
+        bootstrap_samples=bootstrap_samples,
+        bootstrap_confidence=bootstrap_confidence,
+        bootstrap_seed=bootstrap_seed,
+    )
 
     out: dict[str, dict[str, dict[str, Any]]] = {
         k: dict(v) for k, v in base.items() if k != "_meta"
@@ -501,6 +692,8 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
             bootstrap_confidence=bootstrap_confidence,
             bootstrap_seed=bootstrap_seed,
         )
+    if pairwise_contrasts:
+        out["pairwise_contrasts"] = pairwise_contrasts  # type: ignore[assignment]
     return out
 
 

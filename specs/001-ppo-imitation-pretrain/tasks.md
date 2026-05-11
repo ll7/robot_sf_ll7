@@ -61,7 +61,7 @@
 
 **Goal**: Capture, validate, and catalogue expert trajectories with playback support.
 
-**Independent Test**: Run `uv run python scripts/training/collect_expert_trajectories.py --policy-id <approved_id> --episodes 200`, then `uv run python scripts/validation/validate_trajectory_dataset.py --dataset <dataset_path>`, and confirm manifests show `qualityStatus=validated`.
+**Independent Test**: Run `uv run python scripts/training/collect_expert_trajectories.py --dataset-id <dataset_id> --policy-id <approved_id> --episodes 200`, then `uv run python scripts/validation/validate_trajectory_dataset.py --dataset <dataset_path>`, and confirm manifests show `qualityStatus=validated`.
 
 ### Implementation for User Story 2
 
@@ -78,7 +78,7 @@
 
 **Goal**: Warm-start PPO agents from expert trajectories and compare against baseline training.
 
-**Independent Test**: Execute `uv run python scripts/training/pretrain_from_expert.py --dataset <dataset_id> --config configs/training/ppo_imitation/bc_pretrain.yaml` followed by `uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml`, then generate a comparison report via `uv run python scripts/tools/compare_training_runs.py --group <run_group_id>` showing ≤70% timestep budget vs. baseline.
+**Independent Test**: Execute `uv run --group imitation python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml` followed by `uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml`, then generate a comparison report via `uv run python scripts/tools/compare_training_runs.py --group <run_group_id>` showing ≤70% timestep budget vs. baseline.
 
 ### Implementation for User Story 3
 

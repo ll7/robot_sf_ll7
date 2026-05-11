@@ -10,6 +10,10 @@ This directory hosts configuration files used by the expert-policy, trajectory c
 * `optuna_expert_ppo.yaml` – Config-first launcher settings for Optuna sweeps on top of `expert_ppo.yaml`.
 * `bc_pretrain.yaml` – Behavioural cloning phase settings (optimizer, batch sizes, dataset references).
 * `ppo_finetune.yaml` – PPO fine-tuning schedule that resumes from a pre-trained checkpoint.
+* `bc_pretrain_issue_749_v10_warm_start.yaml` and
+  `ppo_finetune_issue_749_v10_warm_start.yaml` – Issue #749 BC warm-start PPO challenger launch
+  packet; see `docs/context/issue_749_bc_preinit_ppo_launch_packet.md` for the dataset collection,
+  artifact-persistence, and evaluation boundary.
 * Additional files describe scenario coverage manifests referenced by trajectory collection commands.
 
 ## Usage Notes

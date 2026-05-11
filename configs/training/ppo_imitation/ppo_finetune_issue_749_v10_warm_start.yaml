@@ -1,0 +1,13 @@
+# Issue #749 PPO fine-tune config for the BC-preinitialized challenger.
+#
+# The pretrained policy id is produced by
+# bc_pretrain_issue_749_v10_warm_start.yaml. The full run is intentionally
+# expensive and should be launched only after the issue #749 trajectory dataset
+# has a durable manifest.
+run_id: issue_749_ppo_finetune_v10_warm_start
+pretrained_policy_id: issue_749_bc_preinit_v10_policy
+total_timesteps: 10000000
+learning_rate: 0.0001
+random_seeds: [111, 112, 113]
+snqi_weights: ../../benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: ../../benchmarks/snqi_baseline_camera_ready_v3.json

@@ -1,0 +1,12 @@
+# Issue #749 behavioral-cloning warm-start config.
+#
+# This config is the BC stage for a BC-preinitialized PPO challenger under the v10
+# fine-tune comparison contract. The dataset must be collected first from the
+# promoted BR-06 v3 expert policy and validated by the trajectory dataset manifest.
+run_id: issue_749_bc_pretrain_v10_warm_start
+dataset_id: issue_749_b60iopxt_v10_eval_trajectories
+policy_output_id: issue_749_bc_preinit_v10_policy
+bc_epochs: 20
+batch_size: 64
+learning_rate: 0.0003
+random_seeds: [111, 112, 113]

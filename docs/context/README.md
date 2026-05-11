@@ -209,6 +209,9 @@ knowledge, not every transient iteration detail.
 
 ## Training Notes
 
+* [Issue #749 BC-Preinitialized PPO Launch Packet](issue_749_bc_preinit_ppo_launch_packet.md)
+  defines the config-first launch path and artifact boundary for the deferred BC warm-start PPO
+  challenger experiment.
 * [Issue #1024 H500 PPO Retrain](issue_1024_h500_ppo_retrain.md)
   records the all-available scenario surface, PR #1025 h500 horizon alignment, and SLURM job
   `12350` for the first 12M-step PPO retrain.

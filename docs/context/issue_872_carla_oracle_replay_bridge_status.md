@@ -6,10 +6,11 @@ Status date: 2026-05-09
 
 ## Scope Boundary
 
-Issue #872 is a parent epic for the CARLA oracle replay bridge. The tracked definition of done
-includes neutral export, clear missing-CARLA failure behavior, at least one positive CARLA oracle
-replay smoke on a CARLA-capable host, and trajectory-level metric comparison between Robot-SF and
-CARLA outputs.
+Issue #872 is a parent epic for the CARLA oracle replay bridge (see the
+[T0/T1 contract in #928](./issue_928_carla_t0_t1_replay_contract.md)). The tracked definition of
+done includes neutral export, clear missing-CARLA failure behavior, at least one positive CARLA
+oracle replay smoke on a CARLA-capable host, and trajectory-level metric comparison between
+Robot-SF and CARLA outputs.
 
 This note records the current implementation boundary. It does not close #872.
 
@@ -27,8 +28,9 @@ Completed CARLA-free T0 bridge pieces:
 
 Next active smoke slice:
 
-- #1003 / PR #1100 carries the setup-only T1 smoke path. Its purpose is dependency gating and
-  fail-closed behavior, not live simulator replay proof.
+- [#1003](https://github.com/ll7/robot_sf_ll7/issues/1003) /
+  [PR #1100](https://github.com/ll7/robot_sf_ll7/pull/1100) carries the setup-only T1 smoke path.
+  Its purpose is dependency gating and fail-closed behavior, not live simulator replay proof.
 
 ## Claim Boundary
 
@@ -62,4 +64,5 @@ The #872 definition of done still needs:
 
 This status note is documentation only. PR validation for the note should include normal docs
 format checks plus the CARLA bridge unit tests already used by the T0 stack. The live simulator
-validation remains deferred to #1111 because this machine does not provide a CARLA runtime.
+validation remains deferred to [#1111](https://github.com/ll7/robot_sf_ll7/issues/1111) because
+this machine does not provide a CARLA runtime.

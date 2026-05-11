@@ -166,12 +166,14 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #596 Testing-Only Planner Promotion Matrix](./context/issue_596_testing_only_planner_promotion_matrix.md)** - Planner-specific promotion blockers, evidence links, and next-proof requirements for the testing-only planners
 * **[Benchmark Release Protocol v0.1](./benchmark_release_protocol.md)** - Canonical benchmark release model, versioning policy, and manifest/entrypoint contract for paper-facing releases
 * **[Benchmark Release Reproducibility](./benchmark_release_reproducibility.md)** - Reproduce a benchmark release from a tag, canonical manifest, and reduced smoke validation path
+* **[Benchmark Docker Reproduction Path](./benchmark_docker_repro.md)** - Build a pinned Docker image and run the canonical small benchmark artifact smoke with one command
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Observation Visibility](./benchmark_observation_visibility.md)** - Configurable planner-facing FOV, range, and static-occlusion filtering for partial-observability experiments
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
 * **[Planner Adapter Starter Template](./dev/planner_adapter_template.md)** - Copy-and-adapt path plus a diagnostic reference adapter for new local planner contributions
 * **[Issue #589 Public Leaderboard MVP Boundary](./context/issue_589_public_leaderboard_mvp.md)** - Conservative no-implementation-now decision and future PR-based leaderboard prerequisites
+* **[Issue #1086 Docker Reproduction Path](./context/issue_1086_docker_reproduction_path.md)** - Decision record and validation boundary for the pinned Docker benchmark smoke path
 * **[Issue #1087 Planner Adapter Starter Template](./context/issue_1087_planner_adapter_template.md)** - Decision record for the reference adapter, docs, and validation path
 * **[Policy Search Context](./context/policy_search/README.md)** - File-based local policy-search workflow with candidate registry, staged evaluation funnel, emitted reports, and SLURM handoff notes for expensive follow-up work
 * **[Issue #1023 Scenario-Horizon Benchmark Surface](./context/issue_1023_scenario_horizon_benchmark.md)** - Runnable h500 scenario-horizon benchmark config, local non-Slurm full campaign evidence, fixed-vs-scenario comparison, and conservative promotion boundary

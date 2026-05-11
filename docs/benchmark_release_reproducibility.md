@@ -197,3 +197,21 @@ uv run python scripts/tools/run_benchmark_release.py \
 
 This preserves the release contract shape while avoiding a heavyweight full
 benchmark run.
+
+## Benchmark Docker Reproduction Path
+
+For a fresh headless container smoke that verifies the benchmark CLI and artifact-writing surfaces
+without requiring a local Python setup, use the pinned Docker path:
+
+```bash
+scripts/repro/run_benchmark_docker_smoke.sh
+```
+
+The Docker smoke is documented in `docs/benchmark_docker_repro.md`. It builds
+`docker/benchmark-repro.Dockerfile`, runs the small
+`configs/scenarios/planner_sanity_matrix_v1.yaml` slice, and writes inspectable artifacts under
+`output/docker_repro/benchmark_bundle_smoke/`.
+
+This Docker path is intentionally narrower than the reduced release manifest above: it is a
+containerized environment and artifact smoke, not a replacement for full release reproduction or
+paper-facing campaign validation.

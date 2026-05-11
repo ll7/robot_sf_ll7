@@ -232,6 +232,16 @@ records from `_run_map_episode`) includes:
 For aggregation, use the utilities in `robot_sf/benchmark/aggregate.py` or the CLI
 ( `robot_sf_bench aggregate` ) to compute mean/median/p95 and optional bootstrap CIs.
 Aggregation validates threshold-profile consistency and rejects mixed profiles.
+When bootstrap sampling is enabled, aggregate output also includes an additive
+`pairwise_contrasts` block when at least two planner groups share paired episode identities. The
+contrast pairing key is `(scenario_id, seed)` with `seed_index` as a fallback, the reported delta is
+`right_minus_left`, and each
+metric contrast includes the paired mean delta, percentile bootstrap interval, two-sided bootstrap
+sign p-value, Holm-adjusted p-value, and paired Cohen's dz effect size. Holm correction is applied
+within the current aggregate family (`family="all"`) separately for each metric; run aggregation on
+scenario-family-filtered inputs when family-specific correction is required. These contrasts are
+descriptive benchmark summaries and do not by themselves establish high-power inference for small
+or weakly paired evidence bases.
 
 For threshold studies, run `scripts/benchmark_threshold_sensitivity.py` to quantify
 distance/comfort threshold impacts across scenario families and to compare speed-aware

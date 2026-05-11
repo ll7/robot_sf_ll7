@@ -701,21 +701,26 @@ def _load_route_clearance_certifications(path: Path | None) -> dict[str, dict[st
         raise ValueError(f"Route-clearance certification file requires 'certifications': {path}")
 
     records: dict[str, dict[str, Any]] = {}
+    seen_scenarios: set[str] = set()
     for scenario_name, record_raw in records_raw.items():
-        scenario = str(scenario_name).strip()
+        scenario = str(scenario_name or "").strip()
         if not scenario:
             raise ValueError("Route-clearance certification scenario keys must be non-empty")
+        scenario_lower = scenario.lower()
+        if scenario_lower in seen_scenarios:
+            raise ValueError(f"Duplicate scenario name detected (case-insensitive): '{scenario}'")
+        seen_scenarios.add(scenario_lower)
         if not isinstance(record_raw, dict):
             raise ValueError(f"Certification for '{scenario}' must be a mapping")
-        status = str(record_raw.get("status", "")).strip()
+        status = str(record_raw.get("status") or "").strip()
         if status not in _ROUTE_CLEARANCE_CERTIFICATION_STATUSES:
             expected = ", ".join(sorted(_ROUTE_CLEARANCE_CERTIFICATION_STATUSES))
             raise ValueError(
                 f"Unsupported route-clearance certification status '{status}' for "
                 f"'{scenario}'. Expected one of: {expected}"
             )
-        claim_scope = str(record_raw.get("claim_scope", "")).strip()
-        rationale = str(record_raw.get("rationale", "")).strip()
+        claim_scope = str(record_raw.get("claim_scope") or "").strip()
+        rationale = str(record_raw.get("rationale") or "").strip()
         if not claim_scope or not rationale:
             raise ValueError(
                 f"Certification for '{scenario}' requires non-empty claim_scope and rationale"
@@ -724,9 +729,9 @@ def _load_route_clearance_certifications(path: Path | None) -> dict[str, dict[st
             "status": status,
             "claim_scope": claim_scope,
             "rationale": rationale,
-            "reviewed_on": str(record_raw.get("reviewed_on", "")).strip() or None,
-            "reviewed_by": str(record_raw.get("reviewed_by", "")).strip() or None,
-            "issue": str(record_raw.get("issue", "")).strip() or None,
+            "reviewed_on": str(record_raw.get("reviewed_on") or "").strip() or None,
+            "reviewed_by": str(record_raw.get("reviewed_by") or "").strip() or None,
+            "issue": str(record_raw.get("issue") or "").strip() or None,
         }
     return records
 

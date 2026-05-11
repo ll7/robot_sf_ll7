@@ -20,6 +20,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     SeedPolicy,
     _jsonable_repo_relative,
     _load_campaign_scenarios,
+    _load_route_clearance_certifications,
     _planner_report_row,
     _resolved_seed_inventory,
     _sanitize_csv_cell,
@@ -2590,6 +2591,93 @@ def test_prepare_campaign_preflight_attaches_route_clearance_certifications(
         validate_payload["route_clearance_certifications_path"]
         == certification_path.resolve().as_posix()
     )
+
+
+def test_load_route_clearance_certifications_treats_null_optional_fields_as_missing(
+    tmp_path: Path,
+) -> None:
+    """Optional null certification fields should stay unset rather than stringified."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "certified_clearance_warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": "benchmark-ready stress geometry with caveat",
+                        "rationale": "Intentionally tight corridor fixture.",
+                        "reviewed_on": None,
+                        "reviewed_by": None,
+                        "issue": None,
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    certifications = _load_route_clearance_certifications(certification_path)
+
+    assert certifications["certified_clearance_warn"]["reviewed_on"] is None
+    assert certifications["certified_clearance_warn"]["reviewed_by"] is None
+    assert certifications["certified_clearance_warn"]["issue"] is None
+
+
+def test_load_route_clearance_certifications_rejects_null_required_fields(tmp_path: Path) -> None:
+    """Required certification strings should fail closed when YAML supplies null."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "certified_clearance_warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": None,
+                        "rationale": "Intentionally tight corridor fixture.",
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="requires non-empty claim_scope and rationale"):
+        _load_route_clearance_certifications(certification_path)
+
+
+def test_load_route_clearance_certifications_rejects_case_insensitive_duplicates(
+    tmp_path: Path,
+) -> None:
+    """Scenario keys should be unique even when they differ only by case."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "Certified_Clearance_Warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": "benchmark-ready stress geometry with caveat",
+                        "rationale": "Primary fixture.",
+                    },
+                    "certified_clearance_warn": {
+                        "status": "excluded_from_planner_attribution",
+                        "claim_scope": "excluded from planner attribution",
+                        "rationale": "Duplicate scenario key with different case.",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate scenario name detected"):
+        _load_route_clearance_certifications(certification_path)
 
 
 def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Path) -> None:

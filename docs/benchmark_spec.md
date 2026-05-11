@@ -110,6 +110,33 @@ is useful for input-contract parity checks but is not a claim of pure planner-lo
 
 Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 
+## Planner Inclusion Check
+
+Use the mechanical inclusion check before proposing that an experimental planner move into a
+promoted or baseline-safe benchmark set:
+
+```bash
+uv run robot_sf_bench planner-inclusion-check \
+  --algo orca \
+  --matrix configs/scenarios/planner_sanity_matrix_v1.yaml \
+  --output-dir output/planner_inclusion/orca
+```
+
+The command runs one planner on a small reference slice, validates episode writes through the
+standard benchmark runner/schema path, aggregates the output, and writes a versioned JSON report
+under the selected output directory. The default gates are intentionally minimal:
+
+* every scheduled episode must produce a schema-valid record,
+* aggregate values must be finite, with no NaN or infinite values,
+* runtime must stay within `--max-runtime-sec` (default `60`),
+* at least `--min-episodes` records must be written,
+* `success` mean must be at least `--min-success-rate` (default `0.5`),
+* `collisions` mean must be at most `--max-collision-rate` (default `0.0`).
+
+The report decision is either `pass` or `revise`, with per-check failure reasons. Passing the gate
+does not automatically change planner status, create a leaderboard claim, or replace paper-facing
+benchmark evidence; it is a reproducible review input for a promotion PR.
+
 ## Reproducible Command (One-Liner)
 
 Run the full suite with a single command (seed-holdout eval set):

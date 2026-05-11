@@ -1102,6 +1102,23 @@ Output format
   each metric. For scenario-family-specific correction, filter or split the input records by family
   before aggregation.
 
+## Planner Inclusion Gate
+
+Run the planner inclusion check when a planner is being considered for promotion from
+experimental/testing-only status into a promoted benchmark set:
+
+```bash
+uv run robot_sf_bench planner-inclusion-check \
+  --algo orca \
+  --matrix configs/scenarios/planner_sanity_matrix_v1.yaml \
+  --output-dir output/planner_inclusion/orca
+```
+
+The command writes `<algo>_episodes.jsonl` plus `<algo>_inclusion_report.json`. The report is a
+review artifact, not an automatic status update. It fails closed with explicit reasons for runner
+or schema failures, NaN/infinite aggregates, slow runtime, too few episodes, low success rate, or
+excess collision rate.
+
 Programmatic usage
 
 ```python

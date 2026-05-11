@@ -2856,6 +2856,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     _finalize_feasibility_metadata(algo_meta)
     if isinstance(planner_runtime_snapshot, dict):
         algo_meta["planner_runtime"] = planner_runtime_snapshot
+    visibility_settings = getattr(config, "observation_visibility", None)
+    if visibility_settings is not None and hasattr(visibility_settings, "to_metadata"):
+        algo_meta["observation_visibility"] = visibility_settings.to_metadata()
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,

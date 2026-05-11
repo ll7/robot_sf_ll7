@@ -13,7 +13,10 @@ from typing import Any
 import yaml
 from loguru import logger
 
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.gym_env.unified_config import (
+    ObservationVisibilitySettings,
+    RobotSimulationConfig,
+)
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import (
     MapDefinition,
@@ -685,6 +688,7 @@ def _validate_scenario_entry(
     _validate_map_reference(scenario, name=name, source=source, index=index)
     _validate_optional_mapping(scenario, key="simulation_config", source=source, index=index)
     _validate_optional_mapping(scenario, key="robot_config", source=source, index=index)
+    _validate_optional_mapping(scenario, key="observation_visibility", source=source, index=index)
     _validate_optional_mapping(scenario, key="metadata", source=source, index=index)
     _validate_platform_semantics(scenario, source=source, index=index)
     _validate_seed_list(scenario, source=source, index=index)
@@ -1038,6 +1042,10 @@ def build_robot_config_from_scenario(
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
     _apply_robot_overrides(config, scenario.get("robot_config", {}))
+    _apply_observation_visibility_overrides(
+        config,
+        scenario.get("observation_visibility"),
+    )
     _apply_map_pool(config, scenario, scenario_path)
     _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
     _apply_single_pedestrian_overrides(config, scenario.get("single_pedestrians"))
@@ -1064,7 +1072,8 @@ def _coerce_finite_float(value: Any, *, field_name: str) -> float:
     """
     parsed = float(value)
     if not math.isfinite(parsed):
-        raise ValueError(f"robot_config.{field_name} must be finite.")
+        prefix = "" if "." in field_name else "robot_config."
+        raise ValueError(f"{prefix}{field_name} must be finite.")
     return parsed
 
 
@@ -1076,7 +1085,21 @@ def _coerce_non_negative_float(value: Any, *, field_name: str) -> float:
     """
     parsed = _coerce_finite_float(value, field_name=field_name)
     if parsed < 0.0:
-        raise ValueError(f"robot_config.{field_name} must be >= 0.")
+        prefix = "" if "." in field_name else "robot_config."
+        raise ValueError(f"{prefix}{field_name} must be >= 0.")
+    return parsed
+
+
+def _coerce_positive_float(value: Any, *, field_name: str) -> float:
+    """Parse and validate a positive finite float for scenario fields.
+
+    Returns:
+        float: Parsed finite float that is ``> 0``.
+    """
+    parsed = _coerce_finite_float(value, field_name=field_name)
+    if parsed <= 0.0:
+        prefix = "" if "." in field_name else "robot_config."
+        raise ValueError(f"{prefix}{field_name} must be > 0.")
     return parsed
 
 
@@ -1094,7 +1117,59 @@ def _coerce_bool(value: Any, *, field_name: str) -> bool:
             return True
         if normalized in {"false", "0", "no", "n"}:
             return False
-    raise ValueError(f"robot_config.{field_name} must be a boolean.")
+    prefix = "" if "." in field_name else "robot_config."
+    raise ValueError(f"{prefix}{field_name} must be a boolean.")
+
+
+def _apply_observation_visibility_overrides(
+    config: RobotSimulationConfig,
+    overrides: Mapping[str, Any] | None,
+) -> None:
+    """Apply optional planner-facing visibility limits from scenario YAML."""
+    if overrides is None:
+        return
+    if not isinstance(overrides, Mapping):
+        raise ValueError("observation_visibility must be a mapping.")
+    allowed = {"enabled", "fov_degrees", "max_range_m", "static_occlusion"}
+    unknown = sorted(set(overrides) - allowed)
+    if unknown:
+        raise ValueError(f"observation_visibility contains unknown keys: {', '.join(unknown)}.")
+
+    enabled = (
+        _coerce_bool(overrides["enabled"], field_name="observation_visibility.enabled")
+        if "enabled" in overrides
+        else True
+    )
+    fov_degrees = (
+        _coerce_positive_float(
+            overrides["fov_degrees"],
+            field_name="observation_visibility.fov_degrees",
+        )
+        if "fov_degrees" in overrides
+        else 360.0
+    )
+    if fov_degrees > 360.0:
+        raise ValueError("observation_visibility.fov_degrees must be <= 360.")
+    max_range_m = None
+    if "max_range_m" in overrides and overrides["max_range_m"] is not None:
+        max_range_m = _coerce_positive_float(
+            overrides["max_range_m"],
+            field_name="observation_visibility.max_range_m",
+        )
+    static_occlusion = (
+        _coerce_bool(
+            overrides["static_occlusion"],
+            field_name="observation_visibility.static_occlusion",
+        )
+        if "static_occlusion" in overrides
+        else False
+    )
+    config.observation_visibility = ObservationVisibilitySettings(
+        enabled=enabled,
+        fov_degrees=fov_degrees,
+        max_range_m=max_range_m,
+        static_occlusion=static_occlusion,
+    )
 
 
 def _robot_type_alias(raw: str) -> str:

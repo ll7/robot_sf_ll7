@@ -28,7 +28,7 @@ Examples were selected to satisfy four constraints:
 
 - small pack size: three examples,
 - distinct scenario/failure-pattern categories,
-- retained durable evidence under `docs/context/evidence/`,
+- retained durable evidence under [docs/context/evidence](evidence/README.md),
 - explicit claim and non-claim boundaries for each example.
 
 ## Summary Table
@@ -46,9 +46,9 @@ Examples were selected to satisfy four constraints:
 - Scenario: `classic_bottleneck_low`
 - Planner/seed: ORCA, seed `111`
 - Evidence pointer:
-  `docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv`
+  [docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv](evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv)
 - Reporting pointer:
-  `docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/fixed_vs_h500_outcome_table.csv`
+  [docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/fixed_vs_h500_outcome_table.csv](evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/fixed_vs_h500_outcome_table.csv)
 - Scenario class: bottleneck / route-completion.
 - Actor mix: robot-only trace stream in the retained summary.
 - Metric layer: success, episode steps, collision flag, near-miss/force/comfort exposure.
@@ -65,9 +65,9 @@ Examples were selected to satisfy four constraints:
 - Scenario: `classic_t_intersection_medium`
 - Planner/seed: ORCA, seed `111`
 - Evidence pointer:
-  `docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv`
+  [docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv](evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv)
 - Reporting pointer:
-  `docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/exposure_aware_trace_table.csv`
+  [docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/exposure_aware_trace_table.csv](evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/exposure_aware_trace_table.csv)
 - Scenario class: T-intersection / pedestrian interaction.
 - Actor mix: robot plus pedestrian.
 - Metric layer: success, episode steps, force-exposure steps, comfort-exposure sum, minimum
@@ -85,9 +85,9 @@ Examples were selected to satisfy four constraints:
 - Scenario: `classic_merging_low`
 - Planner/seed: ORCA, seed `111`
 - Evidence pointer:
-  `docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv`
+  [docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv](evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv)
 - Reporting pointer:
-  `docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/exposure_aware_trace_table.csv`
+  [docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/exposure_aware_trace_table.csv](evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/exposure_aware_trace_table.csv)
 - Scenario class: merging / pedestrian interaction.
 - Actor mix: robot plus pedestrian.
 - Metric layer: collision, episode steps, force exposure, comfort exposure.
@@ -110,9 +110,9 @@ rtk column -s, -t docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-
 ```
 
 The original trace runner command shape is recorded in
-`docs/context/issue_1049_h500_mechanism_pilot.md`. It uses ignored `output/` intermediates, while
-the compact trace summaries and exposure tables above are the durable retained evidence for this
-worked-example pack.
+[docs/context/issue_1049_h500_mechanism_pilot.md](issue_1049_h500_mechanism_pilot.md). It uses
+ignored `output/` intermediates, while the compact trace summaries and exposure tables above are
+the durable retained evidence for this worked-example pack.
 
 ## Claim Boundary
 

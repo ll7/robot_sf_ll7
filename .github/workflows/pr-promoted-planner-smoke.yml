@@ -1,0 +1,63 @@
+name: PR Promoted Planner Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  promoted-planner-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUNBUFFERED: "1"
+      SDL_VIDEODRIVER: dummy
+      MPLBACKEND: Agg
+      PYGAME_HIDE_SUPPORT_PROMPT: "1"
+      LOGURU_LEVEL: WARNING
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.11"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: System packages for headless
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
+
+      - name: Sync dependencies (locked)
+        run: uv sync --all-extras --frozen
+
+      - name: Run promoted planner smoke
+        run: |
+          uv run python scripts/validation/run_pr_promoted_planner_smoke.py \
+            --output-root output/benchmarks/pr_promoted_planner_smoke \
+            --runtime-budget-seconds 90 \
+            --github-step-summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload promoted planner smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-promoted-planner-smoke
+          path: |
+            output/benchmarks/pr_promoted_planner_smoke/summary.json
+            output/benchmarks/pr_promoted_planner_smoke/summary.md
+            output/benchmarks/pr_promoted_planner_smoke/episodes.jsonl
+            output/benchmarks/pr_promoted_planner_smoke/logs/
+          if-no-files-found: warn

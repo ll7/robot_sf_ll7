@@ -37,6 +37,12 @@ from robot_sf_carla_bridge.export import (
     write_export_payload,
     write_export_records,
 )
+from robot_sf_carla_bridge.replay_smoke import (
+    T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION,
+    build_t1_oracle_replay_smoke_setup,
+    select_t0_export_payload,
+    validate_t1_replay_catalog_payload,
+)
 from robot_sf_carla_bridge.schema_catalog import (
     SCHEMA_CATALOG_VERSION,
     list_carla_bridge_schema_catalog,
@@ -49,6 +55,7 @@ __all__ = [
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
     "SCHEMA_CATALOG_VERSION",
+    "T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION",
     "CarlaUnavailableError",
     "CertificateRef",
     "PedestrianReplaySpec",
@@ -61,6 +68,7 @@ __all__ = [
     "build_export_payload_from_map_definition",
     "build_export_payload_from_scenario_entry",
     "build_export_payloads_from_scenario_file",
+    "build_t1_oracle_replay_smoke_setup",
     "check_carla_availability",
     "list_carla_bridge_schema_catalog",
     "load_availability_schema",
@@ -73,7 +81,9 @@ __all__ = [
     "read_export_payload",
     "require_carla",
     "resolve_export_manifest_payload_paths",
+    "select_t0_export_payload",
     "validate_export_payload",
+    "validate_t1_replay_catalog_payload",
     "write_export_payload",
     "write_export_records",
 ]

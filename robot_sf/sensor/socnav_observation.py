@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 from gymnasium import spaces
 from loguru import logger
+from shapely.geometry import LineString
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
@@ -231,6 +232,66 @@ class SocNavObservationFusion:
         self._last_heading = float(wrapped_heading)
         return np.array([angular_velocity], dtype=np.float32)
 
+    def _visible_pedestrian_mask(
+        self,
+        ped_positions: np.ndarray,
+        *,
+        robot_pos: np.ndarray,
+        robot_heading: float,
+    ) -> np.ndarray:
+        """Return the planner-facing visibility mask for pedestrian positions."""
+        if ped_positions.size == 0:
+            return np.zeros((0,), dtype=bool)
+        settings = getattr(self.env_config, "observation_visibility", None)
+        if settings is None or not bool(getattr(settings, "enabled", False)):
+            return np.ones((ped_positions.shape[0],), dtype=bool)
+
+        visible = np.ones((ped_positions.shape[0],), dtype=bool)
+        rel = ped_positions - robot_pos
+        dists = np.linalg.norm(rel, axis=1)
+
+        max_range_m = getattr(settings, "max_range_m", None)
+        if max_range_m is not None:
+            visible &= dists <= float(max_range_m)
+
+        fov_degrees = float(getattr(settings, "fov_degrees", 360.0))
+        if fov_degrees < 360.0:
+            bearings = np.arctan2(rel[:, 1], rel[:, 0])
+            deltas = ((bearings - robot_heading + np.pi) % (2.0 * np.pi)) - np.pi
+            visible &= np.abs(deltas) <= np.deg2rad(fov_degrees) / 2.0
+
+        if bool(getattr(settings, "static_occlusion", False)):
+            for idx, ped_pos in enumerate(ped_positions):
+                if visible[idx] and self._statically_occluded(robot_pos=robot_pos, ped_pos=ped_pos):
+                    visible[idx] = False
+        return visible
+
+    def _statically_occluded(self, *, robot_pos: np.ndarray, ped_pos: np.ndarray) -> bool:
+        """Return whether static map geometry blocks line of sight to a pedestrian."""
+        obstacles = getattr(getattr(self.simulator, "map_def", None), "obstacles", []) or []
+        if not obstacles:
+            return False
+        segment = LineString(
+            [
+                (float(robot_pos[0]), float(robot_pos[1])),
+                (float(ped_pos[0]), float(ped_pos[1])),
+            ]
+        )
+        if segment.length <= 0.0:
+            return False
+        for obstacle in obstacles:
+            polygons = (
+                obstacle.iter_polygons()
+                if hasattr(obstacle, "iter_polygons")
+                else [getattr(obstacle, "geometry", None)]
+            )
+            for polygon in polygons:
+                if polygon is None or getattr(polygon, "is_empty", False):
+                    continue
+                if segment.intersects(polygon) and not segment.touches(polygon):
+                    return True
+        return False
+
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
         ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
@@ -250,6 +311,16 @@ class SocNavObservationFusion:
 
         robot_pose = self.simulator.robots[self.robot_index].pose
         robot_pos = np.asarray(robot_pose[0], dtype=np.float32)
+        heading = float(robot_pose[1])
+        visibility_mask = self._visible_pedestrian_mask(
+            ped_positions,
+            robot_pos=robot_pos,
+            robot_heading=heading,
+        )
+        if visibility_mask.size > 0:
+            ped_positions = ped_positions[visibility_mask]
+            ped_velocities = ped_velocities[visibility_mask]
+
         # Order pedestrians by distance to robot (closest-first)
         if ped_positions.size > 0:
             rel = ped_positions - robot_pos
@@ -266,7 +337,6 @@ class SocNavObservationFusion:
             padded[: ped_positions.shape[0]] = ped_positions
         if ped_velocities.size > 0:
             # Convert pedestrian velocities to ego frame (rotate by -heading)
-            heading = float(robot_pose[1])
             cos_h = np.cos(heading)
             sin_h = np.sin(heading)
             vx = ped_velocities[:, 0]

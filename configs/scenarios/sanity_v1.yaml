@@ -1,0 +1,16 @@
+# Issue #1083 nominal calibration matrix.
+#
+# `sanity_v1` is intentionally easier than the hard paper/stress matrices. It keeps low-ambiguity
+# route-following and sparse-interaction cases so baseline competence can be checked separately
+# from stress-test robustness.
+
+includes:
+  - single/planner_sanity_simple.yaml
+  - sets/verified_simple_subset_v1.yaml
+select_scenarios:
+  - planner_sanity_simple
+  - empty_map_8_directions_east
+  - goal_behind_robot
+  - single_ped_crossing_orthogonal
+map_search_paths:
+  - ../../maps/svg_maps

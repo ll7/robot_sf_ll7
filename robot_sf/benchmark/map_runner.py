@@ -25,6 +25,7 @@ from robot_sf.benchmark import planner_command_contract as planner_commands
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
+    resolve_observation_mode,
 )
 from robot_sf.benchmark.algorithm_readiness import (
     BenchmarkProfile,
@@ -35,6 +36,14 @@ from robot_sf.benchmark.metrics import (
     EpisodeData,
     compute_all_metrics,
     post_process_metrics,
+)
+from robot_sf.benchmark.observation_noise import (
+    apply_observation_noise,
+    make_observation_noise_rng,
+    merge_observation_noise_stats,
+    new_observation_noise_stats,
+    normalize_observation_noise_spec,
+    observation_noise_hash,
 )
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -132,6 +141,7 @@ from robot_sf.planner.socnav import (
     SocialForcePlannerAdapter,
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
+    TrivialReferencePlannerAdapter,
 )
 from robot_sf.planner.sonic_crowdnav import (
     SonicCrowdNavAdapter,
@@ -192,6 +202,8 @@ _SOCNAV_ALGO_KEYS = {
     "gst_predictor_rand_guarded",
     "sicnav",
     "dr_mpc",
+    "trivial_reference",
+    "reference_adapter",
 }
 _PPO_PAPER_REQUIRED_PROVENANCE = (
     "training_config",
@@ -1250,6 +1262,22 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             normalized_robot_command_mode=normalized_robot_command_mode,
         )
 
+    if algo_key in {"trivial_reference", "reference_adapter"}:
+        adapter = TrivialReferencePlannerAdapter(config=_build_socnav_config(algo_config))
+        meta["algorithm"] = "trivial_reference"
+        return _build_adapter_policy(
+            algo_key="trivial_reference",
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="TrivialReferencePlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations=(
+                "Diagnostic adapter template only; do not use as benchmark planner evidence."
+            ),
+        )
+
     if algo_key == "policy_stack_v1":
         stack_cfg = build_policy_stack_v1_build_config(algo_config)
         adapter = PolicyStackV1Adapter(
@@ -2288,6 +2316,8 @@ def _scenario_identity_payload(
     horizon: int | None,
     dt: float | None,
     record_forces: bool,
+    observation_mode: str | None = None,
+    observation_noise: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
 
@@ -2305,6 +2335,12 @@ def _scenario_identity_payload(
     payload["algo"] = str(algo)
     payload["algo_config_hash"] = _config_hash(algo_config)
     payload["record_forces"] = bool(record_forces)
+    if observation_mode is not None:
+        payload["observation_mode"] = str(observation_mode)
+    noise_spec = normalize_observation_noise_spec(observation_noise)
+    if bool(noise_spec["enabled"]):
+        payload["observation_noise_profile"] = str(noise_spec["profile"])
+        payload["observation_noise_hash"] = observation_noise_hash(noise_spec)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
     if dt is not None and float(dt) > 0.0:
@@ -2596,6 +2632,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
+    observation_mode: str | None = None,
+    observation_noise: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -2605,6 +2643,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
     scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
+    scenario_id = str(
+        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
+    )
+    noise_spec = normalize_observation_noise_spec(observation_noise)
+    noise_rng = make_observation_noise_rng(noise_spec, seed=seed, scenario_id=scenario_id)
+    noise_stats = new_observation_noise_stats()
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
@@ -2626,12 +2670,19 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo_config=raw_policy_cfg,
         scenario=scenario,
     )
+    active_observation_mode = resolve_observation_mode(algo, observation_mode)
     policy_fn, algo_meta = _build_policy(
         algo,
         policy_cfg,
         robot_kinematics=robot_kinematics,
         robot_command_mode=robot_command_mode,
         adapter_impact_eval=adapter_impact_eval,
+    )
+    algo_meta = enrich_algorithm_metadata(
+        algo=algo,
+        metadata=algo_meta,
+        robot_kinematics=robot_kinematics,
+        observation_mode=active_observation_mode,
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
     planner_reset = getattr(policy_fn, "_planner_reset", None)
@@ -2660,7 +2711,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     goal_vec = np.zeros(2, dtype=float)
     try:
         for step_idx in range(horizon_val):
-            policy_command = policy_fn(obs)
+            policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
+            merge_observation_noise_stats(noise_stats, step_noise_stats)
+            policy_command = policy_fn(policy_obs)
             # Use per-step flag when available (e.g. SAC with fallback); fall back to the
             # static cached value for planners that set _planner_native_env_action once.
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
@@ -2795,6 +2848,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 metadata=algo_meta,
                 execution_mode=execution_mode,
                 robot_kinematics=robot_kinematics,
+                observation_mode=active_observation_mode,
             )
         else:
             impact["status"] = "not_applicable"
@@ -2802,6 +2856,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     _finalize_feasibility_metadata(algo_meta)
     if isinstance(planner_runtime_snapshot, dict):
         algo_meta["planner_runtime"] = planner_runtime_snapshot
+    visibility_settings = getattr(config, "observation_visibility", None)
+    if visibility_settings is not None and hasattr(visibility_settings, "to_metadata"):
+        algo_meta["observation_visibility"] = visibility_settings.to_metadata()
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
@@ -2809,9 +2866,6 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
 
     ts_end = datetime.now(UTC).isoformat()
-    scenario_id = str(
-        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
-    )
     scenario_params = _scenario_identity_payload(
         scenario,
         algo=algo,
@@ -2819,6 +2873,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         horizon=horizon,
         dt=dt,
         record_forces=record_forces,
+        observation_mode=active_observation_mode,
+        observation_noise=noise_spec,
     )
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - start_time))
@@ -2849,7 +2905,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "scenario_params": scenario_params,
         "metrics": metrics,
         "algorithm_metadata": algo_meta,
+        "observation_noise": noise_spec,
+        "observation_noise_hash": observation_noise_hash(noise_spec),
+        "observation_noise_stats": noise_stats,
         "algo": algo,
+        "observation_mode": active_observation_mode,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": ts_end},
@@ -2916,6 +2976,8 @@ def _run_map_job_worker(
         algo_config_path=params.get("algo_config_path"),
         scenario_path=Path(params.get("scenario_path")),
         adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
+        observation_mode=params.get("observation_mode"),
+        observation_noise=params.get("observation_noise"),
     )
 
 
@@ -3047,6 +3109,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_profile: BenchmarkProfile = "baseline-safe",
     socnav_missing_prereq_policy: str = "fail-fast",
     adapter_impact_eval: bool = False,
+    observation_mode: str | None = None,
+    observation_noise: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -3069,6 +3133,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
 
     suite_seeds = _resolve_seed_list(Path("configs/benchmarks/seed_list_v1.yaml"))
     suite_key = _suite_key(scenario_path)
+    noise_spec = normalize_observation_noise_spec(observation_noise)
+    noise_hash = observation_noise_hash(noise_spec)
 
     filtered: list[dict[str, Any]] = []
     for scenario in scenarios:
@@ -3091,12 +3157,15 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         kinematics_tag = scenario_kinematics[0]
     else:
         kinematics_tag = "mixed"
+    batch_observation_mode = str(observation_mode).strip() if observation_mode is not None else None
     algo_contract = enrich_algorithm_metadata(
         algo=algo,
         metadata={},
         robot_kinematics=kinematics_tag,
         adapter_impact_requested=adapter_impact_eval,
+        observation_mode=batch_observation_mode,
     )
+    active_observation_mode = str(algo_contract["observation_spec"]["active_mode"])
     planner_meta = algo_contract.get("planner_kinematics")
     if isinstance(planner_meta, dict):
         planner_meta["scenario_kinematics"] = scenario_kinematics
@@ -3169,6 +3238,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             },
             "algorithm_metadata_contract": algo_contract,
             "preflight": preflight,
+            "observation_noise": noise_spec,
+            "observation_noise_hash": noise_hash,
         }
         summary["benchmark_availability"] = availability_payload(summary)
         return summary
@@ -3184,6 +3255,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     algo_config=raw_policy_cfg,
                     scenario=sc,
                 )
+                identity_observation_mode = resolve_observation_mode(
+                    identity_algo,
+                    batch_observation_mode,
+                )
                 identity_payload = _scenario_identity_payload(
                     sc,
                     algo=identity_algo,
@@ -3191,6 +3266,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     horizon=horizon,
                     dt=dt,
                     record_forces=record_forces,
+                    observation_mode=identity_observation_mode,
+                    observation_noise=noise_spec,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
                     filtered_jobs.append((sc, seed))
@@ -3207,6 +3284,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),
         "adapter_impact_eval": bool(adapter_impact_eval),
+        "observation_noise": noise_spec,
+        "observation_mode": batch_observation_mode,
     }
 
     total_jobs = len(jobs)
@@ -3317,6 +3396,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 metadata=algo_contract,
                 execution_mode=execution_mode,
                 robot_kinematics=kinematics_tag,
+                observation_mode=active_observation_mode,
             )
         else:
             impact_contract["status"] = "not_applicable"
@@ -3380,6 +3460,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         },
         "algorithm_metadata_contract": algo_contract,
         "preflight": preflight,
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
     }
     summary["benchmark_availability"] = availability_payload(summary)
     return summary

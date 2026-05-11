@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.benchmark.algorithm_metadata import (
     canonical_algorithm_name,
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
+    observation_spec_for_algorithm,
+    resolve_observation_mode,
 )
 
 
@@ -14,6 +18,25 @@ def test_canonical_algorithm_name_resolves_aliases() -> None:
     assert canonical_algorithm_name("simple_policy") == "goal"
     assert canonical_algorithm_name("sf") == "social_force"
     assert canonical_algorithm_name("unknown_algo") == "unknown_algo"
+
+
+def test_observation_spec_declares_supported_modes_and_rejects_invalid_override() -> None:
+    """Planner observation contracts should be inspectable and fail closed."""
+    goal_spec = observation_spec_for_algorithm("goal")
+    assert goal_spec["default_mode"] == "goal_state"
+    assert goal_spec["supported_modes"] == ["goal_state", "socnav_state"]
+    assert resolve_observation_mode("goal", "socnav_state") == "socnav_state"
+
+    meta = enrich_algorithm_metadata(algo="goal", observation_mode="socnav_state")
+    assert meta["observation_spec"]["active_mode"] == "socnav_state"
+    assert meta["observation_spec"]["override_applied"] is True
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_observation_mode("orca", "goal_state")
+    assert "Observation mode 'goal_state' is not supported by algorithm 'orca'" in str(
+        excinfo.value
+    )
+    assert "socnav_state" in str(excinfo.value)
 
 
 def test_random_baseline_metadata_marks_stochastic_reference() -> None:
@@ -72,6 +95,23 @@ def test_grid_route_metadata_marks_testing_only_route_spike() -> None:
     assert meta["policy_semantics"] == "occupancy_grid_route_tracking"
     assert planner["planner_command_space"] == "unicycle_vw"
     assert planner["adapter_name"] == "GridRoutePlannerAdapter"
+
+
+def test_trivial_reference_metadata_marks_diagnostic_template() -> None:
+    """Reference adapter metadata should prevent benchmark-evidence overclaiming."""
+    meta = enrich_algorithm_metadata(
+        algo="reference_adapter",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["canonical_algorithm"] == "trivial_reference"
+    assert meta["baseline_category"] == "diagnostic"
+    assert meta["policy_semantics"] == "diagnostic_adapter_template"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "TrivialReferencePlannerAdapter"
+    assert planner["diagnostic_reference_only"] is True
 
 
 def test_orca_metadata_exposes_upstream_reference_and_projection_contract() -> None:

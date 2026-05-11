@@ -15,7 +15,12 @@ tree.
 
 ## Current Verdict
 
-The model side has a durable pointer; the publication-bundle side is still blocked.
+> 2026-05-09 update: issue `#1062` records a durable publication archive pointer for the scoped
+> seven-planner release `0.0.2`. Keep the original audit below as the May 7 state before that
+> pointer was verified.
+
+The model side has a durable pointer; the scoped `0.0.2` publication-bundle side now has a durable
+GitHub release and DOI pointer. The all-planners May 4 compact evidence remains partial.
 
 * The current paper-facing PPO checkpoint has a W&B artifact pointer in `model/registry.yaml`.
 * The benchmark release inputs are tracked and hash-pinned in
@@ -25,9 +30,10 @@ The model side has a durable pointer; the publication-bundle side is still block
   notes and should be treated as cache/history unless paired with a W&B artifact, release asset,
   DOI, or other durable manifest.
 * No bulky generated outputs were promoted during this audit.
-
-The missing paper-critical source is a durable publication bundle and diagnostics pointer. Issue
-`#1062` now tracks publishing or recording that archive, checksums, manifest, and SNQI diagnostics.
+* Issue `#1062` later recorded the durable scoped release archive, embedded manifest, embedded
+  checksums, and SNQI diagnostics in
+  `docs/context/issue_1062_paper_evidence_archive.md` and
+  `docs/experiments/publication/20260414_benchmark_release_0_0_2/`.
 
 ## Artifact Inventory
 
@@ -38,8 +44,8 @@ The missing paper-critical source is a durable publication bundle and diagnostic
 | Benchmark release config | `configs/benchmarks/paper_experiment_matrix_v1.yaml` | durable | tracked and hash-pinned by the release manifest. |
 | Scenario matrix | `configs/scenarios/classic_interactions_francis2023.yaml` | durable | tracked and hash-pinned by the release manifest. |
 | SNQI weights/baseline | `configs/benchmarks/snqi_weights_camera_ready_v3.json`, `configs/benchmarks/snqi_baseline_camera_ready_v3.json` | durable | tracked and hash-pinned by the release manifest. |
-| SNQI diagnostics | `reports/snqi_diagnostics.{json,md}` inside campaign/publication bundles | blocked for current paper archive | compact evidence bundles may include diagnostics, but the current paper bundle still needs a durable archive pointer. |
-| Publication bundle archive | `output/benchmarks/publication/<bundle_name>.tar.gz` | blocked | local path only unless uploaded; tracked by follow-up `#1062`. |
+| SNQI diagnostics | `reports/snqi_diagnostics.{json,md}` inside campaign/publication bundles | durable for scoped `0.0.2` | Recover from the `0.0.2` release archive; see `docs/context/issue_1062_paper_evidence_archive.md`. |
+| Publication bundle archive | `output/benchmarks/publication/<bundle_name>.tar.gz` | durable for scoped `0.0.2` | GitHub release asset plus DOI pointer recorded by `#1062`; local output paths remain cache/history. |
 | Compact evidence bundles | `docs/context/evidence/` | partial durable summaries | acceptable for small review evidence, not a replacement for the full publication bundle. |
 
 Date suffixes embedded in artifact identifiers and bundle names follow the `YYYYMMDD` format (for
@@ -69,7 +75,7 @@ This audit updates:
 
 ## Follow-Up Boundary
 
-Issue `#1062` is the blocker for archive publication. It should verify every new durable URL or
-artifact pointer and keep raw episode JSONL, videos, large logs, coverage, and model checkpoints out
-of git unless a maintainer explicitly chooses a small fixture.
-
+Issue `#1062` resolves the archive-publication blocker for the scoped seven-planner release `0.0.2`
+by verifying the durable release URL, DOI, archive checksum, embedded publication manifest,
+embedded checksums, and embedded SNQI diagnostics. The all-planners surface remains separate because
+`socnav_bench` still depends on external licensed assets.

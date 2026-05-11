@@ -78,6 +78,8 @@ knowledge, not every transient iteration detail.
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
+* Route-clearance certification: [issue_1105_route_clearance_certification.md](issue_1105_route_clearance_certification.md)
+* Negative route-clearance repair: [issue_1130_negative_route_clearance_repair.md](issue_1130_negative_route_clearance_repair.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
@@ -96,6 +98,7 @@ knowledge, not every transient iteration detail.
   [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
+  [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
@@ -108,6 +111,9 @@ knowledge, not every transient iteration detail.
   records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
   full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
   promotion boundary.
+* [Issue #1081 Observation Noise](issue_1081_observation_noise.md) records the opt-in benchmark
+  observation-noise profile contract, provenance fields, resume identity behavior, and
+  non-calibrated robustness interpretation limit.
 * [Issue #1038 H500 SNQI Contract Decision](issue_1038_h500_snqi_contract.md)
   records the h500 scenario-horizon SNQI failure decomposition and the decision to keep the surface
   experimental instead of overwriting the camera-ready v3 SNQI assets.
@@ -121,6 +127,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1053 Durable Artifact Reference Audit](issue_1053_durable_artifact_references.md)
   separates durable W&B/release/artifact-store pointers from local `output/` caches and records the
   publication-bundle archive blocker.
+* [Issue #1062 Paper Evidence Archive Pointer](issue_1062_paper_evidence_archive.md)
+  records the durable scoped `0.0.2` release archive, DOI, checksums, publication manifest, and SNQI
+  diagnostics recovery path without committing raw benchmark outputs.
 * [Issue #1054 Planner Readiness And Fallback Audit](issue_1054_planner_readiness_fallback_audit.md)
   records the paper-matrix planner readiness table, dependency status, and fail-closed treatment of
   fallback or degraded rows.
@@ -136,28 +145,63 @@ knowledge, not every transient iteration detail.
 * [Issue #1073 Robot SF Empirical-Expansion Gate](issue_1073_empirical_expansion_gate_2026_06_08.md)
   defines the June 8 checkpoint rule for promoting Robot SF beyond dissertation-floor examples,
   including counted improvement units, proof surfaces, and decline criteria.
+* [Issue #1082 Paper Cross-Kinematics Parity Sweep](issue_1082_paper_cross_kinematics_v1.md)
+  adds the `paper-cross-kinematics-v1` profile, three-mode kinematics matrix, compatibility
+  manifest, and smoke/preflight command boundary for cross-kinematics interpretation.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.
+* [Issue #1065 Route-Clearance Warning Audit](issue_1065_route_clearance_warning_audit.md)
+  lists all current paper and h500 route-clearance warnings, classifies their attribution boundary,
+  and opens the route repair/certification follow-up.
 * [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
   provides reusable paper/report wording for h500 as a long-horizon sensitivity surface and marks
   unsafe winner-table, wait-then-go, and SNQI calibration claims.
+* [Issue #1085 Pedestrian-Impact Aggregate Metrics](issue_1085_pedestrian_impact_metrics.md)
+  defines the schema-backed `pedestrian-impact.v1` block, canonical aggregate reductions, and
+  opt-in CLI path for pedestrian-impact benchmark outputs.
+* [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
+  records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
+  fleet-integration boundary.
+* [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
+  records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
+  importer outputs, and deferred generalization scope.
+* [Issue #1090 Observation Visibility](issue_1090_observation_visibility.md)
+  records the planner-facing FOV/range/static-occlusion boundary, ground-truth separation, and
+  dynamic-occlusion follow-up boundary.
+* [Issue #1083 Sanity V1 Nominal Matrix](issue_1083_sanity_v1_nominal_matrix.md)
+  records the non-paper-facing nominal calibration matrix, smoke config, baseline threshold, and
+  local proof run for easier deployment-like scenes.
+* [Issue #1084 Planner Inclusion Gate](issue_1084_planner_inclusion_gate.md)
+  records the mechanical planner inclusion-check command, report schema, default thresholds, and
+  real pass/revise proof cases for promotion review.
 * [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
   defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
   pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.
 * [Issue #1052 Claim-Language Audit](issue_1052_claim_language_audit.md)
   records the benchmark-set claim boundary for issue-791 paper wording and marks stale OOD /
   transfer language as historical rather than current manuscript scope.
+* [Issue #1074 Robot-SF Worked-Example Pack](issue_1074_robot_sf_worked_example_pack.md)
+  curates three retained h500 examples that map scenario class, actor mix, metric layer,
+  failure-pattern vocabulary, durable evidence, and claim/non-claim boundaries.
+* [Issue #1075 Operating Envelope And Non-Claims](issue_1075_operating_envelope.md)
+  defines the current Robot-SF dissertation-floor evidence envelope, supported evidence types,
+  non-claims, and future-work boundaries for CARLA, physical validation, and broader empirical use.
 * [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as
   experimental candidates, plus their planner behavior and caveats.
+* [Issue #1113 Continuous H500 Promotion Matrix](issue_1113_continuous_h500_promotion.md)
+  records the full `full_matrix_h500` run for
+  `hybrid_rule_v3_fast_progress_static_escape_continuous`, promotion-gate outcome, comparator
+  deltas, remaining failure taxonomy, and artifact persistence boundary.
 
 ## Feature Extractor Notes
 
 * [Issue #193 Feature Extractor Evaluation](./issue_193_feature_extractor_evaluation.md)
-  GPU throughput microbenchmark + 32 K PPO comparison of DynamicsExtractor vs MLP/CNN/Attention; 
-  recommends `mlp_small` as new default for fresh training runs.
+  GPU throughput microbenchmark + 32 K PPO comparison of DynamicsExtractor vs MLP/CNN/Attention;
+  preserves the historical `mlp_small` recommendation but marks default promotion as superseded
+  pending the later `dyn_large_med` safety blocker and #834 maintainer decision.
 * [Issue #193 Feature Extractor Optuna Study](./issue_193_feature_extractor_optuna_study.md)
   4 M-step SLURM sweep infrastructure, DB classification, and April 20 final pre-screen analysis; 
 `feat_sweep_4m_array.db` is the current evidence surface, with longer 10 M+ validation still
@@ -177,6 +221,9 @@ knowledge, not every transient iteration detail.
 
 ## Training Notes
 
+* [Issue #749 BC-Preinitialized PPO Launch Packet](issue_749_bc_preinit_ppo_launch_packet.md)
+  defines the config-first launch path and artifact boundary for the deferred BC warm-start PPO
+  challenger experiment.
 * [Issue #1024 H500 PPO Retrain](issue_1024_h500_ppo_retrain.md)
   records the all-available scenario surface, PR #1025 h500 horizon alignment, and SLURM job
   `12350` for the first 12M-step PPO retrain.
@@ -263,6 +310,9 @@ knowledge, not every transient iteration detail.
 
 * [Issue #435 Map Coverage Flow](./issue_435_map_coverage_flow.md)
   parent flow state for real-world maps, SocNavBench import, and map-quality repair issues.
+* [Issue #334 SocNavBench ETH Import Batch](issue_334_socnavbench_eth_import.md)
+  records the first staged SocNavBench map-import batch, the fail-closed source-asset validator,
+  and the boundary before a converted ETH SVG can be committed.
 * [Issue #328 Real-World Map Parent Tracker](./issue_328_real_world_map_parent.md)
   parent/child split, current child issue state, and shared validation contract for real-world
   benchmark maps.
@@ -274,7 +324,9 @@ why a change was made rather than a full issue execution transcript.
 
 * [Issue #592 Hybrid Obstacle-Context Predictor Design](./issue_592_hybrid_obstacle_predictor_design.md)
   scopes the obstacle-conditioned predictive-model idea into a feature-baseline-first experiment
-  path with proof gates before any grid/CNN or obstacle-node graph prototype.
+  milestone that links follow-up #1138 for the first deterministic obstacle-feature
+  implementation slice and defines a path with proof gates before any grid/CNN or obstacle-node
+  graph prototype.
 * [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter` .
@@ -317,6 +369,9 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #930 CARLA T0 Neutral Export Schema](issue_930_carla_t0_export_schema.md)
   records the import-safe `robot_sf_carla_bridge` package, `carla-replay-export.v1` schema, and
   missing-CARLA `not-available` guard for future oracle replay work.
+* [Issue #872 CARLA Oracle Replay Bridge Status](issue_872_carla_oracle_replay_bridge_status.md)
+  summarizes the parent epic state, the completed CARLA-free T0 stack, the setup-only T1 boundary,
+  and the live replay / metric-parity child issues that remain before #872 can close.
 * [Issue #934 CARLA T0 Export Builder API](issue_934_carla_t0_export_builder.md)
   adds typed, schema-validated builder objects for `carla-replay-export.v1` payload construction, 
   stacked on the issue #930 bridge package.
@@ -395,6 +450,12 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1000 CARLA Bridge Schema Catalog Schema CLI](issue_1000_carla_schema_catalog_schema_cli.md)
   exposes the CARLA bridge schema catalog JSON Schema through
   `robot-sf-catalog-carla-schemas --schema`.
+- [Issue #1076 AMV Paper-Defense Backlog Tracker](issue_1076_amv_paper_defense_backlog.md)
+  records the approved AMV backlog child issues, filing waves, dependency notes, and the current
+  Wave 1 PR linkage without treating follow-up waves as submission blockers.
+- [Issue #1003 CARLA T1 Oracle Replay Smoke](issue_1003_carla_t1_oracle_smoke.md)
+  adds a setup-only T1 oracle replay smoke command for one T0 export manifest payload, with
+  schema-catalog validation and fail-closed `not-available` behavior when CARLA is absent.
 
 ## DreamerV3 Notes
 

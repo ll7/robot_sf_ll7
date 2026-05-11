@@ -153,3 +153,162 @@ def test_compute_aggregates_with_ci_shape_and_determinism(tmp_path: Path):
         bootstrap_seed=123,
     )
     assert summary_ci == summary_ci_2
+
+
+def test_compute_aggregates_flattens_pedestrian_impact_block() -> None:
+    """Schema-backed pedestrian-impact reductions should aggregate without custom parsing."""
+    records = [
+        {
+            "episode_id": "ep-1",
+            "scenario_id": "sc-1",
+            "seed": 1,
+            "algo": "planner-a",
+            "metric_parameters": {
+                "threshold_signature": "default",
+                "threshold_profile": {
+                    "profile_id": "default",
+                    "collision_distance_m": 0.3,
+                    "near_miss_distance_m": 0.6,
+                    "comfort_force_threshold": 2.0,
+                },
+            },
+            "metrics": {
+                "success": True,
+                "pedestrian_impact": {
+                    "schema_version": "pedestrian-impact.v1",
+                    "parameters": {"near_radius_m": 2.0, "window_steps": 1},
+                    "units": {
+                        "accel": "m/s^2",
+                        "turn_rate": "rad/s",
+                        "near_radius": "m",
+                        "sample_counts": "samples",
+                        "sample_fraction": "fraction",
+                    },
+                    "sample_counts": {
+                        "pedestrians": 1,
+                        "near_samples": 4,
+                        "far_samples": 5,
+                        "near_sample_frac": 4.0 / 9.0,
+                    },
+                    "canonical_reductions": {
+                        "accel_delta_mean": 0.5,
+                        "accel_delta_median": 0.4,
+                        "accel_delta_valid_pedestrians": 1,
+                        "turn_rate_delta_mean": 0.2,
+                        "turn_rate_delta_median": 0.1,
+                        "turn_rate_delta_valid_pedestrians": 1,
+                    },
+                },
+            },
+        },
+        {
+            "episode_id": "ep-2",
+            "scenario_id": "sc-1",
+            "seed": 2,
+            "algo": "planner-a",
+            "metric_parameters": {
+                "threshold_signature": "default",
+                "threshold_profile": {
+                    "profile_id": "default",
+                    "collision_distance_m": 0.3,
+                    "near_miss_distance_m": 0.6,
+                    "comfort_force_threshold": 2.0,
+                },
+            },
+            "metrics": {
+                "success": True,
+                "pedestrian_impact": {
+                    "schema_version": "pedestrian-impact.v1",
+                    "parameters": {"near_radius_m": 2.0, "window_steps": 1},
+                    "units": {
+                        "accel": "m/s^2",
+                        "turn_rate": "rad/s",
+                        "near_radius": "m",
+                        "sample_counts": "samples",
+                        "sample_fraction": "fraction",
+                    },
+                    "sample_counts": {
+                        "pedestrians": 1,
+                        "near_samples": 6,
+                        "far_samples": 6,
+                        "near_sample_frac": 0.5,
+                    },
+                    "canonical_reductions": {
+                        "accel_delta_mean": 1.5,
+                        "accel_delta_median": 1.4,
+                        "accel_delta_valid_pedestrians": 1,
+                        "turn_rate_delta_mean": 0.6,
+                        "turn_rate_delta_median": 0.5,
+                        "turn_rate_delta_valid_pedestrians": 1,
+                    },
+                },
+            },
+        },
+    ]
+
+    summary = compute_aggregates(records, group_by="algo")
+
+    metrics = summary["planner-a"]
+    assert metrics["ped_impact_accel_delta_mean"]["mean"] == 1.0
+    assert metrics["ped_impact_turn_rate_delta_mean"]["mean"] == 0.4
+    assert metrics["ped_impact_near_samples"]["mean"] == 5.0
+
+
+def _paired_contrast_records() -> list[dict]:
+    """Build synthetic records with a planted paired effect for group B over group A."""
+    values_a = [1.0, 2.0, 3.0, 4.0, 5.0]
+    deltas = [1.0, 2.0, 3.0, 1.0, 2.0]
+    records = []
+    for seed, (value_a, delta) in enumerate(zip(values_a, deltas, strict=True), start=1):
+        for algo, score in (("A", value_a), ("B", value_a + delta)):
+            records.append(
+                {
+                    "episode_id": f"{algo}-{seed}",
+                    "scenario_id": "paired-scenario",
+                    "seed": seed,
+                    "scenario_params": {"algo": algo},
+                    "metrics": {"score": score},
+                }
+            )
+    return records
+
+
+def test_compute_aggregates_with_ci_emits_pairwise_contrasts_for_planted_effect() -> None:
+    """Pairwise contrast block should recover a planted paired group difference."""
+    summary_ci = compute_aggregates_with_ci(
+        _paired_contrast_records(),
+        group_by="scenario_params.algo",
+        bootstrap_samples=500,
+        bootstrap_confidence=0.90,
+        bootstrap_seed=123,
+    )
+
+    contrasts = summary_ci["pairwise_contrasts"]
+    assert contrasts["_meta"]["pairing_keys"] == ["scenario_id", "seed_or_seed_index"]
+    assert contrasts["_meta"]["p_value_correction"] == "holm"
+    score = contrasts["A__vs__B"]["metrics"]["score"]
+    assert score["n_pairs"] == 5
+    assert score["delta_mean"] == 1.8
+    assert score["delta_ci"][0] > 0.0
+    assert score["p_value_holm"] >= score["p_value"]
+    assert score["effect_size"]["type"] == "paired_cohens_dz"
+    assert score["effect_size"]["value"] > 0.0
+
+
+def test_compute_aggregates_with_ci_pairwise_contrasts_are_seed_deterministic() -> None:
+    """Pairwise bootstrap output should be reproducible for identical inputs and seeds."""
+    first = compute_aggregates_with_ci(
+        _paired_contrast_records(),
+        group_by="scenario_params.algo",
+        bootstrap_samples=250,
+        bootstrap_confidence=0.90,
+        bootstrap_seed=456,
+    )
+    second = compute_aggregates_with_ci(
+        _paired_contrast_records(),
+        group_by="scenario_params.algo",
+        bootstrap_samples=250,
+        bootstrap_confidence=0.90,
+        bootstrap_seed=456,
+    )
+    assert first["pairwise_contrasts"] == second["pairwise_contrasts"]

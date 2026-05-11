@@ -20,6 +20,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     SeedPolicy,
     _jsonable_repo_relative,
     _load_campaign_scenarios,
+    _load_route_clearance_certifications,
     _planner_report_row,
     _resolved_seed_inventory,
     _sanitize_csv_cell,
@@ -77,8 +78,175 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
     assert cfg.scenario_matrix_path.exists()
     assert cfg.planners[0].algo_config_path is not None
     assert cfg.planners[0].algo_config_path == algo_cfg_abs
-    assert cfg.planners[0].algo_config_path.exists()
-    assert list(cfg.seed_policy.seeds) == [101]
+
+
+def test_load_campaign_config_resolves_observation_noise_profile(tmp_path: Path) -> None:
+    """Campaign configs should accept file-backed observation-noise profiles."""
+    config_dir = tmp_path / "cfg"
+    config_dir.mkdir(parents=True)
+    matrix_path = config_dir / "matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "s1",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "simulation_config": {"max_episode_steps": 1},
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    noise_path = config_dir / "noise.yaml"
+    noise_path.write_text(
+        yaml.safe_dump({"profile": "unit_noise", "pedestrian_false_negative_prob": 0.25}),
+        encoding="utf-8",
+    )
+    cfg_path = config_dir / "campaign.yaml"
+    cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "noise_campaign",
+                "scenario_matrix": "matrix.yaml",
+                "observation_noise": "noise.yaml",
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(cfg_path)
+
+    assert cfg.observation_noise is not None
+    assert cfg.observation_noise["profile"] == "unit_noise"
+    assert cfg.observation_noise["enabled"] is True
+
+
+def test_load_campaign_config_rejects_directory_observation_noise_profile(
+    tmp_path: Path,
+) -> None:
+    """Campaign configs should fail closed when observation_noise points at a directory."""
+    config_dir = tmp_path / "cfg"
+    config_dir.mkdir(parents=True)
+    matrix_path = config_dir / "matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "s1",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "simulation_config": {"max_episode_steps": 1},
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    noise_dir = config_dir / "noise_dir"
+    noise_dir.mkdir()
+    cfg_path = config_dir / "campaign.yaml"
+    cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "noise_campaign",
+                "scenario_matrix": "matrix.yaml",
+                "observation_noise": "noise_dir",
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileNotFoundError, match="Could not resolve observation_noise"):
+        load_campaign_config(cfg_path)
+
+
+def test_load_campaign_config_parses_observation_mode_overrides(tmp_path: Path) -> None:
+    """Campaign configs should support global and per-planner observation-mode overrides."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: observation_override_campaign",
+                f"scenario_matrix: {scenario_path.name}",
+                "observation_mode: socnav_state",
+                "planners:",
+                "  - key: goal_default_override",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+                "  - key: goal_explicit_override",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+                "    observation_mode: goal_state",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+
+    assert cfg.observation_mode == "socnav_state"
+    assert cfg.planners[0].observation_mode is None
+    assert cfg.planners[1].observation_mode == "goal_state"
+
+
+def test_load_campaign_config_rejects_blank_planner_observation_mode(tmp_path: Path) -> None:
+    """Blank planner-level observation-mode overrides should be rejected."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: observation_blank_planner",
+                f"scenario_matrix: {scenario_path.name}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    observation_mode: '   '",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Planner entry 'observation_mode' cannot be empty"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_blank_global_observation_mode(tmp_path: Path) -> None:
+    """Blank campaign-level observation-mode overrides should be rejected."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: observation_blank_global",
+                f"scenario_matrix: {scenario_path.name}",
+                "observation_mode: '   '",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Campaign 'observation_mode' cannot be empty"):
+        load_campaign_config(config_path)
 
 
 def test_scenario_horizon_schedule_applies_to_loaded_campaign_scenarios(
@@ -473,6 +641,58 @@ def test_load_holonomic_camera_ready_campaign_config() -> None:
     assert ppo_cfg["fallback_to_goal"] is False
 
 
+def test_load_paper_cross_kinematics_v1_campaign_config() -> None:
+    """Cross-kinematics profile should be the only paper profile with a 3-mode matrix."""
+    cfg = load_campaign_config(
+        get_repository_root() / "configs/benchmarks/paper_cross_kinematics_v1.yaml"
+    )
+
+    assert cfg.name == "paper_cross_kinematics_v1"
+    assert cfg.paper_facing is True
+    assert cfg.paper_profile_version == "paper-cross-kinematics-v1"
+    assert cfg.kinematics_matrix == ("differential_drive", "bicycle_drive", "holonomic")
+    assert cfg.holonomic_command_mode == "vx_vy"
+    assert cfg.export_publication_bundle is False
+    assert cfg.stop_on_failure is False
+    assert cfg.seed_policy.mode == "fixed-list"
+    assert list(cfg.seed_policy.seeds) == [111]
+    assert [planner.key for planner in cfg.planners] == ["goal", "social_force", "orca"]
+    assert all(planner.planner_group == "core" for planner in cfg.planners)
+    assert (
+        cfg.comparability_mapping_path
+        == Path("configs/benchmarks/alyassi_comparability_map_v1.yaml").resolve()
+    )
+
+    scenarios = _load_campaign_scenarios(cfg)
+    assert [scenario["name"] for scenario in scenarios] == ["classic_cross_trap_low"]
+
+
+def test_paper_cross_kinematics_v1_compatibility_manifest() -> None:
+    """Compatibility manifest should record every configured planner/kinematics pair."""
+    config_payload = yaml.safe_load(
+        (get_repository_root() / "configs/benchmarks/paper_cross_kinematics_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    manifest_path = get_repository_root() / config_payload["compatibility_manifest"]
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+
+    assert manifest["version"] == "paper-cross-kinematics-v1"
+    assert manifest["kinematics"] == ["differential_drive", "bicycle_drive", "holonomic"]
+    planner_keys = [planner["key"] for planner in config_payload["planners"]]
+    assert set(manifest["planners"]) == set(planner_keys)
+    for planner_key in planner_keys:
+        support = manifest["planners"][planner_key]["support"]
+        assert set(support) == set(manifest["kinematics"])
+        assert all(entry["status"] == "supported" for entry in support.values())
+        assert all(str(entry["reason"]).strip() for entry in support.values())
+
+    excluded = manifest["excluded_planners"]
+    assert excluded["ppo"]["status"] == "degraded"
+    assert str(excluded["ppo"]["reason"]).strip()
+    assert manifest["validation_contract"]["supported_pairs_must_run"] is True
+
+
 def test_socnav_bench_reentry_probe_config_is_focused_and_fail_fast() -> None:
     """The SocNavBench re-entry probe should stay narrow and fail closed."""
 
@@ -579,6 +799,31 @@ def test_issue_1023_scenario_horizon_config_uses_h500_schedule() -> None:
     )
 
 
+def test_sanity_v1_smoke_config_is_nominal_calibration_surface() -> None:
+    """The sanity_v1 smoke config should stay narrow, non-paper-facing, and baseline-safe."""
+    cfg = load_campaign_config(get_repository_root() / "configs/benchmarks/sanity_v1_smoke.yaml")
+
+    assert cfg.paper_facing is False
+    assert cfg.paper_interpretation_profile == "sanity-v1-nominal-calibration"
+    assert cfg.export_publication_bundle is False
+    assert cfg.kinematics_matrix == ("differential_drive",)
+    assert cfg.seed_policy.mode == "fixed-list"
+    assert list(cfg.seed_policy.seeds) == [111]
+    assert cfg.horizon == 250
+    assert [planner.key for planner in cfg.planners] == ["goal", "orca"]
+    assert {planner.planner_group for planner in cfg.planners} == {"core"}
+    assert {planner.benchmark_profile for planner in cfg.planners} == {"baseline-safe"}
+
+    scenarios = _load_campaign_scenarios(cfg)
+    assert [scenario["name"] for scenario in scenarios] == [
+        "planner_sanity_simple",
+        "empty_map_8_directions_east",
+        "goal_behind_robot",
+        "single_ped_crossing_orthogonal",
+    ]
+    assert all(scenario["seeds"] == [111] for scenario in scenarios)
+
+
 def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
     """Extended seed configs should change only the named seed schedule."""
     base_cfg = load_campaign_config(Path("configs/benchmarks/paper_experiment_matrix_v1.yaml"))
@@ -649,6 +894,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
                 "  - key: goal",
                 "    algo: goal",
                 "    benchmark_profile: baseline-safe",
+                "    observation_mode: socnav_state",
                 "  - key: ppo",
                 "    algo: ppo",
                 "    benchmark_profile: experimental",
@@ -660,6 +906,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
 
     cfg = load_campaign_config(config_path)
     assert cfg.scenario_matrix_path == scenario_abs
+    run_batch_calls: list[dict[str, object]] = []
 
     def _fake_run_batch(
         scenarios_or_path,
@@ -673,7 +920,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         """Write one episode record and return readiness/preflight metadata."""
         scenarios = list(scenarios_or_path) if isinstance(scenarios_or_path, list) else []
         _ = schema_path
-        _ = kwargs
+        run_batch_calls.append({"algo": algo, **kwargs})
         if scenarios:
             map_file = scenarios[0].get("map_file")
             if isinstance(map_file, str):
@@ -800,6 +1047,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     )
 
     result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="test")
+    assert run_batch_calls[0]["observation_mode"] == "socnav_state"
 
     campaign_root = Path(result["campaign_root"])
     assert campaign_root.exists()
@@ -2374,6 +2622,7 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
                 "paper_facing: true",
                 "paper_profile_version: paper-matrix-v1",
                 "kinematics_matrix: [differential_drive]",
+                "observation_mode: socnav_state",
                 "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 "seed_policy:",
                 "  mode: fixed-list",
@@ -2401,6 +2650,7 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
     first = matrix_payload["rows"][0]
     assert first["planner_group"] == "core"
     assert first["kinematics"] == "differential_drive"
+    assert first["observation_mode"] == "socnav_state"
 
 
 def test_prepare_campaign_preflight_accepts_fixed_campaign_id(tmp_path: Path) -> None:
@@ -2504,6 +2754,195 @@ def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     manifest_payload = prepared["manifest_payload"]
     assert manifest_payload["route_clearance_warning_count"] == 1
     assert manifest_payload["route_clearance_warnings"] == warnings
+
+
+def test_prepare_campaign_preflight_attaches_route_clearance_certifications(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Preflight should expose accepted route-clearance interpretations per warning row."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    map_path = (get_repository_root() / "maps/svg_maps/classic_crossing.svg").resolve()
+    scenario_path.write_text(
+        "\n".join(
+            [
+                "- name: certified_clearance_warn",
+                f"  map_file: {map_path.as_posix()}",
+                "  seeds: [111]",
+                "  robot_config:",
+                "    radius: 0.8",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        "\n".join(
+            [
+                "schema_version: route-clearance-certifications.v1",
+                "certifications:",
+                "  certified_clearance_warn:",
+                "    status: certified_stress_geometry",
+                "    claim_scope: benchmark-ready stress geometry with caveat",
+                "    rationale: Intentionally tight corridor fixture.",
+                "    reviewed_on: '2026-05-09'",
+                "    reviewed_by: ll7",
+                "    issue: '1105'",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: clearance_certification_contract",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"route_clearance_certifications: {certification_path.as_posix()}",
+                "observation_noise:",
+                "  profile: clearance_noise",
+                "  pedestrian_false_negative_prob: 0.2",
+                "  seed: 17",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    fake_map_def = SimpleNamespace(
+        robot_routes=[SimpleNamespace(waypoints=[(0.0, 0.0), (1.0, 0.0)])],
+        obstacles=[SimpleNamespace(vertices=[(1.0, -0.1), (2.0, -0.1), (2.0, 0.1), (1.0, 0.1)])],
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.convert_map",
+        lambda _path: fake_map_def,
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="clearance")
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+
+    warning = validate_payload["route_clearance_warnings"][0]
+    assert warning["certification_status"] == "certified_stress_geometry"
+    assert warning["certification_claim_scope"] == "benchmark-ready stress geometry with caveat"
+    assert warning["certification_issue"] == "1105"
+    assert validate_payload["route_clearance_warning_summary"] == {
+        "warning_count": 1,
+        "certified_warning_count": 1,
+        "unresolved_warning_count": 0,
+        "status_counts": {"certified_stress_geometry": 1},
+        "unresolved_scenarios": [],
+    }
+    assert (
+        validate_payload["route_clearance_certifications_path"]
+        == certification_path.resolve().as_posix()
+    )
+    assert validate_payload["observation_noise"]["profile"] == "clearance_noise"
+    assert validate_payload["observation_noise"]["enabled"] is True
+    assert isinstance(validate_payload["observation_noise_hash"], str)
+    assert len(validate_payload["observation_noise_hash"]) == 12
+
+    manifest_payload = prepared["manifest_payload"]
+    assert (
+        manifest_payload["route_clearance_warning_summary"]
+        == validate_payload["route_clearance_warning_summary"]
+    )
+    assert manifest_payload["observation_noise"] == validate_payload["observation_noise"]
+    assert manifest_payload["observation_noise_hash"] == validate_payload["observation_noise_hash"]
+
+
+def test_load_route_clearance_certifications_treats_null_optional_fields_as_missing(
+    tmp_path: Path,
+) -> None:
+    """Optional null certification fields should stay unset rather than stringified."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "certified_clearance_warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": "benchmark-ready stress geometry with caveat",
+                        "rationale": "Intentionally tight corridor fixture.",
+                        "reviewed_on": None,
+                        "reviewed_by": None,
+                        "issue": None,
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    certifications = _load_route_clearance_certifications(certification_path)
+
+    assert certifications["certified_clearance_warn"]["reviewed_on"] is None
+    assert certifications["certified_clearance_warn"]["reviewed_by"] is None
+    assert certifications["certified_clearance_warn"]["issue"] is None
+
+
+def test_load_route_clearance_certifications_rejects_null_required_fields(tmp_path: Path) -> None:
+    """Required certification strings should fail closed when YAML supplies null."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "certified_clearance_warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": None,
+                        "rationale": "Intentionally tight corridor fixture.",
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="requires non-empty claim_scope and rationale"):
+        _load_route_clearance_certifications(certification_path)
+
+
+def test_load_route_clearance_certifications_rejects_case_insensitive_duplicates(
+    tmp_path: Path,
+) -> None:
+    """Scenario keys should be unique even when they differ only by case."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "Certified_Clearance_Warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": "benchmark-ready stress geometry with caveat",
+                        "rationale": "Primary fixture.",
+                    },
+                    "certified_clearance_warn": {
+                        "status": "excluded_from_planner_attribution",
+                        "claim_scope": "excluded from planner attribution",
+                        "rationale": "Duplicate scenario key with different case.",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate scenario name detected"):
+        _load_route_clearance_certifications(certification_path)
 
 
 def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Path) -> None:

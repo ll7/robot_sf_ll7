@@ -1,0 +1,57 @@
+version: 1
+source_family: socnavbench
+source_policy: license_safe_local_staging_required
+upstream:
+  repository: https://github.com/CMU-TBD/SocNavBench
+  checked_commit: 2724ea85ff22ca61a88ee95285dfc3fa056656c6
+  official_asset_source: https://drive.google.com/drive/folders/1LAySlmE9dwrTghnL3Y5gE62K5cDJkPm1
+  upstream_docs:
+    - output/repos/SocNavBench/docs/install.md
+    - output/repos/SocNavBench/docs/usage.md
+    - output/repos/SocNavBench/sd3dis/README.md
+notes:
+  - This manifest intentionally does not vendor SocNavBench/S3DIS map assets.
+  - Convert only maps whose official source files are staged locally and checksum-recorded.
+batches:
+  - batch_id: eth_first
+    status: blocked_pending_source_assets
+    issue: 334
+    description: First staged SocNavBench map import batch selected by maintainer decision.
+    maps:
+      - map_id: socnavbench_eth
+        upstream_map_name: ETH
+        upstream_episode_keys:
+          - t_ETH1
+          - t_ETH2
+          - t_eth_follow
+          - t_eth_against
+          - t_eth_dense_flow
+          - t_eth_dense_against
+        source_assets:
+          - key: eth_mesh_dir
+            description: Curated SocNavBench ETH mesh directory.
+            relative_path: sd3dis/stanford_building_parser_dataset/mesh/ETH
+            kind: directory
+            required_for_conversion: true
+            checksum_status: pending_official_asset_staging
+          - key: eth_traversible_pickle
+            description: Precomputed ETH traversible generated from the curated mesh.
+            relative_path: sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl
+            kind: file
+            required_for_conversion: true
+            checksum_status: pending_official_asset_staging
+          - key: eth_pedestrian_dataset
+            description: Upstream ETH pedestrian trajectory CSV used by SocNavBench episodes.
+            relative_path: agents/humans/datasets/eth/world_coordinate_inter_eth.csv
+            kind: file
+            required_for_conversion: false
+            checksum_status: upstream_git_tracked
+        planned_outputs:
+          map_svg: maps/svg_maps/socnavbench/socnavbench_eth.svg
+          scenario_config: configs/scenarios/single/socnavbench_eth_smoke.yaml
+          provenance_note: docs/context/issue_334_socnavbench_eth_import.md
+        acceptance_checks:
+          - SVG parser accepts the converted map.
+          - Route and zone semantics are explicit and non-overlapping.
+          - A representative smoke benchmark reaches the map loading path without fallback.
+          - Geometry scale and source checksums are documented before merge.

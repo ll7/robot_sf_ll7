@@ -15,6 +15,16 @@ Added outputs (`ped_impact_*`):
 - heading turn-rate disturbance: near/far means and per-ped delta aggregates
 - validity counters: `ped_impact_accel_delta_valid`, `ped_impact_turn_rate_delta_valid`
 
+Issue #1085 promoted the same opt-in outputs into a schema-backed episode block:
+
+- `metrics.pedestrian_impact.schema_version == "pedestrian-impact.v1"`
+- `metrics.pedestrian_impact.parameters` for radius/window provenance
+- `metrics.pedestrian_impact.sample_counts` for near/far support
+- `metrics.pedestrian_impact.canonical_reductions` for aggregate-ready deltas
+
+`robot_sf_bench run --experimental-ped-impact` now exposes the opt-in path for benchmark JSONL
+outputs; aggregation flattens the structured block into the documented `ped_impact_*` reductions.
+
 ## Semantics
 
 - Near/far split: robot-pedestrian distance `<= radius` is near, `> radius` is far.
@@ -42,6 +52,4 @@ In `tests/test_metrics.py`:
 
 ## Follow-Ups (Deferred)
 
-- CLI exposure for map/benchmark runners (kept out-of-scope in this patch to avoid touching
-  low-coverage execution plumbing files).
 - Threshold profiling for `radius_m` and `window_steps` across canonical scenario suites.

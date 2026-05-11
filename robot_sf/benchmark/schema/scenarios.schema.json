@@ -176,6 +176,32 @@
                 },
                 "additionalProperties": true
             },
+            "multi_amv": {
+                "type": "object",
+                "properties": {
+                    "num_robots": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "near_miss_distance_m": {
+                        "type": "number",
+                        "exclusiveMinimum": 0.0
+                    },
+                    "collision_distance_m": {
+                        "type": "number",
+                        "exclusiveMinimum": 0.0
+                    },
+                    "deadlock_speed_mps": {
+                        "type": "number",
+                        "minimum": 0.0
+                    },
+                    "deadlock_window_steps": {
+                        "type": "integer",
+                        "minimum": 1
+                    }
+                },
+                "additionalProperties": false
+            },
             "seeds": {
                 "type": "array",
                 "items": {

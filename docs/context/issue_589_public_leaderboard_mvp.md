@@ -6,6 +6,16 @@ Decide whether Robot SF should pursue a public social-navigation planner leaderb
 the smallest credible MVP boundary if it becomes valuable later.
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/589>
+Next actionable follow-up: <https://github.com/ll7/robot_sf_ll7/issues/1136>
+
+## 2026-05-10 Backlog Status
+
+Issue #589 was reopened as a future planned idea after the original MVP-boundary PR merged. Keep it
+as a parent/backlog concept, not a direct implementation request.
+
+The next actionable slice is #1136: draft the external planner submission manifest schema,
+validator, and maintainer-reviewed smoke path. That issue is intentionally narrower than a
+leaderboard website, public upload endpoint, or execution of arbitrary user code.
 
 ## Current Decision
 
@@ -79,3 +89,5 @@ one maintainer-reviewed smoke path.
 
 Only after that schema exists should a separate issue consider a static leaderboard page generated
 from accepted release bundles.
+
+As of 2026-05-10, that narrower schema issue is #1136.

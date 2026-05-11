@@ -34,6 +34,11 @@ from robot_sf.benchmark.fallback_policy import (
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
 )
+from robot_sf.benchmark.observation_noise import (
+    load_observation_noise_spec,
+    normalize_observation_noise_spec,
+    observation_noise_hash,
+)
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.seed_variance import (
     build_seed_episode_rows,
@@ -95,11 +100,30 @@ _SEED_VARIABILITY_METRICS: tuple[str, ...] = (
     "snqi",
 )
 _PLANNER_GROUPS = {"core", "experimental"}
-_PAPER_FROZEN_KINEMATICS_V1 = ("differential_drive",)
+_PAPER_KINEMATICS_BY_PROFILE = {
+    "paper-seed-variability-v1": ("differential_drive",),
+    "paper-matrix-v1": ("differential_drive",),
+    "paper-cross-kinematics-v1": ("differential_drive", "bicycle_drive", "holonomic"),
+}
 _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
 _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
 _ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
+_ROUTE_CLEARANCE_CERTIFICATION_STATUSES = {
+    "certified_stress_geometry",
+    "excluded_from_planner_attribution",
+    "repaired_geometry",
+}
+
+
+def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
+    """Return a normalized observation-mode override, rejecting blank strings."""
+    if raw is None:
+        return None
+    normalized = str(raw).strip()
+    if not normalized:
+        raise ValueError(f"{label} cannot be empty when provided")
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -134,6 +158,7 @@ class PlannerSpec:
     algo_config_path: Path | None = None
     socnav_missing_prereq_policy: str = "fail-fast"
     adapter_impact_eval: bool = False
+    observation_mode: str | None = None
     workers_override: int | None = None
     horizon_override: int | None = None
     dt_override: float | None = None
@@ -188,11 +213,14 @@ class CampaignConfig:
     preview_scenario_limit: int = 100
     kinematics_matrix: tuple[str, ...] = ("differential_drive",)
     holonomic_command_mode: str = "vx_vy"
+    observation_mode: str | None = None
     paper_facing: bool = False
     paper_profile_version: str | None = None
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
     comparability_mapping_path: Path | None = None
     snqi_contract: SnqiContractConfig = field(default_factory=SnqiContractConfig)
+    route_clearance_certifications_path: Path | None = None
+    observation_noise: dict[str, Any] | None = None
 
 
 def _repo_relative(path: Path) -> str:
@@ -679,9 +707,87 @@ def _map_route_clearance_center_min_m(route_lines: list[LineString], map_def: An
     return min_distance
 
 
+def _load_route_clearance_certifications(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load route-clearance certification records keyed by scenario id.
+
+    Returns:
+        Certification metadata keyed by scenario name, or an empty mapping when disabled.
+    """
+    if path is None:
+        return {}
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Route-clearance certification file must be a mapping: {path}")
+    records_raw = payload.get("certifications")
+    if not isinstance(records_raw, dict):
+        raise ValueError(f"Route-clearance certification file requires 'certifications': {path}")
+
+    records: dict[str, dict[str, Any]] = {}
+    seen_scenarios: set[str] = set()
+    for scenario_name, record_raw in records_raw.items():
+        scenario = str(scenario_name or "").strip()
+        if not scenario:
+            raise ValueError("Route-clearance certification scenario keys must be non-empty")
+        scenario_lower = scenario.lower()
+        if scenario_lower in seen_scenarios:
+            raise ValueError(f"Duplicate scenario name detected (case-insensitive): '{scenario}'")
+        seen_scenarios.add(scenario_lower)
+        if not isinstance(record_raw, dict):
+            raise ValueError(f"Certification for '{scenario}' must be a mapping")
+        status = str(record_raw.get("status") or "").strip()
+        if status not in _ROUTE_CLEARANCE_CERTIFICATION_STATUSES:
+            expected = ", ".join(sorted(_ROUTE_CLEARANCE_CERTIFICATION_STATUSES))
+            raise ValueError(
+                f"Unsupported route-clearance certification status '{status}' for "
+                f"'{scenario}'. Expected one of: {expected}"
+            )
+        claim_scope = str(record_raw.get("claim_scope") or "").strip()
+        rationale = str(record_raw.get("rationale") or "").strip()
+        if not claim_scope or not rationale:
+            raise ValueError(
+                f"Certification for '{scenario}' requires non-empty claim_scope and rationale"
+            )
+        records[scenario] = {
+            "status": status,
+            "claim_scope": claim_scope,
+            "rationale": rationale,
+            "reviewed_on": str(record_raw.get("reviewed_on") or "").strip() or None,
+            "reviewed_by": str(record_raw.get("reviewed_by") or "").strip() or None,
+            "issue": str(record_raw.get("issue") or "").strip() or None,
+        }
+    return records
+
+
+def _route_clearance_warning_summary(
+    warnings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Summarize route-clearance warning certification state for preflight payloads.
+
+    Returns:
+        Counts and unresolved scenario ids for the emitted warning rows.
+    """
+    status_counts: dict[str, int] = {}
+    unresolved: list[str] = []
+    for warning in warnings:
+        scenario = str(warning.get("scenario", "unknown"))
+        status = warning.get("certification_status")
+        if isinstance(status, str) and status:
+            status_counts[status] = status_counts.get(status, 0) + 1
+        else:
+            unresolved.append(scenario)
+    return {
+        "warning_count": len(warnings),
+        "certified_warning_count": len(warnings) - len(unresolved),
+        "unresolved_warning_count": len(unresolved),
+        "status_counts": dict(sorted(status_counts.items())),
+        "unresolved_scenarios": sorted(unresolved),
+    }
+
+
 def _build_route_clearance_warnings(
     scenarios: list[dict[str, Any]],
     *,
+    certifications: dict[str, dict[str, Any]] | None = None,
     margin_warn_threshold_m: float = _ROUTE_CLEARANCE_WARN_THRESHOLD_M,
 ) -> list[dict[str, Any]]:
     """Build informational preflight warnings for low route-obstacle clearance margins.
@@ -690,6 +796,7 @@ def _build_route_clearance_warnings(
         List of warning dictionaries for scenarios with margin below ``margin_warn_threshold_m``.
     """
     warnings: list[dict[str, Any]] = []
+    certifications = certifications or {}
     for scenario in scenarios:
         map_path = _resolve_map_path_for_scenario(scenario)
         if map_path is None:
@@ -710,22 +817,31 @@ def _build_route_clearance_warnings(
         min_margin_m = float(min_center_distance - robot_radius_m)
         if min_margin_m >= float(margin_warn_threshold_m):
             continue
-        warnings.append(
-            {
-                "scenario": str(
-                    scenario.get("name")
-                    or scenario.get("scenario_id")
-                    or scenario.get("id")
-                    or "unknown"
-                ),
-                "map_file": str(scenario.get("map_file", "")),
-                "robot_radius_m": round(robot_radius_m, 6),
-                "min_center_distance_m": round(float(min_center_distance), 6),
-                "min_clearance_margin_m": round(min_margin_m, 6),
-                "warning_threshold_m": float(margin_warn_threshold_m),
-                "warning_scope": warning_scope,
-            }
+        scenario_name = str(
+            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
         )
+        warning = {
+            "scenario": scenario_name,
+            "map_file": str(scenario.get("map_file", "")),
+            "robot_radius_m": round(robot_radius_m, 6),
+            "min_center_distance_m": round(float(min_center_distance), 6),
+            "min_clearance_margin_m": round(min_margin_m, 6),
+            "warning_threshold_m": float(margin_warn_threshold_m),
+            "warning_scope": warning_scope,
+        }
+        certification = certifications.get(scenario_name)
+        if certification is not None:
+            warning.update(
+                {
+                    "certification_status": certification["status"],
+                    "certification_claim_scope": certification["claim_scope"],
+                    "certification_rationale": certification["rationale"],
+                    "certification_reviewed_on": certification["reviewed_on"],
+                    "certification_reviewed_by": certification["reviewed_by"],
+                    "certification_issue": certification["issue"],
+                }
+            )
+        warnings.append(warning)
     warnings.sort(key=lambda item: (item.get("scenario", ""), item.get("map_file", "")))
     return warnings
 
@@ -925,11 +1041,37 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     return candidate
 
 
+def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | None:
+    """Resolve an optional inline or file-backed observation-noise config.
+
+    Returns:
+        Normalized noise spec, or ``None`` when no profile is configured.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return normalize_observation_noise_spec(raw)
+    if isinstance(raw, str) and raw.strip():
+        path = _resolve_path(raw, base_dir=base_dir)
+        if path is None or not path.is_file():
+            raise FileNotFoundError(f"Could not resolve observation_noise '{raw}'")
+        return load_observation_noise_spec(path)
+    raise ValueError("observation_noise must be a mapping or YAML file path")
+
+
 def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912
     """Validate campaign-level invariants after config parsing."""
     if cfg.scenario_horizons_path is not None and not cfg.scenario_horizons_path.is_file():
         raise FileNotFoundError(
             f"Scenario horizon schedule not found: {cfg.scenario_horizons_path}"
+        )
+    if (
+        cfg.route_clearance_certifications_path is not None
+        and not cfg.route_clearance_certifications_path.is_file()
+    ):
+        raise FileNotFoundError(
+            "Route-clearance certification file not found: "
+            f"{cfg.route_clearance_certifications_path}"
         )
     if cfg.scenario_horizons_path is not None:
         if cfg.horizon is not None:
@@ -998,10 +1140,19 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
     if cfg.paper_facing:
         if not cfg.paper_profile_version or not str(cfg.paper_profile_version).strip():
             raise ValueError("paper_facing=true requires non-empty paper_profile_version")
-        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
-        if normalized_kinematics != _PAPER_FROZEN_KINEMATICS_V1:
+        paper_profile = str(cfg.paper_profile_version).strip()
+        expected_kinematics = _PAPER_KINEMATICS_BY_PROFILE.get(paper_profile)
+        if expected_kinematics is None:
+            known_profiles = ", ".join(sorted(_PAPER_KINEMATICS_BY_PROFILE))
             raise ValueError(
-                "paper_facing=true currently requires kinematics_matrix=['differential_drive']",
+                f"Unsupported paper_profile_version '{paper_profile}'. Expected one of: "
+                f"{known_profiles}"
+            )
+        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
+        if normalized_kinematics != expected_kinematics:
+            raise ValueError(
+                "paper_facing=true requires kinematics_matrix="
+                f"{list(expected_kinematics)!r} for paper_profile_version='{paper_profile}'",
             )
         for planner in cfg.planners:
             if not planner.enabled:
@@ -1014,7 +1165,7 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError("paper_facing=true requires comparability_mapping path")
 
 
-def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
+def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, PLR0915
     """Load and validate a camera-ready benchmark campaign YAML config.
 
     Returns:
@@ -1065,6 +1216,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
                     entry.get("socnav_missing_prereq_policy", "fail-fast"),
                 ),
                 adapter_impact_eval=bool(entry.get("adapter_impact_eval", False)),
+                observation_mode=_normalize_observation_mode(
+                    entry.get("observation_mode"),
+                    label="Planner entry 'observation_mode'",
+                ),
                 workers_override=(
                     int(entry["workers"]) if entry.get("workers") is not None else None
                 ),
@@ -1097,6 +1252,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
     snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=config_path.parent)
     scenario_horizons = _resolve_path(
         payload.get("scenario_horizons"),
+        base_dir=config_path.parent,
+    )
+    route_clearance_certifications_path = _resolve_path(
+        payload.get("route_clearance_certifications"),
         base_dir=config_path.parent,
     )
     comparability_mapping_path = _resolve_path(
@@ -1174,6 +1333,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             if str(value).strip()
         ),
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
+        observation_mode=_normalize_observation_mode(
+            payload.get("observation_mode"),
+            label="Campaign 'observation_mode'",
+        ),
         paper_facing=bool(payload.get("paper_facing", False)),
         paper_profile_version=(
             str(payload.get("paper_profile_version")).strip()
@@ -1189,6 +1352,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             required_dimensions=required_dimensions,
         ),
         comparability_mapping_path=comparability_mapping_path,
+        route_clearance_certifications_path=route_clearance_certifications_path,
         snqi_contract=SnqiContractConfig(
             enabled=bool(snqi_contract_raw.get("enabled", True)),
             enforcement=(
@@ -1214,6 +1378,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             ),
             calibration_seed=int(snqi_contract_raw.get("calibration_seed", 123)),
             calibration_trials=int(snqi_contract_raw.get("calibration_trials", 3000)),
+        ),
+        observation_noise=_resolve_observation_noise(
+            payload.get("observation_noise"),
+            base_dir=config_path.parent,
         ),
     )
     _validate_campaign_config(cfg)
@@ -1288,6 +1456,7 @@ def _build_matrix_summary_rows(
     """
     matrix_path = _repo_relative(cfg.scenario_matrix_path)
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
     repeats = len(resolved_seeds)
     horizon_mode = "scenario_horizons" if cfg.scenario_horizons_path is not None else "fixed"
     scenario_horizons_path = (
@@ -1298,6 +1467,7 @@ def _build_matrix_summary_rows(
     for planner in cfg.planners:
         if not planner.enabled:
             continue
+        active_observation_mode = planner.observation_mode or cfg.observation_mode
         for kinematics in normalized_kinematics:
             rows.append(
                 {
@@ -1308,6 +1478,7 @@ def _build_matrix_summary_rows(
                     "algo": planner.algo,
                     "planner_group": planner.planner_group,
                     "benchmark_profile": planner.benchmark_profile,
+                    "observation_mode": active_observation_mode,
                     "kinematics": kinematics,
                     "seed_policy.mode": cfg.seed_policy.mode,
                     "seed_policy.seed_set": cfg.seed_policy.seed_set,
@@ -1318,6 +1489,9 @@ def _build_matrix_summary_rows(
                     "scenario_horizons_path": scenario_horizons_path,
                     "paper_facing": bool(cfg.paper_facing),
                     "paper_profile_version": cfg.paper_profile_version,
+                    "observation_noise.profile": noise_spec["profile"],
+                    "observation_noise.enabled": bool(noise_spec["enabled"]),
+                    "observation_noise_hash": observation_noise_hash(noise_spec),
                     "config_hash": config_hash,
                     "git_commit": git_meta.get("commit", "unknown"),
                     "campaign_id": campaign_id,
@@ -2022,7 +2196,14 @@ def prepare_campaign_preflight(
 
     created_at_utc = _utc_now()
     scenarios = _load_campaign_scenarios(cfg)
-    route_clearance_warnings = _build_route_clearance_warnings(scenarios)
+    route_clearance_certifications = _load_route_clearance_certifications(
+        cfg.route_clearance_certifications_path
+    )
+    route_clearance_warnings = _build_route_clearance_warnings(
+        scenarios,
+        certifications=route_clearance_certifications,
+    )
+    route_clearance_warning_summary = _route_clearance_warning_summary(route_clearance_warnings)
     resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
     scenario_horizons_summary = _scenario_horizon_summary(
@@ -2031,6 +2212,8 @@ def prepare_campaign_preflight(
     )
     git_meta = _git_context()
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
+    noise_hash = observation_noise_hash(noise_spec)
 
     validate_config_path = preflight_dir / "validate_config.json"
     preview_scenarios_path = preflight_dir / "preview_scenarios.json"
@@ -2089,6 +2272,14 @@ def prepare_campaign_preflight(
         ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "route_clearance_warning_summary": route_clearance_warning_summary,
+        "route_clearance_certifications_path": (
+            _repo_relative(cfg.route_clearance_certifications_path)
+            if cfg.route_clearance_certifications_path is not None
+            else None
+        ),
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
     }
     if scenario_horizons_summary is not None:
         validate_payload["scenario_horizons"] = scenario_horizons_summary
@@ -2101,6 +2292,12 @@ def prepare_campaign_preflight(
         "preview_limit": preview_limit,
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "route_clearance_warning_summary": route_clearance_warning_summary,
+        "route_clearance_certifications_path": (
+            _repo_relative(cfg.route_clearance_certifications_path)
+            if cfg.route_clearance_certifications_path is not None
+            else None
+        ),
     }
     if len(scenarios) > preview_limit:
         preview_payload["truncated"] = True
@@ -2208,7 +2405,15 @@ def prepare_campaign_preflight(
         ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "route_clearance_warning_summary": route_clearance_warning_summary,
+        "route_clearance_certifications_path": (
+            _repo_relative(cfg.route_clearance_certifications_path)
+            if cfg.route_clearance_certifications_path is not None
+            else None
+        ),
         "scenario_horizons": scenario_horizons_summary,
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
         "snqi_weights_path": (
             _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
         ),
@@ -2231,12 +2436,14 @@ def prepare_campaign_preflight(
                     if planner.algo_config_path is not None
                     else None
                 ),
+                "observation_mode": planner.observation_mode,
                 "enabled": planner.enabled,
             }
             for planner in cfg.planners
         ],
         "kinematics_matrix": list(cfg.kinematics_matrix),
         "holonomic_command_mode": cfg.holonomic_command_mode,
+        "observation_mode": cfg.observation_mode,
         "repository_url": cfg.repository_url,
         "release_tag": cfg.release_tag,
         "doi": cfg.doi,
@@ -2897,6 +3104,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     for planner in cfg.planners:
         if not planner.enabled:
             continue
+        active_observation_mode = planner.observation_mode or cfg.observation_mode
         for kinematics in kinematics_matrix:
             planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
             planner_dir = runs_dir / planner_run_key
@@ -2948,6 +3156,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     benchmark_profile=planner.benchmark_profile,
                     socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
                     adapter_impact_eval=planner.adapter_impact_eval,
+                    observation_mode=active_observation_mode,
+                    observation_noise=cfg.observation_noise,
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
@@ -3043,6 +3253,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                         ),
                         "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
                         "adapter_impact_eval": planner.adapter_impact_eval,
+                        "observation_mode": active_observation_mode,
                         "workers": effective_workers,
                         "horizon": effective_horizon,
                         "dt": effective_dt,
@@ -3559,6 +3770,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "holonomic_command_mode": cfg.holonomic_command_mode,
             "paper_facing": bool(cfg.paper_facing),
             "paper_profile_version": cfg.paper_profile_version,
+            "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),
+            "observation_noise_hash": observation_noise_hash(
+                normalize_observation_noise_spec(cfg.observation_noise)
+            ),
             "amv_profile_name": cfg.amv_profile.name,
             "amv_contract_version": cfg.amv_profile.contract_version,
             "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,

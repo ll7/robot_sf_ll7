@@ -417,17 +417,18 @@ def test_episode_schema_accepts_ped_force_metrics():
     ep = _make_episode(T=3, K=1)
     ep.ped_forces[..., 0] = 2.0  # ensure finite force data
     metrics = compute_all_metrics(ep, horizon=5)
+    collision = metrics.get("collisions", 0.0) > 0.0
     record = {
         "version": "v1",
         "episode_id": "demo-1",
         "scenario_id": "sc-demo",
         "seed": 123,
         "metrics": metrics,
-        "termination_reason": "max_steps",
+        "termination_reason": "collision" if collision else "max_steps",
         "outcome": {
             "route_complete": False,
-            "collision_event": False,
-            "timeout_event": True,
+            "collision_event": collision,
+            "timeout_event": not collision,
         },
         "integrity": {"contradictions": []},
         "timing": {"steps_per_second": 1.0},

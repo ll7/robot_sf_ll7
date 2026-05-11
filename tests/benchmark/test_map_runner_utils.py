@@ -228,6 +228,30 @@ def test_goal_policy_and_build_policy() -> None:
     assert abs(angular) <= 1.0
 
 
+def test_build_policy_trivial_reference_adapter_exposes_template_contract() -> None:
+    """The documented reference adapter should build through the real map-runner seam."""
+    policy, meta = _build_policy(
+        "reference_adapter",
+        {"allow_testing_algorithms": True, "max_linear_speed": 0.75},
+    )
+
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [1.0, 0.0]},
+    }
+    linear, angular = policy(obs)
+    assert linear > 0.0
+    assert abs(angular) <= 1.0
+    assert meta["algorithm"] == "trivial_reference"
+    assert meta["canonical_algorithm"] == "trivial_reference"
+    assert meta["baseline_category"] == "diagnostic"
+    assert meta["policy_semantics"] == "diagnostic_adapter_template"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+    assert meta["planner_kinematics"]["adapter_name"] == "TrivialReferencePlannerAdapter"
+    assert meta["planner_kinematics"]["diagnostic_reference_only"] is True
+    assert "Diagnostic adapter template only" in meta["planner_kinematics"]["limitations"]
+
+
 def test_goal_policy_supports_flat_map_runner_observation() -> None:
     """Goal baseline should work with the flat observation keys emitted by the env."""
     obs = {
@@ -1994,6 +2018,9 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert record["metrics"]["success"] == 0.0
     algo_md = record["algorithm_metadata"]
     assert algo_md["baseline_category"] == "classical"
+    assert record["observation_mode"] == "goal_state"
+    assert record["scenario_params"]["observation_mode"] == "goal_state"
+    assert algo_md["observation_spec"]["active_mode"] == "goal_state"
     assert algo_md["planner_kinematics"]["robot_kinematics"] in {"unknown", "differential_drive"}
     feasibility = algo_md.get("kinematics_feasibility")
     assert isinstance(feasibility, dict)
@@ -2576,9 +2603,17 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
     )
     monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    captured_params: list[dict[str, object]] = []
+
+    def _fake_run_map_job_worker(job):
+        """Capture fixed params propagated to map workers."""
+        _scenario, _seed, params = job
+        captured_params.append(dict(params))
+        return {"episode_id": "ep1"}
+
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner._run_map_job_worker",
-        lambda job: {"episode_id": "ep1"},
+        _fake_run_map_job_worker,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner._write_validated",
@@ -2590,10 +2625,15 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         [scenario],
         out_path,
         schema_path=tmp_path / "schema.json",
+        observation_mode="socnav_state",
         workers=1,
         resume=False,
     )
     assert result["written"] == 1
+    assert captured_params[0]["observation_mode"] == "socnav_state"
+    assert result["algorithm_metadata_contract"]["observation_spec"]["active_mode"] == (
+        "socnav_state"
+    )
     assert result["algorithm_metadata_contract"]["baseline_category"] == "classical"
     assert result["algorithm_metadata_contract"]["planner_kinematics"]["robot_kinematics"] in {
         "unknown",
@@ -2614,6 +2654,29 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         resume=True,
     )
     assert result["written"] == 0
+
+
+def test_run_map_batch_rejects_unsupported_observation_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unsupported planner observation-mode overrides should fail before writing episodes."""
+    scenario = {"name": "s1", "metadata": {"supported": True}}
+    out_path = tmp_path / "episodes.jsonl"
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+
+    with pytest.raises(ValueError, match="Observation mode 'goal_state' is not supported"):
+        run_map_batch(
+            [scenario],
+            out_path,
+            schema_path=tmp_path / "schema.json",
+            algo="orca",
+            observation_mode="goal_state",
+            workers=1,
+            resume=False,
+        )
+    assert not out_path.exists()
 
 
 def test_run_map_batch_parallel_writes_results_in_job_order(

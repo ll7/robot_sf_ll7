@@ -1485,6 +1485,8 @@ def run_batch(  # noqa: PLR0913
     experimental_ped_impact: bool = False,
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
+    observation_mode: str | None = None,
+    observation_noise: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -1523,6 +1525,8 @@ def run_batch(  # noqa: PLR0913
             experimental_ped_impact=experimental_ped_impact,
             ped_impact_radius_m=ped_impact_radius_m,
             ped_impact_window_steps=ped_impact_window_steps,
+            observation_mode=observation_mode,
+            observation_noise=observation_noise,
             workers=workers,
             resume=resume,
         )

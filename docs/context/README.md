@@ -108,6 +108,9 @@ knowledge, not every transient iteration detail.
   records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
   full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
   promotion boundary.
+* [Issue #1081 Observation Noise](issue_1081_observation_noise.md) records the opt-in benchmark
+  observation-noise profile contract, provenance fields, resume identity behavior, and
+  non-calibrated robustness interpretation limit.
 * [Issue #1038 H500 SNQI Contract Decision](issue_1038_h500_snqi_contract.md)
   records the h500 scenario-horizon SNQI failure decomposition and the decision to keep the surface
   experimental instead of overwriting the camera-ready v3 SNQI assets.
@@ -133,6 +136,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1055 Exposure-Aware H500 Tables](issue_1055_exposure_aware_h500_tables.md)
   defines and populates representative h500 reporting tables that place completion gains beside
   duration, collision, near-miss, force-exposure, and comfort-exposure rates.
+* [Issue #1082 Paper Cross-Kinematics Parity Sweep](issue_1082_paper_cross_kinematics_v1.md)
+  adds the `paper-cross-kinematics-v1` profile, three-mode kinematics matrix, compatibility
+  manifest, and smoke/preflight command boundary for cross-kinematics interpretation.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.
@@ -395,6 +401,12 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1000 CARLA Bridge Schema Catalog Schema CLI](issue_1000_carla_schema_catalog_schema_cli.md)
   exposes the CARLA bridge schema catalog JSON Schema through
   `robot-sf-catalog-carla-schemas --schema`.
+- [Issue #1076 AMV Paper-Defense Backlog Tracker](issue_1076_amv_paper_defense_backlog.md)
+  records the approved AMV backlog child issues, filing waves, dependency notes, and the current
+  Wave 1 PR linkage without treating follow-up waves as submission blockers.
+- [Issue #1003 CARLA T1 Oracle Replay Smoke](issue_1003_carla_t1_oracle_smoke.md)
+  adds a setup-only T1 oracle replay smoke command for one T0 export manifest payload, with
+  schema-catalog validation and fail-closed `not-available` behavior when CARLA is absent.
 
 ## DreamerV3 Notes
 

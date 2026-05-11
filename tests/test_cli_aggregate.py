@@ -162,3 +162,49 @@ def test_cli_aggregate_with_ci_and_seed(tmp_path: Path, capsys):
 
     # Determinism check: summaries should be identical with same seed
     assert d1 == d2
+
+
+def test_cli_aggregate_with_ci_writes_pairwise_contrasts(tmp_path: Path, capsys) -> None:
+    """Aggregate CLI should write additive pairwise contrasts for paired planner inputs."""
+    episodes = tmp_path / "paired_episodes.jsonl"
+    with episodes.open("w", encoding="utf-8") as f:
+        for seed, value_a in enumerate([1.0, 2.0, 3.0, 4.0], start=1):
+            for algo, score in (("A", value_a), ("B", value_a + 2.0)):
+                f.write(
+                    json.dumps(
+                        {
+                            "episode_id": f"{algo}-{seed}",
+                            "scenario_id": "paired-cli",
+                            "seed": seed,
+                            "scenario_params": {"algo": algo},
+                            "metrics": {"score": score},
+                        }
+                    )
+                    + "\n"
+                )
+
+    out_json = tmp_path / "summary_ci.json"
+    rc = cli_main(
+        [
+            "aggregate",
+            "--in",
+            str(episodes),
+            "--out",
+            str(out_json),
+            "--bootstrap-samples",
+            "200",
+            "--bootstrap-confidence",
+            "0.9",
+            "--bootstrap-seed",
+            "123",
+        ]
+    )
+    cap = capsys.readouterr()
+    assert rc == 0, f"aggregate ci failed: {cap.err}"
+
+    data = json.loads(out_json.read_text(encoding="utf-8"))
+    score = data["pairwise_contrasts"]["A__vs__B"]["metrics"]["score"]
+    assert score["n_pairs"] == 4
+    assert score["delta_mean"] == 2.0
+    assert score["delta_ci"] == [2.0, 2.0]
+    assert data["pairwise_contrasts"]["_meta"]["correction_family"] == ["family", "metric"]

@@ -7,6 +7,8 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
 
 - `classic_interactions.yaml`, `francis2023.yaml`: manifest entry points for the two suites.
 - `classic_interactions_francis2023.yaml`: combined manifest for both suites.
+- `confirmation_v1.yaml`: compact confirmation matrix with issue-596 atomic and sparse
+  interaction archetypes for non-paper robustness checks.
 - `single/`: one scenario per file (manual fine-tuning and small edits).
 - `archetypes/`: groups of related scenarios (may contain one or many entries).
 - `sets/`: manifest files that include other scenario files.

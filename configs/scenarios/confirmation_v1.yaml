@@ -1,0 +1,32 @@
+## Confirmation Scenario Matrix v1
+#
+# Purpose:
+#   Provide a compact robustness-check matrix that is intentionally distinct
+#   from the Francis-heavy paper matrix. The selected scenarios come from the
+#   issue-596 atomic and sparse-interaction packs so they exercise planner
+#   ranking stability across frame, topology, static-clearance, robustness, and
+#   sparse dynamic-interaction archetypes without importing new assets.
+#
+# Canonical validation:
+#   robot_sf_bench validate-config --matrix configs/scenarios/confirmation_v1.yaml
+#   robot_sf_bench preview-scenarios --matrix configs/scenarios/confirmation_v1.yaml
+
+includes:
+  - archetypes/issue_596_frame_consistency.yaml
+  - archetypes/issue_596_static_obstacles.yaml
+  - archetypes/issue_596_topology.yaml
+  - archetypes/issue_596_dynamic.yaml
+  - archetypes/issue_596_robustness.yaml
+
+select_scenarios:
+  - empty_map_8_directions_east
+  - corner_90_turn
+  - u_trap_local_minimum
+  - single_obstacle_circle
+  - narrow_passage
+  - symmetry_ambiguous_choice
+  - single_ped_crossing_orthogonal
+  - head_on_interaction
+
+map_search_paths:
+  - ../../maps/svg_maps

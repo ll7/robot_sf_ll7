@@ -103,6 +103,13 @@ Current promoted all-planners baseline run:
     and the baseline-safe `goal` plus `orca` planners
   + use it to confirm baseline competence on easier deployment-like scenes before interpreting
     hard-matrix failures; it is not a replacement for the paper or h500 stress surfaces
+* `configs/benchmarks/paper_cross_kinematics_v1.yaml`
+  + issue #1082 cross-kinematics parity smoke surface
+  + uses `paper_profile_version=paper-cross-kinematics-v1` and exactly
+    `differential_drive`, `bicycle_drive`, and `holonomic`
+  + runs only the first supported core rows (`goal`, `social_force`, `orca`) on one
+    `classic_cross_trap_low` seed, with deferred planner coverage recorded in
+    `configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml`
 * `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
   + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
   + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,

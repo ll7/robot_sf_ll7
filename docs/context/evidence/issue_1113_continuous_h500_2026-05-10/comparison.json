@@ -8,7 +8,7 @@
       "near_miss_rate": 0.3958333333333333,
       "classic_collision_rate": 0.014492753623188406,
       "francis_collision_rate": 0.013333333333333334,
-      "summary_json": "output/policy_search/hybrid_rule_v3_fast_progress_static_escape_continuous/full_matrix_h500/issue1113_continuous_h500/summary.json"
+      "summary_json": "docs/context/evidence/issue_1113_continuous_h500_2026-05-10/continuous_candidate_summary.json"
     },
     {
       "candidate": "scenario_adaptive_hybrid_orca_v1",

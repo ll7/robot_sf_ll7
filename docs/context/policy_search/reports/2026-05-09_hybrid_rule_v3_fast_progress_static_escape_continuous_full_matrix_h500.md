@@ -15,7 +15,8 @@ Environment-bound continuous static checks should let the fast-progress static-e
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/scenarios/classic_interactions_francis2023.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/hybrid_rule_v3_fast_progress_static_escape_continuous/full_matrix_h500/issue1113_continuous_h500/summary.json`
+- Summary JSON: `docs/context/evidence/issue_1113_continuous_h500_2026-05-10/continuous_candidate_summary.json`
+- Report naming pattern: `YYYY-MM-DD_<candidate>_<stage>.md` (date format: `YYYY-MM-DD`)
 - Git commit: `e75cb985c1ab896f988f7c60db7d3692b480edca`
 
 ## Aggregate Results

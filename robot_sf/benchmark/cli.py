@@ -33,6 +33,7 @@ from robot_sf.benchmark.distributions import collect_grouped_values as _dist_col
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
+from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
 from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
@@ -267,6 +268,12 @@ def _handle_run(args) -> int:
             benchmark_profile=args.benchmark_profile,
             socnav_missing_prereq_policy=args.socnav_missing_prereq_policy,
             adapter_impact_eval=bool(getattr(args, "adapter_impact_eval", False)),
+            observation_mode=getattr(args, "observation_mode", None),
+            observation_noise=(
+                load_observation_noise_spec(args.observation_noise)
+                if getattr(args, "observation_noise", None)
+                else None
+            ),
             snqi_weights=snqi_weights,
             snqi_baseline=snqi_baseline,
             workers=args.workers,
@@ -1168,6 +1175,10 @@ def _add_run_subparser(
     )
     p.add_argument("--algo-config", help="Path to algorithm configuration YAML file")
     p.add_argument(
+        "--observation-noise",
+        help="Path to an observation-noise YAML profile applied to planner inputs",
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1230,6 +1241,14 @@ def _add_run_subparser(
         help=(
             "Enable adapter-impact metadata probing. "
             "For mixed-command planners (e.g., PPO), records native vs adapted step usage."
+        ),
+    )
+    p.add_argument(
+        "--observation-mode",
+        default=None,
+        help=(
+            "Optional planner observation-mode override. Unsupported planner/mode "
+            "combinations fail before episodes are written."
         ),
     )
     p.add_argument(

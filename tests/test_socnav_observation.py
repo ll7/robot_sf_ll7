@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.gym_env.unified_config import ObservationVisibilitySettings, RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.sensor.socnav_observation import SocNavObservationFusion, socnav_observation_space
@@ -88,3 +88,75 @@ def test_socnav_observation_clips_positions_to_map_aware_cap() -> None:
     assert obs["goal"]["next"].tolist() == pytest.approx([70.0, 70.0])
     assert obs["pedestrians"]["positions"][0].tolist() == pytest.approx([100.0, 80.0])
     assert obs["map"]["size"].tolist() == pytest.approx([120.0, 80.0])
+
+
+def test_socnav_observation_visibility_filters_fov_without_mutating_ground_truth() -> None:
+    """Planner-facing pedestrian observations should honor opt-in FOV settings only."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        fov_degrees=90.0,
+    )
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[3.0, 0.0], [0.0, 3.0]], dtype=np.float32),
+        ped_vel=np.zeros((2, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+
+    obs = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    ).next_obs()
+
+    assert obs["pedestrians"]["count"][0] == pytest.approx(1.0)
+    assert obs["pedestrians"]["positions"][0].tolist() == pytest.approx([3.0, 0.0])
+    assert simulator.ped_pos.shape == (2, 2)
+
+
+def test_socnav_observation_visibility_filters_static_occluded_pedestrian() -> None:
+    """Static obstacle geometry should hide pedestrians behind an occluding polygon."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        static_occlusion=True,
+    )
+    obstacle = Obstacle([(1.0, -0.5), (2.0, -0.5), (2.0, 0.5), (1.0, 0.5)])
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[3.0, 0.0], [0.0, 3.0]], dtype=np.float32),
+        ped_vel=np.zeros((2, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[obstacle]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+
+    obs = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    ).next_obs()
+
+    assert obs["pedestrians"]["count"][0] == pytest.approx(1.0)
+    assert obs["pedestrians"]["positions"][0].tolist() == pytest.approx([0.0, 3.0])
+    np.testing.assert_allclose(
+        simulator.ped_pos,
+        np.array([[3.0, 0.0], [0.0, 3.0]], dtype=np.float32),
+    )

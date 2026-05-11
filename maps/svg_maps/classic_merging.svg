@@ -141,20 +141,20 @@
      id="routes"
      inkscape:label="Routes">
     <path
-       d="M 9.461555,11.260392 15.030132,22.903815 22.088904,9.9556054 34.032522,31.133104"
+       d="M 9.461555,11.260392 12.5,22.8 18.0,22.8 18.0,10.8 25.6,10.8 25.6,18.8 31.5,18.8 34.032522,31.133104"
        stroke="#0300d5"
        stroke-width="1"
        fill="none"
        inkscape:label="robot_route_0_0"
        id="path11"
-       sodipodi:nodetypes="cccc" />
+       sodipodi:nodetypes="cccccccc" />
     <path
-       d="M 9.5739824,33.437863 17.898886,21.097983 21.897775,10.688809 28.896097,19.683472 36.168641,11.37282"
+       d="M 9.5739824,33.437863 18.0,24.0 18.0,10.8 25.6,10.8 25.6,18.8 31.5,18.8 36.168641,11.37282"
        stroke="#c40202"
        stroke-width="1"
        fill="none"
        inkscape:label="ped_route_0_0"
        id="path12"
-       sodipodi:nodetypes="ccccc" />
+       sodipodi:nodetypes="ccccccc" />
   </g>
 </svg>

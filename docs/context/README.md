@@ -78,6 +78,7 @@ knowledge, not every transient iteration detail.
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
+* Negative route-clearance repair: [issue_1130_negative_route_clearance_repair.md](issue_1130_negative_route_clearance_repair.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
@@ -151,6 +152,15 @@ knowledge, not every transient iteration detail.
 * [Issue #1085 Pedestrian-Impact Aggregate Metrics](issue_1085_pedestrian_impact_metrics.md)
   defines the schema-backed `pedestrian-impact.v1` block, canonical aggregate reductions, and
   opt-in CLI path for pedestrian-impact benchmark outputs.
+* [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
+  records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
+  fleet-integration boundary.
+* [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
+  records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
+  importer outputs, and deferred generalization scope.
+* [Issue #1090 Observation Visibility](issue_1090_observation_visibility.md)
+  records the planner-facing FOV/range/static-occlusion boundary, ground-truth separation, and
+  dynamic-occlusion follow-up boundary.
 * [Issue #1083 Sanity V1 Nominal Matrix](issue_1083_sanity_v1_nominal_matrix.md)
   records the non-paper-facing nominal calibration matrix, smoke config, baseline threshold, and
   local proof run for easier deployment-like scenes.

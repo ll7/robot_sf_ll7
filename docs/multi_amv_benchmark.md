@@ -27,10 +27,11 @@ The tracked smoke scenario is
 * `robot_count`
 * `pair_count`
 * `min_inter_robot_distance_m`
-* `inter_robot_collision_events`
-* `inter_robot_near_miss_events`
+* `inter_robot_collision_events` for contiguous collision encounters, not raw collision steps
+* `inter_robot_near_miss_events` for contiguous near-miss encounters, not raw near-miss steps
 * `deadlock_steps`
-* `deadlock_detected`
+* `deadlock_detected` when the entire fleet stays below the deadlock speed threshold for the
+  configured window
 
 These metrics are pairwise over robot positions only. They do not replace the existing
 single-robot benchmark metrics and are not yet part of the main `robot_sf_bench run` episode schema.

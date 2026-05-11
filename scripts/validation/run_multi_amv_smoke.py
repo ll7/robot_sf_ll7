@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +23,12 @@ def _multi_robot_config_from_scenario(
     """Build a ``MultiRobotConfig`` from an existing benchmark scenario."""
     base = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
     settings = multi_amv_settings_from_scenario(scenario)
-    config = MultiRobotConfig()
-    config.__dict__.update(base.__dict__)
-    config.num_robots = settings.num_robots
-    return config
+    config_values = {
+        field.name: getattr(base, field.name)
+        for field in fields(MultiRobotConfig)
+        if field.name != "num_robots" and hasattr(base, field.name)
+    }
+    return MultiRobotConfig(**config_values, num_robots=settings.num_robots)
 
 
 def _goal_actions(env: Any) -> np.ndarray:

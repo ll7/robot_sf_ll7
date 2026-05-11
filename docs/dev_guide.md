@@ -455,6 +455,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
 - Simulation glue: interact with pedestrian physics through `robot_sf/sim/FastPysfWrapper`. Don’t import from `fast-pysf` directly inside envs.
 - Baselines/benchmarks: get planners with `robot_sf.baselines.get_baseline(...)`. Prefer programmatic runners; CLI exists at `robot_sf/benchmark/cli.py` for convenience.
+- Local planner adapters: start from `docs/dev/planner_adapter_template.md` and the diagnostic
+  `reference_adapter` path before adding a new map-runner planner key.
 - Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `output/`.
 - Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
 - Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
@@ -1093,6 +1095,31 @@ Output format
 
 - For each group and metric, the aggregator returns mean, median, p95.
 - When CIs are enabled, additional keys are included: mean_ci, median_ci, p95_ci as [low, high].
+- When CIs are enabled and at least two groups share `(scenario_id, seed)` episode identities
+  (`seed_index` is accepted as a fallback), an additive top-level `pairwise_contrasts` block reports
+  paired bootstrap mean deltas, confidence intervals, two-sided bootstrap sign p-values,
+  Holm-adjusted p-values, and paired Cohen's dz effect sizes. Deltas are `right_minus_left` for
+  comparison keys like `A__vs__B`.
+- Holm correction is applied within the current aggregate family (`family="all"`) separately for
+  each metric. For scenario-family-specific correction, filter or split the input records by family
+  before aggregation.
+
+## Planner Inclusion Gate
+
+Run the planner inclusion check when a planner is being considered for promotion from
+experimental/testing-only status into a promoted benchmark set:
+
+```bash
+uv run robot_sf_bench planner-inclusion-check \
+  --algo orca \
+  --matrix configs/scenarios/planner_sanity_matrix_v1.yaml \
+  --output-dir output/planner_inclusion/orca
+```
+
+The command writes `<algo>_episodes.jsonl` plus `<algo>_inclusion_report.json`. The report is a
+review artifact, not an automatic status update. It fails closed with explicit reasons for runner
+or schema failures, NaN/infinite aggregates, slow runtime, too few episodes, low success rate, or
+excess collision rate.
 
 Programmatic usage
 

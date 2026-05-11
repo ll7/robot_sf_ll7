@@ -334,6 +334,16 @@ def _preview_metadata_lookup(  # noqa: C901
                     if isinstance(route_warning, dict)
                     else None
                 ),
+                "route_clearance_certification_status": (
+                    route_warning.get("certification_status")
+                    if isinstance(route_warning, dict)
+                    else None
+                ),
+                "route_clearance_certification_claim_scope": (
+                    route_warning.get("certification_claim_scope")
+                    if isinstance(route_warning, dict)
+                    else None
+                ),
             }
             for key in _scenario_keys(scenario):
                 lookup[key] = row

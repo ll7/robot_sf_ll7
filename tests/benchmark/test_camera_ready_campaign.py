@@ -20,6 +20,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     SeedPolicy,
     _jsonable_repo_relative,
     _load_campaign_scenarios,
+    _load_route_clearance_certifications,
     _planner_report_row,
     _resolved_seed_inventory,
     _sanitize_csv_cell,
@@ -2753,6 +2754,195 @@ def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     manifest_payload = prepared["manifest_payload"]
     assert manifest_payload["route_clearance_warning_count"] == 1
     assert manifest_payload["route_clearance_warnings"] == warnings
+
+
+def test_prepare_campaign_preflight_attaches_route_clearance_certifications(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Preflight should expose accepted route-clearance interpretations per warning row."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    map_path = (get_repository_root() / "maps/svg_maps/classic_crossing.svg").resolve()
+    scenario_path.write_text(
+        "\n".join(
+            [
+                "- name: certified_clearance_warn",
+                f"  map_file: {map_path.as_posix()}",
+                "  seeds: [111]",
+                "  robot_config:",
+                "    radius: 0.8",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        "\n".join(
+            [
+                "schema_version: route-clearance-certifications.v1",
+                "certifications:",
+                "  certified_clearance_warn:",
+                "    status: certified_stress_geometry",
+                "    claim_scope: benchmark-ready stress geometry with caveat",
+                "    rationale: Intentionally tight corridor fixture.",
+                "    reviewed_on: '2026-05-09'",
+                "    reviewed_by: ll7",
+                "    issue: '1105'",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: clearance_certification_contract",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                f"route_clearance_certifications: {certification_path.as_posix()}",
+                "observation_noise:",
+                "  profile: clearance_noise",
+                "  pedestrian_false_negative_prob: 0.2",
+                "  seed: 17",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    fake_map_def = SimpleNamespace(
+        robot_routes=[SimpleNamespace(waypoints=[(0.0, 0.0), (1.0, 0.0)])],
+        obstacles=[SimpleNamespace(vertices=[(1.0, -0.1), (2.0, -0.1), (2.0, 0.1), (1.0, 0.1)])],
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.convert_map",
+        lambda _path: fake_map_def,
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="clearance")
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+
+    warning = validate_payload["route_clearance_warnings"][0]
+    assert warning["certification_status"] == "certified_stress_geometry"
+    assert warning["certification_claim_scope"] == "benchmark-ready stress geometry with caveat"
+    assert warning["certification_issue"] == "1105"
+    assert validate_payload["route_clearance_warning_summary"] == {
+        "warning_count": 1,
+        "certified_warning_count": 1,
+        "unresolved_warning_count": 0,
+        "status_counts": {"certified_stress_geometry": 1},
+        "unresolved_scenarios": [],
+    }
+    assert (
+        validate_payload["route_clearance_certifications_path"]
+        == certification_path.resolve().as_posix()
+    )
+    assert validate_payload["observation_noise"]["profile"] == "clearance_noise"
+    assert validate_payload["observation_noise"]["enabled"] is True
+    assert isinstance(validate_payload["observation_noise_hash"], str)
+    assert len(validate_payload["observation_noise_hash"]) == 12
+
+    manifest_payload = prepared["manifest_payload"]
+    assert (
+        manifest_payload["route_clearance_warning_summary"]
+        == validate_payload["route_clearance_warning_summary"]
+    )
+    assert manifest_payload["observation_noise"] == validate_payload["observation_noise"]
+    assert manifest_payload["observation_noise_hash"] == validate_payload["observation_noise_hash"]
+
+
+def test_load_route_clearance_certifications_treats_null_optional_fields_as_missing(
+    tmp_path: Path,
+) -> None:
+    """Optional null certification fields should stay unset rather than stringified."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "certified_clearance_warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": "benchmark-ready stress geometry with caveat",
+                        "rationale": "Intentionally tight corridor fixture.",
+                        "reviewed_on": None,
+                        "reviewed_by": None,
+                        "issue": None,
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    certifications = _load_route_clearance_certifications(certification_path)
+
+    assert certifications["certified_clearance_warn"]["reviewed_on"] is None
+    assert certifications["certified_clearance_warn"]["reviewed_by"] is None
+    assert certifications["certified_clearance_warn"]["issue"] is None
+
+
+def test_load_route_clearance_certifications_rejects_null_required_fields(tmp_path: Path) -> None:
+    """Required certification strings should fail closed when YAML supplies null."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "certified_clearance_warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": None,
+                        "rationale": "Intentionally tight corridor fixture.",
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="requires non-empty claim_scope and rationale"):
+        _load_route_clearance_certifications(certification_path)
+
+
+def test_load_route_clearance_certifications_rejects_case_insensitive_duplicates(
+    tmp_path: Path,
+) -> None:
+    """Scenario keys should be unique even when they differ only by case."""
+    certification_path = tmp_path / "route_clearance_certifications.yaml"
+    certification_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "route-clearance-certifications.v1",
+                "certifications": {
+                    "Certified_Clearance_Warn": {
+                        "status": "certified_stress_geometry",
+                        "claim_scope": "benchmark-ready stress geometry with caveat",
+                        "rationale": "Primary fixture.",
+                    },
+                    "certified_clearance_warn": {
+                        "status": "excluded_from_planner_attribution",
+                        "claim_scope": "excluded from planner attribution",
+                        "rationale": "Duplicate scenario key with different case.",
+                    },
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate scenario name detected"):
+        _load_route_clearance_certifications(certification_path)
 
 
 def test_prepare_campaign_preflight_matrix_summary_is_deterministic(tmp_path: Path) -> None:

@@ -109,6 +109,11 @@ _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
 _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
 _ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
+_ROUTE_CLEARANCE_CERTIFICATION_STATUSES = {
+    "certified_stress_geometry",
+    "excluded_from_planner_attribution",
+    "repaired_geometry",
+}
 
 
 def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
@@ -214,6 +219,7 @@ class CampaignConfig:
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
     comparability_mapping_path: Path | None = None
     snqi_contract: SnqiContractConfig = field(default_factory=SnqiContractConfig)
+    route_clearance_certifications_path: Path | None = None
     observation_noise: dict[str, Any] | None = None
 
 
@@ -701,9 +707,87 @@ def _map_route_clearance_center_min_m(route_lines: list[LineString], map_def: An
     return min_distance
 
 
+def _load_route_clearance_certifications(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load route-clearance certification records keyed by scenario id.
+
+    Returns:
+        Certification metadata keyed by scenario name, or an empty mapping when disabled.
+    """
+    if path is None:
+        return {}
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Route-clearance certification file must be a mapping: {path}")
+    records_raw = payload.get("certifications")
+    if not isinstance(records_raw, dict):
+        raise ValueError(f"Route-clearance certification file requires 'certifications': {path}")
+
+    records: dict[str, dict[str, Any]] = {}
+    seen_scenarios: set[str] = set()
+    for scenario_name, record_raw in records_raw.items():
+        scenario = str(scenario_name or "").strip()
+        if not scenario:
+            raise ValueError("Route-clearance certification scenario keys must be non-empty")
+        scenario_lower = scenario.lower()
+        if scenario_lower in seen_scenarios:
+            raise ValueError(f"Duplicate scenario name detected (case-insensitive): '{scenario}'")
+        seen_scenarios.add(scenario_lower)
+        if not isinstance(record_raw, dict):
+            raise ValueError(f"Certification for '{scenario}' must be a mapping")
+        status = str(record_raw.get("status") or "").strip()
+        if status not in _ROUTE_CLEARANCE_CERTIFICATION_STATUSES:
+            expected = ", ".join(sorted(_ROUTE_CLEARANCE_CERTIFICATION_STATUSES))
+            raise ValueError(
+                f"Unsupported route-clearance certification status '{status}' for "
+                f"'{scenario}'. Expected one of: {expected}"
+            )
+        claim_scope = str(record_raw.get("claim_scope") or "").strip()
+        rationale = str(record_raw.get("rationale") or "").strip()
+        if not claim_scope or not rationale:
+            raise ValueError(
+                f"Certification for '{scenario}' requires non-empty claim_scope and rationale"
+            )
+        records[scenario] = {
+            "status": status,
+            "claim_scope": claim_scope,
+            "rationale": rationale,
+            "reviewed_on": str(record_raw.get("reviewed_on") or "").strip() or None,
+            "reviewed_by": str(record_raw.get("reviewed_by") or "").strip() or None,
+            "issue": str(record_raw.get("issue") or "").strip() or None,
+        }
+    return records
+
+
+def _route_clearance_warning_summary(
+    warnings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Summarize route-clearance warning certification state for preflight payloads.
+
+    Returns:
+        Counts and unresolved scenario ids for the emitted warning rows.
+    """
+    status_counts: dict[str, int] = {}
+    unresolved: list[str] = []
+    for warning in warnings:
+        scenario = str(warning.get("scenario", "unknown"))
+        status = warning.get("certification_status")
+        if isinstance(status, str) and status:
+            status_counts[status] = status_counts.get(status, 0) + 1
+        else:
+            unresolved.append(scenario)
+    return {
+        "warning_count": len(warnings),
+        "certified_warning_count": len(warnings) - len(unresolved),
+        "unresolved_warning_count": len(unresolved),
+        "status_counts": dict(sorted(status_counts.items())),
+        "unresolved_scenarios": sorted(unresolved),
+    }
+
+
 def _build_route_clearance_warnings(
     scenarios: list[dict[str, Any]],
     *,
+    certifications: dict[str, dict[str, Any]] | None = None,
     margin_warn_threshold_m: float = _ROUTE_CLEARANCE_WARN_THRESHOLD_M,
 ) -> list[dict[str, Any]]:
     """Build informational preflight warnings for low route-obstacle clearance margins.
@@ -712,6 +796,7 @@ def _build_route_clearance_warnings(
         List of warning dictionaries for scenarios with margin below ``margin_warn_threshold_m``.
     """
     warnings: list[dict[str, Any]] = []
+    certifications = certifications or {}
     for scenario in scenarios:
         map_path = _resolve_map_path_for_scenario(scenario)
         if map_path is None:
@@ -732,22 +817,31 @@ def _build_route_clearance_warnings(
         min_margin_m = float(min_center_distance - robot_radius_m)
         if min_margin_m >= float(margin_warn_threshold_m):
             continue
-        warnings.append(
-            {
-                "scenario": str(
-                    scenario.get("name")
-                    or scenario.get("scenario_id")
-                    or scenario.get("id")
-                    or "unknown"
-                ),
-                "map_file": str(scenario.get("map_file", "")),
-                "robot_radius_m": round(robot_radius_m, 6),
-                "min_center_distance_m": round(float(min_center_distance), 6),
-                "min_clearance_margin_m": round(min_margin_m, 6),
-                "warning_threshold_m": float(margin_warn_threshold_m),
-                "warning_scope": warning_scope,
-            }
+        scenario_name = str(
+            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
         )
+        warning = {
+            "scenario": scenario_name,
+            "map_file": str(scenario.get("map_file", "")),
+            "robot_radius_m": round(robot_radius_m, 6),
+            "min_center_distance_m": round(float(min_center_distance), 6),
+            "min_clearance_margin_m": round(min_margin_m, 6),
+            "warning_threshold_m": float(margin_warn_threshold_m),
+            "warning_scope": warning_scope,
+        }
+        certification = certifications.get(scenario_name)
+        if certification is not None:
+            warning.update(
+                {
+                    "certification_status": certification["status"],
+                    "certification_claim_scope": certification["claim_scope"],
+                    "certification_rationale": certification["rationale"],
+                    "certification_reviewed_on": certification["reviewed_on"],
+                    "certification_reviewed_by": certification["reviewed_by"],
+                    "certification_issue": certification["issue"],
+                }
+            )
+        warnings.append(warning)
     warnings.sort(key=lambda item: (item.get("scenario", ""), item.get("map_file", "")))
     return warnings
 
@@ -971,6 +1065,14 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         raise FileNotFoundError(
             f"Scenario horizon schedule not found: {cfg.scenario_horizons_path}"
         )
+    if (
+        cfg.route_clearance_certifications_path is not None
+        and not cfg.route_clearance_certifications_path.is_file()
+    ):
+        raise FileNotFoundError(
+            "Route-clearance certification file not found: "
+            f"{cfg.route_clearance_certifications_path}"
+        )
     if cfg.scenario_horizons_path is not None:
         if cfg.horizon is not None:
             raise ValueError("scenario_horizons cannot be combined with fixed horizon")
@@ -1063,7 +1165,7 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError("paper_facing=true requires comparability_mapping path")
 
 
-def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
+def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, PLR0915
     """Load and validate a camera-ready benchmark campaign YAML config.
 
     Returns:
@@ -1150,6 +1252,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
     snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=config_path.parent)
     scenario_horizons = _resolve_path(
         payload.get("scenario_horizons"),
+        base_dir=config_path.parent,
+    )
+    route_clearance_certifications_path = _resolve_path(
+        payload.get("route_clearance_certifications"),
         base_dir=config_path.parent,
     )
     comparability_mapping_path = _resolve_path(
@@ -1246,6 +1352,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             required_dimensions=required_dimensions,
         ),
         comparability_mapping_path=comparability_mapping_path,
+        route_clearance_certifications_path=route_clearance_certifications_path,
         snqi_contract=SnqiContractConfig(
             enabled=bool(snqi_contract_raw.get("enabled", True)),
             enforcement=(
@@ -2089,7 +2196,14 @@ def prepare_campaign_preflight(
 
     created_at_utc = _utc_now()
     scenarios = _load_campaign_scenarios(cfg)
-    route_clearance_warnings = _build_route_clearance_warnings(scenarios)
+    route_clearance_certifications = _load_route_clearance_certifications(
+        cfg.route_clearance_certifications_path
+    )
+    route_clearance_warnings = _build_route_clearance_warnings(
+        scenarios,
+        certifications=route_clearance_certifications,
+    )
+    route_clearance_warning_summary = _route_clearance_warning_summary(route_clearance_warnings)
     resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
     scenario_horizons_summary = _scenario_horizon_summary(
@@ -2158,6 +2272,12 @@ def prepare_campaign_preflight(
         ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "route_clearance_warning_summary": route_clearance_warning_summary,
+        "route_clearance_certifications_path": (
+            _repo_relative(cfg.route_clearance_certifications_path)
+            if cfg.route_clearance_certifications_path is not None
+            else None
+        ),
         "observation_noise": noise_spec,
         "observation_noise_hash": noise_hash,
     }
@@ -2172,6 +2292,12 @@ def prepare_campaign_preflight(
         "preview_limit": preview_limit,
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "route_clearance_warning_summary": route_clearance_warning_summary,
+        "route_clearance_certifications_path": (
+            _repo_relative(cfg.route_clearance_certifications_path)
+            if cfg.route_clearance_certifications_path is not None
+            else None
+        ),
     }
     if len(scenarios) > preview_limit:
         preview_payload["truncated"] = True
@@ -2279,6 +2405,12 @@ def prepare_campaign_preflight(
         ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "route_clearance_warning_summary": route_clearance_warning_summary,
+        "route_clearance_certifications_path": (
+            _repo_relative(cfg.route_clearance_certifications_path)
+            if cfg.route_clearance_certifications_path is not None
+            else None
+        ),
         "scenario_horizons": scenario_horizons_summary,
         "observation_noise": noise_spec,
         "observation_noise_hash": noise_hash,

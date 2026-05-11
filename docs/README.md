@@ -6,6 +6,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 **Artifact root**: All generated artifacts (JSONL, figures, videos) must live under the git-ignored `output/` directory. Legacy `results/` paths have been migrated; update commands accordingly when running examples or scripts. Small, reviewable copies of durable evidence may be promoted into [docs/context/evidence](./context/evidence/README.md); do not mirror `output/` wholesale.
 
+**Route-clearance caveats**: paper-facing preflights expose route-clearance certifications from
+[`configs/benchmarks/route_clearance_certifications_v1.yaml`](../configs/benchmarks/route_clearance_certifications_v1.yaml);
+see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_clearance_certification.md).
+
 ## 🚀 Social Navigation Benchmark Platform (Complete)
 
 **The Social Navigation Benchmark Platform is now fully operational!**

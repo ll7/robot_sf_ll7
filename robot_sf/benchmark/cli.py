@@ -268,6 +268,7 @@ def _handle_run(args) -> int:
             benchmark_profile=args.benchmark_profile,
             socnav_missing_prereq_policy=args.socnav_missing_prereq_policy,
             adapter_impact_eval=bool(getattr(args, "adapter_impact_eval", False)),
+            observation_mode=getattr(args, "observation_mode", None),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
                 if getattr(args, "observation_noise", None)
@@ -1240,6 +1241,14 @@ def _add_run_subparser(
         help=(
             "Enable adapter-impact metadata probing. "
             "For mixed-command planners (e.g., PPO), records native vs adapted step usage."
+        ),
+    )
+    p.add_argument(
+        "--observation-mode",
+        default=None,
+        help=(
+            "Optional planner observation-mode override. Unsupported planner/mode "
+            "combinations fail before episodes are written."
         ),
     )
     p.add_argument(

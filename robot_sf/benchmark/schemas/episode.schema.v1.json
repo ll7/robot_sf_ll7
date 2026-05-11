@@ -14,6 +14,76 @@
         "outcome",
         "integrity"
     ],
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": true
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "exclusiveMinimum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": false
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "maximum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
     "properties": {
         "version": {
             "const": "v1"
@@ -38,6 +108,10 @@
         },
         "algo": {
             "type": "string"
+        },
+        "observation_mode": {
+            "type": "string",
+            "description": "Active planner observation-mode contract for this episode."
         },
         "algorithm_metadata": {
             "type": "object",
@@ -72,6 +146,36 @@
                 },
                 "policy_semantics": {
                     "type": "string"
+                },
+                "observation_spec": {
+                    "type": "object",
+                    "properties": {
+                        "default_mode": {
+                            "type": "string"
+                        },
+                        "active_mode": {
+                            "type": "string"
+                        },
+                        "supported_modes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "inputs": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "override_applied": {
+                            "type": "boolean"
+                        },
+                        "notes": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
                 },
                 "config": {
                     "type": "object"
@@ -246,6 +350,22 @@
         "metrics": {
             "type": "object",
             "minProperties": 1,
+            "properties": {
+                "collisions": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "collision_rate": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                }
+            },
             "additionalProperties": {
                 "type": [
                     "number",

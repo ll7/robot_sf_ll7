@@ -22,7 +22,7 @@ The trace-backed mechanism evidence now exists:
   blockers.
 - [Issue #1055 Exposure-Aware H500 Tables](issue_1055_exposure_aware_h500_tables.md) records the
   exposure-aware interpretation table used to avoid treating h500 success as a single winner signal.
-- `docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv`
+- [representative_trace_summary.csv](evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv)
   is the compact retained seed-level table.
 
 The child-promoting cell is `classic_merging_low` seed `111` under h500. In #1049 and #1056 it is
@@ -75,7 +75,7 @@ The relevant h500 strict envelope is:
 - `nominal_sanity`: success at least `0.80`, collision at most `0.02`.
 - Scenario-stratified guard: classic collision at most `0.07`, Francis collision at most `0.05`.
 - Full h500 promotion claims must evaluate the configured gates in
-  `configs/policy_search/promotion_gates.yaml`.
+  [configs/policy_search/promotion_gates.yaml](../../configs/policy_search/promotion_gates.yaml).
 
 ## Remaining Boundary
 

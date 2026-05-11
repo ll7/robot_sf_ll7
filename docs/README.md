@@ -147,6 +147,8 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #821 Paper Evidence Upgrade](./context/issue_821_paper_evidence_upgrade.md)** - Extended camera-ready matrix with guarded PPO, TEB, and SNQI ranking ablation evidence
 * **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
 * **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
+* **[Benchmark Release 0.0.2 Publication Snapshot](./experiments/publication/20260414_benchmark_release_0_0_2/summary.md)** - Durable scoped seven-planner release pointer with DOI, archive checksum, embedded manifest/checksum/SNQI paths, and fresh-checkout recovery command
+* **[Issue #1062 Paper Evidence Archive Pointer](./context/issue_1062_paper_evidence_archive.md)** - Paper evidence archive recovery note for the scoped `0.0.2` bundle without committing raw benchmark outputs
 * **[Issue #435 Map Coverage Flow](./context/issue_435_map_coverage_flow.md)** - Parent flow state for map coverage, SocNavBench import, and map-quality child issues
 * **[Issue #328 Real-World Map Parent Tracker](./context/issue_328_real_world_map_parent.md)** - Parent/child map-coverage split, child issue status, and shared validation contract for real-world benchmark maps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment

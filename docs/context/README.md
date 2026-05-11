@@ -126,6 +126,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1053 Durable Artifact Reference Audit](issue_1053_durable_artifact_references.md)
   separates durable W&B/release/artifact-store pointers from local `output/` caches and records the
   publication-bundle archive blocker.
+* [Issue #1062 Paper Evidence Archive Pointer](issue_1062_paper_evidence_archive.md)
+  records the durable scoped `0.0.2` release archive, DOI, checksums, publication manifest, and SNQI
+  diagnostics recovery path without committing raw benchmark outputs.
 * [Issue #1054 Planner Readiness And Fallback Audit](issue_1054_planner_readiness_fallback_audit.md)
   records the paper-matrix planner readiness table, dependency status, and fail-closed treatment of
   fallback or degraded rows.

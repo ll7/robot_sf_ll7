@@ -303,6 +303,9 @@ knowledge, not every transient iteration detail.
 
 * [Issue #435 Map Coverage Flow](./issue_435_map_coverage_flow.md)
   parent flow state for real-world maps, SocNavBench import, and map-quality repair issues.
+* [Issue #334 SocNavBench ETH Import Batch](issue_334_socnavbench_eth_import.md)
+  records the first staged SocNavBench map-import batch, the fail-closed source-asset validator,
+  and the boundary before a converted ETH SVG can be committed.
 * [Issue #328 Real-World Map Parent Tracker](./issue_328_real_world_map_parent.md)
   parent/child split, current child issue state, and shared validation contract for real-world
   benchmark maps.

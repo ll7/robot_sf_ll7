@@ -77,6 +77,27 @@ def test_inclusion_report_fails_closed_with_explicit_reasons(tmp_path: Path) -> 
     assert any("schema_valid" in reason for reason in report["failure_reasons"])
 
 
+def test_inclusion_report_counts_failed_jobs_summary_fallback(tmp_path: Path) -> None:
+    """Runner summaries that omit a failures list should still count failed_jobs."""
+    report = build_inclusion_report(
+        algo="goal",
+        algo_config=None,
+        benchmark_profile="experimental",
+        matrix=Path("matrix.yaml"),
+        schema=Path("schema.json"),
+        output_dir=tmp_path,
+        episodes_path=tmp_path / "episodes.jsonl",
+        summary={"total_jobs": 2, "written": 2, "failures": None, "failed_jobs": 1},
+        aggregates=_aggregate(success=1.0, collisions=0.0),
+        runtime_sec=1.0,
+        criteria=InclusionCriteria(),
+    )
+
+    assert report["decision"] == "revise"
+    assert report["checks"]["schema_valid"]["passed"] is False
+    assert report["checks"]["schema_valid"]["observed"]["failures"] == 1
+
+
 def test_planner_inclusion_cli_writes_report(monkeypatch, tmp_path: Path, capsys) -> None:
     """CLI command should run the checker and write a JSON report artifact."""
     matrix = tmp_path / "matrix.yaml"

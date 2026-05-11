@@ -241,7 +241,9 @@ def build_inclusion_report(  # noqa: PLR0913
     written = int(summary.get("written", 0) or 0)
     failures = summary.get("failures", [])
     failure_count = (
-        len(failures) if isinstance(failures, list) else int(summary.get("failed", 0) or 0)
+        len(failures)
+        if isinstance(failures, list)
+        else int(summary.get("failed_jobs", summary.get("failed", 0)) or 0)
     )
     success_rate = _aggregate_mean(aggregates, group, "success")
     collision_rate = _aggregate_mean(aggregates, group, "collisions")

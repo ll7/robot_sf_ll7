@@ -33,6 +33,7 @@ from robot_sf.benchmark.distributions import collect_grouped_values as _dist_col
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
+from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.planner_inclusion import (
     DEFAULT_INCLUSION_MATRIX,
     InclusionCriteria,
@@ -273,6 +274,12 @@ def _handle_run(args) -> int:
             benchmark_profile=args.benchmark_profile,
             socnav_missing_prereq_policy=args.socnav_missing_prereq_policy,
             adapter_impact_eval=bool(getattr(args, "adapter_impact_eval", False)),
+            observation_mode=getattr(args, "observation_mode", None),
+            observation_noise=(
+                load_observation_noise_spec(args.observation_noise)
+                if getattr(args, "observation_noise", None)
+                else None
+            ),
             snqi_weights=snqi_weights,
             snqi_baseline=snqi_baseline,
             workers=args.workers,
@@ -1115,7 +1122,7 @@ def _handle_planner_inclusion_check(args) -> int:
                 max_runtime_sec=float(args.max_runtime_sec),
             ),
         )
-        print(json.dumps(to_jsonable_payload(report), indent=2))
+        print(json.dumps(to_jsonable_payload(report), indent=2, allow_nan=False))
         return 0 if report.get("decision") == "pass" else 1
     except Exception:  # pragma: no cover - error path
         return 2
@@ -1209,6 +1216,10 @@ def _add_run_subparser(
     )
     p.add_argument("--algo-config", help="Path to algorithm configuration YAML file")
     p.add_argument(
+        "--observation-noise",
+        help="Path to an observation-noise YAML profile applied to planner inputs",
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1271,6 +1282,14 @@ def _add_run_subparser(
         help=(
             "Enable adapter-impact metadata probing. "
             "For mixed-command planners (e.g., PPO), records native vs adapted step usage."
+        ),
+    )
+    p.add_argument(
+        "--observation-mode",
+        default=None,
+        help=(
+            "Optional planner observation-mode override. Unsupported planner/mode "
+            "combinations fail before episodes are written."
         ),
     )
     p.add_argument(

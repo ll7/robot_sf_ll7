@@ -1093,6 +1093,14 @@ Output format
 
 - For each group and metric, the aggregator returns mean, median, p95.
 - When CIs are enabled, additional keys are included: mean_ci, median_ci, p95_ci as [low, high].
+- When CIs are enabled and at least two groups share `(scenario_id, seed)` episode identities
+  (`seed_index` is accepted as a fallback), an additive top-level `pairwise_contrasts` block reports
+  paired bootstrap mean deltas, confidence intervals, two-sided bootstrap sign p-values,
+  Holm-adjusted p-values, and paired Cohen's dz effect sizes. Deltas are `right_minus_left` for
+  comparison keys like `A__vs__B`.
+- Holm correction is applied within the current aggregate family (`family="all"`) separately for
+  each metric. For scenario-family-specific correction, filter or split the input records by family
+  before aggregation.
 
 ## Planner Inclusion Gate
 

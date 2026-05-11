@@ -1,0 +1,12 @@
+# Compact scenario surface for issue #1082 cross-kinematics parity smoke.
+#
+# Keep this surface intentionally small: one verified, low-density classic scenario with one seed
+# is enough to prove the campaign wiring and kinematics metadata without turning the profile into a
+# full paper campaign by accident.
+
+includes:
+  - ../archetypes/classic_cross_trap.yaml
+select_scenarios:
+  - classic_cross_trap_low
+map_search_paths:
+  - ../../../maps/svg_maps

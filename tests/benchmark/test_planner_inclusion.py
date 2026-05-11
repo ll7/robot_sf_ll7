@@ -207,7 +207,7 @@ def test_planner_inclusion_cli_serializes_nonstandard_report_values(
         return {
             "decision": "pass",
             "artifacts": {"report_json": tmp_path / "report.json"},
-            "metrics": {"runtime_sec": FakeScalar()},
+            "metrics": {"runtime_sec": FakeScalar(), "bad_value": float("nan")},
         }
 
     monkeypatch.setattr(
@@ -231,3 +231,4 @@ def test_planner_inclusion_cli_serializes_nonstandard_report_values(
     assert rc == 0
     assert payload["artifacts"]["report_json"] == str(tmp_path / "report.json")
     assert payload["metrics"]["runtime_sec"] == 1.25
+    assert payload["metrics"]["bad_value"] is None

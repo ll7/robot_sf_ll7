@@ -34,6 +34,11 @@ from robot_sf.benchmark.fallback_policy import (
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
 )
+from robot_sf.benchmark.observation_noise import (
+    load_observation_noise_spec,
+    normalize_observation_noise_spec,
+    observation_noise_hash,
+)
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.seed_variance import (
     build_seed_episode_rows,
@@ -95,11 +100,25 @@ _SEED_VARIABILITY_METRICS: tuple[str, ...] = (
     "snqi",
 )
 _PLANNER_GROUPS = {"core", "experimental"}
-_PAPER_FROZEN_KINEMATICS_V1 = ("differential_drive",)
+_PAPER_KINEMATICS_BY_PROFILE = {
+    "paper-seed-variability-v1": ("differential_drive",),
+    "paper-matrix-v1": ("differential_drive",),
+    "paper-cross-kinematics-v1": ("differential_drive", "bicycle_drive", "holonomic"),
+}
 _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
 _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
 _ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
+
+
+def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
+    """Return a normalized observation-mode override, rejecting blank strings."""
+    if raw is None:
+        return None
+    normalized = str(raw).strip()
+    if not normalized:
+        raise ValueError(f"{label} cannot be empty when provided")
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -134,6 +153,7 @@ class PlannerSpec:
     algo_config_path: Path | None = None
     socnav_missing_prereq_policy: str = "fail-fast"
     adapter_impact_eval: bool = False
+    observation_mode: str | None = None
     workers_override: int | None = None
     horizon_override: int | None = None
     dt_override: float | None = None
@@ -188,11 +208,13 @@ class CampaignConfig:
     preview_scenario_limit: int = 100
     kinematics_matrix: tuple[str, ...] = ("differential_drive",)
     holonomic_command_mode: str = "vx_vy"
+    observation_mode: str | None = None
     paper_facing: bool = False
     paper_profile_version: str | None = None
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
     comparability_mapping_path: Path | None = None
     snqi_contract: SnqiContractConfig = field(default_factory=SnqiContractConfig)
+    observation_noise: dict[str, Any] | None = None
 
 
 def _repo_relative(path: Path) -> str:
@@ -925,6 +947,24 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     return candidate
 
 
+def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | None:
+    """Resolve an optional inline or file-backed observation-noise config.
+
+    Returns:
+        Normalized noise spec, or ``None`` when no profile is configured.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return normalize_observation_noise_spec(raw)
+    if isinstance(raw, str) and raw.strip():
+        path = _resolve_path(raw, base_dir=base_dir)
+        if path is None or not path.is_file():
+            raise FileNotFoundError(f"Could not resolve observation_noise '{raw}'")
+        return load_observation_noise_spec(path)
+    raise ValueError("observation_noise must be a mapping or YAML file path")
+
+
 def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912
     """Validate campaign-level invariants after config parsing."""
     if cfg.scenario_horizons_path is not None and not cfg.scenario_horizons_path.is_file():
@@ -998,10 +1038,19 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
     if cfg.paper_facing:
         if not cfg.paper_profile_version or not str(cfg.paper_profile_version).strip():
             raise ValueError("paper_facing=true requires non-empty paper_profile_version")
-        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
-        if normalized_kinematics != _PAPER_FROZEN_KINEMATICS_V1:
+        paper_profile = str(cfg.paper_profile_version).strip()
+        expected_kinematics = _PAPER_KINEMATICS_BY_PROFILE.get(paper_profile)
+        if expected_kinematics is None:
+            known_profiles = ", ".join(sorted(_PAPER_KINEMATICS_BY_PROFILE))
             raise ValueError(
-                "paper_facing=true currently requires kinematics_matrix=['differential_drive']",
+                f"Unsupported paper_profile_version '{paper_profile}'. Expected one of: "
+                f"{known_profiles}"
+            )
+        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
+        if normalized_kinematics != expected_kinematics:
+            raise ValueError(
+                "paper_facing=true requires kinematics_matrix="
+                f"{list(expected_kinematics)!r} for paper_profile_version='{paper_profile}'",
             )
         for planner in cfg.planners:
             if not planner.enabled:
@@ -1065,6 +1114,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
                     entry.get("socnav_missing_prereq_policy", "fail-fast"),
                 ),
                 adapter_impact_eval=bool(entry.get("adapter_impact_eval", False)),
+                observation_mode=_normalize_observation_mode(
+                    entry.get("observation_mode"),
+                    label="Planner entry 'observation_mode'",
+                ),
                 workers_override=(
                     int(entry["workers"]) if entry.get("workers") is not None else None
                 ),
@@ -1174,6 +1227,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             if str(value).strip()
         ),
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
+        observation_mode=_normalize_observation_mode(
+            payload.get("observation_mode"),
+            label="Campaign 'observation_mode'",
+        ),
         paper_facing=bool(payload.get("paper_facing", False)),
         paper_profile_version=(
             str(payload.get("paper_profile_version")).strip()
@@ -1214,6 +1271,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             ),
             calibration_seed=int(snqi_contract_raw.get("calibration_seed", 123)),
             calibration_trials=int(snqi_contract_raw.get("calibration_trials", 3000)),
+        ),
+        observation_noise=_resolve_observation_noise(
+            payload.get("observation_noise"),
+            base_dir=config_path.parent,
         ),
     )
     _validate_campaign_config(cfg)
@@ -1288,6 +1349,7 @@ def _build_matrix_summary_rows(
     """
     matrix_path = _repo_relative(cfg.scenario_matrix_path)
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
     repeats = len(resolved_seeds)
     horizon_mode = "scenario_horizons" if cfg.scenario_horizons_path is not None else "fixed"
     scenario_horizons_path = (
@@ -1298,6 +1360,7 @@ def _build_matrix_summary_rows(
     for planner in cfg.planners:
         if not planner.enabled:
             continue
+        active_observation_mode = planner.observation_mode or cfg.observation_mode
         for kinematics in normalized_kinematics:
             rows.append(
                 {
@@ -1308,6 +1371,7 @@ def _build_matrix_summary_rows(
                     "algo": planner.algo,
                     "planner_group": planner.planner_group,
                     "benchmark_profile": planner.benchmark_profile,
+                    "observation_mode": active_observation_mode,
                     "kinematics": kinematics,
                     "seed_policy.mode": cfg.seed_policy.mode,
                     "seed_policy.seed_set": cfg.seed_policy.seed_set,
@@ -1318,6 +1382,9 @@ def _build_matrix_summary_rows(
                     "scenario_horizons_path": scenario_horizons_path,
                     "paper_facing": bool(cfg.paper_facing),
                     "paper_profile_version": cfg.paper_profile_version,
+                    "observation_noise.profile": noise_spec["profile"],
+                    "observation_noise.enabled": bool(noise_spec["enabled"]),
+                    "observation_noise_hash": observation_noise_hash(noise_spec),
                     "config_hash": config_hash,
                     "git_commit": git_meta.get("commit", "unknown"),
                     "campaign_id": campaign_id,
@@ -2031,6 +2098,8 @@ def prepare_campaign_preflight(
     )
     git_meta = _git_context()
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
+    noise_hash = observation_noise_hash(noise_spec)
 
     validate_config_path = preflight_dir / "validate_config.json"
     preview_scenarios_path = preflight_dir / "preview_scenarios.json"
@@ -2089,6 +2158,8 @@ def prepare_campaign_preflight(
         ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
     }
     if scenario_horizons_summary is not None:
         validate_payload["scenario_horizons"] = scenario_horizons_summary
@@ -2209,6 +2280,8 @@ def prepare_campaign_preflight(
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
         "scenario_horizons": scenario_horizons_summary,
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
         "snqi_weights_path": (
             _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
         ),
@@ -2231,12 +2304,14 @@ def prepare_campaign_preflight(
                     if planner.algo_config_path is not None
                     else None
                 ),
+                "observation_mode": planner.observation_mode,
                 "enabled": planner.enabled,
             }
             for planner in cfg.planners
         ],
         "kinematics_matrix": list(cfg.kinematics_matrix),
         "holonomic_command_mode": cfg.holonomic_command_mode,
+        "observation_mode": cfg.observation_mode,
         "repository_url": cfg.repository_url,
         "release_tag": cfg.release_tag,
         "doi": cfg.doi,
@@ -2897,6 +2972,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     for planner in cfg.planners:
         if not planner.enabled:
             continue
+        active_observation_mode = planner.observation_mode or cfg.observation_mode
         for kinematics in kinematics_matrix:
             planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
             planner_dir = runs_dir / planner_run_key
@@ -2948,6 +3024,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     benchmark_profile=planner.benchmark_profile,
                     socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
                     adapter_impact_eval=planner.adapter_impact_eval,
+                    observation_mode=active_observation_mode,
+                    observation_noise=cfg.observation_noise,
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
@@ -3043,6 +3121,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                         ),
                         "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
                         "adapter_impact_eval": planner.adapter_impact_eval,
+                        "observation_mode": active_observation_mode,
                         "workers": effective_workers,
                         "horizon": effective_horizon,
                         "dt": effective_dt,
@@ -3559,6 +3638,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "holonomic_command_mode": cfg.holonomic_command_mode,
             "paper_facing": bool(cfg.paper_facing),
             "paper_profile_version": cfg.paper_profile_version,
+            "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),
+            "observation_noise_hash": observation_noise_hash(
+                normalize_observation_noise_spec(cfg.observation_noise)
+            ),
             "amv_profile_name": cfg.amv_profile.name,
             "amv_contract_version": cfg.amv_profile.contract_version,
             "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,

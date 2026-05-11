@@ -153,3 +153,63 @@ def test_compute_aggregates_with_ci_shape_and_determinism(tmp_path: Path):
         bootstrap_seed=123,
     )
     assert summary_ci == summary_ci_2
+
+
+def _paired_contrast_records() -> list[dict]:
+    """Build synthetic records with a planted paired effect for group B over group A."""
+    values_a = [1.0, 2.0, 3.0, 4.0, 5.0]
+    deltas = [1.0, 2.0, 3.0, 1.0, 2.0]
+    records = []
+    for seed, (value_a, delta) in enumerate(zip(values_a, deltas, strict=True), start=1):
+        for algo, score in (("A", value_a), ("B", value_a + delta)):
+            records.append(
+                {
+                    "episode_id": f"{algo}-{seed}",
+                    "scenario_id": "paired-scenario",
+                    "seed": seed,
+                    "scenario_params": {"algo": algo},
+                    "metrics": {"score": score},
+                }
+            )
+    return records
+
+
+def test_compute_aggregates_with_ci_emits_pairwise_contrasts_for_planted_effect() -> None:
+    """Pairwise contrast block should recover a planted paired group difference."""
+    summary_ci = compute_aggregates_with_ci(
+        _paired_contrast_records(),
+        group_by="scenario_params.algo",
+        bootstrap_samples=500,
+        bootstrap_confidence=0.90,
+        bootstrap_seed=123,
+    )
+
+    contrasts = summary_ci["pairwise_contrasts"]
+    assert contrasts["_meta"]["pairing_keys"] == ["scenario_id", "seed_or_seed_index"]
+    assert contrasts["_meta"]["p_value_correction"] == "holm"
+    score = contrasts["A__vs__B"]["metrics"]["score"]
+    assert score["n_pairs"] == 5
+    assert score["delta_mean"] == 1.8
+    assert score["delta_ci"][0] > 0.0
+    assert score["p_value_holm"] >= score["p_value"]
+    assert score["effect_size"]["type"] == "paired_cohens_dz"
+    assert score["effect_size"]["value"] > 0.0
+
+
+def test_compute_aggregates_with_ci_pairwise_contrasts_are_seed_deterministic() -> None:
+    """Pairwise bootstrap output should be reproducible for identical inputs and seeds."""
+    first = compute_aggregates_with_ci(
+        _paired_contrast_records(),
+        group_by="scenario_params.algo",
+        bootstrap_samples=250,
+        bootstrap_confidence=0.90,
+        bootstrap_seed=456,
+    )
+    second = compute_aggregates_with_ci(
+        _paired_contrast_records(),
+        group_by="scenario_params.algo",
+        bootstrap_samples=250,
+        bootstrap_confidence=0.90,
+        bootstrap_seed=456,
+    )
+    assert first["pairwise_contrasts"] == second["pairwise_contrasts"]

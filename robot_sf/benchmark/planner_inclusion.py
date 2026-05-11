@@ -419,6 +419,7 @@ def run_planner_inclusion_check(  # noqa: PLR0913
     )
     report["artifacts"]["report_json"] = str(report_path)
     report_path.write_text(
-        json.dumps(to_jsonable_payload(report), indent=2) + "\n", encoding="utf-8"
+        json.dumps(to_jsonable_payload(report), indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
     )
     return report

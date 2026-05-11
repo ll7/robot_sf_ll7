@@ -100,7 +100,11 @@ _SEED_VARIABILITY_METRICS: tuple[str, ...] = (
     "snqi",
 )
 _PLANNER_GROUPS = {"core", "experimental"}
-_PAPER_FROZEN_KINEMATICS_V1 = ("differential_drive",)
+_PAPER_KINEMATICS_BY_PROFILE = {
+    "paper-seed-variability-v1": ("differential_drive",),
+    "paper-matrix-v1": ("differential_drive",),
+    "paper-cross-kinematics-v1": ("differential_drive", "bicycle_drive", "holonomic"),
+}
 _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
 _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
@@ -1034,10 +1038,19 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
     if cfg.paper_facing:
         if not cfg.paper_profile_version or not str(cfg.paper_profile_version).strip():
             raise ValueError("paper_facing=true requires non-empty paper_profile_version")
-        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
-        if normalized_kinematics != _PAPER_FROZEN_KINEMATICS_V1:
+        paper_profile = str(cfg.paper_profile_version).strip()
+        expected_kinematics = _PAPER_KINEMATICS_BY_PROFILE.get(paper_profile)
+        if expected_kinematics is None:
+            known_profiles = ", ".join(sorted(_PAPER_KINEMATICS_BY_PROFILE))
             raise ValueError(
-                "paper_facing=true currently requires kinematics_matrix=['differential_drive']",
+                f"Unsupported paper_profile_version '{paper_profile}'. Expected one of: "
+                f"{known_profiles}"
+            )
+        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
+        if normalized_kinematics != expected_kinematics:
+            raise ValueError(
+                "paper_facing=true requires kinematics_matrix="
+                f"{list(expected_kinematics)!r} for paper_profile_version='{paper_profile}'",
             )
         for planner in cfg.planners:
             if not planner.enabled:

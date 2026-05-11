@@ -142,6 +142,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1055 Exposure-Aware H500 Tables](issue_1055_exposure_aware_h500_tables.md)
   defines and populates representative h500 reporting tables that place completion gains beside
   duration, collision, near-miss, force-exposure, and comfort-exposure rates.
+* [Issue #1059 Deferred Planner-Improvement Program](issue_1059_deferred_planner_improvement_program.md)
+  links the #1049/#1056 trace evidence to the first targeted planner child (#1034/#1036), records
+  the strict h500 incumbent envelope, and keeps full-matrix promotion deferred to #1113.
 * [Issue #1073 Robot SF Empirical-Expansion Gate](issue_1073_empirical_expansion_gate_2026_06_08.md)
   defines the June 8 checkpoint rule for promoting Robot SF beyond dissertation-floor examples,
   including counted improvement units, proof surfaces, and decline criteria.

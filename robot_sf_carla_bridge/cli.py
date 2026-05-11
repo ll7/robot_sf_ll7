@@ -1,4 +1,4 @@
-"""Command-line wrappers for CARLA-free T0 export helpers."""
+"""Command-line wrappers for CARLA bridge helpers."""
 
 from __future__ import annotations
 
@@ -7,7 +7,13 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf_carla_bridge.availability import check_carla_availability, load_availability_schema
+import jsonschema
+
+from robot_sf_carla_bridge.availability import (
+    CarlaUnavailableError,
+    check_carla_availability,
+    load_availability_schema,
+)
 from robot_sf_carla_bridge.export import (
     BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
     build_export_payloads_from_scenario_file,
@@ -18,6 +24,10 @@ from robot_sf_carla_bridge.export import (
     read_export_payload,
     resolve_export_manifest_payload_paths,
     write_export_records,
+)
+from robot_sf_carla_bridge.replay_smoke import (
+    T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION,
+    build_t1_oracle_replay_smoke_setup,
 )
 from robot_sf_carla_bridge.schema_catalog import (
     list_carla_bridge_schema_catalog,
@@ -233,6 +243,66 @@ def catalog_carla_schemas_main(argv: list[str] | None = None) -> int:
         sys.stdout.write(f"{json.dumps(load_schema_catalog_schema(), sort_keys=True)}\n")
         return 0
     sys.stdout.write(f"{json.dumps(list_carla_bridge_schema_catalog(), sort_keys=True)}\n")
+    return 0
+
+
+def replay_t1_oracle_smoke_main(argv: list[str] | None = None) -> int:
+    """Validate one T0 export and prepare a setup-only CARLA T1 oracle replay smoke.
+
+    Returns:
+        Process-style exit code.
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Prepare one CARLA T1 oracle replay smoke from a T0 export manifest."
+    )
+    parser.add_argument("--manifest", help="Path to a T0 export manifest JSON.")
+    parser.add_argument(
+        "--scenario-id",
+        help="Optional scenario id to select from the manifest; defaults to the first payload.",
+    )
+    parser.add_argument("--json", action="store_true", help="Print a machine-readable summary.")
+    args = parser.parse_args(argv)
+
+    if args.manifest is None or not str(args.manifest).strip():
+        parser.error("the following arguments are required: --manifest")
+
+    manifest_path = Path(args.manifest)
+    try:
+        summary = build_t1_oracle_replay_smoke_setup(
+            manifest_path,
+            scenario_id=args.scenario_id,
+        )
+    except CarlaUnavailableError as exc:
+        status = {
+            "schema_version": T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION,
+            "status": "not-available",
+            "mode": "not-available",
+            "manifest": manifest_path.as_posix(),
+            "dependency": "carla",
+            "reason": str(exc),
+            "action": (
+                "Install CARLA and ensure its Python API is on PYTHONPATH before using "
+                "CARLA replay entry points."
+            ),
+        }
+        if args.json:
+            sys.stdout.write(f"{json.dumps(status, sort_keys=True)}\n")
+        else:
+            sys.stderr.write(f"Error: {status['reason']} {status['action']}\n")
+        return 1
+    except (ValueError, OSError, json.JSONDecodeError, jsonschema.ValidationError) as exc:
+        sys.stderr.write(f"Error: {exc}\n")
+        return 1
+
+    if args.json:
+        sys.stdout.write(f"{json.dumps(summary, sort_keys=True)}\n")
+        return 0
+
+    sys.stdout.write(
+        f"{manifest_path.as_posix()}: scenario "
+        f"{summary['selected_payload']['scenario_id']} ready for CARLA T1 oracle replay setup\n"
+    )
     return 0
 
 

@@ -27,6 +27,9 @@ and should stay there rather than being reimplemented in this parent issue.
   - `kinematics_parity_table.md`
   - `kinematics_skipped_combinations.csv`
   - `kinematics_skipped_combinations.md`
+- The frozen `paper-matrix-v1` profile remains differential-drive-only. The issue #1082 profile
+  `paper-cross-kinematics-v1` is the explicit paper-facing parity smoke surface for
+  `differential_drive`, `bicycle_drive`, and `holonomic` rows.
 
 ## Interpretation Caveat
 
@@ -48,6 +51,9 @@ capability, adapter effects, and robot feasibility must not be collapsed into on
 - Classic planner wiring: `robot_sf/planner/classic_planner_adapter.py`
 - Benchmark feasibility aggregation: `robot_sf/benchmark/map_runner.py`
 - Campaign parity reporting: `robot_sf/benchmark/camera_ready_campaign.py`
+- Cross-kinematics smoke profile: `configs/benchmarks/paper_cross_kinematics_v1.yaml`
+- Cross-kinematics compatibility manifest:
+  `configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml`
 - Schema field: `robot_sf/benchmark/schemas/episode.schema.v1.json`
 - Contract tests:
   - `tests/test_classic_planner_adapter.py`

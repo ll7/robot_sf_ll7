@@ -255,6 +255,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="trivial_reference",
+        tier="experimental",
+        aliases=("trivial_reference", "reference_adapter"),
+        note="Diagnostic starter-template adapter for contributor onboarding; not benchmark evidence.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="mppi_social",
         tier="experimental",
         aliases=("mppi_social",),

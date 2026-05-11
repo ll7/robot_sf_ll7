@@ -102,6 +102,16 @@ _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
 _ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
 
 
+def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
+    """Return a normalized observation-mode override, rejecting blank strings."""
+    if raw is None:
+        return None
+    normalized = str(raw).strip()
+    if not normalized:
+        raise ValueError(f"{label} cannot be empty when provided")
+    return normalized
+
+
 @dataclass(frozen=True)
 class AmvProfileConfig:
     """AMV paper-profile scope contract settings."""
@@ -134,6 +144,7 @@ class PlannerSpec:
     algo_config_path: Path | None = None
     socnav_missing_prereq_policy: str = "fail-fast"
     adapter_impact_eval: bool = False
+    observation_mode: str | None = None
     workers_override: int | None = None
     horizon_override: int | None = None
     dt_override: float | None = None
@@ -188,6 +199,7 @@ class CampaignConfig:
     preview_scenario_limit: int = 100
     kinematics_matrix: tuple[str, ...] = ("differential_drive",)
     holonomic_command_mode: str = "vx_vy"
+    observation_mode: str | None = None
     paper_facing: bool = False
     paper_profile_version: str | None = None
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
@@ -1065,6 +1077,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
                     entry.get("socnav_missing_prereq_policy", "fail-fast"),
                 ),
                 adapter_impact_eval=bool(entry.get("adapter_impact_eval", False)),
+                observation_mode=_normalize_observation_mode(
+                    entry.get("observation_mode"),
+                    label="Planner entry 'observation_mode'",
+                ),
                 workers_override=(
                     int(entry["workers"]) if entry.get("workers") is not None else None
                 ),
@@ -1174,6 +1190,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             if str(value).strip()
         ),
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
+        observation_mode=_normalize_observation_mode(
+            payload.get("observation_mode"),
+            label="Campaign 'observation_mode'",
+        ),
         paper_facing=bool(payload.get("paper_facing", False)),
         paper_profile_version=(
             str(payload.get("paper_profile_version")).strip()
@@ -1298,6 +1318,7 @@ def _build_matrix_summary_rows(
     for planner in cfg.planners:
         if not planner.enabled:
             continue
+        active_observation_mode = planner.observation_mode or cfg.observation_mode
         for kinematics in normalized_kinematics:
             rows.append(
                 {
@@ -1308,6 +1329,7 @@ def _build_matrix_summary_rows(
                     "algo": planner.algo,
                     "planner_group": planner.planner_group,
                     "benchmark_profile": planner.benchmark_profile,
+                    "observation_mode": active_observation_mode,
                     "kinematics": kinematics,
                     "seed_policy.mode": cfg.seed_policy.mode,
                     "seed_policy.seed_set": cfg.seed_policy.seed_set,
@@ -2231,12 +2253,14 @@ def prepare_campaign_preflight(
                     if planner.algo_config_path is not None
                     else None
                 ),
+                "observation_mode": planner.observation_mode,
                 "enabled": planner.enabled,
             }
             for planner in cfg.planners
         ],
         "kinematics_matrix": list(cfg.kinematics_matrix),
         "holonomic_command_mode": cfg.holonomic_command_mode,
+        "observation_mode": cfg.observation_mode,
         "repository_url": cfg.repository_url,
         "release_tag": cfg.release_tag,
         "doi": cfg.doi,
@@ -2897,6 +2921,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     for planner in cfg.planners:
         if not planner.enabled:
             continue
+        active_observation_mode = planner.observation_mode or cfg.observation_mode
         for kinematics in kinematics_matrix:
             planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
             planner_dir = runs_dir / planner_run_key
@@ -2948,6 +2973,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     benchmark_profile=planner.benchmark_profile,
                     socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
                     adapter_impact_eval=planner.adapter_impact_eval,
+                    observation_mode=active_observation_mode,
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
@@ -3043,6 +3069,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                         ),
                         "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
                         "adapter_impact_eval": planner.adapter_impact_eval,
+                        "observation_mode": active_observation_mode,
                         "workers": effective_workers,
                         "horizon": effective_horizon,
                         "dt": effective_dt,

@@ -25,6 +25,7 @@ from robot_sf.benchmark import planner_command_contract as planner_commands
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
+    resolve_observation_mode,
 )
 from robot_sf.benchmark.algorithm_readiness import (
     BenchmarkProfile,
@@ -2288,6 +2289,7 @@ def _scenario_identity_payload(
     horizon: int | None,
     dt: float | None,
     record_forces: bool,
+    observation_mode: str | None = None,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
 
@@ -2305,6 +2307,8 @@ def _scenario_identity_payload(
     payload["algo"] = str(algo)
     payload["algo_config_hash"] = _config_hash(algo_config)
     payload["record_forces"] = bool(record_forces)
+    if observation_mode is not None:
+        payload["observation_mode"] = str(observation_mode)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
     if dt is not None and float(dt) > 0.0:
@@ -2596,6 +2600,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
+    observation_mode: str | None = None,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -2626,12 +2631,19 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo_config=raw_policy_cfg,
         scenario=scenario,
     )
+    active_observation_mode = resolve_observation_mode(algo, observation_mode)
     policy_fn, algo_meta = _build_policy(
         algo,
         policy_cfg,
         robot_kinematics=robot_kinematics,
         robot_command_mode=robot_command_mode,
         adapter_impact_eval=adapter_impact_eval,
+    )
+    algo_meta = enrich_algorithm_metadata(
+        algo=algo,
+        metadata=algo_meta,
+        robot_kinematics=robot_kinematics,
+        observation_mode=active_observation_mode,
     )
     planner_close = getattr(policy_fn, "_planner_close", None)
     planner_reset = getattr(policy_fn, "_planner_reset", None)
@@ -2795,6 +2807,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 metadata=algo_meta,
                 execution_mode=execution_mode,
                 robot_kinematics=robot_kinematics,
+                observation_mode=active_observation_mode,
             )
         else:
             impact["status"] = "not_applicable"
@@ -2819,6 +2832,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         horizon=horizon,
         dt=dt,
         record_forces=record_forces,
+        observation_mode=active_observation_mode,
     )
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - start_time))
@@ -2850,6 +2864,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "metrics": metrics,
         "algorithm_metadata": algo_meta,
         "algo": algo,
+        "observation_mode": active_observation_mode,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": ts_end},
@@ -2916,6 +2931,7 @@ def _run_map_job_worker(
         algo_config_path=params.get("algo_config_path"),
         scenario_path=Path(params.get("scenario_path")),
         adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
+        observation_mode=params.get("observation_mode"),
     )
 
 
@@ -3047,6 +3063,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_profile: BenchmarkProfile = "baseline-safe",
     socnav_missing_prereq_policy: str = "fail-fast",
     adapter_impact_eval: bool = False,
+    observation_mode: str | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -3091,12 +3108,15 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         kinematics_tag = scenario_kinematics[0]
     else:
         kinematics_tag = "mixed"
+    batch_observation_mode = str(observation_mode).strip() if observation_mode is not None else None
     algo_contract = enrich_algorithm_metadata(
         algo=algo,
         metadata={},
         robot_kinematics=kinematics_tag,
         adapter_impact_requested=adapter_impact_eval,
+        observation_mode=batch_observation_mode,
     )
+    active_observation_mode = str(algo_contract["observation_spec"]["active_mode"])
     planner_meta = algo_contract.get("planner_kinematics")
     if isinstance(planner_meta, dict):
         planner_meta["scenario_kinematics"] = scenario_kinematics
@@ -3184,6 +3204,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     algo_config=raw_policy_cfg,
                     scenario=sc,
                 )
+                identity_observation_mode = resolve_observation_mode(
+                    identity_algo,
+                    batch_observation_mode,
+                )
                 identity_payload = _scenario_identity_payload(
                     sc,
                     algo=identity_algo,
@@ -3191,6 +3215,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     horizon=horizon,
                     dt=dt,
                     record_forces=record_forces,
+                    observation_mode=identity_observation_mode,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
                     filtered_jobs.append((sc, seed))
@@ -3207,6 +3232,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),
         "adapter_impact_eval": bool(adapter_impact_eval),
+        "observation_mode": batch_observation_mode,
     }
 
     total_jobs = len(jobs)
@@ -3317,6 +3343,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 metadata=algo_contract,
                 execution_mode=execution_mode,
                 robot_kinematics=kinematics_tag,
+                observation_mode=active_observation_mode,
             )
         else:
             impact_contract["status"] = "not_applicable"

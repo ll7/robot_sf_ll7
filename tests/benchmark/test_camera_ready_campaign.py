@@ -81,6 +81,95 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
     assert list(cfg.seed_policy.seeds) == [101]
 
 
+def test_load_campaign_config_parses_observation_mode_overrides(tmp_path: Path) -> None:
+    """Campaign configs should support global and per-planner observation-mode overrides."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: observation_override_campaign",
+                f"scenario_matrix: {scenario_path.name}",
+                "observation_mode: socnav_state",
+                "planners:",
+                "  - key: goal_default_override",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+                "  - key: goal_explicit_override",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+                "    observation_mode: goal_state",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+
+    assert cfg.observation_mode == "socnav_state"
+    assert cfg.planners[0].observation_mode is None
+    assert cfg.planners[1].observation_mode == "goal_state"
+
+
+def test_load_campaign_config_rejects_blank_planner_observation_mode(tmp_path: Path) -> None:
+    """Blank planner-level observation-mode overrides should be rejected."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: observation_blank_planner",
+                f"scenario_matrix: {scenario_path.name}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    observation_mode: '   '",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Planner entry 'observation_mode' cannot be empty"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_blank_global_observation_mode(tmp_path: Path) -> None:
+    """Blank campaign-level observation-mode overrides should be rejected."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: observation_blank_global",
+                f"scenario_matrix: {scenario_path.name}",
+                "observation_mode: '   '",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Campaign 'observation_mode' cannot be empty"):
+        load_campaign_config(config_path)
+
+
 def test_scenario_horizon_schedule_applies_to_loaded_campaign_scenarios(
     tmp_path: Path,
 ) -> None:
@@ -649,6 +738,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
                 "  - key: goal",
                 "    algo: goal",
                 "    benchmark_profile: baseline-safe",
+                "    observation_mode: socnav_state",
                 "  - key: ppo",
                 "    algo: ppo",
                 "    benchmark_profile: experimental",
@@ -660,6 +750,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
 
     cfg = load_campaign_config(config_path)
     assert cfg.scenario_matrix_path == scenario_abs
+    run_batch_calls: list[dict[str, object]] = []
 
     def _fake_run_batch(
         scenarios_or_path,
@@ -673,7 +764,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         """Write one episode record and return readiness/preflight metadata."""
         scenarios = list(scenarios_or_path) if isinstance(scenarios_or_path, list) else []
         _ = schema_path
-        _ = kwargs
+        run_batch_calls.append({"algo": algo, **kwargs})
         if scenarios:
             map_file = scenarios[0].get("map_file")
             if isinstance(map_file, str):
@@ -800,6 +891,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     )
 
     result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="test")
+    assert run_batch_calls[0]["observation_mode"] == "socnav_state"
 
     campaign_root = Path(result["campaign_root"])
     assert campaign_root.exists()
@@ -2374,6 +2466,7 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
                 "paper_facing: true",
                 "paper_profile_version: paper-matrix-v1",
                 "kinematics_matrix: [differential_drive]",
+                "observation_mode: socnav_state",
                 "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
                 "seed_policy:",
                 "  mode: fixed-list",
@@ -2401,6 +2494,7 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
     first = matrix_payload["rows"][0]
     assert first["planner_group"] == "core"
     assert first["kinematics"] == "differential_drive"
+    assert first["observation_mode"] == "socnav_state"
 
 
 def test_prepare_campaign_preflight_accepts_fixed_campaign_id(tmp_path: Path) -> None:

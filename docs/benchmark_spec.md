@@ -91,6 +91,22 @@ CLI gating:
 * `--benchmark-profile experimental`: allows baseline-ready + experimental algorithms.
 * `--adapter-impact-eval` (optional): records adapter-impact metadata (native vs adapted step
   counts where measurable, currently most informative for PPO command conversion).
+* `--observation-mode <mode>` (optional): requests a declared planner observation contract for
+  controlled input-modality checks. Unsupported planner/mode combinations fail before episodes
+  are written.
+
+Observation-mode declarations are metadata contracts, not automatic environment rewrites. The
+current standard modes are:
+
+* `goal_state`: robot state plus route goal only.
+* `socnav_state`: structured robot, goal, and pedestrian state.
+* `headed_socnav_state`: structured social-navigation state with headed robot fields.
+* `sensor_fusion_state`: configured sensor-fusion stack used by learned checkpoint policies.
+* `lidar_human_state` / `gst_human_state`: upstream learned-wrapper input contracts.
+
+The built-in `goal` planner declares both `goal_state` and `socnav_state`, making it the initial
+two-mode demonstration path. Extra channels in `socnav_state` are ignored by that planner, so this
+is useful for input-contract parity checks but is not a claim of pure planner-logic attribution.
 
 Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 
@@ -208,6 +224,8 @@ Each episode record is schema-validated against
 * `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and
   adapter markers for compatibility interpretation. Contract now also includes
   `planner_command_space` (`unicycle_vw|holonomic_vxy`) for kinematics-aware interpretation.
+* `observation_mode` and `algorithm_metadata.observation_spec`, including the planner's default
+  mode, supported modes, active mode, and whether an override was applied.
 * `algorithm_metadata.kinematics_feasibility` with command-level intervention diagnostics:
   `commands_evaluated`, `infeasible_native_count`, `projected_count`,
   `projection_rate`, `infeasible_rate`, `mean/max abs delta` for linear and angular commands.

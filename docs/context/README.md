@@ -178,6 +178,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1052 Claim-Language Audit](issue_1052_claim_language_audit.md)
   records the benchmark-set claim boundary for issue-791 paper wording and marks stale OOD /
   transfer language as historical rather than current manuscript scope.
+* [Issue #1074 Robot-SF Worked-Example Pack](issue_1074_robot_sf_worked_example_pack.md)
+  curates three retained h500 examples that map scenario class, actor mix, metric layer,
+  failure-pattern vocabulary, durable evidence, and claim/non-claim boundaries.
 * [Issue #1075 Operating Envelope And Non-Claims](issue_1075_operating_envelope.md)
   defines the current Robot-SF dissertation-floor evidence envelope, supported evidence types,
   non-claims, and future-work boundaries for CARLA, physical validation, and broader empirical use.

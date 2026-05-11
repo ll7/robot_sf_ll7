@@ -288,8 +288,6 @@ class SocNavObservationFusion:
             for polygon in polygons:
                 if polygon is None or getattr(polygon, "is_empty", False):
                     continue
-                if segment.crosses(polygon) or segment.within(polygon) or polygon.contains(segment):
-                    return True
                 if segment.intersects(polygon) and not segment.touches(polygon):
                     return True
         return False

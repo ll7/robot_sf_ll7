@@ -1098,7 +1098,8 @@ def _coerce_positive_float(value: Any, *, field_name: str) -> float:
     """
     parsed = _coerce_finite_float(value, field_name=field_name)
     if parsed <= 0.0:
-        raise ValueError(f"{field_name} must be > 0.")
+        prefix = "" if "." in field_name else "robot_config."
+        raise ValueError(f"{prefix}{field_name} must be > 0.")
     return parsed
 
 

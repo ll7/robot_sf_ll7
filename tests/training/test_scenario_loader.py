@@ -8,6 +8,7 @@ import pytest
 
 from robot_sf.training import scenario_loader
 from robot_sf.training.scenario_loader import (
+    _coerce_positive_float,
     build_robot_config_from_scenario,
     load_scenarios,
     resolve_map_definition,
@@ -89,6 +90,11 @@ def test_build_robot_config_rejects_invalid_observation_visibility(tmp_path: Pat
             },
             scenario_path=tmp_path / "scenario.yaml",
         )
+
+    def test_coerce_positive_float_prefixes_robot_config_fields() -> None:
+        """Positive float validation should match sibling robot_config error prefixes."""
+        with pytest.raises(ValueError, match=r"robot_config\.radius must be > 0\."):
+            _coerce_positive_float(0, field_name="radius")
 
 
 def test_load_scenarios_select_scenarios_preserves_explicit_order(tmp_path: Path) -> None:

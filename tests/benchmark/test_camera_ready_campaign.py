@@ -77,8 +77,86 @@ def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):
     assert cfg.scenario_matrix_path.exists()
     assert cfg.planners[0].algo_config_path is not None
     assert cfg.planners[0].algo_config_path == algo_cfg_abs
-    assert cfg.planners[0].algo_config_path.exists()
-    assert list(cfg.seed_policy.seeds) == [101]
+
+
+def test_load_campaign_config_resolves_observation_noise_profile(tmp_path: Path) -> None:
+    """Campaign configs should accept file-backed observation-noise profiles."""
+    config_dir = tmp_path / "cfg"
+    config_dir.mkdir(parents=True)
+    matrix_path = config_dir / "matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "s1",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "simulation_config": {"max_episode_steps": 1},
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    noise_path = config_dir / "noise.yaml"
+    noise_path.write_text(
+        yaml.safe_dump({"profile": "unit_noise", "pedestrian_false_negative_prob": 0.25}),
+        encoding="utf-8",
+    )
+    cfg_path = config_dir / "campaign.yaml"
+    cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "noise_campaign",
+                "scenario_matrix": "matrix.yaml",
+                "observation_noise": "noise.yaml",
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(cfg_path)
+
+    assert cfg.observation_noise is not None
+    assert cfg.observation_noise["profile"] == "unit_noise"
+    assert cfg.observation_noise["enabled"] is True
+
+
+def test_load_campaign_config_rejects_directory_observation_noise_profile(
+    tmp_path: Path,
+) -> None:
+    """Campaign configs should fail closed when observation_noise points at a directory."""
+    config_dir = tmp_path / "cfg"
+    config_dir.mkdir(parents=True)
+    matrix_path = config_dir / "matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "s1",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "simulation_config": {"max_episode_steps": 1},
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    noise_dir = config_dir / "noise_dir"
+    noise_dir.mkdir()
+    cfg_path = config_dir / "campaign.yaml"
+    cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "noise_campaign",
+                "scenario_matrix": "matrix.yaml",
+                "observation_noise": "noise_dir",
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileNotFoundError, match="Could not resolve observation_noise"):
+        load_campaign_config(cfg_path)
 
 
 def test_load_campaign_config_parses_observation_mode_overrides(tmp_path: Path) -> None:

@@ -34,6 +34,11 @@ from robot_sf.benchmark.fallback_policy import (
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
 )
+from robot_sf.benchmark.observation_noise import (
+    load_observation_noise_spec,
+    normalize_observation_noise_spec,
+    observation_noise_hash,
+)
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.seed_variance import (
     build_seed_episode_rows,
@@ -205,6 +210,7 @@ class CampaignConfig:
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
     comparability_mapping_path: Path | None = None
     snqi_contract: SnqiContractConfig = field(default_factory=SnqiContractConfig)
+    observation_noise: dict[str, Any] | None = None
 
 
 def _repo_relative(path: Path) -> str:
@@ -937,6 +943,24 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     return candidate
 
 
+def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | None:
+    """Resolve an optional inline or file-backed observation-noise config.
+
+    Returns:
+        Normalized noise spec, or ``None`` when no profile is configured.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return normalize_observation_noise_spec(raw)
+    if isinstance(raw, str) and raw.strip():
+        path = _resolve_path(raw, base_dir=base_dir)
+        if path is None or not path.is_file():
+            raise FileNotFoundError(f"Could not resolve observation_noise '{raw}'")
+        return load_observation_noise_spec(path)
+    raise ValueError("observation_noise must be a mapping or YAML file path")
+
+
 def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912
     """Validate campaign-level invariants after config parsing."""
     if cfg.scenario_horizons_path is not None and not cfg.scenario_horizons_path.is_file():
@@ -1235,6 +1259,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912
             calibration_seed=int(snqi_contract_raw.get("calibration_seed", 123)),
             calibration_trials=int(snqi_contract_raw.get("calibration_trials", 3000)),
         ),
+        observation_noise=_resolve_observation_noise(
+            payload.get("observation_noise"),
+            base_dir=config_path.parent,
+        ),
     )
     _validate_campaign_config(cfg)
     return cfg
@@ -1308,6 +1336,7 @@ def _build_matrix_summary_rows(
     """
     matrix_path = _repo_relative(cfg.scenario_matrix_path)
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
     repeats = len(resolved_seeds)
     horizon_mode = "scenario_horizons" if cfg.scenario_horizons_path is not None else "fixed"
     scenario_horizons_path = (
@@ -1340,6 +1369,9 @@ def _build_matrix_summary_rows(
                     "scenario_horizons_path": scenario_horizons_path,
                     "paper_facing": bool(cfg.paper_facing),
                     "paper_profile_version": cfg.paper_profile_version,
+                    "observation_noise.profile": noise_spec["profile"],
+                    "observation_noise.enabled": bool(noise_spec["enabled"]),
+                    "observation_noise_hash": observation_noise_hash(noise_spec),
                     "config_hash": config_hash,
                     "git_commit": git_meta.get("commit", "unknown"),
                     "campaign_id": campaign_id,
@@ -2053,6 +2085,8 @@ def prepare_campaign_preflight(
     )
     git_meta = _git_context()
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
+    noise_hash = observation_noise_hash(noise_spec)
 
     validate_config_path = preflight_dir / "validate_config.json"
     preview_scenarios_path = preflight_dir / "preview_scenarios.json"
@@ -2111,6 +2145,8 @@ def prepare_campaign_preflight(
         ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
     }
     if scenario_horizons_summary is not None:
         validate_payload["scenario_horizons"] = scenario_horizons_summary
@@ -2231,6 +2267,8 @@ def prepare_campaign_preflight(
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
         "scenario_horizons": scenario_horizons_summary,
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
         "snqi_weights_path": (
             _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
         ),
@@ -2974,6 +3012,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
                     adapter_impact_eval=planner.adapter_impact_eval,
                     observation_mode=active_observation_mode,
+                    observation_noise=cfg.observation_noise,
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
@@ -3586,6 +3625,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "holonomic_command_mode": cfg.holonomic_command_mode,
             "paper_facing": bool(cfg.paper_facing),
             "paper_profile_version": cfg.paper_profile_version,
+            "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),
+            "observation_noise_hash": observation_noise_hash(
+                normalize_observation_noise_spec(cfg.observation_noise)
+            ),
             "amv_profile_name": cfg.amv_profile.name,
             "amv_contract_version": cfg.amv_profile.contract_version,
             "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,

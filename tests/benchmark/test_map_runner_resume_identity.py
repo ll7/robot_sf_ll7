@@ -47,6 +47,7 @@ def test_resume_identity_is_algorithm_aware(
             dt=params.get("dt"),
             record_forces=bool(params.get("record_forces", True)),
             observation_mode=params.get("observation_mode"),
+            observation_noise=params.get("observation_noise"),
         )
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
@@ -170,6 +171,7 @@ def test_resume_identity_includes_algo_config_hash(
             dt=params.get("dt"),
             record_forces=bool(params.get("record_forces", True)),
             observation_mode=params.get("observation_mode"),
+            observation_noise=params.get("observation_noise"),
         )
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
@@ -236,6 +238,36 @@ def test_scenario_identity_ignores_seed_schedule_fields() -> None:
     episode_a = map_runner._compute_map_episode_id(payload_a, seed=1)
     episode_b = map_runner._compute_map_episode_id(payload_b, seed=1)
     assert episode_a == episode_b
+
+
+def test_scenario_identity_includes_observation_noise_hash() -> None:
+    """Resume identity should distinguish clean and observation-noisy benchmark runs."""
+    scenario = _minimal_map_scenario()
+
+    clean = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+    )
+    noisy = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        observation_noise={"profile": "unit", "pose_noise_std_m": 0.1},
+    )
+
+    assert "observation_noise_profile" not in clean
+    assert noisy["observation_noise_profile"] == "unit"
+    assert map_runner._compute_map_episode_id(clean, seed=1) != map_runner._compute_map_episode_id(
+        noisy,
+        seed=1,
+    )
 
 
 def test_scenario_identity_includes_observation_mode() -> None:

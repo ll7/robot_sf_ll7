@@ -48,11 +48,12 @@ The following evidence types can support dissertation-floor discussion when they
 committed configs, commands, or durable notes:
 
 - Scenario and benchmark contracts:
-  `docs/scenario_certification.md`, scenario matrix configs under `configs/scenarios/`, and
-  benchmark configs under `configs/benchmarks/`.
+  [docs/scenario_certification.md](../scenario_certification.md), scenario matrix configs under
+  [configs/scenarios/](../../configs/scenarios/), and benchmark configs under
+  [configs/benchmarks/](../../configs/benchmarks/).
 - Benchmark execution evidence:
   episode JSONL, aggregate reports, campaign summaries, SNQI diagnostics, and compact evidence
-  bundles under `docs/context/evidence/` when retained there deliberately.
+  bundles under [docs/context/evidence/](evidence/) when retained there deliberately.
 - Planner-readiness evidence:
   native/adapter mode, dependency status, fail-closed behavior, and explicit fallback/degraded
   caveats.
@@ -60,8 +61,8 @@ committed configs, commands, or durable notes:
   route/geometry sanity, scenario certification labels, trace-backed h500 mechanism notes, and
   reproducible counterexample or episode artifacts.
 - Documentation evidence:
-  issue execution notes under `docs/context/` that name command paths, validation status, and known
-  limits.
+  issue execution notes under [docs/context/](./) that name command paths, validation status, and
+  known limits.
 
 These surfaces are enough to show how the framework structures evidence and where benchmark claims
 are currently grounded. They are not enough to claim field validity or simulator-transfer parity.
@@ -121,11 +122,11 @@ Checked on 2026-05-09:
 
 - Read #1075 in full, including comments.
 - Reviewed repo-local claim-boundary surfaces:
-  `docs/code_review.md`, `docs/benchmark_camera_ready.md`,
-  `docs/benchmark_artifact_publication.md`, `docs/scenario_certification.md`,
-  `docs/context/issue_1052_claim_language_audit.md`,
-  `docs/context/issue_868_scenario_certification.md`, and
-  `docs/context/issue_928_carla_t0_t1_replay_contract.md`.
+  [docs/code_review.md](../code_review.md), [docs/benchmark_camera_ready.md](../benchmark_camera_ready.md),
+  [docs/benchmark_artifact_publication.md](../benchmark_artifact_publication.md), [docs/scenario_certification.md](../scenario_certification.md),
+  [docs/context/issue_1052_claim_language_audit.md](issue_1052_claim_language_audit.md),
+  [docs/context/issue_868_scenario_certification.md](issue_868_scenario_certification.md), and
+  [docs/context/issue_928_carla_t0_t1_replay_contract.md](issue_928_carla_t0_t1_replay_contract.md).
 - Confirmed the issue-referenced external source path
   `ll7/diss:docs/superpowers/specs/2026-05-08-dissertation-narrative-framework-thesis-floor-design.md`
   was not present in this checkout; this note therefore relies on the issue body plus repo-local

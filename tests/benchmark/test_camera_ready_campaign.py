@@ -581,7 +581,7 @@ def test_issue_1023_scenario_horizon_config_uses_h500_schedule() -> None:
 
 def test_sanity_v1_smoke_config_is_nominal_calibration_surface() -> None:
     """The sanity_v1 smoke config should stay narrow, non-paper-facing, and baseline-safe."""
-    cfg = load_campaign_config(Path("configs/benchmarks/sanity_v1_smoke.yaml"))
+    cfg = load_campaign_config(get_repository_root() / "configs/benchmarks/sanity_v1_smoke.yaml")
 
     assert cfg.paper_facing is False
     assert cfg.paper_interpretation_profile == "sanity-v1-nominal-calibration"

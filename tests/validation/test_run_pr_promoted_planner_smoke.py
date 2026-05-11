@@ -61,8 +61,10 @@ def test_runner_writes_summary_and_markdown(monkeypatch, tmp_path: Path) -> None
         stdout: int,
         stderr: int,
         check: bool,
+        timeout: float,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, env, text, stdout, stderr, check
+        assert timeout == 120.0
         out_arg = command[command.index("--out") + 1]
         Path(out_arg).write_text(json.dumps(_episode("goal")) + "\n", encoding="utf-8")
         payload = {
@@ -132,8 +134,9 @@ def test_runner_fails_on_degraded_readiness(monkeypatch, tmp_path: Path) -> None
         stdout: int,
         stderr: int,
         check: bool,
+        timeout: float,
     ) -> subprocess.CompletedProcess[str]:
-        del cwd, env, text, stdout, stderr, check
+        del cwd, env, text, stdout, stderr, check, timeout
         out_arg = command[command.index("--out") + 1]
         Path(out_arg).write_text(json.dumps(_episode("goal")) + "\n", encoding="utf-8")
         payload = {
@@ -170,7 +173,10 @@ def test_runner_fails_on_degraded_readiness(monkeypatch, tmp_path: Path) -> None
 
 def test_workflow_invokes_runner_and_uploads_summary() -> None:
     """Workflow exposes the runner, step summary, and artifact outputs."""
-    workflow = Path(".github/workflows/pr-promoted-planner-smoke.yml").read_text(encoding="utf-8")
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = (repo_root / ".github/workflows/pr-promoted-planner-smoke.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "pull_request:" in workflow
     assert "scripts/validation/run_pr_promoted_planner_smoke.py" in workflow

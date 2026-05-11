@@ -245,7 +245,7 @@ def _run_planner(
     log_path = output_root / "logs" / f"{algorithm}.log"
     episodes_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    if episodes_path.exists():
+    if episodes_path.is_file():
         episodes_path.unlink()
 
     command = _runner_command(
@@ -270,6 +270,7 @@ def _run_planner(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
+        timeout=runtime_budget_seconds + 30.0,
     )
     duration_seconds = time.perf_counter() - start
     log_path.write_text(proc.stdout, encoding="utf-8")
@@ -325,7 +326,7 @@ def _write_combined_episodes(results: list[PlannerResult], output_root: Path) ->
     combined_path = output_root / "episodes.jsonl"
     with combined_path.open("w", encoding="utf-8") as out_handle:
         for result in results:
-            if not result.episodes_path.exists():
+            if not result.episodes_path.is_file():
                 continue
             for line in result.episodes_path.read_text(encoding="utf-8").splitlines():
                 if line.strip():

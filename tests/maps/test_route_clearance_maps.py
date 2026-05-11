@@ -9,6 +9,18 @@ from shapely.geometry import LineString, Polygon
 from robot_sf.nav.svg_map_parser import convert_map
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ROBOT_RADIUS_M = 1.0
+
+
+def _resolve_map_path(map_path: Path) -> Path:
+    """Resolve map paths relative to the repository root used by this test module.
+
+    Returns:
+        Absolute repository-local map path.
+    """
+
+    assert map_path, "map_path must be provided"
+    return map_path if map_path.is_absolute() else (REPO_ROOT / map_path).resolve()
 
 
 def _obstacle_polygons(map_path: Path) -> list[Polygon]:
@@ -17,7 +29,9 @@ def _obstacle_polygons(map_path: Path) -> list[Polygon]:
     Returns:
         Non-empty obstacle polygons.
     """
-    map_def = convert_map(str(map_path))
+    resolved_map_path = _resolve_map_path(map_path)
+    map_def = convert_map(str(resolved_map_path))
+    assert map_def is not None, f"Failed to convert map: {resolved_map_path}"
     polygons: list[Polygon] = []
     for obstacle in map_def.obstacles:
         vertices = getattr(obstacle, "vertices", None)
@@ -34,7 +48,9 @@ def _route_lines(map_path: Path, *, kind: str) -> list[LineString]:
     Returns:
         Non-empty route lines.
     """
-    map_def = convert_map(str(map_path))
+    resolved_map_path = _resolve_map_path(map_path)
+    map_def = convert_map(str(resolved_map_path))
+    assert map_def is not None, f"Failed to convert map: {resolved_map_path}"
     routes = map_def.robot_routes if kind == "robot" else map_def.ped_routes
     return [LineString(route.waypoints) for route in routes if len(route.waypoints) >= 2]
 
@@ -45,15 +61,15 @@ def test_repaired_maps_do_not_route_through_obstacle_interiors() -> None:
         Path("maps/svg_maps/classic_merging.svg"),
         Path("maps/svg_maps/classic_station_platform.svg"),
     ):
-        map_path = REPO_ROOT / rel_path
+        map_path = rel_path
         obstacles = _obstacle_polygons(map_path)
         assert obstacles, f"{rel_path} should parse obstacle geometry"
 
         for kind in ("robot", "ped"):
             for line in _route_lines(map_path, kind=kind):
-                assert not any(line.crosses(obstacle) for obstacle in obstacles), (
-                    f"{rel_path} {kind} route crosses obstacle interior"
-                )
+                assert not any(
+                    line.crosses(obstacle) or line.within(obstacle) for obstacle in obstacles
+                ), f"{rel_path} {kind} route intersects an obstacle interior"
 
 
 def test_repaired_robot_routes_keep_nonnegative_footprint_margin() -> None:
@@ -64,12 +80,13 @@ def test_repaired_robot_routes_keep_nonnegative_footprint_margin() -> None:
     }
 
     for filename, min_expected_margin in expected_min_margin_m.items():
-        map_path = REPO_ROOT / "maps" / "svg_maps" / filename
+        map_path = Path("maps/svg_maps") / filename
         obstacles = _obstacle_polygons(map_path)
+        assert obstacles, f"{filename} should parse obstacle geometry"
         route_margins = []
         for line in _route_lines(map_path, kind="robot"):
             min_center_distance = min(line.distance(obstacle) for obstacle in obstacles)
-            route_margins.append(min_center_distance - 1.0)
+            route_margins.append(min_center_distance - ROBOT_RADIUS_M)
 
         assert route_margins, f"{filename} should have at least one robot route"
         assert min(route_margins) >= min_expected_margin

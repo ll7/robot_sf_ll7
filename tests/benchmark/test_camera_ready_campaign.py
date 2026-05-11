@@ -798,6 +798,31 @@ def test_issue_1023_scenario_horizon_config_uses_h500_schedule() -> None:
     )
 
 
+def test_sanity_v1_smoke_config_is_nominal_calibration_surface() -> None:
+    """The sanity_v1 smoke config should stay narrow, non-paper-facing, and baseline-safe."""
+    cfg = load_campaign_config(get_repository_root() / "configs/benchmarks/sanity_v1_smoke.yaml")
+
+    assert cfg.paper_facing is False
+    assert cfg.paper_interpretation_profile == "sanity-v1-nominal-calibration"
+    assert cfg.export_publication_bundle is False
+    assert cfg.kinematics_matrix == ("differential_drive",)
+    assert cfg.seed_policy.mode == "fixed-list"
+    assert list(cfg.seed_policy.seeds) == [111]
+    assert cfg.horizon == 250
+    assert [planner.key for planner in cfg.planners] == ["goal", "orca"]
+    assert {planner.planner_group for planner in cfg.planners} == {"core"}
+    assert {planner.benchmark_profile for planner in cfg.planners} == {"baseline-safe"}
+
+    scenarios = _load_campaign_scenarios(cfg)
+    assert [scenario["name"] for scenario in scenarios] == [
+        "planner_sanity_simple",
+        "empty_map_8_directions_east",
+        "goal_behind_robot",
+        "single_ped_crossing_orthogonal",
+    ]
+    assert all(scenario["seeds"] == [111] for scenario in scenarios)
+
+
 def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
     """Extended seed configs should change only the named seed schedule."""
     base_cfg = load_campaign_config(Path("configs/benchmarks/paper_experiment_matrix_v1.yaml"))

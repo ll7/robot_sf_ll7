@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import ModuleType
 
 import pytest
@@ -152,6 +153,34 @@ def test_t1_oracle_replay_smoke_selects_requested_scenario(tmp_path, monkeypatch
     assert summary["selected_payload"]["scenario_id"] == "second"
     assert summary["selected_payload"]["payload_index"] == 1
     assert summary["scenario"]["id"] == "second"
+
+
+def test_select_t0_export_payload_reads_only_selected_payload(tmp_path, monkeypatch) -> None:
+    """Selecting one scenario should not deserialize every payload in the manifest."""
+
+    import robot_sf_carla_bridge.replay_smoke as replay_module
+
+    manifest_path = _write_manifest(
+        tmp_path,
+        [
+            {"scenario_id": "first", "payload": _minimal_t0_payload("first")},
+            {"scenario_id": "second", "payload": _minimal_t0_payload("second")},
+        ],
+    )
+
+    loaded_paths: list[Path] = []
+    real_read_export_payload = replay_module.read_export_payload
+
+    def _counting_read_export_payload(path: str | Path) -> dict:
+        loaded_paths.append(Path(path))
+        return real_read_export_payload(path)
+
+    monkeypatch.setattr(replay_module, "read_export_payload", _counting_read_export_payload)
+
+    record = replay_module.select_t0_export_payload(manifest_path, scenario_id="second")
+
+    assert record["scenario_id"] == "second"
+    assert loaded_paths == [Path(record["path"])]
 
 
 def test_t1_oracle_replay_smoke_rejects_catalog_payload_version_mismatch(

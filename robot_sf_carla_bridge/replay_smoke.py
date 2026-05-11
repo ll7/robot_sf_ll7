@@ -8,7 +8,11 @@ from typing import Any, cast
 import jsonschema
 
 from robot_sf_carla_bridge.availability import require_carla
-from robot_sf_carla_bridge.export import load_export_manifest_payloads, validate_export_payload
+from robot_sf_carla_bridge.export import (
+    read_export_payload,
+    resolve_export_manifest_payload_paths,
+    validate_export_payload,
+)
 from robot_sf_carla_bridge.schema_catalog import (
     list_carla_bridge_schema_catalog,
     load_schema_catalog_schema,
@@ -75,8 +79,8 @@ def select_t0_export_payload(
         ValueError: if the manifest has no payloads or the requested scenario is absent.
     """
 
-    records = load_export_manifest_payloads(manifest_path)
-    if not records:
+    entries = resolve_export_manifest_payload_paths(manifest_path)
+    if not entries:
         raise ValueError("T0 export manifest contains no payloads to replay")
 
     selected_index = 0
@@ -84,25 +88,25 @@ def select_t0_export_payload(
         selected_index = next(
             (
                 index
-                for index, record in enumerate(records)
-                if record.get("scenario_id") == scenario_id
+                for index, entry in enumerate(entries)
+                if entry.get("scenario_id") == scenario_id
             ),
             -1,
         )
         if selected_index < 0:
-            available = ", ".join(str(record.get("scenario_id")) for record in records)
+            available = ", ".join(str(entry.get("scenario_id")) for entry in entries)
             raise ValueError(
                 f"T0 export manifest does not contain scenario_id {scenario_id!r}; "
                 f"available: {available}"
             )
 
-    selected = dict(records[selected_index])
-    payload = selected.get("payload")
-    if not isinstance(payload, dict):
-        raise ValueError("selected T0 export payload must be a JSON object")
-    selected["payload"] = cast("dict[str, Any]", payload)
-    selected["payload_index"] = selected_index
-    return selected
+    selected = entries[selected_index]
+    return {
+        "scenario_id": selected["scenario_id"],
+        "path": selected["path"],
+        "payload": read_export_payload(selected["path"]),
+        "payload_index": selected_index,
+    }
 
 
 def build_t1_oracle_replay_smoke_setup(

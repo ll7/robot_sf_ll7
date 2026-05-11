@@ -2376,7 +2376,6 @@ def post_process_metrics(
     if snqi_weights is not None:
         snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
         metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
-    _attach_pedestrian_impact_block(metrics)
     for count_key in (
         "collisions",
         "ped_collision_count",
@@ -2385,6 +2384,12 @@ def post_process_metrics(
         "total_collision_count",
         "near_misses",
         "force_exceed_events",
+        "ped_impact_window_steps",
+        "ped_impact_ped_count",
+        "ped_impact_near_samples",
+        "ped_impact_far_samples",
+        "ped_impact_accel_delta_valid",
+        "ped_impact_turn_rate_delta_valid",
     ):
         if count_key in metrics and metrics[count_key] is not None:
             try:
@@ -2397,6 +2402,7 @@ def post_process_metrics(
                 metrics[valid_key] = bool(int(metrics[valid_key]))
             except Exception:  # pragma: no cover
                 pass
+    _attach_pedestrian_impact_block(metrics)
     return _sanitize_metrics(metrics)
 
 
@@ -2438,10 +2444,6 @@ def _attach_pedestrian_impact_block(metrics: dict[str, Any]) -> None:
             "turn_rate_near_mean": metrics.get("ped_impact_turn_rate_near_mean"),
             "turn_rate_far_mean": metrics.get("ped_impact_turn_rate_far_mean"),
         },
-        "interpretation": (
-            "Near-vs-far pedestrian motion deltas; positive deltas mean larger values while "
-            "pedestrians are within the configured near radius than while farther away."
-        ),
     }
 
 

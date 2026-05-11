@@ -98,7 +98,7 @@ def test_episode_schema_validates_pedestrian_impact_block():
             "near_misses": 0,
             "pedestrian_impact": {
                 "schema_version": "pedestrian-impact.v1",
-                "parameters": {"near_radius_m": 2.0, "window_steps": 1.0},
+                "parameters": {"near_radius_m": 2.0, "window_steps": 1},
                 "units": {
                     "accel": "m/s^2",
                     "turn_rate": "rad/s",
@@ -107,18 +107,18 @@ def test_episode_schema_validates_pedestrian_impact_block():
                     "sample_fraction": "fraction",
                 },
                 "sample_counts": {
-                    "pedestrians": 1.0,
-                    "near_samples": 4.0,
-                    "far_samples": 5.0,
+                    "pedestrians": 1,
+                    "near_samples": 4,
+                    "far_samples": 5,
                     "near_sample_frac": 4.0 / 9.0,
                 },
                 "canonical_reductions": {
                     "accel_delta_mean": 0.75,
                     "accel_delta_median": 0.70,
-                    "accel_delta_valid_pedestrians": 1.0,
+                    "accel_delta_valid_pedestrians": 1,
                     "turn_rate_delta_mean": 0.20,
                     "turn_rate_delta_median": 0.18,
-                    "turn_rate_delta_valid_pedestrians": 1.0,
+                    "turn_rate_delta_valid_pedestrians": 1,
                 },
             },
         },
@@ -133,5 +133,10 @@ def test_episode_schema_validates_pedestrian_impact_block():
 
     jsonschema.validate(instance=record, schema=schema)
     record["metrics"]["pedestrian_impact"]["schema_version"] = "wrong"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=record, schema=schema)
+
+    record["metrics"]["pedestrian_impact"]["schema_version"] = "pedestrian-impact.v1"
+    record["metrics"]["pedestrian_impact"]["sample_counts"]["pedestrians"] = 1.5
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=record, schema=schema)

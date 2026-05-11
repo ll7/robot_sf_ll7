@@ -2582,6 +2582,33 @@ def _policy_command_to_env_action(  # noqa: C901
     return np.array([d_linear, d_angular], dtype=float)
 
 
+def _normalize_pedestrian_impact_controls(
+    *,
+    experimental_ped_impact: bool,
+    ped_impact_radius_m: float,
+    ped_impact_window_steps: int,
+) -> tuple[float, int]:
+    """Normalize pedestrian-impact controls and fail fast for invalid opt-in values.
+
+    Returns:
+        Normalized radius/window pair for downstream metric computation.
+    """
+
+    radius = float(ped_impact_radius_m)
+    window_value = float(ped_impact_window_steps)
+    window_steps = int(window_value)
+    if experimental_ped_impact:
+        if not math.isfinite(radius) or radius <= 0.0:
+            raise ValueError("ped_impact_radius_m must be a finite value > 0.")
+        if (
+            not math.isfinite(window_value)
+            or float(window_steps) != window_value
+            or window_steps < 1
+        ):
+            raise ValueError("ped_impact_window_steps must be an integer >= 1.")
+    return radius, window_steps
+
+
 def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any],
     seed: int,
@@ -2605,6 +2632,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     Returns:
         dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
     """
+    ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+    )
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
     scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
@@ -3067,6 +3099,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     Returns:
         Summary payload with counts and failure details.
     """
+    ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+    )
     scenarios_is_path = isinstance(scenarios_or_path, (str, Path))
     if scenarios_is_path:
         scenario_path = Path(scenarios_or_path)

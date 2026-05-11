@@ -52,6 +52,4 @@ In `tests/test_metrics.py`:
 
 ## Follow-Ups (Deferred)
 
-- CLI exposure for map/benchmark runners (kept out-of-scope in this patch to avoid touching
-  low-coverage execution plumbing files).
 - Threshold profiling for `radius_m` and `window_steps` across canonical scenario suites.

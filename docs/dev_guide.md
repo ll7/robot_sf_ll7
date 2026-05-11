@@ -1050,9 +1050,9 @@ Key points
 
 CLI usage
 - Run a batch with parallel workers and default resume behavior:
-  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output output/benchmarks/episodes.jsonl --workers 4
+  - robot_sf_bench run --matrix configs/baselines/example.yaml --out output/benchmarks/episodes.jsonl --workers 4
 - Force recomputation (disable resume):
-  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output output/benchmarks/episodes.jsonl --workers 4 --no-resume
+  - robot_sf_bench run --matrix configs/baselines/example.yaml --out output/benchmarks/episodes.jsonl --workers 4 --no-resume
 - Opt in to schema-backed pedestrian-impact reductions:
   - robot_sf_bench run --matrix configs/scenarios/planner_sanity_matrix_v1.yaml --out output/benchmarks/ped_impact/episodes.jsonl --experimental-ped-impact
 - Baseline computation also accepts the same flags:

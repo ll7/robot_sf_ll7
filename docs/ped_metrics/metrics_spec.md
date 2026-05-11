@@ -131,7 +131,11 @@ Canonical reductions:
 Near samples use robot-pedestrian distance `<= --ped-impact-radius-m` (default `2.0` meters), and
 far samples use distances above that threshold. Acceleration and turn-rate signals are smoothed
 with a trailing window of `--ped-impact-window-steps` (default `5`). Aggregation flattens
-`metrics.pedestrian_impact.canonical_reductions` and reports the normal mean/median/p95 summaries.
+`metrics.pedestrian_impact.canonical_reductions` and `metrics.pedestrian_impact.sample_counts`
+into aggregate-ready `ped_impact_*` fields such as `ped_impact_accel_delta_mean`,
+`ped_impact_turn_rate_delta_mean`, `ped_impact_ped_count`, `ped_impact_near_samples`,
+`ped_impact_far_samples`, and `ped_impact_near_sample_frac`, then reports the normal
+mean/median/p95 summaries.
 
 ### Motion Quality Metrics
 

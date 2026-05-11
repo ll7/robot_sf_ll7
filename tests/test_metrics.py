@@ -648,11 +648,12 @@ def test_post_process_metrics_adds_schema_backed_pedestrian_impact_block() -> No
     assert metrics["ped_impact_accel_delta_mean"] == 0.75
     block = metrics["pedestrian_impact"]
     assert block["schema_version"] == "pedestrian-impact.v1"
-    assert block["parameters"] == {"near_radius_m": 2.0, "window_steps": 1.0}
-    assert block["sample_counts"]["near_samples"] == 4.0
+    assert block["parameters"] == {"near_radius_m": 2.0, "window_steps": 1}
+    assert block["sample_counts"]["near_samples"] == 4
     assert block["units"]["accel"] == "m/s^2"
     assert block["canonical_reductions"]["accel_delta_mean"] == 0.75
     assert block["canonical_reductions"]["turn_rate_delta_mean"] == 0.20
+    assert "interpretation" not in block
 
 
 def test_experimental_ped_impact_handles_empty_crowd() -> None:

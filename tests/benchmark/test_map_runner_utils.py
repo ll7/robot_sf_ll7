@@ -2751,6 +2751,30 @@ def test_run_map_batch_filters_and_validation(
     assert result["total_jobs"] == 1
 
 
+def test_run_map_batch_rejects_invalid_experimental_ped_impact_controls(
+    tmp_path: Path,
+) -> None:
+    """Experimental pedestrian-impact runs should fail fast on invalid control values."""
+
+    with pytest.raises(ValueError, match="ped_impact_radius_m"):
+        run_map_batch(
+            [],
+            tmp_path / "out.jsonl",
+            schema_path=tmp_path / "schema.json",
+            experimental_ped_impact=True,
+            ped_impact_radius_m=0.0,
+        )
+
+    with pytest.raises(ValueError, match="ped_impact_window_steps"):
+        run_map_batch(
+            [],
+            tmp_path / "out.jsonl",
+            schema_path=tmp_path / "schema.json",
+            experimental_ped_impact=True,
+            ped_impact_window_steps=0,
+        )
+
+
 def test_run_map_batch_skips_incompatible_kinematics(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

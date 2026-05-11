@@ -269,7 +269,7 @@
                                     "exclusiveMinimum": 0
                                 },
                                 "window_steps": {
-                                    "type": "number",
+                                    "type": "integer",
                                     "minimum": 1
                                 }
                             },
@@ -304,15 +304,15 @@
                             "type": "object",
                             "properties": {
                                 "pedestrians": {
-                                    "type": "number",
+                                    "type": "integer",
                                     "minimum": 0
                                 },
                                 "near_samples": {
-                                    "type": "number",
+                                    "type": "integer",
                                     "minimum": 0
                                 },
                                 "far_samples": {
-                                    "type": "number",
+                                    "type": "integer",
                                     "minimum": 0
                                 },
                                 "near_sample_frac": {
@@ -333,7 +333,7 @@
                                     "type": "number"
                                 },
                                 "accel_delta_valid_pedestrians": {
-                                    "type": "number",
+                                    "type": "integer",
                                     "minimum": 0
                                 },
                                 "turn_rate_delta_mean": {
@@ -343,7 +343,7 @@
                                     "type": "number"
                                 },
                                 "turn_rate_delta_valid_pedestrians": {
-                                    "type": "number",
+                                    "type": "integer",
                                     "minimum": 0
                                 }
                             },

@@ -148,6 +148,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
   provides reusable paper/report wording for h500 as a long-horizon sensitivity surface and marks
   unsafe winner-table, wait-then-go, and SNQI calibration claims.
+* [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
+  records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
+  importer outputs, and deferred generalization scope.
 * [Issue #1090 Observation Visibility](issue_1090_observation_visibility.md)
   records the planner-facing FOV/range/static-occlusion boundary, ground-truth separation, and
   dynamic-occlusion follow-up boundary.

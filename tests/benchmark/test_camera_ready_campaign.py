@@ -475,7 +475,9 @@ def test_load_holonomic_camera_ready_campaign_config() -> None:
 
 def test_load_paper_cross_kinematics_v1_campaign_config() -> None:
     """Cross-kinematics profile should be the only paper profile with a 3-mode matrix."""
-    cfg = load_campaign_config(Path("configs/benchmarks/paper_cross_kinematics_v1.yaml"))
+    cfg = load_campaign_config(
+        get_repository_root() / "configs/benchmarks/paper_cross_kinematics_v1.yaml"
+    )
 
     assert cfg.name == "paper_cross_kinematics_v1"
     assert cfg.paper_facing is True
@@ -500,9 +502,11 @@ def test_load_paper_cross_kinematics_v1_campaign_config() -> None:
 def test_paper_cross_kinematics_v1_compatibility_manifest() -> None:
     """Compatibility manifest should record every configured planner/kinematics pair."""
     config_payload = yaml.safe_load(
-        Path("configs/benchmarks/paper_cross_kinematics_v1.yaml").read_text(encoding="utf-8")
+        (get_repository_root() / "configs/benchmarks/paper_cross_kinematics_v1.yaml").read_text(
+            encoding="utf-8"
+        )
     )
-    manifest_path = Path(config_payload["compatibility_manifest"])
+    manifest_path = get_repository_root() / config_payload["compatibility_manifest"]
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
     assert manifest["version"] == "paper-cross-kinematics-v1"

@@ -108,6 +108,9 @@ knowledge, not every transient iteration detail.
   records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
   full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
   promotion boundary.
+* [Issue #1081 Observation Noise](issue_1081_observation_noise.md) records the opt-in benchmark
+  observation-noise profile contract, provenance fields, resume identity behavior, and
+  non-calibrated robustness interpretation limit.
 * [Issue #1038 H500 SNQI Contract Decision](issue_1038_h500_snqi_contract.md)
   records the h500 scenario-horizon SNQI failure decomposition and the decision to keep the surface
   experimental instead of overwriting the camera-ready v3 SNQI assets.
@@ -133,18 +136,33 @@ knowledge, not every transient iteration detail.
 * [Issue #1055 Exposure-Aware H500 Tables](issue_1055_exposure_aware_h500_tables.md)
   defines and populates representative h500 reporting tables that place completion gains beside
   duration, collision, near-miss, force-exposure, and comfort-exposure rates.
+* [Issue #1082 Paper Cross-Kinematics Parity Sweep](issue_1082_paper_cross_kinematics_v1.md)
+  adds the `paper-cross-kinematics-v1` profile, three-mode kinematics matrix, compatibility
+  manifest, and smoke/preflight command boundary for cross-kinematics interpretation.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.
+* [Issue #1065 Route-Clearance Warning Audit](issue_1065_route_clearance_warning_audit.md)
+  lists all current paper and h500 route-clearance warnings, classifies their attribution boundary,
+  and opens the route repair/certification follow-up.
 * [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
   provides reusable paper/report wording for h500 as a long-horizon sensitivity surface and marks
   unsafe winner-table, wait-then-go, and SNQI calibration claims.
+* [Issue #1083 Sanity V1 Nominal Matrix](issue_1083_sanity_v1_nominal_matrix.md)
+  records the non-paper-facing nominal calibration matrix, smoke config, baseline threshold, and
+  local proof run for easier deployment-like scenes.
+* [Issue #1084 Planner Inclusion Gate](issue_1084_planner_inclusion_gate.md)
+  records the mechanical planner inclusion-check command, report schema, default thresholds, and
+  real pass/revise proof cases for promotion review.
 * [Issue #1044 H500 Follow-Up Benchmark Plan](issue_1044_h500_followup_benchmark_plan.md)
   defines the long-horizon claim boundary, multi-table reporting plan, raw evidence requirements,
   pilot trace slice, and separate SNQI contract policy for a future h500 paper or benchmark report.
 * [Issue #1052 Claim-Language Audit](issue_1052_claim_language_audit.md)
   records the benchmark-set claim boundary for issue-791 paper wording and marks stale OOD /
   transfer language as historical rather than current manuscript scope.
+* [Issue #1075 Operating Envelope And Non-Claims](issue_1075_operating_envelope.md)
+  defines the current Robot-SF dissertation-floor evidence envelope, supported evidence types,
+  non-claims, and future-work boundaries for CARLA, physical validation, and broader empirical use.
 * [Issue #1023 Experimental Benchmark Candidates](issue_1023_experimental_benchmark_candidates.md)
   records why `scenario_adaptive_hybrid_orca_v1` and
   `hybrid_rule_v3_fast_progress_static_escape` were added to the long-horizon benchmark as
@@ -392,6 +410,12 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1000 CARLA Bridge Schema Catalog Schema CLI](issue_1000_carla_schema_catalog_schema_cli.md)
   exposes the CARLA bridge schema catalog JSON Schema through
   `robot-sf-catalog-carla-schemas --schema`.
+- [Issue #1076 AMV Paper-Defense Backlog Tracker](issue_1076_amv_paper_defense_backlog.md)
+  records the approved AMV backlog child issues, filing waves, dependency notes, and the current
+  Wave 1 PR linkage without treating follow-up waves as submission blockers.
+- [Issue #1003 CARLA T1 Oracle Replay Smoke](issue_1003_carla_t1_oracle_smoke.md)
+  adds a setup-only T1 oracle replay smoke command for one T0 export manifest payload, with
+  schema-catalog validation and fail-closed `not-available` behavior when CARLA is absent.
 
 ## DreamerV3 Notes
 

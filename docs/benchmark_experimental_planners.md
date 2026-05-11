@@ -20,6 +20,7 @@ The following planners are currently treated as testing-only and fail closed by 
 - `gap_prediction`
 - `sicnav`
 - `dr_mpc`
+- `trivial_reference` / `reference_adapter` (diagnostic starter template only)
 
 These planners are blocked unless their algo config explicitly contains:
 
@@ -89,6 +90,6 @@ testing-only planners. None of them currently meet the promotion bar.
 
 ## Current status
 
-- Keep all nine planners behind `allow_testing_algorithms: true`.
+- Keep all testing-only planners behind `allow_testing_algorithms: true`.
 - Treat their existing benchmark notes as negative evidence, not missing paperwork.
 - Do not remove the guard for documentation completeness alone.

@@ -1,0 +1,11 @@
+profile: robustness_smoke_v1
+enabled: true
+seed: 1081
+pose_noise_std_m: 0.02
+heading_noise_std_rad: 0.01
+lidar_dropout_prob: 0.1
+lidar_dropout_value: 0.0
+pedestrian_false_negative_prob: 0.1
+pedestrian_false_positive_prob: 0.05
+pedestrian_false_positive_radius_m: 4.0
+pedestrian_false_positive_radius: 0.35

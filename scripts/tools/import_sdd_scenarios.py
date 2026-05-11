@@ -82,12 +82,13 @@ def _parse_annotation_line(line: str, *, line_number: int) -> SddPoint | None:
 def load_sdd_points(path: Path, *, label: str) -> list[SddPoint]:
     """Load pedestrian points from an SDD annotation file."""
     points: list[SddPoint] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        point = _parse_annotation_line(line, line_number=line_number)
-        if point is None:
-            continue
-        if point.label.lower() == label.lower():
-            points.append(point)
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            point = _parse_annotation_line(line, line_number=line_number)
+            if point is None:
+                continue
+            if point.label.lower() == label.lower():
+                points.append(point)
     if not points:
         raise ValueError(f"No usable '{label}' annotations found in {path}.")
     return points

@@ -146,5 +146,5 @@ def test_episode_validator_rejects_legacy_collision_alias_drift() -> None:
         },
         "integrity": {"contradictions": []},
     }
-    with pytest.raises(ValueError, match="collision_event=false"):
+    with pytest.raises(jsonschema.ValidationError, match="collision_event=false"):
         validate_episode(record, schema)

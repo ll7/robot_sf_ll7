@@ -37,7 +37,6 @@ def validate_episode(record: dict[str, Any], schema: dict[str, Any]) -> None:
 
     Raises:
         jsonschema.ValidationError: If the record violates the JSON schema.
-        ValueError: If schema-valid fields contradict the canonical outcome contract.
     """
     jsonschema.validate(instance=record, schema=schema)
     contradictions = outcome_contradictions(
@@ -47,4 +46,4 @@ def validate_episode(record: dict[str, Any], schema: dict[str, Any]) -> None:
     )
     if contradictions:
         joined = "; ".join(contradictions)
-        raise ValueError(f"episode semantic validation failed: {joined}")
+        raise jsonschema.ValidationError(f"episode semantic validation failed: {joined}")

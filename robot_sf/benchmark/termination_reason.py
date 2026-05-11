@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -13,12 +12,6 @@ TERMINATION_REASONS: tuple[str, ...] = (
     "truncated",
     "max_steps",
     "error",
-)
-
-_COLLISION_COMPONENT_KEYS: tuple[str, ...] = (
-    "ped_collision_count",
-    "obstacle_collision_count",
-    "agent_collision_count",
 )
 
 
@@ -64,54 +57,6 @@ def build_outcome_payload(
         "collision_event": bool(collision),
         "timeout_event": bool(timeout),
     }
-
-
-def _resolved_total_collision_count(metrics: Mapping[str, Any]) -> float:
-    """Return the best available collision count from an episode metrics payload."""
-    explicit_total = metric_scalar(metrics, "total_collision_count", default=float("nan"))
-    if math.isfinite(explicit_total):
-        return max(0.0, explicit_total)
-
-    component_total = 0.0
-    saw_component = False
-    for key in _COLLISION_COMPONENT_KEYS:
-        if key not in metrics:
-            continue
-        saw_component = True
-        component_value = metric_scalar(metrics, key, default=0.0)
-        if not math.isfinite(component_value):
-            continue
-        component_total += max(0.0, component_value)
-    if saw_component:
-        return component_total if math.isfinite(component_total) else 0.0
-
-    fallback = metric_scalar(metrics, "collisions", default=0.0)
-    return max(0.0, fallback) if math.isfinite(fallback) else 0.0
-
-
-def canonicalize_collision_metrics(
-    metrics: Mapping[str, Any] | None,
-    *,
-    collision: bool,
-) -> dict[str, Any]:
-    """Return metrics with canonical episode-level collision encoding.
-
-    New episode outputs use ``metrics.collisions`` as the authoritative 0/1
-    event flag that mirrors ``outcome.collision_event``. Any count-style signal
-    remains available under ``total_collision_count`` and the component count
-    fields.
-    """
-    normalized = dict(metrics.items()) if isinstance(metrics, Mapping) else {}
-    if isinstance(metrics, Mapping) and (
-        "total_collision_count" not in normalized
-        and (
-            "collisions" in normalized
-            or any(key in normalized for key in _COLLISION_COMPONENT_KEYS)
-        )
-    ):
-        normalized["total_collision_count"] = int(_resolved_total_collision_count(metrics))
-    normalized["collisions"] = int(bool(collision))
-    return normalized
 
 
 def metric_scalar(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,129 @@ def _finite_float(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _unwrap_json_value(value: Any) -> Any:
+    """Normalize common non-standard scalar/container wrappers before JSON conversion.
+
+    Returns:
+        Unwrapped value suitable for further JSON-safe normalization.
+    """
+
+    current = value
+    for _ in range(4):
+        if isinstance(current, Path):
+            return current.as_posix()
+        if current is None or isinstance(
+            current, bool | int | float | str | Mapping | list | tuple
+        ):
+            return current
+
+        item = getattr(current, "item", None)
+        if callable(item):
+            try:
+                current = item()
+                continue
+            except Exception:
+                pass
+
+        tolist = getattr(current, "tolist", None)
+        if callable(tolist):
+            try:
+                current = tolist()
+                continue
+            except Exception:
+                pass
+
+        break
+    return current
+
+
+def _jsonable_leaf(value: Any) -> tuple[bool, Any]:
+    """Return whether a value can be emitted as a JSON scalar immediately.
+
+    Returns:
+        Pair of ``handled`` flag and normalized scalar candidate.
+    """
+
+    item = _unwrap_json_value(value)
+    if item is None or isinstance(item, bool | int | str):
+        return True, item
+    if isinstance(item, float):
+        return True, item if math.isfinite(item) else None
+    return False, item
+
+
+def _jsonable_child(value: Any, stack: list[tuple[Any, Any]]) -> Any:
+    """Normalize one nested JSON child and queue container work when needed.
+
+    Returns:
+        JSON-safe scalar, placeholder container, or stringified fallback.
+    """
+
+    handled, item = _jsonable_leaf(value)
+    if handled:
+        return item
+    if isinstance(item, Mapping):
+        child: dict[str, Any] = {}
+        stack.append((item, child))
+        return child
+    if isinstance(item, list | tuple):
+        child = []
+        stack.append((item, child))
+        return child
+    return str(item)
+
+
+def _extend_jsonable_mapping(
+    source: Mapping[Any, Any],
+    target: dict[str, Any],
+    stack: list[tuple[Any, Any]],
+) -> None:
+    """Populate one JSON object container without recursion."""
+
+    for key, raw_value in source.items():
+        target[str(key)] = _jsonable_child(raw_value, stack)
+
+
+def _extend_jsonable_sequence(
+    source: list[Any] | tuple[Any, ...],
+    target: list[Any],
+    stack: list[tuple[Any, Any]],
+) -> None:
+    """Populate one JSON array container without recursion."""
+
+    for raw_value in source:
+        target.append(_jsonable_child(raw_value, stack))
+
+
+def to_jsonable_payload(value: Any) -> Any:
+    """Convert nested payloads into JSON-safe builtins without recursion.
+
+    Returns:
+        JSON-safe payload containing only built-in scalar/container types.
+    """
+
+    handled, root_value = _jsonable_leaf(value)
+    if handled:
+        return root_value
+    if isinstance(root_value, Mapping):
+        root: dict[str, Any] | list[Any] = {}
+        stack: list[tuple[Any, Any]] = [(root_value, root)]
+    elif isinstance(root_value, list | tuple):
+        root = []
+        stack = [(root_value, root)]
+    else:
+        return str(root_value)
+
+    while stack:
+        source, target = stack.pop()
+        if isinstance(source, Mapping):
+            _extend_jsonable_mapping(source, target, stack)
+            continue
+        _extend_jsonable_sequence(source, target, stack)
+
+    return root
+
+
 def _aggregate_mean(aggregates: dict[str, Any], group: str, metric: str) -> float | None:
     """Read one aggregate metric mean from a grouped aggregate payload.
 
@@ -69,15 +193,27 @@ def _non_finite_aggregate_paths(payload: Any, *, prefix: str = "") -> list[str]:
         Dotted/list-index paths for non-finite aggregate values.
     """
     paths: list[str] = []
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            child_prefix = f"{prefix}.{key}" if prefix else str(key)
-            paths.extend(_non_finite_aggregate_paths(value, prefix=child_prefix))
-    elif isinstance(payload, list):
-        for index, value in enumerate(payload):
-            paths.extend(_non_finite_aggregate_paths(value, prefix=f"{prefix}[{index}]"))
-    elif isinstance(payload, float) and not math.isfinite(payload):
-        paths.append(prefix)
+    stack: list[tuple[Any, str]] = [(payload, prefix)]
+    while stack:
+        current, current_prefix = stack.pop()
+        current = _unwrap_json_value(current)
+        if isinstance(current, Mapping):
+            for key, value in current.items():
+                child_prefix = f"{current_prefix}.{key}" if current_prefix else str(key)
+                stack.append((value, child_prefix))
+            continue
+        if isinstance(current, list | tuple):
+            for index in range(len(current) - 1, -1, -1):
+                stack.append((current[index], f"{current_prefix}[{index}]"))
+            continue
+        if isinstance(current, bool):
+            continue
+        try:
+            number = float(current)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(number):
+            paths.append(current_prefix)
     return paths
 
 
@@ -255,7 +391,7 @@ def run_planner_inclusion_check(  # noqa: PLR0913
         record_forces=record_forces,
         video_enabled=False,
         video_renderer="none",
-        append=False,
+        append=resume,
         fail_fast=False,
         progress_cb=None,
         algo=algo,
@@ -282,5 +418,7 @@ def run_planner_inclusion_check(  # noqa: PLR0913
         criteria=criteria,
     )
     report["artifacts"]["report_json"] = str(report_path)
-    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    report_path.write_text(
+        json.dumps(to_jsonable_payload(report), indent=2) + "\n", encoding="utf-8"
+    )
     return report

@@ -37,6 +37,7 @@ from robot_sf.benchmark.planner_inclusion import (
     DEFAULT_INCLUSION_MATRIX,
     InclusionCriteria,
     run_planner_inclusion_check,
+    to_jsonable_payload,
 )
 from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
@@ -1114,7 +1115,7 @@ def _handle_planner_inclusion_check(args) -> int:
                 max_runtime_sec=float(args.max_runtime_sec),
             ),
         )
-        print(json.dumps(report, indent=2))
+        print(json.dumps(to_jsonable_payload(report), indent=2))
         return 0 if report.get("decision") == "pass" else 1
     except Exception:  # pragma: no cover - error path
         return 2

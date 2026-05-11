@@ -116,11 +116,12 @@ def test_issue_749_warm_start_configs_load():
     from scripts.training.pretrain_from_expert import load_bc_config
     from scripts.training.train_ppo_with_pretrained_policy import load_ppo_finetuning_config
 
+    repo_root = Path(__file__).resolve().parents[2]
     bc_config = load_bc_config(
-        Path("configs/training/ppo_imitation/bc_pretrain_issue_749_v10_warm_start.yaml")
+        repo_root / "configs/training/ppo_imitation/bc_pretrain_issue_749_v10_warm_start.yaml"
     )
     fine_tune_config = load_ppo_finetuning_config(
-        Path("configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml")
+        repo_root / "configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml"
     )
 
     assert bc_config.dataset_id == "issue_749_b60iopxt_v10_eval_trajectories"

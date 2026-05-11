@@ -9,6 +9,8 @@ Validates end-to-end workflow:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from robot_sf import common
@@ -107,6 +109,29 @@ def test_fine_tuning_config_structure(tmp_path, monkeypatch):
     assert config.pretrained_policy_id == "test_bc_policy"
     assert config.total_timesteps == 1000
     assert len(config.random_seeds) == 2
+
+
+def test_issue_749_warm_start_configs_load():
+    """Issue #749 configs should preserve the BC -> PPO warm-start contract."""
+    from scripts.training.pretrain_from_expert import load_bc_config
+    from scripts.training.train_ppo_with_pretrained_policy import load_ppo_finetuning_config
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bc_config = load_bc_config(
+        repo_root / "configs/training/ppo_imitation/bc_pretrain_issue_749_v10_warm_start.yaml"
+    )
+    fine_tune_config = load_ppo_finetuning_config(
+        repo_root / "configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml"
+    )
+
+    assert bc_config.dataset_id == "issue_749_b60iopxt_v10_eval_trajectories"
+    assert bc_config.policy_output_id == "issue_749_bc_preinit_v10_policy"
+    assert fine_tune_config.pretrained_policy_id == bc_config.policy_output_id
+    assert fine_tune_config.total_timesteps == 10_000_000
+    assert fine_tune_config.snqi_weights_path is not None
+    assert fine_tune_config.snqi_weights_path.name == "snqi_weights_camera_ready_v3.json"
+    assert fine_tune_config.snqi_baseline_path is not None
+    assert fine_tune_config.snqi_baseline_path.name == "snqi_baseline_camera_ready_v3.json"
 
 
 def test_comparative_metrics_structure():

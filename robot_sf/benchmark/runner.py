@@ -853,13 +853,22 @@ def _compute_metrics(
     horizon: int,
     snqi_weights: dict[str, float] | None,
     snqi_baseline: dict[str, dict[str, float]] | None,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
 ) -> dict[str, Any]:
     """Compute metrics and optional SNQI post-processing.
 
     Returns:
         Metrics dictionary for the episode.
     """
-    metrics_raw = compute_all_metrics(ep, horizon=horizon)
+    metrics_raw = compute_all_metrics(
+        ep,
+        horizon=horizon,
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+    )
     return post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
@@ -934,6 +943,9 @@ def run_episode(  # noqa: PLR0913
     video_enabled: bool = False,
     video_renderer: str = "none",
     videos_dir: str | None = None,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
 ) -> dict[str, Any]:
     """Run a single episode and return a metrics record dict.
 
@@ -986,7 +998,15 @@ def run_episode(  # noqa: PLR0913
     )
 
     # Compute metrics
-    metrics = _compute_metrics(ep, horizon, snqi_weights, snqi_baseline)
+    metrics = _compute_metrics(
+        ep,
+        horizon,
+        snqi_weights,
+        snqi_baseline,
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+    )
     collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
     route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)
     ended = route_complete or collision
@@ -1107,6 +1127,9 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
         video_enabled=bool(params.get("video_enabled", False)),
         video_renderer=str(params.get("video_renderer", "none")),
         videos_dir=params.get("videos_dir"),
+        experimental_ped_impact=bool(params.get("experimental_ped_impact", False)),
+        ped_impact_radius_m=float(params.get("ped_impact_radius_m", 2.0)),
+        ped_impact_window_steps=int(params.get("ped_impact_window_steps", 5)),
     )
 
 
@@ -1273,6 +1296,9 @@ def _setup_fixed_params(  # noqa: PLR0913
     video_renderer: str,
     algo: str,
     algo_config_path: str | None,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
 ) -> dict[str, Any]:
     """Set up the fixed parameters dict for job execution.
 
@@ -1291,6 +1317,9 @@ def _setup_fixed_params(  # noqa: PLR0913
         "video_enabled": bool(video_enabled) and str(video_renderer) != "none",
         "video_renderer": str(video_renderer),
         "videos_dir": videos_dir,
+        "experimental_ped_impact": bool(experimental_ped_impact),
+        "ped_impact_radius_m": float(ped_impact_radius_m),
+        "ped_impact_window_steps": int(ped_impact_window_steps),
     }
 
 
@@ -1453,6 +1482,11 @@ def run_batch(  # noqa: PLR0913
     benchmark_profile: str = "baseline-safe",
     socnav_missing_prereq_policy: str = "fail-fast",
     adapter_impact_eval: bool = False,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
+    observation_mode: str | None = None,
+    observation_noise: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -1488,6 +1522,11 @@ def run_batch(  # noqa: PLR0913
             benchmark_profile=benchmark_profile,
             socnav_missing_prereq_policy=socnav_missing_prereq_policy,
             adapter_impact_eval=adapter_impact_eval,
+            experimental_ped_impact=experimental_ped_impact,
+            ped_impact_radius_m=ped_impact_radius_m,
+            ped_impact_window_steps=ped_impact_window_steps,
+            observation_mode=observation_mode,
+            observation_noise=observation_noise,
             workers=workers,
             resume=resume,
         )
@@ -1507,6 +1546,9 @@ def run_batch(  # noqa: PLR0913
         video_renderer,
         algo,
         algo_config_path,
+        experimental_ped_impact,
+        ped_impact_radius_m,
+        ped_impact_window_steps,
     )
 
     # Filter jobs for resume

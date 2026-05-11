@@ -1,0 +1,131 @@
+schema_version: route-clearance-certifications.v1
+reviewed_on: "2026-05-09"
+reviewed_by: ll7
+issue: "1105"
+certifications:
+  classic_cross_trap_high:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat
+    rationale: Route keeps a narrow positive obstacle margin by design to exercise cross-traffic pressure.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_cross_trap_low:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat
+    rationale: Route keeps a narrow positive obstacle margin by design to exercise cross-traffic pressure.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_cross_trap_medium:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat
+    rationale: Route keeps a narrow positive obstacle margin by design to exercise cross-traffic pressure.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_doorway_high:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready bottleneck stress geometry; planner-attribution claims require caveat
+    rationale: Doorway route intentionally leaves only near-zero positive robot-radius clearance.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_doorway_low:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready bottleneck stress geometry; planner-attribution claims require caveat
+    rationale: Doorway route intentionally leaves only near-zero positive robot-radius clearance.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_doorway_medium:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready bottleneck stress geometry; planner-attribution claims require caveat
+    rationale: Doorway route intentionally leaves only near-zero positive robot-radius clearance.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_merging_low:
+    status: excluded_from_planner_attribution
+    claim_scope: benchmark row may run, but failures are not planner-mechanism evidence until geometry is repaired
+    rationale: Preflight reports negative clearance because the route centerline overlaps obstacle geometry.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_merging_medium:
+    status: excluded_from_planner_attribution
+    claim_scope: benchmark row may run, but failures are not planner-mechanism evidence until geometry is repaired
+    rationale: Preflight reports negative clearance because the route centerline overlaps obstacle geometry.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_overtaking_low:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat
+    rationale: Positive but sub-threshold obstacle margin is consistent with a constrained overtaking corridor.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_overtaking_medium:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat
+    rationale: Positive but sub-threshold obstacle margin is consistent with a constrained overtaking corridor.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_station_platform_medium:
+    status: excluded_from_planner_attribution
+    claim_scope: benchmark row may run, but failures are not planner-mechanism evidence until geometry is repaired
+    rationale: Preflight reports negative clearance because the route centerline overlaps station obstacle geometry.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_t_intersection_low:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat
+    rationale: Positive but sub-threshold obstacle margin is consistent with a constrained T-intersection route.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  classic_t_intersection_medium:
+    status: certified_stress_geometry
+    claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat
+    rationale: Positive but sub-threshold obstacle margin is consistent with a constrained T-intersection route.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  francis2023_entering_elevator:
+    status: certified_stress_geometry
+    claim_scope: stress-only doorway/elevator geometry; use for capability stress, not uncaveated planner attribution
+    rationale: Tangent robot-radius clearance is intentional for Francis-style tight elevator entry.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  francis2023_entering_room:
+    status: certified_stress_geometry
+    claim_scope: stress-only doorway geometry; use for capability stress, not uncaveated planner attribution
+    rationale: Tangent robot-radius clearance is intentional for Francis-style room entry.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  francis2023_exiting_elevator:
+    status: certified_stress_geometry
+    claim_scope: stress-only doorway/elevator geometry; use for capability stress, not uncaveated planner attribution
+    rationale: Tangent robot-radius clearance is intentional for Francis-style elevator exit.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  francis2023_exiting_room:
+    status: certified_stress_geometry
+    claim_scope: stress-only doorway geometry; use for capability stress, not uncaveated planner attribution
+    rationale: Tangent robot-radius clearance is intentional for Francis-style room exit.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"
+  francis2023_narrow_doorway:
+    status: certified_stress_geometry
+    claim_scope: stress-only doorway geometry; use for capability stress, not uncaveated planner attribution
+    rationale: Tangent robot-radius clearance is intentional for the narrow-doorway stress case.
+    reviewed_on: "2026-05-09"
+    reviewed_by: ll7
+    issue: "1105"

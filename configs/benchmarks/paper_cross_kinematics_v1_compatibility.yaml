@@ -1,0 +1,73 @@
+version: paper-cross-kinematics-v1
+profile: paper-cross-kinematics-v1
+scenario_surface: configs/scenarios/sets/paper_cross_kinematics_v1.yaml
+kinematics:
+  - differential_drive
+  - bicycle_drive
+  - holonomic
+holonomic_command_mode: vx_vy
+status_values:
+  supported: Native or adapter path is expected to run in the benchmark campaign.
+  degraded: Path may run but interpretation requires an explicit caveat.
+  unsupported: Path must not be counted as a successful benchmark row.
+planners:
+  goal:
+    algo: goal
+    planner_group: core
+    support:
+      differential_drive:
+        status: supported
+        reason: Goal policy emits unicycle commands that run natively under the default contract.
+      bicycle_drive:
+        status: supported
+        reason: Goal unicycle commands route through the benchmark kinematics projection layer.
+      holonomic:
+        status: supported
+        reason: Goal unicycle commands run through holonomic unicycle_vw compatibility.
+  social_force:
+    algo: social_force
+    planner_group: core
+    support:
+      differential_drive:
+        status: supported
+        reason: Force output is projected into the differential-drive benchmark command contract.
+      bicycle_drive:
+        status: supported
+        reason: Force output is projected through the bicycle-drive benchmark adapter.
+      holonomic:
+        status: supported
+        reason: Force output can use the holonomic benchmark bridge and records projection metadata.
+  orca:
+    algo: orca
+    planner_group: core
+    support:
+      differential_drive:
+        status: supported
+        reason: ORCA world-velocity output is projected into the unicycle command contract.
+      bicycle_drive:
+        status: supported
+        reason: ORCA world-velocity output is projected through the bicycle-drive benchmark adapter.
+      holonomic:
+        status: supported
+        reason: ORCA world-velocity output maps directly to the holonomic vx_vy benchmark contract.
+excluded_planners:
+  ppo:
+    status: degraded
+    reason: Existing paper PPO artifacts are kinematics-profile-specific; keep learned-policy parity out of the first smoke surface.
+  prediction_planner:
+    status: degraded
+    reason: Checkpoint and adapter provenance should be audited separately before cross-kinematics claims.
+  sacadrl:
+    status: degraded
+    reason: Legacy adapter-sensitive planner remains experimental and should not anchor the first parity smoke.
+  socnav_sampling:
+    status: degraded
+    reason: Sampling challenger remains experimental and is deferred from the first paper-cross-kinematics profile.
+validation_contract:
+  supported_pairs_must_run: true
+  unsupported_or_degraded_pairs_must_have_reason: true
+  required_artifacts:
+    - reports/kinematics_parity_table.csv
+    - reports/kinematics_parity_table.md
+    - reports/kinematics_skipped_combinations.csv
+    - reports/kinematics_skipped_combinations.md

@@ -14,6 +14,76 @@
         "outcome",
         "integrity"
     ],
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": true
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "exclusiveMinimum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "outcome": {
+                        "properties": {
+                            "collision_event": {
+                                "const": false
+                            }
+                        },
+                        "required": [
+                            "collision_event"
+                        ]
+                    }
+                },
+                "required": [
+                    "outcome"
+                ]
+            },
+            "then": {
+                "properties": {
+                    "metrics": {
+                        "properties": {
+                            "collisions": {
+                                "type": [
+                                    "number",
+                                    "integer"
+                                ],
+                                "maximum": 0
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
     "properties": {
         "version": {
             "const": "v1"
@@ -38,6 +108,10 @@
         },
         "algo": {
             "type": "string"
+        },
+        "observation_mode": {
+            "type": "string",
+            "description": "Active planner observation-mode contract for this episode."
         },
         "algorithm_metadata": {
             "type": "object",
@@ -72,6 +146,36 @@
                 },
                 "policy_semantics": {
                     "type": "string"
+                },
+                "observation_spec": {
+                    "type": "object",
+                    "properties": {
+                        "default_mode": {
+                            "type": "string"
+                        },
+                        "active_mode": {
+                            "type": "string"
+                        },
+                        "supported_modes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "inputs": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "override_applied": {
+                            "type": "boolean"
+                        },
+                        "notes": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
                 },
                 "config": {
                     "type": "object"
@@ -246,6 +350,136 @@
         "metrics": {
             "type": "object",
             "minProperties": 1,
+            "properties": {
+                "collisions": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "collision_rate": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "pedestrian_impact": {
+                    "type": "object",
+                    "description": "Schema-backed pedestrian-impact metric block for opt-in near-vs-far reductions.",
+                    "required": [
+                        "schema_version",
+                        "parameters",
+                        "units",
+                        "sample_counts",
+                        "canonical_reductions"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "pedestrian-impact.v1"
+                        },
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "near_radius_m": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                },
+                                "window_steps": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                }
+                            },
+                            "required": [
+                                "near_radius_m",
+                                "window_steps"
+                            ],
+                            "additionalProperties": true
+                        },
+                        "units": {
+                            "type": "object",
+                            "properties": {
+                                "accel": {
+                                    "const": "m/s^2"
+                                },
+                                "turn_rate": {
+                                    "const": "rad/s"
+                                },
+                                "near_radius": {
+                                    "const": "m"
+                                },
+                                "sample_counts": {
+                                    "const": "samples"
+                                },
+                                "sample_fraction": {
+                                    "const": "fraction"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "sample_counts": {
+                            "type": "object",
+                            "properties": {
+                                "pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "near_samples": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "far_samples": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "near_sample_frac": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "canonical_reductions": {
+                            "type": "object",
+                            "properties": {
+                                "accel_delta_mean": {
+                                    "type": "number"
+                                },
+                                "accel_delta_median": {
+                                    "type": "number"
+                                },
+                                "accel_delta_valid_pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "turn_rate_delta_mean": {
+                                    "type": "number"
+                                },
+                                "turn_rate_delta_median": {
+                                    "type": "number"
+                                },
+                                "turn_rate_delta_valid_pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "component_means": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "number"
+                            }
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                }
+            },
             "additionalProperties": {
                 "type": [
                     "number",
@@ -350,6 +584,55 @@
         "identity": {
             "type": "object",
             "additionalProperties": true
+        },
+        "observation_noise": {
+            "type": "object",
+            "description": "Benchmark-only planner-input observation noise profile.",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "profile": {
+                    "type": "string"
+                },
+                "interpretation": {
+                    "type": "string"
+                },
+                "pose_noise_std_m": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "heading_noise_std_rad": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "lidar_dropout_prob": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "pedestrian_false_negative_prob": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "pedestrian_false_positive_prob": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                }
+            },
+            "additionalProperties": true
+        },
+        "observation_noise_hash": {
+            "type": "string"
+        },
+        "observation_noise_stats": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+            }
         },
         "video": {
             "type": "object",

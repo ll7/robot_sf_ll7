@@ -16,6 +16,7 @@ from robot_sf.planner.socnav import (
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
+    TrivialReferencePlannerAdapter,
     make_hrvo_policy,
     make_orca_policy,
     make_prediction_policy,
@@ -105,6 +106,23 @@ def test_sampling_adapter_moves_toward_goal():
     v, w = adapter.plan(obs)
     assert v > 0.0
     assert abs(w) < 1e-6  # aligned with heading
+
+
+def test_trivial_reference_adapter_is_deterministic_and_bounded():
+    """Reference adapter should document the minimal deterministic planner contract."""
+    adapter = TrivialReferencePlannerAdapter(
+        SocNavPlannerConfig(max_linear_speed=0.75, max_angular_speed=0.5)
+    )
+    obs = _make_obs(goal=(5.0, 0.0), heading=0.0)
+
+    assert adapter.plan(obs) == adapter.plan(obs)
+    v, w = adapter.plan(_make_obs(goal=(0.0, 5.0), heading=0.0))
+    assert 0.0 <= v <= 0.75
+    assert -0.5 <= w <= 0.5
+
+    adapter.reset(seed=123)
+    assert adapter.diagnostics()["steps"] == 0
+    assert TrivialReferencePlannerAdapter._wrap_angle(5 * np.pi) == pytest.approx(np.pi)
 
 
 def test_sampling_adapter_stops_within_tolerance():

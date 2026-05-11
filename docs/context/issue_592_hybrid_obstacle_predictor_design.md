@@ -2,6 +2,25 @@
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/592>
 
+Current first implementation follow-up:
+<https://github.com/ll7/robot_sf_ll7/issues/1138>
+
+## 2026-05-10 Backlog Status
+
+#592 remains the research parent for obstacle-conditioned predictive models. The repo already has
+the design boundary and staged architecture options below, but it does not yet contain a trained or
+registered obstacle-conditioned predictor. The next actionable implementation slice is #1138:
+deterministic local obstacle features for the predictive planner baseline.
+
+That split keeps the parent issue honest:
+
+- #592 records the architecture decision trail, proof gates, and escalation path from local
+  features to grid or obstacle-node variants.
+- #1138 owns the first code-bearing baseline: shared feature extraction, feature schema,
+  config-first model path, input-dimension checks, and focused tests.
+- Grid/CNN and obstacle-node graph work remains out of scope until a same-seed comparison shows
+  the smaller feature baseline is insufficient.
+
 ## Current Boundary
 
 `prediction_planner` currently predicts pedestrian trajectories from agent kinematics in the robot
@@ -174,4 +193,3 @@ follow-up work:
   predictor;
 - optional later follow-up: prototype the grid or obstacle-node variant only if the first comparison
   justifies the added complexity.
-

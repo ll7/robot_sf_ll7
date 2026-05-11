@@ -102,6 +102,41 @@ Threshold provenance and reproducibility contract:
 - **Range**: [0, 1]
 - **Purpose**: Relative discomfort exposure
 
+### Pedestrian-Impact Metrics
+
+Pedestrian-impact metrics are opt-in because they are exploratory social-impact signals, not a
+headline benchmark score. Enable them in benchmark JSONL output with:
+
+```bash
+uv run robot_sf_bench run \
+  --matrix <scenario-matrix.yaml> \
+  --out output/benchmarks/ped_impact/episodes.jsonl \
+  --experimental-ped-impact
+```
+
+The flat `ped_impact_*` metrics are preserved for backward compatibility. Episode records also
+include `metrics.pedestrian_impact` with `schema_version: pedestrian-impact.v1`.
+
+Canonical reductions:
+
+- `ped_impact_accel_delta_mean`: mean per-pedestrian near-minus-far acceleration delta (`m/s^2`).
+- `ped_impact_accel_delta_median`: median per-pedestrian near-minus-far acceleration delta
+  (`m/s^2`).
+- `ped_impact_turn_rate_delta_mean`: mean per-pedestrian near-minus-far heading turn-rate delta
+  (`rad/s`).
+- `ped_impact_turn_rate_delta_median`: median per-pedestrian near-minus-far heading turn-rate
+  delta (`rad/s`).
+- `ped_impact_*_valid`: number of pedestrians with both near and far support for that reduction.
+
+Near samples use robot-pedestrian distance `<= --ped-impact-radius-m` (default `2.0` meters), and
+far samples use distances above that threshold. Acceleration and turn-rate signals are smoothed
+with a trailing window of `--ped-impact-window-steps` (default `5`). Aggregation flattens
+`metrics.pedestrian_impact.canonical_reductions` and `metrics.pedestrian_impact.sample_counts`
+into aggregate-ready `ped_impact_*` fields such as `ped_impact_accel_delta_mean`,
+`ped_impact_turn_rate_delta_mean`, `ped_impact_ped_count`, `ped_impact_near_samples`,
+`ped_impact_far_samples`, and `ped_impact_near_sample_frac`, then reports the normal
+mean/median/p95 summaries.
+
 ### Motion Quality Metrics
 
 #### Smoothness (Jerk)

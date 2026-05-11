@@ -463,7 +463,14 @@ def test_preview_metadata_lookup_handles_truncation_and_missing_dicts() -> None:
     lookup, truncated = _preview_metadata_lookup(
         {
             "truncated": True,
-            "route_clearance_warnings": [{"scenario": "case_a", "warning_scope": "route"}],
+            "route_clearance_warnings": [
+                {
+                    "scenario": "case_a",
+                    "warning_scope": "route",
+                    "certification_status": "certified_stress_geometry",
+                    "certification_claim_scope": "stress-only geometry",
+                }
+            ],
             "scenarios": [
                 "bad-row",
                 {
@@ -478,6 +485,8 @@ def test_preview_metadata_lookup_handles_truncation_and_missing_dicts() -> None:
     assert truncated is True
     assert lookup["case_a"]["route_clearance_warning"] is True
     assert lookup["case_a"]["route_clearance_scope"] == "route"
+    assert lookup["case_a"]["route_clearance_certification_status"] == "certified_stress_geometry"
+    assert lookup["case_a"]["route_clearance_certification_claim_scope"] == "stress-only geometry"
     assert lookup["case_a"]["ped_density"] is None
 
 

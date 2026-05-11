@@ -1,0 +1,22 @@
+scenarios:
+- name: observation_visibility_blind_corner_smoke
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_blind_corner.svg
+  simulation_config:
+    max_episode_steps: 160
+    ped_density: 0.0
+  observation_visibility:
+    enabled: true
+    fov_degrees: 120.0
+    max_range_m: 8.0
+    static_occlusion: true
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    archetype: blind_corner
+    flow: bi
+    behavior: none
+    purpose: observation_visibility_smoke
+  seeds:
+  - 219

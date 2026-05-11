@@ -15,6 +15,10 @@ documentation/provenance audit only; it does not rerun benchmarks or reinterpret
 
 ## Current Verdict
 
+> 2026-05-09 update: issue `#1062` records a durable publication archive pointer for scoped release
+> `0.0.2`. The May 4 all-planners compact evidence remains partial and should not be treated as the
+> publication archive.
+
 The release contract is mostly reconstructable from committed configs and docs, but the evidence
 trail is not yet publication-archive complete.
 
@@ -30,12 +34,13 @@ Gaps:
 * the current tracked May 4 evidence bundle is partial and explicitly not publication-ready;
 * `docs/context/evidence/camera_ready_all_planners_2026-05-04/` does not include
   `reports/snqi_diagnostics.json`;
-* several context notes still cite publication bundles only as local `output/` paths;
+* several historical context notes cite publication bundles only as local `output/` paths;
 * the canonical PPO registry entry still has `commit: null`, a local `local_path`, and one note
   pointing at a local `output/model_cache/.../best_summary.json` file.
 
-Use issue `#1053` to repair durable artifact references and archive pointers before treating this
-as a complete paper evidence trail.
+Use `docs/context/issue_1062_paper_evidence_archive.md` and
+`docs/experiments/publication/20260414_benchmark_release_0_0_2/` for the current scoped
+seven-planner archive pointer. Continue treating the May 4 all-planners compact evidence as partial.
 
 ## Evidence Checklist
 
@@ -55,7 +60,7 @@ as a complete paper evidence trail.
 | Publication bundle workflow | `docs/benchmark_camera_ready_release.md` | present | Defines GitHub release upload, checksums, and manifest validation. |
 | Tracked compact evidence | `docs/context/evidence/camera_ready_all_planners_2026-05-04/` | partial | Useful internal evidence, but `benchmark_success=false` and publication bundle was skipped. |
 | Tracked SNQI diagnostics for May 4 bundle | `docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/snqi_diagnostics.json` | missing | The source run reported SNQI pass, but this compact bundle does not carry the diagnostics JSON required by the release manifest. |
-| Durable publication archive URL | release asset / DOI URL in current paper evidence | missing | Existing docs mostly cite local bundle paths or placeholders; #1053 should replace these with durable archive pointers. |
+| Durable publication archive URL | release asset / DOI URL in current paper evidence | present for scoped `0.0.2` | `#1062` records the GitHub release asset, DOI URL, archive checksum, embedded manifest, embedded checksums, and embedded SNQI diagnostics. |
 
 ## Hash Check
 
@@ -93,8 +98,7 @@ payload with weights, baseline, rank alignment, outcome separation, and dominanc
 
 ## Follow-Up Boundary
 
-No benchmark rerun is required by this audit alone. The next paper-critical action is issue `#1053`:
-replace or supplement local `output/` publication-bundle references with durable archive pointers,
-fold the `model/registry.yaml` `local_path` and `Best summary` note fields into the same
-durable-reference repair so the PPO checkpoint carries no worktree-local fallback, and include the
-required SNQI diagnostics payload when promoting any compact evidence bundle as paper support.
+No benchmark rerun is required by this audit alone. Issue `#1062` later recorded the durable scoped
+`0.0.2` archive pointer, embedded manifest, embedded checksums, and embedded SNQI diagnostics. The
+PPO registry provenance caveat and May 4 all-planners compact-evidence caveat remain separate from
+that scoped release archive.

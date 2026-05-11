@@ -159,12 +159,14 @@ def _copy_downloads(bundle: DashboardBundle, out_dir: Path) -> dict[str, str]:
         if not isinstance(raw, str) or not raw.strip():
             continue
         source = (get_repository_root() / raw).resolve()
-        if not source.exists():
+        if not source.is_file():
             source = (bundle.bundle_root / raw).resolve()
-        if not source.exists() or not source.is_file():
+        if not source.is_file():
             continue
         downloads_dir.mkdir(parents=True, exist_ok=True)
-        target = downloads_dir / source.name
+        target = downloads_dir / f"{key}_{source.name}"
+        if target.exists():
+            raise ValueError(f"Download target collision: {target}")
         shutil.copy2(source, target)
         downloads[key] = target.relative_to(out_dir).as_posix()
     return downloads
@@ -377,9 +379,19 @@ def _render_planner_page(
     return _html_shell(title=f"{name} - {payload['title']}", css_path=css_path, body=body)
 
 
+def _validated_output_dir(out_dir: Path) -> Path:
+    """Resolve and validate the dashboard output directory."""
+
+    resolved = out_dir.resolve()
+    repo_root = get_repository_root().resolve()
+    if resolved == repo_root or resolved in repo_root.parents:
+        raise ValueError(f"Output directory cannot be the repository root or a parent: {resolved}")
+    return resolved
+
+
 def write_dashboard(bundle: DashboardBundle, out_dir: Path, *, title: str) -> dict[str, Any]:
     """Write dashboard files and return the manifest payload."""
-    out_dir = out_dir.resolve()
+    out_dir = _validated_output_dir(out_dir)
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -398,8 +410,15 @@ def write_dashboard(bundle: DashboardBundle, out_dir: Path, *, title: str) -> di
     planner_dir = out_dir / "planners"
     planner_dir.mkdir(parents=True, exist_ok=True)
     planner_paths = []
+    seen_slugs: dict[str, str] = {}
     for row in payload["planner_rows"]:
-        planner_path = planner_dir / f"{_slug(_planner_identity(row))}.html"
+        identity = _planner_identity(row)
+        slug = _slug(identity)
+        existing = seen_slugs.get(slug)
+        if existing is not None:
+            raise ValueError(f"Planner slug collision: {slug!r} for {identity!r} and {existing!r}")
+        seen_slugs[slug] = identity
+        planner_path = planner_dir / f"{slug}.html"
         planner_path.write_text(
             _render_planner_page(payload, row, css_path="../assets/dashboard.css"),
             encoding="utf-8",

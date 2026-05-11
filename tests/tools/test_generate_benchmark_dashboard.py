@@ -89,8 +89,8 @@ def test_dashboard_generator_writes_self_contained_site(tmp_path: Path, monkeypa
     assert (out_dir / "index.html").exists()
     assert (out_dir / "assets" / "dashboard.css").exists()
     assert (out_dir / "data" / "dashboard_data.json").exists()
-    assert (out_dir / "downloads" / "campaign_summary.json").exists()
-    assert (out_dir / "downloads" / "campaign_table.csv").exists()
+    assert (out_dir / "downloads" / "campaign_summary_json_campaign_summary.json").exists()
+    assert (out_dir / "downloads" / "campaign_table_csv_campaign_table.csv").exists()
     index = (out_dir / "index.html").read_text(encoding="utf-8")
     assert "Smoke Dashboard" in index
     assert "planners/goal.html" in index
@@ -101,3 +101,36 @@ def test_dashboard_generator_rejects_missing_campaign_summary(tmp_path: Path) ->
     """Generator fails clearly when the bundle lacks the supported summary."""
     with pytest.raises(FileNotFoundError, match="campaign_summary.json"):
         generate_benchmark_dashboard.load_dashboard_bundle(tmp_path / "missing")
+
+
+def test_dashboard_generator_rejects_repo_root_output_dir(tmp_path: Path, monkeypatch) -> None:
+    """Generator should refuse to delete the repository root or one of its parents."""
+
+    bundle = _make_campaign_bundle(tmp_path)
+    monkeypatch.setattr(generate_benchmark_dashboard, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="repository root or a parent"):
+        generate_benchmark_dashboard.main(["--bundle-root", str(bundle), "--out", str(tmp_path)])
+
+
+def test_dashboard_generator_rejects_case_insensitive_planner_slug_collisions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Planner pages should fail closed when normalized slugs collide."""
+
+    bundle = _make_campaign_bundle(tmp_path)
+    monkeypatch.setattr(generate_benchmark_dashboard, "get_repository_root", lambda: tmp_path)
+
+    summary_path = bundle / "reports" / "campaign_summary.json"
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["planner_rows"] = [
+        {**payload["planner_rows"][0], "planner_key": "Goal"},
+        {**payload["planner_rows"][1], "planner_key": "goal"},
+    ]
+    summary_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Planner slug collision"):
+        generate_benchmark_dashboard.main(
+            ["--bundle-root", str(bundle), "--out", str(tmp_path / "dashboard")]
+        )

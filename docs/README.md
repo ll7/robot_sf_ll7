@@ -135,6 +135,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
+* **[Issue #1065 Route-Clearance Warning Audit](./context/issue_1065_route_clearance_warning_audit.md)** - Paper and h500 route-clearance warning classification, planner-attribution boundary, and repair/certification follow-up
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
 * **[Issue #832 Paper-Matrix Extended Seed Schedule](./context/issue_832_paper_matrix_extended_seed_schedule.md)** - Staged S5/S10/S20 seed extension policy, runtime estimates, tmux commands, and comparison artifact contract for the frozen paper matrix
 * **[Issue #821 Paper Evidence Upgrade](./context/issue_821_paper_evidence_upgrade.md)** - Extended camera-ready matrix with guarded PPO, TEB, and SNQI ranking ablation evidence

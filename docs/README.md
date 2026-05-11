@@ -186,6 +186,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #1084 Planner Inclusion Gate](./context/issue_1084_planner_inclusion_gate.md)** - Mechanical `planner-inclusion-check` command, report schema, thresholds, and pass/revise proof cases for promotion review
 * **[Benchmark Mechanism Roadmap Plan (2026-05-07)](./superpowers/plans/2026-05-07-benchmark-mechanism-roadmap.md)** - Agent-executable plan for the trace-backed h500 mechanism pilot, deferred planner-improvement capture, and deferred CARLA-transfer capture
 * **[Goal Sequence Spec (2026-05-07)](./superpowers/specs/2026-05-07_goal_sequence.md)** - Issue sequencing rationale that keeps paper evidence first, h500 mechanism interpretation next, and deferred strategic alternatives explicit
+* **[Issue #872 CARLA Oracle Replay Bridge Status](./context/issue_872_carla_oracle_replay_bridge_status.md)** - Parent-epic status for the CARLA bridge, current T0/T1 claim boundaries, and live replay / metric-parity follow-up issues
 * **[Camera-Ready All-Planners SLURM Check (2026-05-04)](./context/camera_ready_all_planners_slurm_2026-05-04.md)** - Failed `rsf-allbench` job, partial all-planners evidence, asset blocker, and rerun boundary
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks

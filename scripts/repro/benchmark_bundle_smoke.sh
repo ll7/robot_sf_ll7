@@ -81,7 +81,7 @@ required = [
 artifacts: dict[str, dict[str, object]] = {}
 for name in required:
     path = output_root / name
-    if not path.exists() or path.stat().st_size == 0:
+    if not path.is_file() or path.stat().st_size == 0:
         raise SystemExit(f"required artifact missing or empty: {path}")
     artifacts[name] = {
         "bytes": path.stat().st_size,

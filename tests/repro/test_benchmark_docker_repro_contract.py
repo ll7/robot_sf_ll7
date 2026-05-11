@@ -44,6 +44,7 @@ def test_benchmark_repro_scripts_define_one_command_smoke_contract() -> None:
     assert "episodes.jsonl" in smoke
     assert "summary.json" in smoke
     assert "manifest.json" in smoke
+    assert "if not path.is_file() or path.stat().st_size == 0:" in smoke
     assert "docker build" in wrapper
     assert "docker run --rm" in wrapper
     assert "docker/benchmark-repro.Dockerfile" in wrapper

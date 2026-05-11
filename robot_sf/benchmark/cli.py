@@ -274,6 +274,9 @@ def _handle_run(args) -> int:
             benchmark_profile=args.benchmark_profile,
             socnav_missing_prereq_policy=args.socnav_missing_prereq_policy,
             adapter_impact_eval=bool(getattr(args, "adapter_impact_eval", False)),
+            experimental_ped_impact=bool(getattr(args, "experimental_ped_impact", False)),
+            ped_impact_radius_m=float(getattr(args, "ped_impact_radius_m", 2.0)),
+            ped_impact_window_steps=int(getattr(args, "ped_impact_window_steps", 5)),
             observation_mode=getattr(args, "observation_mode", None),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
@@ -1283,6 +1286,23 @@ def _add_run_subparser(
             "Enable adapter-impact metadata probing. "
             "For mixed-command planners (e.g., PPO), records native vs adapted step usage."
         ),
+    )
+    p.add_argument(
+        "--experimental-ped-impact",
+        action="store_true",
+        help="Emit schema-backed pedestrian-impact near-vs-far reductions.",
+    )
+    p.add_argument(
+        "--ped-impact-radius-m",
+        type=float,
+        default=2.0,
+        help="Near/far split radius in meters for --experimental-ped-impact.",
+    )
+    p.add_argument(
+        "--ped-impact-window-steps",
+        type=int,
+        default=5,
+        help="Trailing smoothing window length for --experimental-ped-impact.",
     )
     p.add_argument(
         "--observation-mode",

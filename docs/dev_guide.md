@@ -1052,9 +1052,11 @@ Key points
 
 CLI usage
 - Run a batch with parallel workers and default resume behavior:
-  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output output/benchmarks/episodes.jsonl --workers 4
+  - robot_sf_bench run --matrix configs/baselines/example.yaml --out output/benchmarks/episodes.jsonl --workers 4
 - Force recomputation (disable resume):
-  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output output/benchmarks/episodes.jsonl --workers 4 --no-resume
+  - robot_sf_bench run --matrix configs/baselines/example.yaml --out output/benchmarks/episodes.jsonl --workers 4 --no-resume
+- Opt in to schema-backed pedestrian-impact reductions:
+  - robot_sf_bench run --matrix configs/scenarios/planner_sanity_matrix_v1.yaml --out output/benchmarks/ped_impact/episodes.jsonl --experimental-ped-impact
 - Baseline computation also accepts the same flags:
   - robot_sf_bench baseline --episodes output/benchmarks/episodes.jsonl --output output/benchmarks/baseline.jsonl --workers 4
 
@@ -1090,6 +1092,8 @@ Options
 - --bootstrap-confidence: Confidence level, e.g., 0.90, 0.95
 - --bootstrap-seed: Optional deterministic seed for CIs
 - --snqi-weights/--snqi-baseline: Recompute metrics.snqi during aggregation
+- Pedestrian-impact records: Aggregation flattens `metrics.pedestrian_impact.canonical_reductions`
+  into `ped_impact_*` reduction columns, then applies the same mean/median/p95 summaries.
 
 Output format
 

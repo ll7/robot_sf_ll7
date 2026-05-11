@@ -364,6 +364,120 @@
                         "integer"
                     ],
                     "minimum": 0
+                },
+                "pedestrian_impact": {
+                    "type": "object",
+                    "description": "Schema-backed pedestrian-impact metric block for opt-in near-vs-far reductions.",
+                    "required": [
+                        "schema_version",
+                        "parameters",
+                        "units",
+                        "sample_counts",
+                        "canonical_reductions"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "pedestrian-impact.v1"
+                        },
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "near_radius_m": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                },
+                                "window_steps": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                }
+                            },
+                            "required": [
+                                "near_radius_m",
+                                "window_steps"
+                            ],
+                            "additionalProperties": true
+                        },
+                        "units": {
+                            "type": "object",
+                            "properties": {
+                                "accel": {
+                                    "const": "m/s^2"
+                                },
+                                "turn_rate": {
+                                    "const": "rad/s"
+                                },
+                                "near_radius": {
+                                    "const": "m"
+                                },
+                                "sample_counts": {
+                                    "const": "samples"
+                                },
+                                "sample_fraction": {
+                                    "const": "fraction"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "sample_counts": {
+                            "type": "object",
+                            "properties": {
+                                "pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "near_samples": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "far_samples": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "near_sample_frac": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "canonical_reductions": {
+                            "type": "object",
+                            "properties": {
+                                "accel_delta_mean": {
+                                    "type": "number"
+                                },
+                                "accel_delta_median": {
+                                    "type": "number"
+                                },
+                                "accel_delta_valid_pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "turn_rate_delta_mean": {
+                                    "type": "number"
+                                },
+                                "turn_rate_delta_median": {
+                                    "type": "number"
+                                },
+                                "turn_rate_delta_valid_pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "component_means": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "number"
+                            }
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
                 }
             },
             "additionalProperties": {

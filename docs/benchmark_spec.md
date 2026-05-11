@@ -253,14 +253,21 @@ Full details live in
 **Experimental pedestrian-impact (opt-in)**
 * `ped_impact_*` metrics (enabled only via
   `compute_all_metrics(..., experimental_ped_impact=True)`).
+* Post-processed episode records also include a schema-backed
+  `metrics.pedestrian_impact` block with `schema_version: pedestrian-impact.v1`.
 * Current prototype exposes near-vs-far deltas for pedestrian acceleration and
   heading turn-rate, plus sample/validity counters.
 * Near/far semantics: distance to robot `<= ped_impact_radius_m` is "near",
   `> ped_impact_radius_m` is "far".
 * Time-window semantics: signal smoothing uses trailing rolling means over
   `ped_impact_window_steps`.
-* Aggregation strategy: compute per-pedestrian `(near_mean - far_mean)` first,
-  then aggregate across pedestrians (mean/median) to reduce density bias.
+* Episode reduction strategy: compute per-pedestrian `(near_mean - far_mean)` first,
+  then reduce across pedestrians (mean/median) to reduce density bias.
+* Aggregate reduction path: `robot_sf.benchmark.aggregate` flattens
+  `metrics.pedestrian_impact.canonical_reductions` into aggregate-ready
+  `ped_impact_accel_delta_{mean,median,valid}` and
+  `ped_impact_turn_rate_delta_{mean,median,valid}` columns, then reports the
+  normal mean/median/p95 aggregate statistics.
 
 **SocNavBench subset (vendored)**
 * `socnavbench_path_length`,  `socnavbench_path_length_ratio`,  `socnavbench_path_irregularity`
@@ -278,8 +285,8 @@ Full details live in
   `time_to_goal_norm_success_only` together with the numeric validity flag
   `time_to_goal_success_only_valid == 1.0`.
 * Experimental `ped_impact_*` metrics are exploratory and should be reported
-  with the associated validity/sample counters. Deltas can be undefined when a
-  pedestrian has only near or only far samples.
+  with the associated validity/sample counters from `metrics.pedestrian_impact.sample_counts`.
+  Deltas can be undefined when a pedestrian has only near or only far samples.
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
 

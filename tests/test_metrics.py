@@ -623,6 +623,40 @@ def test_experimental_ped_impact_near_vs_far_deltas() -> None:
     assert vals["ped_impact_turn_rate_delta_mean"] > 0.0
 
 
+def test_post_process_metrics_adds_schema_backed_pedestrian_impact_block() -> None:
+    """Post-processing should preserve flat keys and add the structured metric block."""
+    metrics = post_process_metrics(
+        {
+            "success": 1.0,
+            "collisions": 0.0,
+            "ped_impact_radius_m": 2.0,
+            "ped_impact_window_steps": 1.0,
+            "ped_impact_ped_count": 1.0,
+            "ped_impact_near_samples": 4.0,
+            "ped_impact_far_samples": 5.0,
+            "ped_impact_near_sample_frac": 4.0 / 9.0,
+            "ped_impact_accel_delta_mean": 0.75,
+            "ped_impact_accel_delta_median": 0.70,
+            "ped_impact_accel_delta_valid": 1.0,
+            "ped_impact_turn_rate_delta_mean": 0.20,
+            "ped_impact_turn_rate_delta_median": 0.18,
+            "ped_impact_turn_rate_delta_valid": 1.0,
+        },
+        snqi_weights=None,
+        snqi_baseline=None,
+    )
+
+    assert metrics["ped_impact_accel_delta_mean"] == 0.75
+    block = metrics["pedestrian_impact"]
+    assert block["schema_version"] == "pedestrian-impact.v1"
+    assert block["parameters"] == {"near_radius_m": 2.0, "window_steps": 1}
+    assert block["sample_counts"]["near_samples"] == 4
+    assert block["units"]["accel"] == "m/s^2"
+    assert block["canonical_reductions"]["accel_delta_mean"] == 0.75
+    assert block["canonical_reductions"]["turn_rate_delta_mean"] == 0.20
+    assert "interpretation" not in block
+
+
 def test_experimental_ped_impact_handles_empty_crowd() -> None:
     """Experimental pedestrian-impact metrics should stay stable when K=0."""
     ep = _make_episode(T=8, K=0)

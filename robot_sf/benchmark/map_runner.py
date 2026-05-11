@@ -2618,6 +2618,33 @@ def _policy_command_to_env_action(  # noqa: C901
     return np.array([d_linear, d_angular], dtype=float)
 
 
+def _normalize_pedestrian_impact_controls(
+    *,
+    experimental_ped_impact: bool,
+    ped_impact_radius_m: float,
+    ped_impact_window_steps: int,
+) -> tuple[float, int]:
+    """Normalize pedestrian-impact controls and fail fast for invalid opt-in values.
+
+    Returns:
+        Normalized radius/window pair for downstream metric computation.
+    """
+
+    radius = float(ped_impact_radius_m)
+    window_value = float(ped_impact_window_steps)
+    window_steps = int(window_value)
+    if experimental_ped_impact:
+        if not math.isfinite(radius) or radius <= 0.0:
+            raise ValueError("ped_impact_radius_m must be a finite value > 0.")
+        if (
+            not math.isfinite(window_value)
+            or float(window_steps) != window_value
+            or window_steps < 1
+        ):
+            raise ValueError("ped_impact_window_steps must be an integer >= 1.")
+    return radius, window_steps
+
+
 def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any],
     seed: int,
@@ -2632,6 +2659,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     algo_config: dict[str, Any] | None = None,
     algo_config_path: str | None = None,
     adapter_impact_eval: bool = False,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
     observation_noise: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -2640,6 +2670,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     Returns:
         dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
     """
+    ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+    )
     ts_start = datetime.now(UTC).isoformat()
     start_time = time.time()
     scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
@@ -2832,6 +2867,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             horizon=horizon_val,
             shortest_path_len=shortest_path,
             robot_max_speed=_robot_max_speed(config),
+            experimental_ped_impact=experimental_ped_impact,
+            ped_impact_radius_m=ped_impact_radius_m,
+            ped_impact_window_steps=ped_impact_window_steps,
         )
     impact = algo_meta.get("adapter_impact")
     if isinstance(impact, dict) and bool(impact.get("requested", False)):
@@ -2976,6 +3014,9 @@ def _run_map_job_worker(
         algo_config_path=params.get("algo_config_path"),
         scenario_path=Path(params.get("scenario_path")),
         adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
+        experimental_ped_impact=bool(params.get("experimental_ped_impact", False)),
+        ped_impact_radius_m=float(params.get("ped_impact_radius_m", 2.0)),
+        ped_impact_window_steps=int(params.get("ped_impact_window_steps", 5)),
         observation_mode=params.get("observation_mode"),
         observation_noise=params.get("observation_noise"),
     )
@@ -3109,6 +3150,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_profile: BenchmarkProfile = "baseline-safe",
     socnav_missing_prereq_policy: str = "fail-fast",
     adapter_impact_eval: bool = False,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     workers: int = 1,
@@ -3119,6 +3163,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     Returns:
         Summary payload with counts and failure details.
     """
+    ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+    )
     scenarios_is_path = isinstance(scenarios_or_path, (str, Path))
     if scenarios_is_path:
         scenario_path = Path(scenarios_or_path)
@@ -3284,6 +3333,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),
         "adapter_impact_eval": bool(adapter_impact_eval),
+        "experimental_ped_impact": bool(experimental_ped_impact),
+        "ped_impact_radius_m": float(ped_impact_radius_m),
+        "ped_impact_window_steps": int(ped_impact_window_steps),
         "observation_noise": noise_spec,
         "observation_mode": batch_observation_mode,
     }

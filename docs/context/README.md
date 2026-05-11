@@ -149,6 +149,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1058 H500 Paper Language](issue_1058_h500_paper_language.md)
   provides reusable paper/report wording for h500 as a long-horizon sensitivity surface and marks
   unsafe winner-table, wait-then-go, and SNQI calibration claims.
+* [Issue #1085 Pedestrian-Impact Aggregate Metrics](issue_1085_pedestrian_impact_metrics.md)
+  defines the schema-backed `pedestrian-impact.v1` block, canonical aggregate reductions, and
+  opt-in CLI path for pedestrian-impact benchmark outputs.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.

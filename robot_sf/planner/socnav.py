@@ -586,11 +586,10 @@ class TrivialReferencePlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Wrapped angle in radians.
         """
-        while angle > pi:
-            angle -= 2 * pi
-        while angle < -pi:
-            angle += 2 * pi
-        return angle
+        wrapped = (angle + pi) % (2 * pi) - pi
+        if wrapped == -pi and angle > 0:
+            return pi
+        return wrapped
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """Return a bounded goal-facing command from a SocNav observation.

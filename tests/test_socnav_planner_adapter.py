@@ -122,6 +122,7 @@ def test_trivial_reference_adapter_is_deterministic_and_bounded():
 
     adapter.reset(seed=123)
     assert adapter.diagnostics()["steps"] == 0
+    assert TrivialReferencePlannerAdapter._wrap_angle(5 * np.pi) == pytest.approx(np.pi)
 
 
 def test_sampling_adapter_stops_within_tolerance():

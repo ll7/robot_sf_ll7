@@ -91,6 +91,22 @@ CLI gating:
 * `--benchmark-profile experimental`: allows baseline-ready + experimental algorithms.
 * `--adapter-impact-eval` (optional): records adapter-impact metadata (native vs adapted step
   counts where measurable, currently most informative for PPO command conversion).
+* `--observation-mode <mode>` (optional): requests a declared planner observation contract for
+  controlled input-modality checks. Unsupported planner/mode combinations fail before episodes
+  are written.
+
+Observation-mode declarations are metadata contracts, not automatic environment rewrites. The
+current standard modes are:
+
+* `goal_state`: robot state plus route goal only.
+* `socnav_state`: structured robot, goal, and pedestrian state.
+* `headed_socnav_state`: structured social-navigation state with headed robot fields.
+* `sensor_fusion_state`: configured sensor-fusion stack used by learned checkpoint policies.
+* `lidar_human_state` / `gst_human_state`: upstream learned-wrapper input contracts.
+
+The built-in `goal` planner declares both `goal_state` and `socnav_state`, making it the initial
+two-mode demonstration path. Extra channels in `socnav_state` are ignored by that planner, so this
+is useful for input-contract parity checks but is not a claim of pure planner-logic attribution.
 
 Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 
@@ -136,9 +152,51 @@ Each episode identity includes:
 * algorithm (`algo`)
 * algorithm config hash (`algo_config_hash`)
 * run-shaping overrides when provided (`run_horizon`, `run_dt`, `record_forces`)
+* observation-noise profile/hash when enabled (`observation_noise_profile`,
+  `observation_noise_hash`)
 
 This guarantees that resuming across mixed algorithm/config batches does not accidentally skip
 jobs that belong to a different algorithm or planner configuration.
+
+## Observation Noise Profiles
+
+Benchmark map runs can inject controlled planner-input observation noise without changing the
+simulator state or ground-truth metric computation. This is intended for robustness checks only; the
+profile is not calibrated to any real sensor model and should be reported with that caveat.
+
+Direct run usage:
+
+```bash
+robot_sf_bench run \
+  --matrix configs/scenarios/planner_sanity_matrix_v1.yaml \
+  --out output/benchmarks/noise_smoke/episodes.jsonl \
+  --algo goal \
+  --benchmark-profile baseline-safe \
+  --observation-noise configs/benchmarks/observation_noise/robustness_smoke_v1.yaml \
+  --horizon 5 \
+  --workers 1 \
+  --no-video \
+  --no-resume
+```
+
+Campaign configs can set the same profile with a top-level block or path:
+
+```yaml
+observation_noise: configs/benchmarks/observation_noise/robustness_smoke_v1.yaml
+```
+
+Supported fields include:
+* `profile`, `enabled`, and optional deterministic `seed`
+* `pose_noise_std_m` and `heading_noise_std_rad`
+* `lidar_dropout_prob` and `lidar_dropout_value`
+* `pedestrian_false_negative_prob`
+* `pedestrian_false_positive_prob`, `pedestrian_false_positive_radius_m`, and
+  `pedestrian_false_positive_radius`
+
+Episode records include `observation_noise`, `observation_noise_hash`, and
+`observation_noise_stats`. Campaign preflight, matrix summaries, manifests, and campaign summaries
+also record the profile/hash. Absent or all-zero settings normalize to `profile: none` and leave
+planner observations unchanged.
 
 ## Metrics: Definitions + Caveats (Summary)
 
@@ -151,7 +209,11 @@ Full details live in
 * `time_to_goal_norm_success_only`: same normalization, but only valid for successful episodes.
 * `time_to_goal_ideal_ratio`: success-only ratio of achieved time to ideal time
   (`shortest_path_len / robot_max_speed`).
-* `collisions`,  `near_misses`: counts based on distance thresholds.
+* `outcome.collision_event`: canonical per-episode collision event flag for new episode outputs.
+* `metrics.collisions`: collision count metric based on distance thresholds. For schema v1 episode
+  outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
+  and zero when the canonical event is false.
+* `near_misses`: count based on distance thresholds.
 * `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
 
 **Force/comfort**
@@ -204,12 +266,20 @@ Each episode record is schema-validated against
 * `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and
   adapter markers for compatibility interpretation. Contract now also includes
   `planner_command_space` (`unicycle_vw|holonomic_vxy`) for kinematics-aware interpretation.
+* `observation_mode` and `algorithm_metadata.observation_spec`, including the planner's default
+  mode, supported modes, active mode, and whether an override was applied.
 * `algorithm_metadata.kinematics_feasibility` with command-level intervention diagnostics:
   `commands_evaluated`, `infeasible_native_count`, `projected_count`,
   `projection_rate`, `infeasible_rate`, `mean/max abs delta` for linear and angular commands.
 * `metric_parameters.threshold_profile` + `metric_parameters.threshold_signature`
   for threshold provenance and reproducibility
 * Git/config hashes for reproducibility
+
+Collision compatibility: schema v1 consumers should read `outcome.collision_event` for the
+canonical per-episode collision status and treat `metrics.collisions` as the agreeing count metric.
+Older bundles that only carry legacy `status`, `collision_rate`, or inconsistent collision counts
+should be migrated with `scripts/tools/migrate_episode_schema_v1.py`; new bundles fail validation
+when `outcome.collision_event` and `metrics.collisions` disagree.
 
 Batch/campaign-level metadata returned by `run_map_batch` (not individual
 records from `_run_map_episode`) includes:
@@ -222,6 +292,16 @@ records from `_run_map_episode`) includes:
 For aggregation, use the utilities in `robot_sf/benchmark/aggregate.py` or the CLI
 ( `robot_sf_bench aggregate` ) to compute mean/median/p95 and optional bootstrap CIs.
 Aggregation validates threshold-profile consistency and rejects mixed profiles.
+When bootstrap sampling is enabled, aggregate output also includes an additive
+`pairwise_contrasts` block when at least two planner groups share paired episode identities. The
+contrast pairing key is `(scenario_id, seed)` with `seed_index` as a fallback, the reported delta is
+`right_minus_left`, and each
+metric contrast includes the paired mean delta, percentile bootstrap interval, two-sided bootstrap
+sign p-value, Holm-adjusted p-value, and paired Cohen's dz effect size. Holm correction is applied
+within the current aggregate family (`family="all"`) separately for each metric; run aggregation on
+scenario-family-filtered inputs when family-specific correction is required. These contrasts are
+descriptive benchmark summaries and do not by themselves establish high-power inference for small
+or weakly paired evidence bases.
 
 For threshold studies, run `scripts/benchmark_threshold_sensitivity.py` to quantify
 distance/comfort threshold impacts across scenario families and to compare speed-aware

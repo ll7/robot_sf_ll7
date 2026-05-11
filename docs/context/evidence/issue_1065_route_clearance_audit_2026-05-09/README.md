@@ -38,7 +38,7 @@ Both preflights reported the same `route_clearance_warning_count`: `18`.
 
 The retained table is:
 
-- `route_clearance_warning_classification.csv`
+- [route_clearance_warning_classification.csv](route_clearance_warning_classification.csv)
 
 It records each scenario, map, warning margin, warning scope, issue #1065 classification, and
 planner-attribution boundary.

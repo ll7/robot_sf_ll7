@@ -7,7 +7,7 @@ Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1065>
 Follow-up repair/certification issue: <https://github.com/ll7/robot_sf_ll7/issues/1105>
 
 Evidence bundle:
-`docs/context/evidence/issue_1065_route_clearance_audit_2026-05-09/`
+[evidence/issue_1065_route_clearance_audit_2026-05-09/](evidence/issue_1065_route_clearance_audit_2026-05-09/)
 
 ## Goal
 
@@ -41,14 +41,14 @@ rtk uv run python scripts/tools/run_camera_ready_benchmark.py \
 
 Both commands wrote local, ignored artifacts under `output/benchmarks/camera_ready/`. The compact
 table promoted for review is
-`docs/context/evidence/issue_1065_route_clearance_audit_2026-05-09/route_clearance_warning_classification.csv`.
+[evidence/issue_1065_route_clearance_audit_2026-05-09/route_clearance_warning_classification.csv](evidence/issue_1065_route_clearance_audit_2026-05-09/route_clearance_warning_classification.csv).
 
 Tracked cross-checks:
 
-- `docs/context/evidence/issue_1023_scenario_horizons_preflight_2026-05-06/preflight/validate_config.json`
-- `docs/context/evidence/issue_1023_candidate_augmented_preflight_2026-05-06/preflight/validate_config.json`
-- `docs/context/camera_ready_all_planners_slurm_2026-05-04.md`
-- `docs/context/issue_1057_semantic_blocker_audit.md`
+- [Issue #1023 Scenario-Horizon Preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/preflight/validate_config.json)
+- [Issue #1023 Candidate-Augmented Preflight](evidence/issue_1023_candidate_augmented_preflight_2026-05-06/preflight/validate_config.json)
+- [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
+- [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
 
 ## Current Warnings
 
@@ -100,7 +100,7 @@ be useful as constrained scenarios, but they must not be silently treated as ord
 - Low-positive-margin classic rows can remain in aggregate comparisons only with caveats. If a
   failure explanation depends on static clearance, require trace-backed evidence or defer to #1105.
 - Continue applying the fallback/degraded policy from
-  `docs/context/issue_691_benchmark_fallback_policy.md`; route-clearance warnings do not make
+  [Issue #691 Benchmark Fallback Policy](issue_691_benchmark_fallback_policy.md); route-clearance warnings do not make
   fallback or degraded execution successful benchmark evidence.
 
 ## Follow-Up Boundary

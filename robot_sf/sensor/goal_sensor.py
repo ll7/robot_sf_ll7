@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Goal-relative observation helpers for robot target sensors."""
 
 from math import atan2, dist
 
@@ -11,13 +11,13 @@ TARGET_DISTANCE_CAP_M = 50.0
 
 
 def norm_angle(angle: float) -> float:
-    """TODO docstring. Document this function.
+    """Normalize an angle to the ``[-pi, pi)`` interval.
 
     Args:
-        angle: TODO docstring.
+        angle: Angle in radians.
 
     Returns:
-        TODO docstring.
+        Equivalent wrapped angle in radians.
     """
     return (angle + np.pi) % (2 * np.pi) - np.pi
 

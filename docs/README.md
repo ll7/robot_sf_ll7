@@ -288,6 +288,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Simulation & UI
 
 * **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
+* **[Helper Catalog](./dev/helper_catalog.md)** - Reusable render helpers for frame capture, output directories, and video contact sheets
 * **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
 * **[OSM Map Generation](./osm_map_workflow.md)** - Programmatic, reproducible maps from OpenStreetMap data (PBF import, zone/route definition, scenario creation)
   + **Quick Start**: 3 approaches (visual editor, programmatic API, hybrid)

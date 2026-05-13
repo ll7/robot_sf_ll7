@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Implemented the issue-1187 render-helper slice: `capture_frames()` now samples real RGB frame
+  buffers or one direct render result, `generate_video_contact_sheet.py` writes deterministic PNG
+  contact sheets from episode frame metadata, and the helper catalog documents the supported
+  surfaces and failure modes.
 * Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
   fix-first repair loop on writable branches: proof failures are now classified as auto-fixable
   now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and

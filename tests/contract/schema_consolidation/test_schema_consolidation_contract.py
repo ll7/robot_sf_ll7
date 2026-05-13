@@ -1,14 +1,4 @@
-"""Contract tests for schema consolidation feature (T011).
-
-These tests are written BEFORE implementation to enforce red → green TDD cycle.
-They define the expected API contracts and will FAIL until implementation is complete.
-
-Test Categories:
-- Schema loading functionality
-- Version detection
-- Duplicate prevention
-- Backward compatibility
-"""
+"""Contract tests for schema consolidation feature (T011)."""
 
 from __future__ import annotations
 
@@ -17,36 +7,32 @@ from pathlib import Path
 
 import pytest
 
+try:
+    import jsonschema  # type: ignore
+except Exception as e:  # pragma: no cover
+    raise RuntimeError("jsonschema dependency required for contract tests") from e
+
 
 class TestSchemaLoaderContract:
     """Contract tests for schema loading API."""
 
     def test_load_schema_contract(self):
-        """Test schema loader API contract - will fail until implemented."""
-        # This test defines the expected contract
-        pytest.importorskip("robot_sf.benchmark.schema_loader")
-
+        """The schema loader should return the canonical episode schema."""
         from robot_sf.benchmark.schema_loader import load_schema
 
-        # Contract: load_schema takes schema_name parameter
         schema = load_schema("episode.schema.v1.json")
 
-        # Contract: returns dict with expected structure
         assert isinstance(schema, dict)
         assert "$schema" in schema
         assert "title" in schema
         assert schema["title"] == "RobotSF Benchmark Episode (v1)"
 
     def test_get_schema_version_contract(self):
-        """Test version detection API contract."""
-        pytest.importorskip("robot_sf.benchmark.schema_loader")
-
+        """The schema loader should expose parsed semantic version metadata."""
         from robot_sf.benchmark.schema_loader import get_schema_version
 
-        # Contract: get_schema_version takes schema_name
         version = get_schema_version("episode.schema.v1.json")
 
-        # Contract: returns version dict
         assert isinstance(version, dict)
         assert "major" in version
         assert "minor" in version
@@ -56,20 +42,14 @@ class TestSchemaLoaderContract:
         assert version["patch"] == 0
 
     def test_schema_loading_error_handling(self):
-        """Test error handling for invalid schema names."""
-        pytest.importorskip("robot_sf.benchmark.schema_loader")
-
+        """Invalid schema names should fail closed."""
         from robot_sf.benchmark.schema_loader import load_schema
 
-        # Contract: invalid schema names raise appropriate errors
         with pytest.raises(FileNotFoundError):
             load_schema("nonexistent.schema.v1.json")
 
     def test_schema_integrity_validation(self):
-        """Test that loaded schemas are valid JSON Schema."""
-        pytest.importorskip("robot_sf.benchmark.schema_loader")
-        jsonschema = pytest.importorskip("jsonschema")
-
+        """Loaded schemas should be valid JSON Schema documents."""
         from robot_sf.benchmark.schema_loader import load_schema
 
         schema = load_schema("episode.schema.v1.json")
@@ -104,17 +84,36 @@ class TestGitHookContract:
 
         assert hook_configured, "Duplicate prevention hook not configured"
 
-    def test_duplicate_detection_logic(self):
-        """Test duplicate detection logic (mock test)."""
-        # This would test the hook logic in isolation
-        # For now, just verify the hook script exists
-        hook_script = Path("hooks/prevent-schema-duplicates.py")
-        if hook_script.exists():
-            # Verify it's executable Python
-            content = hook_script.read_text()
-            assert "def main(" in content, "Hook script should have main function"
-        else:
-            pytest.skip("Hook script not implemented yet")
+    def test_duplicate_detection_logic(self, tmp_path):
+        """The hook helper should reject staged schemas that duplicate canonical files."""
+        from hooks.prevent_schema_duplicates import prevent_schema_duplicates
+
+        canonical_dir = tmp_path / "canonical"
+        canonical_dir.mkdir()
+        canonical_schema = canonical_dir / "episode.schema.v1.json"
+        canonical_schema.write_text(
+            Path("robot_sf/benchmark/schemas/episode.schema.v1.json").read_text(),
+            encoding="utf-8",
+        )
+
+        duplicate_dir = tmp_path / "duplicate"
+        duplicate_dir.mkdir()
+        duplicate_schema = duplicate_dir / "episode.schema.v1.json"
+        duplicate_schema.write_text(canonical_schema.read_text(encoding="utf-8"), encoding="utf-8")
+
+        result = prevent_schema_duplicates(
+            staged_files=[str(duplicate_schema)],
+            canonical_dir=canonical_dir,
+        )
+
+        assert result["status"] == "fail"
+        assert result["duplicates_found"] == [
+            {
+                "file": str(duplicate_schema),
+                "canonical_file": str(canonical_schema),
+                "reason": "Content hash matches existing canonical schema",
+            }
+        ]
 
 
 class TestBackwardCompatibilityContract:
@@ -137,7 +136,12 @@ class TestBackwardCompatibilityContract:
         assert "version" in schema["properties"]
         assert schema["properties"]["version"]["const"] == "v1"
 
-    def test_existing_tests_still_pass(self):
-        """Test that existing contract tests still pass."""
-        # This test is skipped as the import path has issues
-        pytest.skip("Skipping test with import issues - main functionality verified elsewhere")
+    def test_episode_schema_wrapper_reads_canonical_schema(self):
+        """The legacy EpisodeSchema wrapper should still read the canonical file."""
+        from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
+
+        schema = EpisodeSchema(Path("robot_sf/benchmark/schemas/episode.schema.v1.json"))
+
+        assert schema.title == "RobotSF Benchmark Episode (v1)"
+        assert schema.version == "v1"
+        assert "episode_id" in schema.required_properties

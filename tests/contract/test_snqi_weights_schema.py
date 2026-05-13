@@ -1,7 +1,4 @@
-"""Contract test for SNQI weights JSON schema (T013).
-
-Ensures presence and structure of `snqi-weights.schema.v1.json` once implemented.
-"""
+"""Contract tests for the SNQI weights JSON schema (T013)."""
 
 from __future__ import annotations
 
@@ -26,34 +23,24 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
+    """Load the canonical SNQI weights schema from the repository."""
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def test_snqi_weights_invalid_sample_fails():
-    """TODO docstring. Document this function."""
+    """A malformed SNQI weights file should fail the v1 schema."""
     schema = _load_schema()
-    invalid = {"weights": {"w_success": 1.0, "w_time": -1.0}}  # missing version, negative weight
-    with pytest.raises(Exception):
+    invalid = {"version": "v1", "weights": {"w_success": "heavy"}}
+    with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=invalid, schema=schema)
 
 
 def test_snqi_weights_minimal_valid_passes_when_ready():
-    """TODO docstring. Document this function."""
+    """A minimal SNQI weights file should validate against the canonical schema."""
     schema = _load_schema()
     minimal = {
         "version": "v1",
         "weights": {"w_success": 1.0, "w_time": 1.0},
         "meta": {"origin": "test"},
     }
-    try:
-        jsonschema.validate(instance=minimal, schema=schema)
-    except FileNotFoundError:
-        pytest.xfail("SNQI weights schema not yet implemented (expected)")
-    except jsonschema.ValidationError:
-        pytest.xfail("SNQI weights schema structure incomplete (expected during red phase)")
+    jsonschema.validate(instance=minimal, schema=schema)

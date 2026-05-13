@@ -54,3 +54,14 @@ def test_dynamic_occlusion_rejects_negative_radius():
             robot_pos=np.asarray([0.0, 0.0], dtype=np.float32),
             pedestrian_radius=-0.1,
         )
+
+
+def test_dynamic_occlusion_rejects_malformed_base_visibility_mask():
+    """Malformed base visibility masks should fail with a clear contract error."""
+    with pytest.raises(ValueError, match="base_visible"):
+        dynamic_pedestrian_occlusion_mask(
+            np.asarray([[2.0, 0.0], [4.0, 0.0]], dtype=np.float32),
+            robot_pos=np.asarray([0.0, 0.0], dtype=np.float32),
+            pedestrian_radius=0.4,
+            base_visible=np.asarray([[True, False]]),
+        )

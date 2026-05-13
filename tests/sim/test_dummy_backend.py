@@ -75,7 +75,9 @@ def test_dummy_simulator_uses_default_spawn_selection_when_resetting(
     """Verify the dummy backend lets route sampling pick a valid spawn automatically."""
     seen_spawn_ids: list[int | None] = []
 
-    def fake_sample_route(_map_def: MapDefinition, spawn_id: int | None) -> list[tuple[float, float]]:
+    def fake_sample_route(
+        _map_def: MapDefinition, spawn_id: int | None
+    ) -> list[tuple[float, float]]:
         seen_spawn_ids.append(spawn_id)
         return [(0.0, 0.0), (1.0, 0.0)]
 

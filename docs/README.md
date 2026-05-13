@@ -131,6 +131,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue 739 PPO Ablation Stage 1](./context/issue_739_ppo_ablation_stage1.md)** - Final reward/observation/optimizer ablation outcome: no tested simplification improved over the issue-708 baseline, with a pointer to the Stage 2 decision record.
 * **[Predictive Planner Complete Tutorial](./training/predictive_planner_complete_tutorial.md)** - Full concept-to-code tutorial (model, scoring, risk-adaptive search, diagnostics, and reproducibility)
 * **[DreamerV3 RLlib Runbook (`drive_state` + `rays`)](./training/dreamerv3_rllib_drive_state_rays.md)** - Config-first training flow for RLlib DreamerV3 without image observations.
+* **[Issue #1190 DreamerV3 Checkpoint Import Boundary](./context/issue_1190_dreamerv3_checkpoint_import_boundary.md)** - Fail-closed BR-08 warm-start probe showing that Ray 2.53.0 has no clean Robot SF world-model import contract.
 * **[Global Planner Quickstart (WIP)](../specs/342-svg-global-planner/quickstart.md)** - Placeholder for the upcoming SVG-based global planner documentation and examples.
 * **[Artifact Policy Quickstart](../specs/243-clean-output-dirs/quickstart.md)** - Step-by-step migration, guard enforcement, and override instructions for the canonical `output/` tree
 * **[Imitation Learning Pipeline](./imitation_learning_pipeline.md)** - Complete guide to PPO pre-training with expert trajectories

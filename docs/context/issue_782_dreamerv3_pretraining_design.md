@@ -6,6 +6,11 @@ Related notes:
 - `docs/context/issue_578_608_609_dreamerv3_parity.md`
 - `docs/context/issue_789_dreamer_multimodal_encoder.md`
 
+> Update 2026-05-14: the follow-up import-boundary probe is recorded in
+> [issue_1190_dreamerv3_checkpoint_import_boundary.md](issue_1190_dreamerv3_checkpoint_import_boundary.md).
+> It fails closed on Ray 2.53.0 because Robot SF has no clean world-model import contract beyond
+> RLlib's full Algorithm/RLModule checkpoint restore surface.
+
 ## Goal
 
 Decide whether this repository should pursue DreamerV3 world-model pretraining for the

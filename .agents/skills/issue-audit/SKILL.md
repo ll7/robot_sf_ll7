@@ -11,9 +11,10 @@ Use this skill when the user wants to refine open issues through a discussion lo
 default `/goal` loop: it keeps the user in the loop, asks one question at a time, and updates issues
 as decisions crystallize.
 
-This skill combines the one-question discipline from `grill-me`, the document-grounded challenge
-style from `grill-with-docs`, and the repository workflows in `gh-issue-template-auditor`,
-`gh-issue-clarifier`, `gh-issue-sequencer`, and `gh-issue-creator`.
+This skill combines a one-question-at-a-time interview pattern, document-grounded challenge and
+terminology checks, and the repository workflows in `gh-issue-template-auditor`,
+`gh-issue-clarifier`, `gh-issue-sequencer`, and `gh-issue-creator`. The interview pattern is
+described here directly so the skill does not depend on locally installed helper skills.
 
 ## Read First
 

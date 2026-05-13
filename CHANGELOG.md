@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
+  fix-first repair loop on writable branches: proof failures are now classified as auto-fixable
+  now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and
+  revalidated before withholding `merge-ready`; and the skill index plus shared goal-loop note now
+  reflect the new validation-and-reassess contract.
+
 ### Added
 
 * Added the issue-1168 multi-AMV planner support classification surface: multi-AMV episode

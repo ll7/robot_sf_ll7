@@ -74,8 +74,8 @@ examples:
     summary: "Switch Robot SF backends using unified config."
     category_slug: advanced
     prerequisites: []
-    ci_enabled: false
-    ci_reason: "Dummy backend currently lacks map metadata and fails under automation."
+    ci_enabled: true
+    ci_reason: null
     doc_reference: docs/dev_guide.md#environment-factory
     tags: [backend]
   - path: advanced/09_defensive_policy.py

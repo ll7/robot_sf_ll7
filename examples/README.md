@@ -57,7 +57,7 @@ Feature-focused demos for developers exploring capabilities.
 
 | Example | Summary | Prerequisites | Tags | CI |
 | --- | --- | --- | --- | --- |
-| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | _None_ | backend | ⚠️ Dummy backend currently lacks map metadata and fails under automation. |
+| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | _None_ | backend | ✅ |
 | [02 Factory Options](./advanced/02_factory_options.py) | Compare environment factory options for rendering and recording. | _None_ | factory | ✅ |
 | [03 Image Observations](./advanced/03_image_observations.py) | Enable image-based observations in the robot environment. | None | image | ✅ |
 | [04 Feature Extractors](./advanced/04_feature_extractors.py) | Run PPO demos with different feature extractors. | uv sync --all-extras | training, feature-extractor | ⚠️ Needs optional extras and lengthy PPO rollout; exceeds smoke timeout. |
@@ -73,7 +73,15 @@ Feature-focused demos for developers exploring capabilities.
 | [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ⚠️ Interactive playback; requires user input to exit. |
 | [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
 | [16 Imitation Learning Pipeline](./advanced/16_imitation_learning_pipeline.py) | End-to-end imitation learning workflow: expert training → trajectory collection → BC pre-training → PPO fine-tuning. | uv sync --all-extras<br>configs/training/ppo_imitation/*.yaml | training, imitation, ppo, behavioral-cloning | ⚠️ Long-running pipeline (30-60 min); requires extensive compute for full training cycles. |
-| [20 Occupancy Grid Workflow](./advanced/20_occupancy_grid_workflow.py) | Standalone grid generation, spawn validation queries, and occupancy-based reward shaping. | _None_ | occupancy, reward, observation | ✅ |
+| [20 Global Planner Demo](./advanced/20_global_planner_demo.py) | Demonstration of global planner integration with environment factory. | _None_ | planning, routing, poi | ⚠️ pyvisgraph numerical instability on default maps; use in interactive testing only. |
+| [21 Occupancy Grid Workflow](./advanced/21_occupancy_grid_workflow.py) | Standalone grid generation, spawn validation queries, and occupancy-based reward shaping. | _None_ | occupancy, reward, observation | ✅ |
+| [22 Occupancy Grid Playthrough](./advanced/22_occupancy_grid_playthrough.py) | Interactive occupancy grid playthrough demonstration. | _None_ | occupancy, interactive | ⚠️ Long interactive pygame session, not relevatn for CI |
+| [23 POI Routing Demo](./advanced/23_poi_routing_demo.py) | Sample POIs and route through them with the global planner on an SVG map. | _None_ | planning, routing, poi, sampling | ⚠️ pyvisgraph numerical instability on default maps; use in interactive testing only. |
+| [24 Planner Bottleneck Test](./advanced/24_planner_bottleneck_test.py) | Analyze planner clearance behavior on a bottleneck corridor map. | maps/svg_maps/planner_test_corridor.svg | planning, diagnostics, clearance | ⚠️ Diagnostic plotting workflow intended for manual planner debugging. |
+| [24 Telemetry Pane](./advanced/24_telemetry_pane.py) | Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance. | _None_ | telemetry, visualization, pygame, interactive | ⚠️ Interactive pygame session not reliable for CI; use headless variant instead. |
+| [25 Planner Diagnostic](./advanced/25_planner_diagnostic.py) | Visualize inflation and visibility-graph internals for planner debugging. | maps/svg_maps/planner_test_corridor.svg | planning, diagnostics, visualization | ⚠️ Produces large diagnostic plots and is intended for manual analysis. |
+| [25 Telemetry Headless Smoke](./advanced/25_telemetry_headless_smoke.py) | Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering. | _None_ | telemetry, visualization, headless, ci | ⚠️ Requires file output inspection; not suitable for smoke tests. |
+| [32 Demo Adversarial Pedestrian](./advanced/32_demo_adversarial_pedestrian.py) | Run a modernized debug rollout for pedestrian PPO policies with factory-based setup. | maps/svg_maps/masterthesis/intersection.svg<br>model/run_043<br>model_ped/ppo_intersection.zip | pedestrian, policy, debug, ppo | ⚠️ Interactive pygame debug demo with offline checkpoints. |
 | [Occupancy Reward Shaping](./occupancy_reward_shaping.py) | Derive a clearance penalty from occupancy grid observations in a short rollout. | _None_ | occupancy, reward, grid | ✅ |
 
 ## Benchmarks

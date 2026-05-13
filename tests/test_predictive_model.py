@@ -5,9 +5,11 @@ from dataclasses import asdict
 import torch
 
 from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     ObstacleFeatureSchemaError,
     predictive_feature_schema_metadata,
+    validate_predictive_feature_schema_metadata,
 )
 from robot_sf.planner.predictive_model import (
     PredictiveModelConfig,
@@ -134,3 +136,29 @@ def test_predictive_checkpoint_records_and_validates_feature_schema(tmp_path) ->
         assert "Predictive feature schema mismatch" in str(exc)
     else:  # pragma: no cover - defensive assertion style for clearer failure
         raise AssertionError("expected ObstacleFeatureSchemaError")
+
+
+def test_predictive_schema_validation_rejects_legacy_name_with_ego_dimension() -> None:
+    """Legacy and ego schema names should remain tied to their exact input widths."""
+    try:
+        validate_predictive_feature_schema_metadata(
+            {
+                "name": "predictive_legacy_v1",
+                "base_schema": "predictive_legacy_v1",
+                "base_feature_dim": 4,
+                "obstacle_feature_schema": None,
+                "input_dim": 9,
+            },
+            input_dim=9,
+            expected_schema_name="predictive_legacy_v1",
+        )
+    except ObstacleFeatureSchemaError as exc:
+        assert "Predictive legacy feature dimension mismatch" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ObstacleFeatureSchemaError")
+
+    validate_predictive_feature_schema_metadata(
+        predictive_feature_schema_metadata(model_family=PREDICTIVE_EGO_FEATURE_SCHEMA),
+        input_dim=9,
+        expected_schema_name=PREDICTIVE_EGO_FEATURE_SCHEMA,
+    )

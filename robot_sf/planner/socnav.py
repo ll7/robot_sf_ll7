@@ -44,8 +44,8 @@ from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.obstacle_features import (
-    LocalObstacleFeatureExtractor,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    LocalObstacleFeatureExtractor,
     infer_predictive_feature_schema,
 )
 from robot_sf.planner.predictive_model import (

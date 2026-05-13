@@ -43,8 +43,8 @@ uv run pytest tests/test_predictive_model.py \
   tests/planner/test_predictive_obstacle_runtime_contract.py -q
 ```
 
-Full PR readiness should use `origin/issue-1138-predictive-obstacle-features-v1` as the stacked
-base while #1138 remains unmerged.
+Full PR readiness should use `origin/main`; #1138 has landed via #1160, so this branch is no
+longer stacked on a feature base.
 
 ## Follow-up boundary
 

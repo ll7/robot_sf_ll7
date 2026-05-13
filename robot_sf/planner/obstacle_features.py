@@ -336,6 +336,15 @@ def infer_predictive_feature_schema(state_dim: int) -> dict[str, object]:
     raise ObstacleFeatureSchemaError(f"Cannot infer predictive feature schema for input_dim={dim}")
 
 
+def _base_schema_feature_dim(schema_name: str) -> int | None:
+    """Return the exact input width for non-obstacle predictive schemas."""
+    if schema_name == PREDICTIVE_LEGACY_FEATURE_SCHEMA:
+        return PREDICTIVE_LEGACY_FEATURE_DIM
+    if schema_name == PREDICTIVE_EGO_FEATURE_SCHEMA:
+        return PREDICTIVE_EGO_FEATURE_DIM
+    return None
+
+
 def validate_predictive_feature_schema_metadata(
     metadata: dict[str, object],
     *,
@@ -370,5 +379,15 @@ def validate_predictive_feature_schema_metadata(
                 f"base_dim={base_dim}, obstacle_dim={PREDICTIVE_OBSTACLE_FEATURE_DIM}, "
                 f"input_dim={int(input_dim)}"
             )
-    elif schema_name not in {PREDICTIVE_LEGACY_FEATURE_SCHEMA, PREDICTIVE_EGO_FEATURE_SCHEMA}:
-        raise ObstacleFeatureSchemaError(f"Unsupported predictive feature schema: {schema_name!r}")
+    else:
+        expected_base_dim = _base_schema_feature_dim(schema_name)
+        if expected_base_dim is None:
+            raise ObstacleFeatureSchemaError(
+                f"Unsupported predictive feature schema: {schema_name!r}"
+            )
+        if int(input_dim) != expected_base_dim:
+            feature_label = "legacy" if schema_name == PREDICTIVE_LEGACY_FEATURE_SCHEMA else "ego"
+            raise ObstacleFeatureSchemaError(
+                f"Predictive {feature_label} feature dimension mismatch: "
+                f"expected {expected_base_dim}, got {int(input_dim)}"
+            )

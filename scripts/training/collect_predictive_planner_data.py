@@ -275,7 +275,7 @@ def _frames_to_samples(
 
         if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
             state = _append_obstacle_feature_rows(
-                state_base,
+                state_base=state_base,
                 frame=frame_t,
                 count=c,
             )

@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from robot_sf.planner.obstacle_features import (
-    ObstacleFeatureSchemaError,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    ObstacleFeatureSchemaError,
     predictive_feature_schema_metadata,
 )
 from robot_sf.planner.predictive_model import (

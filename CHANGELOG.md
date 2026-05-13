@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fail-closed mode/session helpers, baseline comparison primitives, and BC export utilities now
   reject invalid mode values, non-finite speed multipliers, negative tolerances, and malformed
   record payloads while keeping NumPy-backed observations serializable for recorder/export flows.
+* Added the issue-1152 manual-control mode experiment surface: typed control/view mode specs,
+  cruise and mouse-target differential-drive mapper variants, runtime mode selection config, and
+  manifest/record metadata for `control_mode`, `view_mode`, and `input_mapping_version`, while
+  keeping unsupported ego-up renderer hooks fail-closed until the camera transform exists.
 * Added the issue-1110 CARLA oracle replay parity adapter surface: `compare_oracle_replay_metrics(...)`
   and its CLI now emit conservative parity reports, reject degraded CARLA `mode` or `status`
   fail-closed, treat non-finite numeric values as unavailable instead of serializing invalid JSON,

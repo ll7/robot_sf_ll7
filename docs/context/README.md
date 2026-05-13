@@ -209,6 +209,9 @@ knowledge, not every transient iteration detail.
   records the full `full_matrix_h500` run for
   `hybrid_rule_v3_fast_progress_static_escape_continuous`, promotion-gate outcome, comparator
   deltas, remaining failure taxonomy, and artifact persistence boundary.
+* [Issue #1152 Manual-Control Mode Experiments](issue_1152_manual_control_modes.md)
+  records the first post-MVP steering-mode bundle, artifact-filterability contract, and fail-closed
+  `ego_up_view_v1` renderer-hook blocker.
 
 ## Manual Control Notes
 

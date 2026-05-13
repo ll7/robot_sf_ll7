@@ -7,7 +7,14 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.manual_control.modes import ManualViewMode
+from robot_sf.manual_control.modes import (
+    ManualControlMode,
+    ManualViewMode,
+    control_mode_for_input_mapping_version,
+    control_mode_spec,
+    parse_manual_control_mode,
+    parse_manual_view_mode,
+)
 
 if TYPE_CHECKING:
     from robot_sf.manual_control.session import AttemptKey
@@ -19,10 +26,26 @@ class ManualSessionMetadata:
 
     session_id: str
     input_mapping_version: str
+    control_mode: str = ManualControlMode.KEYBOARD_HOLD.value
     view_mode: str = ManualViewMode.FIXED_MAP.value
     policy_to_beat: str | None = None
     policy_to_beat_source: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Validate and canonicalize mode metadata for append-only artifacts."""
+        control_mode = parse_manual_control_mode(self.control_mode)
+        view_mode = parse_manual_view_mode(self.view_mode)
+        expected_mapping_version = control_mode_spec(control_mode).input_mapping_version
+        if self.input_mapping_version != expected_mapping_version:
+            raise ValueError(
+                "manual-control session metadata mismatch: "
+                f"control_mode={control_mode.value!r} expects "
+                f"input_mapping_version={expected_mapping_version!r}, got "
+                f"{self.input_mapping_version!r}"
+            )
+        object.__setattr__(self, "control_mode", control_mode.value)
+        object.__setattr__(self, "view_mode", view_mode.value)
 
 
 @dataclass(frozen=True)
@@ -104,10 +127,22 @@ class ManualControlRecord:
         session_payload = payload.get("session")
         if not isinstance(session_payload, dict):
             raise ValueError("manual-control record is missing session metadata")
+        input_mapping_version = str(session_payload["input_mapping_version"])
+        control_mode_payload = session_payload.get("control_mode")
+        control_mode = (
+            str(control_mode_payload)
+            if control_mode_payload is not None
+            else control_mode_for_input_mapping_version(input_mapping_version).value
+        )
+        try:
+            parse_manual_control_mode(control_mode)
+        except ValueError as exc:
+            raise ValueError(f"unsupported manual-control mode: {control_mode!r}") from exc
         view_mode = str(session_payload.get("view_mode", ManualViewMode.FIXED_MAP.value))
-        allowed_view_modes = {mode.value for mode in ManualViewMode}
-        if view_mode not in allowed_view_modes:
-            raise ValueError(f"unsupported manual-control view mode: {view_mode!r}")
+        try:
+            parse_manual_view_mode(view_mode)
+        except ValueError as exc:
+            raise ValueError(f"unsupported manual-control view mode: {view_mode!r}") from exc
         training_sample = payload.get("training_sample", False)
         if not isinstance(training_sample, bool):
             raise ValueError("training_sample must be a boolean")
@@ -119,7 +154,8 @@ class ManualControlRecord:
             step_idx=int(payload["step_idx"]),
             session=ManualSessionMetadata(
                 session_id=str(session_payload["session_id"]),
-                input_mapping_version=str(session_payload["input_mapping_version"]),
+                input_mapping_version=input_mapping_version,
+                control_mode=control_mode,
                 view_mode=view_mode,
                 policy_to_beat=session_payload.get("policy_to_beat"),
                 policy_to_beat_source=session_payload.get("policy_to_beat_source"),

@@ -17,6 +17,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
     TrivialReferencePlannerAdapter,
+    _sacadrl_session_config,
     make_hrvo_policy,
     make_orca_policy,
     make_prediction_policy,
@@ -492,6 +493,21 @@ def test_sacadrl_adapter_requires_model_when_fallback_disabled(monkeypatch):
     obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
     with pytest.raises(RuntimeError, match="missing model"):
         adapter.plan(obs)
+
+
+def test_sacadrl_cpu_session_config_disables_gpu_devices():
+    """SA-CADRL CPU inference should not ask TensorFlow to initialize CUDA devices."""
+    from robot_sf.planner import socnav
+
+    if socnav.tf is None:
+        pytest.skip("TensorFlow not installed; skipping SA-CADRL TensorFlow config check.")
+
+    config = _sacadrl_session_config(socnav.tf, device="/cpu:0")
+    assert config.device_count["GPU"] == 0
+    assert config.allow_soft_placement is True
+
+    device_config = _sacadrl_session_config(socnav.tf, device=" /device:CPU:0 ")
+    assert device_config.device_count["GPU"] == 0
 
 
 def test_sacadrl_adapter_runs_model_when_available():

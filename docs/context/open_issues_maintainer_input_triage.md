@@ -28,7 +28,10 @@ Initial recommendation:
 Deprecate first, then remove later if no external callers surface. Prefer folding #1141/#1146 into #1150 rather than implementing another active env path.
 
 Decision:
-Pending.
+Decided for this pass. Use `make_crowd_sim_env` as the replacement crowd-simulation
+surface, remove `SimpleRobotEnv`, and do not reuse `EmptyRobotEnv` as the implementation base.
+See the crowd-simulation decision updates below for the detailed factory, API, config,
+observation, recording, rendering, and package-placement contract.
 
 ### 2. SocNavBench ETH source assets
 
@@ -89,7 +92,10 @@ Initial recommendation:
 Opt-in, disabled by default, circular pedestrian body model, nearest pedestrian blocks line-of-sight, binary visibility only for v1.
 
 Decision:
-Pending.
+No longer pending for this pass. The v1 implementation direction is opt-in binary pedestrian
+visibility with the simple circular body model from the initial recommendation, tracked in #1124
+and PR #1159. Reopen maintainer input only if review expands the occlusion model beyond that v1
+scope.
 
 ### 7. SensorFusion temporal ordering
 
@@ -103,7 +109,9 @@ Initial recommendation:
 Oldest-to-newest, current frame at `[-1]`, because current code mostly follows that pattern.
 
 Decision:
-Pending.
+Decided for this pass: stacked sensor tensors are oldest-to-newest, with the current sample at
+`[-1]`. #1143/#1149 are tracked in PR #1157; reopen maintainer input only if review changes that
+ordering contract.
 
 ### 8. Multi-AMV first planner adapter
 

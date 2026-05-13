@@ -21,7 +21,7 @@ All outputs are deterministic given the scenario matrix file and master seed.
 ```bash
 uv run python scripts/classic_benchmark_full.py \
   --scenarios configs/scenarios/classic_interactions.yaml \
-  --output results/full_classic_run_01 \
+  --output output/benchmarks/full_classic_run_01 \
   --workers 2 --seed 123 --algo ppo \
   --initial-episodes 2 --max-episodes 4 --batch-size 2 \
   --target-collision-half-width 0.05 \
@@ -32,7 +32,7 @@ Smoke mode (fast placeholder artifacts):
 ```bash
 uv run python scripts/classic_benchmark_full.py \
   --scenarios configs/scenarios/classic_interactions.yaml \
-  --output results/full_classic_smoke \
+  --output output/benchmarks/full_classic_smoke \
   --smoke --initial-episodes 1 --max-episodes 1
 ```
 
@@ -173,7 +173,7 @@ Typical workflow:
 ```bash
 uv run python scripts/classic_benchmark_full.py \
   --scenarios configs/scenarios/classic_interactions.yaml \
-  --output results/full_classic_final \
+  --output output/benchmarks/full_classic_final \
   --seed 123 \
   --initial-episodes 2 \
   --max-episodes 4 \

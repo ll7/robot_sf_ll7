@@ -122,6 +122,40 @@ def test_manual_jsonl_records_round_trip_control_and_view_modes(tmp_path):
     assert loaded[0].session.input_mapping_version == "keyboard_cruise_diff_drive_v1"
 
 
+def test_manual_session_metadata_rejects_mismatched_control_mode_and_mapping_version() -> None:
+    """Session metadata should fail closed when mode and mapping version disagree."""
+    with pytest.raises(ValueError, match="manual-control session metadata mismatch"):
+        ManualSessionMetadata(
+            session_id="session-1",
+            input_mapping_version="keyboard_cruise_diff_drive_v1",
+        )
+
+
+def test_load_manual_jsonl_records_derives_missing_control_mode_from_mapping_version(tmp_path) -> None:
+    """Legacy payloads missing control_mode should stay internally consistent on load."""
+    path = tmp_path / "manual.jsonl"
+    record = ManualControlRecord.for_attempt(
+        event="step",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=0,
+        step_idx=5,
+        session=ManualSessionMetadata(
+            session_id="session-1",
+            input_mapping_version="keyboard_cruise_diff_drive_v1",
+            control_mode="keyboard_cruise",
+            view_mode="fixed_map",
+        ),
+        training_sample=True,
+    ).to_json_dict()
+    del record["session"]["control_mode"]
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    loaded = load_manual_jsonl_records(path)
+
+    assert loaded[0].session.control_mode == "keyboard_cruise"
+    assert loaded[0].session.input_mapping_version == "keyboard_cruise_diff_drive_v1"
+
+
 def test_load_manual_jsonl_records_rejects_unsupported_schema(tmp_path):
     """Manual JSONL loading should fail closed for schema drift."""
     path = tmp_path / "manual.jsonl"
@@ -191,6 +225,29 @@ def test_load_manual_jsonl_records_validates_view_mode_and_training_sample(tmp_p
     path.write_text(json.dumps(record) + "\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="training_sample must be a boolean"):
+        load_manual_jsonl_records(path)
+
+
+def test_load_manual_jsonl_records_rejects_mismatched_control_mode_and_mapping_version(
+    tmp_path,
+) -> None:
+    """Explicitly inconsistent session metadata should fail closed on load."""
+    path = tmp_path / "manual.jsonl"
+    record = ManualControlRecord.for_attempt(
+        event="step",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=0,
+        step_idx=5,
+        session=ManualSessionMetadata(
+            session_id="session-1",
+            input_mapping_version="manual_keyboard_diff_drive_hold_v1",
+        ),
+        training_sample=True,
+    ).to_json_dict()
+    record["session"]["control_mode"] = "keyboard_cruise"
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manual-control session metadata mismatch"):
         load_manual_jsonl_records(path)
 
 

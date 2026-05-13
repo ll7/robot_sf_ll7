@@ -6,6 +6,7 @@ from robot_sf.manual_control.modes import (
     CONTROL_MODE_REGISTRY,
     ManualControlMode,
     ManualViewMode,
+    control_mode_for_input_mapping_version,
     ensure_supported_manual_mode,
     ensure_supported_mvp_mode,
     view_mode_spec,
@@ -48,6 +49,16 @@ def test_post_mvp_control_modes_are_registered_with_versions_and_labels():
     assert mouse.input_mapping_version == "mouse_target_diff_drive_v1"
     assert "persistent target velocity" in cruise.overlay_label
     assert "steering intent" in mouse.overlay_label
+
+
+def test_input_mapping_versions_resolve_back_to_control_modes() -> None:
+    """Recorded mapping versions should round-trip back to their owning control mode."""
+    assert (
+        control_mode_for_input_mapping_version("keyboard_cruise_diff_drive_v1")
+        == ManualControlMode.KEYBOARD_CRUISE
+    )
+    with pytest.raises(ValueError, match="unknown manual-control input mapping version"):
+        control_mode_for_input_mapping_version("joystick_arcade_v1")
 
 
 def test_ego_up_view_fails_closed_with_documented_blocker():

@@ -126,6 +126,19 @@ def control_mode_spec(mode: str | ManualControlMode) -> ManualControlModeSpec:
     return CONTROL_MODE_REGISTRY[parsed]
 
 
+def control_mode_for_input_mapping_version(input_mapping_version: str) -> ManualControlMode:
+    """Return the control mode that owns a versioned input mapping identifier."""
+    normalized = str(input_mapping_version)
+    for spec in CONTROL_MODE_REGISTRY.values():
+        if spec.input_mapping_version == normalized:
+            return spec.mode
+    raise ValueError(
+        "unknown manual-control input mapping version "
+        f"{input_mapping_version!r}; expected one of: "
+        + ", ".join(spec.input_mapping_version for spec in CONTROL_MODE_REGISTRY.values())
+    )
+
+
 def view_mode_spec(mode: str | ManualViewMode) -> ManualViewModeSpec:
     """Return registry metadata for a view mode."""
     parsed = parse_manual_view_mode(mode)

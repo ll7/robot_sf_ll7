@@ -84,6 +84,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
+    from robot_sf.gym_env.crowd_sim_env import CrowdSimEnv, CrowdSimulationConfig
 
 
 def _load_robot_env_with_image():
@@ -858,7 +859,7 @@ def make_pedestrian_env(  # noqa: PLR0913
 
 
 def make_crowd_sim_env(  # noqa: PLR0913
-    config=None,
+    config: CrowdSimulationConfig | None = None,
     *,
     seed: int | None = None,
     map_id: str | None = None,
@@ -869,7 +870,7 @@ def make_crowd_sim_env(  # noqa: PLR0913
     recording_path: str | None = None,
     video_path: str | None = None,
     video_fps: float | None = None,
-):
+) -> CrowdSimEnv:
     """Create a robot-free crowd simulation environment.
 
     The returned env exposes ``reset``/``step`` for fast pedestrian-only Social Force

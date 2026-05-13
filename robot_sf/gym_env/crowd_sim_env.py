@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -373,7 +374,8 @@ class CrowdSimEnv(gym.Env):
             path = Path(self.config.recording_path)
         else:
             stamp = time.strftime("%Y%m%d_%H%M%S")
-            path = Path(self.config.recording_dir) / f"crowd_sim_{stamp}.jsonl"
+            unique = f"{time.time_ns()}_{uuid.uuid4().hex[:8]}"
+            path = Path(self.config.recording_dir) / f"crowd_sim_{stamp}_{unique}.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         self._recording_path = path
         self._recording_file = path.open("a", encoding="utf-8")

@@ -166,7 +166,12 @@ def test_make_crowd_sim_env_seed_controls_constructor_map_selection(monkeypatch)
                 env.close()
         return ids
 
-    assert len(set(selected_map_ids(123))) == 1
+    seed_123_ids = selected_map_ids(123)
+    seed_456_ids = selected_map_ids(456)
+
+    assert len(set(seed_123_ids)) == 1
+    assert len(set(seed_456_ids)) == 1
+    assert seed_123_ids[0] != seed_456_ids[0]
 
 
 def test_crowd_sim_env_render_rgb_array_uses_lazy_view(monkeypatch):

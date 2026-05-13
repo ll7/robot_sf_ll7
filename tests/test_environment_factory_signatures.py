@@ -81,7 +81,10 @@ def test_make_crowd_sim_env_signature_explicit():
     assert "config" in params
     assert "render_mode" in params
     assert "recording_enabled" in params
+    assert "recording_dir" in params
+    assert "recording_path" in params
     assert "video_path" in params
+    assert "video_fps" in params
 
 
 def test_make_crowd_sim_env_preserves_preconfigured_values(monkeypatch, tmp_path):

@@ -149,10 +149,10 @@ class LocalObstacleFeatureExtractor:
             ``(num_query_points, 6)`` feature matrix.
         """
         lines = list(obstacle_lines)
-        return np.asarray(
-            [self._nearest_feature(point, lines).as_array() for point in query_points],
-            dtype=np.float32,
-        )
+        rows = [self._nearest_feature(point, lines).as_array() for point in query_points]
+        if not rows:
+            return np.empty((0, PREDICTIVE_OBSTACLE_FEATURE_DIM), dtype=np.float32)
+        return np.asarray(rows, dtype=np.float32)
 
     def _nearest_feature(self, query_point: Vec2D, lines: list[Line2D]) -> LocalObstacleFeature:
         """Compute nearest-line feature with deterministic tie-breaking.

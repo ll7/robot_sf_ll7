@@ -63,6 +63,16 @@ def test_obstacle_feature_many_reuses_same_schema():
     np.testing.assert_allclose(features[:, -1], [1.0, 1.0])
 
 
+def test_obstacle_feature_many_empty_input_keeps_feature_width():
+    """Empty batch extraction should preserve the fixed feature width."""
+    extractor = LocalObstacleFeatureExtractor()
+
+    features = extractor.extract_many([], [((0.0, 0.0), (2.0, 0.0))])
+
+    assert features.shape == (0, PREDICTIVE_OBSTACLE_FEATURE_DIM)
+    assert features.dtype == np.float32
+
+
 def test_obstacle_feature_tie_breaks_by_input_order():
     """Equal-distance obstacle ties should be stable by line order."""
     extractor = LocalObstacleFeatureExtractor()

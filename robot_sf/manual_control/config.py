@@ -74,9 +74,6 @@ class ManualControlRuntimeConfig:
     def to_json_dict(self) -> dict[str, str]:
         """Return a compact JSON-compatible config dictionary."""
         return {
-            "control_mode": self.control_mode.value,
-            "view_mode": self.view_mode.value,
             "robot_action_space": self.robot_action_space,
-            "input_mapping_version": self.input_mapping_version,
             **self.overlay_metadata(),
         }

@@ -114,8 +114,10 @@ class ManualControlRecord:
             session=ManualSessionMetadata(
                 session_id=str(session_payload["session_id"]),
                 input_mapping_version=str(session_payload["input_mapping_version"]),
-                control_mode=str(session_payload.get("control_mode", "keyboard_hold")),
-                view_mode=str(session_payload.get("view_mode", "fixed_map")),
+                control_mode=str(
+                    session_payload.get("control_mode", ManualControlMode.KEYBOARD_HOLD.value)
+                ),
+                view_mode=str(session_payload.get("view_mode", ManualViewMode.FIXED_MAP.value)),
                 policy_to_beat=session_payload.get("policy_to_beat"),
                 policy_to_beat_source=session_payload.get("policy_to_beat_source"),
                 extra=dict(session_payload.get("extra") or {}),

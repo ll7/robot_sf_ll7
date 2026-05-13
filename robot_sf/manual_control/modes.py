@@ -85,17 +85,6 @@ VIEW_MODE_REGISTRY: dict[ManualViewMode, ManualViewModeSpec] = {
 }
 """Versioned manual-control view mode registry."""
 
-SUPPORTED_MVP_CONTROL_MODES = tuple(
-    spec.mode for spec in CONTROL_MODE_REGISTRY.values() if spec.implemented
-)
-"""Control modes implemented in the current manual-control foundation."""
-
-SUPPORTED_MVP_VIEW_MODES = tuple(
-    spec.mode for spec in VIEW_MODE_REGISTRY.values() if spec.implemented
-)
-"""View modes implemented in the current manual-control foundation."""
-
-
 def parse_manual_control_mode(value: str | ManualControlMode) -> ManualControlMode:
     """Parse a manual-control mode identifier and fail closed for unknown values.
 

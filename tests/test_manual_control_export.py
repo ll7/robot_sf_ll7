@@ -1,7 +1,9 @@
 """Tests for manual-control demonstration export helpers."""
 
 import json
+from pathlib import Path
 
+import numpy as np
 import pytest
 
 from robot_sf.manual_control.export import (
@@ -111,7 +113,10 @@ def test_write_demonstration_samples_jsonl(tmp_path):
         [
             _record(
                 training_sample=True,
-                observation={"obs": [1.0]},
+                observation={
+                    "obs": np.array([1.0], dtype=np.float32),
+                    "artifact": Path("output/manual/demo.jsonl"),
+                },
                 mapped_action=(0.5, 0.0),
             )
         ]
@@ -123,3 +128,7 @@ def test_write_demonstration_samples_jsonl(tmp_path):
     assert written_path == path
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     assert rows == [samples[0].to_json_dict()]
+    assert rows[0]["observation"] == {
+        "obs": [1.0],
+        "artifact": "output/manual/demo.jsonl",
+    }

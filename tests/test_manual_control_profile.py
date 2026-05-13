@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from robot_sf.manual_control.profile import profile_manual_jsonl_recording
 from robot_sf.manual_control.recording import ManualControlRecord, ManualSessionMetadata
 from robot_sf.manual_control.session import AttemptKey
@@ -42,3 +44,9 @@ def test_profile_manual_jsonl_recording_reports_size_and_attempts(tmp_path):
     assert payload["profile_schema"] == "manual_control_recording_profile_v1"
     assert payload["estimated_horizon500_bytes"] > 0
     assert payload["recommendation"] == "keep_jsonl_source_of_truth"
+
+
+def test_profile_manual_jsonl_recording_rejects_directory_input(tmp_path) -> None:
+    """Recording profiling should fail closed when the input path is not a file."""
+    with pytest.raises(ValueError, match="not a file"):
+        profile_manual_jsonl_recording(tmp_path)

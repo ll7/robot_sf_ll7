@@ -1,6 +1,9 @@
 """Tests for manual-control replay helpers."""
 
 import json
+from pathlib import Path
+
+import numpy as np
 
 from robot_sf.manual_control.recording import ManualControlRecord, ManualSessionMetadata
 from robot_sf.manual_control.replay import (
@@ -75,7 +78,11 @@ def test_iter_replay_events_exposes_serializable_event_stream():
         ),
         input_keys=["w"],
         mapped_action=(0.5, 0.0),
-        metrics={"success": False},
+        metrics={
+            "success": np.bool_(False),
+            "trajectory": np.array([1.0, 2.0], dtype=np.float32),
+            "artifact": Path("output/manual/replay.json"),
+        },
         training_sample=True,
     )
     replay = group_records_by_attempt([record])[0]
@@ -85,6 +92,11 @@ def test_iter_replay_events_exposes_serializable_event_stream():
     assert events[0].to_json_dict()["session_id"] == "session-1"
     assert events[0].to_json_dict()["mapped_action"] == [0.5, 0.0]
     assert events[0].to_json_dict()["training_sample"] is True
+    assert events[0].to_json_dict()["metrics"] == {
+        "success": False,
+        "trajectory": [1.0, 2.0],
+        "artifact": "output/manual/replay.json",
+    }
 
 
 def test_write_attempt_replay_json_writes_grouped_attempts(tmp_path):

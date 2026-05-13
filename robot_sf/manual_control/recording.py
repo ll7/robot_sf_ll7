@@ -85,7 +85,7 @@ class ManualControlRecord:
         dict[str, Any]
             Serializable manual-control record.
         """
-        payload = asdict(self)
+        payload = _json_compatible(asdict(self))
         payload["record_schema"] = "manual_control_v1"
         return payload
 
@@ -104,6 +104,13 @@ class ManualControlRecord:
         session_payload = payload.get("session")
         if not isinstance(session_payload, dict):
             raise ValueError("manual-control record is missing session metadata")
+        view_mode = str(session_payload.get("view_mode", ManualViewMode.FIXED_MAP.value))
+        allowed_view_modes = {mode.value for mode in ManualViewMode}
+        if view_mode not in allowed_view_modes:
+            raise ValueError(f"unsupported manual-control view mode: {view_mode!r}")
+        training_sample = payload.get("training_sample", False)
+        if not isinstance(training_sample, bool):
+            raise ValueError("training_sample must be a boolean")
         return cls(
             event=str(payload["event"]),
             scenario_id=str(payload["scenario_id"]),
@@ -113,7 +120,7 @@ class ManualControlRecord:
             session=ManualSessionMetadata(
                 session_id=str(session_payload["session_id"]),
                 input_mapping_version=str(session_payload["input_mapping_version"]),
-                view_mode=str(session_payload.get("view_mode", "fixed_map")),
+                view_mode=view_mode,
                 policy_to_beat=session_payload.get("policy_to_beat"),
                 policy_to_beat_source=session_payload.get("policy_to_beat_source"),
                 extra=dict(session_payload.get("extra") or {}),
@@ -126,7 +133,7 @@ class ManualControlRecord:
             ),
             observation=payload.get("observation"),
             metrics=dict(payload.get("metrics") or {}),
-            training_sample=bool(payload.get("training_sample", False)),
+            training_sample=training_sample,
         )
 
 
@@ -172,16 +179,50 @@ def load_manual_jsonl_records(path: str | Path) -> list[ManualControlRecord]:
         Parsed records in file order.
     """
     records: list[ManualControlRecord] = []
-    for line_number, line in enumerate(
-        Path(path).read_text(encoding="utf-8").splitlines(), start=1
-    ):
-        if not line.strip():
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"invalid JSON on manual-control line {line_number}") from exc
-        if not isinstance(payload, dict):
-            raise ValueError(f"manual-control line {line_number} is not a JSON object")
-        records.append(ManualControlRecord.from_json_dict(payload))
+    with Path(path).open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+                if not isinstance(payload, dict):
+                    raise ValueError("line is not a JSON object")
+                records.append(ManualControlRecord.from_json_dict(payload))
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"invalid record on manual-control line {line_number}: {exc}"
+                ) from exc
     return records
+
+
+def _json_compatible(value: Any) -> Any:
+    """Convert manual-control payload values into JSON-compatible builtins.
+
+    Returns
+    -------
+    Any
+        Equivalent builtin container or scalar value that `json.dumps` can serialize.
+    """
+    if isinstance(value, dict):
+        return {str(key): _json_compatible(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_compatible(item) for item in value]
+    if isinstance(value, Path):
+        return str(value)
+
+    tolist = getattr(value, "tolist", None)
+    if callable(tolist):
+        converted = tolist()
+        if converted is not value:
+            return _json_compatible(converted)
+
+    item = getattr(value, "item", None)
+    if callable(item):
+        try:
+            converted = item()
+        except (TypeError, ValueError):
+            converted = value
+        if converted is not value:
+            return _json_compatible(converted)
+
+    return value

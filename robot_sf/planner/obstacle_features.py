@@ -90,7 +90,7 @@ class LocalObstacleFeature:
 class LocalObstacleFeatureExtractor:
     """Extract deterministic nearest-line obstacle features."""
 
-    unavailable_distance: float = -1.0
+    unavailable_distance: float = 50.0
 
     @property
     def schema(self) -> str:
@@ -174,15 +174,14 @@ class LocalObstacleFeatureExtractor:
         best: tuple[float, int, np.ndarray, np.ndarray] | None = None
         for index, line in enumerate(lines):
             start = np.asarray(line[0], dtype=float)
-            end = np.asarray(line[1], dtype=float)
-            segment = end - start
-            length = float(np.linalg.norm(segment))
-            if length <= 0.0:
+            segment = np.asarray(line[1], dtype=float) - start
+            length_sq = float(np.dot(segment, segment))
+            if length_sq <= 0.0:
                 continue
-            projection = float(np.dot(point - start, segment) / (length * length))
+            rel_point = point - start
+            projection = float(np.dot(rel_point, segment) / length_sq)
             projection = float(np.clip(projection, 0.0, 1.0))
-            nearest = start + projection * segment
-            offset = point - nearest
+            offset = rel_point - projection * segment
             distance = float(np.linalg.norm(offset))
             candidate = (distance, index, offset, segment)
             if best is None or (distance, index) < (best[0], best[1]):

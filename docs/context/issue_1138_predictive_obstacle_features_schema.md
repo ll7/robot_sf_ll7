@@ -33,7 +33,7 @@ Semantics:
 Unavailable map/obstacle geometry uses deterministic sentinel behavior:
 
 ```text
-[-1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+[50.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 ```
 
 The unavailable distance is configurable on `LocalObstacleFeatureExtractor`.
@@ -54,6 +54,11 @@ Nearest obstacle selection is deterministic. Equal-distance ties are broken by i
 
 ## Remaining work
 
+Deferred follow-up issues:
+
+- `#1165` predictive planner: wire obstacle features through data, training, and runtime
+- `#1167` predictive planner: compare obstacle-feature baseline on same seeds
+
 - Add one shared call path in predictive data collection.
 - Extend predictive dataset files/checkpoint metadata with `obstacle_feature_schema`.
 - Update training/evaluation model input dimensions using the same schema metadata.
@@ -64,7 +69,12 @@ Nearest obstacle selection is deterministic. Equal-distance ties are broken by i
 
 ## Validation status
 
-No validation commands have been run for this partial implementation in this pass.
+Validation commands run on this branch:
+
+- `uv run pytest tests/planner/test_obstacle_features.py -q`
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
+
+Both passed for the PR branch before this note was refreshed; rerun them after any follow-up edits.
 
 ## Additional foundation: feature composition
 

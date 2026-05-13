@@ -32,8 +32,17 @@ def test_obstacle_feature_nearest_distance_normal_and_tangent():
     np.testing.assert_allclose(features, [1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
 
 
-def test_obstacle_feature_unavailable_map_uses_sentinel_mask():
-    """Missing obstacle geometry should produce sentinel distance and mask=0."""
+def test_obstacle_feature_unavailable_map_uses_default_sentinel_mask():
+    """Missing obstacle geometry should use the v1 default sentinel distance and mask=0."""
+    extractor = LocalObstacleFeatureExtractor()
+
+    features = extractor.extract((1.0, 1.0), [])
+
+    np.testing.assert_allclose(features, [50.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+def test_obstacle_feature_unavailable_map_allows_custom_sentinel_distance():
+    """Callers may override the default unavailable-distance sentinel when needed."""
     extractor = LocalObstacleFeatureExtractor(unavailable_distance=-1.0)
 
     features = extractor.extract((1.0, 1.0), [])

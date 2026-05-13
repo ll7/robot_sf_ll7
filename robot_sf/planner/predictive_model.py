@@ -15,6 +15,13 @@ import torch
 from loguru import logger
 from torch import Tensor, nn
 
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    ObstacleFeatureSchemaError,
+    infer_predictive_feature_schema,
+    validate_predictive_feature_schema_metadata,
+)
+
 
 @lru_cache(maxsize=32)
 def _log_unexpected_checkpoint_keys(signature: tuple[str, ...]) -> None:
@@ -35,6 +42,7 @@ class PredictiveModelConfig:
     hidden_dim: int = 96
     message_passing_steps: int = 2
     distance_temperature: float = 2.0
+    feature_schema_name: str = PREDICTIVE_LEGACY_FEATURE_SCHEMA
 
 
 class _MessageBlock(nn.Module):
@@ -191,14 +199,24 @@ def save_predictive_checkpoint(
     epoch: int,
     metrics: dict[str, float] | None = None,
     extra: dict[str, Any] | None = None,
+    feature_schema_metadata: dict[str, object] | None = None,
 ) -> None:
     """Persist model/optimizer/config/metrics to a checkpoint file."""
+    feature_schema = feature_schema_metadata or infer_predictive_feature_schema(
+        int(model.config.input_dim)
+    )
+    validate_predictive_feature_schema_metadata(
+        feature_schema,
+        input_dim=int(model.config.input_dim),
+        expected_schema_name=str(model.config.feature_schema_name),
+    )
     payload = {
         "config": asdict(model.config),
         "state_dict": model.state_dict(),
         "epoch": int(epoch),
         "metrics": metrics or {},
         "extra": extra or {},
+        "feature_schema": feature_schema,
     }
     if optimizer is not None:
         payload["optimizer_state_dict"] = optimizer.state_dict()
@@ -212,6 +230,8 @@ def load_predictive_checkpoint(
     path: str | Path,
     *,
     map_location: str | torch.device = "cpu",
+    expected_feature_schema_name: str | None = None,
+    expected_input_dim: int | None = None,
 ) -> tuple[PredictiveTrajectoryModel, dict[str, Any]]:
     """Load a predictive model checkpoint.
 
@@ -221,6 +241,19 @@ def load_predictive_checkpoint(
     payload = torch.load(Path(path), map_location=map_location, weights_only=True)
     config_data = payload.get("config", {})
     config = PredictiveModelConfig(**config_data)
+    feature_schema = payload.get("feature_schema")
+    if not isinstance(feature_schema, dict):
+        feature_schema = infer_predictive_feature_schema(int(config.input_dim))
+    validate_predictive_feature_schema_metadata(
+        feature_schema,
+        input_dim=int(config.input_dim),
+        expected_schema_name=expected_feature_schema_name,
+    )
+    if expected_input_dim is not None and int(expected_input_dim) != int(config.input_dim):
+        raise ObstacleFeatureSchemaError(
+            "Predictive checkpoint input_dim mismatch: "
+            f"expected {int(expected_input_dim)}, got {int(config.input_dim)}"
+        )
     model = PredictiveTrajectoryModel(config)
     state_dict = payload["state_dict"]
     load_result = model.load_state_dict(state_dict, strict=False)

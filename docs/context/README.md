@@ -348,6 +348,9 @@ why a change was made rather than a full issue execution transcript.
   milestone that links follow-up #1138 for the first deterministic obstacle-feature
   implementation slice and defines a path with proof gates before any grid/CNN or obstacle-node
   graph prototype.
+* [Issue #1165 Predictive Obstacle-Feature Lifecycle](issue_1165_predictive_obstacle_lifecycle.md)
+  records the schema/dimension contract for obstacle-feature predictive datasets, training,
+  checkpoints, and runtime loading before any same-seed performance comparison.
 * [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter` .

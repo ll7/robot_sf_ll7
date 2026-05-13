@@ -1137,7 +1137,7 @@ def _apply_observation_visibility_overrides(
         return
     if not isinstance(overrides, Mapping):
         raise ValueError("observation_visibility must be a mapping.")
-    allowed = {"enabled", "fov_degrees", "max_range_m", "static_occlusion"}
+    allowed = {"enabled", "fov_degrees", "max_range_m", "static_occlusion", "dynamic_occlusion"}
     unknown = sorted(set(overrides) - allowed)
     if unknown:
         raise ValueError(f"observation_visibility contains unknown keys: {', '.join(unknown)}.")
@@ -1171,11 +1171,20 @@ def _apply_observation_visibility_overrides(
         if "static_occlusion" in overrides
         else False
     )
+    dynamic_occlusion = (
+        _coerce_bool(
+            overrides["dynamic_occlusion"],
+            field_name="observation_visibility.dynamic_occlusion",
+        )
+        if "dynamic_occlusion" in overrides
+        else False
+    )
     config.observation_visibility = ObservationVisibilitySettings(
         enabled=enabled,
         fov_degrees=fov_degrees,
         max_range_m=max_range_m,
         static_occlusion=static_occlusion,
+        dynamic_occlusion=dynamic_occlusion,
     )
 
 

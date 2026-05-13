@@ -42,11 +42,11 @@ class BicycleDriveState:
 
     @property
     def pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
+        """Return the current 2D position.
 
 
         Returns:
-            TODO docstring.
+            The ``(x, y)`` position component of the bicycle pose.
         """
         return self.pose[0]
 

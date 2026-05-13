@@ -33,7 +33,8 @@ At the start of the audit, state:
 - issue set, such as all open issues, a label, a milestone, a Project #5 slice, or a numbered list,
 - write mode: issue edits, comments, labels, project routing, issue splits, and consolidation are
   allowed after each user decision,
-- ordering: readiness blockers first,
+- ordering: `decision-required` blockers first; if none exist, continue through all open issues by
+  Project #5 priority and look for refinements,
 - stop condition: all selected issues are ready/tracked/blocked with a reason, the user stops, or
   an optional time budget is reached.
 
@@ -48,12 +49,18 @@ Prioritize the next question by readiness impact:
 5. Stale issues whose body conflicts with current repo state.
 6. Lower-risk template cleanup and metadata normalization.
 
-Do not spend user attention on already-actionable issues until readiness blockers are exhausted.
+When no open issue has a `decision-required` label, do not stop the audit. Continue across all open
+issues, starting with the highest Project #5 priority and then the strongest issue-level priority
+signals, and look for refinements that would make the issue more executable, better scoped, less
+duplicative, or easier to validate. Do not spend user attention on already-actionable issues until
+readiness blockers are exhausted.
 
 ## Workflow
 
 1. Gather issue state
    - Inspect open issues and Project #5 items.
+   - Check for `decision-required` issues first. If none exist, build a priority-ordered open-issue
+     queue and audit it for refinement opportunities instead of stopping.
    - Run or use `scripts/tools/issue_template_audit.py` where issue body readiness is unclear.
    - Inspect linked PRs, context notes, and relevant files before asking questions that repo
      exploration can answer.

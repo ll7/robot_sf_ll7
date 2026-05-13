@@ -67,6 +67,7 @@ def test_build_robot_config_parses_observation_visibility_settings(tmp_path: Pat
                 "fov_degrees": 120,
                 "max_range_m": 8.5,
                 "static_occlusion": True,
+                "dynamic_occlusion": True,
             },
         },
         scenario_path=tmp_path / "scenario.yaml",
@@ -76,6 +77,7 @@ def test_build_robot_config_parses_observation_visibility_settings(tmp_path: Pat
     assert config.observation_visibility.fov_degrees == pytest.approx(120.0)
     assert config.observation_visibility.max_range_m == pytest.approx(8.5)
     assert config.observation_visibility.static_occlusion is True
+    assert config.observation_visibility.dynamic_occlusion is True
 
 
 def test_build_robot_config_rejects_invalid_observation_visibility(tmp_path: Path) -> None:

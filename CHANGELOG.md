@@ -7,15 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
 ### Changed
 
 * Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
-  fix-first repair loop on writable branches: proof failures are now classified as auto-fixable,
-  deferred follow-up, or handoff-only blockers; safe in-scope gaps should be repaired and
+  fix-first repair loop on writable branches: proof failures are now classified as auto-fixable
+  now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and
   revalidated before withholding `merge-ready`; and the skill index plus shared goal-loop note now
   reflect the new validation-and-reassess contract.
+
+### Added
+
+* Added the issue-1128 multi-AMV episode extension surface: `multi_amv_episode_extension(...)`
+  now emits an additive namespaced `multi_amv` block for smoke outputs, requires explicit
+  planner status, omits optional planner notes when absent, and keeps invalid single-robot or
+  empty-metric inputs fail-closed through targeted regression coverage and the documented
+  multi-AMV smoke validation path.
 
 * Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`
   support in `robot_sf/training/scenario_loader.py`, the new

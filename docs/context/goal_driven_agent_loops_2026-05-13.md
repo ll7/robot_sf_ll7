@@ -60,13 +60,13 @@ before continuing. It stops instead of guessing when an issue is blocked, ambigu
 by an open PR, or missing proof requirements.
 
 `goal-pr-review` reviews open PRs against linked issue contracts, not just CI state. When the full
-proof bar fails, the default path is fix-first if the PR branch is writable and the smallest repair
-stays inside the issue or PR contract. The loop should classify each gap as auto-fixable now,
-deferred follow-up, or handoff-only blocker; repair safe gaps on-branch; rerun targeted proof plus
-the readiness gate; then reassess `merge-ready`. It applies a dedicated `merge-ready` label only
-after the full proof bar passes: issue contract resolved, diff matches scope, checks or readiness
-proof are adequate, review threads are handled, generated artifacts are classified, and deferred
-work is captured as follow-up issues.
+proof bar fails, the loop should fix safe actionable gaps on writable PR branches before leaving a
+passive "not merge-ready" comment. Each gap should be classified as fixable now, deferred
+follow-up, or handoff-only blocker. Fixes must stay inside the issue/PR contract, be committed and
+pushed, and be validated before reassessing readiness. It applies a dedicated `merge-ready` label
+only after the full proof bar passes: issue contract resolved, diff matches scope, checks or
+readiness proof are adequate, review threads are handled, generated artifacts are classified, and
+deferred work is captured as follow-up issues.
 
 ## Deferred Scope
 

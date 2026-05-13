@@ -116,6 +116,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue 403 Grid PPO Training Runbook](./training/issue_403_grid_training.md)** - Step-by-step training for the grid+SocNav PPO expert.
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
+* **[Issue #1138 Predictive Obstacle Feature Schema](./context/issue_1138_predictive_obstacle_features_schema.md)** - Stable six-value obstacle-feature contract, sentinel behavior, and deferred lifecycle wiring for predictive planner inputs
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
 * **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Final no-promotion recommendation for the issue-708 PPO campaign family, plus the original retrain config, SLURM submission path, deterministic eval surface, and provenance record.
 * **[Issue #749 BC-Preinitialized PPO Launch Packet](./context/issue_749_bc_preinit_ppo_launch_packet.md)** - Config-first BC warm-start PPO challenger path, artifact boundary, and follow-up execution gate for the v10 fine-tune contract
@@ -170,6 +171,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Benchmark Docker Reproduction Path](./benchmark_docker_repro.md)** - Build a pinned Docker image and run the canonical small benchmark artifact smoke with one command
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Observation Visibility](./benchmark_observation_visibility.md)** - Configurable planner-facing FOV, range, and static-occlusion filtering for partial-observability experiments
+* **[Issue #1124 Dynamic Pedestrian Occlusion Contract](./context/issue_1124_dynamic_pedestrian_occlusion_contract.md)** - Opt-in planner-facing pedestrian-to-pedestrian occlusion semantics, metadata behavior, and benchmark-reporting limits
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
 * **[Planner Adapter Starter Template](./dev/planner_adapter_template.md)** - Copy-and-adapt path plus a diagnostic reference adapter for new local planner contributions
@@ -199,6 +201,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow
 * **[Multi-AMV Benchmark First Slice](./multi_amv_benchmark.md)** - Minimal multi-robot scenario surface, validation smoke, and inter-robot metric block
+* **[Issue #1128 Multi-AMV Episode Extension](./context/issue_1128_multi_amv_episode_extension.md)** - Additive episode-output block for multi-AMV smoke runs, explicit planner-status contract, and fail-closed validation notes
 * **[Real-World Trajectory Import](./real_world_trajectory_import.md)** - Narrow Stanford Drone Dataset annotation importer, normalization contract, and provenance workflow
 * **[Benchmark Visual Artifacts](./benchmark_visuals.md)** - SimulationView & synthetic video pipeline, performance metrics
 * **[Metrics Specification](./dev/issues/social-navigation-benchmark/metrics_spec.md)** - Formal definitions of benchmark metrics (includes per-pedestrian force quantiles)

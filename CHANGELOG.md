@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1110 CARLA oracle replay parity adapter surface: `compare_oracle_replay_metrics(...)`
+  and its CLI now emit conservative parity reports, reject degraded CARLA `mode` or `status`
+  fail-closed, treat non-finite numeric values as unavailable instead of serializing invalid JSON,
+  and document the adapter as a comparison boundary rather than live CARLA evidence.
+
 * Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`
   support in `robot_sf/training/scenario_loader.py`, the new
   `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` eval/training surface,

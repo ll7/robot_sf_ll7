@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -68,17 +69,22 @@ def compare_oracle_replay_metrics(
     dict[str, Any]
         Namespaced parity report with comparable, unavailable, match, or mismatch rows.
     """
-    carla_mode = str(carla_record.get("mode", carla_record.get("status", "native"))).lower()
-    if carla_mode in DEGRADED_MODES:
+    carla_mode = str(carla_record.get("mode", "native")).lower()
+    carla_status = str(carla_record.get("status", "native")).lower()
+    degraded = next(
+        (value for value in (carla_mode, carla_status) if value in DEGRADED_MODES),
+        None,
+    )
+    if degraded is not None:
         return {
             "comparison_schema": "carla_oracle_replay_parity_v1",
             "status": "unavailable",
-            "reason": f"CARLA replay mode is not native/comparable: {carla_mode}",
+            "reason": f"CARLA replay mode/status is not native/comparable: {degraded}",
             "metrics": [
                 MetricParityRow(
                     metric=name,
                     status="unavailable",
-                    reason=f"CARLA replay mode is not native/comparable: {carla_mode}",
+                    reason=f"CARLA replay mode/status is not native/comparable: {degraded}",
                 ).to_json_dict()
                 for name in metric_names
             ],
@@ -162,6 +168,6 @@ def _is_number(value: Any) -> bool:
     Returns
     -------
     bool
-        True for non-boolean ``int`` or ``float`` values.
+        True for finite, non-boolean ``int`` or ``float`` values.
     """
-    return isinstance(value, int | float) and not isinstance(value, bool)
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)

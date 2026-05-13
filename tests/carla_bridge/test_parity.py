@@ -1,5 +1,7 @@
 """Tests for CARLA oracle replay parity comparison."""
 
+import math
+
 import pytest
 
 from robot_sf.carla_bridge.parity import compare_oracle_replay_metrics
@@ -44,3 +46,29 @@ def test_compare_oracle_replay_metrics_rejects_degraded_carla_mode():
     assert report["status"] == "unavailable"
     assert "fallback" in report["reason"]
     assert report["metrics"][0]["status"] == "unavailable"
+
+
+def test_compare_oracle_replay_metrics_rejects_degraded_status_even_with_native_mode():
+    """A degraded CARLA status should fail closed even when mode still says native."""
+    report = compare_oracle_replay_metrics(
+        {"metrics": {"success": True}},
+        {"mode": "native", "status": "failed", "metrics": {"success": True}},
+        metric_names=("success",),
+    )
+
+    assert report["status"] == "unavailable"
+    assert "failed" in report["reason"]
+    assert report["metrics"][0]["reason"] == report["reason"]
+
+
+def test_compare_oracle_replay_metrics_marks_non_finite_numbers_unavailable():
+    """NaN and infinity should stay unavailable instead of becoming JSON deltas."""
+    report = compare_oracle_replay_metrics(
+        {"metrics": {"snqi": math.nan}},
+        {"metrics": {"snqi": math.inf}},
+        metric_names=("snqi",),
+    )
+
+    assert report["status"] == "unavailable"
+    assert report["metrics"][0]["status"] == "unavailable"
+    assert report["metrics"][0]["reason"] == "metric values are not numeric or boolean"

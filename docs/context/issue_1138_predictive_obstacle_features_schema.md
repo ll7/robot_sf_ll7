@@ -36,7 +36,8 @@ Unavailable map/obstacle geometry uses deterministic sentinel behavior:
 [50.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 ```
 
-The unavailable distance is configurable on `LocalObstacleFeatureExtractor`.
+The unavailable distance is configurable on `LocalObstacleFeatureExtractor` but must remain finite
+and non-negative.
 
 ## Determinism
 

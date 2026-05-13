@@ -92,6 +92,11 @@ class LocalObstacleFeatureExtractor:
 
     unavailable_distance: float = 50.0
 
+    def __post_init__(self) -> None:
+        """Validate unavailable-feature sentinel configuration."""
+        if not np.isfinite(self.unavailable_distance) or self.unavailable_distance < 0.0:
+            raise ValueError("unavailable_distance must be a finite, non-negative float")
+
     @property
     def schema(self) -> str:
         """Return the stable feature schema identifier.

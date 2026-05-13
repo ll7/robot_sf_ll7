@@ -43,11 +43,22 @@ def test_obstacle_feature_unavailable_map_uses_default_sentinel_mask():
 
 def test_obstacle_feature_unavailable_map_allows_custom_sentinel_distance():
     """Callers may override the default unavailable-distance sentinel when needed."""
-    extractor = LocalObstacleFeatureExtractor(unavailable_distance=-1.0)
+    extractor = LocalObstacleFeatureExtractor(unavailable_distance=25.0)
 
     features = extractor.extract((1.0, 1.0), [])
 
-    np.testing.assert_allclose(features, [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    np.testing.assert_allclose(features, [25.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+
+def test_obstacle_feature_unavailable_distance_must_be_finite_non_negative():
+    """Unavailable-distance sentinel values should preserve finite v1 schema semantics."""
+    for unavailable_distance in (-1.0, float("nan"), float("inf")):
+        try:
+            LocalObstacleFeatureExtractor(unavailable_distance=unavailable_distance)
+        except ValueError as exc:
+            assert "finite, non-negative" in str(exc)
+        else:  # pragma: no cover - defensive assertion style for clearer failure
+            raise AssertionError("expected ValueError")
 
 
 def test_obstacle_feature_many_reuses_same_schema():

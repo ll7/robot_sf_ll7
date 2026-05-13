@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   metadata now carries explicit planner-family support records, planner support preflight checks
   fail closed for unsupported or smoke-only planner families, and the docs index records the
   current boundary between smoke execution and real multi-robot planner support.
+* Added the issue-1153 manual-control replay/export helper surface: BC samples now carry source
+  provenance, replay/profile helpers reject directory inputs fail-closed, and replay/export JSON
+  writers preserve NumPy-backed payloads by normalizing them into JSON-safe builtins before
+  serialization.
 
 * Added the issue-1151 manual-control MVP foundation surface: append-only JSONL recording,
   fail-closed mode/session helpers, baseline comparison primitives, and BC export utilities now

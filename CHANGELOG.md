@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
+  fix-first repair loop on writable branches: proof failures are now classified as auto-fixable
+  now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and
+  revalidated before withholding `merge-ready`; and the skill index plus shared goal-loop note now
+  reflect the new validation-and-reassess contract.
+
 ### Fixed
 
 * Fixed the crowd-only Gymnasium environment contract so `CrowdSimEnv` keeps a stable
@@ -16,6 +24,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on reset events instead of repeating it on every step.
 
 ### Added
+
+* Added the issue-1168 multi-AMV planner support classification surface: multi-AMV episode
+  metadata now carries explicit planner-family support records, planner support preflight checks
+  fail closed for unsupported or smoke-only planner families, and the docs index records the
+  current boundary between smoke execution and real multi-robot planner support.
+* Added the issue-1153 manual-control replay/export helper surface: BC samples now carry source
+  provenance, replay/profile helpers reject directory inputs fail-closed, and replay/export JSON
+  writers preserve NumPy-backed payloads by normalizing them into JSON-safe builtins before
+  serialization.
+
+* Added the issue-1151 manual-control MVP foundation surface: append-only JSONL recording,
+  fail-closed mode/session helpers, baseline comparison primitives, and BC export utilities now
+  reject invalid mode values, non-finite speed multipliers, negative tolerances, and malformed
+  record payloads while keeping NumPy-backed observations serializable for recorder/export flows.
+* Added the issue-1110 CARLA oracle replay parity adapter surface: `compare_oracle_replay_metrics(...)`
+  and its CLI now emit conservative parity reports, reject degraded CARLA `mode` or `status`
+  fail-closed, treat non-finite numeric values as unavailable instead of serializing invalid JSON,
+  and document the adapter as a comparison boundary rather than live CARLA evidence.
+* Added the issue-1128 multi-AMV episode extension surface: `multi_amv_episode_extension(...)`
+  now emits an additive namespaced `multi_amv` block for smoke outputs, requires explicit
+  planner status, omits optional planner notes when absent, and keeps invalid single-robot or
+  empty-metric inputs fail-closed through targeted regression coverage and the documented
+  multi-AMV smoke validation path.
 
 * Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`
   support in `robot_sf/training/scenario_loader.py`, the new

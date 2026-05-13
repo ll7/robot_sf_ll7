@@ -78,8 +78,16 @@ knowledge, not every transient iteration detail.
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
+* Goal-driven agent loops:
+  [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Route-clearance certification: [issue_1105_route_clearance_certification.md](issue_1105_route_clearance_certification.md)
 * Negative route-clearance repair: [issue_1130_negative_route_clearance_repair.md](issue_1130_negative_route_clearance_repair.md)
+* Open-issues implementation status:
+  [open_issues_implementation_status_2026-05-12.md](open_issues_implementation_status_2026-05-12.md)
+* Open-issues maintainer-input triage:
+  [open_issues_maintainer_input_triage.md](open_issues_maintainer_input_triage.md)
+* Open-issues PR split strategy:
+  [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
@@ -166,6 +174,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.
+* [Issue #1168 Multi-AMV Planner Support Classification](issue_1168_multi_amv_planner_support.md)
+  records the current planner-family inventory, fail-closed support gate, and the boundary between
+  goal-controller smoke execution and real multi-AMV planner support.
 * [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
   records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
   importer outputs, and deferred generalization scope.
@@ -198,6 +209,13 @@ knowledge, not every transient iteration detail.
   records the full `full_matrix_h500` run for
   `hybrid_rule_v3_fast_progress_static_escape_continuous`, promotion-gate outcome, comparator
   deltas, remaining failure taxonomy, and artifact persistence boundary.
+
+## Manual Control Notes
+
+* [Issue #1154 Web-Game Data Collection Path](issue_1154_web_game_data_collection_path.md)
+  records the feasibility gate for browser/web-game manual-control collection, including schema
+  parity, consent/privacy, retention, deterministic hosted scenarios, and the narrow offline
+  compatibility-prototype boundary.
 
 ## Feature Extractor Notes
 

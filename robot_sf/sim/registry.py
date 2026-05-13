@@ -22,12 +22,12 @@ _DEFAULT_PERFORMANCE_SCORE = 1000
 
 
 def register_backend(key: str, factory: SimulatorFactory, *, override: bool = False) -> None:
-    """TODO docstring. Document this function.
+    """Register a simulator backend factory under a string key.
 
     Args:
-        key: TODO docstring.
-        factory: TODO docstring.
-        override: TODO docstring.
+        key: Backend identifier used by factory and configuration code.
+        factory: Callable that creates a simulator facade for this backend.
+        override: Replace an existing registration when ``True``.
     """
     k = key.strip()
     if not k:
@@ -44,13 +44,13 @@ def register_backend(key: str, factory: SimulatorFactory, *, override: bool = Fa
 
 
 def get_backend(key: str) -> SimulatorFactory:
-    """TODO docstring. Document this function.
+    """Return the simulator backend factory registered for ``key``.
 
     Args:
-        key: TODO docstring.
+        key: Backend identifier to resolve.
 
     Returns:
-        TODO docstring.
+        Registered simulator factory.
     """
     try:
         return _REGISTRY[key]
@@ -60,11 +60,11 @@ def get_backend(key: str) -> SimulatorFactory:
 
 
 def list_backends() -> list[str]:
-    """TODO docstring. Document this function.
+    """List registered simulator backend keys.
 
 
     Returns:
-        TODO docstring.
+        Backend keys sorted lexicographically.
     """
     return sorted(_REGISTRY.keys())
 
@@ -101,13 +101,13 @@ def select_best_backend(preferred: str | None = None) -> str:
         )
 
     def _score(name: str) -> tuple[int, str]:
-        """TODO docstring. Document this function.
+        """Return the backend preference score used for automatic selection.
 
         Args:
-            name: TODO docstring.
+            name: Registered backend key.
 
         Returns:
-            TODO docstring.
+            Tuple ordered by performance preference, then name for stable ties.
         """
         return (_BACKEND_PERFORMANCE_ORDER.get(name, _DEFAULT_PERFORMANCE_SCORE), name)
 

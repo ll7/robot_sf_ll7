@@ -8,6 +8,7 @@ observation emitted when `ObservationMode.SOCNAV_STRUCT` is enabled.
 """
 
 import os
+import re
 import sys
 import threading
 from collections.abc import Callable
@@ -3226,6 +3227,23 @@ def _sacadrl_actions() -> np.ndarray:
     return actions
 
 
+def _sacadrl_session_config(tf_module: Any, *, device: str):
+    """Build a TensorFlow session config for SA-CADRL inference.
+
+    Returns:
+        TensorFlow ConfigProto: Session configuration matching the requested device.
+    """
+    kwargs: dict[str, Any] = {
+        "allow_soft_placement": True,
+        "log_device_placement": False,
+        "gpu_options": tf_module.GPUOptions(allow_growth=True),
+    }
+    normalized_device = device.lower().replace(" ", "")
+    if re.search(r"(^|/)(device:)?cpu(?::|$)", normalized_device):
+        kwargs["device_count"] = {"GPU": 0}
+    return tf_module.ConfigProto(**kwargs)
+
+
 class _SACADRLModel:
     """Tensorflow checkpoint wrapper for GA3C-CADRL policy inference."""
 
@@ -3241,11 +3259,7 @@ class _SACADRLModel:
             with self._tf.device(device):
                 self._sess = self._tf.Session(
                     graph=self._graph,
-                    config=self._tf.ConfigProto(
-                        allow_soft_placement=True,
-                        log_device_placement=False,
-                        gpu_options=self._tf.GPUOptions(allow_growth=True),
-                    ),
+                    config=_sacadrl_session_config(self._tf, device=device),
                 )
                 saver = self._tf.train.import_meta_graph(
                     f"{checkpoint_prefix}.meta", clear_devices=True

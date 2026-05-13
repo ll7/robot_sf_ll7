@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.manual_control.recording import load_manual_jsonl_records
+from robot_sf.manual_control.recording import _json_compatible, load_manual_jsonl_records
 from robot_sf.manual_control.rewind import compute_rewind_invalidated_record_indexes
 
 if TYPE_CHECKING:
@@ -41,23 +41,25 @@ class DemonstrationSample:
         dict[str, Any]
             Serializable behavior-cloning sample.
         """
-        return {
-            "sample_schema": "manual_control_bc_v1",
-            "session_id": self.session_id,
-            "scenario_id": self.scenario_id,
-            "seed": self.seed,
-            "attempt_id": self.attempt_id,
-            "step_idx": self.step_idx,
-            "observation": self.observation,
-            "action": list(self.action),
-            "input_keys": list(self.input_keys),
-            "rewind_segment_id": self.rewind_segment_id,
-            "source": {
-                "record_schema": self.source_record_schema,
-                "record_index": self.source_record_index,
-                "path": self.source_path,
-            },
-        }
+        return _json_compatible(
+            {
+                "sample_schema": "manual_control_bc_v1",
+                "session_id": self.session_id,
+                "scenario_id": self.scenario_id,
+                "seed": self.seed,
+                "attempt_id": self.attempt_id,
+                "step_idx": self.step_idx,
+                "observation": self.observation,
+                "action": list(self.action),
+                "input_keys": list(self.input_keys),
+                "rewind_segment_id": self.rewind_segment_id,
+                "source": {
+                    "record_schema": self.source_record_schema,
+                    "record_index": self.source_record_index,
+                    "path": self.source_path,
+                },
+            }
+        )
 
 
 def export_demonstration_samples(

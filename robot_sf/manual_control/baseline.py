@@ -23,6 +23,11 @@ class BaselineMetric:
     direction: MetricDirection
     tolerance: float = 0.0
 
+    def __post_init__(self) -> None:
+        """Reject invalid tolerance values that would invert comparison semantics."""
+        if self.tolerance < 0.0:
+            raise ValueError(f"tolerance must be non-negative, got {self.tolerance}")
+
     def is_beaten_by(self, candidate_value: float) -> bool:
         """Return whether ``candidate_value`` beats this baseline metric."""
         if self.direction == MetricDirection.HIGHER_IS_BETTER:

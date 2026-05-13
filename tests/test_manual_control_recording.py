@@ -1,6 +1,10 @@
 """Tests for manual-control JSONL recording contracts."""
 
 import json
+from pathlib import Path
+
+import numpy as np
+import pytest
 
 from robot_sf.manual_control.recording import (
     ManualControlRecord,
@@ -104,6 +108,36 @@ def test_load_manual_jsonl_records_rejects_unsupported_schema(tmp_path):
         raise AssertionError("expected ValueError")
 
 
+def test_manual_control_record_serializes_numpy_values_and_paths() -> None:
+    """Manual record payloads should convert NumPy values and paths before JSON dumps."""
+    session = ManualSessionMetadata(
+        session_id="session-1",
+        input_mapping_version="manual_keyboard_diff_drive_hold_v1",
+    )
+    record = ManualControlRecord.for_attempt(
+        event="step",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=2,
+        step_idx=3,
+        session=session,
+        observation={
+            "positions": np.array([[1.0, 2.0]], dtype=np.float32),
+            "score": np.float32(0.5),
+            "artifact": Path("output/manual/demo.jsonl"),
+        },
+        metrics={"snqi": np.float64(0.75)},
+        training_sample=True,
+    )
+
+    payload = record.to_json_dict()
+    encoded = json.loads(json.dumps(payload))
+
+    assert encoded["observation"]["positions"] == [[1.0, 2.0]]
+    assert encoded["observation"]["score"] == pytest.approx(0.5)
+    assert encoded["observation"]["artifact"] == "output/manual/demo.jsonl"
+    assert encoded["metrics"]["snqi"] == pytest.approx(0.75)
+
+
 def test_manual_rewind_metadata_round_trips_in_recording_schema(tmp_path):
     """Rewind events should be explicit append-only recording records."""
     path = tmp_path / "manual.jsonl"
@@ -131,3 +165,44 @@ def test_manual_rewind_metadata_round_trips_in_recording_schema(tmp_path):
 
     assert loaded[0].event == "rewind"
     assert loaded[0].rewind == record.rewind
+
+
+def test_load_manual_jsonl_records_validates_view_mode_and_training_sample(tmp_path):
+    """Manual JSONL loading should fail closed on invalid mode and sample types."""
+    path = tmp_path / "manual.jsonl"
+    record = ManualControlRecord.for_attempt(
+        event="step",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=0,
+        step_idx=5,
+        session=ManualSessionMetadata(
+            session_id="session-1",
+            input_mapping_version="manual_keyboard_diff_drive_hold_v1",
+        ),
+        training_sample=True,
+    ).to_json_dict()
+
+    record["session"]["view_mode"] = "panorama"
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsupported manual-control view mode"):
+        load_manual_jsonl_records(path)
+
+    record["session"]["view_mode"] = "fixed_map"
+    record["training_sample"] = "false"
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="training_sample must be a boolean"):
+        load_manual_jsonl_records(path)
+
+
+def test_load_manual_jsonl_records_reports_line_number_for_invalid_payload(tmp_path):
+    """Manual JSONL loading should wrap malformed payloads with their line number."""
+    path = tmp_path / "manual.jsonl"
+    path.write_text(
+        json.dumps({"record_schema": "manual_control_v1", "session": {}}) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="manual-control line 1"):
+        load_manual_jsonl_records(path)

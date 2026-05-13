@@ -95,6 +95,8 @@ def profile_manual_jsonl_recording(path: str | Path) -> ManualRecordingProfile:
         Compact profile used to decide whether JSONL remains acceptable.
     """
     input_path = Path(path)
+    if not input_path.is_file():
+        raise ValueError(f"Input path is not a file: {input_path}")
     start = perf_counter()
     records = load_manual_jsonl_records(input_path)
     read_seconds = perf_counter() - start
@@ -114,8 +116,8 @@ def _build_profile(
     ManualRecordingProfile
         Compact recording profile.
     """
-    text = path.read_text(encoding="utf-8")
-    line_count = len(text.splitlines())
+    with path.open(encoding="utf-8") as handle:
+        line_count = sum(1 for _ in handle)
     return ManualRecordingProfile(
         source_path=str(path),
         size_bytes=path.stat().st_size,

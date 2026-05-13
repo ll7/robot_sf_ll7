@@ -80,7 +80,7 @@ def plan_replay_to_step_rewind(
     if not replay.records:
         raise ValueError("cannot rewind an empty manual-control attempt")
 
-    from_step_idx = max(record.step_idx for record in replay.records)
+    from_step_idx = replay.records[-1].step_idx
     if target_step_idx > from_step_idx:
         raise ValueError(
             f"cannot rewind from step {from_step_idx} to future step {target_step_idx}"
@@ -120,12 +120,13 @@ def compute_rewind_invalidated_record_indexes(
         if rewind_record.rewind is None:
             continue
         rewind = rewind_record.rewind
-        for record_index, record in enumerate(ordered_records[:rewind_index]):
+        for record_index in range(rewind_index):
+            record = ordered_records[record_index]
             if not record.training_sample:
                 continue
             if not _same_attempt(record, rewind_record):
                 continue
-            if rewind.to_step_idx < record.step_idx <= rewind.from_step_idx:
+            if rewind.invalidates_samples_after_step < record.step_idx <= rewind.from_step_idx:
                 invalidated.add(record_index)
     return frozenset(invalidated)
 

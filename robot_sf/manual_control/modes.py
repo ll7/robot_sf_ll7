@@ -30,11 +30,33 @@ SUPPORTED_MVP_VIEW_MODES = (ManualViewMode.FIXED_MAP,)
 
 def ensure_supported_mvp_mode(
     *,
-    control_mode: ManualControlMode,
-    view_mode: ManualViewMode,
+    control_mode: ManualControlMode | str,
+    view_mode: ManualViewMode | str,
 ) -> None:
     """Fail closed when a requested manual-control mode is not implemented yet."""
-    if control_mode not in SUPPORTED_MVP_CONTROL_MODES:
-        raise NotImplementedError(f"manual control mode is not implemented: {control_mode.value}")
-    if view_mode not in SUPPORTED_MVP_VIEW_MODES:
-        raise NotImplementedError(f"manual view mode is not implemented: {view_mode.value}")
+    try:
+        normalized_control_mode = (
+            control_mode
+            if isinstance(control_mode, ManualControlMode)
+            else ManualControlMode(control_mode)
+        )
+    except ValueError as exc:
+        raise NotImplementedError(
+            f"manual control mode is not implemented: {control_mode}"
+        ) from exc
+
+    try:
+        normalized_view_mode = (
+            view_mode if isinstance(view_mode, ManualViewMode) else ManualViewMode(view_mode)
+        )
+    except ValueError as exc:
+        raise NotImplementedError(f"manual view mode is not implemented: {view_mode}") from exc
+
+    if normalized_control_mode not in SUPPORTED_MVP_CONTROL_MODES:
+        raise NotImplementedError(
+            f"manual control mode is not implemented: {normalized_control_mode.value}"
+        )
+    if normalized_view_mode not in SUPPORTED_MVP_VIEW_MODES:
+        raise NotImplementedError(
+            f"manual view mode is not implemented: {normalized_view_mode.value}"
+        )

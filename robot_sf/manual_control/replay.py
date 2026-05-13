@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from robot_sf.manual_control.recording import _json_compatible
 from robot_sf.manual_control.session import AttemptKey
 
 if TYPE_CHECKING:
@@ -72,19 +73,23 @@ class ManualReplayEvent:
         dict[str, object]
             Serializable replay event.
         """
-        return {
-            "event": self.event,
-            "scenario_id": self.scenario_id,
-            "seed": self.seed,
-            "attempt_id": self.attempt_id,
-            "step_idx": self.step_idx,
-            "session_id": self.session_id,
-            "input_keys": list(self.input_keys),
-            "mapped_action": list(self.mapped_action) if self.mapped_action is not None else None,
-            "metrics": self.metrics,
-            "rewind": self.rewind,
-            "training_sample": self.training_sample,
-        }
+        return _json_compatible(
+            {
+                "event": self.event,
+                "scenario_id": self.scenario_id,
+                "seed": self.seed,
+                "attempt_id": self.attempt_id,
+                "step_idx": self.step_idx,
+                "session_id": self.session_id,
+                "input_keys": list(self.input_keys),
+                "mapped_action": (
+                    list(self.mapped_action) if self.mapped_action is not None else None
+                ),
+                "metrics": self.metrics,
+                "rewind": self.rewind,
+                "training_sample": self.training_sample,
+            }
+        )
 
 
 def group_records_by_attempt(records: Iterable[ManualControlRecord]) -> list[ManualAttemptReplay]:

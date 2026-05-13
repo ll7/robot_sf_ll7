@@ -4,12 +4,20 @@ from dataclasses import asdict
 
 import torch
 
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    ObstacleFeatureSchemaError,
+    predictive_feature_schema_metadata,
+    validate_predictive_feature_schema_metadata,
+)
 from robot_sf.planner.predictive_model import (
     PredictiveModelConfig,
     PredictiveTrajectoryModel,
     compute_ade_fde,
     load_predictive_checkpoint,
     masked_trajectory_loss,
+    save_predictive_checkpoint,
 )
 
 
@@ -86,3 +94,71 @@ def test_load_predictive_checkpoint_ignores_unexpected_aux_head_keys(tmp_path) -
     mask = torch.ones(2, cfg.max_agents)
     out = loaded(state, mask)
     assert out["future_positions"].shape == (2, cfg.max_agents, cfg.horizon_steps, 2)
+
+
+def test_predictive_checkpoint_records_and_validates_feature_schema(tmp_path) -> None:
+    """Checkpoint loading should fail closed when requested schema does not match metadata."""
+    cfg = PredictiveModelConfig(
+        max_agents=4,
+        horizon_steps=3,
+        input_dim=10,
+        hidden_dim=16,
+        message_passing_steps=1,
+        feature_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    )
+    model = PredictiveTrajectoryModel(cfg)
+    checkpoint = tmp_path / "predictive_obstacle.pt"
+
+    save_predictive_checkpoint(
+        checkpoint,
+        model=model,
+        optimizer=None,
+        epoch=1,
+        feature_schema_metadata=predictive_feature_schema_metadata(
+            model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+            ego_conditioning=False,
+        ),
+    )
+
+    _loaded, payload = load_predictive_checkpoint(
+        checkpoint,
+        expected_feature_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        expected_input_dim=10,
+    )
+    assert payload["feature_schema"]["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+
+    try:
+        load_predictive_checkpoint(
+            checkpoint,
+            expected_feature_schema_name="predictive_legacy_v1",
+        )
+    except ObstacleFeatureSchemaError as exc:
+        assert "Predictive feature schema mismatch" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ObstacleFeatureSchemaError")
+
+
+def test_predictive_schema_validation_rejects_legacy_name_with_ego_dimension() -> None:
+    """Legacy and ego schema names should remain tied to their exact input widths."""
+    try:
+        validate_predictive_feature_schema_metadata(
+            {
+                "name": "predictive_legacy_v1",
+                "base_schema": "predictive_legacy_v1",
+                "base_feature_dim": 4,
+                "obstacle_feature_schema": None,
+                "input_dim": 9,
+            },
+            input_dim=9,
+            expected_schema_name="predictive_legacy_v1",
+        )
+    except ObstacleFeatureSchemaError as exc:
+        assert "Predictive legacy feature dimension mismatch" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ObstacleFeatureSchemaError")
+
+    validate_predictive_feature_schema_metadata(
+        predictive_feature_schema_metadata(model_family=PREDICTIVE_EGO_FEATURE_SCHEMA),
+        input_dim=9,
+        expected_schema_name=PREDICTIVE_EGO_FEATURE_SCHEMA,
+    )

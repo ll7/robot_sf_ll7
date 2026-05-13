@@ -24,7 +24,7 @@ class RobotEnvWithImage(RobotEnv):
 
     def __init__(  # noqa: PLR0913
         self,
-        env_config: RobotEnvSettings = RobotEnvSettings(),
+        env_config: RobotEnvSettings | None = None,
         reward_func: Callable[[dict], float] = simple_reward,
         debug: bool = False,
         recording_enabled: bool = False,
@@ -59,6 +59,8 @@ class RobotEnvWithImage(RobotEnv):
             recording_seed: Optional seed stored with metadata.
             asymmetric_critic: When True, expose critic-only privileged state in observations.
         """
+        if env_config is None:
+            env_config = RobotEnvSettings()
         # Force debug mode if image observations are enabled to ensure SimulationView is created
         if env_config.use_image_obs:
             debug = True

@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   revalidated before withholding `merge-ready`; and the skill index plus shared goal-loop note now
   reflect the new validation-and-reassess contract.
 
+### Fixed
+
+* Fixed the crowd-only Gymnasium environment contract so `CrowdSimEnv` keeps a stable
+  observation-space shape across resets, `make_crowd_sim_env()` preserves preconfigured
+  config values unless callers override them explicitly, reset-time map selection no longer
+  mutates NumPy's global RNG state, and compact JSONL recordings keep static scene metadata
+  on reset events instead of repeating it on every step.
+
 ### Added
 
 * Added the issue-1185 dummy-backend smoke surface: `robot_sf/sim/backends/dummy_backend.py`
@@ -33,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fail-closed mode/session helpers, baseline comparison primitives, and BC export utilities now
   reject invalid mode values, non-finite speed multipliers, negative tolerances, and malformed
   record payloads while keeping NumPy-backed observations serializable for recorder/export flows.
+* Added the issue-1152 manual-control mode experiment surface: typed control/view mode specs,
+  cruise and mouse-target differential-drive mapper variants, runtime mode selection config, and
+  manifest/record metadata for `control_mode`, `view_mode`, and `input_mapping_version`, while
+  keeping unsupported ego-up renderer hooks fail-closed until the camera transform exists.
 * Added the issue-1110 CARLA oracle replay parity adapter surface: `compare_oracle_replay_metrics(...)`
   and its CLI now emit conservative parity reports, reject degraded CARLA `mode` or `status`
   fail-closed, treat non-finite numeric values as unavailable instead of serializing invalid JSON,

@@ -63,8 +63,11 @@ gymnasium.Env
 │   │   └── PedestrianEnv
 │   └── MultiAgentEnv (abstract)
 │       └── MultiRobotEnv
-└── SimpleRobotEnv (lightweight, separate)
 ```
+
+`SimpleRobotEnv` and `EmptyRobotEnv` were unfinished legacy prototypes and are no longer part of
+the supported environment surface. Use the factory helpers below (including
+`make_crowd_sim_env` for robot-free simulation) for supported environments.
 
 ## 🔧 Quick Start
 
@@ -73,7 +76,8 @@ gymnasium.Env
 from robot_sf.gym_env.environment_factory import (
     make_robot_env,
     make_image_robot_env,
-    make_pedestrian_env
+    make_pedestrian_env,
+    make_crowd_sim_env,
 )
 
 # Basic robot environment
@@ -84,6 +88,9 @@ env = make_image_robot_env(debug=True)
 
 # Pedestrian environment  
 env = make_pedestrian_env(robot_model=model, debug=True)
+
+# Robot-free Social Force crowd simulation
+env = make_crowd_sim_env(render_mode=None)
 ```
 
 ### Unified Configuration

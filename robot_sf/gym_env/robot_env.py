@@ -522,7 +522,7 @@ class RobotEnv(BaseEnv):
 
     def __init__(  # noqa: PLR0913
         self,
-        env_config: EnvSettings = EnvSettings(),
+        env_config: EnvSettings | None = None,
         reward_func: Callable[[dict], float] | None = None,
         debug: bool = False,
         recording_enabled: bool = False,
@@ -560,6 +560,8 @@ class RobotEnv(BaseEnv):
             asymmetric_critic: When True, add a critic-only privileged state vector to
                 observations for asymmetric actor-critic training.
         """
+        if env_config is None:
+            env_config = EnvSettings()
         self._asymmetric_critic_enabled = bool(asymmetric_critic)
         self._critic_privileged_state_key = _ASYMMETRIC_CRITIC_STATE_KEY
         super().__init__(

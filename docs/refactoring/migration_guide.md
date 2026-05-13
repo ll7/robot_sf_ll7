@@ -175,7 +175,7 @@ def test_factory_consistency():
 ### 2. Environment Files (Refactor)
 - 🔄 `robot_sf/gym_env/pedestrian_env.py` - Extend SingleAgentEnv
 - 🔄 `robot_sf/gym_env/robot_env.py` - Update to use unified config
-- 🔄 `robot_sf/gym_env/empty_robot_env.py` - Merge with RobotEnv or refactor
+- ✅ `robot_sf/gym_env/crowd_sim_env.py` - Supported crowd-only replacement for legacy EmptyRobotEnv use cases
 - 🔄 `robot_sf/gym_env/multi_robot_env.py` - Extend MultiAgentEnv
 - 🔄 `robot_sf/gym_env/robot_env_with_image.py` - Potentially merge with RobotEnv
 

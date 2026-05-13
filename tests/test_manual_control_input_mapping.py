@@ -1,10 +1,15 @@
 """Tests for pure manual-control input mapping."""
 
 from robot_sf.manual_control.input_mapping import (
+    DifferentialDriveCruiseKeyboardMapper,
     DifferentialDriveKeyboardMapper,
+    DifferentialDriveMouseTargetMapper,
     ManualKeyState,
+    ManualMouseTarget,
+    mapper_for_manual_mode,
     mapper_for_robot_config,
 )
+from robot_sf.manual_control.modes import ManualControlMode
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
@@ -78,6 +83,88 @@ def test_mapper_for_robot_config_fails_closed_for_unsupported_action_space():
         mapper_for_robot_config(BicycleDriveSettings())
     except NotImplementedError as exc:
         assert "BicycleDriveSettings" in str(exc)
+        assert "differential_drive" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected NotImplementedError")
+
+
+def test_keyboard_cruise_mapper_increments_persistent_target_velocity():
+    """Cruise mode should adjust a persistent target instead of requiring held velocity."""
+    mapper = DifferentialDriveCruiseKeyboardMapper(
+        DifferentialDriveSettings(max_linear_speed=1.0, max_angular_speed=0.5),
+        linear_step=0.4,
+        angular_step=0.25,
+    )
+
+    target = mapper.next_target_velocity(["w", "a"], current_target_velocity=(0.8, 0.4))
+    action = mapper.map_action(
+        ["w", "a"],
+        current_velocity=(0.5, 0.1),
+        current_target_velocity=(0.8, 0.4),
+    )
+
+    assert target == (1.0, 0.5)
+    assert action == (0.5, 0.4)
+
+
+def test_keyboard_cruise_mapper_brake_resets_target_velocity():
+    """Cruise brake should reset persistent target velocity to zero."""
+    mapper = DifferentialDriveCruiseKeyboardMapper()
+
+    assert mapper.next_target_velocity(["space"], current_target_velocity=(1.0, -1.0)) == (0.0, 0.0)
+    assert mapper.map_action(["space"], current_velocity=(0.25, -0.5)) == (-0.25, 0.5)
+
+
+def test_mouse_target_mapper_points_at_local_target():
+    """Mouse-target mode should convert local intent into bounded velocity deltas."""
+    mapper = DifferentialDriveMouseTargetMapper(
+        DifferentialDriveSettings(max_linear_speed=2.0, max_angular_speed=1.0),
+        linear_gain=1.0,
+        angular_gain=1.0,
+    )
+
+    action = mapper.map_action(ManualMouseTarget(x=0.0, y=2.0), current_velocity=(0.5, 0.25))
+
+    assert action == (1.5, 0.75)
+
+
+def test_mouse_target_mapper_requires_target():
+    """Mouse-target mode should fail closed when no cursor/click target is available."""
+    mapper = DifferentialDriveMouseTargetMapper()
+
+    try:
+        mapper.map_action(None)
+    except ValueError as exc:
+        assert "requires a local mouse target" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ValueError")
+
+
+def test_mapper_for_manual_mode_selects_registered_differential_mappers():
+    """Mapper factory should select each implemented differential-drive mode."""
+    settings = DifferentialDriveSettings()
+
+    assert isinstance(
+        mapper_for_manual_mode(settings, ManualControlMode.KEYBOARD_HOLD),
+        DifferentialDriveKeyboardMapper,
+    )
+    assert isinstance(
+        mapper_for_manual_mode(settings, ManualControlMode.KEYBOARD_CRUISE),
+        DifferentialDriveCruiseKeyboardMapper,
+    )
+    assert isinstance(
+        mapper_for_manual_mode(settings, ManualControlMode.MOUSE_TARGET),
+        DifferentialDriveMouseTargetMapper,
+    )
+
+
+def test_mapper_for_manual_mode_fails_closed_for_unsupported_action_space():
+    """Unsupported action spaces should name the missing mode/action-space combination."""
+    try:
+        mapper_for_manual_mode(BicycleDriveSettings(), ManualControlMode.MOUSE_TARGET)
+    except NotImplementedError as exc:
+        assert "BicycleDriveSettings" in str(exc)
+        assert "mouse_target" in str(exc)
         assert "differential_drive" in str(exc)
     else:  # pragma: no cover - defensive assertion style for clearer failure
         raise AssertionError("expected NotImplementedError")

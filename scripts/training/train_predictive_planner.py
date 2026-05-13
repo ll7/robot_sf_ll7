@@ -21,6 +21,11 @@ from torch.utils.data import DataLoader, TensorDataset
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from robot_sf.models.registry import upsert_registry_entry
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    infer_predictive_feature_schema,
+    validate_predictive_feature_schema_metadata,
+)
 from robot_sf.planner.predictive_model import (
     PredictiveModelConfig,
     PredictiveTrajectoryModel,
@@ -102,6 +107,12 @@ def parse_args() -> argparse.Namespace:
         default=Path("output/tmp/predictive_planner/training/run_latest"),
     )
     parser.add_argument("--model-id", type=str, default="predictive_rgl_v1")
+    parser.add_argument(
+        "--model-family",
+        choices=("predictive_legacy_v1", "predictive_ego_v1", PREDICTIVE_OBSTACLE_FEATURE_SCHEMA),
+        default="",
+        help="Optional expected predictive feature schema; defaults to dataset metadata.",
+    )
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=3e-4)
@@ -571,6 +582,24 @@ def _dataset_manifest_path(dataset_path: Path) -> Path:
     return dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
 
 
+def _load_feature_schema_metadata(
+    dataset_path: Path, raw: np.lib.npyio.NpzFile
+) -> dict[str, object]:
+    """Load predictive feature-schema metadata from NPZ or sibling manifest."""
+    if "feature_schema_json" in raw:
+        raw_value = raw["feature_schema_json"]
+        text = str(raw_value.item() if getattr(raw_value, "shape", ()) == () else raw_value)
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            return payload
+    manifest_path = _dataset_manifest_path(dataset_path)
+    if manifest_path.exists():
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict) and isinstance(payload.get("feature_schema"), dict):
+            return dict(payload["feature_schema"])
+    return infer_predictive_feature_schema(int(raw["state"].shape[2]))
+
+
 def _source_dataset_ids(dataset_path: Path) -> list[str]:
     """Resolve dataset provenance ids from the sibling manifest when available."""
     manifest_path = _dataset_manifest_path(dataset_path)
@@ -742,6 +771,14 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         raise ValueError("Expected state shape (N, max_agents, F) with F >= 4")
     if target.ndim != 4 or target.shape[-1] != 2:
         raise ValueError("Expected target shape (N, max_agents, horizon, 2)")
+    feature_schema = _load_feature_schema_metadata(Path(args.dataset), raw)
+    expected_schema_name = str(args.model_family).strip() or str(feature_schema.get("name", ""))
+    if expected_schema_name:
+        validate_predictive_feature_schema_metadata(
+            feature_schema,
+            input_dim=int(state.shape[2]),
+            expected_schema_name=expected_schema_name,
+        )
 
     diagnostics = _dataset_diagnostics(
         state=state,
@@ -777,6 +814,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         input_dim=int(state.shape[2]),
         hidden_dim=int(args.hidden_dim),
         message_passing_steps=int(args.message_passing_steps),
+        feature_schema_name=str(feature_schema["name"]),
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -855,7 +893,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "selection_mode": "val_loss_fallback"
                     if bool(args.select_by_proxy)
                     else "val_loss",
+                    "feature_schema": feature_schema,
                 },
+                feature_schema_metadata=feature_schema,
             )
         logger.info(
             "epoch={} train_loss={:.4f} val_loss={:.4f} val_ade={:.3f} val_fde={:.3f}",
@@ -899,7 +939,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 extra={
                     "dataset": str(args.dataset),
                     "model_id": args.model_id,
+                    "feature_schema": feature_schema,
                 },
+                feature_schema_metadata=feature_schema,
             )
             try:
                 proxy_metrics = _run_proxy_eval(checkpoint_path=epoch_ckpt, args=args, epoch=epoch)
@@ -960,7 +1002,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                         "dataset": str(args.dataset),
                         "model_id": args.model_id,
                         "selection_mode": "proxy",
+                        "feature_schema": feature_schema,
                     },
+                    feature_schema_metadata=feature_schema,
                 )
 
     if not checkpoint_path.exists():
@@ -978,7 +1022,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 "dataset": str(args.dataset),
                 "model_id": args.model_id,
                 "selection_mode": "post_train_fallback",
+                "feature_schema": feature_schema,
             },
+            feature_schema_metadata=feature_schema,
         )
 
     gates = {
@@ -1010,6 +1056,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "checkpoint": str(checkpoint_path),
         "device": str(device),
         "config": asdict(cfg),
+        "feature_schema": feature_schema,
         "best": best,
         "best_checkpoint": {
             "path": str(checkpoint_path),

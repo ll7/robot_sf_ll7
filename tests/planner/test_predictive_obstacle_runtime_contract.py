@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.planner.obstacle_features import (
     ObstacleFeatureSchemaError,
@@ -15,6 +15,9 @@ from robot_sf.planner.predictive_model import (
     save_predictive_checkpoint,
 )
 from robot_sf.planner.socnav import PredictionPlannerAdapter, SocNavPlannerConfig
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_prediction_planner_adapter_fails_closed_on_schema_mismatch(tmp_path: Path) -> None:

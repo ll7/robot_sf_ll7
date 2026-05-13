@@ -16,8 +16,8 @@ from loguru import logger
 from torch import Tensor, nn
 
 from robot_sf.planner.obstacle_features import (
-    ObstacleFeatureSchemaError,
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    ObstacleFeatureSchemaError,
     infer_predictive_feature_schema,
     validate_predictive_feature_schema_metadata,
 )

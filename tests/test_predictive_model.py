@@ -4,6 +4,11 @@ from dataclasses import asdict
 
 import torch
 
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    ObstacleFeatureSchemaError,
+    predictive_feature_schema_metadata,
+)
 from robot_sf.planner.predictive_model import (
     PredictiveModelConfig,
     PredictiveTrajectoryModel,
@@ -11,11 +16,6 @@ from robot_sf.planner.predictive_model import (
     load_predictive_checkpoint,
     masked_trajectory_loss,
     save_predictive_checkpoint,
-)
-from robot_sf.planner.obstacle_features import (
-    ObstacleFeatureSchemaError,
-    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
-    predictive_feature_schema_metadata,
 )
 
 

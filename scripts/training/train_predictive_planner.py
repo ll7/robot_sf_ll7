@@ -21,18 +21,17 @@ from torch.utils.data import DataLoader, TensorDataset
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from robot_sf.models.registry import upsert_registry_entry
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    infer_predictive_feature_schema,
+    validate_predictive_feature_schema_metadata,
+)
 from robot_sf.planner.predictive_model import (
     PredictiveModelConfig,
     PredictiveTrajectoryModel,
     compute_ade_fde,
     masked_trajectory_loss,
     save_predictive_checkpoint,
-)
-from robot_sf.planner.obstacle_features import (
-    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
-    infer_predictive_feature_schema,
-    predictive_feature_schema_metadata,
-    validate_predictive_feature_schema_metadata,
 )
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -583,7 +582,9 @@ def _dataset_manifest_path(dataset_path: Path) -> Path:
     return dataset_path.with_suffix(dataset_path.suffix + ".manifest.json")
 
 
-def _load_feature_schema_metadata(dataset_path: Path, raw: np.lib.npyio.NpzFile) -> dict[str, object]:
+def _load_feature_schema_metadata(
+    dataset_path: Path, raw: np.lib.npyio.NpzFile
+) -> dict[str, object]:
     """Load predictive feature-schema metadata from NPZ or sibling manifest."""
     if "feature_schema_json" in raw:
         raw_value = raw["feature_schema_json"]

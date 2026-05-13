@@ -16,8 +16,8 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.obstacle_features import (
-    LocalObstacleFeatureExtractor,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    LocalObstacleFeatureExtractor,
     append_obstacle_features,
     predictive_feature_schema_metadata,
 )
@@ -274,17 +274,10 @@ def _frames_to_samples(
                     target_mask[src_idx, k - 1] = 1.0
 
         if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
-            extractor = LocalObstacleFeatureExtractor()
-            obstacle_rows = np.zeros((max_agents, extractor.feature_dim), dtype=np.float32)
-            if c > 0:
-                obstacle_rows[:c] = extractor.extract_many(
-                    [tuple(point) for point in frame_t.ped_positions_world[:c]],
-                    [],
-                )
-            state = append_obstacle_features(
+            state = _append_obstacle_feature_rows(
                 state_base,
-                obstacle_rows,
-                schema_metadata=extractor.schema_metadata,
+                frame=frame_t,
+                count=c,
             )
         else:
             state = state_base
@@ -294,6 +287,33 @@ def _frames_to_samples(
         target_masks.append(target_mask)
 
     return np.stack(states), np.stack(targets), np.stack(masks), np.stack(target_masks)
+
+
+def _append_obstacle_feature_rows(
+    *,
+    state_base: np.ndarray,
+    frame: Frame,
+    count: int,
+) -> np.ndarray:
+    """Append deterministic obstacle feature rows to base predictive state.
+
+    Returns
+    -------
+    np.ndarray
+        Predictive state with the obstacle-feature schema appended.
+    """
+    extractor = LocalObstacleFeatureExtractor()
+    obstacle_rows = np.zeros((state_base.shape[0], extractor.feature_dim), dtype=np.float32)
+    if count > 0:
+        obstacle_rows[:count] = extractor.extract_many(
+            [tuple(point) for point in frame.ped_positions_world[:count]],
+            [],
+        )
+    return append_obstacle_features(
+        state_base,
+        obstacle_rows,
+        schema_metadata=extractor.schema_metadata,
+    )
 
 
 def parse_args() -> argparse.Namespace:

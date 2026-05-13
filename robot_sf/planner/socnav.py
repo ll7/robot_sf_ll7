@@ -42,6 +42,7 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
 from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
+from robot_sf.planner.obstacle_features import LocalObstacleFeatureExtractor
 from robot_sf.planner.predictive_model import (
     PredictiveTrajectoryModel,
     load_predictive_checkpoint,
@@ -3878,8 +3879,6 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 state[:count, 7] = float(goal_dir[1])
                 state[:count, 8] = goal_dist
             if expected_dim > 9:
-                from robot_sf.planner.obstacle_features import LocalObstacleFeatureExtractor
-
                 extractor = LocalObstacleFeatureExtractor()
                 obstacle_rows = extractor.extract_many(
                     [tuple(point) for point in ped_positions[:count]],

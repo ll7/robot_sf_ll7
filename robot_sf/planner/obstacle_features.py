@@ -272,7 +272,9 @@ def predictive_feature_schema_metadata(
     """
     normalized = str(model_family).strip() or PREDICTIVE_LEGACY_FEATURE_SCHEMA
     if normalized == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
-        base_dim = PREDICTIVE_EGO_FEATURE_DIM if bool(ego_conditioning) else PREDICTIVE_LEGACY_FEATURE_DIM
+        base_dim = (
+            PREDICTIVE_EGO_FEATURE_DIM if bool(ego_conditioning) else PREDICTIVE_LEGACY_FEATURE_DIM
+        )
         return {
             "name": PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
             "base_schema": PREDICTIVE_EGO_FEATURE_SCHEMA

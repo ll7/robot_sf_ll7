@@ -61,6 +61,11 @@ Then branch by task type:
 
 - `.agents/skills/`: execution-oriented skills plus repo-local context-pack skills for benchmark,
   planner, experiment, and documentation work
+- `.agents/skills/goal-issue-discovery/`, `.agents/skills/goal-issue-implementation/`, and
+  `.agents/skills/goal-pr-review/`: autonomous goal loops for issue discovery, sequential issue
+  implementation, and PR readiness review
+- `.agents/skills/issue-audit/`: user-in-the-loop open-issue refinement that asks one
+  readiness-blocking question at a time
 - `.agents/skills/autoresearch/` and `.agents/skills/auto-improvement/`: repo-local skills for
   measurable improvement loops and smaller refinement passes
 - `.agents/skills/context-map/` and `.agents/skills/what-context-needed/`: context-gathering skills

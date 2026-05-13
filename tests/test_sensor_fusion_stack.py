@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.sensor.image_sensor_fusion import ImageSensorFusion
 from robot_sf.sensor.sensor_fusion import (
     OBS_DRIVE_STATE,
     OBS_RAYS,
@@ -88,5 +89,36 @@ def test_sensor_fusion_history_is_oldest_to_newest() -> None:
             [0.1, 0.0, 0.1, 0.0, 0.0],
             [0.1, 0.0, 0.1, 0.0, 0.0],
             [0.2, 0.0, 0.2, 0.0, 0.0],
+        ],
+    )
+
+
+def test_image_sensor_fusion_first_observation_prefills_history() -> None:
+    """ImageSensorFusion should prefill temporal history on the first observation."""
+    robot_obs = spaces.Box(low=-10.0, high=10.0, shape=(2,), dtype=np.float32)
+    target_obs = spaces.Box(low=-10.0, high=10.0, shape=(3,), dtype=np.float32)
+    lidar_obs = spaces.Box(low=0.0, high=10.0, shape=(2,), dtype=np.float32)
+    timesteps = 3
+
+    _norm_space, orig_space = fused_sensor_space(timesteps, robot_obs, target_obs, lidar_obs)
+    fusion = ImageSensorFusion(
+        lidar_sensor=lambda: np.array([1.0, 1.0], dtype=np.float32),
+        robot_speed_sensor=lambda: (2.0, 0.0),
+        target_sensor=lambda: (3.0, 0.0, 0.0),
+        image_sensor=None,
+        unnormed_obs_space=orig_space,
+        use_next_goal=True,
+        use_image_obs=False,
+    )
+
+    obs = fusion.next_obs()
+
+    assert np.allclose(obs[OBS_RAYS], [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]])
+    assert np.allclose(
+        obs[OBS_DRIVE_STATE],
+        [
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
         ],
     )

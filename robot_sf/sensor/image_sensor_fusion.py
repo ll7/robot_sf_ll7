@@ -117,6 +117,12 @@ class ImageSensorFusion:
                 self.lidar_state_cache.append(sensor_data["lidar_state"])
                 if self.use_image_obs and sensor_data["image_state"] is not None:
                     self.image_state_cache.append(sensor_data["image_state"])
+            self.stacked_drive_state = np.repeat(
+                sensor_data["drive_state"][np.newaxis, :], self.cache_steps, axis=0
+            ).astype(self.stacked_drive_state.dtype, copy=False)
+            self.stacked_lidar_state = np.repeat(
+                sensor_data["lidar_state"][np.newaxis, :], self.cache_steps, axis=0
+            ).astype(self.stacked_lidar_state.dtype, copy=False)
 
     def _update_sensor_caches(self, sensor_data: dict):
         """Update sensor caches with current data."""

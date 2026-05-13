@@ -26,9 +26,9 @@ def append_history_row(stacked_state: np.ndarray, current_state: np.ndarray) -> 
         Updated stack with previous rows shifted toward index ``0`` and the current state at
         index ``-1``.
     """
-    updated = np.roll(stacked_state, -1, axis=0)
-    updated[-1] = current_state
-    return updated
+    stacked_state[:-1] = stacked_state[1:]
+    stacked_state[-1] = current_state
+    return stacked_state
 
 
 def fused_sensor_space(
@@ -255,3 +255,5 @@ class SensorFusion:
         """
         self.drive_state_cache.clear()
         self.lidar_state_cache.clear()
+        self.stacked_drive_state = np.zeros_like(self.stacked_drive_state)
+        self.stacked_lidar_state = np.zeros_like(self.stacked_lidar_state)

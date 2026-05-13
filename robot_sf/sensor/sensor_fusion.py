@@ -17,6 +17,20 @@ OBS_RAYS = "rays"
 OBS_IMAGE = "image"
 
 
+def append_history_row(stacked_state: np.ndarray, current_state: np.ndarray) -> np.ndarray:
+    """Append ``current_state`` as the newest row in an oldest-to-newest stack.
+
+    Returns
+    -------
+    np.ndarray
+        Updated stack with previous rows shifted toward index ``0`` and the current state at
+        index ``-1``.
+    """
+    updated = np.roll(stacked_state, -1, axis=0)
+    updated[-1] = current_state
+    return updated
+
+
 def fused_sensor_space(
     timesteps: int,
     robot_obs: spaces.Box,
@@ -188,10 +202,11 @@ class SensorFusion:
         -------
         Dict[str, np.ndarray]
             The next observation, consisting of the drive state and LiDAR state.
+            Stacked rows are ordered oldest-to-newest, with the current sample
+            stored at index ``-1``.
         """
         # Get the current LiDAR state
         lidar_state = self.lidar_sensor()
-        # TODO: append beginning at the end for conv feature extractor
 
         # Get the current robot speed
         speed_x, speed_rot = self.robot_speed_sensor()
@@ -220,13 +235,11 @@ class SensorFusion:
                 lidar_state[np.newaxis, :], self.cache_steps, axis=0
             )
         else:
-            # Add the current states to the caches and remove the oldest states
+            # Add current states as the newest row so temporal stacks are oldest-to-newest.
             self.drive_state_cache.append(drive_state)
             self.lidar_state_cache.append(lidar_state)
-            self.stacked_drive_state = np.roll(self.stacked_drive_state, -1, axis=0)
-            self.stacked_drive_state[-1] = drive_state
-            self.stacked_lidar_state = np.roll(self.stacked_lidar_state, -1, axis=0)
-            self.stacked_lidar_state[-1] = lidar_state
+            self.stacked_drive_state = append_history_row(self.stacked_drive_state, drive_state)
+            self.stacked_lidar_state = append_history_row(self.stacked_lidar_state, lidar_state)
 
         # Normalize the stacked states by the maximum values in the observation space
         max_drive = self.unnormed_obs_space[OBS_DRIVE_STATE].high

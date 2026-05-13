@@ -11,7 +11,12 @@ from gymnasium import spaces
 
 from robot_sf.common.types import PolarVec2D
 from robot_sf.sensor.image_sensor import ImageSensor
-from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_IMAGE, OBS_RAYS
+from robot_sf.sensor.sensor_fusion import (
+    OBS_DRIVE_STATE,
+    OBS_IMAGE,
+    OBS_RAYS,
+    append_history_row,
+)
 
 
 @dataclass
@@ -120,10 +125,12 @@ class ImageSensorFusion:
 
     def _update_stacked_states(self, sensor_data: dict):
         """Update stacked states with current sensor data."""
-        self.stacked_drive_state = np.roll(self.stacked_drive_state, -1, axis=0)
-        self.stacked_drive_state[-1] = sensor_data["drive_state"]
-        self.stacked_lidar_state = np.roll(self.stacked_lidar_state, -1, axis=0)
-        self.stacked_lidar_state[-1] = sensor_data["lidar_state"]
+        self.stacked_drive_state = append_history_row(
+            self.stacked_drive_state, sensor_data["drive_state"]
+        )
+        self.stacked_lidar_state = append_history_row(
+            self.stacked_lidar_state, sensor_data["lidar_state"]
+        )
 
     def _build_observation(self, sensor_data: dict) -> dict[str, np.ndarray]:
         """Build the final observation dictionary.

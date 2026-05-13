@@ -35,8 +35,8 @@ def _record(
     )
 
 
-def test_group_records_by_attempt_orders_attempts_and_steps():
-    """Replay grouping should preserve attempt identity and sort records by step."""
+def test_group_records_by_attempt_orders_attempts_and_preserves_stream_order():
+    """Replay grouping should preserve attempt identity and source-stream order."""
     records = [
         _record("scenario-b", 1, 0, 2),
         _record("scenario-a", 1, 1, 3),
@@ -49,11 +49,11 @@ def test_group_records_by_attempt_orders_attempts_and_steps():
         ("scenario-a", 1, 1),
         ("scenario-b", 1, 0),
     ]
-    assert [record.step_idx for record in replays[0].records] == [1, 3]
+    assert [record.step_idx for record in replays[0].records] == [3, 1]
 
 
-def test_group_records_by_attempt_preserves_file_order_within_same_step():
-    """Same-step events should keep original stream order for deterministic replay."""
+def test_group_records_by_attempt_preserves_later_low_step_events():
+    """Replay should not reorder later stream events that carry earlier step indexes."""
     records = [
         _record("scenario-a", 1, 0, 2, event="input"),
         _record("scenario-a", 1, 0, 2, event="step"),
@@ -62,7 +62,7 @@ def test_group_records_by_attempt_preserves_file_order_within_same_step():
 
     replays = group_records_by_attempt(records)
 
-    assert [record.event for record in replays[0].records] == ["countdown", "input", "step"]
+    assert [record.event for record in replays[0].records] == ["input", "step", "countdown"]
 
 
 def test_iter_replay_events_exposes_serializable_event_stream():

@@ -37,6 +37,11 @@ from robot_sf_carla_bridge.export import (
     write_export_payload,
     write_export_records,
 )
+from robot_sf_carla_bridge.parity import (
+    DEFAULT_PARITY_METRICS,
+    MetricParityRow,
+    compare_oracle_replay_metrics,
+)
 from robot_sf_carla_bridge.replay_smoke import (
     T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION,
     build_t1_oracle_replay_smoke_setup,
@@ -52,12 +57,14 @@ from robot_sf_carla_bridge.schema_catalog import (
 __all__ = [
     "AVAILABILITY_SCHEMA_VERSION",
     "BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION",
+    "DEFAULT_PARITY_METRICS",
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
     "SCHEMA_CATALOG_VERSION",
     "T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION",
     "CarlaUnavailableError",
     "CertificateRef",
+    "MetricParityRow",
     "PedestrianReplaySpec",
     "Pose2D",
     "RobotReplaySpec",
@@ -70,6 +77,7 @@ __all__ = [
     "build_export_payloads_from_scenario_file",
     "build_t1_oracle_replay_smoke_setup",
     "check_carla_availability",
+    "compare_oracle_replay_metrics",
     "list_carla_bridge_schema_catalog",
     "load_availability_schema",
     "load_batch_validation_summary_schema",

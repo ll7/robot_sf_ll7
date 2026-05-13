@@ -653,8 +653,9 @@ class SimulationView:
         self.is_abortion_requested = True
         if self.record_video and self.frames and MOVIEPY_AVAILABLE and self.video_path:
             logger.debug("Writing video file.")
-            clip = ImageSequenceClip(self.frames, fps=self._effective_video_fps())
-            clip.write_videofile(self.video_path)
+            resolved_fps = self._effective_video_fps()
+            clip = ImageSequenceClip(self.frames, fps=resolved_fps)
+            clip.write_videofile(self.video_path, fps=resolved_fps)
             self.frames = []
         elif self.record_video and self.frames and MOVIEPY_AVAILABLE and not self.video_path:
             logger.warning(

@@ -165,10 +165,11 @@ def test_sim_view_video_encoding_uses_render_target_when_fps_unset(monkeypatch, 
 
         def __init__(self, frames, *, fps):
             self.frames = frames
-            captured["fps"] = fps
+            captured["clip_fps"] = fps
 
-        def write_videofile(self, path):
+        def write_videofile(self, path, **kwargs):
             captured["path"] = path
+            captured["write_kwargs"] = kwargs
 
     monkeypatch.setattr(sim_view_mod, "MOVIEPY_AVAILABLE", True)
     monkeypatch.setattr(sim_view_mod, "ImageSequenceClip", DummyClip)
@@ -186,8 +187,9 @@ def test_sim_view_video_encoding_uses_render_target_when_fps_unset(monkeypatch, 
     view.render(_make_state(), target_fps=24)
     view._handle_quit()
 
-    assert captured["fps"] == 24.0
+    assert captured["clip_fps"] == 24.0
     assert captured["path"] == str(video_path)
+    assert captured["write_kwargs"]["fps"] == 24.0
 
 
 def test_sim_view_video_encoding_prefers_explicit_video_fps(monkeypatch, tmp_path) -> None:
@@ -199,10 +201,11 @@ def test_sim_view_video_encoding_prefers_explicit_video_fps(monkeypatch, tmp_pat
 
         def __init__(self, frames, *, fps):
             self.frames = frames
-            captured["fps"] = fps
+            captured["clip_fps"] = fps
 
-        def write_videofile(self, path):
+        def write_videofile(self, path, **kwargs):
             captured["path"] = path
+            captured["write_kwargs"] = kwargs
 
     monkeypatch.setattr(sim_view_mod, "MOVIEPY_AVAILABLE", True)
     monkeypatch.setattr(sim_view_mod, "ImageSequenceClip", DummyClip)
@@ -220,8 +223,9 @@ def test_sim_view_video_encoding_prefers_explicit_video_fps(monkeypatch, tmp_pat
     view.render(_make_state(), target_fps=24)
     view._handle_quit()
 
-    assert captured["fps"] == 12.0
+    assert captured["clip_fps"] == 12.0
     assert captured["path"] == str(video_path)
+    assert captured["write_kwargs"]["fps"] == 12.0
 
 
 def test_sim_view_occupancy_grid_error_and_rotation_paths(monkeypatch) -> None:

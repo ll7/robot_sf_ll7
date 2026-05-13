@@ -61,6 +61,13 @@ Each command runs headless and finishes in under two minutes. The sequence
 introduces factory-based environment creation, benchmark automation, and map
 customization without requiring additional assets beyond the repository.
 
+### Reusable Helper Catalog
+
+Many examples are intentionally thin wrappers around reusable helpers. Before
+copying setup, policy-loading, recording, or output-directory code into a new
+example, check the [helper catalog](../docs/dev/helper_catalog.md) for the
+canonical helper surface and expected usage pattern.
+
 """
 
 

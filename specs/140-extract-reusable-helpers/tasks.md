@@ -34,8 +34,8 @@
 - [X] T022 Refactor `scripts/benchmark_repro_check.py` and `scripts/benchmark_workers.py` to consume helper catalog APIs, updating worker interfaces as needed.
 
 ## Phase 3.5: Polish
-- [ ] T023 Add helper catalog documentation page at `docs/dev/helper_catalog.md` and link it from `docs/README.md` and any relevant section indices via `register_helper` automation.
-- [ ] T024 Update `examples/README.md` (and per-example docstrings where applicable) to reference the helper catalog and quickstart usage.
+- [X] T023 Add helper catalog documentation page at `docs/dev/helper_catalog.md` and link it from `docs/README.md`; document `register_helper` as the helper-specific automation path.
+- [X] T024 Update `examples/README.md` (and per-example docstrings where applicable) to reference the helper catalog and quickstart usage.
 - [ ] T025 Record helper-to-orchestrator mappings and regression commands in `specs/140-extract-reusable-helpers/helper_inventory.yaml` and `regression_checks.yaml`, confirming they reflect post-refactor state (update from setup placeholders).
 - [X] T026 Update `CHANGELOG.md` with a summary of the helper consolidation feature (public helper surface + example/script refactors).
 - [X] T027 Run formatting and linting (`uv run ruff check --fix .` followed by `uv run ruff check .`) to ensure style compliance.

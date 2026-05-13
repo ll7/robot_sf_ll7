@@ -52,11 +52,11 @@ class BaseMetricsCallback(BaseCallback):
 
     # Define an abstract method for _on_step() if needed
     def _on_step(self) -> bool:
-        """TODO docstring. Document this function.
+        """Process one callback step in concrete metric loggers.
 
 
         Returns:
-            TODO docstring.
+            True to continue training, False to request early stopping.
         """
         raise NotImplementedError
 

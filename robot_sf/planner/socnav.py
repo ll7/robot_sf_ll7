@@ -8,6 +8,7 @@ observation emitted when `ObservationMode.SOCNAV_STRUCT` is enabled.
 """
 
 import os
+import re
 import sys
 import threading
 from collections.abc import Callable
@@ -42,6 +43,11 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
 from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    LocalObstacleFeatureExtractor,
+    infer_predictive_feature_schema,
+)
 from robot_sf.planner.predictive_model import (
     PredictiveTrajectoryModel,
     load_predictive_checkpoint,
@@ -457,6 +463,7 @@ class SocNavPlannerConfig:
     predictive_model_id: str = _PREDICTIVE_MODEL_ID
     predictive_checkpoint_path: str | None = None
     predictive_device: str = "cpu"
+    predictive_feature_schema_name: str = "predictive_legacy_v1"
     predictive_max_agents: int = 16
     predictive_horizon_steps: int = 8
     predictive_ego_conditioning: bool = False
@@ -3226,6 +3233,23 @@ def _sacadrl_actions() -> np.ndarray:
     return actions
 
 
+def _sacadrl_session_config(tf_module: Any, *, device: str):
+    """Build a TensorFlow session config for SA-CADRL inference.
+
+    Returns:
+        TensorFlow ConfigProto: Session configuration matching the requested device.
+    """
+    kwargs: dict[str, Any] = {
+        "allow_soft_placement": True,
+        "log_device_placement": False,
+        "gpu_options": tf_module.GPUOptions(allow_growth=True),
+    }
+    normalized_device = device.lower().replace(" ", "")
+    if re.search(r"(^|/)(device:)?cpu(?::|$)", normalized_device):
+        kwargs["device_count"] = {"GPU": 0}
+    return tf_module.ConfigProto(**kwargs)
+
+
 class _SACADRLModel:
     """Tensorflow checkpoint wrapper for GA3C-CADRL policy inference."""
 
@@ -3241,11 +3265,7 @@ class _SACADRLModel:
             with self._tf.device(device):
                 self._sess = self._tf.Session(
                     graph=self._graph,
-                    config=self._tf.ConfigProto(
-                        allow_soft_placement=True,
-                        log_device_placement=False,
-                        gpu_options=self._tf.GPUOptions(allow_growth=True),
-                    ),
+                    config=_sacadrl_session_config(self._tf, device=device),
                 )
                 saver = self._tf.train.import_meta_graph(
                     f"{checkpoint_prefix}.meta", clear_devices=True
@@ -3758,7 +3778,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 "PyTorch is required for PredictionPlannerAdapter. Install torch dependency."
             )
         checkpoint_path = self._resolve_checkpoint_path()
-        model, _payload = load_predictive_checkpoint(checkpoint_path, map_location=self._device)
+        model, _payload = load_predictive_checkpoint(
+            checkpoint_path,
+            map_location=self._device,
+            expected_feature_schema_name=str(self.config.predictive_feature_schema_name),
+        )
         model.to(self._device)
         model.eval()
         return model
@@ -3843,6 +3867,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         model = self._ensure_model()
         if model is not None:
             expected_dim = int(getattr(model.config, "input_dim", expected_dim))
+        schema_metadata = infer_predictive_feature_schema(expected_dim)
+        base_feature_dim = int(schema_metadata["base_feature_dim"])
         state = np.zeros((max_agents, expected_dim), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
         count = min(max_agents, ped_positions.shape[0])
@@ -3855,7 +3881,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             state[:count, 0] = rel_x
             state[:count, 1] = rel_y
             state[:count, 2:4] = ped_velocities_ego[:count]
-            if expected_dim >= 9:
+            if base_feature_dim >= 9:
                 goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
                 goal_rel_world = goal_current - robot_pos
                 goal_rel = np.array(
@@ -3872,6 +3898,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 state[:count, 6] = float(goal_dir[0])
                 state[:count, 7] = float(goal_dir[1])
                 state[:count, 8] = goal_dist
+            if schema_metadata["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+                extractor = LocalObstacleFeatureExtractor()
+                obstacle_rows = extractor.extract_many(
+                    [tuple(point) for point in ped_positions[:count]],
+                    [],
+                )
+                end = min(expected_dim, base_feature_dim + extractor.feature_dim)
+                state[:count, base_feature_dim:end] = obstacle_rows[:, : end - base_feature_dim]
             mask[:count] = 1.0
         return state, mask, robot_pos, robot_heading
 

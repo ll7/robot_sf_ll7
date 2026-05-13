@@ -426,6 +426,9 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
   - For the repository's cross-agent compatibility stance and the retrieval → planning → execution
     → verification discipline mapped to repo-local skills, see
     `docs/context/issue_728_coding_agents_compatibility.md`.
+  - For autonomous goal-loop skills around issue discovery, issue implementation, PR review, and
+    user-in-the-loop issue audit, see
+    `docs/context/goal_driven_agent_loops_2026-05-13.md`.
 - Clarify exact requirements before starting implementation.
 - If necessary, ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
   - Discuss possible options and trade-offs.

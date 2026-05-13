@@ -98,7 +98,8 @@ def group_records_by_attempt(records: Iterable[ManualControlRecord]) -> list[Man
     Returns
     -------
     list[ManualAttemptReplay]
-        Attempt replays sorted by scenario, seed, and attempt id.
+        Attempt replays sorted by scenario, seed, and attempt id. Records within each
+        attempt preserve source-stream order.
     """
     grouped: dict[tuple[str, int, int], list[tuple[int, ManualControlRecord]]] = defaultdict(list)
     for record_index, record in enumerate(records):
@@ -106,10 +107,7 @@ def group_records_by_attempt(records: Iterable[ManualControlRecord]) -> list[Man
 
     replays: list[ManualAttemptReplay] = []
     for (scenario_id, seed, attempt_id), indexed_records in sorted(grouped.items()):
-        ordered = tuple(
-            record
-            for _, record in sorted(indexed_records, key=lambda item: (item[1].step_idx, item[0]))
-        )
+        ordered = tuple(record for _, record in indexed_records)
         replays.append(
             ManualAttemptReplay(
                 key=AttemptKey(scenario_id=scenario_id, seed=seed),

@@ -6,6 +6,10 @@ read the specific `SKILL.md` before applying a skill.
 ## Selection Guide
 
 - Not sure which skill applies: `skill-picker`
+- Discover and open improvement issues autonomously: `goal-issue-discovery`
+- Audit open issues with one user decision at a time: `issue-audit`
+- Implement eligible issue queues sequentially: `goal-issue-implementation`
+- Review open PRs, fix safe actionable gaps, and apply merge-ready after proof: `goal-pr-review`
 - Implement an issue end-to-end: `gh-issue-autopilot`
 - Sequence Project #5 issue batches: `gh-issue-sequencer`
 - Address PR review comments: `gh-pr-comment-fixer`
@@ -30,6 +34,8 @@ read the specific `SKILL.md` before applying a skill.
   can include benchmark checks but starts from branch claims and evidence.
 - `context-map` discovers the relevant surface before work; `skill-picker` chooses which skill to
   use when routing is unclear.
+- Goal-loop skills are orchestration layers. They should reuse the narrower `gh-*`,
+  verification, and context-note skills instead of duplicating their procedures.
 
 ## GitHub Skill Policy
 
@@ -63,6 +69,9 @@ read the specific `SKILL.md` before applying a skill.
 | `context-map` | Building a focused map of relevant files, docs, commands, and risks before multi-file work. |
 | `context-note-maintainer` | Creating or refreshing linked `docs/context/` notes so reusable agent knowledge stays discoverable and current. |
 | `experiment-context` | Finding canonical config-first training/evaluation paths, artifact lineage, and validation gates. |
+| `goal-issue-discovery` | Autonomously finding evidence-graded improvement opportunities and creating detailed GitHub issues. |
+| `goal-issue-implementation` | Sequentially implementing eligible open issues through branch, validation, push, and PR creation. |
+| `goal-pr-review` | Reviewing open PRs against linked issue contracts, fixing safe actionable gaps on writable branches, and applying `merge-ready` after full proof. |
 | `gh-issue-autopilot` | Selecting or executing an issue through implementation, validation, push, and draft PR. |
 | `gh-issue-clarifier` | Tightening ambiguous GitHub issues and marking decision-required items when needed. |
 | `gh-issue-creator` | Creating structured GitHub issues from rough prompts with repo template conventions. |
@@ -72,6 +81,7 @@ read the specific `SKILL.md` before applying a skill.
 | `gh-pr-comment-fixer` | Fetching PR review comments, implementing fixes, validating, pushing, and resolving threads. |
 | `gh-pr-opener` | Opening Robot SF PRs with issue-scope verification and PR-readiness freshness checks. |
 | `implementation-verification` | Comparing the current branch to `origin/main` and proving each claimed feature works as designed. |
+| `issue-audit` | Refining open issues with one user-facing readiness question at a time, then updating issue/project state. |
 | `paper-facing-docs` | Drafting or reviewing benchmark/manuscript-support docs with conservative provenance handling. |
 | `planner-integration` | Assessing planner-family adapter burden, provenance safety, and benchmark readiness. |
 | `pr-ready-check` | Running the standard PR readiness pipeline through shared `scripts/dev` entry points. |

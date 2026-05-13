@@ -86,8 +86,12 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
+* **[Open-Issues Implementation Status](./context/open_issues_implementation_status_2026-05-12.md)** - Handoff record for the May 2026 open-issues pass, including implemented slices, blocked items, and remaining follow-up surface
+* **[Open-Issues Maintainer Input Triage](./context/open_issues_maintainer_input_triage.md)** - Consolidated maintainer-decision inventory for open issues that still need scope, contract, or prioritization guidance
+* **[Open-Issues PR Split Strategy](./context/open_issues_pr_split_strategy_2026-05-13.md)** - PR packaging strategy and validation grouping for the open-issues implementation pass
 * **[Project Prioritization](./project_prioritization.md)** - Priority-score model, Project #5 field semantics, and the local/manual score-sync workflow
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
+* **[Goal-Driven Agent Loops](./context/goal_driven_agent_loops_2026-05-13.md)** - Shared contract for autonomous issue discovery, issue implementation, PR review, and user-in-the-loop issue audit skills
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
@@ -117,6 +121,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue 403 Grid PPO Training Runbook](./training/issue_403_grid_training.md)** - Step-by-step training for the grid+SocNav PPO expert.
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
+* **[Issue #1138 Predictive Obstacle Feature Schema](./context/issue_1138_predictive_obstacle_features_schema.md)** - Stable six-value obstacle-feature contract, sentinel behavior, and deferred lifecycle wiring for predictive planner inputs
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
 * **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Final no-promotion recommendation for the issue-708 PPO campaign family, plus the original retrain config, SLURM submission path, deterministic eval surface, and provenance record.
 * **[Issue #749 BC-Preinitialized PPO Launch Packet](./context/issue_749_bc_preinit_ppo_launch_packet.md)** - Config-first BC warm-start PPO challenger path, artifact boundary, and follow-up execution gate for the v10 fine-tune contract
@@ -171,6 +176,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Benchmark Docker Reproduction Path](./benchmark_docker_repro.md)** - Build a pinned Docker image and run the canonical small benchmark artifact smoke with one command
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Observation Visibility](./benchmark_observation_visibility.md)** - Configurable planner-facing FOV, range, and static-occlusion filtering for partial-observability experiments
+* **[Issue #1124 Dynamic Pedestrian Occlusion Contract](./context/issue_1124_dynamic_pedestrian_occlusion_contract.md)** - Opt-in planner-facing pedestrian-to-pedestrian occlusion semantics, metadata behavior, and benchmark-reporting limits
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
 * **[Planner Adapter Starter Template](./dev/planner_adapter_template.md)** - Copy-and-adapt path plus a diagnostic reference adapter for new local planner contributions
@@ -194,12 +200,15 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Benchmark Mechanism Roadmap Plan (2026-05-07)](./superpowers/plans/2026-05-07-benchmark-mechanism-roadmap.md)** - Agent-executable plan for the trace-backed h500 mechanism pilot, deferred planner-improvement capture, and deferred CARLA-transfer capture
 * **[Goal Sequence Spec (2026-05-07)](./superpowers/specs/2026-05-07_goal_sequence.md)** - Issue sequencing rationale that keeps paper evidence first, h500 mechanism interpretation next, and deferred strategic alternatives explicit
 * **[Issue #872 CARLA Oracle Replay Bridge Status](./context/issue_872_carla_oracle_replay_bridge_status.md)** - Parent-epic status for the CARLA bridge, current T0/T1 claim boundaries, and live replay / metric-parity follow-up issues
+* **[Issue #1110 CARLA Oracle Replay Parity Adapter](./context/issue_1110_carla_oracle_replay_parity_adapter.md)** - Conservative metric-parity report format, fail-closed degraded-mode handling, and CLI validation boundary before live CARLA evidence exists
 * **[Camera-Ready All-Planners SLURM Check (2026-05-04)](./context/camera_ready_all_planners_slurm_2026-05-04.md)** - Failed `rsf-allbench` job, partial all-planners evidence, asset blocker, and rerun boundary
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow
 * **[Multi-AMV Benchmark First Slice](./multi_amv_benchmark.md)** - Minimal multi-robot scenario surface, validation smoke, and inter-robot metric block
+* **[Issue #1128 Multi-AMV Episode Extension](./context/issue_1128_multi_amv_episode_extension.md)** - Additive episode-output block for multi-AMV smoke runs, explicit planner-status contract, and fail-closed validation notes
+* **[Issue #1168 Multi-AMV Planner Support Classification](./context/issue_1168_multi_amv_planner_support.md)** - Planner-family support inventory, fail-closed multi-AMV preflight gate, and the boundary between smoke control and real multi-robot planner support
 * **[Real-World Trajectory Import](./real_world_trajectory_import.md)** - Narrow Stanford Drone Dataset annotation importer, normalization contract, and provenance workflow
 * **[Benchmark Visual Artifacts](./benchmark_visuals.md)** - SimulationView & synthetic video pipeline, performance metrics
 * **[Metrics Specification](./dev/issues/social-navigation-benchmark/metrics_spec.md)** - Formal definitions of benchmark metrics (includes per-pedestrian force quantiles)

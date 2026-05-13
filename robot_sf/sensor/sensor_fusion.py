@@ -11,6 +11,11 @@ import numpy as np
 from gymnasium import spaces
 
 from robot_sf.common.types import PolarVec2D
+from robot_sf.sensor.history_stack import (
+    append_history_row,
+    fill_history_stack,
+    reset_history_stack,
+)
 
 OBS_DRIVE_STATE = "drive_state"
 OBS_RAYS = "rays"
@@ -188,10 +193,11 @@ class SensorFusion:
         -------
         Dict[str, np.ndarray]
             The next observation, consisting of the drive state and LiDAR state.
+            Stacked rows are ordered oldest-to-newest, with the current sample
+            stored at index ``-1``.
         """
         # Get the current LiDAR state
         lidar_state = self.lidar_sensor()
-        # TODO: append beginning at the end for conv feature extractor
 
         # Get the current robot speed
         speed_x, speed_rot = self.robot_speed_sensor()
@@ -213,20 +219,14 @@ class SensorFusion:
             for _ in range(self.cache_steps):
                 self.drive_state_cache.append(drive_state)
                 self.lidar_state_cache.append(lidar_state)
-            self.stacked_drive_state = np.repeat(
-                drive_state[np.newaxis, :], self.cache_steps, axis=0
-            )
-            self.stacked_lidar_state = np.repeat(
-                lidar_state[np.newaxis, :], self.cache_steps, axis=0
-            )
+            self.stacked_drive_state = fill_history_stack(self.stacked_drive_state, drive_state)
+            self.stacked_lidar_state = fill_history_stack(self.stacked_lidar_state, lidar_state)
         else:
-            # Add the current states to the caches and remove the oldest states
+            # Add current states as the newest row so temporal stacks are oldest-to-newest.
             self.drive_state_cache.append(drive_state)
             self.lidar_state_cache.append(lidar_state)
-            self.stacked_drive_state = np.roll(self.stacked_drive_state, -1, axis=0)
-            self.stacked_drive_state[-1] = drive_state
-            self.stacked_lidar_state = np.roll(self.stacked_lidar_state, -1, axis=0)
-            self.stacked_lidar_state[-1] = lidar_state
+            self.stacked_drive_state = append_history_row(self.stacked_drive_state, drive_state)
+            self.stacked_lidar_state = append_history_row(self.stacked_lidar_state, lidar_state)
 
         # Normalize the stacked states by the maximum values in the observation space
         max_drive = self.unnormed_obs_space[OBS_DRIVE_STATE].high
@@ -242,3 +242,5 @@ class SensorFusion:
         """
         self.drive_state_cache.clear()
         self.lidar_state_cache.clear()
+        self.stacked_drive_state = reset_history_stack(self.stacked_drive_state)
+        self.stacked_lidar_state = reset_history_stack(self.stacked_lidar_state)

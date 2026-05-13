@@ -13,8 +13,12 @@ from robot_sf.manual_control.export import (
     write_demonstration_samples_jsonl,
 )
 from robot_sf.manual_control.input_mapping import (
+    DifferentialDriveCruiseKeyboardMapper,
     DifferentialDriveKeyboardMapper,
+    DifferentialDriveMouseTargetMapper,
     ManualKeyState,
+    ManualMouseTarget,
+    mapper_for_manual_mode,
     mapper_for_robot_config,
 )
 from robot_sf.manual_control.manifest import (
@@ -22,9 +26,18 @@ from robot_sf.manual_control.manifest import (
     write_manual_session_manifest,
 )
 from robot_sf.manual_control.modes import (
+    CONTROL_MODE_REGISTRY,
+    VIEW_MODE_REGISTRY,
     ManualControlMode,
+    ManualControlModeSpec,
     ManualViewMode,
+    ManualViewModeSpec,
+    control_mode_spec,
+    ensure_supported_manual_mode,
     ensure_supported_mvp_mode,
+    parse_manual_control_mode,
+    parse_manual_view_mode,
+    view_mode_spec,
 )
 from robot_sf.manual_control.profile import ManualRecordingProfile, profile_manual_jsonl_recording
 from robot_sf.manual_control.recording import (
@@ -54,17 +67,23 @@ from robot_sf.manual_control.session import (
 )
 
 __all__ = [
+    "CONTROL_MODE_REGISTRY",
+    "VIEW_MODE_REGISTRY",
     "AttemptKey",
     "AttemptProgress",
     "BaselineComparison",
     "BaselineMetric",
     "DemonstrationSample",
+    "DifferentialDriveCruiseKeyboardMapper",
     "DifferentialDriveKeyboardMapper",
+    "DifferentialDriveMouseTargetMapper",
     "ManualAttemptReplay",
     "ManualControlMode",
+    "ManualControlModeSpec",
     "ManualControlRecord",
     "ManualJsonlRecorder",
     "ManualKeyState",
+    "ManualMouseTarget",
     "ManualRecordingProfile",
     "ManualReplayEvent",
     "ManualRewindMetadata",
@@ -74,18 +93,25 @@ __all__ = [
     "ManualSessionMetadata",
     "ManualSessionState",
     "ManualViewMode",
+    "ManualViewModeSpec",
     "MetricDirection",
     "PolicyBaseline",
     "compute_rewind_invalidated_record_indexes",
+    "control_mode_spec",
+    "ensure_supported_manual_mode",
     "ensure_supported_mvp_mode",
     "export_demonstration_samples",
     "export_demonstration_samples_from_jsonl",
     "group_records_by_attempt",
     "iter_replay_events",
     "load_manual_jsonl_records",
+    "mapper_for_manual_mode",
     "mapper_for_robot_config",
+    "parse_manual_control_mode",
+    "parse_manual_view_mode",
     "plan_replay_to_step_rewind",
     "profile_manual_jsonl_recording",
+    "view_mode_spec",
     "write_attempt_replay_json",
     "write_demonstration_samples_jsonl",
     "write_manual_session_manifest",

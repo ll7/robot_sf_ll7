@@ -169,6 +169,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Benchmark Docker Reproduction Path](./benchmark_docker_repro.md)** - Build a pinned Docker image and run the canonical small benchmark artifact smoke with one command
 * **[Camera-ready Release Workflow](./benchmark_camera_ready_release.md)** - Guided release upload checklist for campaign publication bundles
 * **[Benchmark Observation Visibility](./benchmark_observation_visibility.md)** - Configurable planner-facing FOV, range, and static-occlusion filtering for partial-observability experiments
+* **[Issue #1124 Dynamic Pedestrian Occlusion Contract](./context/issue_1124_dynamic_pedestrian_occlusion_contract.md)** - Opt-in planner-facing pedestrian-to-pedestrian occlusion semantics, metadata behavior, and benchmark-reporting limits
 * **[Benchmark Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)** - Benchmark-facing mapping from current planner/config support to Alyassi-style planner families, including readiness and overclaim guardrails
 * **[Benchmark: Experimental Planners](./benchmark_experimental_planners.md)** - Opt-in guardrails and usage notes for unfinished benchmark planner families
 * **[Planner Adapter Starter Template](./dev/planner_adapter_template.md)** - Copy-and-adapt path plus a diagnostic reference adapter for new local planner contributions

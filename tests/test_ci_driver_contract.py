@@ -50,7 +50,22 @@ def _extract_workflow_phases(run_text: str) -> set[str]:
 def _workflow_phases() -> set[str]:
     """Return CI driver phases referenced by the GitHub Actions workflow."""
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
-    steps = workflow["jobs"]["ci"]["steps"]
+
+    referenced_phases: set[str] = set()
+    for job in workflow["jobs"].values():
+        for step in job["steps"]:
+            run_text = step.get("run")
+            if not run_text:
+                continue
+            referenced_phases.update(_extract_workflow_phases(run_text))
+
+    return referenced_phases
+
+
+def _workflow_job_phases(job_name: str) -> set[str]:
+    """Return CI driver phases referenced by a specific workflow job."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"][job_name]["steps"]
 
     referenced_phases: set[str] = set()
     for step in steps:
@@ -58,8 +73,12 @@ def _workflow_phases() -> set[str]:
         if not run_text:
             continue
         referenced_phases.update(_extract_workflow_phases(run_text))
-
     return referenced_phases
+
+
+def _workflow_text() -> str:
+    """Return the raw CI workflow text."""
+    return CI_WORKFLOW.read_text(encoding="utf-8")
 
 
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
@@ -105,3 +124,21 @@ def test_ci_workflow_only_references_known_driver_phases() -> None:
     assert workflow_phases <= driver_phases, (
         f"unknown workflow phases: {sorted(workflow_phases - driver_phases)}"
     )
+
+
+def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
+    """Keep fast PR feedback independent from the heavier smoke/artifact lane."""
+    workflow = yaml.safe_load(_workflow_text())
+
+    assert {"fast-feedback", "smoke-artifacts"} <= set(workflow["jobs"])
+    assert _workflow_job_phases("fast-feedback") == {"lint", "typecheck", "test"}
+    assert _workflow_job_phases("smoke-artifacts") == {"smoke", "artifact-policy"}
+    assert "needs" not in workflow["jobs"]["fast-feedback"]
+
+
+def test_ci_workflow_does_not_download_apt_fast_at_runtime() -> None:
+    """Avoid bespoke apt-fast bootstrap in hosted CI."""
+    workflow_text = _workflow_text()
+
+    assert "apt-fast" not in workflow_text
+    assert "raw.githubusercontent.com/ilikenwf/apt-fast" not in workflow_text

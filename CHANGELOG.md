@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1181 `ml-intern` bounded-assistant assessment note, including the local-only
+  proof ladder, trace/privacy boundary, verified Robot SF prompt/context stack, and the explicit
+  recommendation to keep `ml-intern` as a bounded experiment assistant rather than a replacement
+  for the repository's local/HPC/SLURM proof-first workflow.
 * Added the issue-1151 manual-control MVP foundation surface: append-only JSONL recording,
   fail-closed mode/session helpers, baseline comparison primitives, and BC export utilities now
   reject invalid mode values, non-finite speed multipliers, negative tolerances, and malformed

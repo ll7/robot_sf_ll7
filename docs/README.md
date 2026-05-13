@@ -86,6 +86,9 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
+* **[Open-Issues Implementation Status](./context/open_issues_implementation_status_2026-05-12.md)** - Handoff record for the May 2026 open-issues pass, including implemented slices, blocked items, and remaining follow-up surface
+* **[Open-Issues Maintainer Input Triage](./context/open_issues_maintainer_input_triage.md)** - Consolidated maintainer-decision inventory for open issues that still need scope, contract, or prioritization guidance
+* **[Open-Issues PR Split Strategy](./context/open_issues_pr_split_strategy_2026-05-13.md)** - PR packaging strategy and validation grouping for the open-issues implementation pass
 * **[Project Prioritization](./project_prioritization.md)** - Priority-score model, Project #5 field semantics, and the local/manual score-sync workflow
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers

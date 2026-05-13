@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -21,11 +22,150 @@ class ManualViewMode(StrEnum):
     ROBOT_STATIC = "robot_static"
 
 
-SUPPORTED_MVP_CONTROL_MODES = (ManualControlMode.KEYBOARD_HOLD,)
-"""Control modes implemented in the current MVP foundation."""
+@dataclass(frozen=True)
+class ManualControlModeSpec:
+    """Registry metadata for one manual-control input mode."""
 
-SUPPORTED_MVP_VIEW_MODES = (ManualViewMode.FIXED_MAP,)
-"""View modes implemented in the current MVP foundation."""
+    mode: ManualControlMode
+    input_mapping_version: str
+    overlay_label: str
+    robot_action_space: str = "differential_drive"
+    implemented: bool = True
+
+
+@dataclass(frozen=True)
+class ManualViewModeSpec:
+    """Registry metadata for one manual-control view mode."""
+
+    mode: ManualViewMode
+    overlay_label: str
+    implemented: bool = True
+    blocker: str | None = None
+
+
+CONTROL_MODE_REGISTRY: dict[ManualControlMode, ManualControlModeSpec] = {
+    ManualControlMode.KEYBOARD_HOLD: ManualControlModeSpec(
+        mode=ManualControlMode.KEYBOARD_HOLD,
+        input_mapping_version="manual_keyboard_diff_drive_hold_v1",
+        overlay_label="Keyboard hold: WASD/arrows command velocity while held; Space brakes",
+    ),
+    ManualControlMode.KEYBOARD_CRUISE: ManualControlModeSpec(
+        mode=ManualControlMode.KEYBOARD_CRUISE,
+        input_mapping_version="keyboard_cruise_diff_drive_v1",
+        overlay_label="Keyboard cruise: WASD/arrows adjust persistent target velocity; Space stops",
+    ),
+    ManualControlMode.MOUSE_TARGET: ManualControlModeSpec(
+        mode=ManualControlMode.MOUSE_TARGET,
+        input_mapping_version="mouse_target_diff_drive_v1",
+        overlay_label="Mouse target: cursor/click sets local steering intent for differential drive",
+    ),
+}
+"""Versioned manual-control input mode registry."""
+
+VIEW_MODE_REGISTRY: dict[ManualViewMode, ManualViewModeSpec] = {
+    ManualViewMode.FIXED_MAP: ManualViewModeSpec(
+        mode=ManualViewMode.FIXED_MAP,
+        overlay_label="Fixed map view: world-oriented static camera",
+    ),
+    ManualViewMode.EGO_UP: ManualViewModeSpec(
+        mode=ManualViewMode.EGO_UP,
+        overlay_label="Ego-up view: robot-centered camera with robot facing up",
+        implemented=False,
+        blocker=(
+            "ego_up_view_v1 requires an interactive renderer camera transform hook; "
+            "the current manual-control foundation exposes pure mode metadata only"
+        ),
+    ),
+    ManualViewMode.ROBOT_STATIC: ManualViewModeSpec(
+        mode=ManualViewMode.ROBOT_STATIC,
+        overlay_label="Robot-static view: robot-centered camera without ego-up rotation",
+        implemented=False,
+        blocker="robot_static view has no renderer camera transform hook in this foundation",
+    ),
+}
+"""Versioned manual-control view mode registry."""
+
+SUPPORTED_MVP_CONTROL_MODES = tuple(
+    spec.mode for spec in CONTROL_MODE_REGISTRY.values() if spec.implemented
+)
+"""Control modes implemented in the current manual-control foundation."""
+
+SUPPORTED_MVP_VIEW_MODES = tuple(
+    spec.mode for spec in VIEW_MODE_REGISTRY.values() if spec.implemented
+)
+"""View modes implemented in the current manual-control foundation."""
+
+
+def parse_manual_control_mode(value: str | ManualControlMode) -> ManualControlMode:
+    """Parse a manual-control mode identifier and fail closed for unknown values.
+
+    Returns
+    -------
+    ManualControlMode
+        Parsed control mode.
+    """
+    if isinstance(value, ManualControlMode):
+        return value
+    try:
+        return ManualControlMode(str(value))
+    except ValueError as exc:
+        supported = ", ".join(mode.value for mode in ManualControlMode)
+        raise ValueError(f"unknown manual control mode {value!r}; supported: {supported}") from exc
+
+
+def parse_manual_view_mode(value: str | ManualViewMode) -> ManualViewMode:
+    """Parse a manual-view mode identifier and fail closed for unknown values.
+
+    Returns
+    -------
+    ManualViewMode
+        Parsed view mode.
+    """
+    if isinstance(value, ManualViewMode):
+        return value
+    try:
+        return ManualViewMode(str(value))
+    except ValueError as exc:
+        supported = ", ".join(mode.value for mode in ManualViewMode)
+        raise ValueError(f"unknown manual view mode {value!r}; supported: {supported}") from exc
+
+
+def control_mode_spec(mode: str | ManualControlMode) -> ManualControlModeSpec:
+    """Return registry metadata for a control mode."""
+    parsed = parse_manual_control_mode(mode)
+    return CONTROL_MODE_REGISTRY[parsed]
+
+
+def view_mode_spec(mode: str | ManualViewMode) -> ManualViewModeSpec:
+    """Return registry metadata for a view mode."""
+    parsed = parse_manual_view_mode(mode)
+    return VIEW_MODE_REGISTRY[parsed]
+
+
+def ensure_supported_manual_mode(
+    *,
+    control_mode: str | ManualControlMode,
+    view_mode: str | ManualViewMode,
+    robot_action_space: str = "differential_drive",
+) -> None:
+    """Fail closed when a requested manual-control mode combination is unsupported."""
+    control_spec = control_mode_spec(control_mode)
+    view_spec = view_mode_spec(view_mode)
+    if not control_spec.implemented:
+        raise NotImplementedError(
+            f"manual control mode is not implemented: {control_spec.mode.value}"
+        )
+    if control_spec.robot_action_space != robot_action_space:
+        raise NotImplementedError(
+            "manual control mapper is not available for "
+            f"{robot_action_space}; mode {control_spec.mode.value} supports "
+            f"{control_spec.robot_action_space}"
+        )
+    if not view_spec.implemented:
+        blocker = f"; blocker: {view_spec.blocker}" if view_spec.blocker else ""
+        raise NotImplementedError(
+            f"manual view mode is not implemented: {view_spec.mode.value}{blocker}"
+        )
 
 
 def ensure_supported_mvp_mode(
@@ -34,7 +174,4 @@ def ensure_supported_mvp_mode(
     view_mode: ManualViewMode,
 ) -> None:
     """Fail closed when a requested manual-control mode is not implemented yet."""
-    if control_mode not in SUPPORTED_MVP_CONTROL_MODES:
-        raise NotImplementedError(f"manual control mode is not implemented: {control_mode.value}")
-    if view_mode not in SUPPORTED_MVP_VIEW_MODES:
-        raise NotImplementedError(f"manual view mode is not implemented: {view_mode.value}")
+    ensure_supported_manual_mode(control_mode=control_mode, view_mode=view_mode)

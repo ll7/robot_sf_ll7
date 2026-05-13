@@ -44,6 +44,7 @@ def test_manual_session_manifest_serializes_baseline_and_progress():
 
     assert payload["manifest_schema"] == "manual_control_session_manifest_v1"
     assert payload["baseline"]["policy_id"] == "best-policy"
+    assert payload["session"]["control_mode"] == "keyboard_hold"
     assert payload["completed_attempts"][0]["scenario_id"] == "scenario-a"
     assert payload["artifacts"] == {"records_jsonl": "manual.jsonl"}
 

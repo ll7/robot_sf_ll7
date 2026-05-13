@@ -37,6 +37,7 @@ class ManualSessionManifest:
             "session": {
                 "session_id": self.session.session_id,
                 "input_mapping_version": self.session.input_mapping_version,
+                "control_mode": self.session.control_mode,
                 "view_mode": self.session.view_mode,
                 "policy_to_beat": self.session.policy_to_beat,
                 "policy_to_beat_source": self.session.policy_to_beat_source,

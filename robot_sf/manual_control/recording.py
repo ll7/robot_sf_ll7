@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.manual_control.modes import ManualViewMode
+from robot_sf.manual_control.modes import ManualControlMode, ManualViewMode
 
 if TYPE_CHECKING:
     from robot_sf.manual_control.session import AttemptKey
@@ -19,6 +19,7 @@ class ManualSessionMetadata:
 
     session_id: str
     input_mapping_version: str
+    control_mode: str = ManualControlMode.KEYBOARD_HOLD.value
     view_mode: str = ManualViewMode.FIXED_MAP.value
     policy_to_beat: str | None = None
     policy_to_beat_source: str | None = None
@@ -113,6 +114,7 @@ class ManualControlRecord:
             session=ManualSessionMetadata(
                 session_id=str(session_payload["session_id"]),
                 input_mapping_version=str(session_payload["input_mapping_version"]),
+                control_mode=str(session_payload.get("control_mode", "keyboard_hold")),
                 view_mode=str(session_payload.get("view_mode", "fixed_map")),
                 policy_to_beat=session_payload.get("policy_to_beat"),
                 policy_to_beat_source=session_payload.get("policy_to_beat_source"),

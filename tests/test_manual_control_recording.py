@@ -38,6 +38,7 @@ def test_manual_control_record_serializes_schema_and_session_metadata():
     assert payload["scenario_id"] == "scenario-a"
     assert payload["seed"] == 7
     assert payload["attempt_id"] == 2
+    assert payload["session"]["control_mode"] == "keyboard_hold"
     assert payload["session"]["policy_to_beat_source"] == "model/registry.yaml"
     assert payload["training_sample"] is True
 
@@ -88,6 +89,33 @@ def test_load_manual_jsonl_records_round_trips_records(tmp_path):
     loaded = load_manual_jsonl_records(path)
 
     assert loaded == [record]
+
+
+def test_manual_jsonl_records_round_trip_control_and_view_modes(tmp_path):
+    """Manual records should remain filterable by selected control/view mode."""
+    path = tmp_path / "manual.jsonl"
+    session = ManualSessionMetadata(
+        session_id="session-1",
+        input_mapping_version="keyboard_cruise_diff_drive_v1",
+        control_mode="keyboard_cruise",
+        view_mode="fixed_map",
+    )
+    record = ManualControlRecord.for_attempt(
+        event="step",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=0,
+        step_idx=5,
+        session=session,
+        mapped_action=(1.0, 0.0),
+        training_sample=True,
+    )
+    path.write_text(json.dumps(record.to_json_dict()) + "\n", encoding="utf-8")
+
+    loaded = load_manual_jsonl_records(path)
+
+    assert loaded[0].session.control_mode == "keyboard_cruise"
+    assert loaded[0].session.view_mode == "fixed_map"
+    assert loaded[0].session.input_mapping_version == "keyboard_cruise_diff_drive_v1"
 
 
 def test_load_manual_jsonl_records_rejects_unsupported_schema(tmp_path):

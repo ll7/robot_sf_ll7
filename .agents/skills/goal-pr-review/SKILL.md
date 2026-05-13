@@ -1,6 +1,6 @@
 ---
 name: goal-pr-review
-description: "Autonomous goal loop that reviews open PRs, fixes actionable gaps, and applies merge-ready after full proof."
+description: "Autonomous goal loop that reviews open PRs, fixes safe actionable gaps, and applies merge-ready after full proof."
 ---
 
 # Goal PR Review
@@ -8,9 +8,9 @@ description: "Autonomous goal loop that reviews open PRs, fixes actionable gaps,
 ## Overview
 
 Use this skill when the user wants an autonomous review loop over open PRs. The loop reviews each PR
-against its linked issue contract, checks proof quality, fixes actionable gaps on writable PR
-branches when safe, captures deferred work as follow-up issues, and applies `merge-ready` only when
-the full proof bar passes.
+against its linked issue contract, checks proof quality, fixes safe actionable gaps on writable PR
+branches, captures deferred work as follow-up issues, and applies `merge-ready` only when the full
+proof bar passes.
 
 This skill reuses `implementation-verification`, `pr-ready-check`, `gh-pr-comment-fixer`,
 `review-benchmark-change`, `gh-issue-creator`, and `context-note-maintainer`.
@@ -26,6 +26,8 @@ This skill reuses `implementation-verification`, `pr-ready-check`, `gh-pr-commen
 - `.agents/skills/pr-ready-check/SKILL.md`
 - `.agents/skills/gh-pr-comment-fixer/SKILL.md`
 - `.agents/skills/review-benchmark-change/SKILL.md`
+- `.agents/skills/gh-issue-creator/SKILL.md`
+- `.agents/skills/context-note-maintainer/SKILL.md`
 
 ## Preflight
 
@@ -90,6 +92,8 @@ For fixable-now gaps, edit the PR branch, run the narrowest relevant validation,
 then reassess the full proof bar. Use `gh-pr-comment-fixer` for review-thread/comment fixes,
 `implementation-verification` to map repaired claims back to code, docs, and tests,
 `pr-ready-check` when readiness proof is needed, and `gh-issue-creator` for deferred follow-ups.
+For missing-proof repairs not tied to review threads, use `implementation-verification` to identify
+the smallest code, test, or docs patch, then apply that patch directly on the writable PR branch.
 Do not duplicate those skills' detailed procedures here.
 
 ## Workflow

@@ -27,6 +27,9 @@ class DemonstrationSample:
     observation: dict[str, Any]
     action: tuple[float, ...]
     input_keys: tuple[str, ...]
+    source_record_index: int
+    source_record_schema: str = "manual_control_v1"
+    source_path: str | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible demonstration sample.
@@ -47,12 +50,19 @@ class DemonstrationSample:
                 "observation": self.observation,
                 "action": list(self.action),
                 "input_keys": list(self.input_keys),
+                "source": {
+                    "record_schema": self.source_record_schema,
+                    "record_index": self.source_record_index,
+                    "path": self.source_path,
+                },
             }
         )
 
 
 def export_demonstration_samples(
     records: Iterable[ManualControlRecord],
+    *,
+    source_path: str | Path | None = None,
 ) -> list[DemonstrationSample]:
     """Extract behavior-cloning samples from training-marked manual records.
 
@@ -62,7 +72,8 @@ def export_demonstration_samples(
         Extracted demonstration samples in record order.
     """
     samples: list[DemonstrationSample] = []
-    for record in records:
+    normalized_source_path = str(source_path) if source_path is not None else None
+    for record_index, record in enumerate(records):
         if not record.training_sample:
             continue
         if record.observation is None or record.mapped_action is None:
@@ -79,6 +90,8 @@ def export_demonstration_samples(
                 observation=record.observation,
                 action=tuple(record.mapped_action),
                 input_keys=tuple(record.input_keys),
+                source_record_index=record_index,
+                source_path=normalized_source_path,
             )
         )
     return samples
@@ -92,7 +105,7 @@ def export_demonstration_samples_from_jsonl(path: str | Path) -> list[Demonstrat
     list[DemonstrationSample]
         Extracted demonstration samples from the JSONL recording.
     """
-    return export_demonstration_samples(load_manual_jsonl_records(path))
+    return export_demonstration_samples(load_manual_jsonl_records(path), source_path=path)
 
 
 def write_demonstration_samples_jsonl(

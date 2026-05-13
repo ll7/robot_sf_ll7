@@ -197,7 +197,7 @@ Implemented artifacts:
 Design:
 
 - Manual-control records can be grouped by scenario id, seed, and attempt id.
-- Records inside each replay group are ordered by `step_idx`.
+- Records inside each replay group preserve append-only source-stream order.
 - This is a data-ordering prerequisite for future visual replay and rewind work; it does not restore simulator state or render playback by itself.
 
 ## Additional foundation: session manifest

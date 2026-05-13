@@ -10,7 +10,7 @@ This document describes the extraction of a helper function to eliminate code du
 The logic for preparing pedestrian action visualization data was duplicated across 4 environment files:
 
 1. `robot_sf/gym_env/robot_env.py`
-2. `robot_sf/gym_env/empty_robot_env.py`
+2. `robot_sf/gym_env/crowd_sim_env.py`
 3. `robot_sf/gym_env/pedestrian_env.py`
 4. `robot_sf/gym_env/pedestrian_env_refactored.py`
 
@@ -106,7 +106,7 @@ ped_actions_np = prepare_pedestrian_actions(self.simulator)
 
 **Updated Import Statements:**
 - `robot_sf/gym_env/robot_env.py`
-- `robot_sf/gym_env/empty_robot_env.py`
+- `robot_sf/gym_env/crowd_sim_env.py`
 - `robot_sf/gym_env/pedestrian_env.py`
 - `robot_sf/gym_env/pedestrian_env_refactored.py`
 

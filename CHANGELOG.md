@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
+  fix-first repair loop on writable branches: proof failures are now classified as auto-fixable
+  now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and
+  revalidated before withholding `merge-ready`; and the skill index plus shared goal-loop note now
+  reflect the new validation-and-reassess contract.
+
+### Fixed
+
+* Fixed the crowd-only Gymnasium environment contract so `CrowdSimEnv` keeps a stable
+  observation-space shape across resets, `make_crowd_sim_env()` preserves preconfigured
+  config values unless callers override them explicitly, reset-time map selection no longer
+  mutates NumPy's global RNG state, and compact JSONL recordings keep static scene metadata
+  on reset events instead of repeating it on every step.
+
 ### Added
+
+* Added the issue-1168 multi-AMV planner support classification surface: multi-AMV episode
+  metadata now carries explicit planner-family support records, planner support preflight checks
+  fail closed for unsupported or smoke-only planner families, and the docs index records the
+  current boundary between smoke execution and real multi-robot planner support.
+* Added the issue-1153 manual-control replay/export helper surface: BC samples now carry source
+  provenance, replay/profile helpers reject directory inputs fail-closed, and replay/export JSON
+  writers preserve NumPy-backed payloads by normalizing them into JSON-safe builtins before
+  serialization.
 
 * Added the issue-1151 manual-control MVP foundation surface: append-only JSONL recording,
   fail-closed mode/session helpers, baseline comparison primitives, and BC export utilities now

@@ -68,7 +68,7 @@ velocity = velocity      # ✅ No manipulation needed
 **Environment Files:**
 - `robot_sf/gym_env/robot_env.py`
 - `robot_sf/gym_env/pedestrian_env.py`  
-- `robot_sf/gym_env/empty_robot_env.py`
+- `robot_sf/gym_env/crowd_sim_env.py`
 - `robot_sf/gym_env/pedestrian_env_refactored.py`
 
 **Data Analysis Files:**

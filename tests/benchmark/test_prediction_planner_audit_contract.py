@@ -120,4 +120,5 @@ def test_build_predictive_planner_algo_config_prefers_explicit_checkpoint_overri
 
     assert config["predictive_checkpoint_path"].endswith("test.pt")
     assert config["predictive_device"] == "cpu"
+    assert config["predictive_feature_schema_name"] == "predictive_legacy_v1"
     assert "predictive_model_id" not in config

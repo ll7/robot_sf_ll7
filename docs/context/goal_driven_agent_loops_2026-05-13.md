@@ -34,6 +34,7 @@ should delegate to existing repo-local skills for concrete work:
 - issue clarification and template repair: `gh-issue-clarifier`, `gh-issue-template-auditor`
 - queue routing: `gh-issue-sequencer`, `gh-issue-priority-assessor`
 - issue implementation: `gh-issue-autopilot`, `gh-pr-opener`
+- PR repair during review: `gh-pr-comment-fixer`, `gh-issue-creator`
 - verification: `implementation-verification`, `pr-ready-check`, `review-benchmark-change`
 - durable notes: `context-note-maintainer`
 
@@ -59,8 +60,9 @@ before continuing. It stops instead of guessing when an issue is blocked, ambigu
 by an open PR, or missing proof requirements.
 
 `goal-pr-review` reviews open PRs against linked issue contracts, not just CI state. When the full
-proof bar fails, the loop should fix actionable gaps on writable PR branches before leaving a
-passive "not merge-ready" comment. Fixes must stay inside the issue/PR contract, be committed and
+proof bar fails, the loop should fix safe actionable gaps on writable PR branches before leaving a
+passive "not merge-ready" comment. Each gap should be classified as fixable now, deferred
+follow-up, or handoff-only blocker. Fixes must stay inside the issue/PR contract, be committed and
 pushed, and be validated before reassessing readiness. It applies a dedicated `merge-ready` label
 only after the full proof bar passes: issue contract resolved, diff matches scope, checks or
 readiness proof are adequate, review threads are handled, generated artifacts are classified, and

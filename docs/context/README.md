@@ -174,6 +174,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.
+* [Issue #1168 Multi-AMV Planner Support Classification](issue_1168_multi_amv_planner_support.md)
+  records the current planner-family inventory, fail-closed support gate, and the boundary between
+  goal-controller smoke execution and real multi-AMV planner support.
 * [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
   records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
   importer outputs, and deferred generalization scope.
@@ -209,6 +212,13 @@ knowledge, not every transient iteration detail.
 * [Issue #1152 Manual-Control Mode Experiments](issue_1152_manual_control_modes.md)
   records the first post-MVP steering-mode bundle, artifact-filterability contract, and fail-closed
   `ego_up_view_v1` renderer-hook blocker.
+
+## Manual Control Notes
+
+* [Issue #1154 Web-Game Data Collection Path](issue_1154_web_game_data_collection_path.md)
+  records the feasibility gate for browser/web-game manual-control collection, including schema
+  parity, consent/privacy, retention, deterministic hosted scenarios, and the narrow offline
+  compatibility-prototype boundary.
 
 ## Feature Extractor Notes
 
@@ -341,6 +351,9 @@ why a change was made rather than a full issue execution transcript.
   milestone that links follow-up #1138 for the first deterministic obstacle-feature
   implementation slice and defines a path with proof gates before any grid/CNN or obstacle-node
   graph prototype.
+* [Issue #1165 Predictive Obstacle-Feature Lifecycle](issue_1165_predictive_obstacle_lifecycle.md)
+  records the schema/dimension contract for obstacle-feature predictive datasets, training,
+  checkpoints, and runtime loading before any same-seed performance comparison.
 * [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter` .

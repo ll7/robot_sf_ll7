@@ -46,6 +46,8 @@ def build_predictive_planner_algo_config(
     if checkpoint_path is not None:
         config["predictive_checkpoint_path"] = str(checkpoint_path)
         config.pop("predictive_model_id", None)
+    if "predictive_feature_schema_name" not in config:
+        config["predictive_feature_schema_name"] = "predictive_legacy_v1"
     if device is not None:
         config["predictive_device"] = str(device)
     if overrides:

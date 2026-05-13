@@ -76,13 +76,13 @@
 
 ### Phase 2: Consolidate Redundant Classes (Medium Priority)
 
-1. **Evaluate EmptyRobotEnv**:
-   - Determine if it can be merged with `RobotEnv` as a configuration option
-   - Or update to extend `SingleAgentEnv`
+1. **Replace EmptyRobotEnv**:
+   - Remove the unclear legacy wrapper
+   - Preserve robot-free pedestrian simulation through `make_crowd_sim_env`
 
-2. **Review SimpleRobotEnv**:
-   - Complete implementation or remove if not needed
-   - Consider if it should be separate or part of main hierarchy
+2. **Remove SimpleRobotEnv**:
+   - Treat the unfinished prototype as legacy cleanup, not a supported environment
+   - Keep supported construction paths behind the environment factory
 
 3. **Update MultiRobotEnv**:
    - Extend `MultiAgentEnv` abstract base class

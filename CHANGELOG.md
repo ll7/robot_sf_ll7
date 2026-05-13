@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1168 multi-AMV planner support classification surface: multi-AMV episode
+  metadata now carries explicit planner-family support records, planner support preflight checks
+  fail closed for unsupported or smoke-only planner families, and the docs index records the
+  current boundary between smoke execution and real multi-robot planner support.
 * Added the issue-1153 manual-control replay/export helper surface: BC samples now carry source
   provenance, replay/profile helpers reject directory inputs fail-closed, and replay/export JSON
   writers preserve NumPy-backed payloads by normalizing them into JSON-safe builtins before

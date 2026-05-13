@@ -207,6 +207,13 @@ knowledge, not every transient iteration detail.
   `hybrid_rule_v3_fast_progress_static_escape_continuous`, promotion-gate outcome, comparator
   deltas, remaining failure taxonomy, and artifact persistence boundary.
 
+## Manual Control Notes
+
+* [Issue #1154 Web-Game Data Collection Path](issue_1154_web_game_data_collection_path.md)
+  records the feasibility gate for browser/web-game manual-control collection, including schema
+  parity, consent/privacy, retention, deterministic hosted scenarios, and the narrow offline
+  compatibility-prototype boundary.
+
 ## Feature Extractor Notes
 
 * [Issue #193 Feature Extractor Evaluation](./issue_193_feature_extractor_evaluation.md)

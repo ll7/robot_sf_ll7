@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from robot_sf.planner.obstacle_features import PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
 from scripts.training import collect_predictive_planner_data as collect
 
 
@@ -127,6 +128,28 @@ def test_frames_to_samples_adds_ego_conditioning_features() -> None:
     assert target_mask[0, 0, 0] == 1.0
 
 
+def test_frames_to_samples_appends_obstacle_feature_schema_rows() -> None:
+    """Obstacle-feature model family should append the stable six-feature schema."""
+    frames = [
+        _frame(ped_positions=[(1.0, 0.0)], ped_velocities=[(0.1, 0.0)]),
+        _frame(ped_positions=[(1.2, 0.0)], ped_velocities=[(0.1, 0.0)]),
+    ]
+
+    state, _target, mask, _target_mask = collect._frames_to_samples(
+        frames,
+        max_agents=2,
+        horizon_steps=1,
+        ego_conditioning=False,
+        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    )
+
+    assert state.shape == (1, 2, 10)
+    assert np.allclose(state[0, 0, 0:4], np.array([1.0, 0.0, 0.1, 0.0], dtype=np.float32))
+    assert state[0, 0, 4] == -1.0
+    assert state[0, 0, 9] == 0.0
+    assert mask[0, 0] == 1.0
+
+
 def test_parse_args_accepts_ego_conditioning_flag(monkeypatch) -> None:
     """CLI parser should expose the ego-conditioning toggle for standalone collection."""
     monkeypatch.setattr(
@@ -136,6 +159,8 @@ def test_parse_args_accepts_ego_conditioning_flag(monkeypatch) -> None:
             "--episodes",
             "2",
             "--ego-conditioning",
+            "--model-family",
+            PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
         ],
     )
 
@@ -143,3 +168,4 @@ def test_parse_args_accepts_ego_conditioning_flag(monkeypatch) -> None:
 
     assert args.episodes == 2
     assert args.ego_conditioning is True
+    assert args.model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA

@@ -15,6 +15,12 @@ from loguru import logger
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.planner.obstacle_features import (
+    LocalObstacleFeatureExtractor,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    append_obstacle_features,
+    predictive_feature_schema_metadata,
+)
 
 
 @dataclass
@@ -178,11 +184,20 @@ def _frames_to_samples(
     max_agents: int,
     horizon_steps: int,
     ego_conditioning: bool,
+    model_family: str = "predictive_legacy_v1",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Create supervised samples from temporal frame sequences."""
+    schema_metadata = predictive_feature_schema_metadata(
+        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+        if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+        else ("predictive_ego_v1" if ego_conditioning else "predictive_legacy_v1"),
+        ego_conditioning=ego_conditioning,
+    )
+    state_dim = int(schema_metadata["input_dim"])
+
     if len(frames) <= horizon_steps:
         return (
-            np.zeros((0, max_agents, 9 if ego_conditioning else 4), dtype=np.float32),
+            np.zeros((0, max_agents, state_dim), dtype=np.float32),
             np.zeros((0, max_agents, horizon_steps, 2), dtype=np.float32),
             np.zeros((0, max_agents), dtype=np.float32),
             np.zeros((0, max_agents, horizon_steps), dtype=np.float32),
@@ -196,7 +211,8 @@ def _frames_to_samples(
     for t in range(0, len(frames) - horizon_steps):
         frame_t = frames[t]
         c = min(frame_t.ped_count, max_agents)
-        state = np.zeros((max_agents, 9 if ego_conditioning else 4), dtype=np.float32)
+        base_dim = 9 if ego_conditioning else 4
+        state_base = np.zeros((max_agents, base_dim), dtype=np.float32)
         target = np.zeros((max_agents, horizon_steps, 2), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
         target_mask = np.zeros((max_agents, horizon_steps), dtype=np.float32)
@@ -207,8 +223,8 @@ def _frames_to_samples(
                 frame_t.robot_pos,
                 frame_t.robot_heading,
             )
-            state[:c, 0:2] = pos_rel
-            state[:c, 2:4] = _vel_world_to_ego(
+            state_base[:c, 0:2] = pos_rel
+            state_base[:c, 2:4] = _vel_world_to_ego(
                 frame_t.ped_velocities_world[:c],
                 frame_t.robot_heading,
             )
@@ -234,7 +250,7 @@ def _frames_to_samples(
                     ],
                     dtype=np.float32,
                 )
-                state[:c, 4:9] = ego_features
+                state_base[:c, 4:9] = ego_features
             mask[:c] = 1.0
 
             for k in range(1, horizon_steps + 1):
@@ -257,6 +273,21 @@ def _frames_to_samples(
                     target[src_idx, k - 1, :] = tgt_rel
                     target_mask[src_idx, k - 1] = 1.0
 
+        if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+            extractor = LocalObstacleFeatureExtractor()
+            obstacle_rows = np.zeros((max_agents, extractor.feature_dim), dtype=np.float32)
+            if c > 0:
+                obstacle_rows[:c] = extractor.extract_many(
+                    [tuple(point) for point in frame_t.ped_positions_world[:c]],
+                    [],
+                )
+            state = append_obstacle_features(
+                state_base,
+                obstacle_rows,
+                schema_metadata=extractor.schema_metadata,
+            )
+        else:
+            state = state_base
         states.append(state)
         targets.append(target)
         masks.append(mask)
@@ -273,6 +304,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-agents", type=int, default=16)
     parser.add_argument("--horizon-steps", type=int, default=8)
     parser.add_argument("--ego-conditioning", action="store_true")
+    parser.add_argument(
+        "--model-family",
+        choices=("predictive_legacy_v1", "predictive_ego_v1", PREDICTIVE_OBSTACLE_FEATURE_SCHEMA),
+        default="predictive_legacy_v1",
+        help="Predictive input schema/model family to collect.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-speed", type=float, default=1.0)
     parser.add_argument("--min-goal-distance", type=float, default=2.0)
@@ -372,6 +409,7 @@ def main() -> int:
             max_agents=args.max_agents,
             horizon_steps=args.horizon_steps,
             ego_conditioning=bool(args.ego_conditioning),
+            model_family=str(args.model_family),
         )
         if states.shape[0] > 0:
             all_states.append(states)
@@ -399,6 +437,13 @@ def main() -> int:
         target=targets_cat,
         mask=masks_cat,
         target_mask=target_masks_cat,
+        feature_schema_json=json.dumps(
+            predictive_feature_schema_metadata(
+                model_family=str(args.model_family),
+                ego_conditioning=bool(args.ego_conditioning),
+            ),
+            sort_keys=True,
+        ),
     )
 
     summary = {
@@ -408,6 +453,11 @@ def main() -> int:
         "horizon_steps": int(args.horizon_steps),
         "num_samples": int(states_cat.shape[0]),
         "state_dim": int(states_cat.shape[2]),
+        "model_family": str(args.model_family),
+        "feature_schema": predictive_feature_schema_metadata(
+            model_family=str(args.model_family),
+            ego_conditioning=bool(args.ego_conditioning),
+        ),
         "active_agent_ratio": float(np.mean(masks_cat)),
         "active_target_ratio": float(np.mean(target_masks_cat)),
         "skipped_reset_failures": int(skipped_resets),
@@ -416,6 +466,23 @@ def main() -> int:
     }
     summary_path = args.output.with_suffix(".json")
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    manifest_path = args.output.with_suffix(args.output.suffix + ".manifest.json")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "dataset_id": args.output.stem,
+                "dataset_schema": "predictive_planner_dataset_v1",
+                "model_family": str(args.model_family),
+                "feature_schema": summary["feature_schema"],
+                "state_dim": int(states_cat.shape[2]),
+                "max_agents": int(args.max_agents),
+                "horizon_steps": int(args.horizon_steps),
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
     logger.info("Saved predictive dataset with {} samples to {}", states_cat.shape[0], args.output)
     return 0
 

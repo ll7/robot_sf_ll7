@@ -8,6 +8,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    predictive_feature_schema_metadata,
+)
 from scripts.training import train_predictive_planner as trainer
 
 if TYPE_CHECKING:
@@ -60,6 +64,29 @@ def test_dataset_diagnostics_accepts_spread_trajectories() -> None:
         target_mask=target_mask,
     )
     assert diag["is_degenerate"] is False
+
+
+def test_load_feature_schema_metadata_prefers_npz_schema_json(tmp_path: Path) -> None:
+    """Training should derive input schema from dataset metadata, not CLI guesses."""
+    dataset = tmp_path / "predictive_obstacle.npz"
+    schema = predictive_feature_schema_metadata(
+        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        ego_conditioning=False,
+    )
+    np.savez_compressed(
+        dataset,
+        state=np.zeros((2, 3, 10), dtype=np.float32),
+        target=np.zeros((2, 3, 4, 2), dtype=np.float32),
+        mask=np.ones((2, 3), dtype=np.float32),
+        target_mask=np.ones((2, 3, 4), dtype=np.float32),
+        feature_schema_json=json.dumps(schema, sort_keys=True),
+    )
+
+    raw = np.load(dataset)
+    loaded = trainer._load_feature_schema_metadata(dataset, raw)
+
+    assert loaded["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+    assert loaded["input_dim"] == 10
 
 
 def test_selection_decision_prefers_proxy_when_enabled() -> None:

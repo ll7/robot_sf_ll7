@@ -10,6 +10,12 @@ from robot_sf.planner.predictive_model import (
     compute_ade_fde,
     load_predictive_checkpoint,
     masked_trajectory_loss,
+    save_predictive_checkpoint,
+)
+from robot_sf.planner.obstacle_features import (
+    ObstacleFeatureSchemaError,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    predictive_feature_schema_metadata,
 )
 
 
@@ -86,3 +92,45 @@ def test_load_predictive_checkpoint_ignores_unexpected_aux_head_keys(tmp_path) -
     mask = torch.ones(2, cfg.max_agents)
     out = loaded(state, mask)
     assert out["future_positions"].shape == (2, cfg.max_agents, cfg.horizon_steps, 2)
+
+
+def test_predictive_checkpoint_records_and_validates_feature_schema(tmp_path) -> None:
+    """Checkpoint loading should fail closed when requested schema does not match metadata."""
+    cfg = PredictiveModelConfig(
+        max_agents=4,
+        horizon_steps=3,
+        input_dim=10,
+        hidden_dim=16,
+        message_passing_steps=1,
+        feature_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    )
+    model = PredictiveTrajectoryModel(cfg)
+    checkpoint = tmp_path / "predictive_obstacle.pt"
+
+    save_predictive_checkpoint(
+        checkpoint,
+        model=model,
+        optimizer=None,
+        epoch=1,
+        feature_schema_metadata=predictive_feature_schema_metadata(
+            model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+            ego_conditioning=False,
+        ),
+    )
+
+    _loaded, payload = load_predictive_checkpoint(
+        checkpoint,
+        expected_feature_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        expected_input_dim=10,
+    )
+    assert payload["feature_schema"]["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+
+    try:
+        load_predictive_checkpoint(
+            checkpoint,
+            expected_feature_schema_name="predictive_legacy_v1",
+        )
+    except ObstacleFeatureSchemaError as exc:
+        assert "Predictive feature schema mismatch" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ObstacleFeatureSchemaError")

@@ -457,6 +457,7 @@ class SocNavPlannerConfig:
     predictive_model_id: str = _PREDICTIVE_MODEL_ID
     predictive_checkpoint_path: str | None = None
     predictive_device: str = "cpu"
+    predictive_feature_schema_name: str = "predictive_legacy_v1"
     predictive_max_agents: int = 16
     predictive_horizon_steps: int = 8
     predictive_ego_conditioning: bool = False
@@ -3758,7 +3759,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 "PyTorch is required for PredictionPlannerAdapter. Install torch dependency."
             )
         checkpoint_path = self._resolve_checkpoint_path()
-        model, _payload = load_predictive_checkpoint(checkpoint_path, map_location=self._device)
+        model, _payload = load_predictive_checkpoint(
+            checkpoint_path,
+            map_location=self._device,
+            expected_feature_schema_name=str(self.config.predictive_feature_schema_name),
+        )
         model.to(self._device)
         model.eval()
         return model
@@ -3872,6 +3877,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 state[:count, 6] = float(goal_dir[0])
                 state[:count, 7] = float(goal_dir[1])
                 state[:count, 8] = goal_dist
+            if expected_dim > 9:
+                from robot_sf.planner.obstacle_features import LocalObstacleFeatureExtractor
+
+                extractor = LocalObstacleFeatureExtractor()
+                obstacle_rows = extractor.extract_many(
+                    [tuple(point) for point in ped_positions[:count]],
+                    [],
+                )
+                end = min(expected_dim, 9 + extractor.feature_dim)
+                state[:count, 9:end] = obstacle_rows[:, : end - 9]
             mask[:count] = 1.0
         return state, mask, robot_pos, robot_heading
 

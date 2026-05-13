@@ -32,7 +32,14 @@ from robot_sf.manual_control.recording import (
     ManualSessionMetadata,
     load_manual_jsonl_records,
 )
-from robot_sf.manual_control.replay import ManualAttemptReplay, group_records_by_attempt
+from robot_sf.manual_control.profile import ManualRecordingProfile, profile_manual_jsonl_recording
+from robot_sf.manual_control.replay import (
+    ManualAttemptReplay,
+    ManualReplayEvent,
+    group_records_by_attempt,
+    iter_replay_events,
+    write_attempt_replay_json,
+)
 from robot_sf.manual_control.session import (
     AttemptKey,
     AttemptProgress,
@@ -52,6 +59,8 @@ __all__ = [
     "ManualControlRecord",
     "ManualJsonlRecorder",
     "ManualKeyState",
+    "ManualRecordingProfile",
+    "ManualReplayEvent",
     "ManualSessionController",
     "ManualSessionManifest",
     "ManualSessionMetadata",
@@ -63,8 +72,11 @@ __all__ = [
     "export_demonstration_samples",
     "export_demonstration_samples_from_jsonl",
     "group_records_by_attempt",
+    "iter_replay_events",
     "load_manual_jsonl_records",
     "mapper_for_robot_config",
+    "profile_manual_jsonl_recording",
+    "write_attempt_replay_json",
     "write_demonstration_samples_jsonl",
     "write_manual_session_manifest",
 ]

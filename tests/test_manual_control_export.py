@@ -61,6 +61,11 @@ def test_export_demonstration_samples_filters_non_training_events():
         "observation": {"obs": [1.0]},
         "action": [0.5, 0.0],
         "input_keys": ["w"],
+        "source": {
+            "record_schema": "manual_control_v1",
+            "record_index": 1,
+            "path": None,
+        },
     }
 
 
@@ -96,6 +101,8 @@ def test_export_demonstration_samples_from_jsonl(tmp_path):
 
     assert len(samples) == 1
     assert samples[0].action == (0.5, 0.0)
+    assert samples[0].source_path == str(path)
+    assert samples[0].source_record_index == 1
 
 
 def test_write_demonstration_samples_jsonl(tmp_path):

@@ -11,7 +11,11 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.multi_amv import inter_robot_metrics, multi_amv_settings_from_scenario
+from robot_sf.benchmark.multi_amv import (
+    inter_robot_metrics,
+    multi_amv_episode_extension,
+    multi_amv_settings_from_scenario,
+)
 from robot_sf.gym_env.environment_factory import make_multi_robot_env
 from robot_sf.gym_env.unified_config import MultiRobotConfig
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
@@ -88,14 +92,12 @@ def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
         "scenario_id": scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
         "horizon": horizon,
         "steps_recorded": int(robot_positions.shape[0]),
-        "multi_amv": {
-            "num_robots": settings.num_robots,
-            "near_miss_distance_m": settings.near_miss_distance_m,
-            "collision_distance_m": settings.collision_distance_m,
-            "deadlock_speed_mps": settings.deadlock_speed_mps,
-            "deadlock_window_steps": settings.deadlock_window_steps,
-        },
-        "metrics": {"inter_robot": metrics},
+        **multi_amv_episode_extension(
+            settings=settings,
+            inter_robot=metrics,
+            planner_status="goal_controller_smoke",
+            planner_note="Minimal multi-AMV smoke runner uses internal goal-directed actions.",
+        ),
     }
 
 

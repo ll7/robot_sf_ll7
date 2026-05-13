@@ -10,6 +10,7 @@ import pytest
 from robot_sf.benchmark.multi_amv import (
     MultiAmvSettings,
     inter_robot_metrics,
+    multi_amv_episode_extension,
     multi_amv_settings_from_scenario,
 )
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
@@ -88,6 +89,34 @@ def test_inter_robot_metrics_handles_empty_trajectory() -> None:
     assert metrics["inter_robot_collision_events"] == pytest.approx(0.0)
     assert metrics["inter_robot_near_miss_events"] == pytest.approx(0.0)
     assert metrics["deadlock_detected"] is False
+
+
+def test_multi_amv_episode_extension_is_additive_and_namespaced() -> None:
+    """Multi-AMV episode data should live in a namespaced optional block."""
+    settings = MultiAmvSettings(num_robots=2)
+    metrics = {"robot_count": 2.0, "pair_count": 1.0, "deadlock_detected": False}
+
+    block = multi_amv_episode_extension(
+        settings=settings,
+        inter_robot=metrics,
+        planner_status="goal_controller_smoke",
+        planner_note="first-slice smoke planner",
+    )
+
+    assert set(block) == {"multi_amv"}
+    assert block["multi_amv"]["enabled"] is True
+    assert block["multi_amv"]["num_robots"] == 2
+    assert block["multi_amv"]["planner_status"] == "goal_controller_smoke"
+    assert block["multi_amv"]["metrics"]["inter_robot"] == metrics
+
+
+def test_multi_amv_episode_extension_requires_multi_robot_metrics() -> None:
+    """The extension should fail closed when called outside multi-robot scope."""
+    with pytest.raises(ValueError, match="at least two robots"):
+        multi_amv_episode_extension(
+            settings=MultiAmvSettings(num_robots=1),
+            inter_robot={"robot_count": 1.0},
+        )
 
 
 def test_multi_amv_smoke_scenario_passes_schema() -> None:

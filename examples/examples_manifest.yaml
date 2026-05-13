@@ -416,7 +416,7 @@ examples:
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
-    ci_reason: "Long interactive pygame session, not relevatn for CI"
+    ci_reason: "Long interactive pygame session, not relevant for CI."
     doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
     tags: [occupancy, interactive]
   - path: advanced/23_poi_routing_demo.py
@@ -449,7 +449,7 @@ examples:
     doc_reference: specs/342-svg-global-planner/quickstart.md
     tags: [planning, diagnostics, visualization]
   - path: advanced/24_telemetry_pane.py
-    name: "24 Telemetry Pane"
+    name: "Telemetry Pane"
     summary: "Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance."
     category_slug: advanced
     prerequisites: []
@@ -458,7 +458,7 @@ examples:
     doc_reference: specs/343-telemetry-viz/quickstart.md
     tags: [telemetry, visualization, pygame, interactive]
   - path: advanced/25_telemetry_headless_smoke.py
-    name: "25 Telemetry Headless Smoke"
+    name: "Telemetry Headless Smoke"
     summary: "Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering."
     category_slug: advanced
     prerequisites: []

@@ -196,7 +196,7 @@ Observed outcomes:
 - `uv run pytest tests/integration/test_train_expert_ppo.py -q` passed: `43 passed in 22.72s`.
 - `train_ppo.py --dry-run` exited successfully against the documented canonical PPO config.
 - `BASE_REF=origin/main PYTEST_NUM_WORKERS=8 scripts/dev/pr_ready_check.sh` passed on this branch:
-  `3434 passed, 18 skipped, 3 warnings in 255.63s`.
+  `3435 passed, 17 skipped, 3 warnings in 255.63s`.
 - The quickstart and dry-run both surfaced a known SVG obstacle repair warning for
   `robot_sf/maps/uni_campus_big.svg`; this did not block the bounded assessment and is exactly the
   kind of real repository signal a bounded assistant should report rather than hide.

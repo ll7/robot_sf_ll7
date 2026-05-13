@@ -209,6 +209,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow
 * **[Multi-AMV Benchmark First Slice](./multi_amv_benchmark.md)** - Minimal multi-robot scenario surface, validation smoke, and inter-robot metric block
 * **[Issue #1128 Multi-AMV Episode Extension](./context/issue_1128_multi_amv_episode_extension.md)** - Additive episode-output block for multi-AMV smoke runs, explicit planner-status contract, and fail-closed validation notes
+* **[Issue #1168 Multi-AMV Planner Support Classification](./context/issue_1168_multi_amv_planner_support.md)** - Planner-family support inventory, fail-closed multi-AMV preflight gate, and the boundary between smoke control and real multi-robot planner support
 * **[Real-World Trajectory Import](./real_world_trajectory_import.md)** - Narrow Stanford Drone Dataset annotation importer, normalization contract, and provenance workflow
 * **[Benchmark Visual Artifacts](./benchmark_visuals.md)** - SimulationView & synthetic video pipeline, performance metrics
 * **[Metrics Specification](./dev/issues/social-navigation-benchmark/metrics_spec.md)** - Formal definitions of benchmark metrics (includes per-pedestrian force quantiles)

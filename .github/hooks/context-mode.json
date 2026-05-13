@@ -3,19 +3,19 @@
         "PreToolUse": [
             {
                 "type": "command",
-                "command": "context-mode hook vscode-copilot pretooluse"
+                "command": "command -v context-mode >/dev/null 2>&1 && context-mode hook vscode-copilot pretooluse || true"
             }
         ],
         "PostToolUse": [
             {
                 "type": "command",
-                "command": "context-mode hook vscode-copilot posttooluse"
+                "command": "command -v context-mode >/dev/null 2>&1 && context-mode hook vscode-copilot posttooluse || true"
             }
         ],
         "SessionStart": [
             {
                 "type": "command",
-                "command": "context-mode hook vscode-copilot sessionstart"
+                "command": "command -v context-mode >/dev/null 2>&1 && context-mode hook vscode-copilot sessionstart || true"
             }
         ]
     }

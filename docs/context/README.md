@@ -78,6 +78,8 @@ knowledge, not every transient iteration detail.
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
+* Goal-driven agent loops:
+  [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Route-clearance certification: [issue_1105_route_clearance_certification.md](issue_1105_route_clearance_certification.md)
 * Negative route-clearance repair: [issue_1130_negative_route_clearance_repair.md](issue_1130_negative_route_clearance_repair.md)
 * Note-maintenance skill:

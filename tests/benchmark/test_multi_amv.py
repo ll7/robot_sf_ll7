@@ -102,6 +102,7 @@ def test_multi_amv_episode_extension_is_additive_and_namespaced() -> None:
     block = multi_amv_episode_extension(
         settings=settings,
         inter_robot=metrics,
+        planner_family="goal_controller_smoke",
         planner_status="goal_controller_smoke",
         planner_note="first-slice smoke planner",
     )
@@ -122,7 +123,33 @@ def test_multi_amv_episode_extension_requires_multi_robot_metrics() -> None:
         multi_amv_episode_extension(
             settings=MultiAmvSettings(num_robots=1),
             inter_robot={"robot_count": 1.0},
+            planner_family="goal_controller_smoke",
+            planner_status="test",
         )
+
+
+def test_multi_amv_episode_extension_requires_non_empty_metrics() -> None:
+    """The extension should fail closed when called with empty metrics."""
+    with pytest.raises(ValueError, match="metrics must be non-empty"):
+        multi_amv_episode_extension(
+            settings=MultiAmvSettings(num_robots=2),
+            inter_robot={},
+            planner_family="goal_controller_smoke",
+            planner_status="test",
+        )
+
+
+def test_multi_amv_episode_extension_omits_optional_planner_note() -> None:
+    """Planner note should stay absent when callers do not provide one."""
+    block = multi_amv_episode_extension(
+        settings=MultiAmvSettings(num_robots=2),
+        inter_robot={"robot_count": 2.0, "pair_count": 1.0},
+        planner_family="goal_controller_smoke",
+        planner_status="explicit-status",
+    )
+
+    assert block["multi_amv"]["planner_status"] == "explicit-status"
+    assert "planner_note" not in block["multi_amv"]
 
 
 def test_multi_amv_smoke_scenario_passes_schema() -> None:

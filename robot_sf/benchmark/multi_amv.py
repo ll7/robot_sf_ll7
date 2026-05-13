@@ -339,8 +339,8 @@ def multi_amv_episode_extension(
     *,
     settings: MultiAmvSettings,
     inter_robot: dict[str, float | bool],
-    planner_family: str = "goal_controller_smoke",
-    planner_status: str = "goal_controller_smoke",
+    planner_family: str,
+    planner_status: str,
     planner_note: str | None = None,
 ) -> dict[str, Any]:
     """Build an additive episode-record block for multi-AMV benchmark outputs.
@@ -358,7 +358,7 @@ def multi_amv_episode_extension(
     if not inter_robot:
         raise ValueError("inter_robot metrics must be non-empty")
     planner_support = multi_amv_planner_support(planner_family)
-    return {
+    payload: dict[str, Any] = {
         "multi_amv": {
             "enabled": True,
             "num_robots": int(settings.num_robots),
@@ -369,10 +369,12 @@ def multi_amv_episode_extension(
             "planner_family": planner_support.planner_family,
             "planner_status": str(planner_status),
             "planner_support": planner_support.to_json_dict(),
-            "planner_note": planner_note,
             "metrics": {"inter_robot": dict(inter_robot)},
         }
     }
+    if planner_note is not None:
+        payload["multi_amv"]["planner_note"] = planner_note
+    return payload
 
 
 def _count_true_runs(values: np.ndarray) -> int:

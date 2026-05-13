@@ -19,7 +19,10 @@ from robot_sf.benchmark.multi_amv import (
 )
 from robot_sf.gym_env.environment_factory import make_multi_robot_env
 from robot_sf.gym_env.unified_config import MultiRobotConfig
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+)
 
 
 def _multi_robot_config_from_scenario(

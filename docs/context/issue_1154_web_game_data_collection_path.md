@@ -44,6 +44,28 @@ External upload remains disabled unless all of these are documented and reviewab
 - Baseline comparison semantics that match the local runner: success first, then time-to-goal,
   then SNQI and safety diagnostics.
 
+## Initial hosted scenario subset
+
+The first browser-compatible subset should be intentionally small and deterministic. It should use
+tracked SVG assets only, and every collected attempt must include the `scenario_id`, `map_id`,
+`seed`, and `asset_version_id` below:
+
+| Scenario id | Map id | Seed | Purpose |
+| --- | --- | --- | --- |
+| `web_manual_debug_06_seed_1154001` | `maps/svg_maps/debug_06.svg` | `1154001` | Basic local-runner parity and smoke validation. |
+| `web_manual_classic_crossing_seed_1154002` | `maps/svg_maps/classic_crossing.svg` | `1154002` | Pedestrian-crossing timing and safety comparison. |
+| `web_manual_classic_doorway_seed_1154003` | `maps/svg_maps/classic_doorway.svg` | `1154003` | Narrow-passage control and retry behavior. |
+
+The asset-versioning plan for this subset is:
+
+- Define one manifest id, `web_manual_control_v0`, before any hosted collection starts.
+- Record the repository commit, browser app build id, local manual-control schema version, and
+  SHA-256 for each SVG map asset in that manifest.
+- Treat any SVG edit, scenario seed change, input mapping change, or browser simulator change as a
+  new manifest id rather than mutating `web_manual_control_v0`.
+- Store the manifest path or durable artifact reference in every exported session so attempts from
+  different hosted scenario versions cannot be mixed silently.
+
 ## Minimal browser record contract
 
 Each browser record stream must either use the local schema directly or provide a lossless converter
@@ -80,7 +102,8 @@ For the design gate:
 
 - Review this note against the fields provided by the merged local manual-control schema.
 - Verify every browser field has a local schema equivalent or explicit converter mapping.
-- Verify hosted scenarios are deterministic and versioned before external collection is enabled.
+- Verify the hosted scenario subset uses the exact map ids, seeds, and asset-version manifest rules
+  documented above before external collection is enabled.
 
 For a later prototype:
 

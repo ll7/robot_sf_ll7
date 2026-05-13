@@ -166,6 +166,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.
+* [Issue #1168 Multi-AMV Planner Support Classification](issue_1168_multi_amv_planner_support.md)
+  records the current planner-family inventory, fail-closed support gate, and the boundary between
+  goal-controller smoke execution and real multi-AMV planner support.
 * [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
   records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
   importer outputs, and deferred generalization scope.

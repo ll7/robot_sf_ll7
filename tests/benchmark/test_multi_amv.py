@@ -9,8 +9,11 @@ import pytest
 
 from robot_sf.benchmark.multi_amv import (
     MultiAmvSettings,
+    ensure_multi_amv_planner_supported,
     inter_robot_metrics,
     multi_amv_episode_extension,
+    multi_amv_planner_support,
+    multi_amv_planner_support_inventory,
     multi_amv_settings_from_scenario,
 )
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
@@ -106,7 +109,10 @@ def test_multi_amv_episode_extension_is_additive_and_namespaced() -> None:
     assert set(block) == {"multi_amv"}
     assert block["multi_amv"]["enabled"] is True
     assert block["multi_amv"]["num_robots"] == 2
+    assert block["multi_amv"]["planner_family"] == "goal_controller_smoke"
     assert block["multi_amv"]["planner_status"] == "goal_controller_smoke"
+    assert block["multi_amv"]["planner_support"]["support_status"] == "native"
+    assert block["multi_amv"]["planner_support"]["contract_kind"] == "goal_controller_smoke"
     assert block["multi_amv"]["metrics"]["inter_robot"] == metrics
 
 
@@ -154,3 +160,32 @@ def test_multi_robot_config_from_scenario_preserves_base_fields(
     assert config.use_planner is True
     assert config.planner_clearance_margin == pytest.approx(0.75)
     assert config.num_robots == 3
+
+
+def test_multi_amv_planner_support_inventory_classifies_known_families() -> None:
+    """Planner support inventory should distinguish smoke from real planner support."""
+    inventory = multi_amv_planner_support_inventory()
+
+    assert inventory["goal_controller_smoke"]["support_status"] == "native"
+    assert inventory["goal_controller_smoke"]["contract_kind"] == "goal_controller_smoke"
+    assert inventory["orca"]["support_status"] == "not_available"
+    assert inventory["ppo"]["support_status"] == "not_available"
+    assert inventory["teb"]["support_status"] == "research_only"
+
+
+def test_ensure_multi_amv_planner_supported_fails_closed_for_single_robot_planners() -> None:
+    """Unsupported planner/multi-AMV combinations should fail before benchmark execution."""
+    with pytest.raises(ValueError, match="not_available.*multi-AMV"):
+        ensure_multi_amv_planner_supported("orca")
+
+
+def test_ensure_multi_amv_planner_supported_can_reject_smoke_for_non_trivial_support() -> None:
+    """Goal-controller smoke should not be mistaken for non-trivial planner-family support."""
+    with pytest.raises(ValueError, match="not non-trivial"):
+        ensure_multi_amv_planner_supported("goal_controller_smoke", require_non_smoke=True)
+
+
+def test_multi_amv_planner_support_rejects_unknown_family() -> None:
+    """Unknown planner families should fail closed with the known inventory named."""
+    with pytest.raises(ValueError, match="unknown multi-AMV planner family"):
+        multi_amv_planner_support("not-a-planner")

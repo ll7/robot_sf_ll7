@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.multi_amv import (
+    ensure_multi_amv_planner_supported,
     inter_robot_metrics,
     multi_amv_episode_extension,
     multi_amv_settings_from_scenario,
@@ -65,6 +66,7 @@ def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
     """Run the first scenario in ``scenario_path`` and return a metrics record."""
     scenario = dict(load_scenarios(scenario_path)[0])
     settings = multi_amv_settings_from_scenario(scenario)
+    planner_support = ensure_multi_amv_planner_supported("goal_controller_smoke")
     config = _multi_robot_config_from_scenario(scenario, scenario_path)
     config.sim_config.sim_time_in_secs = max(
         config.sim_config.time_per_step_in_secs,
@@ -95,8 +97,9 @@ def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
         **multi_amv_episode_extension(
             settings=settings,
             inter_robot=metrics,
+            planner_family=planner_support.planner_family,
             planner_status="goal_controller_smoke",
-            planner_note="Minimal multi-AMV smoke runner uses internal goal-directed actions.",
+            planner_note=planner_support.rationale,
         ),
     }
 

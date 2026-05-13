@@ -8,6 +8,7 @@ fleet-optimization abstraction.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -22,6 +23,197 @@ class MultiAmvSettings:
     collision_distance_m: float = 0.4
     deadlock_speed_mps: float = 0.05
     deadlock_window_steps: int = 10
+
+
+class MultiAmvPlannerSupportStatus(StrEnum):
+    """Support status for running a planner family in multi-AMV scenarios."""
+
+    NATIVE = "native"
+    ADAPTER = "adapter"
+    NOT_AVAILABLE = "not_available"
+    RESEARCH_ONLY = "research_only"
+
+
+@dataclass(frozen=True)
+class MultiAmvPlannerSupport:
+    """Planner-family support classification for multi-AMV execution."""
+
+    planner_family: str
+    support_status: MultiAmvPlannerSupportStatus
+    contract_kind: str
+    action_shape: str
+    robot_identity: str
+    collision_responsibility: str
+    metadata_reporting: str
+    rationale: str
+
+    def to_json_dict(self) -> dict[str, str]:
+        """Return JSON-compatible support metadata.
+
+        Returns
+        -------
+        dict[str, str]
+            Planner support classification and minimum contract fields.
+        """
+        return {
+            "planner_family": self.planner_family,
+            "support_status": self.support_status.value,
+            "contract_kind": self.contract_kind,
+            "action_shape": self.action_shape,
+            "robot_identity": self.robot_identity,
+            "collision_responsibility": self.collision_responsibility,
+            "metadata_reporting": self.metadata_reporting,
+            "rationale": self.rationale,
+        }
+
+
+_MULTI_AMV_PLANNER_SUPPORT: dict[str, MultiAmvPlannerSupport] = {
+    "goal_controller_smoke": MultiAmvPlannerSupport(
+        planner_family="goal_controller_smoke",
+        support_status=MultiAmvPlannerSupportStatus.NATIVE,
+        contract_kind="goal_controller_smoke",
+        action_shape="array[num_robots, 2] unicycle velocity commands",
+        robot_identity="implicit row order from MultiRobotEnv simulators",
+        collision_responsibility="smoke runner only; not a coordinated fleet planner",
+        metadata_reporting="planner_support block plus inter-robot metrics",
+        rationale=(
+            "Supported only as the minimal smoke controller used to exercise multi-AMV "
+            "episode records; it is not benchmark-comparable planner-family support."
+        ),
+    ),
+    "goal": MultiAmvPlannerSupport(
+        planner_family="goal",
+        support_status=MultiAmvPlannerSupportStatus.NOT_AVAILABLE,
+        contract_kind="single_robot_planner",
+        action_shape="single robot action; no fleet action tensor",
+        robot_identity="missing",
+        collision_responsibility="missing inter-robot coordination contract",
+        metadata_reporting="not available",
+        rationale="The single-robot goal planner does not define multi-robot identity or actions.",
+    ),
+    "social_force": MultiAmvPlannerSupport(
+        planner_family="social_force",
+        support_status=MultiAmvPlannerSupportStatus.RESEARCH_ONLY,
+        contract_kind="pedestrian_dynamics_or_single_robot_baseline",
+        action_shape="not defined for coordinated robot fleet control",
+        robot_identity="missing",
+        collision_responsibility="research question; no benchmark contract yet",
+        metadata_reporting="not available",
+        rationale="Social-force behavior can inform research, but no multi-AMV planner adapter exists.",
+    ),
+    "orca": MultiAmvPlannerSupport(
+        planner_family="orca",
+        support_status=MultiAmvPlannerSupportStatus.NOT_AVAILABLE,
+        contract_kind="single_robot_or_pairwise_adapter_missing",
+        action_shape="not defined for all robots with stable robot ids",
+        robot_identity="missing",
+        collision_responsibility="missing fleet-level responsibility and metadata contract",
+        metadata_reporting="not available",
+        rationale=(
+            "ORCA is the first plausible non-trivial candidate, but it needs an explicit "
+            "multi-robot adapter before benchmark use."
+        ),
+    ),
+    "ppo": MultiAmvPlannerSupport(
+        planner_family="ppo",
+        support_status=MultiAmvPlannerSupportStatus.NOT_AVAILABLE,
+        contract_kind="single_robot_policy",
+        action_shape="single policy action; no multi-robot observation/action schema",
+        robot_identity="missing",
+        collision_responsibility="missing learned fleet-control contract",
+        metadata_reporting="not available",
+        rationale="Existing PPO checkpoints are trained for single-robot environment contracts.",
+    ),
+    "guarded_ppo": MultiAmvPlannerSupport(
+        planner_family="guarded_ppo",
+        support_status=MultiAmvPlannerSupportStatus.NOT_AVAILABLE,
+        contract_kind="single_robot_policy_with_guard",
+        action_shape="single policy action; no multi-robot observation/action schema",
+        robot_identity="missing",
+        collision_responsibility="missing learned fleet-control contract",
+        metadata_reporting="not available",
+        rationale="Guarded PPO inherits the single-robot PPO contract and is not fleet-aware.",
+    ),
+    "sacadrl": MultiAmvPlannerSupport(
+        planner_family="sacadrl",
+        support_status=MultiAmvPlannerSupportStatus.NOT_AVAILABLE,
+        contract_kind="single_robot_policy",
+        action_shape="single robot action",
+        robot_identity="missing",
+        collision_responsibility="missing fleet-control contract",
+        metadata_reporting="not available",
+        rationale="SA-CADRL support is single-robot and has no multi-AMV adapter.",
+    ),
+    "teb": MultiAmvPlannerSupport(
+        planner_family="teb",
+        support_status=MultiAmvPlannerSupportStatus.RESEARCH_ONLY,
+        contract_kind="testing_only_single_robot_planner",
+        action_shape="single robot trajectory command",
+        robot_identity="missing",
+        collision_responsibility="research-only until a fleet adapter exists",
+        metadata_reporting="not available",
+        rationale="TEB is testing-only in this repo and not a coordinated multi-AMV planner.",
+    ),
+}
+
+
+def multi_amv_planner_support_inventory() -> dict[str, dict[str, str]]:
+    """Return planner-family multi-AMV support inventory.
+
+    Returns
+    -------
+    dict[str, dict[str, str]]
+        JSON-compatible support records keyed by planner family.
+    """
+    return {
+        planner_family: support.to_json_dict()
+        for planner_family, support in sorted(_MULTI_AMV_PLANNER_SUPPORT.items())
+    }
+
+
+def multi_amv_planner_support(planner_family: str) -> MultiAmvPlannerSupport:
+    """Return the multi-AMV support classification for a planner family.
+
+    Returns
+    -------
+    MultiAmvPlannerSupport
+        Support classification for the requested planner family.
+    """
+    normalized = str(planner_family).strip().lower().replace("-", "_")
+    try:
+        return _MULTI_AMV_PLANNER_SUPPORT[normalized]
+    except KeyError as exc:
+        known = ", ".join(sorted(_MULTI_AMV_PLANNER_SUPPORT))
+        raise ValueError(f"unknown multi-AMV planner family {planner_family!r}; known: {known}") from exc
+
+
+def ensure_multi_amv_planner_supported(
+    planner_family: str,
+    *,
+    require_non_smoke: bool = False,
+) -> MultiAmvPlannerSupport:
+    """Fail closed when a planner family lacks a multi-AMV execution contract.
+
+    Returns
+    -------
+    MultiAmvPlannerSupport
+        Support classification for allowed planner families.
+    """
+    support = multi_amv_planner_support(planner_family)
+    if support.support_status not in {
+        MultiAmvPlannerSupportStatus.NATIVE,
+        MultiAmvPlannerSupportStatus.ADAPTER,
+    }:
+        raise ValueError(
+            f"planner family {support.planner_family!r} is {support.support_status.value} "
+            f"for multi-AMV scenarios: {support.rationale}"
+        )
+    if require_non_smoke and support.contract_kind == "goal_controller_smoke":
+        raise ValueError(
+            "multi-AMV goal_controller_smoke is a smoke controller, not non-trivial "
+            "planner-family support"
+        )
+    return support
 
 
 def multi_amv_settings_from_scenario(scenario: dict[str, Any]) -> MultiAmvSettings:
@@ -145,6 +337,7 @@ def multi_amv_episode_extension(
     *,
     settings: MultiAmvSettings,
     inter_robot: dict[str, float | bool],
+    planner_family: str = "goal_controller_smoke",
     planner_status: str = "goal_controller_smoke",
     planner_note: str | None = None,
 ) -> dict[str, Any]:
@@ -162,6 +355,7 @@ def multi_amv_episode_extension(
         raise ValueError("multi-AMV episode extension requires at least two robots")
     if not inter_robot:
         raise ValueError("inter_robot metrics must be non-empty")
+    planner_support = multi_amv_planner_support(planner_family)
     return {
         "multi_amv": {
             "enabled": True,
@@ -170,7 +364,9 @@ def multi_amv_episode_extension(
             "collision_distance_m": float(settings.collision_distance_m),
             "deadlock_speed_mps": float(settings.deadlock_speed_mps),
             "deadlock_window_steps": int(settings.deadlock_window_steps),
+            "planner_family": planner_support.planner_family,
             "planner_status": str(planner_status),
+            "planner_support": planner_support.to_json_dict(),
             "planner_note": planner_note,
             "metrics": {"inter_robot": dict(inter_robot)},
         }

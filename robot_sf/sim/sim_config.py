@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Configuration dataclasses for simulator timing and pedestrian behavior."""
 
 from dataclasses import dataclass, field
 from math import ceil
@@ -110,20 +110,20 @@ class SimulationSettings:
 
     @property
     def max_sim_steps(self) -> int:
-        """TODO docstring. Document this function.
+        """Return the maximum number of fixed-time simulation steps.
 
 
         Returns:
-            TODO docstring.
+            Ceiling of episode duration divided by step duration.
         """
         return ceil(self.sim_time_in_secs / self.time_per_step_in_secs)
 
     @property
     def peds_per_area_m2(self) -> float:
-        """TODO docstring. Document this function.
+        """Return the pedestrian density for the configured difficulty.
 
 
         Returns:
-            TODO docstring.
+            Pedestrians per square meter selected from ``ped_density_by_difficulty``.
         """
         return self.ped_density_by_difficulty[self.difficulty]

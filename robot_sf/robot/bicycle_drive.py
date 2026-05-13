@@ -42,11 +42,11 @@ class BicycleDriveState:
 
     @property
     def pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
+        """Return the current 2D position.
 
 
         Returns:
-            TODO docstring.
+            The ``(x, y)`` position component of the bicycle pose.
         """
         return self.pose[0]
 
@@ -132,16 +132,16 @@ class BicycleDriveRobot:
     movement: BicycleMotion = field(init=False)
 
     def __post_init__(self):
-        """TODO docstring. Document this function."""
+        """Create the motion helper bound to this robot's drive settings."""
         self.movement = BicycleMotion(self.config)
 
     @property
     def observation_space(self) -> spaces.Box:
-        """TODO docstring. Document this function.
-
+        """Return the bounded observation space for velocity and steering state.
 
         Returns:
-            TODO docstring.
+            A Box with lower and upper bounds derived from the configured velocity
+            and steering limits.
         """
         high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
         low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
@@ -149,11 +149,11 @@ class BicycleDriveRobot:
 
     @property
     def action_space(self) -> spaces.Box:
-        """TODO docstring. Document this function.
-
+        """Return the bounded action space for acceleration and steering commands.
 
         Returns:
-            TODO docstring.
+            A Box with lower and upper bounds derived from the configured
+            acceleration and steering limits.
         """
         high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
         low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
@@ -161,31 +161,28 @@ class BicycleDriveRobot:
 
     @property
     def pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
-
+        """Return the current 2D position of the robot.
 
         Returns:
-            TODO docstring.
+            The ``(x, y)`` position from the current bicycle-drive pose.
         """
         return self.state.pose[0]
 
     @property
     def pose(self) -> RobotPose:
-        """TODO docstring. Document this function.
-
+        """Return the full robot pose.
 
         Returns:
-            TODO docstring.
+            The current ``((x, y), theta)`` pose tuple.
         """
         return self.state.pose
 
     @property
     def current_speed(self) -> PolarVec2D:
-        """TODO docstring. Document this function.
-
+        """Return the robot's scalar speed paired with its current heading.
 
         Returns:
-            TODO docstring.
+            The current speed/orientation tuple exposed by the drive state.
         """
         return self.state.current_speed
 
@@ -207,12 +204,12 @@ class BicycleDriveRobot:
         self.state = BicycleDriveState(new_pose, 0)
 
     def parse_action(self, action: np.ndarray) -> BicycleAction:
-        """Reset vehicle to initial state.
+        """Convert a raw action array into the bicycle-drive action tuple.
 
         Args:
-            action: Unused action (kept for interface compatibility)
+            action: Array-like acceleration and steering command.
 
         Returns:
-            Initial observation dictionary
+            The ``(acceleration, steering_angle)`` tuple used by the drive model.
         """
         return (action[0], action[1])

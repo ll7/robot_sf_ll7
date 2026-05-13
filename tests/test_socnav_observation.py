@@ -160,3 +160,37 @@ def test_socnav_observation_visibility_filters_static_occluded_pedestrian() -> N
         simulator.ped_pos,
         np.array([[3.0, 0.0], [0.0, 3.0]], dtype=np.float32),
     )
+
+
+def test_socnav_observation_visibility_filters_dynamic_occluded_pedestrian() -> None:
+    """Opt-in dynamic occlusion should hide pedestrians blocked by nearer pedestrians."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        dynamic_occlusion=True,
+    )
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[2.0, 0.0], [4.0, 0.0], [4.0, 1.0]], dtype=np.float32),
+        ped_vel=np.zeros((3, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+
+    obs = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    ).next_obs()
+
+    assert obs["pedestrians"]["count"][0] == pytest.approx(2.0)
+    assert obs["pedestrians"]["positions"][0].tolist() == pytest.approx([2.0, 0.0])
+    assert obs["pedestrians"]["positions"][1].tolist() == pytest.approx([4.0, 1.0])

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* Fixed the crowd-only Gymnasium environment contract so `CrowdSimEnv` keeps a stable
+  observation-space shape across resets, `make_crowd_sim_env()` preserves preconfigured
+  config values unless callers override them explicitly, reset-time map selection no longer
+  mutates NumPy's global RNG state, and compact JSONL recordings keep static scene metadata
+  on reset events instead of repeating it on every step.
+
 ### Added
 
 * Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`

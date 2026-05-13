@@ -62,13 +62,20 @@ class CrowdSimEnv(gym.Env):
         self.map_def: MapDefinition
         self.map_id: str | None = None
         self.sim: Simulator
+        configured_cap = self.config.sim_config.max_total_pedestrians
+        self._pedestrian_capacity = 0 if configured_cap is None else int(configured_cap)
+        if self._pedestrian_capacity < 0:
+            raise ValueError("sim_config.max_total_pedestrians must be >= 0 when provided")
         self._step_count = 0
         self._warned_ignored_action = False
         self._sim_ui: SimulationView | None = None
         self._recording_file = None
         self._recording_path: Path | None = None
+        self._map_rng = np.random.default_rng()
 
         self._reset_simulator()
+        self._sync_pedestrian_capacity()
+        self.observation_space = self._make_observation_space()
         if self.config.recording_enabled:
             self._open_recording()
 
@@ -87,9 +94,10 @@ class CrowdSimEnv(gym.Env):
         """
         super().reset(seed=seed)
         if seed is not None:
-            np.random.seed(seed)
+            self._map_rng = self.np_random
         options = options or {}
         self._reset_simulator(map_id=options.get("map_id"))
+        self._sync_pedestrian_capacity()
         observation = self._observation()
         info = self._info()
         self._record_event("reset", observation, info)
@@ -174,7 +182,6 @@ class CrowdSimEnv(gym.Env):
             peds_have_obstacle_forces=self.config.peds_have_obstacle_forces,
         )
         self._step_count = 0
-        self._update_observation_space()
         if self._sim_ui is not None:
             self._sim_ui.map_def = self.map_def
             self._sim_ui.obstacles = self.map_def.obstacles
@@ -189,30 +196,77 @@ class CrowdSimEnv(gym.Env):
         """
         if map_id is not None:
             return self.config.map_pool.get_map(map_id), map_id
+        if self.config.map_pool.map_defs:
+            map_ids = sorted(self.config.map_pool.map_defs.keys())
+            chosen_index = int(self._map_rng.integers(len(map_ids)))
+            chosen_id = map_ids[chosen_index]
+            return self.config.map_pool.map_defs[chosen_id], chosen_id
         map_def = self.config.map_pool.choose_random_map()
-        for candidate_id, candidate_map in self.config.map_pool.map_defs.items():
-            if candidate_map is map_def:
-                return map_def, candidate_id
         return map_def, None
 
-    def _update_observation_space(self) -> None:
-        """Update array-shaped observation spaces for the current pedestrian count."""
+    def _sync_pedestrian_capacity(self) -> None:
+        """Freeze and validate the fixed pedestrian capacity for this env instance."""
         num_peds = int(self.sim.pysf_state.num_peds)
+        if self._pedestrian_capacity == 0:
+            self._pedestrian_capacity = num_peds
+            return
+        if num_peds > self._pedestrian_capacity:
+            raise ValueError(
+                "CrowdSimEnv requires a fixed pedestrian capacity across resets; "
+                f"current simulator has {num_peds} pedestrians but capacity is "
+                f"{self._pedestrian_capacity}. Set sim_config.max_total_pedestrians "
+                "high enough for all selected maps."
+            )
+
+    def _make_observation_space(self) -> spaces.Dict:
+        """Return the fixed observation space for this environment instance.
+
+        Returns
+        -------
+        spaces.Dict
+            Observation-space dictionary sized to the frozen pedestrian capacity.
+        """
         vector_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(num_peds, 2),
+            shape=(self._pedestrian_capacity, 2),
             dtype=np.float32,
         )
-        self.observation_space = spaces.Dict(
+        return spaces.Dict(
             {
                 "positions": vector_space,
                 "velocities": vector_space,
                 "goals": vector_space,
                 "forces": vector_space,
-                "step": spaces.Box(low=0, high=np.inf, shape=(1,), dtype=np.int64),
+                "step": spaces.Box(
+                    low=0,
+                    high=np.iinfo(np.int64).max,
+                    shape=(1,),
+                    dtype=np.int64,
+                ),
             }
         )
+
+    def _pad_pedestrian_matrix(self, values: np.ndarray, *, dtype: np.dtype) -> np.ndarray:
+        """Pad or reject pedestrian matrices to match the fixed observation-space capacity.
+
+        Returns
+        -------
+        np.ndarray
+            Matrix padded with trailing zero rows up to the frozen pedestrian capacity.
+        """
+        array = np.asarray(values, dtype=dtype)
+        if array.ndim != 2 or array.shape[1] != 2:
+            raise ValueError(f"expected pedestrian matrix with shape (N, 2), got {array.shape}")
+        if array.shape[0] > self._pedestrian_capacity:
+            raise ValueError(
+                "CrowdSimEnv observation exceeds fixed pedestrian capacity: "
+                f"{array.shape[0]} > {self._pedestrian_capacity}"
+            )
+        padded = np.zeros((self._pedestrian_capacity, 2), dtype=dtype)
+        if array.shape[0] > 0:
+            padded[: array.shape[0]] = array
+        return padded
 
     def _observation(self) -> dict[str, np.ndarray]:
         """Return compact dynamic pedestrian state.
@@ -224,9 +278,9 @@ class CrowdSimEnv(gym.Env):
         """
         states = self.sim.pysf_state.pysf_states()
         return {
-            "positions": np.asarray(states[:, 0:2], dtype=np.float32),
-            "velocities": np.asarray(states[:, 2:4], dtype=np.float32),
-            "goals": np.asarray(states[:, 4:6], dtype=np.float32),
+            "positions": self._pad_pedestrian_matrix(states[:, 0:2], dtype=np.float32),
+            "velocities": self._pad_pedestrian_matrix(states[:, 2:4], dtype=np.float32),
+            "goals": self._pad_pedestrian_matrix(states[:, 4:6], dtype=np.float32),
             "forces": self._pedestrian_forces(),
             "step": np.asarray([self._step_count], dtype=np.int64),
         }
@@ -242,8 +296,8 @@ class CrowdSimEnv(gym.Env):
         num_peds = int(self.sim.pysf_state.num_peds)
         forces = np.asarray(self.sim.last_ped_forces, dtype=np.float32)
         if forces.shape == (num_peds, 2):
-            return forces
-        return np.zeros((num_peds, 2), dtype=np.float32)
+            return self._pad_pedestrian_matrix(forces, dtype=np.float32)
+        return np.zeros((self._pedestrian_capacity, 2), dtype=np.float32)
 
     def _info(self) -> dict[str, Any]:
         """Return static scene and episode metadata outside the step observation.
@@ -335,8 +389,8 @@ class CrowdSimEnv(gym.Env):
         payload = {
             "event": event,
             "step": int(self._step_count),
-            "info": info,
             "observation": {key: value.tolist() for key, value in observation.items()},
         }
+        payload["info"] = info if event == "reset" else {}
         self._recording_file.write(json.dumps(payload, sort_keys=True) + "\n")
         self._recording_file.flush()

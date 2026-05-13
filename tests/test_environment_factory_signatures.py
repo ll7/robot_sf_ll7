@@ -6,8 +6,15 @@ Ensures discoverability and prevents regression back to **kwargs catch-all.
 from __future__ import annotations
 
 import inspect
+from types import SimpleNamespace
 
+import numpy as np
+
+from robot_sf.gym_env import crowd_sim_env
+from robot_sf.gym_env import environment_factory as environment_factory_module
 from robot_sf.gym_env.base_env import BaseEnv
+from robot_sf.gym_env.crowd_sim_env import CrowdSimEnv, CrowdSimulationConfig
+from robot_sf.gym_env.env_config import SimulationSettings
 from robot_sf.gym_env.environment_factory import (
     make_crowd_sim_env,
     make_image_robot_env,
@@ -69,12 +76,141 @@ def test_make_multi_robot_env_signature_explicit():
 
 
 def test_make_crowd_sim_env_signature_explicit():
-    """Crowd env factory exposes robot-free stepping, rendering, and recording controls."""
+    """Crowd env factory exposes robot-free stepping and recording controls."""
     params = _param_names(make_crowd_sim_env)
     assert "config" in params
     assert "render_mode" in params
     assert "recording_enabled" in params
     assert "video_path" in params
+
+
+def test_make_crowd_sim_env_preserves_preconfigured_values(monkeypatch):
+    """Crowd env factory should preserve explicit config values by default."""
+
+    class FakePedestrianStates:
+        def __init__(self):
+            self._states = np.array(
+                [[1.0, 2.0, 0.1, 0.2, 5.0, 6.0]],
+                dtype=float,
+            )
+
+        @property
+        def num_peds(self) -> int:
+            return 1
+
+        def pysf_states(self) -> np.ndarray:
+            return self._states
+
+    class FakeSimulator:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.pysf_state = FakePedestrianStates()
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+            self.last_actions = []
+
+        @property
+        def ped_pos(self) -> np.ndarray:
+            return self.pysf_state.pysf_states()[:, 0:2]
+
+        def step_once(self, actions):
+            self.last_actions = actions
+
+    class FakeMapPool:
+        def __init__(self):
+            self.map = SimpleNamespace(obstacles=[], ped_count=1)
+            self.map_defs = {"fake": self.map}
+
+        def choose_random_map(self):
+            return self.map
+
+        def get_map(self, map_id: str):
+            return self.map_defs[map_id]
+
+    monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
+
+    config = CrowdSimulationConfig(
+        sim_config=SimulationSettings(
+            sim_time_in_secs=0.2,
+            time_per_step_in_secs=0.1,
+        ),
+        map_pool=FakeMapPool(),
+        map_id="fake",
+        peds_have_obstacle_forces=False,
+        render_mode="rgb_array",
+        recording_enabled=True,
+        recording_dir="configured-dir",
+        recording_path="configured.jsonl",
+        video_path="configured.mp4",
+        video_fps=12.5,
+    )
+
+    env = make_crowd_sim_env(config=config)
+
+    assert isinstance(env, CrowdSimEnv)
+    assert env.config.peds_have_obstacle_forces is False
+    assert env.config.render_mode == "rgb_array"
+    assert env.config.recording_enabled is True
+    assert env.config.recording_dir == "configured-dir"
+    assert env.config.recording_path == "configured.jsonl"
+    assert env.config.video_path == "configured.mp4"
+    assert env.config.video_fps == 12.5
+
+
+def test_make_crowd_sim_env_applies_explicit_overrides(monkeypatch):
+    """Crowd env factory should apply explicit overrides when config is omitted."""
+
+    class FakeCrowdSimulationConfig:
+        def __init__(self):
+            self.map_id = None
+            self.peds_have_obstacle_forces = True
+            self.render_mode = None
+            self.recording_enabled = False
+            self.recording_dir = "recordings"
+            self.recording_path = None
+            self.video_path = None
+            self.video_fps = None
+
+    class FakeCrowdEnv:
+        def __init__(self, config):
+            self.config = config
+            self.applied_seed = None
+
+    applied = {}
+
+    monkeypatch.setattr(
+        environment_factory_module,
+        "_apply_global_seed",
+        lambda seed: applied.setdefault("seed", seed),
+    )
+    monkeypatch.setattr(
+        environment_factory_module,
+        "_load_crowd_sim_env",
+        lambda: (FakeCrowdEnv, FakeCrowdSimulationConfig),
+    )
+
+    env = make_crowd_sim_env(
+        seed=123,
+        map_id="fake",
+        peds_have_obstacle_forces=False,
+        render_mode="rgb_array",
+        recording_enabled=True,
+        recording_dir="override-dir",
+        recording_path="override.jsonl",
+        video_path="override.mp4",
+        video_fps=9.0,
+    )
+
+    assert isinstance(env, FakeCrowdEnv)
+    assert applied["seed"] == 123
+    assert env.applied_seed == 123
+    assert env.config.map_id == "fake"
+    assert env.config.peds_have_obstacle_forces is False
+    assert env.config.render_mode == "rgb_array"
+    assert env.config.recording_enabled is True
+    assert env.config.recording_dir == "override-dir"
+    assert env.config.recording_path == "override.jsonl"
+    assert env.config.video_path == "override.mp4"
+    assert env.config.video_fps == 9.0
 
 
 def test_env_constructors_do_not_use_config_instance_defaults() -> None:

@@ -65,8 +65,9 @@ gymnasium.Env
 │       └── MultiRobotEnv
 ```
 
-`SimpleRobotEnv` was an unfinished legacy prototype and is no longer part of the supported
-environment surface. Use the factory helpers below for supported environments.
+`SimpleRobotEnv` and `EmptyRobotEnv` were unfinished legacy prototypes and are no longer part of
+the supported environment surface. Use the factory helpers below (including
+`make_crowd_sim_env` for robot-free simulation) for supported environments.
 
 ## 🔧 Quick Start
 

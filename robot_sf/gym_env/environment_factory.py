@@ -862,10 +862,10 @@ def make_crowd_sim_env(  # noqa: PLR0913
     *,
     seed: int | None = None,
     map_id: str | None = None,
-    peds_have_obstacle_forces: bool = True,
+    peds_have_obstacle_forces: bool | None = None,
     render_mode: str | None = None,
-    recording_enabled: bool = False,
-    recording_dir: str = "recordings",
+    recording_enabled: bool | None = None,
+    recording_dir: str | None = None,
     recording_path: str | None = None,
     video_path: str | None = None,
     video_fps: float | None = None,
@@ -885,13 +885,20 @@ def make_crowd_sim_env(  # noqa: PLR0913
         config = CrowdSimulationConfig()
     if map_id is not None:
         config.map_id = map_id
-    config.peds_have_obstacle_forces = peds_have_obstacle_forces
-    config.render_mode = render_mode
-    config.recording_enabled = recording_enabled
-    config.recording_dir = recording_dir
-    config.recording_path = recording_path
-    config.video_path = video_path
-    config.video_fps = video_fps
+    if peds_have_obstacle_forces is not None:
+        config.peds_have_obstacle_forces = peds_have_obstacle_forces
+    if render_mode is not None:
+        config.render_mode = render_mode
+    if recording_enabled is not None:
+        config.recording_enabled = recording_enabled
+    if recording_dir is not None:
+        config.recording_dir = recording_dir
+    if recording_path is not None:
+        config.recording_path = recording_path
+    if video_path is not None:
+        config.video_path = video_path
+    if video_fps is not None:
+        config.video_fps = video_fps
     env = CrowdSimEnv(config)
     env.applied_seed = seed
     return env

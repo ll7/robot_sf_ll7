@@ -16,15 +16,25 @@ from robot_sf.gym_env.environment_factory import make_crowd_sim_env
 class FakePedestrianStates:
     """Minimal pedestrian state container compatible with CrowdSimEnv."""
 
-    def __init__(self):
-        """Create a deterministic two-pedestrian state matrix."""
-        self._states = np.array(
-            [
-                [1.0, 2.0, 0.1, 0.2, 5.0, 6.0],
-                [3.0, 4.0, 0.3, 0.4, 7.0, 8.0],
-            ],
-            dtype=float,
-        )
+    def __init__(self, num_peds: int = 2):
+        """Create a deterministic pedestrian state matrix.
+
+        The row count stays configurable so resets can swap between fake maps.
+        """
+        rows = []
+        for index in range(num_peds):
+            base = float(index * 2)
+            rows.append(
+                [
+                    1.0 + base,
+                    2.0 + base,
+                    0.1 + base / 10,
+                    0.2 + base / 10,
+                    5.0 + base,
+                    6.0 + base,
+                ]
+            )
+        self._states = np.array(rows, dtype=float)
 
     @property
     def num_peds(self) -> int:
@@ -42,8 +52,10 @@ class FakeSimulator:
     def __init__(self, **kwargs):
         """Capture simulator construction kwargs for assertions."""
         self.kwargs = kwargs
-        self.pysf_state = FakePedestrianStates()
+        num_peds = int(getattr(kwargs["map_def"], "ped_count", 2))
+        self.pysf_state = FakePedestrianStates(num_peds=num_peds)
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_actions = []
 
     @property
     def ped_pos(self) -> np.ndarray:
@@ -54,16 +66,20 @@ class FakeSimulator:
         """Advance fake pedestrians and record the action list."""
         self.last_actions = actions
         self.pysf_state.pysf_states()[:, 0:2] += 1.0
-        self.last_ped_forces = np.ones((self.pysf_state.num_peds, 2), dtype=float)
+        self.last_ped_forces = np.ones(
+            (self.pysf_state.num_peds, 2),
+            dtype=float,
+        )
 
 
 class FakeMapPool:
     """Map-pool double exposing the methods used by CrowdSimEnv."""
 
     def __init__(self):
-        """Create a single fake map entry."""
-        self.map = SimpleNamespace(obstacles=[])
-        self.map_defs = {"fake": self.map}
+        """Create deterministic fake map entries with different pedestrian counts."""
+        self.map = SimpleNamespace(obstacles=[], ped_count=2)
+        self.alt_map = SimpleNamespace(obstacles=[], ped_count=1)
+        self.map_defs = {"fake": self.map, "alt": self.alt_map}
 
     def choose_random_map(self):
         """Return the fake map."""
@@ -77,7 +93,10 @@ class FakeMapPool:
 def _config(**kwargs) -> CrowdSimulationConfig:
     """Build a deterministic crowd simulation config for tests."""
     base = {
-        "sim_config": SimulationSettings(sim_time_in_secs=0.2, time_per_step_in_secs=0.1),
+        "sim_config": SimulationSettings(
+            sim_time_in_secs=0.2,
+            time_per_step_in_secs=0.1,
+        ),
         "map_pool": FakeMapPool(),
         "map_id": "fake",
     }
@@ -126,6 +145,8 @@ def test_crowd_sim_env_render_rgb_array_uses_lazy_view(monkeypatch):
             self.kwargs = kwargs
             self.frames = []
             self.screen = frame
+            self.target_fps = None
+            self.closed = False
 
         def render(self, _state, target_fps: float):
             """Capture one fake frame."""
@@ -180,10 +201,36 @@ def test_crowd_sim_env_records_jsonl_and_closes(monkeypatch, tmp_path):
     assert env.recording_path == recording_path
     records = [json.loads(line) for line in recording_path.read_text().splitlines()]
     assert [record["event"] for record in records] == ["reset", "step"]
+    assert records[0]["info"]["map_id"] == "fake"
+    assert records[1]["info"] == {}
     assert records[-1]["observation"]["positions"] == [[2.0, 3.0], [4.0, 5.0]]
 
     env.close()
     assert env._recording_file is None
+
+
+def test_crowd_sim_env_observation_space_stays_static_across_resets(monkeypatch):
+    """CrowdSimEnv should keep a fixed observation shape across map resets."""
+    monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
+
+    env = CrowdSimEnv(
+        _config(
+            sim_config=SimulationSettings(
+                sim_time_in_secs=0.2,
+                time_per_step_in_secs=0.1,
+                max_total_pedestrians=3,
+            )
+        )
+    )
+
+    initial_shape = env.observation_space["positions"].shape
+    obs, _ = env.reset(options={"map_id": "alt"})
+
+    assert initial_shape == (3, 2)
+    assert env.observation_space["positions"].shape == (3, 2)
+    assert obs["positions"].shape == (3, 2)
+    assert obs["positions"][0].tolist() == [1.0, 2.0]
+    assert obs["positions"][1:].tolist() == [[0.0, 0.0], [0.0, 0.0]]
 
 
 def test_crowd_sim_env_screen_fallback_and_existing_view_reset(monkeypatch):
@@ -201,6 +248,8 @@ def test_crowd_sim_env_screen_fallback_and_existing_view_reset(monkeypatch):
             self.screen = frame
             self.map_def = None
             self.obstacles = None
+            self.target_fps = None
+            self.closed = False
 
         def render(self, _state, target_fps: float):
             """Store the requested target FPS without appending a frame."""
@@ -212,7 +261,17 @@ def test_crowd_sim_env_screen_fallback_and_existing_view_reset(monkeypatch):
 
     monkeypatch.setattr(crowd_sim_env, "SimulationView", FakeView)
 
-    env = CrowdSimEnv(_config(map_id=None, render_mode="rgb_array"))
+    env = CrowdSimEnv(
+        _config(
+            map_id=None,
+            render_mode="rgb_array",
+            sim_config=SimulationSettings(
+                sim_time_in_secs=0.2,
+                time_per_step_in_secs=0.1,
+                max_total_pedestrians=2,
+            ),
+        )
+    )
     rendered = env.render()
     env.reset(options={"map_id": "fake"})
     env.close()

@@ -30,6 +30,83 @@ SOCNAV_POSITION_CAP_M = 50.0
 """Global cap for SocNav position-like observations to keep bounds consistent."""
 
 
+def dynamic_pedestrian_occlusion_mask(
+    ped_positions: np.ndarray,
+    *,
+    robot_pos: np.ndarray,
+    pedestrian_radius: float,
+    base_visible: np.ndarray | None = None,
+) -> np.ndarray:
+    """Return planner-facing pedestrian visibility after dynamic body occlusion.
+
+    Contract for this first helper:
+    - pedestrians are circular blockers with radius ``pedestrian_radius``;
+    - only a target pedestrian's center-line visibility is tested;
+    - a nearer visible pedestrian blocks a farther target when the line segment from
+      robot center to target center passes through the nearer pedestrian disk;
+    - ground-truth simulator state is not modified.
+    """
+    ped_positions = np.asarray(ped_positions, dtype=float)
+    if ped_positions.size == 0:
+        return np.zeros((0,), dtype=bool)
+    if pedestrian_radius < 0:
+        raise ValueError("pedestrian_radius must be >= 0")
+
+    visible = (
+        np.ones((ped_positions.shape[0],), dtype=bool)
+        if base_visible is None
+        else np.asarray(base_visible, dtype=bool).copy()
+    )
+    robot = np.asarray(robot_pos, dtype=float)
+    rel = ped_positions - robot
+    dists = np.linalg.norm(rel, axis=1)
+    order = np.argsort(dists, kind="stable")
+
+    for target_idx in order:
+        if not visible[target_idx]:
+            continue
+        target_dist = float(dists[target_idx])
+        if target_dist <= 0.0:
+            continue
+        target_vec = rel[target_idx]
+        for blocker_idx in order:
+            if blocker_idx == target_idx or not visible[blocker_idx]:
+                continue
+            blocker_dist = float(dists[blocker_idx])
+            if blocker_dist >= target_dist:
+                break
+            if _point_blocks_segment(
+                point=ped_positions[blocker_idx],
+                segment_start=robot,
+                segment_end=ped_positions[target_idx],
+                radius=pedestrian_radius,
+                segment_vec=target_vec,
+                segment_len_sq=target_dist * target_dist,
+            ):
+                visible[target_idx] = False
+                break
+    return visible
+
+
+def _point_blocks_segment(
+    *,
+    point: np.ndarray,
+    segment_start: np.ndarray,
+    segment_end: np.ndarray,
+    radius: float,
+    segment_vec: np.ndarray,
+    segment_len_sq: float,
+) -> bool:
+    """Return whether a disk centered at ``point`` blocks a center-line segment."""
+    if segment_len_sq <= 0.0:
+        return False
+    projection = float(np.dot(point - segment_start, segment_vec) / segment_len_sq)
+    if projection <= 0.0 or projection >= 1.0:
+        return False
+    nearest = segment_start + projection * segment_vec
+    return float(np.linalg.norm(point - nearest)) <= radius
+
+
 def _map_position_cap(map_def: Any) -> np.ndarray:
     """Return per-axis position caps that preserve coordinates on larger maps."""
     width = float(getattr(map_def, "width", SOCNAV_POSITION_CAP_M) or SOCNAV_POSITION_CAP_M)
@@ -264,6 +341,13 @@ class SocNavObservationFusion:
             for idx, ped_pos in enumerate(ped_positions):
                 if visible[idx] and self._statically_occluded(robot_pos=robot_pos, ped_pos=ped_pos):
                     visible[idx] = False
+        if bool(getattr(settings, "dynamic_occlusion", False)):
+            visible = dynamic_pedestrian_occlusion_mask(
+                ped_positions,
+                robot_pos=robot_pos,
+                pedestrian_radius=float(getattr(self.env_config.sim_config, "ped_radius", 0.0)),
+                base_visible=visible,
+            )
         return visible
 
     def _statically_occluded(self, *, robot_pos: np.ndarray, ped_pos: np.ndarray) -> bool:

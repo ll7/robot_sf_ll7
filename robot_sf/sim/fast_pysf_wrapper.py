@@ -39,10 +39,10 @@ class FastPysfWrapper:
     """
 
     def __init__(self, simulator: pysf.Simulator):
-        """TODO docstring. Document this function.
+        """Wrap a PySocialForce simulator for force queries.
 
         Args:
-            simulator: TODO docstring.
+            simulator: Active PySocialForce simulator instance to query.
         """
         self.sim = simulator
         # Named caches for precomputed force grids. Each cache is a dict with
@@ -184,14 +184,14 @@ class FastPysfWrapper:
 
     def _compute_robot_force_at_point(self, p: np.ndarray, robot_state: dict) -> np.ndarray:
         # Defensive: try common names for robot interaction functions
-        """TODO docstring. Document this function.
+        """Compute robot-interaction force at a sample point when supported.
 
         Args:
-            p: TODO docstring.
-            robot_state: TODO docstring.
+            p: 2D point where the robot force should be evaluated.
+            robot_state: Backend-specific robot state passed to available force helpers.
 
         Returns:
-            TODO docstring.
+            Force vector for the point, or zeros when no compatible helper is available.
         """
         for name in ("robot_force", "robot_interaction_force_on_point", "force_robot"):
             if hasattr(pf_forces, name):

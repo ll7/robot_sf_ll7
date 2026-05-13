@@ -133,6 +133,42 @@ def test_make_crowd_sim_env_exposes_factory(monkeypatch):
     assert env.applied_seed == 123
 
 
+def test_make_crowd_sim_env_seed_controls_constructor_map_selection(monkeypatch):
+    """Factory seeding should make constructor-time random map selection reproducible."""
+    monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
+
+    class ManyMapPool(FakeMapPool):
+        """Map pool with enough entries to expose unseeded constructor RNG drift."""
+
+        def __init__(self):
+            self.map_defs = {
+                f"fake-{index:02d}": SimpleNamespace(obstacles=[], ped_count=1)
+                for index in range(25)
+            }
+
+    def selected_map_ids(seed: int) -> list[str | None]:
+        ids = []
+        for _ in range(3):
+            env = make_crowd_sim_env(
+                config=CrowdSimulationConfig(
+                    sim_config=SimulationSettings(
+                        sim_time_in_secs=0.2,
+                        time_per_step_in_secs=0.1,
+                    ),
+                    map_pool=ManyMapPool(),
+                    map_id=None,
+                ),
+                seed=seed,
+            )
+            try:
+                ids.append(env.map_id)
+            finally:
+                env.close()
+        return ids
+
+    assert len(set(selected_map_ids(123))) == 1
+
+
 def test_crowd_sim_env_render_rgb_array_uses_lazy_view(monkeypatch):
     """RGB rendering should lazily create a view and return the captured frame."""
     monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)

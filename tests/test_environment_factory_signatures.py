@@ -84,7 +84,7 @@ def test_make_crowd_sim_env_signature_explicit():
     assert "video_path" in params
 
 
-def test_make_crowd_sim_env_preserves_preconfigured_values(monkeypatch):
+def test_make_crowd_sim_env_preserves_preconfigured_values(monkeypatch, tmp_path):
     """Crowd env factory should preserve explicit config values by default."""
 
     class FakePedestrianStates:
@@ -128,6 +128,9 @@ def test_make_crowd_sim_env_preserves_preconfigured_values(monkeypatch):
 
     monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
 
+    recording_dir = tmp_path / "configured-dir"
+    recording_path = tmp_path / "configured.jsonl"
+    video_path = tmp_path / "configured.mp4"
     config = CrowdSimulationConfig(
         sim_config=SimulationSettings(
             sim_time_in_secs=0.2,
@@ -138,22 +141,25 @@ def test_make_crowd_sim_env_preserves_preconfigured_values(monkeypatch):
         peds_have_obstacle_forces=False,
         render_mode="rgb_array",
         recording_enabled=True,
-        recording_dir="configured-dir",
-        recording_path="configured.jsonl",
-        video_path="configured.mp4",
+        recording_dir=str(recording_dir),
+        recording_path=str(recording_path),
+        video_path=str(video_path),
         video_fps=12.5,
     )
 
     env = make_crowd_sim_env(config=config)
 
-    assert isinstance(env, CrowdSimEnv)
-    assert env.config.peds_have_obstacle_forces is False
-    assert env.config.render_mode == "rgb_array"
-    assert env.config.recording_enabled is True
-    assert env.config.recording_dir == "configured-dir"
-    assert env.config.recording_path == "configured.jsonl"
-    assert env.config.video_path == "configured.mp4"
-    assert env.config.video_fps == 12.5
+    try:
+        assert isinstance(env, CrowdSimEnv)
+        assert env.config.peds_have_obstacle_forces is False
+        assert env.config.render_mode == "rgb_array"
+        assert env.config.recording_enabled is True
+        assert env.config.recording_dir == str(recording_dir)
+        assert env.config.recording_path == str(recording_path)
+        assert env.config.video_path == str(video_path)
+        assert env.config.video_fps == 12.5
+    finally:
+        env.close()
 
 
 def test_make_crowd_sim_env_applies_explicit_overrides(monkeypatch):

@@ -71,7 +71,8 @@ class CrowdSimEnv(gym.Env):
         self._sim_ui: SimulationView | None = None
         self._recording_file = None
         self._recording_path: Path | None = None
-        self._map_rng = np.random.default_rng()
+        # Honor factory-level seeding before the first constructor-time map selection.
+        self._map_rng = np.random.default_rng(np.random.randint(0, np.iinfo(np.uint32).max))
 
         self._reset_simulator()
         self._sync_pedestrian_capacity()

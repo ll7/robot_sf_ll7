@@ -58,10 +58,13 @@ one branch, implements, validates, checks generated artifacts, commits, pushes, 
 before continuing. It stops instead of guessing when an issue is blocked, ambiguous, already covered
 by an open PR, or missing proof requirements.
 
-`goal-pr-review` reviews open PRs against linked issue contracts, not just CI state. It applies a
-dedicated `merge-ready` label only after the full proof bar passes: issue contract resolved, diff
-matches scope, checks or readiness proof are adequate, review threads are handled, generated
-artifacts are classified, and deferred work is captured as follow-up issues.
+`goal-pr-review` reviews open PRs against linked issue contracts, not just CI state. When the full
+proof bar fails, the loop should fix actionable gaps on writable PR branches before leaving a
+passive "not merge-ready" comment. Fixes must stay inside the issue/PR contract, be committed and
+pushed, and be validated before reassessing readiness. It applies a dedicated `merge-ready` label
+only after the full proof bar passes: issue contract resolved, diff matches scope, checks or
+readiness proof are adequate, review threads are handled, generated artifacts are classified, and
+deferred work is captured as follow-up issues.
 
 ## Deferred Scope
 

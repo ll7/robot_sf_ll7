@@ -9,7 +9,7 @@ read the specific `SKILL.md` before applying a skill.
 - Discover and open improvement issues autonomously: `goal-issue-discovery`
 - Audit open issues with one user decision at a time: `issue-audit`
 - Implement eligible issue queues sequentially: `goal-issue-implementation`
-- Review open PRs and apply merge-ready after proof: `goal-pr-review`
+- Review open PRs, fix actionable gaps, and apply merge-ready after proof: `goal-pr-review`
 - Implement an issue end-to-end: `gh-issue-autopilot`
 - Sequence Project #5 issue batches: `gh-issue-sequencer`
 - Address PR review comments: `gh-pr-comment-fixer`
@@ -71,7 +71,7 @@ read the specific `SKILL.md` before applying a skill.
 | `experiment-context` | Finding canonical config-first training/evaluation paths, artifact lineage, and validation gates. |
 | `goal-issue-discovery` | Autonomously finding evidence-graded improvement opportunities and creating detailed GitHub issues. |
 | `goal-issue-implementation` | Sequentially implementing eligible open issues through branch, validation, push, and PR creation. |
-| `goal-pr-review` | Reviewing open PRs against linked issue contracts and applying `merge-ready` after full proof. |
+| `goal-pr-review` | Reviewing open PRs against linked issue contracts, fixing scoped writable gaps, and applying `merge-ready` after full proof. |
 | `gh-issue-autopilot` | Selecting or executing an issue through implementation, validation, push, and draft PR. |
 | `gh-issue-clarifier` | Tightening ambiguous GitHub issues and marking decision-required items when needed. |
 | `gh-issue-creator` | Creating structured GitHub issues from rough prompts with repo template conventions. |

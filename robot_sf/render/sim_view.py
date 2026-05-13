@@ -104,7 +104,7 @@ def _empty_map_definition() -> MapDefinition:
 
 @dataclass
 class VisualizableAction:
-    """TODO docstring. Document this class."""
+    """Action payload rendered alongside an agent pose and goal."""
 
     pose: RobotPose
     action: DifferentialDriveAction | BicycleAction | UnicycleAction
@@ -218,7 +218,7 @@ class SimulationView:
     focus_on_ego_ped: bool = False
     record_video: bool = False
     video_path: str | None = None
-    video_fps: float = 10.0
+    video_fps: float | None = None
     frames: list[np.ndarray] = field(default_factory=list)
     clock: pygame.time.Clock = field(init=False)
 
@@ -550,15 +550,21 @@ class SimulationView:
 
     def _finalize_frame(self, target_fps: float):
         """Capture or display the completed frame."""
+        # Store the effective render cadence for video encoding and diagnostics.
+        self.current_target_fps = target_fps
         if self.record_video:
             self._capture_frame()
         else:
-            # Store the current target FPS for display
-            self.current_target_fps = target_fps
             if self._use_display:
                 pygame.display.update()
             # Control frame rate with pygame's clock
             self.clock.tick(target_fps)
+
+    def _effective_video_fps(self) -> float:
+        """Return the FPS used when encoding captured frames."""
+        if self.video_fps is not None:
+            return float(self.video_fps)
+        return float(self.current_target_fps)
 
     def _capture_frame(self):
         """Capture the current frame for video recording."""
@@ -587,11 +593,11 @@ class SimulationView:
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
+        """Return the default screen position for timestep text.
 
 
         Returns:
-            tuple[int, int]: Default ray vector rendering size (16, 16) pixels.
+            Default ``(x, y)`` text position in screen pixels.
         """
         return (16, 16)
 
@@ -646,8 +652,7 @@ class SimulationView:
         self.is_abortion_requested = True
         if self.record_video and self.frames and MOVIEPY_AVAILABLE and self.video_path:
             logger.debug("Writing video file.")
-            # TODO: get the correct fps from the simulation
-            clip = ImageSequenceClip(self.frames, fps=self.video_fps)
+            clip = ImageSequenceClip(self.frames, fps=self._effective_video_fps())
             clip.write_videofile(self.video_path)
             self.frames = []
         elif self.record_video and self.frames and MOVIEPY_AVAILABLE and not self.video_path:

@@ -8,8 +8,8 @@ from gymnasium import spaces
 
 from robot_sf.common.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
 
-WheelSpeedState = tuple[float, float]  # tuple of (left, right) speeds
-# TODO: Is WheelSpeedState in translation or rotation units?
+WheelSpeedState = tuple[float, float]
+"""Left and right wheel angular velocities in radians per second."""
 
 
 @dataclass
@@ -64,7 +64,9 @@ class DifferentialDriveState:
     pose: RobotPose = ((0.0, 0.0), 0.0)
     velocity: PolarVec2D = (0.0, 0.0)
     last_wheel_speeds: WheelSpeedState = (0.0, 0.0)
+    """Previous left/right wheel angular velocities in radians per second."""
     wheel_speeds: WheelSpeedState = (0.0, 0.0)
+    """Current left/right wheel angular velocities in radians per second."""
 
 
 @dataclass

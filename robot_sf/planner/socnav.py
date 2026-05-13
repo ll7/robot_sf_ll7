@@ -43,7 +43,11 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
 from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
-from robot_sf.planner.obstacle_features import LocalObstacleFeatureExtractor
+from robot_sf.planner.obstacle_features import (
+    LocalObstacleFeatureExtractor,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    infer_predictive_feature_schema,
+)
 from robot_sf.planner.predictive_model import (
     PredictiveTrajectoryModel,
     load_predictive_checkpoint,
@@ -3863,6 +3867,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         model = self._ensure_model()
         if model is not None:
             expected_dim = int(getattr(model.config, "input_dim", expected_dim))
+        schema_metadata = infer_predictive_feature_schema(expected_dim)
+        base_feature_dim = int(schema_metadata["base_feature_dim"])
         state = np.zeros((max_agents, expected_dim), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
         count = min(max_agents, ped_positions.shape[0])
@@ -3875,7 +3881,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             state[:count, 0] = rel_x
             state[:count, 1] = rel_y
             state[:count, 2:4] = ped_velocities_ego[:count]
-            if expected_dim >= 9:
+            if base_feature_dim >= 9:
                 goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
                 goal_rel_world = goal_current - robot_pos
                 goal_rel = np.array(
@@ -3892,14 +3898,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 state[:count, 6] = float(goal_dir[0])
                 state[:count, 7] = float(goal_dir[1])
                 state[:count, 8] = goal_dist
-            if expected_dim > 9:
+            if schema_metadata["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
                 extractor = LocalObstacleFeatureExtractor()
                 obstacle_rows = extractor.extract_many(
                     [tuple(point) for point in ped_positions[:count]],
                     [],
                 )
-                end = min(expected_dim, 9 + extractor.feature_dim)
-                state[:count, 9:end] = obstacle_rows[:, : end - 9]
+                end = min(expected_dim, base_feature_dim + extractor.feature_dim)
+                state[:count, base_feature_dim:end] = obstacle_rows[:, : end - base_feature_dim]
             mask[:count] = 1.0
         return state, mask, robot_pos, robot_heading
 

@@ -150,6 +150,17 @@ def test_frames_to_samples_appends_obstacle_feature_schema_rows() -> None:
     assert mask[0, 0] == 1.0
 
 
+def test_effective_feature_schema_follows_emitted_ego_conditioning_features() -> None:
+    """Collector metadata should match the actual emitted feature width."""
+    schema = collect._effective_predictive_feature_schema(
+        model_family="predictive_legacy_v1",
+        ego_conditioning=True,
+    )
+
+    assert schema["name"] == "predictive_ego_v1"
+    assert schema["input_dim"] == 9
+
+
 def test_parse_args_accepts_ego_conditioning_flag(monkeypatch) -> None:
     """CLI parser should expose the ego-conditioning toggle for standalone collection."""
     monkeypatch.setattr(

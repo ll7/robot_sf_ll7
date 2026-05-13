@@ -16,6 +16,8 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_LEGACY_FEATURE_SCHEMA,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
     append_obstacle_features,
@@ -35,6 +37,25 @@ class Frame:
     ped_positions_world: np.ndarray
     ped_velocities_world: np.ndarray
     ped_count: int
+
+
+def _effective_predictive_feature_schema(
+    *,
+    model_family: str,
+    ego_conditioning: bool,
+) -> dict[str, object]:
+    """Resolve the predictive feature schema actually emitted by the collector."""
+    normalized = str(model_family).strip() or PREDICTIVE_LEGACY_FEATURE_SCHEMA
+    if normalized == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+        effective_family = PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+    elif normalized == PREDICTIVE_EGO_FEATURE_SCHEMA or bool(ego_conditioning):
+        effective_family = PREDICTIVE_EGO_FEATURE_SCHEMA
+    else:
+        effective_family = PREDICTIVE_LEGACY_FEATURE_SCHEMA
+    return predictive_feature_schema_metadata(
+        model_family=effective_family,
+        ego_conditioning=bool(ego_conditioning),
+    )
 
 
 def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
@@ -187,10 +208,8 @@ def _frames_to_samples(
     model_family: str = "predictive_legacy_v1",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Create supervised samples from temporal frame sequences."""
-    schema_metadata = predictive_feature_schema_metadata(
-        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
-        if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
-        else ("predictive_ego_v1" if ego_conditioning else "predictive_legacy_v1"),
+    schema_metadata = _effective_predictive_feature_schema(
+        model_family=model_family,
         ego_conditioning=ego_conditioning,
     )
     state_dim = int(schema_metadata["input_dim"])
@@ -207,11 +226,11 @@ def _frames_to_samples(
     targets: list[np.ndarray] = []
     masks: list[np.ndarray] = []
     target_masks: list[np.ndarray] = []
+    base_dim = int(schema_metadata["base_feature_dim"])
 
     for t in range(0, len(frames) - horizon_steps):
         frame_t = frames[t]
         c = min(frame_t.ped_count, max_agents)
-        base_dim = 9 if ego_conditioning else 4
         state_base = np.zeros((max_agents, base_dim), dtype=np.float32)
         target = np.zeros((max_agents, horizon_steps, 2), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
@@ -228,7 +247,7 @@ def _frames_to_samples(
                 frame_t.ped_velocities_world[:c],
                 frame_t.robot_heading,
             )
-            if ego_conditioning:
+            if base_dim >= 9:
                 goal_rel = _world_to_ego(
                     frame_t.goal_current.reshape(1, 2),
                     frame_t.robot_pos,
@@ -458,7 +477,7 @@ def main() -> int:
         mask=masks_cat,
         target_mask=target_masks_cat,
         feature_schema_json=json.dumps(
-            predictive_feature_schema_metadata(
+            _effective_predictive_feature_schema(
                 model_family=str(args.model_family),
                 ego_conditioning=bool(args.ego_conditioning),
             ),
@@ -474,7 +493,7 @@ def main() -> int:
         "num_samples": int(states_cat.shape[0]),
         "state_dim": int(states_cat.shape[2]),
         "model_family": str(args.model_family),
-        "feature_schema": predictive_feature_schema_metadata(
+        "feature_schema": _effective_predictive_feature_schema(
             model_family=str(args.model_family),
             ego_conditioning=bool(args.ego_conditioning),
         ),

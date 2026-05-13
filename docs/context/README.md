@@ -215,6 +215,9 @@ knowledge, not every transient iteration detail.
 
 ## Manual Control Notes
 
+* [Issue #1163 Manual-Control Recording Format Decision](issue_1163_manual_control_recording_format.md)
+  records the measured no-change decision for compact manual-control recording formats, including
+  JSONL size/throughput thresholds and provenance requirements for any future derived artifact.
 * [Issue #1154 Web-Game Data Collection Path](issue_1154_web_game_data_collection_path.md)
   records the feasibility gate for browser/web-game manual-control collection, including schema
   parity, consent/privacy, retention, deterministic hosted scenarios, and the narrow offline

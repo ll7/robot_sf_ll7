@@ -82,6 +82,12 @@ knowledge, not every transient iteration detail.
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Route-clearance certification: [issue_1105_route_clearance_certification.md](issue_1105_route_clearance_certification.md)
 * Negative route-clearance repair: [issue_1130_negative_route_clearance_repair.md](issue_1130_negative_route_clearance_repair.md)
+* Open-issues implementation status:
+  [open_issues_implementation_status_2026-05-12.md](open_issues_implementation_status_2026-05-12.md)
+* Open-issues maintainer-input triage:
+  [open_issues_maintainer_input_triage.md](open_issues_maintainer_input_triage.md)
+* Open-issues PR split strategy:
+  [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 

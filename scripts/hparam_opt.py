@@ -12,6 +12,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.observation_config import set_observation_stack_steps
 from robot_sf.gym_env.robot_env import RobotEnv, simple_reward
 from robot_sf.tb_logging import DrivingMetricsCallback, VecEnvMetrics
 
@@ -84,23 +85,23 @@ def training_score(
     difficulty: int = 1,
     route_completion_thresholds: list[float] | None = None,
 ):
-    """TODO docstring. Document this function.
+    """Train and score one hyperparameter configuration.
 
     Args:
-        study_name: TODO docstring.
-        hparams: TODO docstring.
-        max_steps: TODO docstring.
-        difficulty: TODO docstring.
-        route_completion_thresholds: TODO docstring.
+        study_name: Name used for TensorBoard and study artifacts.
+        hparams: Hyperparameter values for environment and PPO configuration.
+        max_steps: Maximum number of PPO training timesteps.
+        difficulty: Pedestrian-density difficulty index for the environment.
+        route_completion_thresholds: Optional completion thresholds for score aggregation.
     """
     if route_completion_thresholds is None:
         route_completion_thresholds = [i / 100 for i in range(1, 101)]
 
     def make_env():
-        """TODO docstring. Document this function."""
+        """Create one training environment with the sampled hyperparameters."""
         config = EnvSettings()
         config.sim_config.difficulty = difficulty
-        config.sim_config.stack_steps = hparams["num_stacked_steps"]
+        set_observation_stack_steps(config, hparams["num_stacked_steps"])
         config.sim_config.time_per_step_in_secs = hparams["d_t"]
         config.sim_config.use_next_goal = hparams["use_next_goal"]
 

@@ -26,13 +26,13 @@ from robot_sf.manual_control.modes import (
     ManualViewMode,
     ensure_supported_mvp_mode,
 )
+from robot_sf.manual_control.profile import ManualRecordingProfile, profile_manual_jsonl_recording
 from robot_sf.manual_control.recording import (
     ManualControlRecord,
     ManualJsonlRecorder,
     ManualSessionMetadata,
     load_manual_jsonl_records,
 )
-from robot_sf.manual_control.profile import ManualRecordingProfile, profile_manual_jsonl_recording
 from robot_sf.manual_control.replay import (
     ManualAttemptReplay,
     ManualReplayEvent,

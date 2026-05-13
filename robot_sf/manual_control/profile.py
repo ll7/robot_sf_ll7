@@ -60,7 +60,7 @@ class ManualRecordingProfile:
         int
             Estimated serialized bytes for 500 records.
         """
-        return int(round(self.bytes_per_record * 500))
+        return round(self.bytes_per_record * 500)
 
     def to_json_dict(self) -> dict[str, object]:
         """Return a JSON-compatible profiling summary.

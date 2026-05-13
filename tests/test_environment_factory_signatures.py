@@ -7,25 +7,30 @@ from __future__ import annotations
 
 import inspect
 
+from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.environment_factory import (
+    make_crowd_sim_env,
     make_image_robot_env,
     make_multi_robot_env,
     make_pedestrian_env,
     make_robot_env,
 )
+from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
+from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.gym_env.robot_env_with_image import RobotEnvWithImage
 
 
 def _param_names(func):
-    """TODO docstring. Document this function.
+    """Return function parameter names in declaration order.
 
     Args:
-        func: TODO docstring.
+        func: Callable object to inspect.
     """
     return [p.name for p in inspect.signature(func).parameters.values()]
 
 
 def test_make_robot_env_signature_explicit():
-    """TODO docstring. Document this function."""
+    """Robot env factory keeps the reviewed explicit public parameters."""
     params = _param_names(make_robot_env)
     assert "config" in params
     assert "reward_func" in params
@@ -45,19 +50,37 @@ def test_make_robot_env_signature_explicit():
 
 
 def test_make_image_robot_env_signature_explicit():
-    """TODO docstring. Document this function."""
+    """Image robot env factory keeps the reviewed explicit public parameters."""
     params = _param_names(make_image_robot_env)
     assert "config" in params
     assert "debug" in params
 
 
 def test_make_pedestrian_env_signature_explicit():
-    """TODO docstring. Document this function."""
+    """Pedestrian env factory exposes config and robot-model parameters."""
     params = _param_names(make_pedestrian_env)
     assert "config" in params and "robot_model" in params
 
 
 def test_make_multi_robot_env_signature_explicit():
-    """TODO docstring. Document this function."""
+    """Multi-robot env factory exposes robot-count and config parameters."""
     params = _param_names(make_multi_robot_env)
     assert "num_robots" in params and "config" in params
+
+
+def test_make_crowd_sim_env_signature_explicit():
+    """Crowd env factory exposes robot-free stepping, rendering, and recording controls."""
+    params = _param_names(make_crowd_sim_env)
+    assert "config" in params
+    assert "render_mode" in params
+    assert "recording_enabled" in params
+    assert "video_path" in params
+
+
+def test_env_constructors_do_not_use_config_instance_defaults() -> None:
+    """Avoid shared mutable config objects in environment constructor signatures."""
+    env_classes = [BaseEnv, RobotEnv, RobotEnvWithImage, MultiRobotEnv]
+
+    for env_class in env_classes:
+        param = inspect.signature(env_class).parameters["env_config"]
+        assert param.default is None

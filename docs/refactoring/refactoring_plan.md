@@ -16,8 +16,10 @@ gymnasium.Env
 │   │   └── PedestrianEnv
 │   └── MultiAgentEnv (abstract)
 │       └── MultiRobotEnv
-└── SimpleRobotEnv (lightweight, separate)
 ```
+
+`SimpleRobotEnv` is no longer part of the target hierarchy; it was removed as an unfinished legacy
+prototype rather than completed.
 
 ## Phase 1: Consolidate Configuration Classes
 
@@ -76,10 +78,9 @@ class PedestrianConfig(RobotConfig):
 - Remove duplicated BaseEnv functionality
 - Use consolidated configuration classes
 
-### 2. Update EmptyRobotEnv  
-- Extend SingleAgentEnv
-- Remove duplicated initialization code
-- Consider merging with RobotEnv as a configuration option
+### 2. Replace EmptyRobotEnv
+- Remove the unclear legacy wrapper
+- Preserve the crowd-only use case through `make_crowd_sim_env`
 
 ### 3. Consolidate RobotEnv variants
 - Make image observations a configuration option in RobotEnv
@@ -130,7 +131,7 @@ class EnvironmentFactory:
 1. `robot_sf/gym_env/base_env.py` - Expand to BaseSimulationEnv
 2. `robot_sf/gym_env/env_config.py` - Consolidate configuration classes  
 3. `robot_sf/gym_env/pedestrian_env.py` - Refactor to extend new base
-4. `robot_sf/gym_env/empty_robot_env.py` - Refactor or merge
+4. `robot_sf/gym_env/crowd_sim_env.py` - Supported crowd-only replacement
 5. `robot_sf/gym_env/robot_env.py` - Update to use consolidated config
 6. `robot_sf/gym_env/robot_env_with_image.py` - Potentially merge with RobotEnv
 7. `robot_sf/gym_env/multi_robot_env.py` - Update to follow patterns

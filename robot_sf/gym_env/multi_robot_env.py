@@ -42,7 +42,7 @@ class MultiRobotEnv(MultiAgentEnv):
 
     def __init__(
         self,
-        env_config: EnvSettings | MultiRobotConfig = EnvSettings(),
+        env_config: EnvSettings | MultiRobotConfig | None = None,
         reward_func: Callable[[dict], float] | None = simple_reward,
         debug: bool = False,
         num_robots: int | None = None,
@@ -66,6 +66,8 @@ class MultiRobotEnv(MultiAgentEnv):
         Raises:
             ValueError: If `num_robots` conflicts with `MultiRobotConfig.num_robots`.
         """
+        if env_config is None:
+            env_config = EnvSettings()
         if isinstance(env_config, MultiRobotConfig):
             resolved_num_robots = env_config.num_robots
             if num_robots is not None and num_robots != resolved_num_robots:

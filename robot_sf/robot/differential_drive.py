@@ -8,8 +8,8 @@ from gymnasium import spaces
 
 from robot_sf.common.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
 
-WheelSpeedState = tuple[float, float]  # tuple of (left, right) speeds
-# TODO: Is WheelSpeedState in translation or rotation units?
+WheelSpeedState = tuple[float, float]
+"""Left and right wheel angular velocities in radians per second."""
 
 
 @dataclass
@@ -64,7 +64,9 @@ class DifferentialDriveState:
     pose: RobotPose = ((0.0, 0.0), 0.0)
     velocity: PolarVec2D = (0.0, 0.0)
     last_wheel_speeds: WheelSpeedState = (0.0, 0.0)
+    """Previous left/right wheel angular velocities in radians per second."""
     wheel_speeds: WheelSpeedState = (0.0, 0.0)
+    """Current left/right wheel angular velocities in radians per second."""
 
 
 @dataclass
@@ -139,8 +141,8 @@ class DifferentialDriveMotion:
         Computes the distance covered by the robot over the time interval ``d_t``.
 
         Args:
-            last_wheel_speeds: The previous wheel speeds.
-            new_wheel_speeds: The updated wheel speeds.
+            last_wheel_speeds: The previous left/right wheel angular velocities in rad/s.
+            new_wheel_speeds: The updated left/right wheel angular velocities in rad/s.
             d_t: The time elapsed since last speeds measurement.
 
         Returns:
@@ -166,8 +168,8 @@ class DifferentialDriveMotion:
 
         Args:
             robot_orient: The prior orientation angle of the robot (radians).
-            last_wheel_speeds: The previous left and right wheel speeds.
-            wheel_speeds: The new left and right wheel speeds.
+            last_wheel_speeds: The previous left/right wheel angular velocities in rad/s.
+            wheel_speeds: The new left/right wheel angular velocities in rad/s.
             d_t: Time elapsed (seconds).
 
         Returns:

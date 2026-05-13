@@ -15,17 +15,36 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 
+
+class FullBenchmarkUnavailableError(RuntimeError):
+    """Raised when the full classic benchmark backend cannot be imported."""
+
+
+def _full_benchmark_unavailable_message(exc: BaseException) -> str:
+    """Build an actionable fail-closed message for unavailable benchmark backend imports."""
+    return (
+        "Full Classic Interaction Benchmark is unavailable because "
+        "`robot_sf.benchmark.full_classic.orchestrator.run_full_benchmark` could not be imported. "
+        "Use the supported `robot_sf.benchmark.full_classic` package path in an initialized "
+        "checkout, or run `uv sync --all-extras` before invoking this legacy CLI wrapper. "
+        f"Import error: {exc}"
+    )
+
+
 try:
     from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark  # type: ignore
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - during early scaffolding
+except (ImportError, ModuleNotFoundError) as _run_full_benchmark_import_error:
+    _run_full_benchmark_unavailable_message = _full_benchmark_unavailable_message(
+        _run_full_benchmark_import_error
+    )
 
     def run_full_benchmark(cfg):  # fallback placeholder
-        """TODO docstring. Document this function.
+        """Fail closed when the full-classic benchmark backend is unavailable.
 
         Args:
-            cfg: TODO docstring.
+            cfg: Parsed benchmark configuration, unused because execution cannot continue.
         """
-        raise NotImplementedError("Full benchmark not yet implemented. Follow tasks T022+.")
+        raise FullBenchmarkUnavailableError(_run_full_benchmark_unavailable_message)
 
 
 @dataclass
@@ -258,13 +277,13 @@ def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Run the Full Classic Interaction Benchmark CLI.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional CLI argument list. When ``None``, argparse reads ``sys.argv``.
 
     Returns:
-        TODO docstring.
+        Process exit code. Returns ``2`` when the backend import is unavailable.
     """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -278,7 +297,11 @@ def main(argv: list[str] | None = None) -> int:
         pass
     cfg = _args_to_config(args)
     print("[classic_benchmark_full] Configuration:", cfg)
-    run_full_benchmark(cfg)
+    try:
+        run_full_benchmark(cfg)
+    except FullBenchmarkUnavailableError as exc:
+        print(f"[classic_benchmark_full] ERROR: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 

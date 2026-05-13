@@ -141,8 +141,8 @@ class DifferentialDriveMotion:
         Computes the distance covered by the robot over the time interval ``d_t``.
 
         Args:
-            last_wheel_speeds: The previous wheel speeds.
-            new_wheel_speeds: The updated wheel speeds.
+            last_wheel_speeds: The previous left/right wheel angular velocities in rad/s.
+            new_wheel_speeds: The updated left/right wheel angular velocities in rad/s.
             d_t: The time elapsed since last speeds measurement.
 
         Returns:
@@ -168,8 +168,8 @@ class DifferentialDriveMotion:
 
         Args:
             robot_orient: The prior orientation angle of the robot (radians).
-            last_wheel_speeds: The previous left and right wheel speeds.
-            wheel_speeds: The new left and right wheel speeds.
+            last_wheel_speeds: The previous left/right wheel angular velocities in rad/s.
+            wheel_speeds: The new left/right wheel angular velocities in rad/s.
             d_t: Time elapsed (seconds).
 
         Returns:

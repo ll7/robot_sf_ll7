@@ -180,7 +180,8 @@ class SimulationView:
         focus_on_ego_ped (bool): Whether to focus the camera on the ego pedestrian.
         record_video (bool): Whether to record the simulation as a video.
         video_path (str): Path to save the recorded video.
-        video_fps (float): Frames per second for the recorded video.
+        video_fps (float | None): Explicit frames per second for the recorded video. When unset,
+            the latest render target FPS is used.
         frames (List[np.ndarray]): List of frames recorded for the video.
         clock (pygame.time.Clock): PyGame clock for controlling frame rate.
         screen (pygame.surface.Surface): PyGame surface for rendering.

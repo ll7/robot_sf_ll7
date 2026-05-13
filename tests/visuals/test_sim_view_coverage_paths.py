@@ -190,6 +190,40 @@ def test_sim_view_video_encoding_uses_render_target_when_fps_unset(monkeypatch, 
     assert captured["path"] == str(video_path)
 
 
+def test_sim_view_video_encoding_prefers_explicit_video_fps(monkeypatch, tmp_path) -> None:
+    """An explicit video FPS should override the latest render target FPS."""
+    captured = {}
+
+    class DummyClip:
+        """Record the FPS passed to the encoder without writing a real video."""
+
+        def __init__(self, frames, *, fps):
+            self.frames = frames
+            captured["fps"] = fps
+
+        def write_videofile(self, path):
+            captured["path"] = path
+
+    monkeypatch.setattr(sim_view_mod, "MOVIEPY_AVAILABLE", True)
+    monkeypatch.setattr(sim_view_mod, "ImageSequenceClip", DummyClip)
+    monkeypatch.setattr(pygame.event, "get", lambda: [])
+
+    video_path = tmp_path / "explicit-fps.mp4"
+    view = SimulationView(
+        width=64,
+        height=48,
+        map_def=_map_def_with_routes_and_obstacles(),
+        record_video=True,
+        video_path=str(video_path),
+        video_fps=12.0,
+    )
+    view.render(_make_state(), target_fps=24)
+    view._handle_quit()
+
+    assert captured["fps"] == 12.0
+    assert captured["path"] == str(video_path)
+
+
 def test_sim_view_occupancy_grid_error_and_rotation_paths(monkeypatch) -> None:
     """Exercise occupancy-grid render branches: runtime error, empty, and ego rotation."""
     view = SimulationView(

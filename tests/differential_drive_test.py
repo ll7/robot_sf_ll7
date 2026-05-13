@@ -78,8 +78,11 @@ def test_resulting_wheel_speeds_are_angular_rates() -> None:
         ),
     )
 
+    straight_left_rad_s, straight_right_rad_s = motion._resulting_wheel_speeds((1.0, 0.0))
     left_wheel_rad_s, right_wheel_rad_s = motion._resulting_wheel_speeds((1.0, 2.0))
 
+    assert straight_left_rad_s == 2.0
+    assert straight_right_rad_s == 2.0
     assert left_wheel_rad_s == 0.0
     assert right_wheel_rad_s == 4.0
 

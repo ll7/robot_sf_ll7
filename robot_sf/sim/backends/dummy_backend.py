@@ -18,10 +18,10 @@ class DummySimulator:
     """Minimal simulator that returns constant positions for testing."""
 
     def __init__(self, seed: int = 0):
-        """TODO docstring. Document this function.
+        """Initialize the deterministic dummy simulator.
 
         Args:
-            seed: TODO docstring.
+            seed: Seed used to reset the dummy random-number generator.
         """
         self.seed = seed
         self.rng = np.random.default_rng(seed)

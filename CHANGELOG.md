@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+* Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
+  fix-first repair loop on writable branches: proof failures are now classified as auto-fixable,
+  deferred follow-up, or handoff-only blockers; safe in-scope gaps should be repaired and
+  revalidated before withholding `merge-ready`; and the skill index plus shared goal-loop note now
+  reflect the new validation-and-reassess contract.
+
 * Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`
   support in `robot_sf/training/scenario_loader.py`, the new
   `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` eval/training surface,

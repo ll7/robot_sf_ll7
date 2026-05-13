@@ -34,6 +34,7 @@ should delegate to existing repo-local skills for concrete work:
 - issue clarification and template repair: `gh-issue-clarifier`, `gh-issue-template-auditor`
 - queue routing: `gh-issue-sequencer`, `gh-issue-priority-assessor`
 - issue implementation: `gh-issue-autopilot`, `gh-pr-opener`
+- PR repair during review: `gh-pr-comment-fixer`, `gh-issue-creator`
 - verification: `implementation-verification`, `pr-ready-check`, `review-benchmark-change`
 - durable notes: `context-note-maintainer`
 
@@ -58,10 +59,14 @@ one branch, implements, validates, checks generated artifacts, commits, pushes, 
 before continuing. It stops instead of guessing when an issue is blocked, ambiguous, already covered
 by an open PR, or missing proof requirements.
 
-`goal-pr-review` reviews open PRs against linked issue contracts, not just CI state. It applies a
-dedicated `merge-ready` label only after the full proof bar passes: issue contract resolved, diff
-matches scope, checks or readiness proof are adequate, review threads are handled, generated
-artifacts are classified, and deferred work is captured as follow-up issues.
+`goal-pr-review` reviews open PRs against linked issue contracts, not just CI state. When the full
+proof bar fails, the default path is fix-first if the PR branch is writable and the smallest repair
+stays inside the issue or PR contract. The loop should classify each gap as auto-fixable now,
+deferred follow-up, or handoff-only blocker; repair safe gaps on-branch; rerun targeted proof plus
+the readiness gate; then reassess `merge-ready`. It applies a dedicated `merge-ready` label only
+after the full proof bar passes: issue contract resolved, diff matches scope, checks or readiness
+proof are adequate, review threads are handled, generated artifacts are classified, and deferred
+work is captured as follow-up issues.
 
 ## Deferred Scope
 

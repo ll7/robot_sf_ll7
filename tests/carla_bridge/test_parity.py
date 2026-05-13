@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from robot_sf.carla_bridge.parity import compare_oracle_replay_metrics
+from robot_sf_carla_bridge.parity import compare_oracle_replay_metrics
 
 
 def test_compare_oracle_replay_metrics_reports_numeric_deltas_and_bool_match():

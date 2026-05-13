@@ -8,8 +8,8 @@ This branch adds the first CARLA-free metric parity adapter for comparing Robot-
 
 Implemented files:
 
-- `robot_sf/carla_bridge/parity.py`
-- `robot_sf/carla_bridge/__init__.py`
+- `robot_sf_carla_bridge/parity.py`
+- `robot_sf_carla_bridge/__init__.py`
 - `scripts/carla_bridge/compare_oracle_replay_metrics.py`
 - `tests/carla_bridge/test_parity.py`
 - `tests/carla_bridge/test_parity_cli.py`

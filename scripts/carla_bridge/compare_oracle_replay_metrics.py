@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from robot_sf.carla_bridge.parity import compare_oracle_replay_metrics
+from robot_sf_carla_bridge.parity import compare_oracle_replay_metrics
 
 
 def parse_args() -> argparse.Namespace:

@@ -55,7 +55,7 @@ class DummySimulator:
         """Reset simulator to initial state."""
         self.timestep = 0
         self.rng = np.random.default_rng(self.seed)
-        route = sample_route(self.map_def, 0)
+        route = sample_route(self.map_def, None)
         navigator = self.robot_navs[0]
         navigator.new_route(route[1:], start_pos=route[0])
         self.robots[0].reset_state((route[0], navigator.initial_orientation))

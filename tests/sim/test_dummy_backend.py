@@ -13,6 +13,7 @@ import pytest
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.sim.backends import dummy_backend
 from robot_sf.sim.backends.dummy_backend import DummySimulator, dummy_factory
 
 
@@ -66,3 +67,20 @@ def test_dummy_simulator_reset_restores_spawn_and_clears_speed(test_map: MapDefi
     assert simulator.robots[0].current_speed == (0.0, 0.0)
     assert simulator.robot_poses[0] != stepped_pose
     assert simulator.robot_navs[0].pos == simulator.robot_poses[0][0]
+
+
+def test_dummy_simulator_uses_default_spawn_selection_when_resetting(
+    test_map: MapDefinition, monkeypatch
+) -> None:
+    """Verify the dummy backend lets route sampling pick a valid spawn automatically."""
+    seen_spawn_ids: list[int | None] = []
+
+    def fake_sample_route(_map_def: MapDefinition, spawn_id: int | None) -> list[tuple[float, float]]:
+        seen_spawn_ids.append(spawn_id)
+        return [(0.0, 0.0), (1.0, 0.0)]
+
+    monkeypatch.setattr(dummy_backend, "sample_route", fake_sample_route)
+
+    DummySimulator(map_def=test_map, seed=1, step_dt=0.1, goal_proximity_threshold=1.0)
+
+    assert seen_spawn_ids == [None]

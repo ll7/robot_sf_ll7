@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -107,9 +108,10 @@ class ManualSessionController:
 
     def set_speed_multiplier(self, value: float) -> None:
         """Set the simulation speed multiplier used by the interactive runner."""
-        if value <= 0:
+        numeric_value = float(value)
+        if not math.isfinite(numeric_value) or numeric_value <= 0:
             raise ValueError("speed multiplier must be positive")
-        self.speed_multiplier = float(value)
+        self.speed_multiplier = numeric_value
 
     def mark_terminal(
         self,

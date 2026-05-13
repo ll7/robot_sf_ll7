@@ -1,5 +1,7 @@
 """Tests for manual-control session state management."""
 
+import math
+
 import pytest
 
 from robot_sf.manual_control.session import ManualSessionController, ManualSessionState
@@ -67,3 +69,12 @@ def test_speed_multiplier_must_be_positive():
 
     with pytest.raises(ValueError, match="positive"):
         controller.set_speed_multiplier(0)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_speed_multiplier_must_be_finite(value: float) -> None:
+    """Speed multipliers should reject non-finite values."""
+    controller = ManualSessionController()
+
+    with pytest.raises(ValueError, match="positive"):
+        controller.set_speed_multiplier(value)

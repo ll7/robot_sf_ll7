@@ -89,3 +89,14 @@ def test_baseline_manifest_serialization_is_json_compatible():
     assert manifest["policy_id"] == "best-policy"
     assert manifest["metrics"]["snqi"]["direction"] == "higher_is_better"
     assert manifest["metadata"] == {"commit": "abc123"}
+
+
+def test_baseline_metric_rejects_negative_tolerance() -> None:
+    """Negative tolerances should fail closed instead of inverting comparisons."""
+    with pytest.raises(ValueError, match="non-negative"):
+        BaselineMetric(
+            name="snqi",
+            value=0.5,
+            direction=MetricDirection.HIGHER_IS_BETTER,
+            tolerance=-0.01,
+        )

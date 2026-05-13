@@ -79,6 +79,11 @@ def plan_replay_to_step_rewind(
         raise ValueError("target_step_idx must be non-negative")
     if not replay.records:
         raise ValueError("cannot rewind an empty manual-control attempt")
+    if any(record.rewind is not None for record in replay.records):
+        raise ValueError(
+            "replay_to_step_v1 cannot plan a new rewind from a replay stream that already "
+            "contains rewind metadata"
+        )
 
     from_step_idx = replay.records[-1].step_idx
     if target_step_idx > from_step_idx:

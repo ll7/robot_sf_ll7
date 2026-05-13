@@ -163,3 +163,19 @@ def test_compute_rewind_invalidated_record_indexes_marks_discarded_suffix():
     invalidated = compute_rewind_invalidated_record_indexes(stream)
 
     assert invalidated == frozenset({1, 2})
+
+
+def test_plan_replay_to_step_rewind_rejects_streams_with_prior_rewind_metadata():
+    """Repeated rewind planning should fail closed until active-timeline derivation exists."""
+    step0 = _record("scenario-a", 1, 0, 0)
+    step1 = _record("scenario-a", 1, 0, 1)
+    replay = group_records_by_attempt([step0, step1])[0]
+    prior_rewind = plan_replay_to_step_rewind(replay, target_step_idx=0).to_rewind_record()
+    replay_with_rewind = group_records_by_attempt([step0, step1, prior_rewind])[0]
+
+    try:
+        plan_replay_to_step_rewind(replay_with_rewind, target_step_idx=0)
+    except ValueError as exc:
+        assert "already contains rewind metadata" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ValueError")

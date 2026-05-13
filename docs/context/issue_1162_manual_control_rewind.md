@@ -29,6 +29,10 @@ yet claim pixel-perfect or physics-state rewind in a live Pygame runner. A later
 should wire `plan_replay_to_step_rewind` into the live environment and add a headless smoke that
 demonstrates simulator state restoration against a concrete tiny scenario.
 
+Repeated rewind planning from an append-only replay stream is currently fail-closed. Once a replay
+already contains `ManualRewindMetadata`, callers must derive the active timeline first or wait for a
+follow-up slice that adds explicit repeated-rewind planning semantics.
+
 ## Validation path
 
 Targeted validation should include:

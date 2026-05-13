@@ -184,7 +184,9 @@ def multi_amv_planner_support(planner_family: str) -> MultiAmvPlannerSupport:
         return _MULTI_AMV_PLANNER_SUPPORT[normalized]
     except KeyError as exc:
         known = ", ".join(sorted(_MULTI_AMV_PLANNER_SUPPORT))
-        raise ValueError(f"unknown multi-AMV planner family {planner_family!r}; known: {known}") from exc
+        raise ValueError(
+            f"unknown multi-AMV planner family {planner_family!r}; known: {known}"
+        ) from exc
 
 
 def ensure_multi_amv_planner_supported(

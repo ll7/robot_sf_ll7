@@ -94,7 +94,12 @@ class LocalObstacleFeature:
 class LocalObstacleFeatureExtractor:
     """Extract deterministic nearest-line obstacle features."""
 
-    unavailable_distance: float = -1.0
+    unavailable_distance: float = 50.0
+
+    def __post_init__(self) -> None:
+        """Validate unavailable-feature sentinel configuration."""
+        if not np.isfinite(self.unavailable_distance) or self.unavailable_distance < 0.0:
+            raise ValueError("unavailable_distance must be a finite, non-negative float")
 
     @property
     def schema(self) -> str:
@@ -153,10 +158,10 @@ class LocalObstacleFeatureExtractor:
             ``(num_query_points, 6)`` feature matrix.
         """
         lines = list(obstacle_lines)
-        return np.asarray(
-            [self._nearest_feature(point, lines).as_array() for point in query_points],
-            dtype=np.float32,
-        )
+        rows = [self._nearest_feature(point, lines).as_array() for point in query_points]
+        if not rows:
+            return np.empty((0, PREDICTIVE_OBSTACLE_FEATURE_DIM), dtype=np.float32)
+        return np.asarray(rows, dtype=np.float32)
 
     def _nearest_feature(self, query_point: Vec2D, lines: list[Line2D]) -> LocalObstacleFeature:
         """Compute nearest-line feature with deterministic tie-breaking.
@@ -178,15 +183,14 @@ class LocalObstacleFeatureExtractor:
         best: tuple[float, int, np.ndarray, np.ndarray] | None = None
         for index, line in enumerate(lines):
             start = np.asarray(line[0], dtype=float)
-            end = np.asarray(line[1], dtype=float)
-            segment = end - start
-            length = float(np.linalg.norm(segment))
-            if length <= 0.0:
+            segment = np.asarray(line[1], dtype=float) - start
+            length_sq = float(np.dot(segment, segment))
+            if length_sq <= 0.0:
                 continue
-            projection = float(np.dot(point - start, segment) / (length * length))
+            rel_point = point - start
+            projection = float(np.dot(rel_point, segment) / length_sq)
             projection = float(np.clip(projection, 0.0, 1.0))
-            nearest = start + projection * segment
-            offset = point - nearest
+            offset = rel_point - projection * segment
             distance = float(np.linalg.norm(offset))
             candidate = (distance, index, offset, segment)
             if best is None or (distance, index) < (best[0], best[1]):

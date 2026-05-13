@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.manual_control.recording import load_manual_jsonl_records
+from robot_sf.manual_control.rewind import compute_rewind_invalidated_record_indexes
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -28,6 +29,7 @@ class DemonstrationSample:
     action: tuple[float, ...]
     input_keys: tuple[str, ...]
     source_record_index: int
+    rewind_segment_id: int = 0
     source_record_schema: str = "manual_control_v1"
     source_path: str | None = None
 
@@ -49,6 +51,7 @@ class DemonstrationSample:
             "observation": self.observation,
             "action": list(self.action),
             "input_keys": list(self.input_keys),
+            "rewind_segment_id": self.rewind_segment_id,
             "source": {
                 "record_schema": self.source_record_schema,
                 "record_index": self.source_record_index,
@@ -71,7 +74,15 @@ def export_demonstration_samples(
     """
     samples: list[DemonstrationSample] = []
     normalized_source_path = str(source_path) if source_path is not None else None
-    for record_index, record in enumerate(records):
+    ordered_records = tuple(records)
+    invalidated_record_indexes = compute_rewind_invalidated_record_indexes(ordered_records)
+    rewind_segment_id = 0
+    for record_index, record in enumerate(ordered_records):
+        if record.rewind is not None:
+            rewind_segment_id += 1
+            continue
+        if record_index in invalidated_record_indexes:
+            continue
         if not record.training_sample:
             continue
         if record.observation is None or record.mapped_action is None:
@@ -89,6 +100,7 @@ def export_demonstration_samples(
                 action=tuple(record.mapped_action),
                 input_keys=tuple(record.input_keys),
                 source_record_index=record_index,
+                rewind_segment_id=rewind_segment_id,
                 source_path=normalized_source_path,
             )
         )

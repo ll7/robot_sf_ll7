@@ -5,6 +5,7 @@ import json
 from robot_sf.manual_control.recording import (
     ManualControlRecord,
     ManualJsonlRecorder,
+    ManualRewindMetadata,
     ManualSessionMetadata,
     load_manual_jsonl_records,
 )
@@ -101,3 +102,32 @@ def test_load_manual_jsonl_records_rejects_unsupported_schema(tmp_path):
         assert "unsupported manual-control record schema" in str(exc)
     else:  # pragma: no cover - defensive assertion style for clearer failure
         raise AssertionError("expected ValueError")
+
+
+def test_manual_rewind_metadata_round_trips_in_recording_schema(tmp_path):
+    """Rewind events should be explicit append-only recording records."""
+    path = tmp_path / "manual.jsonl"
+    session = ManualSessionMetadata(
+        session_id="session-1",
+        input_mapping_version="manual_keyboard_diff_drive_hold_v1",
+    )
+    record = ManualControlRecord.for_attempt(
+        event="rewind",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=0,
+        step_idx=1,
+        session=session,
+        rewind=ManualRewindMetadata(
+            strategy="replay_to_step_v1",
+            from_step_idx=4,
+            to_step_idx=1,
+            invalidates_samples_after_step=1,
+            reason="operator requested",
+        ),
+    )
+    path.write_text(json.dumps(record.to_json_dict()) + "\n", encoding="utf-8")
+
+    loaded = load_manual_jsonl_records(path)
+
+    assert loaded[0].event == "rewind"
+    assert loaded[0].rewind == record.rewind

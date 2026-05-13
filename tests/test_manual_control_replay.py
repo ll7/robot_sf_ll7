@@ -8,6 +8,10 @@ from robot_sf.manual_control.replay import (
     iter_replay_events,
     write_attempt_replay_json,
 )
+from robot_sf.manual_control.rewind import (
+    compute_rewind_invalidated_record_indexes,
+    plan_replay_to_step_rewind,
+)
 from robot_sf.manual_control.session import AttemptKey
 
 
@@ -106,3 +110,44 @@ def test_write_attempt_replay_json_writes_grouped_attempts(tmp_path):
         "scenario-a",
         "scenario-b",
     ]
+
+
+def test_plan_replay_to_step_rewind_restores_prefix_and_builds_event():
+    """Rewind planning should keep the replay prefix and append an explicit event."""
+    records = [
+        _record("scenario-a", 1, 0, 0),
+        _record("scenario-a", 1, 0, 1),
+        _record("scenario-a", 1, 0, 2),
+    ]
+    replay = group_records_by_attempt(records)[0]
+
+    plan = plan_replay_to_step_rewind(replay, target_step_idx=1, reason="operator")
+    rewind_record = plan.to_rewind_record()
+
+    assert [record.step_idx for record in plan.restored_records] == [0, 1]
+    assert plan.from_step_idx == 2
+    assert plan.to_step_idx == 1
+    assert rewind_record.event == "rewind"
+    assert rewind_record.rewind is not None
+    assert rewind_record.rewind.strategy == "replay_to_step_v1"
+    assert rewind_record.rewind.reason == "operator"
+
+
+def test_compute_rewind_invalidated_record_indexes_marks_discarded_suffix():
+    """Later rewind records should invalidate prior training samples after the target step."""
+    step0 = _record("scenario-a", 1, 0, 0)
+    old_step1 = _record("scenario-a", 1, 0, 1)
+    old_step2 = _record("scenario-a", 1, 0, 2)
+    replay = group_records_by_attempt([step0, old_step1, old_step2])[0]
+    plan = plan_replay_to_step_rewind(replay, target_step_idx=0)
+    rewind_record = plan.to_rewind_record()
+    stream = [
+        step0.__class__(**{**step0.__dict__, "training_sample": True}),
+        old_step1.__class__(**{**old_step1.__dict__, "training_sample": True}),
+        old_step2.__class__(**{**old_step2.__dict__, "training_sample": True}),
+        rewind_record,
+    ]
+
+    invalidated = compute_rewind_invalidated_record_indexes(stream)
+
+    assert invalidated == frozenset({1, 2})

@@ -198,6 +198,9 @@ knowledge, not every transient iteration detail.
   records the full `full_matrix_h500` run for
   `hybrid_rule_v3_fast_progress_static_escape_continuous`, promotion-gate outcome, comparator
   deltas, remaining failure taxonomy, and artifact persistence boundary.
+* [Issue #1162 Manual-Control Active-Attempt Rewind](issue_1162_manual_control_rewind.md)
+  records the replay-to-step rewind strategy, rejected simulator-checkpoint alternative, and
+  append-only BC-export boundary.
 
 ## Feature Extractor Notes
 

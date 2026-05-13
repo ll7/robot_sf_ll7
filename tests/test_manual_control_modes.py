@@ -61,3 +61,14 @@ def test_ego_up_view_fails_closed_with_documented_blocker():
             control_mode=ManualControlMode.KEYBOARD_CRUISE,
             view_mode=ManualViewMode.EGO_UP,
         )
+
+
+def test_ensure_supported_mvp_mode_accepts_supported_string_inputs():
+    """Public mode guards should accept the serialized MVP string values."""
+    ensure_supported_mvp_mode(control_mode="keyboard_hold", view_mode="fixed_map")
+
+
+def test_ensure_supported_mvp_mode_rejects_unknown_strings() -> None:
+    """Unknown serialized mode values should still fail closed."""
+    with pytest.raises(NotImplementedError, match="joystick"):
+        ensure_supported_mvp_mode(control_mode="joystick", view_mode="fixed_map")

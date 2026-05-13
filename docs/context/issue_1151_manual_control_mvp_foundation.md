@@ -89,7 +89,13 @@ Pause/countdown/retry events can be recorded with `training_sample=false`; behav
 
 ## Validation status
 
-No validation commands have been run for this partial implementation in this pass.
+Validation has been run for this implementation slice:
+
+- `UV_NO_CONFIG=1 python -m pytest tests/test_manual_control_*.py -q`
+- `UV_NO_CONFIG=1 BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
+
+These checks cover the manual-control foundation helpers, BC export CLI path, and the
+branch-wide readiness gate for the main-based PR branch.
 
 ## Additional foundation: baseline comparison
 

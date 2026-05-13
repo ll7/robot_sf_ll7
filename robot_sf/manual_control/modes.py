@@ -85,6 +85,7 @@ VIEW_MODE_REGISTRY: dict[ManualViewMode, ManualViewModeSpec] = {
 }
 """Versioned manual-control view mode registry."""
 
+
 def parse_manual_control_mode(value: str | ManualControlMode) -> ManualControlMode:
     """Parse a manual-control mode identifier and fail closed for unknown values.
 
@@ -159,8 +160,16 @@ def ensure_supported_manual_mode(
 
 def ensure_supported_mvp_mode(
     *,
-    control_mode: ManualControlMode,
-    view_mode: ManualViewMode,
+    control_mode: ManualControlMode | str,
+    view_mode: ManualViewMode | str,
 ) -> None:
     """Fail closed when a requested manual-control mode is not implemented yet."""
-    ensure_supported_manual_mode(control_mode=control_mode, view_mode=view_mode)
+    try:
+        ensure_supported_manual_mode(control_mode=control_mode, view_mode=view_mode)
+    except ValueError as exc:
+        message = str(exc)
+        if "manual view mode" in message:
+            raise NotImplementedError(f"manual view mode is not implemented: {view_mode}") from exc
+        raise NotImplementedError(
+            f"manual control mode is not implemented: {control_mode}"
+        ) from exc

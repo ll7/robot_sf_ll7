@@ -236,6 +236,14 @@ Canonical note:
 
 For issue management and delivery, use these local skills:
 
+- `.agents/skills/goal-issue-discovery/SKILL.md`
+  - Autonomous goal loop for finding evidence-graded improvement opportunities and opening detailed issues.
+- `.agents/skills/issue-audit/SKILL.md`
+  - User-in-the-loop issue audit that asks one readiness-blocking question at a time and updates issues as decisions crystallize.
+- `.agents/skills/goal-issue-implementation/SKILL.md`
+  - Sequential goal loop for implementing eligible open issues through branch, validation, push, and PR creation.
+- `.agents/skills/goal-pr-review/SKILL.md`
+  - Autonomous PR review loop that fixes scoped writable gaps before applying `merge-ready` after the full proof bar passes.
 - `.agents/skills/gh-issue-autopilot/SKILL.md`
   - Autonomous issue-to-PR workflow: select next best issue, branch, implement, validate, push, and open draft PR.
 - `.agents/skills/gh-issue-clarifier/SKILL.md`

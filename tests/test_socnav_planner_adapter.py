@@ -506,6 +506,9 @@ def test_sacadrl_cpu_session_config_disables_gpu_devices():
     assert config.device_count["GPU"] == 0
     assert config.allow_soft_placement is True
 
+    device_config = _sacadrl_session_config(socnav.tf, device=" /device:CPU:0 ")
+    assert device_config.device_count["GPU"] == 0
+
 
 def test_sacadrl_adapter_runs_model_when_available():
     """SA-CADRL adapter should run inference when TensorFlow and checkpoint are available."""

@@ -8,6 +8,7 @@ observation emitted when `ObservationMode.SOCNAV_STRUCT` is enabled.
 """
 
 import os
+import re
 import sys
 import threading
 from collections.abc import Callable
@@ -3238,7 +3239,7 @@ def _sacadrl_session_config(tf_module: Any, *, device: str):
         "gpu_options": tf_module.GPUOptions(allow_growth=True),
     }
     normalized_device = device.lower().replace(" ", "")
-    if normalized_device.startswith("/cpu") or normalized_device.startswith("cpu"):
+    if re.search(r"(^|/)(device:)?cpu(?::|$)", normalized_device):
         kwargs["device_count"] = {"GPU": 0}
     return tf_module.ConfigProto(**kwargs)
 

@@ -11,24 +11,15 @@ import numpy as np
 from gymnasium import spaces
 
 from robot_sf.common.types import PolarVec2D
+from robot_sf.sensor.history_stack import (
+    append_history_row,
+    fill_history_stack,
+    reset_history_stack,
+)
 
 OBS_DRIVE_STATE = "drive_state"
 OBS_RAYS = "rays"
 OBS_IMAGE = "image"
-
-
-def append_history_row(stacked_state: np.ndarray, current_state: np.ndarray) -> np.ndarray:
-    """Append ``current_state`` as the newest row in an oldest-to-newest stack.
-
-    Returns
-    -------
-    np.ndarray
-        Updated stack with previous rows shifted toward index ``0`` and the current state at
-        index ``-1``.
-    """
-    stacked_state[:-1] = stacked_state[1:]
-    stacked_state[-1] = current_state
-    return stacked_state
 
 
 def fused_sensor_space(
@@ -228,12 +219,8 @@ class SensorFusion:
             for _ in range(self.cache_steps):
                 self.drive_state_cache.append(drive_state)
                 self.lidar_state_cache.append(lidar_state)
-            self.stacked_drive_state = np.repeat(
-                drive_state[np.newaxis, :], self.cache_steps, axis=0
-            )
-            self.stacked_lidar_state = np.repeat(
-                lidar_state[np.newaxis, :], self.cache_steps, axis=0
-            )
+            self.stacked_drive_state = fill_history_stack(self.stacked_drive_state, drive_state)
+            self.stacked_lidar_state = fill_history_stack(self.stacked_lidar_state, lidar_state)
         else:
             # Add current states as the newest row so temporal stacks are oldest-to-newest.
             self.drive_state_cache.append(drive_state)
@@ -255,5 +242,5 @@ class SensorFusion:
         """
         self.drive_state_cache.clear()
         self.lidar_state_cache.clear()
-        self.stacked_drive_state = np.zeros_like(self.stacked_drive_state)
-        self.stacked_lidar_state = np.zeros_like(self.stacked_lidar_state)
+        self.stacked_drive_state = reset_history_stack(self.stacked_drive_state)
+        self.stacked_lidar_state = reset_history_stack(self.stacked_lidar_state)

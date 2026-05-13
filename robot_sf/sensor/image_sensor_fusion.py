@@ -10,12 +10,16 @@ import numpy as np
 from gymnasium import spaces
 
 from robot_sf.common.types import PolarVec2D
+from robot_sf.sensor.history_stack import (
+    append_history_row,
+    fill_history_stack,
+    reset_history_stack,
+)
 from robot_sf.sensor.image_sensor import ImageSensor
 from robot_sf.sensor.sensor_fusion import (
     OBS_DRIVE_STATE,
     OBS_IMAGE,
     OBS_RAYS,
-    append_history_row,
 )
 
 
@@ -117,12 +121,12 @@ class ImageSensorFusion:
                 self.lidar_state_cache.append(sensor_data["lidar_state"])
                 if self.use_image_obs and sensor_data["image_state"] is not None:
                     self.image_state_cache.append(sensor_data["image_state"])
-            self.stacked_drive_state = np.repeat(
-                sensor_data["drive_state"][np.newaxis, :], self.cache_steps, axis=0
-            ).astype(self.stacked_drive_state.dtype, copy=False)
-            self.stacked_lidar_state = np.repeat(
-                sensor_data["lidar_state"][np.newaxis, :], self.cache_steps, axis=0
-            ).astype(self.stacked_lidar_state.dtype, copy=False)
+            self.stacked_drive_state = fill_history_stack(
+                self.stacked_drive_state, sensor_data["drive_state"]
+            )
+            self.stacked_lidar_state = fill_history_stack(
+                self.stacked_lidar_state, sensor_data["lidar_state"]
+            )
 
     def _update_sensor_caches(self, sensor_data: dict):
         """Update sensor caches with current data."""
@@ -197,5 +201,5 @@ class ImageSensorFusion:
             self.image_state_cache.clear()
 
         # Reset stacked states to zeros
-        self.stacked_drive_state = np.zeros_like(self.stacked_drive_state)
-        self.stacked_lidar_state = np.zeros_like(self.stacked_lidar_state)
+        self.stacked_drive_state = reset_history_stack(self.stacked_drive_state)
+        self.stacked_lidar_state = reset_history_stack(self.stacked_lidar_state)

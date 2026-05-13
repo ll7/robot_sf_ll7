@@ -145,7 +145,7 @@ def test_frames_to_samples_appends_obstacle_feature_schema_rows() -> None:
 
     assert state.shape == (1, 2, 10)
     assert np.allclose(state[0, 0, 0:4], np.array([1.0, 0.0, 0.1, 0.0], dtype=np.float32))
-    assert state[0, 0, 4] == -1.0
+    assert state[0, 0, 4] == 50.0
     assert state[0, 0, 9] == 0.0
     assert mask[0, 0] == 1.0
 

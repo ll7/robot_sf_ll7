@@ -28,7 +28,7 @@ class BaseEnv(Env):
 
     def __init__(  # noqa: PLR0913
         self,
-        env_config: EnvSettings = EnvSettings(),
+        env_config: EnvSettings | None = None,
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
@@ -63,6 +63,8 @@ class BaseEnv(Env):
             recording_seed: Optional seed override used by JSONL recorder metadata.
         """
         super().__init__()
+        if env_config is None:
+            env_config = EnvSettings()
 
         # Environment configuration details
         self.env_config = env_config

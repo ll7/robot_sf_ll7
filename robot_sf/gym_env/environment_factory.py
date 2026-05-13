@@ -2,8 +2,8 @@
 
 Overview
 --------
-Provides explicit, typed factory functions for creating navigation and
-pedestrian simulation environments. Replaces legacy ad‑hoc kwargs surface
+Provides explicit, typed factory functions for creating navigation, pedestrian,
+and crowd-only simulation environments. Replaces legacy ad‑hoc kwargs surface
 with structured option objects while preserving backward compatibility via
 ``apply_legacy_kwargs`` (T029). Deterministic seeding added in T030.
 
@@ -22,6 +22,8 @@ Key Features
     ``RecordingOptions(record=False)`` even if ``record_video=True`` convenience
     flag is passed (opt‑out preserved). Robot/image factories flip to True in
     that scenario for user convenience.
+* Crowd-only simulation: ``make_crowd_sim_env`` exposes robot-free Social Force
+    pedestrian stepping with optional rendering/recording and no robot action input.
 * Performance guard: lightweight import strategy and timing test (T015/T031)
     ensure mean creation time regression is limited to +5% vs baseline.
 
@@ -82,6 +84,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
+    from robot_sf.gym_env.crowd_sim_env import CrowdSimEnv, CrowdSimulationConfig
 
 
 def _load_robot_env_with_image():
@@ -130,6 +133,16 @@ def _load_multi_robot_env():
     """
     module = importlib.import_module("robot_sf.gym_env.multi_robot_env")
     return module.MultiRobotEnv
+
+
+def _load_crowd_sim_env():
+    """Lazy-load the crowd-only simulation environment class.
+
+    Returns:
+        tuple[type, type]: ``CrowdSimEnv`` and ``CrowdSimulationConfig`` classes.
+    """
+    module = importlib.import_module("robot_sf.gym_env.crowd_sim_env")
+    return module.CrowdSimEnv, module.CrowdSimulationConfig
 
 
 def _load_stub_robot_model():
@@ -841,6 +854,53 @@ def make_pedestrian_env(  # noqa: PLR0913
         video_fps=eff_video_fps,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
     )
+    env.applied_seed = seed
+    return env
+
+
+def make_crowd_sim_env(  # noqa: PLR0913
+    config: CrowdSimulationConfig | None = None,
+    *,
+    seed: int | None = None,
+    map_id: str | None = None,
+    peds_have_obstacle_forces: bool | None = None,
+    render_mode: str | None = None,
+    recording_enabled: bool | None = None,
+    recording_dir: str | None = None,
+    recording_path: str | None = None,
+    video_path: str | None = None,
+    video_fps: float | None = None,
+) -> CrowdSimEnv:
+    """Create a robot-free crowd simulation environment.
+
+    The returned env exposes ``reset``/``step`` for fast pedestrian-only Social Force
+    simulation. ``step(action=None)`` is accepted for Gymnasium compatibility; non-``None``
+    actions are ignored with a warning because there is no robot or ego policy.
+
+    Returns:
+        CrowdSimEnv: Configured crowd-only Gymnasium environment.
+    """
+    _apply_global_seed(seed)
+    CrowdSimEnv, CrowdSimulationConfig = _load_crowd_sim_env()
+    if config is None:
+        config = CrowdSimulationConfig()
+    if map_id is not None:
+        config.map_id = map_id
+    if peds_have_obstacle_forces is not None:
+        config.peds_have_obstacle_forces = peds_have_obstacle_forces
+    if render_mode is not None:
+        config.render_mode = render_mode
+    if recording_enabled is not None:
+        config.recording_enabled = recording_enabled
+    if recording_dir is not None:
+        config.recording_dir = recording_dir
+    if recording_path is not None:
+        config.recording_path = recording_path
+    if video_path is not None:
+        config.video_path = video_path
+    if video_fps is not None:
+        config.video_fps = video_fps
+    env = CrowdSimEnv(config)
     env.applied_seed = seed
     return env
 

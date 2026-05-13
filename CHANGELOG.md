@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   revalidated before withholding `merge-ready`; and the skill index plus shared goal-loop note now
   reflect the new validation-and-reassess contract.
 
+### Fixed
+
+* Fixed the crowd-only Gymnasium environment contract so `CrowdSimEnv` keeps a stable
+  observation-space shape across resets, `make_crowd_sim_env()` preserves preconfigured
+  config values unless callers override them explicitly, reset-time map selection no longer
+  mutates NumPy's global RNG state, and compact JSONL recordings keep static scene metadata
+  on reset events instead of repeating it on every step.
+
 ### Added
 
 * Added the issue-1168 multi-AMV planner support classification surface: multi-AMV episode

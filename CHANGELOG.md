@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1128 multi-AMV episode extension surface: `multi_amv_episode_extension(...)`
+  now emits an additive namespaced `multi_amv` block for smoke outputs, requires explicit
+  planner status, omits optional planner notes when absent, and keeps invalid single-robot or
+  empty-metric inputs fail-closed through targeted regression coverage and the documented
+  multi-AMV smoke validation path.
+
 * Added the issue-857 horizon-alignment experiment surfaces: manifest-level `scenario_overrides`
   support in `robot_sf/training/scenario_loader.py`, the new
   `configs/scenarios/sets/ppo_full_maintained_eval_v1_horizon100.yaml` eval/training surface,

@@ -26,7 +26,6 @@ Implemented files:
     "deadlock_speed_mps": 0.05,
     "deadlock_window_steps": 10,
     "planner_status": "goal_controller_smoke",
-    "planner_note": "...",
     "metrics": {
       "inter_robot": {}
     }
@@ -35,6 +34,8 @@ Implemented files:
 ```
 
 The block is intentionally namespaced so existing single-robot episode consumers can ignore it without schema migration.
+`planner_status` is required so callers keep the planner mode explicit, and the optional
+`planner_note` field is omitted when no note is provided.
 
 ## Fail-closed behavior
 
@@ -49,4 +50,10 @@ The helper raises `ValueError` when called with fewer than two robots or empty i
 
 ## Validation status
 
-No validation commands have been run for this partial implementation in this pass.
+Validation has been run for this implementation slice:
+
+- `UV_NO_CONFIG=1 python -m pytest tests/benchmark/test_multi_amv.py -q`
+- `UV_NO_CONFIG=1 BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
+
+These checks cover the additive namespaced record shape, fail-closed single-robot and
+empty-metrics paths, and the branch-wide readiness gate for the main-based PR branch.

@@ -145,7 +145,7 @@ def multi_amv_episode_extension(
     *,
     settings: MultiAmvSettings,
     inter_robot: dict[str, float | bool],
-    planner_status: str = "goal_controller_smoke",
+    planner_status: str,
     planner_note: str | None = None,
 ) -> dict[str, Any]:
     """Build an additive episode-record block for multi-AMV benchmark outputs.
@@ -162,7 +162,7 @@ def multi_amv_episode_extension(
         raise ValueError("multi-AMV episode extension requires at least two robots")
     if not inter_robot:
         raise ValueError("inter_robot metrics must be non-empty")
-    return {
+    payload: dict[str, Any] = {
         "multi_amv": {
             "enabled": True,
             "num_robots": int(settings.num_robots),
@@ -171,10 +171,12 @@ def multi_amv_episode_extension(
             "deadlock_speed_mps": float(settings.deadlock_speed_mps),
             "deadlock_window_steps": int(settings.deadlock_window_steps),
             "planner_status": str(planner_status),
-            "planner_note": planner_note,
             "metrics": {"inter_robot": dict(inter_robot)},
         }
     }
+    if planner_note is not None:
+        payload["multi_amv"]["planner_note"] = planner_note
+    return payload
 
 
 def _count_true_runs(values: np.ndarray) -> int:

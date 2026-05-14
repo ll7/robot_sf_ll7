@@ -502,5 +502,8 @@ why a change was made rather than a full issue execution transcript.
   Program-level stop decision and closure rationale after the probe/gate/full sequence.
 * [Issue 782: DreamerV3 world-model pretraining design](issue_782_dreamerv3_pretraining_design.md)
   Inventory of reusable rollout sources plus the recommended proof-first pretraining path.
+* [Issue #1190 DreamerV3 checkpoint import boundary probe](issue_1190_dreamerv3_checkpoint_import_boundary.md)
+  Fail-closed result for the BR-08 warm-start import question: Ray 2.53.0 exposes full
+  Algorithm/RLModule restore, not a clean Robot SF world-model import contract.
 * [Issue 789: DreamerV3 multimodal encoder stop note](issue_789_dreamer_multimodal_encoder.md)
   Fail-closed investigation result for mixed observation spaces on Ray 2.53.0 DreamerV3.

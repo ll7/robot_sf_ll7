@@ -142,6 +142,8 @@ class ManualControlRecord:
         if not isinstance(session_payload, dict):
             raise ValueError("manual-control record is missing session metadata")
         rewind_payload = payload.get("rewind")
+        if rewind_payload is not None and not isinstance(rewind_payload, dict):
+            raise ValueError("rewind must be an object when provided")
         input_mapping_version = str(session_payload["input_mapping_version"])
         control_mode_payload = session_payload.get("control_mode")
         control_mode = (
@@ -194,7 +196,7 @@ class ManualControlRecord:
                     ),
                     reason=rewind_payload.get("reason"),
                 )
-                if isinstance(rewind_payload, dict)
+                if rewind_payload is not None
                 else None
             ),
             training_sample=training_sample,

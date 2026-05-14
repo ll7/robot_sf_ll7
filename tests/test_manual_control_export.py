@@ -23,6 +23,9 @@ def _record(
     *,
     event: str = "step",
     training_sample: bool,
+    scenario_id: str = "scenario-a",
+    seed: int = 7,
+    attempt_id: int = 1,
     step_idx: int = 2,
     observation=None,
     mapped_action=None,
@@ -30,8 +33,8 @@ def _record(
     """Build a minimal manual-control record for export tests."""
     return ManualControlRecord.for_attempt(
         event=event,
-        attempt_key=AttemptKey("scenario-a", 7),
-        attempt_id=1,
+        attempt_key=AttemptKey(scenario_id, seed),
+        attempt_id=attempt_id,
         step_idx=step_idx,
         session=ManualSessionMetadata(
             session_id="session-1",
@@ -188,4 +191,44 @@ def test_export_demonstration_samples_excludes_samples_invalidated_by_rewind():
     ] == [
         (0, {"obs": [0.0]}, 0),
         (1, {"obs": [10.0]}, 1),
+    ]
+
+
+def test_export_demonstration_samples_scopes_rewind_segment_ids_per_attempt():
+    """Rewind segment numbering should restart for each independent attempt stream."""
+    attempt_a_step0 = _record(
+        training_sample=True,
+        step_idx=0,
+        observation={"obs": [0.0]},
+        mapped_action=(0.0, 0.0),
+    )
+    attempt_a_rewind = ManualControlRecord.for_attempt(
+        event="rewind",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=1,
+        step_idx=0,
+        session=attempt_a_step0.session,
+        rewind=ManualRewindMetadata(
+            strategy="replay_to_step_v1",
+            from_step_idx=1,
+            to_step_idx=0,
+            invalidates_samples_after_step=0,
+            reason="test",
+        ),
+    )
+    attempt_b_step0 = _record(
+        training_sample=True,
+        scenario_id="scenario-b",
+        seed=11,
+        attempt_id=3,
+        step_idx=0,
+        observation={"obs": [5.0]},
+        mapped_action=(1.0, 0.0),
+    )
+
+    samples = export_demonstration_samples([attempt_a_step0, attempt_a_rewind, attempt_b_step0])
+
+    assert [(sample.scenario_id, sample.attempt_id, sample.rewind_segment_id) for sample in samples] == [
+        ("scenario-a", 1, 0),
+        ("scenario-b", 3, 0),
     ]

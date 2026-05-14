@@ -78,10 +78,12 @@ def export_demonstration_samples(
     normalized_source_path = str(source_path) if source_path is not None else None
     ordered_records = tuple(records)
     invalidated_record_indexes = compute_rewind_invalidated_record_indexes(ordered_records)
-    rewind_segment_id = 0
+    rewind_segment_ids_by_attempt: dict[tuple[str, int, int], int] = {}
     for record_index, record in enumerate(ordered_records):
+        attempt_key = (record.scenario_id, record.seed, record.attempt_id)
+        rewind_segment_id = rewind_segment_ids_by_attempt.get(attempt_key, 0)
         if record.rewind is not None:
-            rewind_segment_id += 1
+            rewind_segment_ids_by_attempt[attempt_key] = rewind_segment_id + 1
             continue
         if record_index in invalidated_record_indexes:
             continue

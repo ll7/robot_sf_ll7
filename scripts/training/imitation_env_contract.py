@@ -34,11 +34,25 @@ def resolve_config_path(raw_value: object, *, base_dir: Path) -> Path | None:
     return candidate.resolve() if candidate.is_absolute() else (base_dir / candidate).resolve()
 
 
+def _load_training_config_mapping(training_config_path: Path | None) -> dict[str, Any] | None:
+    """Load a training config file and require a mapping payload when provided."""
+    if training_config_path is None:
+        return None
+    if not training_config_path.is_file():
+        raise FileNotFoundError(f"Training config is not a file: {training_config_path}")
+    raw = yaml.safe_load(training_config_path.read_text(encoding="utf-8"))
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("training config must be a mapping")
+    return raw
+
+
 def load_training_env_overrides(training_config_path: Path | None) -> dict[str, object]:
     """Load ``env_overrides`` from an expert training config."""
-    if training_config_path is None:
+    raw = _load_training_config_mapping(training_config_path)
+    if raw is None:
         return {}
-    raw = yaml.safe_load(training_config_path.read_text(encoding="utf-8")) or {}
     overrides = raw.get("env_overrides", {})
     if overrides is None:
         return {}
@@ -55,9 +69,10 @@ def resolve_scenario_config_path(
     """Return the scenario config path from explicit config or training config."""
     if scenario_config_path is not None:
         return scenario_config_path
-    if training_config_path is None:
+    raw = _load_training_config_mapping(training_config_path)
+    if raw is None:
         return None
-    raw = yaml.safe_load(training_config_path.read_text(encoding="utf-8")) or {}
+    assert training_config_path is not None
     return resolve_config_path(raw.get("scenario_config"), base_dir=training_config_path.parent)
 
 
@@ -86,8 +101,14 @@ def make_training_contract_env(
 
     _apply_env_overrides(env_config, load_training_env_overrides(training_config_path))
     env = make_robot_env(config=env_config, seed=seed)
-    if observation_keys and isinstance(getattr(env, "observation_space", None), spaces.Dict):
-        available = set(env.observation_space.spaces)
+    if observation_keys:
+        obs_space = getattr(env, "observation_space", None)
+        if not isinstance(obs_space, spaces.Dict):
+            raise ValueError(
+                "Cannot filter env observation space; expected Dict observation space, got "
+                f"{type(obs_space).__name__}"
+            )
+        available = set(obs_space.spaces)
         missing = [key for key in observation_keys if key not in available]
         if missing:
             preview = ", ".join(sorted(missing)[:5])

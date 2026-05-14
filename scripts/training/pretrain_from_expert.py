@@ -104,8 +104,8 @@ def _require_imitation_bc():
 
 def _load_trajectory_dataset(dataset_path: Path) -> dict[str, Any]:
     """Load NPZ trajectory dataset."""
-    if not dataset_path.exists():
-        raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+    if not dataset_path.is_file():
+        raise FileNotFoundError(f"Dataset not found or not a file: {dataset_path}")
 
     with np.load(str(dataset_path), allow_pickle=True) as data:
         metadata_raw = data.get("metadata")

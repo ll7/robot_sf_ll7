@@ -67,6 +67,8 @@ def _load_dataset_metadata(dataset_id: str | None) -> dict[str, Any]:
     dataset_path = common.get_trajectory_dataset_path(dataset_id)
     if not dataset_path.exists():
         return {}
+    if not dataset_path.is_file():
+        raise FileNotFoundError(f"Dataset metadata path is not a file: {dataset_path}")
     with np.load(str(dataset_path), allow_pickle=True) as data:
         metadata_raw = data.get("metadata")
         if metadata_raw is None or getattr(metadata_raw, "shape", None) != ():

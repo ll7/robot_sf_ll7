@@ -49,11 +49,11 @@ def _extract_workflow_phases(run_text: str) -> set[str]:
 
 def _workflow_phases() -> set[str]:
     """Return CI driver phases referenced by the GitHub Actions workflow."""
-    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    workflow = yaml.safe_load(_workflow_text())
 
     referenced_phases: set[str] = set()
     for job in workflow["jobs"].values():
-        for step in job["steps"]:
+        for step in job.get("steps", []):
             run_text = step.get("run")
             if not run_text:
                 continue
@@ -64,8 +64,8 @@ def _workflow_phases() -> set[str]:
 
 def _workflow_job_phases(job_name: str) -> set[str]:
     """Return CI driver phases referenced by a specific workflow job."""
-    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
-    steps = workflow["jobs"][job_name]["steps"]
+    workflow = yaml.safe_load(_workflow_text())
+    steps = workflow["jobs"][job_name].get("steps", [])
 
     referenced_phases: set[str] = set()
     for step in steps:

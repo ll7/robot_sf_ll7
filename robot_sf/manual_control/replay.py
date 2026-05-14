@@ -39,6 +39,7 @@ class ManualReplayEvent:
     input_keys: tuple[str, ...]
     mapped_action: tuple[float, ...] | None
     metrics: dict[str, object]
+    rewind: dict[str, object] | None
     training_sample: bool
 
     @classmethod
@@ -60,6 +61,7 @@ class ManualReplayEvent:
             input_keys=tuple(record.input_keys),
             mapped_action=record.mapped_action,
             metrics=dict(record.metrics),
+            rewind=record.rewind.__dict__ if record.rewind is not None else None,
             training_sample=record.training_sample,
         )
 
@@ -84,6 +86,7 @@ class ManualReplayEvent:
                     list(self.mapped_action) if self.mapped_action is not None else None
                 ),
                 "metrics": self.metrics,
+                "rewind": self.rewind,
                 "training_sample": self.training_sample,
             }
         )

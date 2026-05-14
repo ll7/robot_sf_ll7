@@ -121,13 +121,25 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
      manifest, or another explicit durable source.
    - Include the persistence decision in the PR body and any issue handoff comment.
 
-12. Push and open draft PR
+12. Run the first-pass self-review
+   - Use `docs/context/pr_first_pass_review_audit_2026-05-14.md` before pushing or opening the PR.
+   - For docs/context changes, verify index links and make validation statements match commands
+     actually run.
+   - For parser, schema, path, JSON, artifact, and public-helper changes, check malformed inputs,
+     missing values, empty collections, wrong shapes, non-finite numbers, path traversal, and
+     repository-relative path handling.
+   - For environment, benchmark, recording, and simulation-loop changes, check streaming behavior,
+     static Gymnasium spaces, random-state isolation, and per-step output size.
+   - For skill or workflow changes, read the changed text as executable instructions and make scope
+     boundaries, selected issue sets, and evidence destinations explicit.
+
+13. Push and open draft PR
    - `git push -u origin "$(git branch --show-current)"`
    - Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
    - Open draft PR linking issue:
      - `gh pr create --draft --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`
 
-13. Create follow-up issues when needed
+14. Create follow-up issues when needed
    - For deferred but important work, create dedicated issues:
      - `gh issue create --title "<follow-up>" --body-file <body.md> --label "enhancement,technical-debt" --milestone "<milestone>"`
    - Add to project:
@@ -137,7 +149,7 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
    - If you are processing a larger batch, finish all issue cleanup before the project-write pass
      and run score sync once at the end.
 
-14. Close loop metadata
+15. Close loop metadata
    - Parent issue:
      - keep open while PR is draft; use closing keyword in PR body (`Closes #<n>`) when ready.
    - Project:
@@ -151,5 +163,6 @@ Use GitHub MCP / GitHub app tools as the source of truth when available before f
   - ambiguity decisions taken (or why none were needed)
   - commands run for validation
   - local artifact persistence decision for generated `output/` files
+  - first-pass self-review result
   - follow-up issues created (if any) with labels/milestone/priority
   - draft PR URL

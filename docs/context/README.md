@@ -90,6 +90,8 @@ knowledge, not every transient iteration detail.
   [open_issues_maintainer_input_triage.md](open_issues_maintainer_input_triage.md)
 * Open-issues PR split strategy:
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
+* PR first-pass review audit:
+  [pr_first_pass_review_audit_2026-05-14.md](pr_first_pass_review_audit_2026-05-14.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 

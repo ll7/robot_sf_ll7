@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Implemented the issue-1187 render-helper slice: `capture_frames()` now samples real RGB frame
+  buffers or one direct render result, `generate_video_contact_sheet.py` writes deterministic PNG
+  contact sheets from episode frame metadata, and the helper catalog documents the supported
+  surfaces and failure modes.
 * Updated the issue-1186 post-`#243` output-root cleanup slice so remaining active benchmark and
   baseline commands now point at `output/benchmarks/...`, the factory-performance baseline tooling
   resolves its default path through canonical artifact helpers, and the social-navigation benchmark
@@ -29,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1185 dummy-backend smoke surface: `robot_sf/sim/backends/dummy_backend.py`
+  now exposes the map metadata and minimal simulator contract that `RobotEnv` expects, so
+  `examples/advanced/01_backend_selection.py` can run headlessly in CI and stays covered by the
+  manifest-driven examples smoke suite.
 * Added the issue-1181 `ml-intern` bounded-assistant assessment note, including the local-only
   proof ladder, trace/privacy boundary, verified Robot SF prompt/context stack, and the explicit
   recommendation to keep `ml-intern` as a bounded experiment assistant rather than a replacement

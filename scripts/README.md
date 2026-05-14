@@ -872,14 +872,14 @@ uv run python scripts/benchmark_repro_check.py
 
 #### `generate_video_contact_sheet.py`
 
-**Purpose**: Placeholder for generating thumbnail contact sheets from episode videos  
+**Purpose**: Generate thumbnail contact sheets from episode frame image artifacts
 **Usage**:
 
 ```bash
-uv run python scripts/generate_video_contact_sheet.py
+uv run python scripts/generate_video_contact_sheet.py output/benchmarks/example/episodes.jsonl output/benchmarks/example/contact_sheet.png
 ```
 
-**Details**: Implementation deferred until video artifact pipeline stabilizes
+**Details**: Reads frame image paths from `frame_paths` or `video.frame_paths` in episode JSONL rows. Rows that only contain MP4 paths should be pre-extracted to image frames before calling this helper.
 
 #### `update_svg_viewbox.py`
 

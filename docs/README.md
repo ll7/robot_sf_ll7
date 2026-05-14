@@ -106,6 +106,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #1154 Web-Game Data Collection Path](./context/issue_1154_web_game_data_collection_path.md)** - Deferred web-game data collection follow-up; rationale for keeping schema parity with the local recorder and sequenced implementation order
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
+* **[Helper Catalog](./dev/helper_catalog.md)** - Reusable environment, policy, episode, rendering, and docs helpers extracted from examples and benchmark scripts
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 * **[Canonical PPO Training Workflow](./training/ppo_training_workflow.md)** - Config-driven PPO entrypoint, evaluation cadence semantics, and startup provenance logging.
 * **[Robot SF Environment Contract And Training Provenance](./training/environment_contract.md)** - Factory entrypoints, rollout ownership, reward-versus-benchmark boundary, and PPO run-record checklist.
@@ -289,6 +290,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Simulation & UI
 
 * **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
+* **[Helper Catalog](./dev/helper_catalog.md)** - Reusable render helpers for frame capture, output directories, and video contact sheets
 * **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
 * **[OSM Map Generation](./osm_map_workflow.md)** - Programmatic, reproducible maps from OpenStreetMap data (PBF import, zone/route definition, scenario creation)
   + **Quick Start**: 3 approaches (visual editor, programmatic API, hybrid)

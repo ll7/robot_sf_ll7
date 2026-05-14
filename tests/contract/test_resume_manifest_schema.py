@@ -1,7 +1,4 @@
-"""Contract test for resume manifest JSON schema (T014).
-
-Checks for `resume-manifest.schema.v1.json` presence and structure once created.
-"""
+"""Contract tests for the resume manifest JSON schema (T014)."""
 
 from __future__ import annotations
 
@@ -26,34 +23,24 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
+    """Load the canonical resume manifest schema from the repository."""
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def test_resume_manifest_invalid_sample_fails():
-    """TODO docstring. Document this function."""
+    """A malformed resume manifest should fail the v1 schema."""
     schema = _load_schema()
     invalid = {"episodes": ["id1", "id2"], "hash": 123}  # missing version, type mismatch
-    with pytest.raises(Exception):
+    with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=invalid, schema=schema)
 
 
 def test_resume_manifest_minimal_valid_passes_when_ready():
-    """TODO docstring. Document this function."""
+    """A minimal resume manifest should validate against the canonical schema."""
     schema = _load_schema()
     minimal = {
         "version": "v1",
         "episodes": ["ep1"],
         "meta": {"source": "unit-test"},
     }
-    try:
-        jsonschema.validate(instance=minimal, schema=schema)
-    except FileNotFoundError:
-        pytest.xfail("Resume manifest schema not yet implemented (expected)")
-    except jsonschema.ValidationError:
-        pytest.xfail("Resume manifest schema structure incomplete (expected during red phase)")
+    jsonschema.validate(instance=minimal, schema=schema)

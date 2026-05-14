@@ -1,7 +1,4 @@
-"""Contract test for aggregate summary JSON schema (T012).
-
-Fails until `aggregate.schema.v1.json` exists. Pattern consistent with T010/T011.
-"""
+"""Contract tests for the aggregate summary JSON schema (T012)."""
 
 from __future__ import annotations
 
@@ -26,35 +23,25 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
+    """Load the canonical aggregate summary schema from the repository."""
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def test_aggregate_summary_invalid_sample_fails():
-    """TODO docstring. Document this function."""
+    """A malformed aggregate summary should fail the v1 schema."""
     schema = _load_schema()
     invalid = {
         "groups": {"A": {"metrics": {"collisions": {"mean": 0}}}},
     }  # missing version, shape mismatch
-    with pytest.raises(Exception):
+    with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=invalid, schema=schema)
 
 
 def test_aggregate_summary_minimal_valid_passes_when_ready():
-    """TODO docstring. Document this function."""
+    """A minimal aggregate summary should validate against the canonical schema."""
     schema = _load_schema()
     minimal = {
         "version": "v1",
         "groups": {"A": {"metrics": {"collisions": {"mean": 0.0, "median": 0.0, "p95": 0.0}}}},
     }
-    try:
-        jsonschema.validate(instance=minimal, schema=schema)
-    except FileNotFoundError:
-        pytest.xfail("Aggregate schema not yet implemented (expected)")
-    except jsonschema.ValidationError:
-        pytest.xfail("Aggregate schema structure incomplete (expected during red phase)")
+    jsonschema.validate(instance=minimal, schema=schema)

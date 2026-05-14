@@ -181,7 +181,8 @@ class SimulationView:
         record_video (bool): Whether to record the simulation as a video.
         video_path (str): Path to save the recorded video.
         video_fps (float | None): Explicit frames per second for the recorded video. When unset,
-            the latest render target FPS is used.
+            the latest render target FPS is used. When lower than the render target, frame capture
+            is downsampled deterministically to this cadence.
         frames (List[np.ndarray]): List of frames recorded for the video.
         clock (pygame.time.Clock): PyGame clock for controlling frame rate.
         screen (pygame.surface.Surface): PyGame surface for rendering.
@@ -253,6 +254,8 @@ class SimulationView:
     # Default chosen to balance typical 720p usage (<~4.4GB for 1200 frames) vs runaway memory.
     max_frames: int | None = field(default=2000)
     _frame_cap_warned: bool = field(init=False, default=False)
+    _recording_render_count: int = field(init=False, default=0)
+    _recording_capture_credit: float = field(init=False, default=0.0)
     # Grid visualization state
     show_occupancy_grid: bool = field(default=False)  # Show occupancy grid overlay
     occupancy_grid: OccupancyGrid | None = field(default=None)  # Current occupancy grid
@@ -554,7 +557,8 @@ class SimulationView:
         # Store the effective render cadence for video encoding and diagnostics.
         self.current_target_fps = target_fps
         if self.record_video:
-            self._capture_frame()
+            if self._should_capture_recording_frame(target_fps):
+                self._capture_frame()
         else:
             if self._use_display:
                 pygame.display.update()
@@ -566,6 +570,22 @@ class SimulationView:
         if self.video_fps is not None:
             return float(self.video_fps)
         return float(self.current_target_fps)
+
+    def _should_capture_recording_frame(self, target_fps: float) -> bool:
+        """Return whether the current render frame should be buffered for video."""
+        self._recording_render_count += 1
+        capture_fps = self._effective_video_fps()
+        render_fps = float(target_fps)
+        if capture_fps <= 0.0 or render_fps <= 0.0 or capture_fps >= render_fps:
+            return True
+        if self._recording_render_count == 1:
+            return True
+
+        self._recording_capture_credit += capture_fps / render_fps
+        if self._recording_capture_credit + 1e-12 < 1.0:
+            return False
+        self._recording_capture_credit -= 1.0
+        return True
 
     def _capture_frame(self):
         """Capture the current frame for video recording."""

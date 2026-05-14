@@ -118,7 +118,6 @@ class TestSensorValidation:
 class TestConflictDetection:
     """Test conflict detection (T029)."""
 
-    @pytest.mark.skip(reason="Conflict detection not yet fully implemented (T029 partial)")
     def test_image_obs_without_image_config_raises(self):
         """use_image_obs=True without image_config raises ValueError."""
         config = RobotSimulationConfig()

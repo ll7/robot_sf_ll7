@@ -7,6 +7,7 @@ standardized naming metadata for JSONL recordings.
 
 from hashlib import sha1
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from loguru import logger
@@ -36,7 +37,44 @@ def ensure_output_dir(path: Path) -> Path:
         raise
 
 
-def capture_frames(env, stride: int = 1) -> list[np.ndarray]:
+def _normalize_frame(frame: Any) -> np.ndarray | None:
+    """Return a valid RGB frame array or ``None`` for unsupported frame payloads."""
+    if frame is None:
+        return None
+    array = np.asarray(frame)
+    if array.ndim != 3 or array.shape[2] != 3:
+        return None
+    if array.dtype != np.uint8:
+        array = np.clip(array, 0, 255).astype(np.uint8)
+    return array
+
+
+def _buffered_frames_from(env: Any) -> list[np.ndarray]:
+    """Collect already-buffered frames from common render containers.
+
+    Returns:
+        Normalized RGB frames in capture order, or an empty list when no known
+        frame buffer is present.
+    """
+    candidates = [
+        getattr(env, "frames", None),
+        getattr(getattr(env, "sim_ui", None), "frames", None),
+        getattr(getattr(env, "view", None), "frames", None),
+    ]
+    frames: list[np.ndarray] = []
+    for candidate in candidates:
+        if not isinstance(candidate, (list, tuple)):
+            continue
+        for frame in candidate:
+            normalized = _normalize_frame(frame)
+            if normalized is not None:
+                frames.append(normalized)
+        if frames:
+            break
+    return frames
+
+
+def capture_frames(env: Any, stride: int = 1) -> list[np.ndarray]:
     """Provide reusable frame sampling logic for recording helpers.
 
     Args:
@@ -58,17 +96,23 @@ def capture_frames(env, stride: int = 1) -> list[np.ndarray]:
         msg = f"Environment {type(env).__name__} does not support rendering"
         raise AttributeError(msg)
 
-    frames = []
-
     try:
-        # This is a placeholder implementation - actual frame capture would
-        # depend on the specific environment interface
         logger.debug(f"Starting frame capture with stride={stride}")
+        buffered = _buffered_frames_from(env)
+        if buffered:
+            return buffered[::stride]
 
-        # For now, return empty list as implementation will be filled
-        # when integrating with actual environment rendering
-        logger.warning("capture_frames is not yet fully implemented")
-        return frames
+        rendered = env.render()
+        normalized = _normalize_frame(rendered)
+        if normalized is not None:
+            return [normalized]
+
+        buffered = _buffered_frames_from(env)
+        if buffered:
+            return buffered[::stride]
+
+        logger.warning("capture_frames found no RGB frame data")
+        return []
 
     except Exception as e:
         logger.error(f"Frame capture failed: {e}")

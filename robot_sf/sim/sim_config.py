@@ -35,8 +35,10 @@ class SimulationSettings:
     """Goal radius"""
 
     stack_steps: int = 3
-    """Number of steps to stack in observations
-    TODO move "stack_steps" from SimulationSettings to ?"""
+    """Deprecated alias for observation history depth.
+
+    Prefer ``observation_stack.stack_steps`` on environment configuration objects.
+    """
 
     use_next_goal: bool = True
     """Whether to use the next goal in the path as the current goal"""

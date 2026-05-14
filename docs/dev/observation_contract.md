@@ -18,7 +18,7 @@ and downstream tooling.
 
 ### Stacking Rules
 
-- `timesteps` equals `SimulationSettings.stack_steps`.
+- `timesteps` equals `observation_stack.stack_steps` on the environment config.
 - Stacking is chronological with newest samples appended and older samples shifted.
 
 ### Normalization
@@ -99,7 +99,7 @@ Sources: `robot_sf/nav/occupancy_grid.py`, `robot_sf/gym_env/robot_env.py`.
 ## Configuration Hooks
 
 - Observation mode: `RobotSimulationConfig.observation_mode`
-- Stacking: `SimulationSettings.stack_steps`
+- Stacking: `RobotSimulationConfig.observation_stack.stack_steps`
 - Grid: `RobotSimulationConfig.grid_config`, `use_occupancy_grid`, `include_grid_in_observation`
 
 ## Reference Files

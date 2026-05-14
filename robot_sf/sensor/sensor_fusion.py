@@ -35,7 +35,7 @@ def fused_sensor_space(
     ----------
     timesteps : int
         The number of **stacked** timesteps in the observation (history length).
-        This should align with ``SimulationSettings.stack_steps``.
+        This should align with ``observation_stack.stack_steps`` on the environment config.
     robot_obs : spaces.Box
         The observation space for the robot.
     target_obs : spaces.Box

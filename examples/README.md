@@ -64,7 +64,7 @@ Feature-focused demos for developers exploring capabilities.
 
 | Example | Summary | Prerequisites | Tags | CI |
 | --- | --- | --- | --- | --- |
-| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | _None_ | backend | ⚠️ Dummy backend currently lacks map metadata and fails under automation. |
+| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | _None_ | backend | ✅ |
 | [02 Factory Options](./advanced/02_factory_options.py) | Compare environment factory options for rendering and recording. | _None_ | factory | ✅ |
 | [03 Image Observations](./advanced/03_image_observations.py) | Enable image-based observations in the robot environment. | None | image | ✅ |
 | [04 Feature Extractors](./advanced/04_feature_extractors.py) | Run PPO demos with different feature extractors. | uv sync --all-extras | training, feature-extractor | ⚠️ Needs optional extras and lengthy PPO rollout; exceeds smoke timeout. |

@@ -15,6 +15,7 @@ except ImportError:
     tqdm = None  # type: ignore
 
 from robot_sf.eval import EnvMetrics
+from robot_sf.gym_env.observation_config import set_observation_stack_steps
 from robot_sf.gym_env.robot_env import EnvSettings, RobotEnv
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
@@ -140,20 +141,20 @@ def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMet
 
 
 def prepare_env(settings: EvalSettings, difficulty: int) -> gymnasium.Env:
-    """TODO docstring. Document this function.
+    """Build an evaluation environment for one configured difficulty.
 
     Args:
-        settings: TODO docstring.
-        difficulty: TODO docstring.
+        settings: Evaluation settings containing gym, force, and vehicle configuration.
+        difficulty: Pedestrian-density difficulty index to apply to the environment.
 
     Returns:
-        TODO docstring.
+        Adapted Gymnasium environment ready for policy evaluation.
     """
     env_settings = EnvSettings()
     env_settings.sim_config.prf_config = settings.prf_config
     env_settings.sim_config.ped_density_by_difficulty = settings.ped_densities
     env_settings.sim_config.difficulty = difficulty
-    env_settings.sim_config.stack_steps = settings.gym_config.obs_timesteps
+    set_observation_stack_steps(env_settings, settings.gym_config.obs_timesteps)
     env_settings.robot_config = settings.vehicle_config
     orig_env = RobotEnv(env_settings)
     return AdaptedEnv(orig_env, settings.gym_config)

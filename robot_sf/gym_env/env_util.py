@@ -8,6 +8,7 @@ import numpy as np
 from gymnasium import spaces
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
+from robot_sf.gym_env.observation_config import get_observation_stack_steps
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
@@ -304,7 +305,7 @@ def create_spaces(  # noqa: C901
 
     # Extend the agent's observation space with additional sensors
     observation_space, orig_obs_space = fused_sensor_space(
-        env_config.sim_config.stack_steps,
+        get_observation_stack_steps(env_config),
         agent.observation_space,
         target_sensor_space(map_def.max_target_dist),
         lidar_sensor_space(lidar_config.num_rays, lidar_config.max_scan_dist),
@@ -607,7 +608,7 @@ def create_spaces_with_image(
     # Extend the agent's observation space with additional sensors
     if image_obs_space is not None:
         observation_space, orig_obs_space = fused_sensor_space_with_image(
-            env_config.sim_config.stack_steps,
+            get_observation_stack_steps(env_config),
             agent.observation_space,
             target_sensor_space(map_def.max_target_dist),
             lidar_sensor_space(
@@ -618,7 +619,7 @@ def create_spaces_with_image(
         )
     else:
         observation_space, orig_obs_space = fused_sensor_space(
-            env_config.sim_config.stack_steps,
+            get_observation_stack_steps(env_config),
             agent.observation_space,
             target_sensor_space(map_def.max_target_dist),
             lidar_sensor_space(

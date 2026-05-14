@@ -1084,6 +1084,23 @@ def _normalize_action_output(action: Any) -> Any:
     return action
 
 
+def _rllib_columns():
+    """Return RLlib column constants, or compatible local strings without Ray."""
+    try:
+        from ray.rllib.core.columns import Columns
+    except ModuleNotFoundError:
+
+        class Columns:
+            """Minimal RLlib column constants used when Ray is not installed."""
+
+            ACTIONS = "actions"
+            OBS = "obs"
+            STATE_IN = "state_in"
+            STATE_OUT = "state_out"
+
+    return Columns
+
+
 def _predict_action(
     algo: Any,
     observation: Any,
@@ -1097,7 +1114,8 @@ def _predict_action(
         module = get_module()
         if module is not None:
             import torch
-            from ray.rllib.core.columns import Columns
+
+            Columns = _rllib_columns()
 
             try:
                 device = next(module.parameters()).device

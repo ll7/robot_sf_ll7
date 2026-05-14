@@ -131,7 +131,9 @@ def test_manual_session_metadata_rejects_mismatched_control_mode_and_mapping_ver
         )
 
 
-def test_load_manual_jsonl_records_derives_missing_control_mode_from_mapping_version(tmp_path) -> None:
+def test_load_manual_jsonl_records_derives_missing_control_mode_from_mapping_version(
+    tmp_path,
+) -> None:
     """Legacy payloads missing control_mode should stay internally consistent on load."""
     path = tmp_path / "manual.jsonl"
     record = ManualControlRecord.for_attempt(

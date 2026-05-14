@@ -6,6 +6,9 @@
 # has a durable manifest.
 run_id: issue_749_ppo_finetune_v10_warm_start
 pretrained_policy_id: issue_749_bc_preinit_v10_policy
+dataset_id: issue_749_b60iopxt_v10_eval_trajectories
+training_config: ../ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+scenario_config: ../../scenarios/sets/ppo_full_maintained_eval_v1.yaml
 total_timesteps: 10000000
 learning_rate: 0.0001
 random_seeds: [111, 112, 113]

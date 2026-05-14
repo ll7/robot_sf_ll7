@@ -26,10 +26,12 @@ except ImportError as exc:
 
 from robot_sf import common
 from robot_sf.benchmark.imitation_manifest import write_training_run_manifest
-from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.imitation_config import BCPretrainingConfig
 from robot_sf.training.observation_wrappers import maybe_flatten_env_observations
+from scripts.training.imitation_env_contract import (
+    make_training_contract_env,
+    resolve_config_path,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -105,13 +107,43 @@ def _load_trajectory_dataset(dataset_path: Path) -> dict[str, Any]:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
-    data = np.load(str(dataset_path), allow_pickle=True)
-    return {
-        "positions": data["positions"],
-        "actions": data["actions"],
-        "observations": data["observations"],
-        "episode_count": int(data.get("episode_count", len(data["positions"]))),
-    }
+    with np.load(str(dataset_path), allow_pickle=True) as data:
+        metadata_raw = data.get("metadata")
+        metadata = {}
+        if metadata_raw is not None:
+            metadata = metadata_raw.item() if getattr(metadata_raw, "shape", None) == () else {}
+        return {
+            "positions": data["positions"],
+            "actions": data["actions"],
+            "observations": data["observations"],
+            "episode_count": int(data.get("episode_count", len(data["positions"]))),
+            "metadata": metadata,
+        }
+
+
+def _observation_keys_from_dataset(dataset: dict[str, Any]) -> tuple[str, ...] | None:
+    """Return persisted observation keys for the trajectory dataset contract."""
+    metadata = dataset.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    contract = metadata.get("observation_contract")
+    if not isinstance(contract, dict):
+        return None
+    keys = contract.get("keys")
+    if not isinstance(keys, list):
+        return None
+    return tuple(str(key) for key in keys)
+
+
+def _dataset_contract_path(dataset: dict[str, Any], key: str) -> Path | None:
+    """Return a path persisted in dataset metadata, if present."""
+    metadata = dataset.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    value = metadata.get(key)
+    if not value:
+        return None
+    return Path(str(value)).resolve()
 
 
 def _flatten_single_observation(obs: Any, observation_space: Space | None) -> np.ndarray:
@@ -206,6 +238,7 @@ def _create_bc_trainer(
         "MlpPolicy",
         env,
         learning_rate=config.learning_rate,
+        device="cpu",
         verbose=1,
     )
 
@@ -216,6 +249,7 @@ def _create_bc_trainer(
         policy=policy_model.policy,
         batch_size=config.batch_size,
         rng=np.random.default_rng(int(config.random_seeds[0])),
+        device="cpu",
     )
 
     return trainer, policy_model
@@ -235,8 +269,15 @@ def run_bc_pretraining(
     logger.info("Loading dataset from {}", dataset_path)
     dataset = _load_trajectory_dataset(dataset_path)
 
-    # Create environment for BC
-    env = make_robot_env(config=RobotSimulationConfig())
+    # Create environment for BC using the same observation contract as collection.
+    env = make_training_contract_env(
+        training_config_path=config.training_config_path
+        or _dataset_contract_path(dataset, "training_config"),
+        scenario_config_path=config.scenario_config_path
+        or _dataset_contract_path(dataset, "scenario_config"),
+        seed=int(config.random_seeds[0]) if config.random_seeds else None,
+        observation_keys=_observation_keys_from_dataset(dataset),
+    )
     raw_observation_space = env.observation_space
     env = maybe_flatten_env_observations(env, context="BC pre-training")
 
@@ -304,6 +345,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def load_bc_config(config_path: Path) -> BCPretrainingConfig:
     """Load and parse BC pre-training configuration from YAML."""
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    base_dir = config_path.parent
 
     return BCPretrainingConfig.from_raw(
         run_id=raw["run_id"],
@@ -313,6 +355,8 @@ def load_bc_config(config_path: Path) -> BCPretrainingConfig:
         batch_size=raw.get("batch_size", 32),
         learning_rate=raw.get("learning_rate", 0.0003),
         random_seeds=tuple(raw.get("random_seeds", [42])),
+        training_config_path=resolve_config_path(raw.get("training_config"), base_dir=base_dir),
+        scenario_config_path=resolve_config_path(raw.get("scenario_config"), base_dir=base_dir),
     )
 
 

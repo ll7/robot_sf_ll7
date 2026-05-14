@@ -6,6 +6,8 @@
 run_id: issue_749_bc_pretrain_v10_warm_start
 dataset_id: issue_749_b60iopxt_v10_eval_trajectories
 policy_output_id: issue_749_bc_preinit_v10_policy
+training_config: ../ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+scenario_config: ../../scenarios/sets/ppo_full_maintained_eval_v1.yaml
 bc_epochs: 20
 batch_size: 64
 learning_rate: 0.0003

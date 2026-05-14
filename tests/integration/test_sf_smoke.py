@@ -5,11 +5,16 @@ with the benchmark system and produces valid outputs.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
 from robot_sf.baselines import get_baseline, list_baselines
 from robot_sf.baselines.social_force import Observation, SFPlannerConfig, SocialForcePlanner
+from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+
+ROOT = Path(__file__).resolve().parents[2]
+EPISODE_SCHEMA_PATH = ROOT / "robot_sf" / "benchmark" / "schemas" / "episode.schema.v1.json"
 
 
 class TestSocialForceIntegration:
@@ -323,44 +328,34 @@ class TestSocialForceIntegration:
         planner3.close()
 
 
-@pytest.mark.slow
-class TestBatchRunnerIntegration:
-    """Tests that require the full benchmark runner (marked as slow)."""
+class TestEpisodeOutputIntegration:
+    """Tests for Social Force metadata in episode-shaped benchmark records."""
 
     def test_episode_schema_compliance(self):
-        """Test that a Social Force episode produces schema-compliant output.
-
-        This is a conceptual test - actual implementation would require
-        integrating with the batch runner system.
-        """
-        # This test would ideally run a small batch through the benchmark system
-        # and validate the output against the episode schema.
-
+        """Social Force metadata should fit the canonical episode schema."""
+        schema = load_schema(EPISODE_SCHEMA_PATH)
         config = SFPlannerConfig()
         planner = SocialForcePlanner(config, seed=42)
 
-        # Simulate episode data that would be generated
-        episode_metadata = planner.get_metadata()
+        record = {
+            "version": "v1",
+            "episode_id": "sf_smoke_000",
+            "scenario_id": "sf_smoke",
+            "seed": 42,
+            "algo": "baseline_sf",
+            "algorithm_metadata": planner.get_metadata(),
+            "metrics": {"success": 0.0, "collisions": 0.0, "near_misses": 0.0},
+            "termination_reason": "max_steps",
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "timeout_event": True,
+            },
+            "integrity": {"contradictions": []},
+        }
 
-        # Basic validation of structure
-        assert "algorithm" in episode_metadata
-        assert "config" in episode_metadata
-        assert "config_hash" in episode_metadata
-
-        # The actual schema validation would happen in the batch runner
-        # when integrated with the CLI system
-
+        validate_episode(record, schema)
         planner.close()
-
-    @pytest.mark.skipif(True, reason="Requires full CLI integration")
-    def test_cli_integration(self):
-        """Test Social Force planner works with CLI --algo baseline_sf.
-
-        This test would require the CLI to be updated to support baseline algorithms.
-        """
-        # This would test something like:
-        # robot_sf_bench run --matrix test_scenarios.yaml --algo baseline_sf --out results.jsonl
-        pass
 
 
 if __name__ == "__main__":

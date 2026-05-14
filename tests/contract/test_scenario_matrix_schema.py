@@ -1,7 +1,4 @@
-"""Contract test for scenario matrix JSON schema (T011).
-
-Fails until `scenario-matrix.schema.v1.json` is implemented. Mirrors T010 pattern.
-"""
+"""Contract tests for the scenario matrix JSON schema (T011)."""
 
 from __future__ import annotations
 
@@ -26,27 +23,23 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
-    """TODO docstring. Document this function.
-
-
-    Returns:
-        TODO docstring.
-    """
+    """Load the canonical scenario matrix schema from the repository."""
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def test_scenario_matrix_invalid_sample_fails():
-    """TODO docstring. Document this function."""
+    """A malformed scenario matrix should fail the v1 schema."""
     schema = _load_schema()
     invalid = {"scenarios": [{"id": 1}]}  # id wrong type, missing required keys
-    with pytest.raises(Exception):
+    with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=invalid, schema=schema)
 
 
 def test_scenario_matrix_minimal_valid_passes_when_ready():
-    """TODO docstring. Document this function."""
+    """A minimal scenario matrix should validate against the canonical schema."""
     schema = _load_schema()
     minimal = {
+        "version": "v1",
         "scenarios": [
             {
                 "id": "simple_1",
@@ -57,9 +50,4 @@ def test_scenario_matrix_minimal_valid_passes_when_ready():
             },
         ],
     }
-    try:
-        jsonschema.validate(instance=minimal, schema=schema)
-    except FileNotFoundError:
-        pytest.xfail("Scenario matrix schema not yet implemented (expected)")
-    except jsonschema.ValidationError:
-        pytest.xfail("Scenario matrix schema structure incomplete (expected during red phase)")
+    jsonschema.validate(instance=minimal, schema=schema)

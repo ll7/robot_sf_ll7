@@ -219,6 +219,9 @@ knowledge, not every transient iteration detail.
   records the feasibility gate for browser/web-game manual-control collection, including schema
   parity, consent/privacy, retention, deterministic hosted scenarios, and the narrow offline
   compatibility-prototype boundary.
+* [Issue #1162 Manual-Control Active-Attempt Rewind](issue_1162_manual_control_rewind.md)
+  records the replay-to-step rewind strategy, rejected simulator-checkpoint alternative,
+  append-only metadata boundary, and fail-closed repeated-rewind policy.
 
 ## Feature Extractor Notes
 

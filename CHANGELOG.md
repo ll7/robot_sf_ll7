@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cruise and mouse-target differential-drive mapper variants, runtime mode selection config, and
   manifest/record metadata for `control_mode`, `view_mode`, and `input_mapping_version`, while
   keeping unsupported ego-up renderer hooks fail-closed until the camera transform exists.
+* Added the issue-1162 manual-control rewind boundary: manual-control records now carry explicit
+  rewind metadata, replay JSON preserves rewind events, and BC export skips samples invalidated by
+  append-only rewind records while repeated-rewind planning fails closed until active-timeline
+  derivation exists.
 * Added the issue-1110 CARLA oracle replay parity adapter surface: `compare_oracle_replay_metrics(...)`
   and its CLI now emit conservative parity reports, reject degraded CARLA `mode` or `status`
   fail-closed, treat non-finite numeric values as unavailable instead of serializing invalid JSON,

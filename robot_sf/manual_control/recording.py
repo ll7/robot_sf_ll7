@@ -49,6 +49,17 @@ class ManualSessionMetadata:
 
 
 @dataclass(frozen=True)
+class ManualRewindMetadata:
+    """Explicit rewind boundary metadata embedded in a manual-control record."""
+
+    strategy: str
+    from_step_idx: int
+    to_step_idx: int
+    invalidates_samples_after_step: int
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
 class ManualControlRecord:
     """One append-only manual-control event or training sample."""
 
@@ -62,6 +73,7 @@ class ManualControlRecord:
     mapped_action: tuple[float, ...] | None = None
     observation: dict[str, Any] | None = None
     metrics: dict[str, Any] = field(default_factory=dict)
+    rewind: ManualRewindMetadata | None = None
     training_sample: bool = False
 
     @classmethod
@@ -77,6 +89,7 @@ class ManualControlRecord:
         mapped_action: tuple[float, ...] | None = None,
         observation: dict[str, Any] | None = None,
         metrics: dict[str, Any] | None = None,
+        rewind: ManualRewindMetadata | None = None,
         training_sample: bool = False,
     ) -> ManualControlRecord:
         """Build a record tied to one scenario/seed attempt.
@@ -97,6 +110,7 @@ class ManualControlRecord:
             mapped_action=mapped_action,
             observation=observation,
             metrics=metrics or {},
+            rewind=rewind,
             training_sample=training_sample,
         )
 
@@ -127,6 +141,9 @@ class ManualControlRecord:
         session_payload = payload.get("session")
         if not isinstance(session_payload, dict):
             raise ValueError("manual-control record is missing session metadata")
+        rewind_payload = payload.get("rewind")
+        if rewind_payload is not None and not isinstance(rewind_payload, dict):
+            raise ValueError("rewind must be an object when provided")
         input_mapping_version = str(session_payload["input_mapping_version"])
         control_mode_payload = session_payload.get("control_mode")
         control_mode = (
@@ -169,6 +186,19 @@ class ManualControlRecord:
             ),
             observation=payload.get("observation"),
             metrics=dict(payload.get("metrics") or {}),
+            rewind=(
+                ManualRewindMetadata(
+                    strategy=str(rewind_payload["strategy"]),
+                    from_step_idx=int(rewind_payload["from_step_idx"]),
+                    to_step_idx=int(rewind_payload["to_step_idx"]),
+                    invalidates_samples_after_step=int(
+                        rewind_payload["invalidates_samples_after_step"]
+                    ),
+                    reason=rewind_payload.get("reason"),
+                )
+                if rewind_payload is not None
+                else None
+            ),
             training_sample=training_sample,
         )
 

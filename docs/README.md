@@ -95,6 +95,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
+* **[Issue #1181 `ml-intern` Bounded Assistant Assessment](./context/issue_1181_ml_intern_experiment_assistant.md)** - Safe-use boundary for evaluating `huggingface/ml-intern` against Robot SF without replacing the local/SLURM proof-first workflow
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
 * **[AI Planner Zoo Context](./ai/planner_zoo_context.md)** - Planner-zoo integration context, readiness framing, and provenance/adapter questions to answer explicitly
 * **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
@@ -288,6 +289,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Simulation & UI
 
 * **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
+* **[Helper Catalog](./dev/helper_catalog.md)** - Reusable render helpers for frame capture, output directories, and video contact sheets
 * **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
 * **[OSM Map Generation](./osm_map_workflow.md)** - Programmatic, reproducible maps from OpenStreetMap data (PBF import, zone/route definition, scenario creation)
   + **Quick Start**: 3 approaches (visual editor, programmatic API, hybrid)
@@ -404,7 +406,7 @@ The figures orchestration script writes `baseline_table.md` by default. To obtai
 
 ```bash
 uv run python scripts/generate_figures.py \
-  --episodes results/episodes_sf_long_fix1.jsonl \
+  --episodes output/benchmarks/episodes_sf_long_fix1.jsonl \
   --auto-out-dir --no-pareto --table-tex \
   --dmetrics collisions,comfort_exposure,snqi --table-metrics collisions,comfort_exposure,snqi
 ```
@@ -413,7 +415,7 @@ uv run python scripts/generate_figures.py \
 
 ```bash
 uv run python -m robot_sf.benchmark.cli table \
-  --episodes results/episodes_sf_long_fix1.jsonl \
+  --episodes output/benchmarks/episodes_sf_long_fix1.jsonl \
   --metrics collisions,comfort_exposure,near_misses,snqi \
   --format tex > docs/figures/table_snqi.tex
 ```
@@ -438,8 +440,8 @@ Optional tuning:
 
 ```bash
      uv run robot_sf_bench aggregate \
-       --in results/episodes_sf_long_fix1.jsonl \
-       --out results/summary_ci.json \
+       --in output/benchmarks/episodes_sf_long_fix1.jsonl \
+       --out output/benchmarks/summary_ci.json \
        --bootstrap-samples 1000 --bootstrap-confidence 0.95 --bootstrap-seed 123
      ```
 
@@ -447,8 +449,8 @@ Optional tuning:
 
 ```bash
      uv run python scripts/generate_figures.py \
-       --episodes results/episodes_sf_long_fix1.jsonl \
-       --table-summary results/summary_ci.json \
+       --episodes output/benchmarks/episodes_sf_long_fix1.jsonl \
+       --table-summary output/benchmarks/summary_ci.json \
        --table-metrics collisions,comfort_exposure,snqi \
        --table-stats mean,median,p95 \
        --table-include-ci --table-tex --no-pareto \
@@ -467,11 +469,11 @@ Example (custom suffix for 90% CIs):
 
 ```bash
 uv run robot_sf_bench aggregate \
-  --in results/episodes.jsonl --out results/summary_ci90.json \
+  --in output/benchmarks/episodes.jsonl --out output/benchmarks/summary_ci90.json \
   --bootstrap-samples 1000 --bootstrap-confidence 0.90
 uv run python scripts/generate_figures.py \
-  --episodes results/episodes.jsonl \
-  --table-summary results/summary_ci90.json \
+  --episodes output/benchmarks/episodes.jsonl \
+  --table-summary output/benchmarks/summary_ci90.json \
   --table-metrics collisions,snqi \
   --table-stats mean,median \
   --table-include-ci --ci-column-suffix ci90 --table-tex \

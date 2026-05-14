@@ -59,6 +59,7 @@ from robot_sf.common.artifact_paths import (
 )
 from robot_sf.common.logging import configure_logging
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.observation_config import set_observation_stack_steps
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
@@ -655,9 +656,9 @@ def _prepare_episode_config(  # noqa: PLR0913
     if policy_name == "ppo":
         policy_stack_steps = resolve_policy_stack_steps(policy_model)
         if policy_stack_steps is not None:
-            config.sim_config.stack_steps = policy_stack_steps
+            set_observation_stack_steps(config, policy_stack_steps)
         elif policy_obs_adapter is not None:
-            config.sim_config.stack_steps = 1
+            set_observation_stack_steps(config, 1)
     return config
 
 

@@ -14,6 +14,10 @@ from loguru import logger
 if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
+from robot_sf.gym_env.observation_config import (
+    ObservationStackSettings,
+    sync_observation_stack_settings,
+)
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.telemetry_config import TelemetryConfigMixin
 from robot_sf.nav.map_config import MapDefinitionPool
@@ -73,6 +77,7 @@ class BaseSimulationConfig(TelemetryConfigMixin):
     backend: str = "fast-pysf"
     sensors: list[dict] = field(default_factory=list)
     observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
+    observation_stack: ObservationStackSettings = field(default_factory=ObservationStackSettings)
     observation_visibility: ObservationVisibilitySettings = field(
         default_factory=ObservationVisibilitySettings,
     )
@@ -91,6 +96,7 @@ class BaseSimulationConfig(TelemetryConfigMixin):
         """
         if not self.sim_config or not self.map_pool or not self.lidar_config:
             raise ValueError("All configuration fields must be initialized!")
+        sync_observation_stack_settings(self)
         self._validate_telemetry()
 
 

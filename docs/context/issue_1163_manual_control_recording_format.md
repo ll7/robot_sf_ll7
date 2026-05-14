@@ -1,4 +1,4 @@
-# Issue 1163 manual-control recording format decision
+# Issue #1163 Manual-Control Recording Format Decision
 
 Related issue: [#1163](https://github.com/ll7/robot_sf_ll7/issues/1163)
 Related prerequisite: [#1153](https://github.com/ll7/robot_sf_ll7/issues/1153)
@@ -16,7 +16,7 @@ with source-record provenance.
 
 ## Evidence
 
-#1153 added the reusable profiling path:
+Issue #1153 added the reusable profiling path:
 
 ```bash
 uv run python scripts/manual_control/profile_recording.py \

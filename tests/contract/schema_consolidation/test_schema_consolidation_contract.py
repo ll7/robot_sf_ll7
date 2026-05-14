@@ -93,7 +93,9 @@ class TestGitHookContract:
         canonical_dir = tmp_path / "canonical"
         canonical_dir.mkdir()
         canonical_schema = canonical_dir / "episode.schema.v1.json"
-        canonical_schema.write_text(EPISODE_SCHEMA_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        canonical_schema.write_text(
+            EPISODE_SCHEMA_PATH.read_text(encoding="utf-8"), encoding="utf-8"
+        )
 
         duplicate_dir = tmp_path / "duplicate"
         duplicate_dir.mkdir()

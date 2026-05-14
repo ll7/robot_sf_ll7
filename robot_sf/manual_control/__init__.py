@@ -43,6 +43,7 @@ from robot_sf.manual_control.profile import ManualRecordingProfile, profile_manu
 from robot_sf.manual_control.recording import (
     ManualControlRecord,
     ManualJsonlRecorder,
+    ManualRewindMetadata,
     ManualSessionMetadata,
     load_manual_jsonl_records,
 )
@@ -52,6 +53,11 @@ from robot_sf.manual_control.replay import (
     group_records_by_attempt,
     iter_replay_events,
     write_attempt_replay_json,
+)
+from robot_sf.manual_control.rewind import (
+    ManualRewindPlan,
+    compute_rewind_invalidated_record_indexes,
+    plan_replay_to_step_rewind,
 )
 from robot_sf.manual_control.session import (
     AttemptKey,
@@ -80,6 +86,8 @@ __all__ = [
     "ManualMouseTarget",
     "ManualRecordingProfile",
     "ManualReplayEvent",
+    "ManualRewindMetadata",
+    "ManualRewindPlan",
     "ManualSessionController",
     "ManualSessionManifest",
     "ManualSessionMetadata",
@@ -88,6 +96,7 @@ __all__ = [
     "ManualViewModeSpec",
     "MetricDirection",
     "PolicyBaseline",
+    "compute_rewind_invalidated_record_indexes",
     "control_mode_spec",
     "ensure_supported_manual_mode",
     "ensure_supported_mvp_mode",
@@ -100,8 +109,9 @@ __all__ = [
     "mapper_for_robot_config",
     "parse_manual_control_mode",
     "parse_manual_view_mode",
-    "view_mode_spec",
+    "plan_replay_to_step_rewind",
     "profile_manual_jsonl_recording",
+    "view_mode_spec",
     "write_attempt_replay_json",
     "write_demonstration_samples_jsonl",
     "write_manual_session_manifest",

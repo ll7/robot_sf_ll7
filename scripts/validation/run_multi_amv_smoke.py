@@ -89,6 +89,7 @@ def build_multi_amv_episode_record(  # noqa: PLR0913
     planner_status: str,
     planner_note: str | None = None,
     wall_time_sec: float,
+    start_timestamp: datetime | None = None,
 ) -> dict[str, Any]:
     """Build a canonical benchmark-style multi-AMV episode record."""
     extension = multi_amv_episode_extension(
@@ -101,6 +102,8 @@ def build_multi_amv_episode_record(  # noqa: PLR0913
     collision_events = float(inter_robot.get("inter_robot_collision_events", 0.0) or 0.0)
     collision_detected = collision_events > 0.0
     termination_reason = "collision" if collision_detected else "terminated"
+    finished_at = datetime.now(UTC)
+    started_at = start_timestamp or finished_at
     scenario_params = {
         "scenario_id": str(scenario_id),
         "algo": str(planner_family),
@@ -127,8 +130,8 @@ def build_multi_amv_episode_record(  # noqa: PLR0913
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {
-            "start": datetime.now(UTC).isoformat(),
-            "end": datetime.now(UTC).isoformat(),
+            "start": started_at.isoformat(),
+            "end": finished_at.isoformat(),
         },
         "status": status_from_termination_reason(termination_reason),
         "steps": int(steps_recorded),
@@ -165,6 +168,7 @@ def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
     env = make_multi_robot_env(num_robots=settings.num_robots, config=config, debug=False)
     positions = []
     started = time.time()
+    start_timestamp = datetime.now(UTC)
     try:
         env.reset(seed=0)
         positions.append(_robot_positions(env))
@@ -194,6 +198,7 @@ def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
         planner_status="goal_controller_smoke",
         planner_note=planner_support.rationale,
         wall_time_sec=wall_time_sec,
+        start_timestamp=start_timestamp,
     )
 
 

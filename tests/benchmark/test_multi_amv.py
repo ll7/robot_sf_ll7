@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -245,6 +246,7 @@ def test_multi_amv_episode_record_uses_canonical_metrics_block() -> None:
         planner_status="goal_controller_smoke",
         planner_note="first-slice smoke planner",
         wall_time_sec=0.25,
+        start_timestamp=datetime(2026, 5, 14, 8, 0, tzinfo=UTC),
     )
 
     assert record["version"] == "v1"
@@ -254,6 +256,8 @@ def test_multi_amv_episode_record_uses_canonical_metrics_block() -> None:
     assert "metrics" not in record["multi_amv"]
     assert record["termination_reason"] == "terminated"
     assert record["outcome"]["collision_event"] is False
+    assert record["timestamps"]["start"] == "2026-05-14T08:00:00+00:00"
+    assert "end" in record["timestamps"]
 
 
 def test_multi_amv_inter_robot_metrics_flatten_for_aggregates() -> None:

@@ -74,8 +74,8 @@ examples:
     summary: "Switch Robot SF backends using unified config."
     category_slug: advanced
     prerequisites: []
-    ci_enabled: false
-    ci_reason: "Dummy backend currently lacks map metadata and fails under automation."
+    ci_enabled: true
+    ci_reason: null
     doc_reference: docs/dev_guide.md#environment-factory
     tags: [backend]
   - path: advanced/09_defensive_policy.py
@@ -416,7 +416,7 @@ examples:
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
-    ci_reason: "Long interactive pygame session, not relevatn for CI"
+    ci_reason: "Long interactive pygame session, not relevant for CI"
     doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
     tags: [occupancy, interactive]
   - path: advanced/23_poi_routing_demo.py

@@ -1,7 +1,7 @@
 """T015: Performance regression guard for factory creation (FR-017).
 
 Compares current mean creation times against baseline in
-`results/factory_perf_baseline.json`. Fails if mean exceeds baseline by >5%.
+`output/benchmarks/factory_perf_baseline.json`. Fails if mean exceeds baseline by >5%.
 Skips if baseline file missing (developer must run baseline script first).
 
 NOTE: Ensures fast demo mode is disabled to reflect real creation cost.
@@ -15,10 +15,11 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.gym_env.environment_factory import make_image_robot_env, make_robot_env
 from robot_sf.gym_env.unified_config import ImageRobotConfig, RobotSimulationConfig
 
-BASELINE_PATH = Path("results/factory_perf_baseline.json")
+BASELINE_PATH = resolve_artifact_path(Path("benchmarks/factory_perf_baseline.json"))
 THRESHOLD = 1.15  # +15% hard budget (tightened per T031 spec compliance)
 SOFT_THRESHOLD = 1.30  # soft warn band (>15% and <=30%)
 ITERATIONS = 2  # keep light for CI; baseline may have been generated with more

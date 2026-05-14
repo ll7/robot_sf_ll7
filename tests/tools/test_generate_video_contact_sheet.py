@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from PIL import Image
 import pytest
+from PIL import Image
 
 from scripts.generate_video_contact_sheet import generate_contact_sheet
 

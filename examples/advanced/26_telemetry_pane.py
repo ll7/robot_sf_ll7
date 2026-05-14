@@ -1,7 +1,7 @@
 """Live telemetry pane docked in the Pygame window.
 
 Usage:
-    uv run python examples/advanced/24_telemetry_pane.py
+    uv run python examples/advanced/26_telemetry_pane.py
 
 Prerequisites:
     - None

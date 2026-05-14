@@ -9,18 +9,22 @@ from robot_sf.examples import load_manifest
 from scripts.validation.render_examples_readme import build_markdown
 
 
-def test_generated_examples_readme_has_unique_advanced_numeric_labels() -> None:
-    """Advanced example labels should not reuse the same numeric prefix."""
+def test_generated_examples_readme_has_unique_numbered_labels() -> None:
+    """Numbered example labels should not reuse the same numeric prefix."""
     markdown = build_markdown(
         load_manifest(),
         include_archived=False,
         include_ci_column=True,
     )
 
-    numeric_labels = re.findall(r"\| \[(\d+) [^\]]+\]\(\./advanced/", markdown)
-    counts = Counter(numeric_labels)
+    numbered_labels = re.findall(r"\| \[(\d+) [^\]]+\]\(\./([^/]+)/", markdown)
+    counts = Counter((category, number) for number, category in numbered_labels)
 
-    assert {number: count for number, count in counts.items() if count > 1} == {}
+    assert {
+        f"{category}:{number}": count
+        for (category, number), count in counts.items()
+        if count > 1
+    } == {}
 
 
 def test_generated_examples_readme_does_not_include_known_catalog_typos() -> None:

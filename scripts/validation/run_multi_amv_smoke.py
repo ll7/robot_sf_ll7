@@ -5,17 +5,29 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from dataclasses import fields
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.aggregate import compute_aggregates
 from robot_sf.benchmark.multi_amv import (
+    MultiAmvSettings,
     ensure_multi_amv_planner_supported,
     inter_robot_metrics,
     multi_amv_episode_extension,
     multi_amv_settings_from_scenario,
+)
+from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.termination_reason import status_from_termination_reason
+from robot_sf.benchmark.thresholds import ensure_metric_parameters
+from robot_sf.benchmark.utils import (
+    _config_hash,
+    _git_hash_fallback,
+    validate_episode_success_integrity,
 )
 from robot_sf.gym_env.environment_factory import make_multi_robot_env
 from robot_sf.gym_env.unified_config import MultiRobotConfig
@@ -65,8 +77,83 @@ def _robot_positions(env: Any) -> np.ndarray:
     return np.asarray(positions, dtype=float)
 
 
+def build_multi_amv_episode_record(  # noqa: PLR0913
+    *,
+    scenario_id: str,
+    seed: int,
+    horizon: int,
+    steps_recorded: int,
+    settings: MultiAmvSettings,
+    inter_robot: dict[str, float | bool],
+    planner_family: str,
+    planner_status: str,
+    planner_note: str | None = None,
+    wall_time_sec: float,
+) -> dict[str, Any]:
+    """Build a canonical benchmark-style multi-AMV episode record."""
+    extension = multi_amv_episode_extension(
+        settings=settings,
+        inter_robot=inter_robot,
+        planner_family=planner_family,
+        planner_status=planner_status,
+        planner_note=planner_note,
+    )
+    collision_events = float(inter_robot.get("inter_robot_collision_events", 0.0) or 0.0)
+    collision_detected = collision_events > 0.0
+    termination_reason = "collision" if collision_detected else "terminated"
+    scenario_params = {
+        "scenario_id": str(scenario_id),
+        "algo": str(planner_family),
+        "horizon": int(horizon),
+        "multi_amv": {"settings": extension["multi_amv"]["settings"]},
+    }
+    record = {
+        "version": "v1",
+        "episode_id": f"multi_amv::{scenario_id}::{planner_family}::{seed}::{horizon}",
+        "scenario_id": str(scenario_id),
+        "seed": int(seed),
+        "scenario_params": scenario_params,
+        "metrics": {"collisions": collision_events, "inter_robot": dict(inter_robot)},
+        "algorithm_metadata": {
+            "algorithm": str(planner_family),
+            "canonical_algorithm": str(planner_family),
+            "status": "ok",
+            "baseline_category": "diagnostic",
+            "multi_amv_planner_support": ensure_multi_amv_planner_supported(
+                planner_family
+            ).to_json_dict(),
+        },
+        "algo": str(planner_family),
+        "config_hash": _config_hash(scenario_params),
+        "git_hash": _git_hash_fallback(),
+        "timestamps": {
+            "start": datetime.now(UTC).isoformat(),
+            "end": datetime.now(UTC).isoformat(),
+        },
+        "status": status_from_termination_reason(termination_reason),
+        "steps": int(steps_recorded),
+        "horizon": int(horizon),
+        "wall_time_sec": float(wall_time_sec),
+        "timing": {
+            "steps_per_second": (
+                float(steps_recorded) / float(wall_time_sec) if wall_time_sec > 0 else 0.0
+            )
+        },
+        "termination_reason": termination_reason,
+        "outcome": {
+            "route_complete": False,
+            "collision_event": collision_detected,
+            "timeout_event": False,
+        },
+        "integrity": {"contradictions": []},
+    }
+    record.update(extension)
+    ensure_metric_parameters(record)
+    return record
+
+
 def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
-    """Run the first scenario in ``scenario_path`` and return a metrics record."""
+    """Run the first scenario in ``scenario_path`` and return an episode record."""
     scenario = dict(load_scenarios(scenario_path)[0])
     settings = multi_amv_settings_from_scenario(scenario)
     planner_support = ensure_multi_amv_planner_supported("goal_controller_smoke")
@@ -77,6 +164,7 @@ def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
     )
     env = make_multi_robot_env(num_robots=settings.num_robots, config=config, debug=False)
     positions = []
+    started = time.time()
     try:
         env.reset(seed=0)
         positions.append(_robot_positions(env))
@@ -87,24 +175,93 @@ def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
                 break
     finally:
         env.close()
+    wall_time_sec = max(1e-9, time.time() - started)
     robot_positions = np.stack(positions, axis=0)
     metrics = inter_robot_metrics(
         robot_positions,
         dt=float(config.sim_config.time_per_step_in_secs),
         settings=settings,
     )
-    return {
-        "scenario_id": scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
-        "horizon": horizon,
-        "steps_recorded": int(robot_positions.shape[0]),
-        **multi_amv_episode_extension(
-            settings=settings,
-            inter_robot=metrics,
-            planner_family=planner_support.planner_family,
-            planner_status="goal_controller_smoke",
-            planner_note=planner_support.rationale,
-        ),
-    }
+    scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+    return build_multi_amv_episode_record(
+        scenario_id=scenario_id,
+        seed=0,
+        horizon=horizon,
+        steps_recorded=int(robot_positions.shape[0]),
+        settings=settings,
+        inter_robot=metrics,
+        planner_family=planner_support.planner_family,
+        planner_status="goal_controller_smoke",
+        planner_note=planner_support.rationale,
+        wall_time_sec=wall_time_sec,
+    )
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Write a JSON payload with stable formatting."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_episode_jsonl(path: Path, record: dict[str, Any], *, schema_path: Path) -> None:
+    """Validate and write one canonical episode record as JSONL."""
+    violations = validate_episode_success_integrity(record)
+    if violations:
+        raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
+    schema = load_schema(schema_path)
+    validate_episode(record, schema)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_report(path: Path, *, aggregates: dict[str, Any], record: dict[str, Any]) -> None:
+    """Write a compact Markdown report for the smoke output."""
+    inter_robot = record["metrics"]["inter_robot"]
+    lines = [
+        "# Multi-AMV Smoke Report",
+        "",
+        f"- Scenario: `{record['scenario_id']}`",
+        f"- Planner status: `{record['multi_amv']['planner_status']}`",
+        f"- Robots: `{record['multi_amv']['settings']['num_robots']}`",
+        "",
+        "## Inter-Robot Metrics",
+        "",
+    ]
+    for key in sorted(inter_robot):
+        lines.append(f"- `{key}`: `{inter_robot[key]}`")
+    lines.extend(
+        [
+            "",
+            "## Aggregate Groups",
+            "",
+        ]
+    )
+    for group_name in sorted(k for k in aggregates if not str(k).startswith("_")):
+        lines.append(f"- `{group_name}`")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_outputs(
+    *,
+    record: dict[str, Any],
+    out: Path,
+    episodes_out: Path | None,
+    aggregates_out: Path | None,
+    report_out: Path | None,
+    schema_path: Path,
+) -> None:
+    """Write requested multi-AMV smoke outputs."""
+    _write_json(out, record)
+    if episodes_out is not None:
+        _write_episode_jsonl(episodes_out, record, schema_path=schema_path)
+    aggregates: dict[str, Any] | None = None
+    if aggregates_out is not None or report_out is not None:
+        aggregates = compute_aggregates([record], group_by="algo")
+    if aggregates_out is not None and aggregates is not None:
+        _write_json(aggregates_out, aggregates)
+    if report_out is not None and aggregates is not None:
+        _write_report(report_out, aggregates=aggregates, record=record)
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,6 +269,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--episodes-out", type=Path)
+    parser.add_argument("--aggregates-out", type=Path)
+    parser.add_argument("--report-out", type=Path)
+    parser.add_argument(
+        "--schema",
+        type=Path,
+        default=Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
+    )
     parser.add_argument("--horizon", type=int, default=40)
     return parser.parse_args()
 
@@ -122,8 +287,14 @@ def main() -> None:
     if args.horizon < 1:
         raise ValueError("--horizon must be >= 1")
     record = run_smoke(scenario_path=args.scenario, horizon=args.horizon)
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(record, indent=2, sort_keys=True), encoding="utf-8")
+    write_outputs(
+        record=record,
+        out=args.out,
+        episodes_out=args.episodes_out,
+        aggregates_out=args.aggregates_out,
+        report_out=args.report_out,
+        schema_path=args.schema,
+    )
     print(json.dumps(record, indent=2, sort_keys=True))
 
 

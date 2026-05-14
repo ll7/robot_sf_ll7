@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from robot_sf.benchmark.aggregate import compute_aggregates, flatten_metrics
 from robot_sf.benchmark.multi_amv import (
     MultiAmvSettings,
     ensure_multi_amv_planner_supported,
@@ -19,7 +20,10 @@ from robot_sf.benchmark.multi_amv import (
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.gym_env.unified_config import MultiRobotConfig, RobotSimulationConfig
 from robot_sf.training.scenario_loader import load_scenarios
-from scripts.validation.run_multi_amv_smoke import _multi_robot_config_from_scenario
+from scripts.validation.run_multi_amv_smoke import (
+    _multi_robot_config_from_scenario,
+    build_multi_amv_episode_record,
+)
 
 
 def test_multi_amv_settings_from_scenario_validates_thresholds() -> None:
@@ -109,12 +113,13 @@ def test_multi_amv_episode_extension_is_additive_and_namespaced() -> None:
 
     assert set(block) == {"multi_amv"}
     assert block["multi_amv"]["enabled"] is True
-    assert block["multi_amv"]["num_robots"] == 2
+    assert block["multi_amv"]["settings"]["num_robots"] == 2
+    assert block["multi_amv"]["settings"]["collision_distance_m"] == pytest.approx(0.4)
     assert block["multi_amv"]["planner_family"] == "goal_controller_smoke"
     assert block["multi_amv"]["planner_status"] == "goal_controller_smoke"
     assert block["multi_amv"]["planner_support"]["support_status"] == "native"
     assert block["multi_amv"]["planner_support"]["contract_kind"] == "goal_controller_smoke"
-    assert block["multi_amv"]["metrics"]["inter_robot"] == metrics
+    assert "metrics" not in block["multi_amv"]
 
 
 def test_multi_amv_episode_extension_requires_multi_robot_metrics() -> None:
@@ -216,3 +221,69 @@ def test_multi_amv_planner_support_rejects_unknown_family() -> None:
     """Unknown planner families should fail closed with the known inventory named."""
     with pytest.raises(ValueError, match="unknown multi-AMV planner family"):
         multi_amv_planner_support("not-a-planner")
+
+
+def test_multi_amv_episode_record_uses_canonical_metrics_block() -> None:
+    """Canonical multi-AMV records should keep metrics reportable at the root."""
+    settings = MultiAmvSettings(num_robots=2)
+    inter_robot = {
+        "robot_count": 2.0,
+        "pair_count": 1.0,
+        "min_inter_robot_distance_m": 0.75,
+        "inter_robot_collision_events": 0.0,
+        "deadlock_detected": False,
+    }
+
+    record = build_multi_amv_episode_record(
+        scenario_id="multi_amv_minimal_smoke",
+        seed=0,
+        horizon=4,
+        steps_recorded=5,
+        settings=settings,
+        inter_robot=inter_robot,
+        planner_family="goal_controller_smoke",
+        planner_status="goal_controller_smoke",
+        planner_note="first-slice smoke planner",
+        wall_time_sec=0.25,
+    )
+
+    assert record["version"] == "v1"
+    assert record["algo"] == "goal_controller_smoke"
+    assert record["metrics"]["inter_robot"] == inter_robot
+    assert record["multi_amv"]["settings"]["num_robots"] == 2
+    assert "metrics" not in record["multi_amv"]
+    assert record["termination_reason"] == "terminated"
+    assert record["outcome"]["collision_event"] is False
+
+
+def test_multi_amv_inter_robot_metrics_flatten_for_aggregates() -> None:
+    """Aggregate/report helpers should include canonical inter-robot metrics."""
+    record = {
+        "episode_id": "episode-a",
+        "scenario_id": "multi_amv_minimal_smoke",
+        "seed": 0,
+        "algo": "goal_controller_smoke",
+        "metrics": {
+            "success": 1.0,
+            "inter_robot": {
+                "robot_count": 2.0,
+                "pair_count": 1.0,
+                "min_inter_robot_distance_m": 0.75,
+                "inter_robot_collision_events": 0.0,
+                "deadlock_detected": False,
+            },
+        },
+    }
+
+    flat = flatten_metrics(record)
+    aggregates = compute_aggregates([record], group_by="algo")
+
+    assert flat["min_inter_robot_distance_m"] == pytest.approx(0.75)
+    assert flat["inter_robot_collision_events"] == pytest.approx(0.0)
+    assert flat["deadlock_detected"] is False
+    assert aggregates["goal_controller_smoke"]["min_inter_robot_distance_m"][
+        "mean"
+    ] == pytest.approx(0.75)
+    assert aggregates["goal_controller_smoke"]["inter_robot_collision_events"][
+        "mean"
+    ] == pytest.approx(0.0)

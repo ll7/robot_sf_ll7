@@ -9,6 +9,7 @@ import pytest
 from robot_sf.manual_control.recording import (
     ManualControlRecord,
     ManualJsonlRecorder,
+    ManualRewindMetadata,
     ManualSessionMetadata,
     load_manual_jsonl_records,
 )
@@ -199,6 +200,55 @@ def test_manual_control_record_serializes_numpy_values_and_paths() -> None:
     assert encoded["observation"]["score"] == pytest.approx(0.5)
     assert encoded["observation"]["artifact"] == "output/manual/demo.jsonl"
     assert encoded["metrics"]["snqi"] == pytest.approx(0.75)
+
+
+def test_manual_rewind_metadata_round_trips_in_recording_schema(tmp_path):
+    """Rewind events should be explicit append-only recording records."""
+    path = tmp_path / "manual.jsonl"
+    session = ManualSessionMetadata(
+        session_id="session-1",
+        input_mapping_version="manual_keyboard_diff_drive_hold_v1",
+    )
+    record = ManualControlRecord.for_attempt(
+        event="rewind",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=0,
+        step_idx=1,
+        session=session,
+        rewind=ManualRewindMetadata(
+            strategy="replay_to_step_v1",
+            from_step_idx=4,
+            to_step_idx=1,
+            invalidates_samples_after_step=1,
+            reason="operator requested",
+        ),
+    )
+    path.write_text(json.dumps(record.to_json_dict()) + "\n", encoding="utf-8")
+
+    loaded = load_manual_jsonl_records(path)
+
+    assert loaded[0].event == "rewind"
+    assert loaded[0].rewind == record.rewind
+
+
+def test_load_manual_jsonl_records_rejects_non_object_rewind_payload(tmp_path):
+    """Malformed rewind payloads should fail closed instead of being dropped silently."""
+    path = tmp_path / "manual.jsonl"
+    record = ManualControlRecord.for_attempt(
+        event="rewind",
+        attempt_key=AttemptKey("scenario-a", 7),
+        attempt_id=0,
+        step_idx=1,
+        session=ManualSessionMetadata(
+            session_id="session-1",
+            input_mapping_version="manual_keyboard_diff_drive_hold_v1",
+        ),
+    ).to_json_dict()
+    record["rewind"] = "bad-payload"
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="rewind must be an object when provided"):
+        load_manual_jsonl_records(path)
 
 
 def test_load_manual_jsonl_records_validates_view_mode_and_training_sample(tmp_path):

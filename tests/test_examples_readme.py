@@ -21,9 +21,7 @@ def test_generated_examples_readme_has_unique_numbered_labels() -> None:
     counts = Counter((category, number) for number, category in numbered_labels)
 
     assert {
-        f"{category}:{number}": count
-        for (category, number), count in counts.items()
-        if count > 1
+        f"{category}:{number}": count for (category, number), count in counts.items() if count > 1
     } == {}
 
 

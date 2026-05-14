@@ -56,14 +56,14 @@ def sync_observation_stack_settings(config: Any) -> ObservationStackSettings:
             "observation_stack must be an ObservationStackSettings instance, dict, or None"
         )
 
-    if (
-        legacy_stack_steps is not None
-        and _validate_stack_steps(legacy_stack_steps) != DEFAULT_OBSERVATION_STACK_STEPS
-        and observation_stack.stack_steps == DEFAULT_OBSERVATION_STACK_STEPS
-    ):
-        observation_stack.stack_steps = _validate_stack_steps(legacy_stack_steps)
+    if legacy_stack_steps is not None:
+        validated_legacy_stack_steps = _validate_stack_steps(legacy_stack_steps)
+        if (
+            validated_legacy_stack_steps != DEFAULT_OBSERVATION_STACK_STEPS
+            and observation_stack.stack_steps == DEFAULT_OBSERVATION_STACK_STEPS
+        ):
+            observation_stack.stack_steps = validated_legacy_stack_steps
 
-    observation_stack.stack_steps = _validate_stack_steps(observation_stack.stack_steps)
     if sim_config is not None and hasattr(sim_config, "stack_steps"):
         sim_config.stack_steps = observation_stack.stack_steps
     return observation_stack

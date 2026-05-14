@@ -103,6 +103,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[AI Retrieval Deferral Note](./ai/retrieval_deferral.md)** - Why MCP/retrieval layers stay out of scope until a real context boundary appears
 * **[Agent Memory Index](../memory/MEMORY.md)** - Repo-local Markdown memory taxonomy for durable agent context, with linked architecture, decision, experiment, failure, and benchmark notes
 * **[Issue #1151 Manual-Control MVP Foundation](./context/issue_1151_manual_control_mvp_foundation.md)** - Pygame manual-control benchmark recorder foundations: input mapping, session controller, recording module, and test suite
+* **[Issue #1163 Manual-Control Recording Format Decision](./context/issue_1163_manual_control_recording_format.md)** - No-change decision for compact manual-control recording formats, with JSONL size/throughput thresholds and provenance requirements for any future derived artifact
 * **[Issue #1154 Web-Game Data Collection Path](./context/issue_1154_web_game_data_collection_path.md)** - Deferred web-game data collection follow-up; rationale for keeping schema parity with the local recorder and sequenced implementation order
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules

@@ -18,7 +18,7 @@ Usage:
 The script will:
 - Use the classic_interactions.yaml scenario matrix
 - Run all baseline algorithms (SF, PPO, Random)
-- Generate comprehensive outputs under results/social_nav_benchmark_YYYYMMDD_HHMMSS/
+- Generate comprehensive outputs under output/benchmarks/social_nav_benchmark_YYYYMMDD_HHMMSS/
 - Produce plots, videos, and statistical reports
 """
 
@@ -38,6 +38,7 @@ try:
     from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
     from robot_sf.benchmark.cli import DEFAULT_SCHEMA_PATH
     from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
+    from robot_sf.common.artifact_paths import resolve_artifact_path
     from robot_sf.render.helper_catalog import ensure_output_dir
     from scripts.classic_benchmark_full import BenchmarkCLIConfig
 except ImportError as e:
@@ -73,6 +74,11 @@ def create_baseline_configs(
         disable_videos=False,
         max_videos=2,  # Generate videos for representative episodes
     )
+
+
+def _resolve_output_root(timestamp: str) -> Path:
+    """Resolve the benchmark output root under the canonical benchmarks artifact tree."""
+    return resolve_artifact_path(Path("benchmarks") / f"social_nav_benchmark_{timestamp}")
 
 
 def run_baseline_benchmark(algo: str, scenario_matrix: str, output_root: str) -> dict[str, Any]:
@@ -327,7 +333,7 @@ def main() -> int:
 
     # Create timestamped output directory
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_root = root / f"results/social_nav_benchmark_{timestamp}"
+    output_root = _resolve_output_root(timestamp)
     ensure_output_dir(output_root)
 
     logger.info("Starting Social Navigation Benchmark")

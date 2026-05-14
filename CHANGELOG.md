@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Updated the issue-1186 post-`#243` output-root cleanup slice so remaining active benchmark and
+  baseline commands now point at `output/benchmarks/...`, the factory-performance baseline tooling
+  resolves its default path through canonical artifact helpers, and the social-navigation benchmark
+  runner no longer advertises a legacy `results/` output root.
 * Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
   fix-first repair loop on writable branches: proof failures are now classified as auto-fixable
   now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and
@@ -29,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now exposes the map metadata and minimal simulator contract that `RobotEnv` expects, so
   `examples/advanced/01_backend_selection.py` can run headlessly in CI and stays covered by the
   manifest-driven examples smoke suite.
+* Added the issue-1181 `ml-intern` bounded-assistant assessment note, including the local-only
+  proof ladder, trace/privacy boundary, verified Robot SF prompt/context stack, and the explicit
+  recommendation to keep `ml-intern` as a bounded experiment assistant rather than a replacement
+  for the repository's local/HPC/SLURM proof-first workflow.
 * Added the issue-1168 multi-AMV planner support classification surface: multi-AMV episode
   metadata now carries explicit planner-family support records, planner support preflight checks
   fail closed for unsupported or smoke-only planner families, and the docs index records the

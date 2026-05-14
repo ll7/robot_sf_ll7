@@ -43,14 +43,14 @@ planner.close()
 robot_sf_bench run \
     --matrix scenarios/test_scenarios.yaml \
     --algo baseline_sf \
-    --out results/social_force_results.jsonl
+    --out output/benchmarks/social_force_results.jsonl
 
 # Use custom configuration
 robot_sf_bench run \
     --matrix scenarios/test_scenarios.yaml \
     --algo baseline_sf \
     --config configs/baselines/social_force_custom.yaml \
-    --out results/social_force_custom.jsonl
+    --out output/benchmarks/social_force_custom.jsonl
 ```
 
 ## Configuration

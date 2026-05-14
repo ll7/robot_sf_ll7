@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Updated the issue-1186 post-`#243` output-root cleanup slice so remaining active benchmark and
+  baseline commands now point at `output/benchmarks/...`, the factory-performance baseline tooling
+  resolves its default path through canonical artifact helpers, and the social-navigation benchmark
+  runner no longer advertises a legacy `results/` output root.
 * Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
   fix-first repair loop on writable branches: proof failures are now classified as auto-fixable
   now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and

@@ -405,7 +405,7 @@ The figures orchestration script writes `baseline_table.md` by default. To obtai
 
 ```bash
 uv run python scripts/generate_figures.py \
-  --episodes results/episodes_sf_long_fix1.jsonl \
+  --episodes output/benchmarks/episodes_sf_long_fix1.jsonl \
   --auto-out-dir --no-pareto --table-tex \
   --dmetrics collisions,comfort_exposure,snqi --table-metrics collisions,comfort_exposure,snqi
 ```
@@ -414,7 +414,7 @@ uv run python scripts/generate_figures.py \
 
 ```bash
 uv run python -m robot_sf.benchmark.cli table \
-  --episodes results/episodes_sf_long_fix1.jsonl \
+  --episodes output/benchmarks/episodes_sf_long_fix1.jsonl \
   --metrics collisions,comfort_exposure,near_misses,snqi \
   --format tex > docs/figures/table_snqi.tex
 ```
@@ -439,8 +439,8 @@ Optional tuning:
 
 ```bash
      uv run robot_sf_bench aggregate \
-       --in results/episodes_sf_long_fix1.jsonl \
-       --out results/summary_ci.json \
+       --in output/benchmarks/episodes_sf_long_fix1.jsonl \
+       --out output/benchmarks/summary_ci.json \
        --bootstrap-samples 1000 --bootstrap-confidence 0.95 --bootstrap-seed 123
      ```
 
@@ -448,8 +448,8 @@ Optional tuning:
 
 ```bash
      uv run python scripts/generate_figures.py \
-       --episodes results/episodes_sf_long_fix1.jsonl \
-       --table-summary results/summary_ci.json \
+       --episodes output/benchmarks/episodes_sf_long_fix1.jsonl \
+       --table-summary output/benchmarks/summary_ci.json \
        --table-metrics collisions,comfort_exposure,snqi \
        --table-stats mean,median,p95 \
        --table-include-ci --table-tex --no-pareto \
@@ -468,11 +468,11 @@ Example (custom suffix for 90% CIs):
 
 ```bash
 uv run robot_sf_bench aggregate \
-  --in results/episodes.jsonl --out results/summary_ci90.json \
+  --in output/benchmarks/episodes.jsonl --out output/benchmarks/summary_ci90.json \
   --bootstrap-samples 1000 --bootstrap-confidence 0.90
 uv run python scripts/generate_figures.py \
-  --episodes results/episodes.jsonl \
-  --table-summary results/summary_ci90.json \
+  --episodes output/benchmarks/episodes.jsonl \
+  --table-summary output/benchmarks/summary_ci90.json \
   --table-metrics collisions,snqi \
   --table-stats mean,median \
   --table-include-ci --ci-column-suffix ci90 --table-tex \

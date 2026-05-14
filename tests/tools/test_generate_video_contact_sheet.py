@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 from PIL import Image
+import pytest
 
 from scripts.generate_video_contact_sheet import generate_contact_sheet
 
@@ -76,3 +77,26 @@ def test_generate_contact_sheet_fails_when_no_frame_sources(tmp_path: Path) -> N
         assert "No frame image paths" in str(exc)
     else:  # pragma: no cover - makes the assertion message clearer on failure
         raise AssertionError("generate_contact_sheet should require frame image paths")
+
+
+def test_generate_contact_sheet_reports_invalid_json_line_numbers(tmp_path: Path) -> None:
+    """Malformed JSONL rows should fail with their line number for easier debugging."""
+    episodes_jsonl = tmp_path / "episodes.jsonl"
+    episodes_jsonl.write_text("{bad json}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"Episode row 1 is not valid JSON"):
+        generate_contact_sheet(episodes_jsonl, tmp_path / "contact_sheet.png")
+
+
+def test_generate_contact_sheet_rejects_directory_frame_paths(tmp_path: Path) -> None:
+    """Directory-valued frame paths should fail closed instead of reaching Pillow open calls."""
+    frame_dir = tmp_path / "frames"
+    frame_dir.mkdir()
+    episodes_jsonl = tmp_path / "episodes.jsonl"
+    episodes_jsonl.write_text(
+        json.dumps({"episode_id": "episode-a", "frame_paths": [str(frame_dir)]}) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileNotFoundError, match="Frame image not found"):
+        generate_contact_sheet(episodes_jsonl, tmp_path / "contact_sheet.png")

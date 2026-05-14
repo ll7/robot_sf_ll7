@@ -19,13 +19,17 @@ from PIL import Image
 def _iter_jsonl_rows(path: Path) -> list[dict]:
     """Load dictionary rows from an episode JSONL file."""
     rows: list[dict] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
-            continue
-        payload = json.loads(line)
-        if not isinstance(payload, dict):
-            raise ValueError(f"Episode row {line_number} is not a JSON object")
-        rows.append(payload)
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Episode row {line_number} is not valid JSON: {exc}") from exc
+            if not isinstance(payload, dict):
+                raise ValueError(f"Episode row {line_number} is not a JSON object")
+            rows.append(payload)
     return rows
 
 
@@ -51,7 +55,7 @@ def _load_frame_images(frame_paths: list[Path]) -> list[Image.Image]:
     """Open frame image paths as RGB Pillow images."""
     images: list[Image.Image] = []
     for path in frame_paths:
-        if not path.exists():
+        if not path.is_file():
             raise FileNotFoundError(f"Frame image not found: {path}")
         images.append(Image.open(path).convert("RGB"))
     return images

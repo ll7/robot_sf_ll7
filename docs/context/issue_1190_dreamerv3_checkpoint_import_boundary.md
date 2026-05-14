@@ -3,7 +3,7 @@
 Related issue: [#1190](https://github.com/ll7/robot_sf_ll7/issues/1190)
 Related design note: [issue_782_dreamerv3_pretraining_design.md](issue_782_dreamerv3_pretraining_design.md)
 Program boundary: [dreamerv3_program_close_out_2026_04_30.md](dreamerv3_program_close_out_2026_04_30.md)
-Runbook: [docs/training/dreamerv3_rllib_drive_state_rays.md](../training/dreamerv3_rllib_drive_state_rays.md)
+Runbook: [dreamerv3_rllib_drive_state_rays.md](../training/dreamerv3_rllib_drive_state_rays.md)
 
 ## Decision
 

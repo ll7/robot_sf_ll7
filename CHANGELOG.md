@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1181 `ml-intern` bounded-assistant assessment note, including the local-only
+  proof ladder, trace/privacy boundary, verified Robot SF prompt/context stack, and the explicit
+  recommendation to keep `ml-intern` as a bounded experiment assistant rather than a replacement
+  for the repository's local/HPC/SLURM proof-first workflow.
 * Added the issue-1168 multi-AMV planner support classification surface: multi-AMV episode
   metadata now carries explicit planner-family support records, planner support preflight checks
   fail closed for unsupported or smoke-only planner families, and the docs index records the
@@ -33,7 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provenance, replay/profile helpers reject directory inputs fail-closed, and replay/export JSON
   writers preserve NumPy-backed payloads by normalizing them into JSON-safe builtins before
   serialization.
-
 * Added the issue-1151 manual-control MVP foundation surface: append-only JSONL recording,
   fail-closed mode/session helpers, baseline comparison primitives, and BC export utilities now
   reject invalid mode values, non-finite speed multipliers, negative tolerances, and malformed

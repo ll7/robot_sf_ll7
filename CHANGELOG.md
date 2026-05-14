@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   buffers or one direct render result, `generate_video_contact_sheet.py` writes deterministic PNG
   contact sheets from episode frame metadata, and the helper catalog documents the supported
   surfaces and failure modes.
+* Updated the issue-1186 post-`#243` output-root cleanup slice so remaining active benchmark and
+  baseline commands now point at `output/benchmarks/...`, the factory-performance baseline tooling
+  resolves its default path through canonical artifact helpers, and the social-navigation benchmark
+  runner no longer advertises a legacy `results/` output root.
 * Updated the issue-1180 `goal-pr-review` workflow so autonomous PR review defaults to a
   fix-first repair loop on writable branches: proof failures are now classified as auto-fixable
   now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and
@@ -29,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1181 `ml-intern` bounded-assistant assessment note, including the local-only
+  proof ladder, trace/privacy boundary, verified Robot SF prompt/context stack, and the explicit
+  recommendation to keep `ml-intern` as a bounded experiment assistant rather than a replacement
+  for the repository's local/HPC/SLURM proof-first workflow.
 * Added the issue-1168 multi-AMV planner support classification surface: multi-AMV episode
   metadata now carries explicit planner-family support records, planner support preflight checks
   fail closed for unsupported or smoke-only planner families, and the docs index records the
@@ -37,7 +45,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provenance, replay/profile helpers reject directory inputs fail-closed, and replay/export JSON
   writers preserve NumPy-backed payloads by normalizing them into JSON-safe builtins before
   serialization.
-
 * Added the issue-1151 manual-control MVP foundation surface: append-only JSONL recording,
   fail-closed mode/session helpers, baseline comparison primitives, and BC export utilities now
   reject invalid mode values, non-finite speed multipliers, negative tolerances, and malformed
@@ -46,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cruise and mouse-target differential-drive mapper variants, runtime mode selection config, and
   manifest/record metadata for `control_mode`, `view_mode`, and `input_mapping_version`, while
   keeping unsupported ego-up renderer hooks fail-closed until the camera transform exists.
+* Added the issue-1162 manual-control rewind boundary: manual-control records now carry explicit
+  rewind metadata, replay JSON preserves rewind events, and BC export skips samples invalidated by
+  append-only rewind records while repeated-rewind planning fails closed until active-timeline
+  derivation exists.
 * Added the issue-1110 CARLA oracle replay parity adapter surface: `compare_oracle_replay_metrics(...)`
   and its CLI now emit conservative parity reports, reject degraded CARLA `mode` or `status`
   fail-closed, treat non-finite numeric values as unavailable instead of serializing invalid JSON,

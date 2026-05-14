@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from loguru import logger
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -97,14 +99,19 @@ def _percentile(values: list[float], p: float) -> float:
     return d0 + d1
 
 
+def _resolve_output_path(path: Path) -> Path:
+    """Resolve a baseline output path through the canonical artifact policy."""
+    return resolve_artifact_path(path)
+
+
 def main() -> None:
-    """TODO docstring. Document this function."""
+    """Measure factory construction timings and write the baseline JSON artifact."""
     parser = argparse.ArgumentParser(description="Baseline factory creation timing")
     parser.add_argument("--iterations", type=int, default=30, help="Creations per factory")
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("results/factory_perf_baseline.json"),
+        default=Path("benchmarks/factory_perf_baseline.json"),
         help="Output JSON path",
     )
     args = parser.parse_args()
@@ -127,7 +134,7 @@ def main() -> None:
     # Pedestrian env requires a robot_model; skip unless trivial to supply (future enhancement)
     # Placeholder: could load a lightweight mock or stub policy; omitted for neutral baseline.
 
-    out_path: Path = args.output
+    out_path = _resolve_output_path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "timestamp": datetime.now(UTC).isoformat(),

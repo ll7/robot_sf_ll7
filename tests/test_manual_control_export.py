@@ -228,7 +228,9 @@ def test_export_demonstration_samples_scopes_rewind_segment_ids_per_attempt():
 
     samples = export_demonstration_samples([attempt_a_step0, attempt_a_rewind, attempt_b_step0])
 
-    assert [(sample.scenario_id, sample.attempt_id, sample.rewind_segment_id) for sample in samples] == [
+    assert [
+        (sample.scenario_id, sample.attempt_id, sample.rewind_segment_id) for sample in samples
+    ] == [
         ("scenario-a", 1, 0),
         ("scenario-b", 3, 0),
     ]

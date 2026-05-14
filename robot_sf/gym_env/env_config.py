@@ -19,6 +19,10 @@ telemetry configuration support from `TelemetryConfigMixin`."""
 
 from dataclasses import dataclass, field
 
+from robot_sf.gym_env.observation_config import (
+    ObservationStackSettings,
+    sync_observation_stack_settings,
+)
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.telemetry_config import TelemetryConfigMixin
 from robot_sf.nav.map_config import MapDefinitionPool
@@ -67,6 +71,7 @@ class BaseEnvSettings(TelemetryConfigMixin):
     # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
     render_scaling: int | None = None
     observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
+    observation_stack: ObservationStackSettings = field(default_factory=ObservationStackSettings)
     # Occupancy grid toggles (legacy settings for compatibility)
     use_occupancy_grid: bool = False
     grid_config: GridConfig | None = None
@@ -84,6 +89,7 @@ class BaseEnvSettings(TelemetryConfigMixin):
         """
         if not self.sim_config or not self.map_pool:
             raise ValueError("Please make sure all properties are initialized!")
+        sync_observation_stack_settings(self)
         self._validate_telemetry()
 
 

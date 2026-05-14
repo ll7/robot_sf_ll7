@@ -5,12 +5,16 @@ with the benchmark system and produces valid outputs.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
 from robot_sf.baselines import get_baseline, list_baselines
 from robot_sf.baselines.social_force import Observation, SFPlannerConfig, SocialForcePlanner
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+
+ROOT = Path(__file__).resolve().parents[2]
+EPISODE_SCHEMA_PATH = ROOT / "robot_sf" / "benchmark" / "schemas" / "episode.schema.v1.json"
 
 
 class TestSocialForceIntegration:
@@ -329,7 +333,7 @@ class TestEpisodeOutputIntegration:
 
     def test_episode_schema_compliance(self):
         """Social Force metadata should fit the canonical episode schema."""
-        schema = load_schema("robot_sf/benchmark/schemas/episode.schema.v1.json")
+        schema = load_schema(EPISODE_SCHEMA_PATH)
         config = SFPlannerConfig()
         planner = SocialForcePlanner(config, seed=42)
 

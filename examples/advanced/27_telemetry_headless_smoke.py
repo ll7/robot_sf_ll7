@@ -2,7 +2,7 @@
 
 Usage:
     DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
-    uv run python examples/advanced/25_telemetry_headless_smoke.py
+    uv run python examples/advanced/27_telemetry_headless_smoke.py
 
 Prerequisites:
     - None

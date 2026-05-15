@@ -40,6 +40,18 @@ def test_context_note_anchor_link_counts_as_index_link() -> None:
     assert diagnostics == []
 
 
+def test_context_note_same_basename_in_subdir_does_not_count_as_index_link() -> None:
+    """A link to another note with the same basename should not index a top-level note."""
+    diagnostics = _context_readme_link_diagnostics(
+        [ChangedFile(status="A", path=Path("docs/context/issue_999_example.md"))],
+        context_readme_text="- [Archived Example](archive/issue_999_example.md)\n",
+    )
+
+    assert any(
+        "not linked from docs/context/README.md" in diagnostic.message for diagnostic in diagnostics
+    )
+
+
 def test_parse_name_status_uses_new_path_for_rename() -> None:
     """Rename rows should track the current worktree path, not the old path pair."""
     changed = _parse_name_status("R100\tdocs/context/old.md\tdocs/context/new.md\n")
@@ -76,6 +88,24 @@ def test_output_pointer_in_tracked_evidence_is_reported(tmp_path: Path) -> None:
     )
     evidence = repo_root / "docs/context/evidence/report.md"
     evidence.write_text("[artifact](output/reports/run.json)\n", encoding="utf-8")
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/evidence/report.md"))],
+        repo_root=repo_root,
+    )
+
+    assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_inline_output_pointer_in_markdown_evidence_is_reported(tmp_path: Path) -> None:
+    """Markdown evidence should flag inline ignored-output pointers, not only links."""
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+    (repo_root / "docs/context/README.md").write_text(
+        "# Context Notes Workflow\n", encoding="utf-8"
+    )
+    evidence = repo_root / "docs/context/evidence/report.md"
+    evidence.write_text("Manifest: `output/reports/run.json`\n", encoding="utf-8")
 
     diagnostics = _collect_diagnostics(
         [ChangedFile(status="M", path=Path("docs/context/evidence/report.md"))],

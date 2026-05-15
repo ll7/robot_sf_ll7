@@ -166,12 +166,10 @@ def _markdown_targets(text: str) -> list[str]:
 def _contains_link_target(targets: Iterable[str], expected: str) -> bool:
     """Return whether a markdown target list references an expected relative path."""
     normalized_expected = expected.lstrip("./")
-    expected_name = Path(normalized_expected).name
+    repo_relative_expected = f"{_TOP_LEVEL_CONTEXT_DIR.as_posix()}/{normalized_expected}"
     for target in targets:
         candidate = target.lstrip("./")
-        if candidate == normalized_expected or candidate.endswith(f"/{normalized_expected}"):
-            return True
-        if Path(candidate).name == expected_name:
+        if candidate in {normalized_expected, repo_relative_expected}:
             return True
     return False
 
@@ -218,16 +216,7 @@ def _evidence_path_diagnostics(path: Path, text: str) -> list[Diagnostic]:
             )
         )
 
-    if path.suffix == ".md":
-        link_targets = _markdown_targets(text)
-        if any(_OUTPUT_PATH_RE.search(target) for target in link_targets):
-            diagnostics.append(
-                Diagnostic(
-                    path=path,
-                    message="tracked evidence should not link to ignored output/ artifacts",
-                )
-            )
-    elif _OUTPUT_PATH_RE.search(scan_text):
+    if _OUTPUT_PATH_RE.search(scan_text):
         diagnostics.append(
             Diagnostic(
                 path=path,

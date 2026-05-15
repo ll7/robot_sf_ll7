@@ -75,7 +75,11 @@ _ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
 
 @contextmanager
 def _temporary_global_reset_seed(seed: int | None):
-    """Temporarily seed legacy global RNGs used by route sampling during reset."""
+    """Temporarily seed legacy global RNGs used by route sampling during reset.
+
+    This scope is intentionally narrow and restores caller-owned RNG state afterward, but
+    it still assumes resets do not run concurrently in the same Python process.
+    """
     if seed is None:
         yield
         return
@@ -654,6 +658,7 @@ class RobotEnv(BaseEnv):
 
         # Store last action executed by the robot
         self.last_action = None
+        self.applied_seed: int | None = None
         self._latest_observation: Any = None
         # Enable occupancy grid overlay visualization if requested
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):

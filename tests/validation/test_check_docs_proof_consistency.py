@@ -6,6 +6,8 @@ import argparse
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from scripts.validation.check_docs_proof_consistency import (
     ChangedFile,
     _collect_diagnostics,
@@ -45,6 +47,18 @@ def test_context_note_same_basename_in_subdir_does_not_count_as_index_link() -> 
     diagnostics = _context_readme_link_diagnostics(
         [ChangedFile(status="A", path=Path("docs/context/issue_999_example.md"))],
         context_readme_text="- [Archived Example](archive/issue_999_example.md)\n",
+    )
+
+    assert any(
+        "not linked from docs/context/README.md" in diagnostic.message for diagnostic in diagnostics
+    )
+
+
+def test_copied_context_note_requires_index_link() -> None:
+    """Copied top-level context notes should be handled like added notes."""
+    diagnostics = _context_readme_link_diagnostics(
+        [ChangedFile(status="C100", path=Path("docs/context/issue_999_example.md"))],
+        context_readme_text="# Context Notes Workflow\n",
     )
 
     assert any(
@@ -232,3 +246,16 @@ def test_explicit_path_new_context_note_is_treated_as_added(tmp_path: Path) -> N
     assert any(
         "not linked from docs/context/README.md" in diagnostic.message for diagnostic in diagnostics
     )
+
+
+def test_explicit_path_outside_repo_is_rejected(tmp_path: Path) -> None:
+    """Explicit path checks should not read files outside the repository root."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    outside_path = tmp_path / "outside.md"
+
+    with pytest.raises(ValueError, match="repository root"):
+        _selected_files(
+            argparse.Namespace(path=[str(outside_path)], base="HEAD"),
+            repo_root=repo_root,
+        )

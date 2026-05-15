@@ -12,6 +12,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -94,9 +95,22 @@ def _normalize_path(path: Path, repo_root: Path) -> Path:
     return path
 
 
+def _normalize_explicit_path(raw_path: str, repo_root: Path) -> Path:
+    """Return a validated repository-relative path from a user-provided --path value."""
+    path = _normalize_path(Path(raw_path), repo_root)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"--path must stay within the repository root: {raw_path}")
+    return path
+
+
 def _is_within_dir(path: Path, root: Path) -> bool:
     """Return whether a repository-relative path is at or below a trusted root."""
     return path == root or root in path.parents
+
+
+def _is_added_status(status: str) -> bool:
+    """Return whether a git status represents a newly introduced file."""
+    return status == "A" or status.startswith("C")
 
 
 def _parse_name_status(output: str, *, default_status: str | None = None) -> list[ChangedFile]:
@@ -138,7 +152,7 @@ def _changed_files(base: str, repo_root: Path) -> list[ChangedFile]:
             current = combined.get(changed.path)
             if current == "A":
                 continue
-            combined[changed.path] = "A" if changed.status == "A" else changed.status
+            combined[changed.path] = "A" if _is_added_status(changed.status) else changed.status
 
     return [ChangedFile(status=status, path=path) for path, status in sorted(combined.items())]
 
@@ -183,7 +197,7 @@ def _context_readme_link_diagnostics(
     diagnostics: list[Diagnostic] = []
     targets = _markdown_targets(context_readme_text)
     for changed in changed_files:
-        if changed.status != "A":
+        if not _is_added_status(changed.status):
             continue
         if changed.path.parent != _TOP_LEVEL_CONTEXT_DIR:
             continue
@@ -305,19 +319,12 @@ def _parse_args() -> argparse.Namespace:
 def _selected_files(args: argparse.Namespace, repo_root: Path) -> list[ChangedFile]:
     """Resolve the changed file set from explicit paths or the branch diff."""
     if args.path:
-        return [
-            ChangedFile(
-                status=(
-                    "M"
-                    if _path_exists_in_ref(
-                        _normalize_path(Path(raw_path), repo_root), str(args.base), repo_root
-                    )
-                    else "A"
-                ),
-                path=_normalize_path(Path(raw_path), repo_root),
-            )
-            for raw_path in args.path
-        ]
+        selected: list[ChangedFile] = []
+        for raw_path in args.path:
+            path = _normalize_explicit_path(raw_path, repo_root)
+            status = "M" if _path_exists_in_ref(path, str(args.base), repo_root) else "A"
+            selected.append(ChangedFile(status=status, path=path))
+        return selected
     return _changed_files(str(args.base), repo_root)
 
 
@@ -325,7 +332,11 @@ def main() -> int:
     """Run the docs/proof consistency checker."""
     args = _parse_args()
     repo_root = _repo_root()
-    changed_files = _selected_files(args, repo_root)
+    try:
+        changed_files = _selected_files(args, repo_root)
+    except ValueError as exc:
+        print(f"ERROR {exc}", file=sys.stderr)
+        return 2
     diagnostics = _collect_diagnostics(changed_files, repo_root=repo_root)
 
     if args.json:

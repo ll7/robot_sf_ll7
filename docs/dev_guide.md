@@ -158,6 +158,7 @@ skills use the same commands:
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
 scripts/dev/run_ci_local.sh
+scripts/dev/check_docs_proof_consistency_diff.sh
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests
@@ -190,6 +191,12 @@ longest functions, and optional pytest duration rows from a captured `--pytest-l
 Use `uv run python scripts/dev/ci_timing_summary.py --run-id <github-actions-run-id> --top 10`
 when GitHub CI wall time drifts from local readiness and you need queue, job, and slowest-step
 timings from `gh run view` data.
+
+Use `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR handoff when a
+branch adds or edits context notes, evidence bundles, or other proof-heavy docs surfaces. The
+checker is intentionally conservative: it only flags high-confidence issues such as missing
+`docs/context/README.md` links for new top-level context notes, tracked evidence files that still
+contain absolute local paths, and tracked evidence that links to ignored `output/` artifacts.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 

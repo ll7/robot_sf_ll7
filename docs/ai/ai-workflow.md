@@ -145,6 +145,11 @@ Before opening the PR, also run a first-pass self-review against the current dif
 [docs/context/pr_first_pass_review_audit_2026-05-14.md](../context/pr_first_pass_review_audit_2026-05-14.md).
 Treat it as a reviewer-lens pass, not another full test suite:
 
+- For docs/proof-heavy branches, run
+  `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR creation to
+  catch high-confidence context/evidence drift such as missing context-note index links, absolute
+  local paths in tracked evidence, and durable evidence files that still point at ignored
+  `output/` artifacts.
 - docs/context changes: align PR-body validation, context-note validation, and exact proof output;
   add required `docs/README.md` and `docs/context/README.md` links.
 - schema, parser, path, JSON, artifact, and public-helper changes: check malformed payloads,

@@ -2,19 +2,31 @@
 
 Date: 2026-05-13
 Issue: #1181
+Follow-up: #1191
 
 ## Decision
 
 `huggingface/ml-intern` is a plausible **bounded experiment assistant** for `robot_sf_ll7`, but it
 should **not** become the repository runtime or replace the existing local/HPC/SLURM workflows.
 
-Recommended near-term use:
+Update, 2026-05-15: the recommended near-term action is to **extract the reusable workflow
+concepts into Robot SF's Codex-native skill and documentation practice**, not to install or run the
+`ml-intern` CLI. A runtime smoke remains optional and deferred because it would add a separate agent
+runtime, credential surface, trace/privacy path, and API-cost risk without improving the current
+proof-first issue workflow.
 
-- repo comprehension after reading the Robot SF context stack,
-- validation-plan drafting,
-- config/path scaffolding,
-- bounded local smoke execution,
-- and, only after local proof, a separate follow-up issue for one small remote sandbox/HF Job check.
+Keep these workflow ideas:
+
+- **No-edit planning pass**: read the Robot SF context stack first, produce a validation plan, and
+  stop before file edits or expensive commands.
+- **Budgeted agent runs**: scope each agent pass to a small issue, explicit command budget, and
+  concrete proof artifact instead of open-ended exploration.
+- **Trace/privacy defaults**: assume uploaded traces are sensitive unless explicitly disabled or
+  sanitized; do not paste unpublished benchmark findings, secrets, or private review text.
+- **One-smoke-before-campaign rule**: prove one small local command before proposing any longer
+  training, benchmark, SLURM, HF Job, or remote sandbox run.
+- **Optional HF-specific lane**: keep any future Hugging Face sandbox or Job smoke in a separate
+  opt-in issue with pinned setup, credentials, timeout, and artifact-routing decisions.
 
 Not recommended in this issue:
 
@@ -37,6 +49,10 @@ Robot SF already has a strong config-first and proof-first workflow:
 That makes `ml-intern` most useful as an assistant that reads repo context first and proposes or
 executes **small, reviewable** steps against existing commands, rather than inventing a parallel
 workflow.
+
+For current Robot SF practice, those concepts are already better expressed through Codex-native
+skills, issue-scoped branches, `scripts/dev/` validation gates, and durable context notes. The
+external runtime is therefore not required to keep the useful discipline.
 
 ## Upstream contract checked on 2026-05-13
 
@@ -63,6 +79,26 @@ Observed from the upstream `huggingface/ml-intern` README / PyPI page:
 { "share_traces": false }
 ```
 
+## Runtime decision checked on 2026-05-15
+
+Observed evidence from the issue-audit pass:
+
+- `ml-intern` was not installed in the checked worktree environment.
+- No explicit `OPENAI_API_KEY`, Hugging Face token suitable for `ml-intern`, local model endpoint,
+  or other provider credential was available for a real CLI run.
+- A Codex or ChatGPT subscription is not the same thing as a runtime API credential.
+- Robot SF already has repo-local substitutes for the useful workflow primitives:
+  `AGENTS.md`, `docs/dev_guide.md`, `.agents/skills/`, proof-first validation scripts,
+  `docs/context/`, artifact-routing policy, and GitHub issue/PR workflow.
+
+Recommendation based on that evidence:
+
+- Do not install, add as a dependency, or run `ml-intern` for this follow-up.
+- Treat issue #1191 as a documentation and workflow-extraction task.
+- Preserve the option for a later runtime smoke only if a future issue supplies explicit
+  credentials, cost/privacy approval, timeout, hardware/runtime assumptions, and durable artifact
+  routing.
+
 ## Trace / data-handling recommendation
 
 The default private trace upload is still a **real upload**, so unpublished research hypotheses,
@@ -88,7 +124,16 @@ Good first uses:
 - “review a PPO config and suggest bounded dry-run proof commands”
 - “compare two local docs/config surfaces and point out contract mismatches”
 
-Possible later use, but only after local proof:
+Codex-native equivalents should follow the same shape without requiring `ml-intern`:
+
+- use a no-edit planning pass for unfamiliar surfaces,
+- cap the command scope before execution,
+- verify referenced paths before suggesting commands,
+- run one lightweight smoke before larger experiments,
+- record reusable decisions in `docs/context/`,
+- and keep private traces or external uploads opt-in rather than default.
+
+Possible later external-runtime use, but only after local proof and explicit approval:
 
 - one remote sandbox smoke for a bounded training or validation command,
 - one explicitly scoped HF Job follow-up with pinned install steps, timeout, hardware, and durable
@@ -204,10 +249,33 @@ Observed outcomes:
   deprecated `evaluation.frequency_episodes` is ignored in favor of `evaluation.step_schedule`, and
   `randomize_seeds` causes the provided training seeds to be ignored.
 
+Issue #1191 update validation on 2026-05-15:
+
+```bash
+ls AGENTS.md docs/dev_guide.md .agents/skills docs/context/README.md docs/README.md \
+  docs/ai/repo_overview.md docs/context/issue_1181_ml_intern_experiment_assistant.md
+uv run pytest tests/docs -q
+git diff --check
+BASE_REF=origin/main PYTEST_NUM_WORKERS=8 scripts/dev/pr_ready_check.sh
+```
+
+Observed outcomes:
+
+- Referenced repository and documentation entry-point paths exist.
+- `uv run pytest tests/docs -q` passed: `7 passed in 10.65s`.
+- `git diff --check` passed with no whitespace errors.
+- The first readiness run after editing passed: `3535 passed, 13 skipped, 3 warnings in 266.37s`.
+- PR handoff should use a post-commit readiness rerun so changed-file detection compares committed
+  docs against `origin/main`.
+
 ## Follow-up boundary
 
-If this note holds up after the local proof ladder, the next acceptable follow-up is **one separate
-issue** for a single remote sandbox/HF Job smoke with:
+Issue #1191 resolved the first follow-up by extracting the useful workflow ideas into Robot SF's
+existing Codex-native practice instead of running the `ml-intern` CLI.
+
+Runtime execution remains **optional and deferred**, not a required Robot SF workflow. The next
+acceptable runtime follow-up, if one is ever needed, is **one separate issue** for a single remote
+sandbox/HF Job smoke with:
 
 - pinned install/setup steps,
 - explicit hardware/runtime assumptions,
@@ -215,4 +283,4 @@ issue** for a single remote sandbox/HF Job smoke with:
 - durable artifact routing,
 - and an explicit statement that it does not replace the canonical local/SLURM workflow.
 
-Follow-up tracker opened: #1191.
+Historical follow-up tracker: #1191.

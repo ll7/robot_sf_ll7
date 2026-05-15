@@ -176,6 +176,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.
+* [Issue #1128 Multi-AMV Episode Extension](issue_1128_multi_amv_episode_extension.md)
+  records the canonical `metrics.inter_robot` JSONL/report output contract for the explicit
+  multi-AMV smoke path.
 * [Issue #1168 Multi-AMV Planner Support Classification](issue_1168_multi_amv_planner_support.md)
   records the current planner-family inventory, fail-closed support gate, and the boundary between
   goal-controller smoke execution and real multi-AMV planner support.

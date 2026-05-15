@@ -361,15 +361,16 @@ def multi_amv_episode_extension(
     payload: dict[str, Any] = {
         "multi_amv": {
             "enabled": True,
-            "num_robots": int(settings.num_robots),
-            "near_miss_distance_m": float(settings.near_miss_distance_m),
-            "collision_distance_m": float(settings.collision_distance_m),
-            "deadlock_speed_mps": float(settings.deadlock_speed_mps),
-            "deadlock_window_steps": int(settings.deadlock_window_steps),
+            "settings": {
+                "num_robots": int(settings.num_robots),
+                "near_miss_distance_m": float(settings.near_miss_distance_m),
+                "collision_distance_m": float(settings.collision_distance_m),
+                "deadlock_speed_mps": float(settings.deadlock_speed_mps),
+                "deadlock_window_steps": int(settings.deadlock_window_steps),
+            },
             "planner_family": planner_support.planner_family,
             "planner_status": str(planner_status),
             "planner_support": planner_support.to_json_dict(),
-            "metrics": {"inter_robot": dict(inter_robot)},
         }
     }
     if planner_note is not None:

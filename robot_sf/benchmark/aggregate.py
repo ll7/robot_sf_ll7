@@ -167,6 +167,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     metrics = dict(rec.get("metrics") or {})
     fq = metrics.pop("force_quantiles", {}) or {}
     ped_impact = metrics.pop("pedestrian_impact", {}) or {}
+    inter_robot = metrics.pop("inter_robot", {}) or {}
     # Flatten known force quantiles
     for qk in ("q50", "q90", "q95"):
         key = f"force_{qk}"
@@ -194,6 +195,9 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
                 ("near_sample_frac", "ped_impact_near_sample_frac"),
             ):
                 base[target_key] = sample_counts.get(source_key)
+    if isinstance(inter_robot, dict):
+        for key, value in inter_robot.items():
+            base[str(key)] = value
     # Remainder metrics (flat numbers)
     base.update(metrics)
     return base

@@ -133,9 +133,9 @@ Files with decreased coverage:
 Coverage comparison and publishing run automatically in CI using a reusable sequence of steps:
 
 ```yaml
-# 1. Tests run with automatic coverage collection
+# 1. The fast-feedback job runs tests through the canonical CI driver
 - name: Unit tests
-  run: uv run pytest -q -n auto
+  run: scripts/dev/ci_driver.sh test
 
 # 2. Restore baseline from cache
 - name: Restore coverage baseline

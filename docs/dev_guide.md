@@ -908,15 +908,25 @@ All figures must be **reproducible from code** and directly **integratable into 
 - The pipeline mirrors the local quality gates. Ensure green locally first.
 
 CI mapping to local tasks and CLI:
-- Lint job → Task “Ruff: Format and Fix” → `uv run ruff check . && uv run ruff format --check .`
-- Code quality job → Task “Check Code Quality” → `uv run ruff check . && uvx ty check . --exit-zero`
-- Type check job → Task "Type Check" → `uvx ty check . --exit-zero`
-- Test job → Task “Run Tests” → `uv run pytest tests`
+- `fast-feedback` job → `scripts/dev/ci_driver.sh lint typecheck test`
+- `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
+- aggregate `ci` job → waits for both split jobs so existing required-check naming remains stable
+- local full equivalent → `scripts/dev/run_ci_local.sh`
 
 Workflow location: `.github/workflows/ci.yml`.
 
 ## CI Performance Monitoring
-The CI pipeline includes integrated performance monitoring for system package installation optimization:
+The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
+
+- `fast-feedback` runs lint, advisory type checking, and the main pytest suite.
+- `smoke-artifacts` runs validation smoke checks, uploads benchmark/recording artifacts, and enforces
+  the artifact-root policy.
+- Both jobs call the canonical `scripts/dev/ci_driver.sh` phases instead of duplicating validation
+  semantics in workflow YAML.
+- System packages are installed through the supported `apt-get` path in one update/install step per
+  job; the workflow does not download `apt-fast` at runtime.
+
+The smoke lane still includes performance monitoring and regression checks:
 
 **Performance Targets**:
 - Package installation: < 73 seconds (50% reduction from 2min 26sec baseline)
@@ -928,8 +938,7 @@ The CI pipeline includes integrated performance monitoring for system package in
 - **Package Validation**: `scripts/ci-tests/package_validation.py` - Validates package availability
 
 **CI Workflow Integration**:
-- Performance monitoring starts before package installation
-- Metrics recorded during package installation steps
+- Fast lint/typecheck/test feedback is reported before smoke/artifact completion.
 - Performance data saved as artifacts for analysis
 - Automatic validation against performance targets
 - Cold/warm regression smoke on `main`: startup-only regressions (`env_create_sec`,

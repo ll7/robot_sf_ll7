@@ -13,14 +13,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHONUNBUFFERED: "1"
+  SDL_VIDEODRIVER: dummy
+  MPLBACKEND: Agg
+  PYGAME_HIDE_SUPPORT_PROMPT: "1"
+
 jobs:
-  ci:
+  fast-feedback:
     runs-on: ubuntu-latest
-    env:
-      PYTHONUNBUFFERED: "1"
-      SDL_VIDEODRIVER: dummy
-      MPLBACKEND: Agg
-      PYGAME_HIDE_SUPPORT_PROMPT: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,20 +30,6 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.11"
-
-      - name: Cache .venv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
 
       - name: Cache compiled extensions
         uses: actions/cache@v4
@@ -63,22 +50,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Configure faster apt mirror
-        run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.enzu.com/ubuntu/|g' /etc/apt/sources.list
-          sudo apt-get update
-
-      - name: Install apt-fast
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y aria2
-          wget https://raw.githubusercontent.com/ilikenwf/apt-fast/master/apt-fast
-          sudo mv apt-fast /usr/local/bin/apt-fast
-          sudo chmod +x /usr/local/bin/apt-fast
-
       - name: System packages for headless
         run: |
-          sudo apt-fast install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
 
       - name: Sync dependencies (locked)
         run: uv sync --all-extras --frozen
@@ -94,17 +69,6 @@ jobs:
 
       - name: Unit tests
         run: scripts/dev/ci_driver.sh test
-
-      - name: Validation smoke tests
-        run: scripts/dev/ci_driver.sh smoke
-
-      - name: Upload map verification manifest
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: map-verification-manifest
-          path: output/validation/map_verification.json
-          if-no-files-found: warn
 
       - name: Restore coverage baseline
         uses: actions/cache@v4
@@ -151,6 +115,50 @@ jobs:
             output/coverage/coverage.json
             output/coverage/htmlcov/
             output/coverage/.coverage
+
+  smoke-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.11"
+
+      - name: Cache compiled extensions
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv/archive-v0
+          key: uv-archive-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: System packages for headless
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
+
+      - name: Sync dependencies (locked)
+        run: uv sync --all-extras --frozen
+
+      - name: Migrate legacy artifacts into canonical root
+        run: uv run python scripts/tools/migrate_artifacts.py
+
+      - name: Validation smoke tests
+        run: scripts/dev/ci_driver.sh smoke
+
+      - name: Upload map verification manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: map-verification-manifest
+          path: output/validation/map_verification.json
+          if-no-files-found: warn
 
       - name: Upload benchmark artifacts
         if: always()
@@ -201,3 +209,21 @@ jobs:
       - name: Enforce artifact root policy
         if: always()
         run: scripts/dev/ci_driver.sh artifact-policy
+
+  ci:
+    runs-on: ubuntu-latest
+    needs:
+      - fast-feedback
+      - smoke-artifacts
+    if: always()
+    steps:
+      - name: Check split job results
+        run: |
+          if [[ "${{ needs.fast-feedback.result }}" != "success" ]]; then
+            echo "fast-feedback finished with ${{ needs.fast-feedback.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.smoke-artifacts.result }}" != "success" ]]; then
+            echo "smoke-artifacts finished with ${{ needs.smoke-artifacts.result }}" >&2
+            exit 1
+          fi

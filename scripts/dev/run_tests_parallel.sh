@@ -75,8 +75,8 @@ if [[ -n "$worker_override" ]]; then
 fi
 
 worker_spec="$(
-  uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" "${requested_args[@]}" --show-reason \
-    2> >(cat >&2)
+  uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" ${requested_args[@]+"${requested_args[@]}"} \
+    --show-reason 2> >(cat >&2)
 )"
 if [[ -z "$worker_spec" ]]; then
   echo "Failed to resolve pytest worker count." >&2

@@ -25,6 +25,7 @@ Read these first when working in this workflow:
 - [docs/context/README.md](../context/README.md)
 - [docs/context/issue_713_batch_first_issue_workflow.md](../context/issue_713_batch_first_issue_workflow.md)
 - [docs/context/issue_728_coding_agents_compatibility.md](../context/issue_728_coding_agents_compatibility.md)
+- [docs/context/pr_first_pass_review_audit_2026-05-14.md](../context/pr_first_pass_review_audit_2026-05-14.md)
 - [docs/project_prioritization.md](../project_prioritization.md)
 - [docs/dev/training_protocol_template.md](../dev/training_protocol_template.md)
 - [docs/context/issue_691_benchmark_fallback_policy.md](../context/issue_691_benchmark_fallback_policy.md)
@@ -139,6 +140,20 @@ The PR readiness gate also checks:
 - full test execution through the shared parallel wrapper.
 
 For benchmark-sensitive changes, use the canonical benchmark command or smoke path and treat fallback or degraded execution as diagnostic only, not as success.
+
+Before opening the PR, also run a first-pass self-review against the current diff using
+[docs/context/pr_first_pass_review_audit_2026-05-14.md](../context/pr_first_pass_review_audit_2026-05-14.md).
+Treat it as a reviewer-lens pass, not another full test suite:
+
+- docs/context changes: align PR-body validation, context-note validation, and exact proof output;
+  add required `docs/README.md` and `docs/context/README.md` links.
+- schema, parser, path, JSON, artifact, and public-helper changes: check malformed payloads,
+  missing values, wrong shapes, directories, absolute paths, traversal, `NaN`, `inf`, and negative
+  sentinels.
+- simulation-loop, recording, benchmark, or environment changes: check streaming behavior,
+  random-state isolation, static Gymnasium spaces, and per-step output size.
+- skill or agent workflow changes: read changed text as executable instructions and preserve
+  selected issue sets, scope boundaries, and evidence destinations.
 
 ### 7. Open the PR
 

@@ -96,7 +96,19 @@ After a successful rerun, record freshness evidence:
      - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
      - `uv run python scripts/dev/pr_ready_freshness.py write --base-ref origin/main`
 
-6. Build the PR body from the repository template
+6. Run the first-pass self-review
+   - Use `docs/context/pr_first_pass_review_audit_2026-05-14.md` as the reviewer-lens checklist.
+   - For docs/context changes, verify index links and make validation statements match commands
+     actually run.
+   - For parser, schema, path, JSON, artifact, and public-helper changes, check malformed inputs,
+     missing values, empty collections, wrong shapes, non-finite numbers, path traversal, and
+     repository-relative path handling.
+   - For environment, benchmark, recording, and simulation-loop changes, check streaming behavior,
+     static Gymnasium spaces, random-state isolation, and per-step output size.
+   - For skill or workflow changes, read the changed text as executable instructions and make scope
+     boundaries, selected issue sets, and evidence destinations explicit.
+
+7. Build the PR body from the repository template
    - Start from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
    - Fill sections with repository-specific evidence:
      - summary of implementation,
@@ -108,12 +120,12 @@ After a successful rerun, record freshness evidence:
      - follow-up issues if any.
    - Do not remove sections; keep the template structure intact.
 
-7. Open the draft PR
+8. Open the draft PR
    - Preferred command:
      - `gh pr create --draft --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`
    - Use a conventional commit/PR title prefix such as `feat:`, `fix:`, or `docs:`.
 
-8. Close the loop
+9. Close the loop
    - Keep the parent issue open while the PR is draft unless repository policy says otherwise.
    - Comment on the issue or PR when a follow-up item was intentionally deferred.
 
@@ -123,6 +135,7 @@ After a successful rerun, record freshness evidence:
 - Latest `origin/main` integrated into the feature branch before PR creation.
 - Ignored/generated `output/` artifacts inspected, classified, and either made durable or
   documented as disposable/local-only.
+- First-pass self-review completed against `docs/context/pr_first_pass_review_audit_2026-05-14.md`.
 - Fresh readiness proof from either:
   - a passing `pr_ready_freshness.py status`, or
   - a new `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` run plus a new stamp.

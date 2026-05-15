@@ -97,6 +97,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
 * **[Issue #1181 `ml-intern` Bounded Assistant Assessment](./context/issue_1181_ml_intern_experiment_assistant.md)** - Safe-use boundary for evaluating `huggingface/ml-intern` against Robot SF without replacing the local/SLURM proof-first workflow
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
+* **[PR First-Pass Review Audit](./context/pr_first_pass_review_audit_2026-05-14.md)** - Recent merged-PR review findings and the pre-opening self-review checklist for reducing repeated reviewer fixes
 * **[AI Planner Zoo Context](./ai/planner_zoo_context.md)** - Planner-zoo integration context, readiness framing, and provenance/adapter questions to answer explicitly
 * **[AI Context Packing Decision](./ai/context_packing.md)** - Current decision and rationale for using Repomix as the default focused-context bundler
 * **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,   `auto-improvement`, context-discovery, quality, and doc-sync skills

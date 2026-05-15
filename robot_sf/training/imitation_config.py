@@ -241,7 +241,7 @@ class BCPretrainingConfig:
             random_seeds=ensure_seed_tuple(random_seeds),
             training_config_path=training_config_path.resolve() if training_config_path else None,
             scenario_config_path=scenario_config_path.resolve() if scenario_config_path else None,
-            device=str(device).strip() or "auto",
+            device=str(device or "auto").strip() or "auto",
         )
 
 

@@ -113,6 +113,24 @@ def test_bc_pretraining_config_accepts_explicit_cpu_device():
     assert bc_config.device == "cpu"
 
 
+def test_bc_pretraining_config_treats_none_device_as_auto():
+    """Null device inputs should fall back to the default auto policy."""
+    from robot_sf.training.imitation_config import BCPretrainingConfig
+
+    bc_config = BCPretrainingConfig.from_raw(
+        run_id="test_bc_none_device",
+        dataset_id="test_traj_minimal",
+        policy_output_id="test_bc_policy",
+        bc_epochs=1,
+        batch_size=2,
+        learning_rate=0.0003,
+        random_seeds=(42,),
+        device=None,
+    )
+
+    assert bc_config.device == "auto"
+
+
 def test_default_bc_pretraining_config_loads_auto_device():
     """Checked-in BC config should expose the default accelerator policy."""
     from scripts.training.pretrain_from_expert import load_bc_config

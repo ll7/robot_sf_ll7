@@ -30,10 +30,10 @@ WORKDIR /workspace/robot_sf_ll7
 
 COPY pyproject.toml uv.lock ./
 COPY fast-pysf ./fast-pysf
+COPY third_party/python-rvo2 ./third_party/python-rvo2
 RUN uv sync --all-extras --frozen --no-install-project
 
 COPY . .
 RUN uv sync --all-extras --frozen
 
 ENTRYPOINT ["scripts/repro/benchmark_bundle_smoke.sh"]
-

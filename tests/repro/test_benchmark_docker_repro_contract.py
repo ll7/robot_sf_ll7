@@ -26,6 +26,7 @@ def test_benchmark_repro_dockerfile_is_pinned_and_uses_frozen_uv_sync() -> None:
     assert 'python -m pip install "uv==${UV_VERSION}"' in text
     assert "uv sync --all-extras --frozen --no-install-project" in text
     assert "uv sync --all-extras --frozen" in text
+    assert "COPY third_party/python-rvo2 ./third_party/python-rvo2" in text
     assert 'ENTRYPOINT ["scripts/repro/benchmark_bundle_smoke.sh"]' in text
 
 

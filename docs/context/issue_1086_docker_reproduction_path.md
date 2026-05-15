@@ -86,6 +86,11 @@ the pinned Docker reproduction path. The workflow records runner OS/architecture
 version, `docker info`, `nvidia-smi`, and `docker run --gpus all ... nvidia-smi` evidence before it
 runs `scripts/repro/run_benchmark_docker_smoke.sh`.
 
+The first workflow execution caught that the Dockerfile's dependency-layer copy omitted the locked
+local `third_party/python-rvo2` dependency before `uv sync --all-extras --frozen
+--no-install-project`. The Dockerfile now copies `third_party/python-rvo2` alongside `fast-pysf`
+before the dependency sync so the frozen ORCA extra can resolve inside the image.
+
 The expected GitHub-hosted `ubuntu-latest` proof is CPU/headless Docker reproduction evidence. If
 NVIDIA hardware or NVIDIA Container Toolkit support is unavailable, the workflow records that as a
 runner limitation; it must not be reported as GPU or CARLA runtime readiness for #1179.

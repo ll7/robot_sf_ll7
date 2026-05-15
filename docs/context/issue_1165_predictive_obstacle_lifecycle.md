@@ -56,7 +56,7 @@ uv run pytest tests/test_predictive_model.py \
   tests/planner/test_predictive_obstacle_runtime_contract.py -q
 ```
 
-#1218 targeted validation on 2026-05-15:
+Issue #1218 Targeted Validation on 2026-05-15:
 
 ```bash
 rtk uv run pytest tests/planner/test_obstacle_features.py \

@@ -1205,6 +1205,10 @@ uv run python scripts/training/train_ppo_with_pretrained_policy.py --config conf
 
 Set `--log-level DEBUG` if you need the full resolved-config dumps from the factory helpers (default is INFO to keep console noise down). Use `--backend <name>` to override the auto-selected simulator backend (defaults to the fastest available choice via `select_best_backend`). The end-to-end example auto-generates BC/ppo fine-tuning configs under `output/tmp/imitation_pipeline/`, so you only need to edit the YAML files when running the scripts manually.
 
+BC pre-training configs default to `device: auto`, which lets Stable-Baselines3 and
+`imitation` use available accelerators. Set `device: cpu` in the BC YAML when you need
+a deterministic or resource-constrained CPU-only run.
+
 **Also see:**
 - End-to-end example: `examples/advanced/16_imitation_learning_pipeline.py`
 - Detailed workflows: `specs/001-ppo-imitation-pretrain/quickstart.md`

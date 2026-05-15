@@ -34,6 +34,7 @@ COPY third_party/python-rvo2 ./third_party/python-rvo2
 RUN uv sync --all-extras --frozen --no-install-project
 
 COPY . .
+RUN rm -rf third_party/python-rvo2/build
 RUN uv sync --all-extras --frozen
 
 ENTRYPOINT ["scripts/repro/benchmark_bundle_smoke.sh"]

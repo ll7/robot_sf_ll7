@@ -91,6 +91,12 @@ local `third_party/python-rvo2` dependency before `uv sync --all-extras --frozen
 --no-install-project`. The Dockerfile now copies `third_party/python-rvo2` alongside `fast-pysf`
 before the dependency sync so the frozen ORCA extra can resolve inside the image.
 
+The next workflow execution reached the final project install but exposed a stale vendored RVO2
+build-tree issue: the dependency-layer install left `third_party/python-rvo2/build/RVO2` pointing at
+an isolated temporary CMake executable that no longer existed when the final `uv sync` reused the
+tree. The Dockerfile now clears `third_party/python-rvo2/build` before the final project sync so
+the vendored wheel build reconfigures from the copied source tree inside the final layer.
+
 The expected GitHub-hosted `ubuntu-latest` proof is CPU/headless Docker reproduction evidence. If
 NVIDIA hardware or NVIDIA Container Toolkit support is unavailable, the workflow records that as a
 runner limitation; it must not be reported as GPU or CARLA runtime readiness for #1179.

@@ -9,24 +9,23 @@ so the test focuses on schema presence and numeric consistency when available.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
-
-import pytest
 
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:  # minimal inline config mirroring other tests
-    """TODO docstring. Document this class."""
+    """Minimal benchmark config for render/encode timing tests."""
 
     def __init__(self, tmp_path: Path, renderer: str = "synthetic"):
-        """TODO docstring. Document this function.
+        """Create a one-episode benchmark config rooted at ``tmp_path``.
 
         Args:
-            tmp_path: TODO docstring.
-            renderer: TODO docstring.
+            tmp_path: Directory used for the benchmark matrix and output artifacts.
+            renderer: Video renderer mode to request from the benchmark pipeline.
         """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
@@ -49,19 +48,40 @@ class _Cfg:  # minimal inline config mirroring other tests
 
 
 def _read_json(path: Path):
-    """TODO docstring. Document this function.
+    """Read a UTF-8 JSON file.
 
     Args:
-        path: TODO docstring.
+        path: JSON file path.
     """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def test_render_encode_split_tests_do_not_use_unconditional_skip_markers():
+    """Guard this file against permanent placeholder skips in the default suite."""
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    skipped_tests: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
+            continue
+        for decorator in node.decorator_list:
+            if (
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Attribute)
+                and decorator.func.attr == "skip"
+                and isinstance(decorator.func.value, ast.Attribute)
+                and decorator.func.value.attr == "mark"
+                and isinstance(decorator.func.value.value, ast.Name)
+                and decorator.func.value.value.id == "pytest"
+            ):
+                skipped_tests.append(node.name)
+    assert skipped_tests == []
+
+
 def test_performance_manifest_has_render_encode_keys(tmp_path):
-    """TODO docstring. Document this function.
+    """Synthetic rendering writes render/encode timing keys in the performance manifest.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory for generated benchmark artifacts.
     """
     cfg = _Cfg(tmp_path)
     run_full_benchmark(cfg)
@@ -79,19 +99,3 @@ def test_performance_manifest_has_render_encode_keys(tmp_path):
     # If render time present, encode time must also be present and non-null
     if rtime is not None:
         assert etime is not None and etime >= 0, (rtime, etime)
-
-
-@pytest.mark.skip(reason="SimulationView specific assertion not yet implemented in headless CI")
-def test_sim_view_mode_sets_render_time_when_available(tmp_path):  # pragma: no cover - placeholder
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
-    cfg = _Cfg(tmp_path / "sim_view", renderer="sim-view")
-    run_full_benchmark(cfg)
-    perf_path = Path(cfg.output_root) / "reports" / "performance_visuals.json"
-    data = _read_json(perf_path)
-    # In real environment with SimulationView + moviepy this should be non-null.
-    # Kept as placeholder for future environment with pygame available.
-    assert "first_video_render_time_s" in data

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -213,6 +213,157 @@ class LocalObstacleFeatureExtractor:
             tangent=(float(tangent[0]), float(tangent[1])),
             valid_mask=1.0,
         )
+
+
+def _coerce_point(value: Any) -> tuple[float, float] | None:
+    """Return a finite 2D point tuple, or ``None`` for malformed input."""
+    try:
+        x, y = value
+        x_f = float(x)
+        y_f = float(y)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(x_f) or not np.isfinite(y_f):
+        return None
+    return (x_f, y_f)
+
+
+def _line_from_pair(value: Any) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Coerce pair-of-point line geometry into the canonical ``Line2D`` shape.
+
+    Returns
+    -------
+    tuple[tuple[float, float], tuple[float, float]] | None
+        Canonical line segment, or ``None`` for malformed or degenerate input.
+    """
+    try:
+        start, end = value
+    except (TypeError, ValueError):
+        return None
+    start_point = _coerce_point(start)
+    end_point = _coerce_point(end)
+    if start_point is None or end_point is None or start_point == end_point:
+        return None
+    return (start_point, end_point)
+
+
+def _line_from_flat_xxyy(value: Any) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Coerce legacy map flat ``(x1, x2, y1, y2)`` line geometry.
+
+    Returns
+    -------
+    tuple[tuple[float, float], tuple[float, float]] | None
+        Canonical line segment, or ``None`` for malformed or degenerate input.
+    """
+    try:
+        x1, x2, y1, y2 = value
+    except (TypeError, ValueError):
+        return None
+    return _line_from_pair(((x1, y1), (x2, y2)))
+
+
+def _line_from_flat_xyxy(value: Any) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Coerce raw simulator-style flat ``(x1, y1, x2, y2)`` line geometry.
+
+    Returns
+    -------
+    tuple[tuple[float, float], tuple[float, float]] | None
+        Canonical line segment, or ``None`` for malformed or degenerate input.
+    """
+    try:
+        x1, y1, x2, y2 = value
+    except (TypeError, ValueError):
+        return None
+    return _line_from_pair(((x1, y1), (x2, y2)))
+
+
+def _append_map_line(lines: list[Line2D], raw_line: Any) -> None:
+    """Append one legacy map line when it can be normalized."""
+    candidate = _line_from_flat_xxyy(raw_line)
+    if candidate is None:
+        candidate = _line_from_pair(raw_line)
+    if candidate is not None:
+        lines.append(candidate)
+
+
+def obstacle_lines_from_map(map_def: Any) -> list[Line2D]:
+    """Return deterministic obstacle and bound lines from a map definition.
+
+    MapDefinition stores obstacle and bound lines in the legacy flat
+    ``(x1, x2, y1, y2)`` order, while other callers may already expose pair-of-point
+    ``Line2D`` values. Malformed entries are skipped so unavailable geometry degrades
+    to the explicit sentinel features rather than corrupting the schema.
+
+    Returns
+    -------
+    list[Line2D]
+        Canonical obstacle and bound line segments, preserving map order.
+    """
+    if map_def is None:
+        return []
+    lines: list[Line2D] = []
+
+    for obstacle in getattr(map_def, "obstacles", []) or []:
+        raw_lines = getattr(obstacle, "lines", None)
+        if raw_lines is None:
+            _append_map_line(lines, obstacle)
+            continue
+        for raw_line in raw_lines:
+            _append_map_line(lines, raw_line)
+
+    for raw_bound in getattr(map_def, "bounds", []) or []:
+        _append_map_line(lines, raw_bound)
+
+    return lines
+
+
+def normalize_obstacle_lines(obstacle_lines: Any) -> list[Line2D]:
+    """Normalize explicit raw obstacle-line payloads into canonical line tuples.
+
+    Explicit payloads are interpreted as pair-of-point lines or flat simulator-style
+    ``(x1, y1, x2, y2)`` rows. Use :func:`obstacle_lines_from_map` for
+    ``MapDefinition`` objects because their flat lines use legacy ``(x1, x2, y1, y2)``
+    order.
+
+    Returns
+    -------
+    list[Line2D]
+        Canonical line segments, skipping malformed or degenerate rows.
+    """
+    if obstacle_lines is None:
+        return []
+    arr = np.asarray(obstacle_lines, dtype=object)
+    if arr.size == 0:
+        return []
+    values: list[Any]
+    if arr.ndim == 1 and arr.size == 4:
+        values = [arr.tolist()]
+    else:
+        values = list(obstacle_lines)
+    lines: list[Line2D] = []
+    for value in values:
+        candidate = _line_from_pair(value)
+        if candidate is None:
+            candidate = _line_from_flat_xyxy(value)
+        if candidate is not None:
+            lines.append(candidate)
+    return lines
+
+
+def obstacle_lines_from_observation(observation: dict[str, Any]) -> list[Line2D]:
+    """Return obstacle lines exposed by a structured runtime observation, if any."""
+    if not isinstance(observation, dict):
+        return []
+    map_payload = observation.get("map")
+    if isinstance(map_payload, dict):
+        lines = normalize_obstacle_lines(map_payload.get("obstacle_lines"))
+        if lines:
+            return lines
+    for key in ("obstacle_lines", "obstacles"):
+        lines = normalize_obstacle_lines(observation.get(key))
+        if lines:
+            return lines
+    return []
 
 
 def _unit_or_zero(vector: np.ndarray) -> np.ndarray:

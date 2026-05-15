@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
@@ -22,13 +22,15 @@ except ImportError as exc:
 
 from robot_sf import common
 from robot_sf.benchmark.imitation_manifest import write_training_run_manifest
-from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.imitation_config import PPOFineTuningConfig
 from robot_sf.training.observation_wrappers import maybe_flatten_env_observations
 from robot_sf.training.snqi_utils import (
     compute_training_snqi,
     resolve_training_snqi_context,
+)
+from scripts.training.imitation_env_contract import (
+    make_training_contract_env,
+    resolve_config_path,
 )
 
 if TYPE_CHECKING:
@@ -58,6 +60,56 @@ class TimestepTracker(BaseCallback):
         return True
 
 
+def _load_dataset_metadata(dataset_id: str | None) -> dict[str, Any]:
+    """Load trajectory dataset metadata for env-contract reconstruction."""
+    if not dataset_id:
+        return {}
+    dataset_path = common.get_trajectory_dataset_path(dataset_id)
+    if not dataset_path.exists():
+        return {}
+    if not dataset_path.is_file():
+        raise FileNotFoundError(f"Dataset metadata path is not a file: {dataset_path}")
+    with np.load(str(dataset_path), allow_pickle=True) as data:
+        metadata_raw = data.get("metadata")
+        if metadata_raw is None or getattr(metadata_raw, "shape", None) != ():
+            return {}
+        metadata = metadata_raw.item()
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _metadata_path(metadata: dict[str, Any], key: str) -> Path | None:
+    """Return a resolved path stored in trajectory metadata, if present."""
+    value = metadata.get(key)
+    if not value:
+        return None
+    return Path(str(value)).resolve()
+
+
+def _metadata_observation_keys(metadata: dict[str, Any]) -> tuple[str, ...] | None:
+    """Return persisted observation keys from trajectory metadata."""
+    contract = metadata.get("observation_contract")
+    if not isinstance(contract, dict):
+        return None
+    keys = contract.get("keys")
+    if not isinstance(keys, list):
+        return None
+    return tuple(str(key) for key in keys)
+
+
+def _make_finetuning_env(config: PPOFineTuningConfig, *, context: str):
+    """Create the fine-tuning/eval env using the pretrained observation contract."""
+    metadata = _load_dataset_metadata(config.dataset_id)
+    env = make_training_contract_env(
+        training_config_path=config.training_config_path
+        or _metadata_path(metadata, "training_config"),
+        scenario_config_path=config.scenario_config_path
+        or _metadata_path(metadata, "scenario_config"),
+        seed=config.random_seeds[0] if config.random_seeds else None,
+        observation_keys=_metadata_observation_keys(metadata),
+    )
+    return maybe_flatten_env_observations(env, context=context)
+
+
 def _evaluate_policy_metrics(
     model: PPO | None,
     config: PPOFineTuningConfig,
@@ -85,9 +137,7 @@ def _evaluate_policy_metrics(
     if model is None:
         raise ValueError("Model must be provided for evaluation when not in dry-run mode")
 
-    eval_seed = config.random_seeds[0] if config.random_seeds else None
-    eval_env = make_robot_env(config=RobotSimulationConfig(), seed=eval_seed)
-    eval_env = maybe_flatten_env_observations(eval_env, context="PPO evaluation")
+    eval_env = _make_finetuning_env(config, context="PPO evaluation")
 
     successes: list[float] = []
     collisions: list[float] = []
@@ -151,9 +201,8 @@ def run_ppo_finetuning(
     if not pretrained_path.exists() and not dry_run:
         raise FileNotFoundError(f"Pre-trained policy not found: {pretrained_path}")
 
-    # Create environment
-    env = make_robot_env(config=RobotSimulationConfig())
-    env = maybe_flatten_env_observations(env, context="PPO fine-tuning")
+    # Create environment from the same observation contract used by BC pre-training.
+    env = _make_finetuning_env(config, context="PPO fine-tuning")
 
     if not dry_run:
         # Load pre-trained model
@@ -319,6 +368,9 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
         learning_rate=raw.get("learning_rate", 0.0001),
         snqi_weights_path=_resolve_optional_path("snqi_weights"),
         snqi_baseline_path=_resolve_optional_path("snqi_baseline"),
+        dataset_id=raw.get("dataset_id"),
+        training_config_path=resolve_config_path(raw.get("training_config"), base_dir=base_dir),
+        scenario_config_path=resolve_config_path(raw.get("scenario_config"), base_dir=base_dir),
     )
 
 

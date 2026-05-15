@@ -206,9 +206,11 @@ class BCPretrainingConfig:
     batch_size: int
     learning_rate: float
     random_seeds: tuple[int, ...]
+    training_config_path: Path | None = None
+    scenario_config_path: Path | None = None
 
     @classmethod
-    def from_raw(
+    def from_raw(  # noqa: PLR0913
         cls,
         *,
         run_id: str,
@@ -218,6 +220,8 @@ class BCPretrainingConfig:
         batch_size: int,
         learning_rate: float,
         random_seeds: tuple[int, ...] | list[int],
+        training_config_path: Path | None = None,
+        scenario_config_path: Path | None = None,
     ) -> BCPretrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -233,6 +237,8 @@ class BCPretrainingConfig:
             batch_size=batch_size,
             learning_rate=learning_rate,
             random_seeds=ensure_seed_tuple(random_seeds),
+            training_config_path=training_config_path.resolve() if training_config_path else None,
+            scenario_config_path=scenario_config_path.resolve() if scenario_config_path else None,
         )
 
 
@@ -247,9 +253,12 @@ class PPOFineTuningConfig:
     learning_rate: float
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
+    dataset_id: str | None = None
+    training_config_path: Path | None = None
+    scenario_config_path: Path | None = None
 
     @classmethod
-    def from_raw(
+    def from_raw(  # noqa: PLR0913
         cls,
         *,
         run_id: str,
@@ -259,6 +268,9 @@ class PPOFineTuningConfig:
         learning_rate: float = 0.0003,
         snqi_weights_path: Path | None = None,
         snqi_baseline_path: Path | None = None,
+        dataset_id: str | None = None,
+        training_config_path: Path | None = None,
+        scenario_config_path: Path | None = None,
     ) -> PPOFineTuningConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -274,6 +286,9 @@ class PPOFineTuningConfig:
             learning_rate=learning_rate,
             snqi_weights_path=snqi_weights_path.resolve() if snqi_weights_path else None,
             snqi_baseline_path=snqi_baseline_path.resolve() if snqi_baseline_path else None,
+            dataset_id=str(dataset_id).strip() if dataset_id else None,
+            training_config_path=training_config_path.resolve() if training_config_path else None,
+            scenario_config_path=scenario_config_path.resolve() if scenario_config_path else None,
         )
 
 

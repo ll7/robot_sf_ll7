@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import builtins
 import warnings
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 from gymnasium import spaces
 from gymnasium.spaces.utils import flatten as flatten_space
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 from scripts.training.pretrain_from_expert import (
     ImitationDependencyWarning,
     _convert_to_transitions,
+    _load_trajectory_dataset,
     _require_imitation_bc,
     _warn_imitation_dependency_mode,
 )
@@ -175,3 +180,12 @@ def test_require_imitation_bc_warns_and_raises_when_import_fails(
     with pytest.warns(ImitationDependencyWarning, match="uv sync --group imitation"):
         with pytest.raises(RuntimeError, match="optional imitation stack"):
             _require_imitation_bc()
+
+
+def test_load_trajectory_dataset_requires_regular_file(tmp_path: Path) -> None:
+    """Reject directory paths so required trajectory datasets fail closed before np.load."""
+    dataset_dir = tmp_path / "dataset_dir"
+    dataset_dir.mkdir()
+
+    with pytest.raises(FileNotFoundError, match="not a file"):
+        _load_trajectory_dataset(dataset_dir)

@@ -10,8 +10,11 @@ Validates end-to-end workflow:
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
+from gymnasium import spaces
 
 from robot_sf import common
 
@@ -132,6 +135,140 @@ def test_issue_749_warm_start_configs_load():
     assert fine_tune_config.snqi_weights_path.name == "snqi_weights_camera_ready_v3.json"
     assert fine_tune_config.snqi_baseline_path is not None
     assert fine_tune_config.snqi_baseline_path.name == "snqi_baseline_camera_ready_v3.json"
+
+
+def test_issue_749_warm_start_configs_define_env_contract():
+    """Issue #749 configs should name the env contract used across BC and fine-tuning."""
+    from scripts.training.pretrain_from_expert import load_bc_config
+    from scripts.training.train_ppo_with_pretrained_policy import load_ppo_finetuning_config
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bc_config = load_bc_config(
+        repo_root / "configs/training/ppo_imitation/bc_pretrain_issue_749_v10_warm_start.yaml"
+    )
+    fine_tune_config = load_ppo_finetuning_config(
+        repo_root / "configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml"
+    )
+
+    expected_training = (
+        repo_root / "configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml"
+    ).resolve()
+    expected_scenarios = (
+        repo_root / "configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml"
+    ).resolve()
+
+    assert bc_config.training_config_path == expected_training
+    assert bc_config.scenario_config_path == expected_scenarios
+    assert fine_tune_config.training_config_path == expected_training
+    assert fine_tune_config.scenario_config_path == expected_scenarios
+    assert fine_tune_config.dataset_id == bc_config.dataset_id
+
+
+def test_collect_trajectories_filters_to_policy_observation_space(tmp_path, monkeypatch):
+    """Collector should drop current extra observation keys before replaying old PPO policies."""
+    from scripts.training import collect_expert_trajectories as collector
+
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+
+    checkpoint = common.get_expert_policy_dir() / "demo_policy.zip"
+    checkpoint.write_text("placeholder", encoding="utf-8")
+    scenario_config = tmp_path / "scenario.yaml"
+    scenario_config.write_text("[]\n", encoding="utf-8")
+
+    captured_policy_obs: list[dict[str, np.ndarray]] = []
+    captured_metadata: dict[str, object] = {}
+
+    class _FakePolicy:
+        observation_space = spaces.Dict(
+            {"kept": spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)}
+        )
+
+        action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+
+        def predict(self, obs, deterministic=True):
+            captured_policy_obs.append(dict(obs))
+            assert sorted(obs) == ["kept"]
+            return np.array([0.0, 0.0], dtype=np.float32), None
+
+    class _FakeEnv:
+        observation_space = spaces.Dict(
+            {
+                "kept": spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32),
+                "extra": spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32),
+            }
+        )
+        action_space = _FakePolicy.action_space
+
+        def __init__(self):
+            self.state = SimpleNamespace(max_sim_steps=1, nav=SimpleNamespace(pos=(0.0, 0.0)))
+
+        def reset(self):
+            return {
+                "kept": np.array([0.25], dtype=np.float32),
+                "extra": np.array([0.75], dtype=np.float32),
+            }, {}
+
+        def step(self, action):
+            return (
+                {
+                    "kept": np.array([0.5], dtype=np.float32),
+                    "extra": np.array([1.0], dtype=np.float32),
+                },
+                0.0,
+                True,
+                False,
+                {},
+            )
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(collector.PPO, "load", lambda _path: _FakePolicy())
+    monkeypatch.setattr(collector, "load_scenarios", lambda _path: ({"name": "demo"},))
+    monkeypatch.setattr(collector, "select_scenario", lambda scenarios, _scenario_id: scenarios[0])
+    monkeypatch.setattr(collector, "build_robot_config_from_scenario", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(collector, "make_robot_env", lambda **_kwargs: _FakeEnv())
+    monkeypatch.setattr(
+        collector,
+        "_write_dataset",
+        lambda _path, _arrays, _episode_count, metadata: captured_metadata.update(metadata),
+    )
+    monkeypatch.setattr(
+        collector,
+        "TrajectoryDatasetValidator",
+        lambda _path: SimpleNamespace(
+            validate=lambda minimum_episodes: SimpleNamespace(
+                episode_count=minimum_episodes,
+                scenario_coverage={"demo": minimum_episodes},
+                integrity_report={},
+                quality_status=common.TrajectoryQuality.VALIDATED,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        collector,
+        "write_trajectory_dataset_manifest",
+        lambda _artifact: tmp_path / "manifest.json",
+    )
+
+    exit_code = collector.main(
+        [
+            "--dataset-id",
+            "demo_dataset",
+            "--policy-id",
+            "demo_policy",
+            "--episodes",
+            "1",
+            "--scenario-config",
+            str(scenario_config),
+            "--seeds",
+            "111",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured_policy_obs
+    assert captured_metadata["observation_contract"]["keys"] == ["kept"]
 
 
 def test_comparative_metrics_structure():

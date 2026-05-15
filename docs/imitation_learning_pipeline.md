@@ -52,13 +52,20 @@ uv run python scripts/training/collect_expert_trajectories.py \
   --dataset-id expert_traj_v1 \
   --policy-id ppo_expert_v1 \
   --episodes 200 \
+  --scenario-config configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml \
+  --training-config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml \
   --seeds 42 43 44
 ```
 
 **What happens:**
 - Loads approved expert policy
+- Applies the expert training config's `env_overrides` so collection uses the same observation mode
+  and environment contract as the checkpoint
+- Filters stored observations to the expert policy's observation space when needed
 - Records specified number of episodes
 - Saves trajectory dataset to `output/benchmarks/expert_trajectories/<dataset_id>.npz`
+- Persists the scenario config, training config, env overrides, and observation contract in the
+  dataset metadata for downstream BC and PPO fine-tuning stages
 - Validates dataset integrity automatically
 - Writes dataset manifest with metadata
 
@@ -78,7 +85,9 @@ The repository ships with `configs/training/ppo_imitation/bc_pretrain.yaml` as a
 starting point—update `dataset_id` and `policy_output_id` before running manual
 experiments. The automated example pipeline writes run-specific configs to
 `output/tmp/imitation_pipeline/` so you can keep the checked-in YAML focused on
-reusable defaults.
+reusable defaults. For checkpoint-specific observation contracts, set `training_config`
+and `scenario_config` in the BC config, or rely on those paths from trajectory dataset
+metadata.
 
 **What happens:**
 - Loads trajectory dataset
@@ -100,8 +109,9 @@ uv run python scripts/training/train_ppo_with_pretrained_policy.py \
 
 Like the BC step, a default `ppo_finetune.yaml` lives under
 `configs/training/ppo_imitation/`. Adjust `pretrained_policy_id` and
-`total_timesteps` for manual runs; the orchestration example generates a
-temporary config automatically.
+`total_timesteps` for manual runs; set `dataset_id` when the fine-tune env should
+reuse a persisted trajectory observation contract. The orchestration example
+generates a temporary config automatically.
 
 **What happens:**
 - Loads pre-trained policy checkpoint
@@ -175,8 +185,8 @@ All artifacts are stored under the canonical `output/` directory:
 - **Expert manifests**: `output/benchmarks/expert_policies/<policy_id>.json`
 - **Trajectory datasets**: `output/benchmarks/expert_trajectories/<dataset_id>.npz`
 - **Dataset manifests**: `output/benchmarks/expert_trajectories/<dataset_id>.json`
-- **Training run manifests**: `output/imitation_reports/runs/<run_id>.json`
-- **Comparison reports**: `output/imitation_reports/comparisons/<group_id>_comparison.json`
+- **Training run manifests**: `output/benchmarks/ppo_imitation/runs/<run_id>.json`
+- **Comparison reports**: `output/benchmarks/ppo_imitation/comparisons/<group_id>_comparison.json`
 
 ---
 

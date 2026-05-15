@@ -28,17 +28,22 @@ from robot_sf import common
 from robot_sf.benchmark.imitation_manifest import write_trajectory_dataset_manifest
 from robot_sf.benchmark.validation.trajectory_dataset import TrajectoryDatasetValidator
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.models import resolve_model_path
 from robot_sf.training.imitation_config import TrajectoryCollectionConfig
+from robot_sf.training.observation_wrappers import resolve_policy_obs_adapter
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
     select_scenario,
 )
+from scripts.training.imitation_env_contract import (
+    load_training_env_overrides,
+    observation_contract_from_space,
+)
+from scripts.training.train_ppo import _apply_env_overrides
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
-else:
-    Mapping = Sequence = Any
+    from collections.abc import Callable, Mapping, Sequence
 
 
 def _resolve_scenario_config(
@@ -118,18 +123,22 @@ def _record_episode(
     *,
     policy: PPO | None,
     dry_run: bool,
+    observation_adapter: Callable[[Mapping[str, Any]], Any] | None = None,
 ) -> tuple[list[Any], list[Any], list[Any]]:
-    """TODO docstring. Document this function.
+    """Record one episode using policy-compatible observations.
 
     Args:
-        env: TODO docstring.
-        policy: TODO docstring.
-        dry_run: TODO docstring.
+        env: Environment instance to reset and step.
+        policy: Optional PPO policy used for non-dry-run action selection.
+        dry_run: Whether to use zero actions instead of policy inference.
+        observation_adapter: Optional adapter that filters or reshapes raw env observations before
+            policy inference and dataset storage.
 
     Returns:
-        TODO docstring.
+        Episode positions, actions, and adapted observations.
     """
-    obs, _ = env.reset()
+    raw_obs, _ = env.reset()
+    obs = observation_adapter(raw_obs) if observation_adapter is not None else raw_obs
     done = False
     positions: list[Any] = []
     actions: list[Any] = []
@@ -142,7 +151,10 @@ def _record_episode(
             action = _zero_action(env.action_space)
         else:
             action, _ = policy.predict(obs, deterministic=True)
-        next_obs, _reward, terminated, truncated, _info = env.step(action)
+        raw_next_obs, _reward, terminated, truncated, _info = env.step(action)
+        next_obs = (
+            observation_adapter(raw_next_obs) if observation_adapter is not None else raw_next_obs
+        )
         positions.append(tuple(env.state.nav.pos))
         actions.append(np.asarray(action, dtype=float))
         observations.append(next_obs)
@@ -161,19 +173,23 @@ def _record_dataset(
     scenario_label: str,
     scenario: Mapping[str, Any],
     scenario_path: Path,
+    env_overrides: Mapping[str, object],
+    observation_adapter: Callable[[Mapping[str, Any]], Any] | None = None,
 ) -> tuple[dict[str, list[np.ndarray]], dict[str, int]]:
-    """TODO docstring. Document this function.
+    """Record all requested episodes for one scenario.
 
     Args:
-        config: TODO docstring.
-        policy: TODO docstring.
-        dry_run: TODO docstring.
-        scenario_label: TODO docstring.
-        scenario: TODO docstring.
-        scenario_path: TODO docstring.
+        config: Trajectory collection settings, including dataset id, seeds, and episode count.
+        policy: Optional PPO policy used for non-dry-run collection.
+        dry_run: Whether to run deterministic zero-action placeholder collection.
+        scenario_label: Scenario identifier used for coverage metadata.
+        scenario: Scenario payload selected from the scenario manifest.
+        scenario_path: Path to the scenario manifest used to build the env config.
+        env_overrides: Training-config environment overrides to apply before env construction.
+        observation_adapter: Optional adapter matching raw env observations to the policy contract.
 
     Returns:
-        TODO docstring.
+        Dataset arrays grouped by field and scenario coverage counts.
     """
     dataset: dict[str, list[np.ndarray]] = {
         "positions": [],
@@ -185,9 +201,15 @@ def _record_dataset(
     for episode in range(config.episodes):
         seed = int(config.random_seeds[episode % len(config.random_seeds)])
         env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        _apply_env_overrides(env_config, env_overrides)
         env = make_robot_env(config=env_config, seed=seed)
         try:
-            positions, actions, observations = _record_episode(env, policy=policy, dry_run=dry_run)
+            positions, actions, observations = _record_episode(
+                env,
+                policy=policy,
+                dry_run=dry_run,
+                observation_adapter=observation_adapter,
+            )
         finally:
             env.close()
         dataset["positions"].append(np.asarray(positions, dtype=object))
@@ -286,18 +308,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Collect expert trajectories and write the dataset plus manifest.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional CLI argument sequence for tests.
 
     Returns:
-        TODO docstring.
+        Process exit code.
     """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
     scenario_path = _resolve_scenario_config(args.scenario_config, args.training_config)
+    training_config_path = args.training_config.resolve() if args.training_config else None
+    env_overrides = load_training_env_overrides(training_config_path)
     seeds_arg: Sequence[int] | None = args.seeds
     if args.override_seed:
         override = tuple(int(value) for value in args.override_seed)
@@ -328,11 +352,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     common.set_global_seed(int(collection_config.random_seeds[0]))
 
     policy = None
+    observation_contract: dict[str, object] | None = None
+    observation_adapter: Callable[[Mapping[str, Any]], Any] | None = None
     if not args.dry_run:
         checkpoint = common.get_expert_policy_dir() / f"{collection_config.source_policy_id}.zip"
         if not checkpoint.exists():
-            raise FileNotFoundError(f"Expert policy checkpoint not found: {checkpoint}")
+            checkpoint = resolve_model_path(collection_config.source_policy_id)
         policy = PPO.load(str(checkpoint))
+        observation_contract = observation_contract_from_space(policy.observation_space)
+        observation_adapter = resolve_policy_obs_adapter(policy)
 
     arrays, coverage = _record_dataset(
         collection_config,
@@ -341,6 +369,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         scenario_label=scenario_label,
         scenario=selected_scenario,
         scenario_path=scenario_path,
+        env_overrides=env_overrides,
+        observation_adapter=observation_adapter,
     )
 
     dataset_path = common.get_trajectory_dataset_path(collection_config.dataset_id)
@@ -354,6 +384,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "scenario_overrides": list(collection_config.scenario_overrides),
         "random_seeds": list(collection_config.random_seeds),
         "scenario_coverage": coverage,
+        "training_config": str(training_config_path) if training_config_path else None,
+        "env_overrides": env_overrides,
+        "observation_contract": observation_contract,
         "command": _command_line(),
         "git_commit": _git_commit_hash(),
         "dry_run": args.dry_run,

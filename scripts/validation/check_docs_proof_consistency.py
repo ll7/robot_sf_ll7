@@ -66,6 +66,19 @@ def _run(cmd: Sequence[str], *, cwd: Path | None = None) -> str:
     return proc.stdout.strip()
 
 
+def _path_exists_in_ref(path: Path, ref: str, repo_root: Path) -> bool:
+    """Return whether a repository-relative path exists in a git ref."""
+    spec = f"{ref}:{path.as_posix()}"
+    proc = subprocess.run(
+        ["git", "cat-file", "-e", spec],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
 def _repo_root() -> Path:
     """Return the repository root for the current checkout."""
     return Path(_run(["git", "rev-parse", "--show-toplevel"])).resolve()
@@ -81,24 +94,32 @@ def _normalize_path(path: Path, repo_root: Path) -> Path:
     return path
 
 
+def _is_within_dir(path: Path, root: Path) -> bool:
+    """Return whether a repository-relative path is at or below a trusted root."""
+    return path == root or root in path.parents
+
+
+def _parse_name_status(output: str, *, default_status: str | None = None) -> list[ChangedFile]:
+    """Parse git --name-status output into ChangedFile rows."""
+    parsed: list[ChangedFile] = []
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if default_status is not None:
+            parsed.append(ChangedFile(status=default_status, path=Path(stripped)))
+            continue
+        parts = stripped.split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0]
+        raw_path = parts[-1]
+        parsed.append(ChangedFile(status=status, path=Path(raw_path)))
+    return parsed
+
+
 def _changed_files(base: str, repo_root: Path) -> list[ChangedFile]:
     """Return changed files from the branch diff plus local worktree edits."""
-
-    def _parse_name_status(output: str, *, default_status: str | None = None) -> list[ChangedFile]:
-        parsed: list[ChangedFile] = []
-        for line in output.splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if default_status is not None:
-                parsed.append(ChangedFile(status=default_status, path=Path(stripped)))
-                continue
-            parts = stripped.split("\t", maxsplit=1)
-            if len(parts) != 2:
-                continue
-            status, raw_path = parts
-            parsed.append(ChangedFile(status=status, path=Path(raw_path)))
-        return parsed
 
     combined: dict[Path, str] = {}
     commands: list[tuple[list[str], str | None]] = [
@@ -138,7 +159,7 @@ def _markdown_targets(text: str) -> list[str]:
     for first, second in _MARKDOWN_LINK_RE.findall(text):
         target = first or second
         if target:
-            targets.append(target.strip())
+            targets.append(target.strip().split("#", maxsplit=1)[0])
     return targets
 
 
@@ -184,7 +205,7 @@ def _context_readme_link_diagnostics(
 def _evidence_path_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     """Flag durable-evidence files that contain local absolute paths or output pointers."""
     diagnostics: list[Diagnostic] = []
-    if not path.as_posix().startswith(_EVIDENCE_DIR.as_posix()):
+    if not _is_within_dir(path, _EVIDENCE_DIR):
         return diagnostics
 
     scan_text = _strip_fenced_code_blocks(text) if path.suffix == ".md" else text
@@ -219,7 +240,7 @@ def _evidence_path_diagnostics(path: Path, text: str) -> list[Diagnostic]:
 
 def _validation_phrase_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     """Flag notes that claim no validation ran while also listing executed commands."""
-    if not path.as_posix().startswith(_TOP_LEVEL_CONTEXT_DIR.as_posix()):
+    if not _is_within_dir(path, _TOP_LEVEL_CONTEXT_DIR):
         return []
     if path.suffix != ".md":
         return []
@@ -296,7 +317,16 @@ def _selected_files(args: argparse.Namespace, repo_root: Path) -> list[ChangedFi
     """Resolve the changed file set from explicit paths or the branch diff."""
     if args.path:
         return [
-            ChangedFile(status="M", path=_normalize_path(Path(raw_path), repo_root))
+            ChangedFile(
+                status=(
+                    "M"
+                    if _path_exists_in_ref(
+                        _normalize_path(Path(raw_path), repo_root), str(args.base), repo_root
+                    )
+                    else "A"
+                ),
+                path=_normalize_path(Path(raw_path), repo_root),
+            )
             for raw_path in args.path
         ]
     return _changed_files(str(args.base), repo_root)

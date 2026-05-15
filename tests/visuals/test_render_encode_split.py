@@ -60,18 +60,18 @@ def test_render_encode_split_tests_do_not_use_unconditional_skip_markers():
     """Guard this file against permanent placeholder skips in the default suite."""
     tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
     skipped_tests: list[str] = []
-    for node in tree.body:
+    for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
             continue
         for decorator in node.decorator_list:
+            func = decorator.func if isinstance(decorator, ast.Call) else decorator
             if (
-                isinstance(decorator, ast.Call)
-                and isinstance(decorator.func, ast.Attribute)
-                and decorator.func.attr == "skip"
-                and isinstance(decorator.func.value, ast.Attribute)
-                and decorator.func.value.attr == "mark"
-                and isinstance(decorator.func.value.value, ast.Name)
-                and decorator.func.value.value.id == "pytest"
+                isinstance(func, ast.Attribute)
+                and func.attr == "skip"
+                and isinstance(func.value, ast.Attribute)
+                and func.value.attr == "mark"
+                and isinstance(func.value.value, ast.Name)
+                and func.value.value.id == "pytest"
             ):
                 skipped_tests.append(node.name)
     assert skipped_tests == []

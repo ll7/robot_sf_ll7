@@ -5,11 +5,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-SCHEMA_TEST_PATHS = (
-    Path("tests/visuals/test_video_schema_validation.py"),
-    Path("tests/visuals/test_plot_schema_validation.py"),
-    Path("tests/visuals/test_performance_schema_validation.py"),
-)
+VISUAL_TEST_DIR = Path(__file__).resolve().parent
+REPO_ROOT = VISUAL_TEST_DIR.parents[1]
+SCHEMA_TEST_PATHS = tuple(sorted(VISUAL_TEST_DIR.glob("test_*_schema_validation.py")))
 
 
 def test_visual_schema_tests_require_declared_jsonschema_dependency():
@@ -18,13 +16,16 @@ def test_visual_schema_tests_require_declared_jsonschema_dependency():
 
     for path in SCHEMA_TEST_PATHS:
         tree = ast.parse(path.read_text(encoding="utf-8"))
+        relative_path = path.relative_to(REPO_ROOT)
         for node in ast.walk(tree):
             if _is_jsonschema_find_spec_call(node):
-                offenders.append(f"{path}: importlib.util.find_spec('jsonschema')")
+                offenders.append(
+                    f"{relative_path}:{node.lineno}: importlib.util.find_spec('jsonschema')"
+                )
             if _is_pytest_skipif_call(node):
-                offenders.append(f"{path}: pytest.mark.skipif")
+                offenders.append(f"{relative_path}:{node.lineno}: pytest.mark.skipif")
 
-    assert offenders == []
+    assert not offenders, "Found prohibited dependency guards:\n" + "\n".join(offenders)
 
 
 def _is_jsonschema_find_spec_call(node: ast.AST) -> bool:

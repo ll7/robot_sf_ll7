@@ -16,10 +16,17 @@ RELEASE_REPRO_DOC = ROOT / "docs" / "benchmark_release_reproducibility.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "benchmark-docker-repro-smoke.yml"
 
 
+def _read_text_file(path: Path) -> str:
+    """Read a UTF-8 text file after verifying it is a regular file."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Expected file does not exist: {path}")
+    return path.read_text(encoding="utf-8")
+
+
 def test_benchmark_repro_dockerfile_is_pinned_and_uses_frozen_uv_sync() -> None:
     """The Docker recipe should pin the main runtime surfaces used by the smoke."""
 
-    text = DOCKERFILE.read_text(encoding="utf-8")
+    text = _read_text_file(DOCKERFILE)
 
     assert "FROM python:3.12.3-slim-bookworm" in text
     assert "ARG UV_VERSION=0.11.9" in text
@@ -34,8 +41,8 @@ def test_benchmark_repro_dockerfile_is_pinned_and_uses_frozen_uv_sync() -> None:
 def test_benchmark_repro_scripts_define_one_command_smoke_contract() -> None:
     """The scripts should build the image and emit the documented benchmark artifacts."""
 
-    smoke = SMOKE_SCRIPT.read_text(encoding="utf-8")
-    wrapper = WRAPPER_SCRIPT.read_text(encoding="utf-8")
+    smoke = _read_text_file(SMOKE_SCRIPT)
+    wrapper = _read_text_file(WRAPPER_SCRIPT)
 
     assert SMOKE_SCRIPT.stat().st_mode & stat.S_IXUSR
     assert WRAPPER_SCRIPT.stat().st_mode & stat.S_IXUSR
@@ -56,10 +63,10 @@ def test_benchmark_repro_scripts_define_one_command_smoke_contract() -> None:
 def test_benchmark_repro_docs_are_discoverable_and_state_limits() -> None:
     """Documentation should expose the path, outputs, pinning, and determinism boundary."""
 
-    doc = DOC.read_text(encoding="utf-8")
-    context = CONTEXT_NOTE.read_text(encoding="utf-8")
-    docs_readme = DOCS_README.read_text(encoding="utf-8")
-    release_repro_doc = RELEASE_REPRO_DOC.read_text(encoding="utf-8")
+    doc = _read_text_file(DOC)
+    context = _read_text_file(CONTEXT_NOTE)
+    docs_readme = _read_text_file(DOCS_README)
+    release_repro_doc = _read_text_file(RELEASE_REPRO_DOC)
 
     for fragment in [
         "scripts/repro/run_benchmark_docker_smoke.sh",
@@ -82,11 +89,12 @@ def test_benchmark_repro_docs_are_discoverable_and_state_limits() -> None:
 def test_benchmark_repro_workflow_qualifies_runner_before_smoke() -> None:
     """Docker CI proof should record runner capabilities before running the smoke."""
 
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+    workflow = _read_text_file(WORKFLOW)
 
     for fragment in [
         "workflow_dispatch:",
         "pull_request:",
+        "paths:",
         "docker version --format",
         "docker info --format",
         "nvidia-smi",

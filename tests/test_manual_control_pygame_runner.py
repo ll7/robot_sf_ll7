@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -9,13 +10,15 @@ import pytest
 from robot_sf.manual_control.pygame_runner import (
     ManualPygameRunner,
     ManualPygameRunnerSettings,
+    _current_velocity,
     _failure_reason,
     _pygame_key_name,
     build_parser,
     main,
     settings_from_args,
 )
-from robot_sf.manual_control.recording import load_manual_jsonl_records
+from robot_sf.manual_control.recording import ManualSessionMetadata, load_manual_jsonl_records
+from robot_sf.manual_control.session import ManualSessionController
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 
@@ -106,15 +109,29 @@ class _FakeScreen:
 
 
 class _FakeDisplay:
-    flips = 0
+    updates = 0
 
     @classmethod
-    def flip(cls) -> None:
-        cls.flips += 1
+    def update(cls) -> None:
+        cls.updates += 1
+
+
+class _FakeClock:
+    ticks: list[float] = []
+
+    def tick(self, target_fps: float) -> None:
+        self.ticks.append(target_fps)
+
+
+class _FakeTime:
+    @staticmethod
+    def Clock() -> _FakeClock:
+        return _FakeClock()
 
 
 class _OverlayPygame(_FakePygame):
     display = _FakeDisplay
+    time = _FakeTime
 
 
 def test_pygame_runner_writes_training_records_and_manifest(tmp_path):
@@ -148,9 +165,13 @@ def test_pygame_runner_writes_training_records_and_manifest(tmp_path):
     assert len(step_records) == 2
     assert all(record.training_sample for record in step_records)
     assert step_records[0].input_keys == ["w"]
-    manifest_text = result.manifest_path.read_text(encoding="utf-8")
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    manifest_text = json.dumps(manifest, sort_keys=True)
     assert "manual_control_session_manifest_v1" in manifest_text
     assert "policy-a" in manifest_text
+    assert manifest["session"]["extra"]["started_at_utc"].endswith("Z")
+    assert manifest["session"]["extra"]["finished_at_utc"].endswith("Z")
+    assert manifest["session"]["extra"]["runtime_seconds"] >= 0.0
     assert env.exit_count == 1
 
 
@@ -227,7 +248,9 @@ def test_pygame_runner_countdown_render_overlay_and_keyup(tmp_path):
     assert "countdown" in [record.event for record in records]
     assert env.render_count >= 1
     assert screen.blits
-    assert _FakeDisplay.flips >= 1
+    assert _FakeDisplay.updates >= 1
+    assert _FakeClock.ticks
+    assert all(target_fps == settings.target_fps for target_fps in _FakeClock.ticks)
 
 
 def test_pygame_runner_quit_event_writes_empty_manifest(tmp_path):
@@ -253,6 +276,47 @@ def test_pygame_runner_quit_event_writes_empty_manifest(tmp_path):
 
     assert result.steps == 0
     assert result.manifest_path.exists()
+
+
+def test_pygame_runner_speed_controls_use_quarter_step(tmp_path) -> None:
+    """Speed controls should be reversible from the minimum multiplier."""
+    settings = ManualPygameRunnerSettings(
+        scenario_id="scenario-speed",
+        seed=14,
+        policy_to_beat="policy-speed",
+        policy_to_beat_source="explicit-test",
+        output_dir=tmp_path,
+    )
+    controller = ManualSessionController(countdown_steps=0)
+    attempt = controller.start_attempt(settings.scenario_id, settings.seed)
+    session = ManualSessionMetadata(
+        session_id=settings.resolved_session_id,
+        input_mapping_version="manual_keyboard_diff_drive_hold_v1",
+    )
+    records = []
+
+    runner = ManualPygameRunner(
+        settings,
+        pygame_module=_FakePygame,
+        event_source=lambda: [
+            _event(_FakePygame.KEYDOWN, "-"),
+            _event(_FakePygame.KEYDOWN, "-"),
+            _event(_FakePygame.KEYDOWN, "-"),
+            _event(_FakePygame.KEYDOWN, "-"),
+            _event(_FakePygame.KEYDOWN, "="),
+        ],
+    )
+    runner._process_events(
+        _FakePygame,
+        controller,
+        SimpleNamespace(write=records.append),
+        attempt.key,
+        session,
+        0,
+        SimpleNamespace(),
+    )
+
+    assert controller.speed_multiplier == 0.5
 
 
 def test_pygame_runner_requires_explicit_policy_to_beat() -> None:
@@ -368,3 +432,4 @@ def test_helper_branches_cover_fallbacks() -> None:
     assert _failure_reason({"truncated": True}) == "truncated"
     assert _failure_reason({}) == "terminated"
     assert _pygame_key_name(SimpleNamespace(key=object()), "raw-key") == "raw-key"
+    assert _current_velocity(SimpleNamespace()) == (0.0, 0.0)

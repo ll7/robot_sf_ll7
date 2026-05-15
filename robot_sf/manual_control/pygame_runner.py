@@ -6,7 +6,8 @@ import argparse
 import os
 import time
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ EventSource = Callable[[], Sequence[Any]]
 EnvFactory = Callable[..., Any]
 
 CONTROL_KEYS = frozenset({"escape", "q", "p", "r", "+", "=", "-", "_"})
+_NO_RESET_OBSERVATION = object()
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,9 @@ class ManualPygameRunner:
         if not isinstance(env.env_config.robot_config, DifferentialDriveSettings):
             raise NotImplementedError("manual-control MVP requires a differential-drive robot")
 
+        started_at_utc = _utc_now()
+        started_monotonic = time.perf_counter()
+        frame_clock = _make_frame_clock(pygame)
         steps = 0
         success = False
         beat_baseline = False
@@ -178,7 +183,7 @@ class ManualPygameRunner:
                 frames = 0
                 while not self._quit_requested:
                     frames += 1
-                    self._process_events(
+                    reset_observation = self._process_events(
                         pygame,
                         controller,
                         recorder,
@@ -187,6 +192,8 @@ class ManualPygameRunner:
                         steps,
                         env,
                     )
+                    if reset_observation is not _NO_RESET_OBSERVATION:
+                        observation = reset_observation
                     if self._quit_requested:
                         break
                     active_attempt = controller.active_attempt or attempt
@@ -245,6 +252,7 @@ class ManualPygameRunner:
                         failure_reason = "frame_limit"
                     if self.settings.render:
                         self._render(env, pygame, controller, steps, failure_reason)
+                    _tick_frame_clock(frame_clock, self.settings.target_fps)
                     if failure_reason is not None:
                         candidate_metrics = _candidate_metrics(
                             success=success,
@@ -272,8 +280,19 @@ class ManualPygameRunner:
                             },
                         )
                         break
+            finished_at_utc = _utc_now()
+            runtime_seconds = max(0.0, time.perf_counter() - started_monotonic)
+            manifest_session = replace(
+                session,
+                extra={
+                    **session.extra,
+                    "started_at_utc": started_at_utc,
+                    "finished_at_utc": finished_at_utc,
+                    "runtime_seconds": runtime_seconds,
+                },
+            )
             manifest = ManualSessionManifest(
-                session=session,
+                session=manifest_session,
                 baseline=baseline,
                 completed_attempts=tuple(controller.completed.values()),
                 unresolved_attempts=tuple(controller.unresolved.values()),
@@ -363,13 +382,19 @@ class ManualPygameRunner:
         session: ManualSessionMetadata,
         step_idx: int,
         env: Any,
-    ) -> None:
-        """Convert Pygame events into session controls and held-key state."""
+    ) -> object:
+        """Convert Pygame events into session controls and held-key state.
+
+        Returns
+        -------
+        object
+            Reset observation when retry was requested, otherwise a sentinel.
+        """
         for event in self._read_events(pygame):
             event_type = getattr(event, "type", None)
             if event_type == getattr(pygame, "QUIT", object()):
                 self._quit_requested = True
-                return
+                return _NO_RESET_OBSERVATION
             if event_type not in {
                 getattr(pygame, "KEYDOWN", object()),
                 getattr(pygame, "KEYUP", object()),
@@ -381,7 +406,7 @@ class ManualPygameRunner:
                 continue
             if key_name in {"escape", "q"}:
                 self._quit_requested = True
-                return
+                return _NO_RESET_OBSERVATION
             if key_name == "p":
                 controller.toggle_pause()
                 self._write_event(
@@ -400,7 +425,7 @@ class ManualPygameRunner:
                 retry = controller.retry_active()
                 self._pressed_keys.clear()
                 self._step_credit = 0.0
-                env.reset(seed=self.settings.seed)
+                observation, _info = env.reset(seed=self.settings.seed)
                 self._write_event(
                     recorder,
                     event="retry",
@@ -410,15 +435,16 @@ class ManualPygameRunner:
                     session=session,
                     metrics={"retry_count": retry.retry_count},
                 )
-                continue
+                return observation
             if key_name in {"+", "="}:
-                controller.set_speed_multiplier(controller.speed_multiplier + 1.0)
+                controller.set_speed_multiplier(controller.speed_multiplier + 0.25)
                 continue
             if key_name in {"-", "_"}:
-                controller.set_speed_multiplier(max(0.25, controller.speed_multiplier - 1.0))
+                controller.set_speed_multiplier(max(0.25, controller.speed_multiplier - 0.25))
                 continue
             if key_name not in CONTROL_KEYS:
                 self._pressed_keys.add(key_name)
+        return _NO_RESET_OBSERVATION
 
     def _read_events(self, pygame: Any) -> Sequence[Any]:
         """Return the next Pygame event batch."""
@@ -576,9 +602,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _current_velocity(env: Any) -> tuple[float, float]:
     """Return the current differential-drive velocity from the live environment."""
-    robot = env.simulator.robots[0]
-    speed = getattr(robot, "current_speed", (0.0, 0.0))
-    return float(speed[0]), float(speed[1])
+    simulator = getattr(env, "simulator", None)
+    robots = getattr(simulator, "robots", None) or ()
+    if not robots:
+        return 0.0, 0.0
+    speed = getattr(robots[0], "current_speed", (0.0, 0.0))
+    try:
+        return float(speed[0]), float(speed[1])
+    except (TypeError, ValueError, IndexError):
+        return 0.0, 0.0
 
 
 def _manual_state_payload(env: Any, observation: Any) -> dict[str, Any]:
@@ -589,8 +621,12 @@ def _manual_state_payload(env: Any, observation: Any) -> dict[str, Any]:
     dict[str, Any]
         JSON-compatible state payload for one training sample.
     """
-    robot_pose = env.simulator.robot_poses[0]
-    goal = env.simulator.goal_pos[0]
+    simulator = getattr(env, "simulator", None)
+    robot_pose = _first_or_default(
+        getattr(simulator, "robot_poses", None),
+        ((0.0, 0.0), 0.0),
+    )
+    goal = _first_or_default(getattr(simulator, "goal_pos", None), (0.0, 0.0))
     return {
         "robot_pose": robot_pose,
         "goal": goal,
@@ -660,6 +696,47 @@ def _pygame_key_name(pygame: Any, key: Any) -> str:
         return str(key).strip().lower()
 
 
+def _first_or_default(values: Any, default: Any) -> Any:
+    """Return the first value from a sequence-like object or a default."""
+    if values is None:
+        return default
+    try:
+        if len(values) == 0:
+            return default
+        return values[0]
+    except (TypeError, IndexError):
+        return default
+
+
+def _make_frame_clock(pygame: Any) -> Any | None:
+    """Create a Pygame frame clock when the injected module provides one.
+
+    Returns
+    -------
+    Any | None
+        Clock-like object with ``tick`` support, or ``None`` when unavailable.
+    """
+    time_module = getattr(pygame, "time", None)
+    clock_factory = getattr(time_module, "Clock", None)
+    if not callable(clock_factory):
+        return None
+    return clock_factory()
+
+
+def _tick_frame_clock(clock: Any | None, target_fps: float) -> None:
+    """Limit the runner loop to the configured frame rate when a clock is available."""
+    if clock is None:
+        return
+    tick = getattr(clock, "tick", None)
+    if callable(tick):
+        tick(target_fps)
+
+
+def _utc_now() -> str:
+    """Return a compact UTC timestamp for manual-control provenance metadata."""
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
 def _draw_overlay(pygame: Any, sim_ui: Any, lines: Iterable[str]) -> None:
     """Draw compact manual-control status text on the SimulationView surface."""
     font = getattr(sim_ui, "font", None)
@@ -675,8 +752,9 @@ def _draw_overlay(pygame: Any, sim_ui: Any, lines: Iterable[str]) -> None:
         screen.blit(text, (x, y))
         y += 18
     display = getattr(pygame, "display", None)
-    if display is not None and getattr(sim_ui, "_use_display", False):
-        display.flip()
+    update = getattr(display, "update", None)
+    if callable(update) and getattr(sim_ui, "_use_display", False):
+        update()
 
 
 def _close_env(env: Any) -> None:

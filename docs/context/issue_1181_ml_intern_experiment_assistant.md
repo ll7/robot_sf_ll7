@@ -31,7 +31,7 @@ Not recommended in this issue:
 - SLURM replacement,
 - or any workflow that treats fallback/degraded execution as valid benchmark evidence.
 
-## Issue #1191 outcome: extract concepts, defer runtime smoke
+## Issue #1191 Outcome: Extract Concepts, Defer Runtime Smoke
 
 Issue #1191 was initially scoped as an `imech192` SLURM setup-and-submit smoke for `ml-intern`.
 During the 2026-05-15 audit, the setup check found:
@@ -48,7 +48,7 @@ and repo-local skills to apply the useful ideas directly. A future `ml-intern` s
 reasonable only for a narrow Hugging Face-specific task where its native model, dataset, Space, or
 HF Jobs context provides a clear advantage over the existing workflow.
 
-## Extracted practices to keep
+## Extracted Practices to Keep
 
 The useful `ml-intern` concepts are workflow controls, not the specific executable:
 

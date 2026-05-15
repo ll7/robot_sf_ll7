@@ -13,6 +13,7 @@ DOC = ROOT / "docs" / "benchmark_docker_repro.md"
 CONTEXT_NOTE = ROOT / "docs" / "context" / "issue_1086_docker_reproduction_path.md"
 DOCS_README = ROOT / "docs" / "README.md"
 RELEASE_REPRO_DOC = ROOT / "docs" / "benchmark_release_reproducibility.md"
+WORKFLOW = ROOT / ".github" / "workflows" / "benchmark-docker-repro-smoke.yml"
 
 
 def test_benchmark_repro_dockerfile_is_pinned_and_uses_frozen_uv_sync() -> None:
@@ -74,3 +75,26 @@ def test_benchmark_repro_docs_are_discoverable_and_state_limits() -> None:
     assert "benchmark_docker_repro.md" in docs_readme
     assert "Benchmark Docker Reproduction Path" in release_repro_doc
     assert "Dockerfile: `docker/benchmark-repro.Dockerfile`" in context
+
+
+def test_benchmark_repro_workflow_qualifies_runner_before_smoke() -> None:
+    """Docker CI proof should record runner capabilities before running the smoke."""
+
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    for fragment in [
+        "workflow_dispatch:",
+        "pull_request:",
+        "docker version --format",
+        "docker info --format",
+        "nvidia-smi",
+        "docker run --rm --gpus all",
+        "scripts/repro/run_benchmark_docker_smoke.sh",
+        "runner_qualification.json",
+        "image_inspect.json",
+        "benchmark-docker-repro-smoke",
+    ]:
+        assert fragment in workflow
+
+    assert "docker_daemon_available" in workflow
+    assert "nvidia_docker_available" in workflow

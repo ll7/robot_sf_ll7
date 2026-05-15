@@ -52,6 +52,9 @@ Required checks for this branch:
 * targeted contract tests for the Dockerfile, scripts, docs, and context note
 * direct smoke script execution on the host
 * Docker wrapper execution when Docker is available
+* path-limited GitHub Actions workflow execution via
+  `.github/workflows/benchmark-docker-repro-smoke.yml` for Docker-capable runner qualification
+  and artifact capture
 * full PR readiness after syncing with `origin/main`
 
 ## 2026-05-09 Local Validation
@@ -75,3 +78,14 @@ ERROR: permission denied while trying to connect to the docker API at unix:///va
 The current user is not in the `docker` group for `/var/run/docker.sock`. The Docker build/run
 command remains the required final environment proof on a Docker-capable host or CI runner; this is
 tracked by follow-up issue #1119.
+
+## 2026-05-15 Runner Qualification Follow-up
+
+Issue #1119 adds `.github/workflows/benchmark-docker-repro-smoke.yml`, a path-limited workflow for
+the pinned Docker reproduction path. The workflow records runner OS/architecture, Docker daemon
+version, `docker info`, `nvidia-smi`, and `docker run --gpus all ... nvidia-smi` evidence before it
+runs `scripts/repro/run_benchmark_docker_smoke.sh`.
+
+The expected GitHub-hosted `ubuntu-latest` proof is CPU/headless Docker reproduction evidence. If
+NVIDIA hardware or NVIDIA Container Toolkit support is unavailable, the workflow records that as a
+runner limitation; it must not be reported as GPU or CARLA runtime readiness for #1179.

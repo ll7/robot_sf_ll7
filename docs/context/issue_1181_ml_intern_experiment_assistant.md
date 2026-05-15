@@ -2,11 +2,18 @@
 
 Date: 2026-05-13
 Issue: #1181
+Follow-up: #1191
 
 ## Decision
 
 `huggingface/ml-intern` is a plausible **bounded experiment assistant** for `robot_sf_ll7`, but it
 should **not** become the repository runtime or replace the existing local/HPC/SLURM workflows.
+
+Update on 2026-05-15 for #1191: do **not** spend API budget on an `ml-intern` runtime smoke for the
+current Robot SF workflow. The incremental value of the CLI is small here because the repository
+already has the core execution discipline through Codex skills, context notes, SLURM-aware local
+machine policy, proof-first validation, and GitHub workflow. Treat `ml-intern` runtime execution as
+optional/deferred, while extracting its useful workflow concepts into the Codex-native workflow.
 
 Recommended near-term use:
 
@@ -14,7 +21,7 @@ Recommended near-term use:
 - validation-plan drafting,
 - config/path scaffolding,
 - bounded local smoke execution,
-- and, only after local proof, a separate follow-up issue for one small remote sandbox/HF Job check.
+- and a separate cost/privacy decision before any remote sandbox, HF Job, or paid CLI runtime check.
 
 Not recommended in this issue:
 
@@ -23,6 +30,50 @@ Not recommended in this issue:
 - CARLA/Unreal-heavy runs,
 - SLURM replacement,
 - or any workflow that treats fallback/degraded execution as valid benchmark evidence.
+
+## Issue #1191 outcome: extract concepts, defer runtime smoke
+
+Issue #1191 was initially scoped as an `imech192` SLURM setup-and-submit smoke for `ml-intern`.
+During the 2026-05-15 audit, the setup check found:
+
+- `ml-intern` was not installed in the worktree environment,
+- no explicit model credential or local OpenAI-compatible endpoint was present,
+- a Codex/ChatGPT subscription is not a substitute for `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+  `HF_TOKEN`, or a local endpoint credential,
+- and Robot SF already has the valuable workflow primitives that `ml-intern` would be asked to
+  demonstrate.
+
+Recommendation: keep the `ml-intern` CLI out of the required Robot SF workflow for now. Use Codex
+and repo-local skills to apply the useful ideas directly. A future `ml-intern` smoke remains
+reasonable only for a narrow Hugging Face-specific task where its native model, dataset, Space, or
+HF Jobs context provides a clear advantage over the existing workflow.
+
+## Extracted practices to keep
+
+The useful `ml-intern` concepts are workflow controls, not the specific executable:
+
+1. **No-edit planning pass**
+   - Start uncertain agent tasks by reading the context stack and proposing a bounded proof ladder.
+   - For Robot SF, the first prompt should name the exact files to read and require the assistant to
+     stop after a plan unless execution is explicitly in scope.
+2. **Budgeted agent runs**
+   - Before exploratory work, declare allowed commands, forbidden commands, max iterations or time
+     budget, stop condition, and cost/risk class.
+   - Avoid broad "improve this repo" prompts against paid or trace-uploading external tools.
+3. **Trace/privacy defaults**
+   - Do not paste secrets, unpublished benchmark interpretations, private review text, or raw
+     internal logs into external agent tools.
+   - Disable trace upload where the tool supports it, especially for pre-publication or
+     benchmark-facing work.
+4. **One-smoke-before-campaign rule**
+   - New assistant workflows, remote sandboxes, and experiment runners must prove one small command
+     first, then fail closed or proceed with an explicit follow-up.
+   - A fallback, degraded, or broadened run is not success evidence.
+5. **Optional HF-specific lane**
+   - Reconsider `ml-intern` for Hugging Face-heavy work such as model, dataset, Space, or HF Jobs
+     exploration.
+   - Keep normal Robot SF issue execution on Codex plus repo-local skills unless the HF-specific
+     value is concrete.
 
 ## Why this fits Robot SF
 
@@ -88,7 +139,7 @@ Good first uses:
 - “review a PPO config and suggest bounded dry-run proof commands”
 - “compare two local docs/config surfaces and point out contract mismatches”
 
-Possible later use, but only after local proof:
+Possible later use, but only after local proof and a new cost/privacy decision:
 
 - one remote sandbox smoke for a bounded training or validation command,
 - one explicitly scoped HF Job follow-up with pinned install steps, timeout, hardware, and durable
@@ -125,8 +176,9 @@ The first validation ladder should stay local and bounded:
 4. **One PPO dry-run candidate**
    - `uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml --dry-run --log-level WARNING`
 
-The point of this ladder is not to outsource repository judgment. It is to check whether
-`ml-intern` can stay inside Robot SF's existing contracts while helping with bounded work.
+The point of this ladder is not to outsource repository judgment. For current Robot SF work, this
+ladder is better used as a Codex-native pattern. It should check that any assistant stays inside the
+existing contracts while helping with bounded work.
 
 ## First-use prompt for Robot SF
 
@@ -206,8 +258,15 @@ Observed outcomes:
 
 ## Follow-up boundary
 
-If this note holds up after the local proof ladder, the next acceptable follow-up is **one separate
-issue** for a single remote sandbox/HF Job smoke with:
+The #1191 decision supersedes the earlier default of running a follow-up `ml-intern` smoke. The
+current follow-up boundary is:
+
+- Codex-native extraction is in scope for #1191.
+- `ml-intern` runtime execution is optional/deferred, not required.
+- A future runtime smoke should be opened only when there is a concrete Hugging Face-specific value
+  proposition and an explicit cost/privacy budget decision.
+
+If a future runtime smoke is approved, it should be a separate issue with:
 
 - pinned install/setup steps,
 - explicit hardware/runtime assumptions,
@@ -215,4 +274,4 @@ issue** for a single remote sandbox/HF Job smoke with:
 - durable artifact routing,
 - and an explicit statement that it does not replace the canonical local/SLURM workflow.
 
-Follow-up tracker opened: #1191.
+Follow-up tracker: #1191.

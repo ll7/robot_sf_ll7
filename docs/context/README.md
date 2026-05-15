@@ -80,7 +80,7 @@ knowledge, not every transient iteration detail.
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
-* `ml-intern` bounded assistant assessment:
+* `ml-intern` bounded assistant assessment and #1191 workflow extraction:
   [issue_1181_ml_intern_experiment_assistant.md](issue_1181_ml_intern_experiment_assistant.md)
 * Route-clearance certification: [issue_1105_route_clearance_certification.md](issue_1105_route_clearance_certification.md)
 * Negative route-clearance repair: [issue_1130_negative_route_clearance_repair.md](issue_1130_negative_route_clearance_repair.md)

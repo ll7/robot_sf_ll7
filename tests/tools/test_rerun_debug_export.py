@@ -6,6 +6,11 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from scripts.tools import rerun_debug_export
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXPORT_SCRIPT = REPO_ROOT / "scripts" / "tools" / "rerun_debug_export.py"
@@ -98,3 +103,49 @@ def test_rerun_export_fails_with_actionable_optional_dependency_message(
     assert result.returncode == 2
     assert "Rerun export requires the optional 'rerun-sdk' package" in result.stderr
     assert not output.exists()
+
+
+def test_jsonl_loader_reports_malformed_json_line(tmp_path: Path) -> None:
+    """Malformed JSONL input should fail closed with the offending line number."""
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(_episode_record()) + "\n{oops\n", encoding="utf-8")
+    output = tmp_path / "debug_timeline.json"
+
+    result = _run_export("--source", str(source), "--output", str(output), "--format", "json")
+
+    assert result.returncode == 1
+    assert f"{source}:2 is not valid JSON" in result.stderr
+    assert not output.exists()
+
+
+def test_rerun_export_saves_after_logging_and_disambiguates_missing_episode_ids(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rerun export should save after log calls and avoid episode-id collisions."""
+    source = tmp_path / "episodes.jsonl"
+    output = tmp_path / "debug_timeline.rrd"
+    first = _episode_record()
+    second = _episode_record()
+    first.pop("episode_id")
+    second.pop("episode_id")
+    _write_jsonl(source, [first, second])
+
+    events: list[tuple[str, object]] = []
+
+    fake_rerun = SimpleNamespace(
+        init=lambda *args, **kwargs: events.append(("init", args)),
+        save=lambda path: events.append(("save", path)),
+        set_time_seconds=lambda *args: events.append(("time_seconds", args)),
+        set_time_sequence=lambda *args: events.append(("time_sequence", args)),
+        log=lambda path, payload: events.append(("log", path)),
+        Points2D=lambda points, radii=None: {"points": points, "radii": radii},
+    )
+    monkeypatch.setitem(sys.modules, "rerun", fake_rerun)
+
+    assert rerun_debug_export.write_rerun_debug_export(source=source, output=output) == output
+
+    assert events[-1] == ("save", str(output))
+    logged_paths = [payload for event, payload in events if event == "log"]
+    assert "episode_0/robot" in logged_paths
+    assert "episode_1/robot" in logged_paths

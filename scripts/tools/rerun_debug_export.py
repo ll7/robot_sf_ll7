@@ -20,7 +20,10 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
             line = raw_line.strip()
             if not line:
                 continue
-            payload = json.loads(line)
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"{path}:{line_number} is not valid JSON") from exc
             if not isinstance(payload, dict):
                 raise ValueError(f"{path}:{line_number} is not a JSON object")
             records.append(payload)
@@ -175,9 +178,8 @@ def write_rerun_debug_export(*, source: Path, output: Path) -> Path:
     payload = build_debug_timeline(_load_jsonl(source), source_path=source)
     output.parent.mkdir(parents=True, exist_ok=True)
     rr.init("robot_sf_debug_export", spawn=False)
-    rr.save(str(output))
-    for episode in payload["episodes"]:
-        episode_id = episode["episode_id"] or "episode"
+    for index, episode in enumerate(payload["episodes"]):
+        episode_id = episode["episode_id"] or f"episode_{index}"
         for frame in episode["frames"]:
             step = frame["step"]
             if frame["time_s"] is not None:
@@ -197,6 +199,7 @@ def write_rerun_debug_export(*, source: Path, output: Path) -> Path:
                     f"{episode_id}/pedestrians",
                     rr.Points2D(pedestrian_points, radii=0.15),
                 )
+    rr.save(str(output))
     return output
 
 

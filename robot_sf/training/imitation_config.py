@@ -223,7 +223,7 @@ class BCPretrainingConfig:
         random_seeds: tuple[int, ...] | list[int],
         training_config_path: Path | None = None,
         scenario_config_path: Path | None = None,
-        device: str = "auto",
+        device: str | None = "auto",
     ) -> BCPretrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 

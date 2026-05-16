@@ -1294,6 +1294,13 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 Use the following templates for specific tasks.
 
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
+- YAML issue forms for common backlog lanes:
+  [research validation](../.github/ISSUE_TEMPLATE/research-validation.yml),
+  [test debt](../.github/ISSUE_TEMPLATE/test-debt.yml),
+  [blocked external artifact/runtime](../.github/ISSUE_TEMPLATE/blocked-external-artifact.yml),
+  [execution run](../.github/ISSUE_TEMPLATE/execution-run.yml), and
+  [epic](../.github/ISSUE_TEMPLATE/epic.yml). These supplement the Markdown templates; they do
+  not replace the fallback template.
 - [issue creator skill](../.agents/skills/gh-issue-creator/SKILL.md) - Turn vague prompts into structured issues
 - [issue template auditor skill](../.agents/skills/gh-issue-template-auditor/SKILL.md) - Review and repair underspecified issues
 - [priority assessor skill](../.agents/skills/gh-issue-priority-assessor/SKILL.md) - Review Project #5 priority inputs against the rubric and explain plausibility

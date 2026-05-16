@@ -392,6 +392,9 @@ why a change was made rather than a full issue execution transcript.
   evidence collection path for diagnosing low CPU utilization without launching new jobs.
 * [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial
   scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
+* [Issue #1237 Adversarial Failure Archive](issue_1237_adversarial_failure_archive.md) -
+  compact `adversarial_failure_archive.v1` manifests for deterministic failure grouping and
+  replay pointers without copying raw bundles.
 * [Issue #923 Multi-Ped Adversarial Candidate Schema](issue_923_multi_ped_adversarial_schema.md) -
   schema-only first slice under #870 for scripted multi-pedestrian adversarial candidates.
 * [Issue #936 Multi-Ped Adversarial Overrides](issue_936_multi_ped_adversarial_overrides.md)

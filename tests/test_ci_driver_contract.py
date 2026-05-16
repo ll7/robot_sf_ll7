@@ -6,12 +6,18 @@ import re
 import shlex
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+CI_JOB_TIMEOUTS = {
+    "fast-feedback": 45,
+    "smoke-artifacts": 30,
+    "ci": 5,
+}
 PHASE_PATTERN = re.compile(
     r"(?:^|\s)(?:\./)?scripts/dev/ci_driver\.sh(?P<args>(?:\s+--?[a-z0-9_-]+|\s+[a-z0-9_-]+)*)",
     re.MULTILINE,
@@ -49,10 +55,10 @@ def _extract_workflow_phases(run_text: str) -> set[str]:
 
 def _workflow_phases() -> set[str]:
     """Return CI driver phases referenced by the GitHub Actions workflow."""
-    workflow = yaml.safe_load(_workflow_text())
+    workflow = yaml.safe_load(_workflow_text()) or {}
 
     referenced_phases: set[str] = set()
-    for job in workflow["jobs"].values():
+    for job in workflow.get("jobs", {}).values():
         for step in job.get("steps", []):
             run_text = step.get("run")
             if not run_text:
@@ -79,6 +85,12 @@ def _workflow_job_phases(job_name: str) -> set[str]:
 def _workflow_text() -> str:
     """Return the raw CI workflow text."""
     return CI_WORKFLOW.read_text(encoding="utf-8")
+
+
+def _workflow_jobs() -> dict[str, Any]:
+    """Return the parsed CI workflow jobs mapping."""
+    workflow = yaml.safe_load(_workflow_text()) or {}
+    return workflow.get("jobs", {})
 
 
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
@@ -142,3 +154,12 @@ def test_ci_workflow_does_not_download_apt_fast_at_runtime() -> None:
 
     assert "apt-fast" not in workflow_text
     assert "raw.githubusercontent.com/ilikenwf/apt-fast" not in workflow_text
+
+
+def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:
+    """Keep every CI job bounded against hung GitHub Actions runs."""
+    jobs = _workflow_jobs()
+
+    assert set(CI_JOB_TIMEOUTS) == set(jobs)
+    for job_name, expected_timeout in CI_JOB_TIMEOUTS.items():
+        assert jobs[job_name].get("timeout-minutes") == expected_timeout

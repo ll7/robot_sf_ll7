@@ -17,9 +17,7 @@ PHASE_PATTERN = re.compile(
     r"(?:^|\s)(?:\./)?scripts/dev/ci_driver\.sh(?P<args>(?:\s+--?[a-z0-9_-]+|\s+[a-z0-9_-]+)*)",
     re.MULTILINE,
 )
-USES_PATTERN = re.compile(
-    r"^\s*(?:-\s+)?uses:\s+(?P<value>\S+)(?:\s+#\s*(?P<comment>\S+))?\s*$"
-)
+USES_PATTERN = re.compile(r"^\s*(?:-\s+)?uses:\s+(?P<value>\S+)(?:\s+#\s*(?P<comment>\S+))?\s*$")
 PINNED_ACTION_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 READABLE_ACTION_TAG_PATTERN = re.compile(r"^v[0-9][A-Za-z0-9_.-]*$")
 
@@ -210,4 +208,7 @@ def test_action_ref_parser_handles_list_items_and_local_actions() -> None:
         )
         == []
     )
-    assert _action_ref_failures_for_line(workflow_file, 2, "      - uses: ./.github/actions/cache") == []
+    assert (
+        _action_ref_failures_for_line(workflow_file, 2, "      - uses: ./.github/actions/cache")
+        == []
+    )

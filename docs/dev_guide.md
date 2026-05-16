@@ -197,6 +197,9 @@ branch adds or edits context notes, evidence bundles, or other proof-heavy docs 
 checker is intentionally conservative: it only flags high-confidence issues such as missing
 `docs/context/README.md` links for new top-level context notes, tracked evidence files that still
 contain absolute local paths, and tracked evidence that links to ignored `output/` artifacts.
+When issue or PR text needs to classify proof strength, use the
+[artifact evidence vocabulary](context/artifact_evidence_vocabulary.md) so local `output/` paths are
+not promoted into durable benchmark or paper-facing claims.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 

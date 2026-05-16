@@ -84,7 +84,7 @@ For guidance on choosing and validating pedestrian densities (units, canonical t
 
 ## Ergonomic Environment Factory Options (Feature 130)
 
-Environment creation now supports structured option objects while retaining legacy convenience flags.
+Environment creation now uses explicit parameters and structured option objects.
 
 ### Quick Examples
 ```python
@@ -108,13 +108,15 @@ env = make_robot_env(render_options=render_opts, recording_options=rec_opts, deb
 img_env = make_image_robot_env(render_options=RenderOptions(max_fps_override=24))
 ```
 
-### Precedence & Deprecation
+### Precedence
 - `record_video=True` overrides `RecordingOptions(record=False)` (warning emitted).
 - `video_fps` maps to `RenderOptions.max_fps_override` unless that field already set.
-- Legacy kwargs (`fps`, `video_output_path`) are mapped with warnings; unknown legacy kwargs raise unless `ROBOT_SF_FACTORY_LEGACY=1`.
+- Legacy catch-all kwargs were retired in Robot SF 2.0. Use `video_fps=` or
+  `RenderOptions(max_fps_override=...)` instead of `fps=`, and use `video_path=` or
+  `RecordingOptions(video_path=...)` instead of `video_output_path=`.
 
 ### Logging
-Each factory emits an INFO creation line with effective recording and fps settings plus WARNING lines for any deprecation or precedence events.
+Each factory emits an INFO creation line with effective recording and fps settings plus WARNING lines for precedence events.
 
 ### Performance Guard
 Test `tests/perf/test_factory_creation_perf.py` ensures mean creation time remains within the regression budget relative to `results/factory_perf_baseline.json`.

@@ -49,13 +49,13 @@ ped_env = make_pedestrian_env(robot_model=policy, recording_options=RecordingOpt
 ## Migration Notes
 | Legacy Param | New Form | Action |
 |--------------|----------|--------|
-| record_video | RecordingOptions.record | Direct mapping |
-| video_path / video_output_path | RecordingOptions.video_path | Rename |
-| fps | RenderOptions.max_fps_override | Rename + scope |
+| record_video | `record_video=` or `RecordingOptions.record` | Convenience flag still supported |
+| video_output_path | `video_path=` or `RecordingOptions.video_path` | Replace legacy name |
+| fps | `video_fps=` or `RenderOptions.max_fps_override` | Replace legacy name |
 
 ## Warnings & Diagnostics
 - If `record_video=True` and `debug=False` → recording still works (headless) with warning clarifying reduced overlay availability.
-- Unknown legacy kw triggers error unless `ROBOT_SF_FACTORY_LEGACY=1` set (then warning + attempt mapping).
+- Unsupported legacy kwargs raise `TypeError` from the explicit factory signature in Robot SF 2.0 and newer.
 
 ## Performance Considerations
 - Option object construction negligible (<0.1 ms typical); monitored in performance validation.

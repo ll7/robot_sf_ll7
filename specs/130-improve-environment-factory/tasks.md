@@ -44,16 +44,16 @@ Deps: T005.
 Accept: Prior failing test passes; type hints clean.
 
 ### Deprecation & Normalization Layer
-**T007 [X]**: Create `robot_sf/gym_env/_factory_compat.py` implementing `DeprecationMap` and function `apply_legacy_kwargs(kwargs, strict: bool)` returning (normalized_kwargs, warnings_emitted).  
+**T007 [X, superseded in Robot SF 2.0]**: Create the temporary factory compatibility mapper for the pre-2.0 migration window.
 Deps: T006, T003.  
 Accept: Unit tests (next task) can import and manipulate.
 
-**T008 [X]**: Add tests `tests/factories/test_deprecation_mapping.py` covering: mapped kw, unmapped strict error, permissive mode via env var, warning messages (Loguru capture).  
+**T008 [X, superseded in Robot SF 2.0]**: Add temporary tests for the pre-2.0 deprecation mapper.
 Deps: T007.  
 Accept: Tests fail until factories integrate layer.
 
 ### Factory Refactor (Incremental)
-**T009 [X]**: Refactor `environment_factory.py` to accept new `render_options` / `recording_options` parameters (without yet removing old paths); integrate call to `apply_legacy_kwargs`.  
+**T009 [X, superseded in Robot SF 2.0]**: Refactor `environment_factory.py` to accept new `render_options` / `recording_options` parameters while the old paths were still present.
 Deps: T008.  
 Accept: Code compiles; legacy usage still works; new params accepted (no behavior change yet).
 
@@ -123,7 +123,7 @@ Deps: T010.
 Deps: T014.
 
 ### Remediation & Alignment (Post Analysis)
-**T029 (CRITICAL)**: Reinstate legacy kwargs shim usage in all public factories (`apply_legacy_kwargs` invocation early). Honor env vars `ROBOT_SF_FACTORY_LEGACY` (permissive warn) & `ROBOT_SF_FACTORY_STRICT` (strict error). Extend tests for mapped rename, unmapped permissive warning, strict error.  
+**T029 (CRITICAL, superseded in Robot SF 2.0)**: Reinstate legacy kwargs shim usage in all public factories. This was temporary migration work and was removed after the 2.0 migration window.
 Deps: T008, T011.  
 Accept: Tests assert correct warnings/errors; legacy params mapped.
 

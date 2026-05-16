@@ -10,8 +10,8 @@ purpose: Map Functional Requirements (FR-001..FR-021) to implementation & tests.
 | FR-002 | Diagnostics & doc updates | logging in factories, docstrings | logging diagnostics test | Done |
 | FR-003 | Option objects | `options.py` dataclasses | option API test | Done |
 | FR-004 | Incompatible auto-adjust (record precedence) | `_normalize_factory_inputs` | normalization test | Done |
-| FR-005 | Legacy mapping layer | `_factory_compat.apply_legacy_kwargs` | deprecation mapping test | Done |
-| FR-006 | Legacy permissive/strict env vars | env var checks in compat | deprecation mapping strict/permissive | Done |
+| FR-005 | Legacy mapping layer | Superseded in Robot SF 2.0 | retired legacy kw rejection test | Done |
+| FR-006 | Legacy permissive/strict env vars | Superseded in Robot SF 2.0 | explicit signature TypeError test | Done |
 | FR-007 | Signature stability guard | snapshot test | signature snapshot | Done |
 | FR-008 | Deterministic seeding | `_apply_global_seed` + seed param | seed determinism test | Done |
 | FR-009 | Recording path intact | recording options + frame test | frame recording test | Done |

@@ -24,7 +24,7 @@ As a developer integrating Robot SF environments, I want clear, discoverable fac
 - What happens when both `debug=True` and `headless` environment variables are set? → Should still create offscreen rendering but warn if contradictory.
 -- What if `record_video=True` and no `video_path` provided? → Frames buffered; logging clarifies missing explicit path (documented).
 -- What if a user disables the cap via environment variable and captures >100k frames? → Out-of-scope here; note memory implication; unchanged.
--- How are unknown legacy kwargs handled? → Raise in strict mode; warn + map (when possible) in permissive mode toggled by `ROBOT_SF_FACTORY_LEGACY=1` / `ROBOT_SF_FACTORY_STRICT=1`.
+-- How are unknown legacy kwargs handled? → Superseded in Robot SF 2.0: public factories no longer expose catch-all kwargs, so unsupported keywords fail at Python's signature boundary.
 -- Should factories validate config object types strictly (e.g., raising TypeError) or coerce? → Strict type expectation; rely on Python exceptions for incorrect types (no implicit coercion).
 -- Multi-robot or pedestrian-specific options: Keep unified option dataclasses for now (avoid premature specialization; revisit if >2 ped-only flags emerge).
 
@@ -35,15 +35,15 @@ As a developer integrating Robot SF environments, I want clear, discoverable fac
 - **FR-002**: Each factory MUST include a comprehensive docstring with a one-line summary, param section, return description, and notes on side effects (e.g., enabling rendering subsystem).
 - **FR-003**: System MUST provide structured auxiliary dataclasses or TypedDicts (e.g., `RenderOptions`, `RecordingOptions`) for secondary/advanced toggles to avoid bloating signatures beyond ~8 parameters.
 - **FR-004**: Factories MUST validate incompatible inputs (e.g., `record_video=True` + `debug=False`) and emit a warning or raise depending on severity (policy: warning with remediation guidance).
-- **FR-005**: A deprecation layer MUST capture legacy `**kwargs` usage, mapping known prior keys to new explicit parameters with a warning referencing migration docs.
-- **FR-006**: Unknown legacy kwargs MUST trigger a clear error listing accepted parameters and linking to migration docs unless permissive mode is enabled (`ROBOT_SF_FACTORY_LEGACY=1`). Strict enforcement when `ROBOT_SF_FACTORY_STRICT=1`.
+- **FR-005**: Superseded in Robot SF 2.0. The temporary deprecation layer was removed after the migration window; use explicit factory parameters.
+- **FR-006**: Superseded in Robot SF 2.0. Unsupported keywords now raise `TypeError` from the explicit factory signatures.
 - **FR-007**: IDE auto-completion MUST show parameter names deterministically (verified by a signature test similar to `test_environment_factory_signatures`).
 - **FR-008**: All factories MUST accept an optional `seed` that, if provided, seeds environment RNG deterministically (document current seeding model and limitations).
 - **FR-009**: Recording-related parameters MUST integrate with rendering so that enabling recording always results in valid frame capture conditions (internally auto-enabling required subsystems where feasible).
 - **FR-010**: Docstrings MUST describe performance implications for enabling image observations or video recording.
 - **FR-011**: Migration guide MUST be added under `docs/dev/issues/130-improve-environment-factory/` with before→after examples.
 - **FR-012**: Example snippets MUST be added or updated in `examples/` demonstrating: basic env, image env, recording, pedestrian env, multi-robot (if supported).
-- **FR-013**: Tests MUST cover: signature stability, deprecation warnings on legacy kwargs, validation of incompatible combinations, and successful creation across all factory variants.
+- **FR-013**: Tests MUST cover: signature stability, rejection of retired legacy kwargs, validation of incompatible combinations, and successful creation across all factory variants.
 - **FR-014**: Factories MUST remain pure (no global mutable side-effects) apart from logging and necessary subsystem init.
 - **FR-015**: Logging MUST use Loguru and follow Principle XII (no stray prints) with INFO-level creation message and WARNING-level diagnostics.
 - **FR-016**: Type hints MUST be complete (no untyped public function parameters) and pass existing type-check stage (no new errors introduced).
@@ -84,4 +84,3 @@ All previous ambiguities resolved; this spec reflects final decisions for Featur
 - [x] Requirements generated (updated post-decisions)
 - [x] Entities identified
 - [x] Review checklist passed
-

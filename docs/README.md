@@ -542,14 +542,14 @@ image_env = make_image_robot_env(debug=True)
 ped_env = make_pedestrian_env(robot_model=model, debug=True)
 ```
 
-### Legacy Pattern (Still Supported)
+### Legacy Class Pattern
 
 #### Environment Factory Ergonomics Migration (Feature 130)
 
-See the new migration guide: [Environment Factory Migration](./dev/issues/130-improve-environment-factory/migration.md). Includes before/after examples, seeding, legacy env vars ( `ROBOT_SF_FACTORY_LEGACY` , `ROBOT_SF_FACTORY_STRICT` ), and precedence rules. Quickstart examples: `specs/130-improve-environment-factory/quickstart.md` .
+See the migration guide: [Environment Factory Migration](./dev/issues/130-improve-environment-factory/migration.md). Includes before/after examples, seeding, explicit replacements for retired legacy kwargs, and precedence rules. Quickstart examples: `specs/130-improve-environment-factory/quickstart.md` .
 
 ```python
-# Traditional approach - still works for backward compatibility
+# Direct class construction remains available when needed
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.env_config import EnvSettings
 

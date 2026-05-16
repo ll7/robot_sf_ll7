@@ -38,8 +38,8 @@
 ## Clarifications (Session 1 – 2025-09-23)
 | Item | Question | Decision | Rationale | Impact |
 |------|----------|----------|-----------|--------|
-| Legacy kwargs policy (FR-005/006) | Strict error vs permissive mapping? | Reinstate compatibility shim with mapping + WARNING; strict errors only when `ROBOT_SF_FACTORY_STRICT=1`. | Constitution VII (backward compatibility). | Re-wire factories to call `_factory_compat.apply_legacy_kwargs`. |
-| Permissive toggle name | Which env var? | `ROBOT_SF_FACTORY_LEGACY=1` enables legacy acceptance; `ROBOT_SF_FACTORY_STRICT=1` forces error on unknown unmapped keys. | Explicit, mirrors existing env style. | Add to spec + migration guide. |
+| Legacy kwargs policy (FR-005/006) | Strict error vs permissive mapping? | Superseded in Robot SF 2.0: remove the temporary compatibility shim and rely on explicit signatures. | Migration window closed. | Unsupported keywords now raise `TypeError`. |
+| Permissive toggle name | Which env var? | Superseded in Robot SF 2.0. | Legacy env-var shim removed. | Migration guide lists explicit replacements. |
 | Validation severity (FR-004) | Warning vs exception? | Use WARNING + auto-adjust (e.g., auto-enable debug when recording) except type errors. | Ergonomics over friction. | Ensure tests assert WARN + corrected state. |
 | Seed support (FR-008) | What gets seeded? | Add `seed: Optional[int]`; seed Python `random`, NumPy, env RNG; store `env.unwrapped.seed_applied`. | Determinism (Principle IV). | Add implementation + test. |
 | `max_episode_steps` mention | Implement now? | DEFER (remove from FR scope). | Prevent scope creep. | Mark deferred in spec. |
@@ -161,7 +161,7 @@ Will append remediation tasks (T029+). Avoid re-indexing existing tasks to prese
 ## Phase 3+: Implementation & Remediation Roadmap
 | New ID | Title | Depends | Severity | Description |
 |--------|-------|---------|----------|-------------|
-| T029 | Reinstate legacy shim integration | T011 | CRITICAL | Re-wire factories to call `apply_legacy_kwargs`; add tests for mapped + unknown keys (warn vs strict). |
+| T029 | Reinstate legacy shim integration | T011 | CRITICAL, superseded in Robot SF 2.0 | Temporary migration shim removed after the 2.0 window; public signatures now reject unsupported keywords. |
 | T030 | Introduce `seed` parameter + deterministic test | T016 | CRITICAL | Add `seed` to all factories; propagate to RNGs; test identical first obs when same seed. |
 | T031 | Tighten performance guard to 5% | T015 | HIGH | Adjust test constant; update baseline notes & add perf_diff.md. |
 | T032 | Extend docstrings & perf notes | T014 | HIGH | Full parameter docs + precedence explanation + performance note. |

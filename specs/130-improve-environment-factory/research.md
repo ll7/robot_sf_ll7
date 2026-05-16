@@ -39,7 +39,7 @@ Pros: Extensibility; Cons: Adds indirection, not required for current scope.
 Status: Rejected (YAGNI).
 
 ## 6. Preliminary Decisions (Proposed)
-1. Strict-by-default unknown kw error; override with env var `ROBOT_SF_FACTORY_LEGACY=1` enabling permissive mapping + warnings.
+1. Superseded in Robot SF 2.0: public factories no longer accept catch-all kwargs, so unsupported keywords raise `TypeError` and callers should use explicit replacements.
 2. Incompatible combos produce warning and auto-normalization where safe (e.g., enabling minimal rendering path for recording); escalate to error only if impossible to normalize.
 3. Multi-robot specialization deferred; keep pedestrian-specific flags inside existing config and generic render options.
 4. Option dataclasses use `@dataclass(slots=True, frozen=False)` for performance and mutability clarity.

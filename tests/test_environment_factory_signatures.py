@@ -9,6 +9,7 @@ import inspect
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from robot_sf.gym_env import crowd_sim_env
 from robot_sf.gym_env import environment_factory as environment_factory_module
@@ -36,6 +37,13 @@ def _param_names(func):
     return [p.name for p in inspect.signature(func).parameters.values()]
 
 
+def _assert_no_var_keyword(func):
+    """Assert public factory signatures do not expose catch-all keyword params."""
+    assert inspect.Parameter.VAR_KEYWORD not in [
+        p.kind for p in inspect.signature(func).parameters.values()
+    ]
+
+
 def test_make_robot_env_signature_explicit():
     """Robot env factory keeps the reviewed explicit public parameters."""
     params = _param_names(make_robot_env)
@@ -43,17 +51,7 @@ def test_make_robot_env_signature_explicit():
     assert "reward_func" in params
     assert "debug" in params
     assert "record_video" in params
-    # No unbounded **kwargs at the end
-    # Ensure no **kwargs parameter slipped back in (VAR_KEYWORD kind absent)
-    # Transitional note: **kwargs retained during ergonomic migration for legacy passthrough.
-    # TODO: Remove legacy **kwargs support and re-enable assertion prohibiting
-    #       VAR_KEYWORD after the v2.0.0 release (see issue #1234).
-    #       After v2.0.0, uncomment the following assertion to enforce strict
-    #       signature hygiene (no catch-all passthrough):
-    # assert inspect.Parameter.VAR_KEYWORD not in [
-    #     p.kind for p in inspect.signature(make_robot_env).parameters.values()
-    # ]
-    _ = [p.kind for p in inspect.signature(make_robot_env).parameters.values()]
+    _assert_no_var_keyword(make_robot_env)
 
 
 def test_make_image_robot_env_signature_explicit():
@@ -61,12 +59,28 @@ def test_make_image_robot_env_signature_explicit():
     params = _param_names(make_image_robot_env)
     assert "config" in params
     assert "debug" in params
+    _assert_no_var_keyword(make_image_robot_env)
 
 
 def test_make_pedestrian_env_signature_explicit():
     """Pedestrian env factory exposes config and robot-model parameters."""
     params = _param_names(make_pedestrian_env)
     assert "config" in params and "robot_model" in params
+    _assert_no_var_keyword(make_pedestrian_env)
+
+
+@pytest.mark.parametrize(
+    "factory,kwargs",
+    [
+        (make_robot_env, {"fps": 30}),
+        (make_image_robot_env, {"video_output_path": "legacy.mp4"}),
+        (make_pedestrian_env, {"fps": 30}),
+    ],
+)
+def test_public_factories_reject_retired_legacy_kwargs(factory, kwargs):
+    """Retired catch-all factory kwargs should fail at the Python signature boundary."""
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        factory(**kwargs)
 
 
 def test_make_multi_robot_env_signature_explicit():

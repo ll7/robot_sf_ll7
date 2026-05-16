@@ -18,10 +18,16 @@ from robot_sf.benchmark.paper_results_handoff import (
 )
 from scripts.tools import paper_results_handoff
 
-_RELEASE_METADATA_PATH = Path(
-    "docs/experiments/publication/20260414_benchmark_release_0_0_2/release_metadata.json"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_RELEASE_METADATA_PATH = (
+    _REPO_ROOT
+    / "docs"
+    / "experiments"
+    / "publication"
+    / "20260414_benchmark_release_0_0_2"
+    / "release_metadata.json"
 )
-_RELEASE_OUTPUT_DIR = Path("output/benchmark_release_0_0_2")
+_RELEASE_OUTPUT_DIR = _REPO_ROOT / "output" / "benchmark_release_0_0_2"
 _PAPER_HANDOFF_BUNDLE_ENV = "ROBOT_SF_PAPER_HANDOFF_BUNDLE"
 
 

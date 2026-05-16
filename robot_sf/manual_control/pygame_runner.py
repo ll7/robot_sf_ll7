@@ -330,9 +330,11 @@ class ManualPygameRunner:
             os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
             os.environ.setdefault("MPLBACKEND", "Agg")
         if self._pygame is not None:
+            _init_pygame(self._pygame)
             return self._pygame
         import pygame  # noqa: PLC0415
 
+        _init_pygame(pygame)
         return pygame
 
     def _make_env(self, runtime_config: ManualControlRuntimeConfig) -> Any:
@@ -721,6 +723,13 @@ def _make_frame_clock(pygame: Any) -> Any | None:
     if not callable(clock_factory):
         return None
     return clock_factory()
+
+
+def _init_pygame(pygame: Any) -> None:
+    """Initialize Pygame subsystems when the module exposes an init hook."""
+    init = getattr(pygame, "init", None)
+    if callable(init):
+        init()
 
 
 def _tick_frame_clock(clock: Any | None, target_fps: float) -> None:

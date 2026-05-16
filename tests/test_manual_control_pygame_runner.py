@@ -134,6 +134,14 @@ class _OverlayPygame(_FakePygame):
     time = _FakeTime
 
 
+class _InitPygame(_FakePygame):
+    init_called = False
+
+    @classmethod
+    def init(cls) -> None:
+        cls.init_called = True
+
+
 def test_pygame_runner_writes_training_records_and_manifest(tmp_path):
     """Runner should write append-only records and a baseline-bearing manifest."""
     env = _FakeEnv(terminal_after=2, success=True)
@@ -251,6 +259,25 @@ def test_pygame_runner_countdown_render_overlay_and_keyup(tmp_path):
     assert _FakeDisplay.updates >= 1
     assert _FakeClock.ticks
     assert all(target_fps == settings.target_fps for target_fps in _FakeClock.ticks)
+
+
+def test_pygame_runner_initializes_pygame_for_headless_event_reads(tmp_path):
+    """Headless CLI-style runs should initialize Pygame before reading events."""
+    _InitPygame.init_called = False
+    settings = ManualPygameRunnerSettings(
+        scenario_id="scenario-init",
+        seed=15,
+        policy_to_beat="policy-init",
+        policy_to_beat_source="explicit-test",
+        output_dir=tmp_path,
+        headless=True,
+        render=False,
+    )
+
+    pygame = ManualPygameRunner(settings, pygame_module=_InitPygame)._load_pygame()
+
+    assert pygame is _InitPygame
+    assert _InitPygame.init_called is True
 
 
 def test_pygame_runner_quit_event_writes_empty_manifest(tmp_path):

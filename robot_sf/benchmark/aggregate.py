@@ -153,6 +153,54 @@ def _resolve_group_key(
     )
 
 
+def _flatten_pedestrian_impact_block(base: dict[str, Any], ped_impact: Any) -> None:
+    """Flatten schema-backed pedestrian-impact reductions into ``base``."""
+    if not isinstance(ped_impact, dict):
+        return
+    reductions = ped_impact.get("canonical_reductions") or {}
+    if isinstance(reductions, dict):
+        for source_key, target_key in (
+            ("accel_delta_mean", "ped_impact_accel_delta_mean"),
+            ("accel_delta_median", "ped_impact_accel_delta_median"),
+            ("accel_delta_valid_pedestrians", "ped_impact_accel_delta_valid"),
+            ("turn_rate_delta_mean", "ped_impact_turn_rate_delta_mean"),
+            ("turn_rate_delta_median", "ped_impact_turn_rate_delta_median"),
+            ("turn_rate_delta_valid_pedestrians", "ped_impact_turn_rate_delta_valid"),
+        ):
+            base[target_key] = reductions.get(source_key)
+    sample_counts = ped_impact.get("sample_counts") or {}
+    if isinstance(sample_counts, dict):
+        for source_key, target_key in (
+            ("pedestrians", "ped_impact_ped_count"),
+            ("near_samples", "ped_impact_near_samples"),
+            ("far_samples", "ped_impact_far_samples"),
+            ("near_sample_frac", "ped_impact_near_sample_frac"),
+        ):
+            base[target_key] = sample_counts.get(source_key)
+
+
+def _flatten_social_acceptability_block(base: dict[str, Any], social_acceptability: Any) -> None:
+    """Flatten schema-backed social-acceptability pilot reductions into ``base``."""
+    if not isinstance(social_acceptability, dict):
+        return
+    base["social_proxemic_available"] = social_acceptability.get("available")
+    parameters = social_acceptability.get("parameters") or {}
+    if isinstance(parameters, dict):
+        base["social_proxemic_radius_m"] = parameters.get("proxemic_radius_m")
+    sample_counts = social_acceptability.get("sample_counts") or {}
+    if isinstance(sample_counts, dict):
+        base["social_proxemic_ped_count"] = sample_counts.get("pedestrians")
+        base["social_proxemic_intrusion_steps"] = sample_counts.get("timesteps")
+    proxemic = social_acceptability.get("proxemic") or {}
+    if isinstance(proxemic, dict):
+        for source_key, target_key in (
+            ("intrusion_frac", "social_proxemic_intrusion_frac"),
+            ("intrusion_area_m_s", "social_proxemic_intrusion_area_m_s"),
+            ("min_clearance_m", "social_proxemic_min_clearance_m"),
+        ):
+            base[target_key] = proxemic.get(source_key)
+
+
 def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     """Flatten metrics dict into a flat per-episode row.
 
@@ -167,6 +215,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     metrics = dict(rec.get("metrics") or {})
     fq = metrics.pop("force_quantiles", {}) or {}
     ped_impact = metrics.pop("pedestrian_impact", {}) or {}
+    social_acceptability = metrics.pop("social_acceptability", {}) or {}
     inter_robot = metrics.pop("inter_robot", {}) or {}
     # Flatten known force quantiles
     for qk in ("q50", "q90", "q95"):
@@ -174,27 +223,8 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
         base[key] = fq.get(qk)
     # Flatten the schema-backed pedestrian-impact block for records that do not also carry
     # legacy flat ped_impact_* keys.
-    if isinstance(ped_impact, dict):
-        reductions = ped_impact.get("canonical_reductions") or {}
-        if isinstance(reductions, dict):
-            for source_key, target_key in (
-                ("accel_delta_mean", "ped_impact_accel_delta_mean"),
-                ("accel_delta_median", "ped_impact_accel_delta_median"),
-                ("accel_delta_valid_pedestrians", "ped_impact_accel_delta_valid"),
-                ("turn_rate_delta_mean", "ped_impact_turn_rate_delta_mean"),
-                ("turn_rate_delta_median", "ped_impact_turn_rate_delta_median"),
-                ("turn_rate_delta_valid_pedestrians", "ped_impact_turn_rate_delta_valid"),
-            ):
-                base[target_key] = reductions.get(source_key)
-        sample_counts = ped_impact.get("sample_counts") or {}
-        if isinstance(sample_counts, dict):
-            for source_key, target_key in (
-                ("pedestrians", "ped_impact_ped_count"),
-                ("near_samples", "ped_impact_near_samples"),
-                ("far_samples", "ped_impact_far_samples"),
-                ("near_sample_frac", "ped_impact_near_sample_frac"),
-            ):
-                base[target_key] = sample_counts.get(source_key)
+    _flatten_pedestrian_impact_block(base, ped_impact)
+    _flatten_social_acceptability_block(base, social_acceptability)
     if isinstance(inter_robot, dict):
         for key, value in inter_robot.items():
             base[str(key)] = value

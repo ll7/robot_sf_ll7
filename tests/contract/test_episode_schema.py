@@ -118,6 +118,58 @@ def test_episode_schema_validates_pedestrian_impact_block() -> None:
         jsonschema.validate(instance=record, schema=schema)
 
 
+def test_episode_schema_validates_social_acceptability_block() -> None:
+    """The social-acceptability pilot block should be schema-backed when present."""
+    schema = _load_schema()
+    record = {
+        "episode_id": "e_social_acceptability",
+        "version": "v1",
+        "scenario_id": "sc_social_acceptability",
+        "seed": 123,
+        "metrics": {
+            "collisions": 0,
+            "near_misses": 0,
+            "social_acceptability": {
+                "schema_version": "social-acceptability-pilot.v1",
+                "status": "exploratory",
+                "parameters": {"proxemic_radius_m": 1.2},
+                "units": {
+                    "clearance": "m",
+                    "intrusion_area": "m*s",
+                    "intrusion_fraction": "fraction",
+                    "sample_counts": "count",
+                },
+                "available": True,
+                "sample_counts": {"pedestrians": 1, "timesteps": 2},
+                "proxemic": {
+                    "intrusion_steps": 2,
+                    "intrusion_frac": 0.5,
+                    "intrusion_area_m_s": 0.9,
+                    "min_clearance_m": 0.1,
+                },
+                "interpretation": "Exploratory trajectory-only proxemic proxy.",
+            },
+        },
+        "termination_reason": "max_steps",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        "integrity": {"contradictions": []},
+    }
+
+    jsonschema.validate(instance=record, schema=schema)
+    record["metrics"]["social_acceptability"]["schema_version"] = "wrong"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=record, schema=schema)
+
+    record["metrics"]["social_acceptability"]["schema_version"] = "social-acceptability-pilot.v1"
+    record["metrics"]["social_acceptability"]["sample_counts"]["pedestrians"] = 1.5
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=record, schema=schema)
+
+
 def test_episode_schema_rejects_collision_event_without_collision_metric() -> None:
     """New v1 records should not report collision_event=true with zero collision count."""
     schema = _load_schema()

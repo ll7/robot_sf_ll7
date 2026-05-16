@@ -29,7 +29,6 @@ REQUIRED_RECORD_FIELDS = (
 )
 VALID_EVIDENCE_GRADES = {"proposal", "inferred", "observed"}
 VALID_PAPER_RELEVANCE = {"none", "exploratory", "paper_candidate", "paper_facing"}
-LOCAL_OUTPUT_PREFIXES = ("output/", "./output/")
 
 
 def validate_registry(registry_path: Path) -> list[str]:
@@ -153,8 +152,10 @@ def _iter_artifact_items(value: Any) -> Iterable[Mapping[str, Any]]:
 
 def _is_local_output_path(path: str) -> bool:
     """Return whether a path points at the disposable worktree output root."""
-    normalized = path.replace("\\", "/")
-    return normalized.startswith(LOCAL_OUTPUT_PREFIXES)
+    parts = Path(path).parts
+    if parts and parts[0] == ".":
+        parts = parts[1:]
+    return bool(parts and parts[0] == "output")
 
 
 def _is_missing(value: Any) -> bool:

@@ -16,7 +16,8 @@ def _write_yaml(path: Path, text: str) -> None:
 
 def test_checked_in_experiment_registry_validates() -> None:
     """The tracked experiment registry should satisfy the workflow contract."""
-    errors = validate_registry(Path("experiments/registry.yaml"))
+    repo_root = Path(__file__).parents[2]
+    errors = validate_registry(repo_root / "experiments/registry.yaml")
 
     assert errors == []
 

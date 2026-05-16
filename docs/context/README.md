@@ -90,6 +90,8 @@ knowledge, not every transient iteration detail.
   [open_issues_maintainer_input_triage.md](open_issues_maintainer_input_triage.md)
 * Open-issues PR split strategy:
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
+* Issue #1240 scenario coverage entropy:
+  [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1255 open-issue dependency graph:
   [issue_1255_open_issue_dependency_graph.md](issue_1255_open_issue_dependency_graph.md)
 * Artifact evidence vocabulary:

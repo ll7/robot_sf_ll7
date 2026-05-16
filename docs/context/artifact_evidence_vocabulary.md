@@ -10,8 +10,8 @@ handoffs.
 - [AGENTS.md](../../AGENTS.md) durable artifact and proof-first validation rules.
 - [docs/dev_guide.md](../dev_guide.md) artifact-root and PR-readiness guidance.
 - [docs/context/evidence/README.md](evidence/README.md) tracked evidence-bundle policy.
-- [issue #691 benchmark fallback policy](issue_691_benchmark_fallback_policy.md).
-- [issue #1062 paper evidence archive pointer](issue_1062_paper_evidence_archive.md).
+- [Issue #691 Benchmark Fallback Policy](issue_691_benchmark_fallback_policy.md).
+- [Issue #1062 Paper Evidence Archive Pointer](issue_1062_paper_evidence_archive.md).
 
 ## Purpose
 
@@ -82,17 +82,17 @@ coverage, temporary exports, videos, and caches, but it is not a durable depende
 
 ## Current Issue-Lane Examples
 
-- [#1243](https://github.com/ll7/robot_sf_ll7/issues/1243) experiment registry:
+- [Issue #1243 Experiment Registry](https://github.com/ll7/robot_sf_ll7/issues/1243):
   registry entries may record exploratory output and local scratch paths, but any registry entry
   used to justify a benchmark or paper-facing claim must reference durable evidence, a release
   artifact, or an external artifact pointer.
-- [#1245](https://github.com/ll7/robot_sf_ll7/issues/1245) BenchmarkClaim artifacts:
+- [Issue #1245 BenchmarkClaim Artifacts](https://github.com/ll7/robot_sf_ll7/issues/1245):
   claim payloads should use benchmark-claim and paper-facing-claim categories and reject local-only
   `output/` paths as sufficient evidence.
-- [#1231](https://github.com/ll7/robot_sf_ll7/issues/1231) paper handoff fixture:
+- [Issue #1231 Paper Handoff Fixture](https://github.com/ll7/robot_sf_ll7/issues/1231):
   the release archive/checksum is the release artifact; the hydrated `output/...` extraction is a
   local cache for tests, not the durable source.
-- [#1108](https://github.com/ll7/robot_sf_ll7/issues/1108) BC warm-start PPO execution:
+- [Issue #1108 BC Warm-Start PPO Execution](https://github.com/ll7/robot_sf_ll7/issues/1108):
   SLURM logs, W&B run folders, and local `output/` paths are execution-run or exploratory evidence
   until a manifest, model registry entry, release artifact, or tracked evidence copy is published.
 - CARLA runtime qualification issues

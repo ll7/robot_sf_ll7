@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
+from loguru import logger
 
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
@@ -2754,6 +2755,75 @@ def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     manifest_payload = prepared["manifest_payload"]
     assert manifest_payload["route_clearance_warning_count"] == 1
     assert manifest_payload["route_clearance_warnings"] == warnings
+
+
+def test_prepare_campaign_preflight_warns_when_route_clearance_map_parse_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Map parse failures should be visible without DEBUG logging."""
+    broken_map_path = tmp_path / "broken.svg"
+    broken_map_path.write_text("<svg><path d='broken'/></svg>\n", encoding="utf-8")
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "\n".join(
+            [
+                "- name: parse_failure_case",
+                f"  map_file: {broken_map_path.as_posix()}",
+                "  seeds: [111]",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: parse_visibility_contract",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def fail_convert_map(_path: str) -> object:
+        raise ValueError("invalid SVG path data")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.convert_map",
+        fail_convert_map,
+    )
+    captured: list[str] = []
+
+    def capture_message(message: object) -> None:
+        captured.append(str(message))
+
+    handle = logger.add(capture_message, level="WARNING", format="{level}:{message}")
+    try:
+        cfg = load_campaign_config(config_path)
+        prepared = prepare_campaign_preflight(
+            cfg,
+            output_root=tmp_path / "out",
+            label="parse",
+        )
+    finally:
+        logger.remove(handle)
+
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+    assert validate_payload["route_clearance_warning_count"] == 0
+
+    log_text = "\n".join(captured)
+    assert "WARNING:" in log_text
+    assert "parse_failure_case" in log_text
+    assert broken_map_path.as_posix() in log_text
+    assert "invalid SVG path data" in log_text
 
 
 def test_prepare_campaign_preflight_attaches_route_clearance_certifications(

@@ -12,3 +12,5 @@ bc_epochs: 20
 batch_size: 64
 learning_rate: 0.0003
 random_seeds: [111, 112, 113]
+# Use accelerators when available; set to "cpu" for deterministic/resource-constrained runs.
+device: auto

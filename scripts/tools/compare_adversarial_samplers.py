@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,6 +13,7 @@ from robot_sf.adversarial.bundle import write_trajectory_csv
 from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, SearchConfig
 from robot_sf.adversarial.samplers import (
+    CandidateSampler,
     CoordinateRefinementSampler,
     OptunaCandidateSampler,
     RandomCandidateSampler,
@@ -39,7 +40,7 @@ class SamplerComparisonRow:
     num_failed_evaluations: int
 
 
-def build_sampler(name: str, search_space: SearchSpaceConfig, *, seed: int):
+def build_sampler(name: str, search_space: SearchSpaceConfig, *, seed: int) -> CandidateSampler:
     """Build a named adversarial sampler."""
     key = name.strip().lower()
     if key == "random":
@@ -61,24 +62,10 @@ def run_sampler_comparison(
     rows: list[SamplerComparisonRow] = []
     for offset, sampler_name in enumerate(sampler_names):
         sampler_output_dir = config.output_dir / sampler_name
-        sampler_config = SearchConfig(
-            policy=config.policy,
-            scenario_template=config.scenario_template,
-            search_space_path=config.search_space_path,
-            search_space=config.search_space,
-            objective=config.objective,
+        sampler_config = replace(
+            config,
             output_dir=sampler_output_dir,
-            budget=config.budget,
             seed=config.seed + offset,
-            algo_config_path=config.algo_config_path,
-            horizon=config.horizon,
-            dt=config.dt,
-            workers=config.workers,
-            record_forces=config.record_forces,
-            require_certification=config.require_certification,
-            benchmark_profile=config.benchmark_profile,
-            snqi_weights_path=config.snqi_weights_path,
-            snqi_baseline_path=config.snqi_baseline_path,
         )
         result = run_adversarial_search(
             sampler_config,

@@ -57,6 +57,7 @@ class ActionContract:
         "mixed",
         "unknown",
     )
+    active_robot_kinematics: str | None = None
     notes: str = ""
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
 
@@ -70,6 +71,7 @@ class ActionContract:
             "units": self.units,
             "scaling": self.scaling,
             "compatible_robot_kinematics": list(self.compatible_robot_kinematics),
+            "active_robot_kinematics": self.active_robot_kinematics,
             "bounds": {key: list(value) for key, value in self.bounds.items()},
             "notes": self.notes,
         }

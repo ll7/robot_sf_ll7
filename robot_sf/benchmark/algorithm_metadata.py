@@ -915,6 +915,8 @@ def resolve_observation_mode(algo: str, requested_mode: str | None = None) -> st
 def _action_output_keys(command_space: str) -> tuple[str, ...]:
     """Return canonical action payload keys for a command-space label."""
     command = command_space.strip().lower()
+    if command == "unicycle_vw":
+        return ("v", "omega")
     if command == "body_velocity_xy_plus_omega":
         return ("vx", "vy", "omega")
     if command == "holonomic_vxy_world" or "velocity_xy" in command:
@@ -925,7 +927,7 @@ def _action_output_keys(command_space: str) -> tuple[str, ...]:
         return ("v", "omega", "vx", "vy")
     if command == "mixed_vw_or_unicycle":
         return ("v", "omega")
-    return ("v", "omega")
+    raise ValueError(f"Unsupported planner command space: {command_space!r}")
 
 
 def _action_frame(command_space: str) -> str:
@@ -981,9 +983,16 @@ def planner_contract_for_algorithm(
         normalization="raw",
         units="mps_radps",
         compatible_robot_kinematics=(
-            (str(robot_kinematics),)
+            "differential_drive",
+            "bicycle_drive",
+            "holonomic",
+            "mixed",
+            "unknown",
+        ),
+        active_robot_kinematics=(
+            str(robot_kinematics)
             if robot_kinematics not in {None, "", "mixed", "unknown"}
-            else ("differential_drive", "bicycle_drive", "holonomic", "mixed", "unknown")
+            else None
         ),
         notes=str(profile.get("projection_policy") or profile.get("execution_detail") or ""),
     )

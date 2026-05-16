@@ -2871,6 +2871,70 @@ def test_run_map_batch_skips_incompatible_kinematics(
     assert "compatibility_reason" in result["preflight"]
 
 
+def test_run_map_batch_filters_per_scenario_kinematics_preflight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mixed-kinematics batches should still run entries with compatible contracts."""
+    scenarios = [
+        {
+            "name": "diff",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "differential_drive"},
+            "seeds": [1],
+        },
+        {
+            "name": "holo",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "holonomic"},
+            "seeds": [1],
+        },
+    ]
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+
+    from robot_sf.benchmark.planner_command_contract import (
+        PlannerContractValidationError,
+    )
+
+    def fake_validate_contract(**kwargs):
+        """Reject only holonomic entries to exercise per-scenario preflight filtering."""
+        if kwargs["robot_kinematics"] == "holonomic":
+            raise PlannerContractValidationError("holonomic contract blocked")
+        return {"action_contract": {"command_space": "unicycle_vw"}}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._validate_planner_contract",
+        fake_validate_contract,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._write_validated",
+        lambda *args, **kwargs: None,
+    )
+
+    result = run_map_batch(
+        scenarios,
+        tmp_path / "out.jsonl",
+        schema_path=tmp_path / "schema.json",
+        algo="goal",
+        workers=1,
+        resume=False,
+    )
+
+    assert result["total_jobs"] == 1
+    assert result["written"] == 1
+    assert result["skipped_jobs"] == 1
+    assert result["preflight"]["compatibility_status"] == "partial"
+    assert result["preflight"]["incompatible_scenario_kinematics"] == {
+        "holonomic": "holonomic contract blocked"
+    }
+
+
 def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

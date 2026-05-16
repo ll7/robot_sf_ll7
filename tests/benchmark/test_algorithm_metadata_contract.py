@@ -55,6 +55,8 @@ def test_enriched_metadata_embeds_typed_planner_contract_payload() -> None:
     assert contract["observation_contract"]["active_mode"] == "socnav_state"
     assert contract["action_contract"]["command_space"] == "unicycle_vw"
     assert contract["action_contract"]["output_keys"] == ["v", "omega"]
+    assert contract["action_contract"]["active_robot_kinematics"] == "differential_drive"
+    assert "holonomic" in contract["action_contract"]["compatible_robot_kinematics"]
     assert contract["compatibility_scope"] == "metadata_only"
 
 
@@ -62,6 +64,12 @@ def test_planner_contract_helper_rejects_unsupported_observation_mode() -> None:
     """Typed contract resolution should fail closed on invalid observation overrides."""
     with pytest.raises(ValueError, match="Observation mode 'goal_state' is not supported"):
         planner_contract_for_algorithm("orca", observation_mode="goal_state")
+
+
+def test_planner_contract_helper_rejects_unknown_command_space() -> None:
+    """Typed contract resolution should fail closed on unknown action contracts."""
+    with pytest.raises(ValueError, match="Unsupported planner command space"):
+        planner_contract_for_algorithm("unknown_algo")
 
 
 def test_random_baseline_metadata_marks_stochastic_reference() -> None:

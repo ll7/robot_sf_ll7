@@ -3229,6 +3229,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         seeds = _select_seeds(scenario, suite_seeds=suite_seeds, suite_key=suite_key)
         for seed in seeds:
             jobs.append((scenario, int(seed)))
+    preflight_skipped_jobs = 0
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3268,19 +3269,39 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     if algo.strip().lower() == "prediction_planner":
         algo_contract.update(_prediction_planner_metadata_overrides(policy_cfg))
+    incompatible_kinematics: dict[str, str] = {}
+    compatible_contract: dict[str, Any] | None = None
     for validation_kinematics in scenario_kinematics or [kinematics_tag]:
         try:
-            algo_contract["planner_contract"] = _validate_planner_contract(
+            compatible_contract = _validate_planner_contract(
                 algo=algo,
                 robot_kinematics=validation_kinematics,
                 algo_config=policy_cfg,
                 observation_mode=active_observation_mode,
             )
+            algo_contract["planner_contract"] = compatible_contract
         except planner_commands.PlannerContractValidationError as exc:
+            incompatible_kinematics[validation_kinematics] = str(exc)
+    if incompatible_kinematics:
+        preflight["incompatible_scenario_kinematics"] = dict(sorted(incompatible_kinematics.items()))
+        if compatible_contract is None:
             preflight["status"] = "skipped"
             preflight["compatibility_status"] = "incompatible"
-            preflight["compatibility_reason"] = str(exc)
-            break
+            preflight["compatibility_reason"] = "; ".join(
+                f"{kinematics}: {reason}"
+                for kinematics, reason in sorted(incompatible_kinematics.items())
+            )
+        else:
+            runnable_jobs: list[tuple[dict[str, Any], int]] = []
+            for scenario, seed in jobs:
+                scenario_kinematics_tag = _scenario_robot_kinematics_label(scenario)
+                if scenario_kinematics_tag in incompatible_kinematics:
+                    preflight_skipped_jobs += 1
+                    continue
+                runnable_jobs.append((scenario, seed))
+            jobs = runnable_jobs
+            preflight["compatibility_status"] = "partial"
+            preflight["skipped_jobs"] = preflight_skipped_jobs
     compatible, incompatible_reason = _planner_kinematics_compatibility(
         algo=algo,
         robot_kinematics=kinematics_tag,
@@ -3523,6 +3544,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "written": wrote,
         "successful_jobs": wrote,
         "failed_jobs": len(failures),
+        "skipped_jobs": preflight_skipped_jobs,
         "failures": failures,
         "out_path": str(out_path),
         "algorithm_readiness": {

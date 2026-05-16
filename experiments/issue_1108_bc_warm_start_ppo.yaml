@@ -1,0 +1,52 @@
+schema_version: experiment-record.v1
+experiment_id: issue_1108_bc_warm_start_ppo
+issue: 1108
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/1108
+question: >
+  Does BC pretraining improve PPO v10 sample efficiency, final benchmark
+  strength, both, or neither compared with the existing 27dbe5xu and b60iopxt
+  references?
+hypothesis: >
+  A BC checkpoint trained from the issue-749 expert trajectory dataset will
+  warm-start PPO enough to improve early sample efficiency without weakening the
+  final policy-analysis comparison.
+config:
+  - configs/training/ppo_imitation/bc_pretrain_issue_749_v10_warm_start.yaml
+  - configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml
+  - configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml
+command: |
+  uv run python scripts/training/collect_expert_trajectories.py \
+    --dataset-id issue_749_b60iopxt_v10_eval_trajectories \
+    --policy-id ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200 \
+    --episodes 141 \
+    --scenario-config configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml \
+    --seeds 111 112 113
+  uv run --group imitation python scripts/training/pretrain_from_expert.py \
+    --config configs/training/ppo_imitation/bc_pretrain_issue_749_v10_warm_start.yaml
+  uv run python scripts/training/train_ppo_with_pretrained_policy.py \
+    --config configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml
+inputs:
+  - path: configs/training/ppo_imitation/bc_pretrain_issue_749_v10_warm_start.yaml
+  - path: configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml
+  - path: docs/context/issue_749_bc_preinit_ppo_launch_packet.md
+outputs:
+  - path: output/slurm/issue1108-bcppo-job-12462/
+    durable_reference: null
+    evidence_role: local staging only until promoted
+expected_artifacts:
+  - name: expert_trajectory_dataset_manifest
+    path: output/datasets/issue_749_b60iopxt_v10_eval_trajectories/manifest.yaml
+    durable_reference_required: true
+  - name: bc_checkpoint
+    path: output/imitation/issue_749_bc_preinit_v10_policy/
+    durable_reference_required: true
+  - name: ppo_finetuned_checkpoint
+    path: output/benchmarks/expert_policies/issue_749_ppo_finetune_v10_warm_start_finetuned.zip
+    durable_reference_required: true
+evidence_grade: observed
+paper_relevance: paper_candidate
+status: in_progress_slurm
+notes: >
+  Issue #1108 is execution-gated on Auxme/SLURM and durable artifact promotion.
+  Local output paths are not paper evidence until replaced by W&B, registry, or
+  release pointers.

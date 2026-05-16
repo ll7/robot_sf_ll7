@@ -478,6 +478,102 @@
                         }
                     },
                     "additionalProperties": true
+                },
+                "social_acceptability": {
+                    "type": "object",
+                    "description": "Schema-backed exploratory social-acceptability pilot block for opt-in proxemic reductions.",
+                    "required": [
+                        "schema_version",
+                        "status",
+                        "parameters",
+                        "units",
+                        "available",
+                        "sample_counts",
+                        "proxemic",
+                        "interpretation"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "social-acceptability-pilot.v1"
+                        },
+                        "status": {
+                            "const": "exploratory"
+                        },
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "proxemic_radius_m": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                }
+                            },
+                            "required": [
+                                "proxemic_radius_m"
+                            ],
+                            "additionalProperties": true
+                        },
+                        "units": {
+                            "type": "object",
+                            "properties": {
+                                "clearance": {
+                                    "const": "m"
+                                },
+                                "intrusion_area": {
+                                    "const": "m*s"
+                                },
+                                "intrusion_fraction": {
+                                    "const": "fraction"
+                                },
+                                "sample_counts": {
+                                    "const": "count"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "available": {
+                            "type": "boolean"
+                        },
+                        "sample_counts": {
+                            "type": "object",
+                            "properties": {
+                                "pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "timesteps": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "proxemic": {
+                            "type": "object",
+                            "properties": {
+                                "intrusion_steps": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "intrusion_frac": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                },
+                                "intrusion_area_m_s": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "min_clearance_m": {
+                                    "type": "number"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
                 }
             },
             "additionalProperties": {

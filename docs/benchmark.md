@@ -151,3 +151,41 @@ Add new checks in `robot_sf/maps/verification/rules.py` (follow existing pattern
 - Spot-check the first line of `episodes.jsonl`: `record["algo"] == record["scenario_params"]["algo"]`.
 - Confirm aggregate outputs include `_meta.effective_group_key` and, when applicable, warnings describing any missing algorithms.
 - Treat `AggregationMetadataError` as a signal to regenerate the episode data—legacy files lacking mirrored metadata are no longer accepted silently.
+
+## Parquet Analytics Export
+
+`episodes.jsonl` remains the source of truth for benchmark runs. For larger campaign analysis,
+convert it into Parquet tables with the optional analytics extra:
+
+```bash
+uv sync --extra analytics
+uv run robot_sf_bench export-parquet \
+  --in output/benchmarks/classic_interactions/episodes.jsonl \
+  --out-dir output/benchmarks/classic_interactions/parquet
+```
+
+The export writes:
+
+- `episodes.parquet`: one fixed top-level row per episode.
+- `metrics.parquet`: long-form typed metric rows keyed by `episode_id` and dotted `metric_path`.
+- `scenario_params.parquet`: long-form scenario parameter rows keyed by dotted `param_path`.
+- `algorithm_metadata.parquet`: long-form planner metadata rows keyed by dotted `metadata_path`.
+- `metadata.json`: source JSONL hashes, row counts, table files, and export schema version.
+- `duckdb_examples.sql`: copy-paste SQL examples for grouped safety metrics and failure mining.
+
+Example DuckDB query:
+
+```sql
+SELECT
+    e.algo,
+    e.scenario_family,
+    AVG(CASE WHEN m.metric_path = 'min_ttc' THEN m.value_number END) AS avg_min_ttc,
+    AVG(CASE WHEN m.metric_path = 'clearance' THEN m.value_number END) AS avg_clearance
+FROM read_parquet('episodes.parquet') AS e
+JOIN read_parquet('metrics.parquet') AS m USING (episode_id)
+GROUP BY e.algo, e.scenario_family
+ORDER BY e.algo, e.scenario_family;
+```
+
+Use `--overwrite` only when replacing a known derived export. The metadata file records that the
+Parquet files are derived views so downstream reports can trace back to the canonical JSONL input.

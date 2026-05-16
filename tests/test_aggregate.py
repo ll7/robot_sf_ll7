@@ -254,6 +254,85 @@ def test_compute_aggregates_flattens_pedestrian_impact_block() -> None:
     assert metrics["ped_impact_near_samples"]["mean"] == 5.0
 
 
+def test_compute_aggregates_flattens_social_acceptability_block() -> None:
+    """Schema-backed social-acceptability pilot reductions should aggregate as scalars."""
+    records = [
+        {
+            "episode_id": "ep-1",
+            "scenario_id": "sc-1",
+            "seed": 1,
+            "algo": "planner-a",
+            "metric_parameters": {
+                "threshold_signature": "default",
+                "threshold_profile": {
+                    "profile_id": "default",
+                    "collision_distance_m": 0.3,
+                    "near_miss_distance_m": 0.6,
+                    "comfort_force_threshold": 2.0,
+                },
+            },
+            "metrics": {
+                "success": True,
+                "social_acceptability": {
+                    "schema_version": "social-acceptability-pilot.v1",
+                    "status": "exploratory",
+                    "parameters": {"proxemic_radius_m": 1.2},
+                    "available": True,
+                    "sample_counts": {"pedestrians": 1, "timesteps": 2},
+                    "proxemic": {
+                        "intrusion_steps": 2,
+                        "intrusion_frac": 0.5,
+                        "intrusion_area_m_s": 0.9,
+                        "min_clearance_m": 0.1,
+                    },
+                },
+            },
+        },
+        {
+            "episode_id": "ep-2",
+            "scenario_id": "sc-1",
+            "seed": 2,
+            "algo": "planner-a",
+            "metric_parameters": {
+                "threshold_signature": "default",
+                "threshold_profile": {
+                    "profile_id": "default",
+                    "collision_distance_m": 0.3,
+                    "near_miss_distance_m": 0.6,
+                    "comfort_force_threshold": 2.0,
+                },
+            },
+            "metrics": {
+                "success": True,
+                "social_acceptability": {
+                    "schema_version": "social-acceptability-pilot.v1",
+                    "status": "exploratory",
+                    "parameters": {"proxemic_radius_m": 1.2},
+                    "available": True,
+                    "sample_counts": {"pedestrians": 1, "timesteps": 1},
+                    "proxemic": {
+                        "intrusion_steps": 1,
+                        "intrusion_frac": 0.25,
+                        "intrusion_area_m_s": 0.3,
+                        "min_clearance_m": 0.4,
+                    },
+                },
+            },
+        },
+    ]
+
+    flat = flatten_metrics(records[0])
+    assert "social_acceptability" not in flat
+    assert flat["social_proxemic_intrusion_area_m_s"] == 0.9
+
+    summary = compute_aggregates(records, group_by="algo")
+
+    metrics = summary["planner-a"]
+    assert metrics["social_proxemic_intrusion_steps"]["mean"] == 1.5
+    assert metrics["social_proxemic_intrusion_frac"]["mean"] == 0.375
+    assert metrics["social_proxemic_intrusion_area_m_s"]["mean"] == 0.6
+
+
 def _paired_contrast_records() -> list[dict]:
     """Build synthetic records with a planted paired effect for group B over group A."""
     values_a = [1.0, 2.0, 3.0, 4.0, 5.0]

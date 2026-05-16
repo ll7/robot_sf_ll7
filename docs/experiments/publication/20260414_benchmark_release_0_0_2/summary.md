@@ -80,6 +80,19 @@ tar -xzf output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_rel
   -C output/benchmark_release_0_0_2
 ```
 
+The paper Results handoff parity test uses this same release source. It accepts either the
+downloaded archive or the extracted bundle through `ROBOT_SF_PAPER_HANDOFF_BUNDLE`, and it also
+auto-discovers the documented paths under `output/benchmark_release_0_0_2`:
+
+```bash
+ROBOT_SF_PAPER_HANDOFF_BUNDLE=output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz \
+  uv run --active pytest tests/benchmark/test_paper_results_handoff.py::test_canonical_handoff_matches_durable_release_campaign_table -q -rs
+```
+
+Before using the bundle, the test verifies the archive SHA-256 from `release_metadata.json` and the
+tracked embedded artifact checksums for `publication_manifest.json`, `checksums.sha256`, and the
+SNQI diagnostics.
+
 ## Tracked Companion Files
 
 - `release_metadata.json`: compact release, asset, campaign, and embedded-artifact metadata.

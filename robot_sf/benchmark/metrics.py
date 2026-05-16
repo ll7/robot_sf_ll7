@@ -462,6 +462,58 @@ def experimental_ped_impact_metrics(
     return metrics
 
 
+def experimental_social_acceptability_metrics(
+    data: EpisodeData,
+    *,
+    proxemic_radius_m: float = 1.2,
+) -> dict[str, float]:
+    """Compute optional trajectory-only social-acceptability pilot metrics.
+
+    The pilot summarizes robot-pedestrian personal-space intrusion from surface
+    clearance samples. It is a deterministic proxy for review and falsification
+    workflows, not a validated human-subject social-compliance score.
+
+    Returns:
+        Mapping of ``social_proxemic_*`` scalar metrics.
+    """
+    radius = (
+        float(proxemic_radius_m)
+        if math.isfinite(proxemic_radius_m) and proxemic_radius_m > 0.0
+        else 1.2
+    )
+    step_count = int(data.robot_pos.shape[0]) if data.robot_pos.ndim >= 2 else 0
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+    metrics: dict[str, float] = {
+        "social_proxemic_available": 1.0 if step_count > 0 and ped_count > 0 else 0.0,
+        "social_proxemic_radius_m": radius,
+        "social_proxemic_ped_count": float(ped_count),
+        "social_proxemic_intrusion_steps": 0.0,
+        "social_proxemic_intrusion_frac": 0.0,
+        "social_proxemic_intrusion_area_m_s": 0.0,
+        "social_proxemic_min_clearance_m": float("nan"),
+    }
+    if step_count <= 0 or ped_count == 0:
+        return metrics
+
+    clearances = _compute_clearance_matrix(data)
+    if clearances.size == 0:
+        return metrics
+    finite = np.isfinite(clearances)
+    if not finite.any():
+        return metrics
+
+    intrusion_depth = np.where(finite, np.maximum(radius - clearances, 0.0), 0.0)
+    intrusion_mask = intrusion_depth > 0.0
+    intrusion_steps = int(np.count_nonzero(np.any(intrusion_mask, axis=1)))
+    metrics["social_proxemic_intrusion_steps"] = float(intrusion_steps)
+    metrics["social_proxemic_intrusion_frac"] = (
+        float(intrusion_steps / step_count) if step_count > 0 else 0.0
+    )
+    metrics["social_proxemic_intrusion_area_m_s"] = float(np.sum(intrusion_depth) * data.dt)
+    metrics["social_proxemic_min_clearance_m"] = float(np.min(clearances[finite]))
+    return metrics
+
+
 # --- Metric stub functions ---
 def success(data: EpisodeData, *, horizon: int) -> float:
     """Return 1 if goal reached before horizon with zero collisions else 0.
@@ -2278,7 +2330,8 @@ def compute_all_metrics(
     Returns:
         dict[str, float]: Mapping from metric name (e.g., ``success``, ``force_q50``,
         ``force_gradient_norm_mean``) to the computed scalar value. When
-        ``experimental_ped_impact`` is enabled, additional ``ped_impact_*`` keys are included.
+        ``experimental_ped_impact`` is enabled, additional ``ped_impact_*`` and
+        exploratory ``social_proxemic_*`` keys are included.
     """
     if shortest_path_len is None:
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback
@@ -2348,6 +2401,7 @@ def compute_all_metrics(
                 window_steps=ped_impact_window_steps,
             )
         )
+        values.update(experimental_social_acceptability_metrics(data))
     return values
 
 
@@ -2390,19 +2444,26 @@ def post_process_metrics(
         "ped_impact_far_samples",
         "ped_impact_accel_delta_valid",
         "ped_impact_turn_rate_delta_valid",
+        "social_proxemic_ped_count",
+        "social_proxemic_intrusion_steps",
     ):
         if count_key in metrics and metrics[count_key] is not None:
             try:
                 metrics[count_key] = int(metrics[count_key])
             except Exception:  # pragma: no cover
                 pass
-    for valid_key in ("time_to_goal_success_only_valid", "time_to_goal_ideal_ratio_valid"):
+    for valid_key in (
+        "time_to_goal_success_only_valid",
+        "time_to_goal_ideal_ratio_valid",
+        "social_proxemic_available",
+    ):
         if valid_key in metrics and metrics[valid_key] is not None:
             try:
                 metrics[valid_key] = bool(int(metrics[valid_key]))
             except Exception:  # pragma: no cover
                 pass
     _attach_pedestrian_impact_block(metrics)
+    _attach_social_acceptability_block(metrics)
     return _sanitize_metrics(metrics)
 
 
@@ -2447,6 +2508,41 @@ def _attach_pedestrian_impact_block(metrics: dict[str, Any]) -> None:
     }
 
 
+def _attach_social_acceptability_block(metrics: dict[str, Any]) -> None:
+    """Attach an exploratory social-acceptability block when pilot metrics are present."""
+    if "social_proxemic_radius_m" not in metrics:
+        return
+
+    metrics["social_acceptability"] = {
+        "schema_version": "social-acceptability-pilot.v1",
+        "status": "exploratory",
+        "parameters": {
+            "proxemic_radius_m": metrics.get("social_proxemic_radius_m"),
+        },
+        "units": {
+            "clearance": "m",
+            "intrusion_area": "m*s",
+            "intrusion_fraction": "fraction",
+            "sample_counts": "count",
+        },
+        "available": metrics.get("social_proxemic_available"),
+        "sample_counts": {
+            "pedestrians": metrics.get("social_proxemic_ped_count"),
+            "timesteps": metrics.get("social_proxemic_intrusion_steps"),
+        },
+        "proxemic": {
+            "intrusion_steps": metrics.get("social_proxemic_intrusion_steps"),
+            "intrusion_frac": metrics.get("social_proxemic_intrusion_frac"),
+            "intrusion_area_m_s": metrics.get("social_proxemic_intrusion_area_m_s"),
+            "min_clearance_m": metrics.get("social_proxemic_min_clearance_m"),
+        },
+        "interpretation": (
+            "Exploratory trajectory-only proxemic proxy; not a replacement for SNQI, "
+            "headline safety metrics, or human-subject validation."
+        ),
+    }
+
+
 def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     """Remove NaN/inf metric entries to keep JSON serialization clean.
 
@@ -2484,6 +2580,7 @@ __all__ = [
     "curvature_mean",
     "distance_to_human_min",
     "energy",
+    "experimental_social_acceptability_metrics",
     "failure_to_progress",
     "force_exceed_events",
     "force_gradient_norm_mean",

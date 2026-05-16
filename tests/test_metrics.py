@@ -584,12 +584,48 @@ def test_experimental_ped_impact_metrics_are_opt_in() -> None:
 
     base = compute_all_metrics(ep, horizon=10)
     assert not any(key.startswith("ped_impact_") for key in base)
+    assert not any(key.startswith("social_proxemic_") for key in base)
 
     enabled = compute_all_metrics(ep, horizon=10, experimental_ped_impact=True)
     assert "ped_impact_radius_m" in enabled
     assert "ped_impact_window_steps" in enabled
     assert "ped_impact_accel_delta_valid" in enabled
     assert "ped_impact_turn_rate_delta_valid" in enabled
+    assert "social_proxemic_radius_m" in enabled
+    assert "social_proxemic_intrusion_steps" in enabled
+
+
+def test_experimental_social_acceptability_proxemic_intrusion() -> None:
+    """Proxemic intrusion should summarize personal-space clearance violations."""
+    ep = _make_episode(T=4, K=1)
+    ep.dt = 0.5
+    ep.robot_pos[:] = 0.0
+    radii_sum = ep.robot_radius + ep.ped_radius
+    clearances = np.array([1.5, 0.5, 0.1, 2.0])
+    ep.peds_pos[:, 0, 0] = radii_sum + clearances
+
+    vals = compute_all_metrics(ep, horizon=4, experimental_ped_impact=True)
+
+    assert vals["social_proxemic_available"] == 1.0
+    assert vals["social_proxemic_radius_m"] == 1.2
+    assert vals["social_proxemic_ped_count"] == 1.0
+    assert vals["social_proxemic_intrusion_steps"] == 2.0
+    assert vals["social_proxemic_intrusion_frac"] == 0.5
+    assert vals["social_proxemic_min_clearance_m"] == pytest.approx(0.1)
+    assert vals["social_proxemic_intrusion_area_m_s"] == pytest.approx(0.9)
+
+
+def test_experimental_social_acceptability_handles_empty_crowd() -> None:
+    """Proxemic pilot metrics should expose unavailable status for K=0."""
+    ep = _make_episode(T=4, K=0)
+    vals = compute_all_metrics(ep, horizon=4, experimental_ped_impact=True)
+
+    assert vals["social_proxemic_available"] == 0.0
+    assert vals["social_proxemic_ped_count"] == 0.0
+    assert vals["social_proxemic_intrusion_steps"] == 0.0
+    assert vals["social_proxemic_intrusion_frac"] == 0.0
+    assert vals["social_proxemic_intrusion_area_m_s"] == 0.0
+    assert math.isnan(vals["social_proxemic_min_clearance_m"])
 
 
 def test_experimental_ped_impact_near_vs_far_deltas() -> None:
@@ -655,6 +691,35 @@ def test_post_process_metrics_adds_schema_backed_pedestrian_impact_block() -> No
     assert block["canonical_reductions"]["accel_delta_mean"] == 0.75
     assert block["canonical_reductions"]["turn_rate_delta_mean"] == 0.20
     assert "interpretation" not in block
+
+
+def test_post_process_metrics_adds_social_acceptability_pilot_block() -> None:
+    """Post-processing should expose proxemic pilot metrics with exploratory provenance."""
+    metrics = post_process_metrics(
+        {
+            "success": 1.0,
+            "collisions": 0.0,
+            "social_proxemic_available": 1.0,
+            "social_proxemic_radius_m": 1.2,
+            "social_proxemic_ped_count": 2.0,
+            "social_proxemic_intrusion_steps": 3.0,
+            "social_proxemic_intrusion_frac": 0.25,
+            "social_proxemic_intrusion_area_m_s": 0.8,
+            "social_proxemic_min_clearance_m": 0.15,
+        },
+        snqi_weights=None,
+        snqi_baseline=None,
+    )
+
+    assert metrics["social_proxemic_intrusion_steps"] == 3
+    assert metrics["social_proxemic_ped_count"] == 2
+    block = metrics["social_acceptability"]
+    assert block["schema_version"] == "social-acceptability-pilot.v1"
+    assert block["status"] == "exploratory"
+    assert block["parameters"] == {"proxemic_radius_m": 1.2}
+    assert block["sample_counts"] == {"pedestrians": 2, "timesteps": 3}
+    assert block["proxemic"]["intrusion_area_m_s"] == 0.8
+    assert "not a replacement for SNQI" in block["interpretation"]
 
 
 def test_experimental_ped_impact_handles_empty_crowd() -> None:

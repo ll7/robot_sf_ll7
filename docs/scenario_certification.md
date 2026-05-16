@@ -7,6 +7,11 @@ scenario manifests. It is intentionally conservative: malformed scenarios, missi
 kinodynamic violations, and clearly blocked dynamic setups are excluded before they can support
 benchmark claims.
 
+For authored scenario intent before execution, use
+[`scenario_contract.v1`](./scenario_contracts.md). A scenario contract records ODD assumptions,
+actor models, invariants, observables, termination semantics, and provenance; it does not replace
+the fail-closed feasibility and eligibility checks described here.
+
 ## Contract
 
 The public schema lives at
@@ -106,6 +111,9 @@ Programmatic tests can call `certify_map_definition(...)` directly with a `MapDe
 not generate adversarial scenarios, promote stress cases into headline benchmarks, or prove that a
 planner will solve a valid scenario. It only certifies that the scenario geometry and currently
 exposed robot/dynamic constraints are not malformed or impossible under the v1 checks.
+
+`scenario_contract.v1` may explain what a scenario is meant to exercise, but a valid intent
+contract does not make an excluded or uncertified scenario benchmark evidence.
 
 For h500 interpretation, layer planner-failure classification on top of certification rather than
 using h500 failures as certification evidence by themselves. Excluded or unresolved-certification

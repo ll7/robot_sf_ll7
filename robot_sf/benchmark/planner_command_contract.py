@@ -136,7 +136,11 @@ def validate_planner_contract(
     """
     algo_key = algo.strip().lower()
     try:
-        contract = planner_contract_for_algorithm(algo_key, observation_mode=observation_mode)
+        contract = planner_contract_for_algorithm(
+            algo_key,
+            observation_mode=observation_mode,
+            robot_kinematics=robot_kinematics,
+        )
     except ValueError as exc:
         raise PlannerContractValidationError(
             f"Planner contract mismatch for planner '{algo_key}': {exc}"

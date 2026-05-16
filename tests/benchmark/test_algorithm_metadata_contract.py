@@ -56,7 +56,7 @@ def test_enriched_metadata_embeds_typed_planner_contract_payload() -> None:
     assert contract["action_contract"]["command_space"] == "unicycle_vw"
     assert contract["action_contract"]["output_keys"] == ["v", "omega"]
     assert contract["action_contract"]["active_robot_kinematics"] == "differential_drive"
-    assert "holonomic" in contract["action_contract"]["compatible_robot_kinematics"]
+    assert contract["action_contract"]["compatible_robot_kinematics"] == ["differential_drive"]
     assert contract["compatibility_scope"] == "metadata_only"
 
 

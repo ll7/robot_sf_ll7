@@ -3270,38 +3270,53 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     if algo.strip().lower() == "prediction_planner":
         algo_contract.update(_prediction_planner_metadata_overrides(policy_cfg))
     incompatible_kinematics: dict[str, str] = {}
+    incompatible_scenarios: dict[str, str] = {}
     compatible_contract: dict[str, Any] | None = None
-    for validation_kinematics in scenario_kinematics or [kinematics_tag]:
+    for scenario in filtered:
+        scenario_id = _scenario_id(scenario)
+        validation_kinematics = _scenario_robot_kinematics_label(scenario)
         try:
+            validation_algo, validation_cfg = _resolve_policy_search_candidate_runtime(
+                default_algo=algo,
+                algo_config_path=algo_config_path,
+                algo_config=raw_policy_cfg,
+                scenario=scenario,
+            )
+            validation_observation_mode = resolve_observation_mode(
+                validation_algo,
+                batch_observation_mode,
+            )
             compatible_contract = _validate_planner_contract(
-                algo=algo,
+                algo=validation_algo,
                 robot_kinematics=validation_kinematics,
-                algo_config=policy_cfg,
-                observation_mode=active_observation_mode,
+                algo_config=validation_cfg,
+                observation_mode=validation_observation_mode,
             )
             algo_contract["planner_contract"] = compatible_contract
         except planner_commands.PlannerContractValidationError as exc:
+            incompatible_scenarios[scenario_id] = str(exc)
             incompatible_kinematics[validation_kinematics] = str(exc)
     if incompatible_kinematics:
         preflight["incompatible_scenario_kinematics"] = dict(
             sorted(incompatible_kinematics.items())
         )
+        preflight["incompatible_scenarios"] = dict(sorted(incompatible_scenarios.items()))
         if compatible_contract is None:
             preflight["status"] = "skipped"
             preflight["compatibility_status"] = "incompatible"
             preflight["compatibility_reason"] = "; ".join(
-                f"{kinematics}: {reason}"
-                for kinematics, reason in sorted(incompatible_kinematics.items())
+                f"{scenario_id}: {reason}"
+                for scenario_id, reason in sorted(incompatible_scenarios.items())
             )
         else:
             runnable_jobs: list[tuple[dict[str, Any], int]] = []
             for scenario, seed in jobs:
-                scenario_kinematics_tag = _scenario_robot_kinematics_label(scenario)
-                if scenario_kinematics_tag in incompatible_kinematics:
+                if _scenario_id(scenario) in incompatible_scenarios:
                     preflight_skipped_jobs += 1
                     continue
                 runnable_jobs.append((scenario, seed))
             jobs = runnable_jobs
+            preflight["status"] = "partial"
             preflight["compatibility_status"] = "partial"
             preflight["skipped_jobs"] = preflight_skipped_jobs
     compatible, incompatible_reason = _planner_kinematics_compatibility(

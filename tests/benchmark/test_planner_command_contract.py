@@ -97,3 +97,17 @@ def test_validate_planner_contract_names_incompatible_action_fixture() -> None:
     assert "planner 'rvo'" in message
     assert "holonomic" in message
     assert "contract mismatch" in message
+
+
+def test_validate_planner_contract_returns_active_robot_kinematics() -> None:
+    """Returned contracts should describe the validated runtime kinematics."""
+    contract = validate_planner_contract(
+        algo="orca",
+        robot_kinematics="differential_drive",
+        algo_config={},
+        observation_mode="socnav_state",
+    )
+
+    action = contract["action_contract"]
+    assert action["active_robot_kinematics"] == "differential_drive"
+    assert action["compatible_robot_kinematics"] == ["differential_drive"]

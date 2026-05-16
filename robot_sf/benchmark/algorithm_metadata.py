@@ -946,6 +946,20 @@ def _action_frame(command_space: str) -> str:
     return "robot"
 
 
+def _compatible_robot_kinematics(
+    profile: dict[str, Any],
+    robot_kinematics: str | None,
+) -> tuple[str, ...]:
+    """Return the kinematics labels the action contract actually covers."""
+    explicit = profile.get("compatible_robot_kinematics")
+    if isinstance(explicit, (list, tuple)):
+        values = tuple(str(value).strip().lower() for value in explicit if str(value).strip())
+        if values:
+            return values
+    active = str(robot_kinematics or "").strip().lower()
+    return (active or "unknown",)
+
+
 def _observation_normalization(active_mode: str) -> str:
     """Return the normalization label for a planner observation mode."""
     if active_mode == "sensor_fusion_state":
@@ -988,13 +1002,7 @@ def planner_contract_for_algorithm(
         frame=_action_frame(command_space),
         normalization="raw",
         units="mps_radps",
-        compatible_robot_kinematics=(
-            "differential_drive",
-            "bicycle_drive",
-            "holonomic",
-            "mixed",
-            "unknown",
-        ),
+        compatible_robot_kinematics=_compatible_robot_kinematics(profile, robot_kinematics),
         active_robot_kinematics=(
             str(robot_kinematics)
             if robot_kinematics not in {None, "", "mixed", "unknown"}

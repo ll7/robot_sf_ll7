@@ -19,7 +19,11 @@ from robot_sf.adversarial.runtime import (
     multi_ped_config_to_single_pedestrian_definitions,
     validate_multi_ped_runtime_plausibility,
 )
-from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
+from robot_sf.adversarial.samplers import (
+    CoordinateRefinementSampler,
+    OptunaCandidateSampler,
+    RandomCandidateSampler,
+)
 from robot_sf.adversarial.search import run_adversarial_search
 
 __all__ = [
@@ -28,6 +32,7 @@ __all__ = [
     "CoordinateRefinementSampler",
     "MultiPedAdversarialConfig",
     "MultiPedCandidateSpec",
+    "OptunaCandidateSampler",
     "Pose2D",
     "RandomCandidateSampler",
     "SearchConfig",

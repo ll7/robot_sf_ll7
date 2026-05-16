@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
+from importlib import import_module
 from random import Random
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D, RangeConfig, SearchSpaceConfig
 
@@ -164,6 +165,89 @@ class CoordinateRefinementSampler:
                 ),
             )
         raise AssertionError(f"unknown refinement dimension: {dimension}")
+
+
+class OptunaCandidateSampler:
+    """Optuna-backed feedback sampler for bounded adversarial search pilots.
+
+    The sampler uses Optuna's ask/tell API so the existing sequential adversarial
+    runner can provide objective feedback through ``observe`` without changing
+    the runner contract.
+    """
+
+    def __init__(self, search_space: SearchSpaceConfig, *, seed: int) -> None:
+        """Initialize an Optuna study with deterministic sampler seed."""
+        optuna = _import_optuna()
+        sampler = optuna.samplers.TPESampler(seed=int(seed))
+        self._study = optuna.create_study(direction="maximize", sampler=sampler)
+        self._trial_state = optuna.trial.TrialState
+        self._search_space = search_space
+        self._pending_trials: list[tuple[CandidateSpec, Any]] = []
+
+    def sample(self) -> CandidateSpec:
+        """Return the next optimizer proposal within the configured bounds."""
+        trial = self._study.ask()
+        candidate = CandidateSpec(
+            start=Pose2D(
+                _suggest_float(trial, "start.x", self._search_space.start_x),
+                _suggest_float(trial, "start.y", self._search_space.start_y),
+            ),
+            goal=Pose2D(
+                _suggest_float(trial, "goal.x", self._search_space.goal_x),
+                _suggest_float(trial, "goal.y", self._search_space.goal_y),
+            ),
+            spawn_time_s=_suggest_float(trial, "spawn_time_s", self._search_space.spawn_time_s),
+            pedestrian_speed_mps=_suggest_float(
+                trial,
+                "pedestrian_speed_mps",
+                self._search_space.pedestrian_speed_mps,
+            ),
+            pedestrian_delay_s=_suggest_float(
+                trial, "pedestrian_delay_s", self._search_space.pedestrian_delay_s
+            ),
+            scenario_seed=_suggest_int(trial, "scenario_seed", self._search_space.scenario_seed),
+        )
+        self._pending_trials.append((candidate, trial))
+        return candidate
+
+    def observe(self, evaluation: CandidateEvaluation) -> None:
+        """Tell Optuna the objective value for a completed proposal."""
+        for index, (candidate, trial) in enumerate(self._pending_trials):
+            if candidate == evaluation.candidate:
+                self._pending_trials.pop(index)
+                score = evaluation.objective_value
+                if score is None or not math.isfinite(float(score)):
+                    self._study.tell(trial, state=self._trial_state.FAIL)
+                    return
+                self._study.tell(trial, float(score))
+                return
+
+
+def _import_optuna() -> Any:
+    """Import Optuna or raise an actionable optional-dependency error."""
+    try:
+        return import_module("optuna")
+    except (ImportError, ModuleNotFoundError) as exc:
+        raise RuntimeError(
+            "OptunaCandidateSampler requires optuna. Install project dependencies with "
+            "`uv sync --all-extras` before using the optimizer-backed adversarial sampler."
+        ) from exc
+
+
+def _suggest_float(trial: Any, name: str, bounds: RangeConfig) -> float:
+    """Suggest a float while supporting degenerate fixed ranges."""
+    if bounds.min == bounds.max:
+        return float(bounds.min)
+    return float(trial.suggest_float(name, float(bounds.min), float(bounds.max)))
+
+
+def _suggest_int(trial: Any, name: str, bounds: RangeConfig) -> int:
+    """Suggest an integer while supporting degenerate fixed ranges."""
+    low = int(bounds.min)
+    high = int(bounds.max)
+    if low == high:
+        return low
+    return int(trial.suggest_int(name, low, high))
 
 
 def _midpoint(bounds: RangeConfig) -> float:

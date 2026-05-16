@@ -1,0 +1,96 @@
+name: Epic
+description: Define a parent issue with explicit children, blockers, and acceptance boundaries.
+title: "epic: "
+labels:
+  - epic
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for parent issues. Keep implementation in child issues unless the epic is
+        deliberately small enough to complete as one PR.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal / Problem
+      description: State the parent outcome and why it should be tracked as an epic.
+      placeholder: This epic coordinates...
+    validations:
+      required: true
+  - type: textarea
+    id: child_issues
+    attributes:
+      label: Child issues or child-creation task
+      description: Link existing child issues or state the task that will create them.
+      placeholder: |
+        Children:
+        Child-creation gap:
+    validations:
+      required: true
+  - type: dropdown
+    id: blocked_ready_state
+    attributes:
+      label: Blocked / ready state
+      options:
+        - ready for child sequencing
+        - blocked by missing child issues
+        - blocked by external runtime or artifact
+        - blocked by maintainer decision
+        - execution-only
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: Define the parent boundary and what belongs in child issues.
+      placeholder: |
+        In scope:
+        Non-goals:
+        Child issue boundaries:
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Define how the epic closes.
+      placeholder: |
+        - [ ] Children are linked or explicitly deferred.
+        - [ ] Blockers have unblock conditions.
+        - [ ] Final validation and evidence boundary is recorded.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation / Testing
+      description: State the final validation gate or explain why children own validation.
+      placeholder: |
+        Epic-level validation:
+        Child-owned validation:
+    validations:
+      required: true
+  - type: textarea
+    id: artifact_policy
+    attributes:
+      label: Artifact policy
+      description: Identify expected durable evidence categories across the epic.
+      placeholder: |
+        Evidence categories:
+        Durable storage:
+        Local output policy:
+    validations:
+      required: true
+  - type: textarea
+    id: estimate_metadata
+    attributes:
+      label: Estimate metadata
+      description: Capture parent-level effort and uncertainty.
+      placeholder: |
+        Parent effort (h):
+        Child effort range:
+        Complexity:
+        Uncertainty:
+    validations:
+      required: true

@@ -18,15 +18,55 @@ SKILL_FILES = [
     ROOT / ".agents" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
 ]
 KNOWN_LABELS = {
+    "agent",
+    "benchmark",
+    "blocked",
     "bug",
     "documentation",
     "enhancement",
-    "refactor",
-    "benchmark",
-    "validation",
-    "agent",
-    "research",
+    "epic",
     "local planner",
+    "refactor",
+    "research",
+    "technical-debt",
+    "test",
+    "validation",
+    "workflow",
+}
+
+EXPECTED_ISSUE_FORMS = {
+    "blocked-external-artifact.yml": [
+        "Unavailable asset or runtime",
+        "Unblock condition",
+        "Fail-closed policy",
+        "Artifact policy",
+    ],
+    "epic.yml": [
+        "Child issues or child-creation task",
+        "Blocked / ready state",
+        "Acceptance criteria",
+        "Estimate metadata",
+    ],
+    "execution-run.yml": [
+        "Runtime and execution location",
+        "Current phase",
+        "Owner / agent handoff",
+        "Artifact root",
+        "Last log timestamp",
+        "Next decision point",
+    ],
+    "research-validation.yml": [
+        "Hypothesis",
+        "Evidence grade",
+        "Artifact policy",
+        "Validation command",
+    ],
+    "test-debt.yml": [
+        "Skipped or failing test evidence",
+        "Intended behavior",
+        "Targeted validation",
+        "Acceptance criteria",
+    ],
 }
 
 
@@ -40,6 +80,14 @@ def _load_template(path: Path) -> tuple[dict[str, object], str]:
     assert isinstance(frontmatter, dict), f"{path} frontmatter must be a YAML mapping"
     body = match.group(2)
     return frontmatter, body
+
+
+def _load_form(path: Path) -> dict[str, object]:
+    """Parse a GitHub issue form YAML file."""
+
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict), f"{path} must be a YAML mapping"
+    return payload
 
 
 def test_issue_templates_parse_and_include_required_sections() -> None:
@@ -85,6 +133,32 @@ def test_specialized_issue_templates_include_domain_specific_sections() -> None:
             assert marker in body, f"missing marker {marker!r} in {name}"
 
 
+def test_issue_forms_cover_common_backlog_lanes() -> None:
+    """Verify YAML issue forms guide the common backlog lanes added for issue 1256."""
+
+    for form_name, markers in EXPECTED_ISSUE_FORMS.items():
+        form_path = TEMPLATE_DIR / form_name
+        assert form_path.exists(), f"missing issue form {form_name}"
+        form = _load_form(form_path)
+        assert form["name"]
+        assert form["description"]
+        labels = form.get("labels", [])
+        assert isinstance(labels, list)
+        assert set(labels).issubset(KNOWN_LABELS), f"unknown label(s) in {form_name}: {labels}"
+        body = form.get("body")
+        assert isinstance(body, list) and body, f"{form_name} body must be a non-empty list"
+        serialized = yaml.safe_dump(form, sort_keys=True)
+        for marker in markers:
+            assert marker in serialized, f"missing marker {marker!r} in {form_name}"
+
+
+def test_issue_form_config_keeps_existing_templates_available() -> None:
+    """Verify adding issue forms does not disable existing Markdown templates."""
+
+    config = _load_form(TEMPLATE_DIR / "config.yml")
+    assert config["blank_issues_enabled"] is True
+
+
 def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     """Verify the docs and skills point at real repo files and commands.
 
@@ -94,6 +168,11 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
 
     docs_text = DOCS_GUIDE.read_text(encoding="utf-8")
     assert "../.github/ISSUE_TEMPLATE/issue_default.md" in docs_text
+    assert "../.github/ISSUE_TEMPLATE/research-validation.yml" in docs_text
+    assert "../.github/ISSUE_TEMPLATE/test-debt.yml" in docs_text
+    assert "../.github/ISSUE_TEMPLATE/blocked-external-artifact.yml" in docs_text
+    assert "../.github/ISSUE_TEMPLATE/execution-run.yml" in docs_text
+    assert "../.github/ISSUE_TEMPLATE/epic.yml" in docs_text
     assert "../.agents/skills/gh-issue-creator/SKILL.md" in docs_text
     assert "../.agents/skills/gh-issue-template-auditor/SKILL.md" in docs_text
     assert "../.agents/skills/gh-issue-priority-assessor/SKILL.md" in docs_text

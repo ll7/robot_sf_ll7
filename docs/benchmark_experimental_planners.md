@@ -7,6 +7,17 @@ This repository now distinguishes between:
 - `experimental-testing`: planners that are implemented and tested, but should not silently enter
   normal benchmark sweeps until they have demonstrated stable benchmark value
 
+## Planner Contract Boundary
+
+Benchmark-facing planners also publish planner contract metadata through
+`robot_sf.benchmark.algorithm_metadata`. The contract records the planner-facing observation mode,
+required inputs, normalization label, command space, action keys, and reset convention before a
+benchmark runner uses the planner.
+
+This metadata is a compatibility guard only. It makes mismatched observation/action assumptions
+fail before benchmark execution, but it is not performance evidence and must not be cited as proof
+that a planner is baseline-ready, paper-facing, or high quality.
+
 ## Testing-only planners
 
 The following planners are currently treated as testing-only and fail closed by default:

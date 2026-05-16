@@ -174,7 +174,7 @@ def _coverage_entropy(feature_rows: Sequence[Mapping[str, str]]) -> float:
     if total <= 0 or len(counts) <= 1:
         return 0.0
     entropy = -sum((count / total) * math.log2(count / total) for count in counts.values())
-    return float(entropy / math.log2(len(counts)))
+    return float(entropy / math.log2(total))
 
 
 def _distinct_features(
@@ -195,10 +195,10 @@ def _recommendation(novelty_score: float, distinct_features: Sequence[str]) -> s
     Returns:
         Conservative curation bucket for the scenario row.
     """
-    if novelty_score <= _REDUNDANT_THRESHOLD:
-        return "merge_or_drop"
     if novelty_score >= _NOVEL_THRESHOLD or distinct_features:
         return "retain_or_investigate"
+    if novelty_score <= _REDUNDANT_THRESHOLD:
+        return "merge_or_drop"
     return "review"
 
 

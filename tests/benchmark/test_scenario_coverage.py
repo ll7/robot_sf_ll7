@@ -85,6 +85,35 @@ def test_build_scenario_coverage_report_flags_redundant_and_novel_rows() -> None
     assert "wait_behavior" in rows["waiting_passengers_medium"]["distinct_features"]
 
 
+def test_coverage_entropy_decreases_for_repeated_feature_tokens() -> None:
+    """Repeated scenario tokens should lower normalized coverage entropy."""
+    unique_report = build_scenario_coverage_report(
+        [
+            _scenario("crossing_low", archetype="crossing", density="low", flow="bi"),
+            _scenario(
+                "queue_high",
+                archetype="queue",
+                density="high",
+                ped_density=0.1,
+                flow="uni",
+            ),
+        ],
+        source="unique.yaml",
+    )
+    repeated_report = build_scenario_coverage_report(
+        [
+            _scenario("crossing_low"),
+            _scenario("crossing_low_duplicate"),
+        ],
+        source="repeated.yaml",
+    )
+
+    assert (
+        unique_report["summary"]["coverage_entropy"]
+        > repeated_report["summary"]["coverage_entropy"]
+    )
+
+
 def test_station_platform_pack_report_uses_existing_distinct_probe_metadata() -> None:
     """The issue #736 candidate pack should produce deterministic coverage rows."""
     matrix = Path("configs/scenarios/sets/station_platform_candidate_pack_issue736.yaml")
@@ -121,6 +150,7 @@ def test_build_scenario_coverage_report_handles_minimal_legacy_rows() -> None:
 
     assert row["scenario_id"] == "scenario_000"
     assert row["nearest_neighbor"] is None
+    assert row["recommendation"] == "retain_or_investigate"
     assert row["feature_tokens"]["archetype"] == "unknown"
     assert row["feature_tokens"]["ped_density_bin"] == "unknown"
     assert row["feature_tokens"]["single_pedestrians"] == "none"

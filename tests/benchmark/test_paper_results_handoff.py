@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import os
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -14,6 +17,12 @@ from robot_sf.benchmark.paper_results_handoff import (
     export_paper_results_handoff,
 )
 from scripts.tools import paper_results_handoff
+
+_RELEASE_METADATA_PATH = Path(
+    "docs/experiments/publication/20260414_benchmark_release_0_0_2/release_metadata.json"
+)
+_RELEASE_OUTPUT_DIR = Path("output/benchmark_release_0_0_2")
+_PAPER_HANDOFF_BUNDLE_ENV = "ROBOT_SF_PAPER_HANDOFF_BUNDLE"
 
 
 def _write(path: Path, payload: str) -> None:
@@ -155,6 +164,123 @@ def _make_publication_bundle(bundle_dir: Path) -> None:
             ]
         )
         + "\n",
+    )
+
+
+def _sha256(path: Path) -> str:
+    """Return the SHA-256 digest for a local file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _load_release_metadata() -> dict[str, object]:
+    """Load the tracked publication release metadata used by the canonical test."""
+    return json.loads(_RELEASE_METADATA_PATH.read_text(encoding="utf-8"))
+
+
+def _verify_sha256(path: Path, expected: str, *, label: str) -> None:
+    """Assert that ``path`` exists and matches the expected SHA-256."""
+    assert path.exists(), f"Missing {label}: {path}"
+    assert _sha256(path) == expected, f"Unexpected SHA-256 for {label}: {path}"
+
+
+def _verify_release_bundle_contents(bundle_dir: Path, metadata: dict[str, object]) -> None:
+    """Verify tracked embedded checksums inside an extracted release bundle."""
+    assets = metadata["assets"]
+    assert isinstance(assets, dict)
+    for key, value in assets.items():
+        if not key.startswith("embedded_"):
+            continue
+        assert isinstance(value, dict)
+        path_in_archive = value["path_in_archive"]
+        expected_sha256 = value["sha256"]
+        assert isinstance(path_in_archive, str)
+        assert isinstance(expected_sha256, str)
+        archive_relative = Path(path_in_archive)
+        bundle_relative = (
+            Path(*archive_relative.parts[1:])
+            if archive_relative.parts and archive_relative.parts[0] == bundle_dir.name
+            else archive_relative
+        )
+        _verify_sha256(
+            bundle_dir / bundle_relative,
+            expected_sha256,
+            label=f"{key} in release bundle",
+        )
+
+
+def _extract_release_archive(
+    archive_path: Path,
+    *,
+    tmp_path: Path,
+    metadata: dict[str, object],
+) -> Path:
+    """Verify and extract the tracked release archive into ``tmp_path``."""
+    assets = metadata["assets"]
+    publication_bundle = metadata["publication_bundle"]
+    assert isinstance(assets, dict)
+    assert isinstance(publication_bundle, dict)
+    archive_metadata = assets["bundle_archive"]
+    assert isinstance(archive_metadata, dict)
+    archive_sha256 = archive_metadata["sha256"]
+    bundle_name = publication_bundle["bundle_name"]
+    assert isinstance(archive_sha256, str)
+    assert isinstance(bundle_name, str)
+
+    _verify_sha256(archive_path, archive_sha256, label="release archive")
+    with tarfile.open(archive_path, "r:gz") as archive:
+        archive.extractall(tmp_path, filter="data")
+    bundle_dir = tmp_path / bundle_name
+    _verify_release_bundle_contents(bundle_dir, metadata)
+    return bundle_dir
+
+
+def _resolve_durable_release_bundle(tmp_path: Path) -> Path:
+    """Resolve the durable release fixture or skip with the documented hydration command."""
+    metadata = _load_release_metadata()
+    assets = metadata["assets"]
+    publication_bundle = metadata["publication_bundle"]
+    assert isinstance(assets, dict)
+    assert isinstance(publication_bundle, dict)
+    archive_metadata = assets["bundle_archive"]
+    assert isinstance(archive_metadata, dict)
+    archive_name = archive_metadata["name"]
+    bundle_name = publication_bundle["bundle_name"]
+    assert isinstance(archive_name, str)
+    assert isinstance(bundle_name, str)
+
+    env_value = os.environ.get(_PAPER_HANDOFF_BUNDLE_ENV)
+    if env_value:
+        configured_path = Path(env_value).expanduser()
+        if configured_path.is_dir():
+            _verify_release_bundle_contents(configured_path, metadata)
+            return configured_path
+        if configured_path.is_file():
+            return _extract_release_archive(configured_path, tmp_path=tmp_path, metadata=metadata)
+        pytest.fail(
+            f"{_PAPER_HANDOFF_BUNDLE_ENV} must point to an extracted bundle directory "
+            f"or the release archive: {configured_path}"
+        )
+
+    default_archive = _RELEASE_OUTPUT_DIR / archive_name
+    if default_archive.exists():
+        return _extract_release_archive(default_archive, tmp_path=tmp_path, metadata=metadata)
+
+    default_bundle = _RELEASE_OUTPUT_DIR / bundle_name
+    if default_bundle.exists():
+        _verify_release_bundle_contents(default_bundle, metadata)
+        return default_bundle
+
+    pytest.skip(
+        "durable release 0.0.2 publication bundle is not hydrated; run "
+        "`mkdir -p output/benchmark_release_0_0_2 && "
+        "gh release download 0.0.2 --pattern "
+        "'paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz' "
+        "--dir output/benchmark_release_0_0_2` or set "
+        f"{_PAPER_HANDOFF_BUNDLE_ENV} to the archive or extracted bundle"
     )
 
 
@@ -346,30 +472,32 @@ def test_export_paper_results_handoff_serializes_missing_metrics_without_nan(
     assert rows[0]["near_misses_mean"] == ""
 
 
-def test_canonical_handoff_matches_frozen_campaign_table_when_available() -> None:
-    """Local canonical artifact should round-trip planner means when present."""
-    source = Path(
-        "output/benchmarks/publication/"
-        "paper_experiment_matrix_v1_issue579_snqi_v3_regen_20260318_163407_publication_bundle"
-    )
-    if not source.exists():
-        pytest.skip("canonical March 18 publication bundle is not present locally")
+def test_canonical_handoff_matches_durable_release_campaign_table(tmp_path: Path) -> None:
+    """Durable release artifact should round-trip planner means when hydrated."""
+    metadata = _load_release_metadata()
+    source = _resolve_durable_release_bundle(tmp_path)
 
     payload = build_paper_results_handoff_payload(
         source,
         confidence_settings={"bootstrap_samples": 0},
     )
     rows = {row["planner_key"]: row for row in payload["rows"]}
+    campaign = metadata["campaign"]
+    seed_policy = metadata["seed_policy"]
+    scope = metadata["scope"]
+    assert isinstance(campaign, dict)
+    assert isinstance(seed_policy, dict)
+    assert isinstance(scope, dict)
+    included_planners = scope["included_planners"]
+    assert isinstance(included_planners, list)
 
-    assert (
-        payload["campaign_id"]
-        == "paper_experiment_matrix_v1_issue579_snqi_v3_regen_20260318_163407"
-    )
+    assert payload["campaign_id"] == campaign["campaign_id"]
+    assert payload["row_count"] == len(included_planners)
     assert rows["orca"]["success_mean"] == pytest.approx(
         rows["orca"]["success_source_table_mean"],
         abs=5e-5,
     )
-    assert rows["orca"]["repeat_count"] == 47
+    assert rows["orca"]["repeat_count"] == seed_policy["repeat_count_per_planner_seed"]
     assert rows["ppo"]["collisions_mean"] == pytest.approx(
         rows["ppo"]["collisions_source_table_mean"],
         abs=5e-5,

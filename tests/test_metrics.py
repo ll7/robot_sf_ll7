@@ -594,6 +594,14 @@ def test_experimental_ped_impact_metrics_are_opt_in() -> None:
     assert "social_proxemic_radius_m" in enabled
     assert "social_proxemic_intrusion_steps" in enabled
 
+    custom_radius = compute_all_metrics(
+        ep,
+        horizon=10,
+        experimental_ped_impact=True,
+        social_proxemic_radius_m=0.75,
+    )
+    assert custom_radius["social_proxemic_radius_m"] == 0.75
+
 
 def test_experimental_social_acceptability_proxemic_intrusion() -> None:
     """Proxemic intrusion should summarize personal-space clearance violations."""

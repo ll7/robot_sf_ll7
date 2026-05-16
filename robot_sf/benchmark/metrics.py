@@ -2307,6 +2307,7 @@ def compute_all_metrics(
     experimental_ped_impact: bool = False,
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
+    social_proxemic_radius_m: float = 1.2,
 ) -> dict[str, float]:
     """Compute all defined metrics for an episode and return them as a mapping.
 
@@ -2326,6 +2327,8 @@ def compute_all_metrics(
             impact metrics.
         ped_impact_window_steps: Trailing smoothing window length (timesteps) used by
             experimental pedestrian impact metrics.
+        social_proxemic_radius_m: Personal-space radius used by exploratory social acceptability
+            metrics when ``experimental_ped_impact`` is enabled.
 
     Returns:
         dict[str, float]: Mapping from metric name (e.g., ``success``, ``force_q50``,
@@ -2401,7 +2404,12 @@ def compute_all_metrics(
                 window_steps=ped_impact_window_steps,
             )
         )
-        values.update(experimental_social_acceptability_metrics(data))
+        values.update(
+            experimental_social_acceptability_metrics(
+                data,
+                proxemic_radius_m=social_proxemic_radius_m,
+            )
+        )
     return values
 
 

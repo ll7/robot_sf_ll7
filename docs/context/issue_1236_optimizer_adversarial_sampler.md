@@ -48,6 +48,16 @@ uv run --active pytest tests/adversarial/test_adversarial_search.py -q -k 'optun
 uv run --active ruff check robot_sf/adversarial/samplers.py robot_sf/adversarial/__init__.py scripts/tools/compare_adversarial_samplers.py tests/adversarial/test_adversarial_search.py
 ```
 
+Full readiness proof after merging `origin/main`:
+
+```bash
+PYTEST_NUM_WORKERS=8 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
+```
+
+Result: `3558 passed, 12 skipped, 6 warnings`. Changed-file coverage cleared the required 80%
+minimum (`robot_sf/adversarial/__init__.py`: 100.0%, `robot_sf/adversarial/samplers.py`: 84.3%)
+with a warning-only 100% goal gap for `samplers.py`.
+
 Synthetic comparison smoke:
 
 ```bash

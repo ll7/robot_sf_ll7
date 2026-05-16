@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1214 docs/proof consistency checker surface: `scripts/validation/check_docs_proof_consistency.py`
+  now scans changed docs/evidence files for high-confidence PR handoff drift, the
+  `scripts/dev/check_docs_proof_consistency_diff.sh` wrapper exposes the branch-diff command, and
+  the contributor workflow docs now point at the new check before proof-heavy PR handoff.
 * Added the issue-1185 dummy-backend smoke surface: `robot_sf/sim/backends/dummy_backend.py`
   now exposes the map metadata and minimal simulator contract that `RobotEnv` expects, so
   `examples/advanced/01_backend_selection.py` can run headlessly in CI and stays covered by the

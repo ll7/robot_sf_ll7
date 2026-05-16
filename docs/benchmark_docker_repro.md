@@ -23,6 +23,23 @@ Default image tag:
 robot-sf-benchmark-repro:py312.3-uv0.11.9
 ```
 
+## GitHub Actions Runner Smoke
+
+The path-limited workflow `.github/workflows/benchmark-docker-repro-smoke.yml` runs the same
+wrapper when Docker reproduction files change, and it can also be triggered manually with
+`workflow_dispatch`.
+
+The workflow records runner qualification evidence before building the image:
+
+* runner OS and architecture
+* Docker daemon version and `docker info`
+* `nvidia-smi` availability
+* `docker run --gpus all ... nvidia-smi` availability
+
+GitHub-hosted `ubuntu-latest` can provide Docker daemon proof for the CPU/headless smoke. It is not
+expected to provide NVIDIA GPU evidence; the workflow records that as an explicit not-available
+condition rather than treating it as benchmark success.
+
 ## What Runs
 
 The smoke uses:

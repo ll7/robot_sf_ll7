@@ -52,6 +52,14 @@ Use `gh-issue-creator` to turn the request into a repo-ready issue.
 
 Pick the narrowest GitHub issue template that fits the task:
 
+- `research-validation.yml` for bounded research questions with explicit evidence grade,
+  artifact policy, and validation command.
+- `test-debt.yml` for skipped, failing, flaky, weak, or missing tests.
+- `blocked-external-artifact.yml` for unavailable datasets, models, runtimes, licenses, or
+  artifact pointers.
+- `execution-run.yml` for long local, SLURM, or release executions with current phase and next
+  decision point.
+- `epic.yml` for parent issues that need child links or a child-creation task.
 - `issue_default.md` for mixed or vague requests.
 - `documentation.md` for guides and workflow docs.
 - `benchmark_experiment.md` for benchmark or scenario work.

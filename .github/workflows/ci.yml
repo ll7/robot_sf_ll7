@@ -22,6 +22,7 @@ env:
 jobs:
   fast-feedback:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -118,6 +119,7 @@ jobs:
 
   smoke-artifacts:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -212,6 +214,7 @@ jobs:
 
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - fast-feedback
       - smoke-artifacts

@@ -52,6 +52,9 @@ Required checks for this branch:
 * targeted contract tests for the Dockerfile, scripts, docs, and context note
 * direct smoke script execution on the host
 * Docker wrapper execution when Docker is available
+* path-limited GitHub Actions workflow execution via
+  `.github/workflows/benchmark-docker-repro-smoke.yml` for Docker-capable runner qualification
+  and artifact capture
 * full PR readiness after syncing with `origin/main`
 
 ## 2026-05-09 Local Validation
@@ -75,3 +78,25 @@ ERROR: permission denied while trying to connect to the docker API at unix:///va
 The current user is not in the `docker` group for `/var/run/docker.sock`. The Docker build/run
 command remains the required final environment proof on a Docker-capable host or CI runner; this is
 tracked by follow-up issue #1119.
+
+## 2026-05-15 Runner Qualification Follow-up
+
+Issue #1119 adds `.github/workflows/benchmark-docker-repro-smoke.yml`, a path-limited workflow for
+the pinned Docker reproduction path. The workflow records runner OS/architecture, Docker daemon
+version, `docker info`, `nvidia-smi`, and `docker run --gpus all ... nvidia-smi` evidence before it
+runs `scripts/repro/run_benchmark_docker_smoke.sh`.
+
+The first workflow execution caught that the Dockerfile's dependency-layer copy omitted the locked
+local `third_party/python-rvo2` dependency before `uv sync --all-extras --frozen
+--no-install-project`. The Dockerfile now copies `third_party/python-rvo2` alongside `fast-pysf`
+before the dependency sync so the frozen ORCA extra can resolve inside the image.
+
+The next workflow execution reached the final project install but exposed a stale vendored RVO2
+build-tree issue: the dependency-layer install left `third_party/python-rvo2/build/RVO2` pointing at
+an isolated temporary CMake executable that no longer existed when the final `uv sync` reused the
+tree. The Dockerfile now clears `third_party/python-rvo2/build` before the final project sync so
+the vendored wheel build reconfigures from the copied source tree inside the final layer.
+
+The expected GitHub-hosted `ubuntu-latest` proof is CPU/headless Docker reproduction evidence. If
+NVIDIA hardware or NVIDIA Container Toolkit support is unavailable, the workflow records that as a
+runner limitation; it must not be reported as GPU or CARLA runtime readiness for #1179.

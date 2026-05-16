@@ -150,6 +150,28 @@ def test_frames_to_samples_appends_obstacle_feature_schema_rows() -> None:
     assert mask[0, 0] == 1.0
 
 
+def test_frames_to_samples_appends_real_map_obstacle_feature_rows() -> None:
+    """Obstacle-feature datasets should use map-derived lines when collection has them."""
+    frames = [
+        _frame(ped_positions=[(1.0, 1.0)], ped_velocities=[(0.1, 0.0)]),
+        _frame(ped_positions=[(1.2, 1.0)], ped_velocities=[(0.1, 0.0)]),
+    ]
+
+    state, _target, mask, _target_mask = collect._frames_to_samples(
+        frames,
+        max_agents=2,
+        horizon_steps=1,
+        ego_conditioning=False,
+        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        obstacle_lines=[((0.0, 0.0), (2.0, 0.0))],
+    )
+
+    assert state.shape == (1, 2, 10)
+    np.testing.assert_allclose(state[0, 0, 4:10], [1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
+    assert state[0, 1, 9] == 0.0
+    assert mask[0, 0] == 1.0
+
+
 def test_effective_feature_schema_follows_emitted_ego_conditioning_features() -> None:
     """Collector metadata should match the actual emitted feature width."""
     schema = collect._effective_predictive_feature_schema(

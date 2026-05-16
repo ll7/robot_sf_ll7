@@ -5,10 +5,12 @@ from __future__ import annotations
 import pytest
 
 from robot_sf.benchmark.planner_command_contract import (
+    PlannerContractValidationError,
     default_robot_command_space,
     init_feasibility_metadata,
     planner_kinematics_compatibility,
     project_with_feasibility,
+    validate_planner_contract,
 )
 from robot_sf.planner.kinematics_model import DifferentialDriveKinematicsModel
 
@@ -79,3 +81,19 @@ def test_planner_kinematics_compatibility_blocks_known_invalid_pairs() -> None:
         robot_kinematics="differential_drive",
         algo_config={"obs_mode": "image"},
     ) == (True, None)
+
+
+def test_validate_planner_contract_names_incompatible_action_fixture() -> None:
+    """Contract validation errors should name planner, kinematics, and remediation context."""
+    with pytest.raises(PlannerContractValidationError) as excinfo:
+        validate_planner_contract(
+            algo="rvo",
+            robot_kinematics="holonomic",
+            algo_config={},
+            observation_mode="socnav_state",
+        )
+
+    message = str(excinfo.value)
+    assert "planner 'rvo'" in message
+    assert "holonomic" in message
+    assert "contract mismatch" in message

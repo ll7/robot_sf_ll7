@@ -223,6 +223,7 @@ _default_robot_command_space = planner_commands.default_robot_command_space
 _init_feasibility_metadata = planner_commands.init_feasibility_metadata
 _planner_kinematics_compatibility = planner_commands.planner_kinematics_compatibility
 _project_with_feasibility = planner_commands.project_with_feasibility
+_validate_planner_contract = planner_commands.validate_planner_contract
 
 
 def _holonomic_world_velocity_command(vx: float, vy: float) -> dict[str, float | str]:
@@ -2706,6 +2707,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         scenario=scenario,
     )
     active_observation_mode = resolve_observation_mode(algo, observation_mode)
+    _validate_planner_contract(
+        algo=algo,
+        robot_kinematics=robot_kinematics,
+        algo_config=policy_cfg,
+        observation_mode=active_observation_mode,
+    )
     policy_fn, algo_meta = _build_policy(
         algo,
         policy_cfg,
@@ -3261,6 +3268,19 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     if algo.strip().lower() == "prediction_planner":
         algo_contract.update(_prediction_planner_metadata_overrides(policy_cfg))
+    for validation_kinematics in scenario_kinematics or [kinematics_tag]:
+        try:
+            algo_contract["planner_contract"] = _validate_planner_contract(
+                algo=algo,
+                robot_kinematics=validation_kinematics,
+                algo_config=policy_cfg,
+                observation_mode=active_observation_mode,
+            )
+        except planner_commands.PlannerContractValidationError as exc:
+            preflight["status"] = "skipped"
+            preflight["compatibility_status"] = "incompatible"
+            preflight["compatibility_reason"] = str(exc)
+            break
     compatible, incompatible_reason = _planner_kinematics_compatibility(
         algo=algo,
         robot_kinematics=kinematics_tag,

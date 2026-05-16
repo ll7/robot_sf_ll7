@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.algorithm_metadata import planner_contract_for_algorithm
+
 if TYPE_CHECKING:
     from robot_sf.planner.kinematics_model import KinematicsModel
 
 _DEFAULT_KINEMATICS = "differential_drive"
+
+
+class PlannerContractValidationError(ValueError):
+    """Raised when planner observation/action metadata does not match a run request."""
 
 
 def default_robot_command_space(
@@ -112,9 +118,51 @@ def planner_kinematics_compatibility(
     return True, None
 
 
+def validate_planner_contract(
+    *,
+    algo: str,
+    robot_kinematics: str,
+    algo_config: dict[str, Any],
+    observation_mode: str | None = None,
+) -> dict[str, Any]:
+    """Validate planner observation/action compatibility before benchmark execution.
+
+    Returns:
+        dict[str, Any]: Serialized planner contract metadata for the requested planner.
+
+    Raises:
+        PlannerContractValidationError: If the planner is incompatible with the requested
+        observation mode, robot kinematics, or action contract.
+    """
+    algo_key = algo.strip().lower()
+    try:
+        contract = planner_contract_for_algorithm(algo_key, observation_mode=observation_mode)
+    except ValueError as exc:
+        raise PlannerContractValidationError(
+            f"Planner contract mismatch for planner '{algo_key}': {exc}"
+        ) from exc
+
+    compatible, reason = planner_kinematics_compatibility(
+        algo=algo_key,
+        robot_kinematics=robot_kinematics,
+        algo_config=algo_config,
+    )
+    if not compatible:
+        payload = contract.to_metadata()
+        action = payload["action_contract"]
+        raise PlannerContractValidationError(
+            "Planner contract mismatch for "
+            f"planner '{algo_key}' with robot_kinematics='{robot_kinematics}': {reason}. "
+            f"Declared command_space='{action['command_space']}'."
+        )
+    return contract.to_metadata()
+
+
 __all__ = [
+    "PlannerContractValidationError",
     "default_robot_command_space",
     "init_feasibility_metadata",
     "planner_kinematics_compatibility",
     "project_with_feasibility",
+    "validate_planner_contract",
 ]

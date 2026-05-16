@@ -2634,6 +2634,9 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
     assert result["algorithm_metadata_contract"]["observation_spec"]["active_mode"] == (
         "socnav_state"
     )
+    planner_contract = result["algorithm_metadata_contract"]["planner_contract"]
+    assert planner_contract["observation_contract"]["active_mode"] == "socnav_state"
+    assert planner_contract["action_contract"]["command_space"] != "unknown"
     assert result["algorithm_metadata_contract"]["baseline_category"] == "classical"
     assert result["algorithm_metadata_contract"]["planner_kinematics"]["robot_kinematics"] in {
         "unknown",

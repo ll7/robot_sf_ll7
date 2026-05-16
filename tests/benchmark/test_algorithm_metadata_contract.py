@@ -9,6 +9,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
     observation_spec_for_algorithm,
+    planner_contract_for_algorithm,
     resolve_observation_mode,
 )
 
@@ -37,6 +38,30 @@ def test_observation_spec_declares_supported_modes_and_rejects_invalid_override(
         excinfo.value
     )
     assert "socnav_state" in str(excinfo.value)
+
+
+def test_enriched_metadata_embeds_typed_planner_contract_payload() -> None:
+    """Algorithm metadata should expose normalized observation/action contract payloads."""
+    meta = enrich_algorithm_metadata(
+        algo="orca",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+        observation_mode="socnav_state",
+    )
+
+    contract = meta["planner_contract"]
+    assert contract["planner_id"] == "orca"
+    assert contract["observation_contract"]["active_mode"] == "socnav_state"
+    assert contract["action_contract"]["command_space"] == "unicycle_vw"
+    assert contract["action_contract"]["output_keys"] == ["v", "omega"]
+    assert contract["compatibility_scope"] == "metadata_only"
+
+
+def test_planner_contract_helper_rejects_unsupported_observation_mode() -> None:
+    """Typed contract resolution should fail closed on invalid observation overrides."""
+    with pytest.raises(ValueError, match="Observation mode 'goal_state' is not supported"):
+        planner_contract_for_algorithm("orca", observation_mode="goal_state")
 
 
 def test_random_baseline_metadata_marks_stochastic_reference() -> None:

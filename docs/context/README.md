@@ -92,6 +92,8 @@ knowledge, not every transient iteration detail.
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
 * Issue #1240 scenario coverage entropy:
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
+* Issue #1255 open-issue dependency graph:
+  [issue_1255_open_issue_dependency_graph.md](issue_1255_open_issue_dependency_graph.md)
 * Artifact evidence vocabulary:
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:
@@ -397,6 +399,9 @@ why a change was made rather than a full issue execution transcript.
   evidence collection path for diagnosing low CPU utilization without launching new jobs.
 * [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial
   scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
+* [Issue #1236 Optimizer Adversarial Sampler](issue_1236_optimizer_adversarial_sampler.md) -
+  Optuna-backed feedback sampler pilot, synthetic comparison helper, and non-paper-facing evidence
+  boundary.
 * [Issue #923 Multi-Ped Adversarial Candidate Schema](issue_923_multi_ped_adversarial_schema.md) -
   schema-only first slice under #870 for scripted multi-pedestrian adversarial candidates.
 * [Issue #936 Multi-Ped Adversarial Overrides](issue_936_multi_ped_adversarial_overrides.md)

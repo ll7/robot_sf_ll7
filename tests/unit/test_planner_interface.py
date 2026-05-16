@@ -8,7 +8,9 @@ import numpy as np
 import pytest
 
 from robot_sf.baselines import get_baseline
+from robot_sf.baselines.interface import ActionContract, ObservationContract, PlannerMetadata
 from robot_sf.baselines.social_force import Observation
+from robot_sf.benchmark.algorithm_metadata import planner_contract_for_algorithm
 
 
 class TestPlannerInterfaceCompliance:
@@ -259,3 +261,46 @@ class TestPlannerInterfaceCompliance:
             assert hasattr(planner, "configure")
             assert hasattr(planner, "close")
             planner.close()
+
+    def test_planner_contract_dataclasses_are_lightweight_metadata(self) -> None:
+        """Planner contracts should serialize without importing planner runtimes."""
+        observation = ObservationContract(
+            mode="socnav_state",
+            supported_modes=("socnav_state",),
+            required_inputs=("robot_state", "goal", "pedestrians"),
+            frame="world",
+            normalization="raw",
+            pedestrian_ordering="distance_ascending",
+        )
+        action = ActionContract(
+            command_space="unicycle_vw",
+            output_keys=("v", "omega"),
+            frame="robot",
+            normalization="raw",
+            units="mps_radps",
+        )
+        metadata = PlannerMetadata(
+            planner_id="unit_planner",
+            observation_contract=observation,
+            action_contract=action,
+            reset_contract="seeded_reset",
+        )
+
+        payload = metadata.to_metadata()
+
+        assert payload["planner_id"] == "unit_planner"
+        assert payload["observation_contract"]["supported_modes"] == ["socnav_state"]
+        assert payload["action_contract"]["output_keys"] == ["v", "omega"]
+        assert payload["reset_contract"] == "seeded_reset"
+
+    @pytest.mark.parametrize("algo", ["goal", "social_force", "orca", "ppo", "random"])
+    def test_core_benchmark_planners_publish_contract_metadata(self, algo: str) -> None:
+        """CI-smoke/core benchmark planners should declare observation and action contracts."""
+        contract = planner_contract_for_algorithm(algo)
+        payload = contract.to_metadata()
+
+        assert payload["planner_id"] == contract.planner_id
+        assert payload["observation_contract"]["active_mode"]
+        assert payload["observation_contract"]["required_inputs"]
+        assert payload["action_contract"]["command_space"] != "unknown"
+        assert payload["action_contract"]["output_keys"]

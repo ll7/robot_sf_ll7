@@ -237,6 +237,19 @@ agent context.
 - Optional MCP integration should expose the Markdown files directly; do not add a retrieval
   database or vector store unless the repository's retrieval-deferral policy changes.
 
+### Question-first experiment registry
+
+Use `experiments/registry.yaml` for planned or active exploratory ML/search/manual-control runs that
+need a reviewable question, hypothesis, command, artifact expectation, evidence grade, and paper
+relevance before execution. This registry complements GitHub issues, W&B artifacts, local telemetry
+under `output/run-tracker/`, and publication bundles; it does not make local `output/` files durable.
+
+Validate the registry with:
+
+```bash
+uv run python scripts/tools/validate_experiment_registry.py experiments/registry.yaml
+```
+
 On macOS, `scripts/dev/run_tests_parallel.sh` uses a bounded fixed xdist worker count by
 default instead of `-n auto`, because the unbounded auto worker selection can leave local
 validation wrappers hanging after child processes should have exited. Override with

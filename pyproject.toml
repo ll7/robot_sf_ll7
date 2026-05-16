@@ -82,6 +82,10 @@ analysis = [
     "matplotlib>=3.9.2",
     "pandas>=2.2.3",
 ]
+analytics = [
+    "duckdb>=1.4.0",
+    "pyarrow>=23.0.0",
+]
 viz = [
     "matplotlib>=3.9.2",
     "seaborn>=0.13.2",

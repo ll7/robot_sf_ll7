@@ -225,6 +225,19 @@ The repository now keeps a repo-local Markdown memory layer under `memory/` for 
 agent context.
 
 - Start with `memory/MEMORY.md`, which acts as the concise index.
+
+### Question-first experiment registry
+
+Use `experiments/registry.yaml` for planned or active exploratory ML/search/manual-control runs that
+need a reviewable question, hypothesis, command, artifact expectation, evidence grade, and paper
+relevance before execution. This registry complements GitHub issues, W&B artifacts, local telemetry
+under `output/run-tracker/`, and publication bundles; it does not make local `output/` files durable.
+
+Validate the registry with:
+
+```bash
+uv run python scripts/tools/validate_experiment_registry.py experiments/registry.yaml
+```
 - Store reusable memory in typed subdirectories such as `memory/architecture/`,
   `memory/decisions/`, `memory/experiments/`, `memory/failures/`, and `memory/benchmarks/`.
 - Use the experiment naming pattern `memory/experiments/YYYY-MM-DD_<topic>.md`.

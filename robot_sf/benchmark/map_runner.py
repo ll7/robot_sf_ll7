@@ -3283,7 +3283,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         except planner_commands.PlannerContractValidationError as exc:
             incompatible_kinematics[validation_kinematics] = str(exc)
     if incompatible_kinematics:
-        preflight["incompatible_scenario_kinematics"] = dict(sorted(incompatible_kinematics.items()))
+        preflight["incompatible_scenario_kinematics"] = dict(
+            sorted(incompatible_kinematics.items())
+        )
         if compatible_contract is None:
             preflight["status"] = "skipped"
             preflight["compatibility_status"] = "incompatible"

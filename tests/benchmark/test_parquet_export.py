@@ -21,7 +21,7 @@ def _episode(
     episode_id: str,
     algo: str,
     scenario_family: str,
-    seed: int,
+    seed: int | float,
     min_ttc: float,
     clearance: float,
     success: bool,
@@ -57,6 +57,11 @@ def _episode(
         "termination_reason": termination_reason,
         "outcome": {"collision_event": not success},
         "integrity": {"seed": seed},
+        "timestamps": {
+            "start": "2026-05-16T08:00:00+00:00",
+            "end": "2026-05-16T08:00:01.250000+00:00",
+        },
+        "wall_time_sec": 1.25,
     }
 
 
@@ -111,6 +116,9 @@ def test_export_parquet_writes_stable_tables_and_metadata(tmp_path: Path) -> Non
     assert [row["episode_id"] for row in episodes] == ["ep-a", "ep-b"]
     assert episodes[0]["algo"] == "planner_a"
     assert episodes[0]["scenario_family"] == "crossing"
+    assert episodes[0]["started_at_utc"] == "2026-05-16T08:00:00+00:00"
+    assert episodes[0]["finished_at_utc"] == "2026-05-16T08:00:01.250000+00:00"
+    assert episodes[0]["total_runtime_sec"] == 1.25
 
     metrics = pq.read_table(result.output_dir / "metrics.parquet").to_pylist()
     metric_paths = {(row["episode_id"], row["metric_path"]) for row in metrics}
@@ -151,6 +159,46 @@ def test_export_parquet_refuses_to_overwrite_existing_outputs(tmp_path: Path) ->
     export_episodes_jsonl_to_parquet(episodes_path, tmp_path / "analytics")
 
     with pytest.raises(FileExistsError, match="already exists"):
+        export_episodes_jsonl_to_parquet(episodes_path, tmp_path / "analytics")
+
+
+def test_export_parquet_coerces_integer_like_float_seed(tmp_path: Path) -> None:
+    """Exact integer floats should not be dropped from integer columns."""
+    episodes_path = tmp_path / "episodes.jsonl"
+    _write_jsonl(
+        episodes_path,
+        [
+            _episode(
+                episode_id="ep-a",
+                algo="planner_a",
+                scenario_family="crossing",
+                seed=11.0,
+                min_ttc=1.25,
+                clearance=0.42,
+                success=True,
+                termination_reason="goal_reached",
+            )
+        ],
+    )
+
+    result = export_episodes_jsonl_to_parquet(episodes_path, tmp_path / "analytics")
+
+    episodes = pq.read_table(result.output_dir / "episodes.parquet").to_pylist()
+    assert episodes[0]["seed"] == 11
+
+
+def test_export_parquet_rejects_directory_input(tmp_path: Path) -> None:
+    """Source paths must be files so provenance hashing cannot open a directory."""
+    with pytest.raises(FileNotFoundError, match="not a file"):
+        export_episodes_jsonl_to_parquet(tmp_path, tmp_path / "analytics")
+
+
+def test_export_parquet_reports_malformed_json_line(tmp_path: Path) -> None:
+    """Malformed source JSONL should fail with file and line number context."""
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text('{"episode_id": "ok"}\n{"episode_id":\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"episodes\.jsonl:2 is not valid JSON"):
         export_episodes_jsonl_to_parquet(episodes_path, tmp_path / "analytics")
 
 

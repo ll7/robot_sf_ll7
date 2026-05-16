@@ -12,8 +12,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.aggregate import read_jsonl
-
 try:  # Optional analytics dependency; validated when export is invoked.
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -73,7 +71,7 @@ def export_episodes_jsonl_to_parquet(
     duckdb_examples_path = out_dir / "duckdb_examples.sql"
     _ensure_can_write([*table_paths.values(), metadata_path, duckdb_examples_path], overwrite)
 
-    records = read_jsonl(paths)
+    records = _read_jsonl_files(paths)
     rows = _build_rows(records)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -144,6 +142,9 @@ def _schemas(pa: Any) -> dict[str, Any]:
                 ("episode_id", pa.string()),
                 ("scenario_id", pa.string()),
                 ("seed", pa.int64()),
+                ("started_at_utc", pa.string()),
+                ("finished_at_utc", pa.string()),
+                ("total_runtime_sec", pa.float64()),
                 ("algo", pa.string()),
                 ("scenario_family", pa.string()),
                 ("termination_reason", pa.string()),
@@ -223,6 +224,9 @@ def _episode_row(record: Mapping[str, Any], episode_id: str) -> dict[str, Any]:
         "episode_id": episode_id,
         "scenario_id": _string_or_none(record.get("scenario_id")),
         "seed": _int_or_none(record.get("seed")),
+        "started_at_utc": _resolve_started_at_utc(record),
+        "finished_at_utc": _resolve_finished_at_utc(record),
+        "total_runtime_sec": _resolve_total_runtime_sec(record),
         "algo": _resolve_algo(record),
         "scenario_family": _resolve_scenario_family(record),
         "termination_reason": _string_or_none(record.get("termination_reason")),
@@ -331,6 +335,17 @@ def _int_or_none(value: Any) -> int | None:
         return None
     if isinstance(value, int):
         return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def _float_or_none(value: Any) -> float | None:
+    """Coerce a numeric value when possible."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int | float):
+        return float(value)
     return None
 
 
@@ -354,6 +369,53 @@ def _json_dumps(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def _resolve_started_at_utc(record: Mapping[str, Any]) -> str | None:
+    """Resolve episode start time from canonical or legacy provenance fields."""
+    return _string_or_none(record.get("started_at_utc")) or _string_or_none(
+        _nested_value(record, "timestamps.start")
+    )
+
+
+def _resolve_finished_at_utc(record: Mapping[str, Any]) -> str | None:
+    """Resolve episode finish time from canonical or legacy provenance fields."""
+    return _string_or_none(record.get("finished_at_utc")) or _string_or_none(
+        _nested_value(record, "timestamps.end")
+    )
+
+
+def _resolve_total_runtime_sec(record: Mapping[str, Any]) -> float | None:
+    """Resolve episode runtime from known benchmark provenance fields."""
+    for value in (
+        record.get("total_runtime_sec"),
+        record.get("runtime_sec"),
+        record.get("wall_time_sec"),
+        record.get("total_runtime"),
+    ):
+        number = _float_or_none(value)
+        if number is not None:
+            return number
+    return None
+
+
+def _read_jsonl_files(paths: Sequence[Path]) -> list[dict[str, Any]]:
+    """Read benchmark episode JSONL files, failing closed on malformed source data."""
+    records: list[dict[str, Any]] = []
+    for path in paths:
+        if not path.is_file():
+            raise FileNotFoundError(f"Benchmark episode JSONL input is not a file: {path}")
+        with path.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                text = line.strip()
+                if not text:
+                    continue
+                try:
+                    record = json.loads(text)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"{path}:{line_number} is not valid JSON: {exc.msg}") from exc
+                records.append(record)
+    return records
+
+
 def _build_metadata(
     *,
     paths: Sequence[Path],
@@ -370,7 +432,7 @@ def _build_metadata(
         "source_files": [
             {
                 "path": str(path),
-                "sha256": _path_sha256(path) if path.exists() else None,
+                "sha256": _path_sha256(path) if path.is_file() else None,
             }
             for path in paths
         ],

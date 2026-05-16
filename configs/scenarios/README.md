@@ -35,6 +35,16 @@ metadata:
       force_q95: null
 ```
 
+## Scenario Contracts
+
+Versioned scenario-intent contracts live under `contracts/`. `scenario_contract.v1` captures
+authored assumptions such as ODD, actors, invariants, observables, termination semantics, and
+provenance before a scenario is executed. It is a governance layer, not a benchmark result and not a
+replacement for `scenario_cert.v1` feasibility checks.
+
+See `docs/scenario_contracts.md` for the schema, loader API, and the boundary between intent
+contracts, certification, and executed benchmark evidence.
+
 ## Manifest (include) files
 
 Manifest files use `includes` (or `include` / `scenario_files`) to combine

@@ -1,0 +1,105 @@
+name: Research validation
+description: Propose a bounded research or benchmark-validation question with proof expectations.
+title: "research: "
+labels:
+  - research
+  - validation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for research-validation work that needs a clear hypothesis, evidence grade,
+        artifact policy, and executable validation path before implementation starts.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal / Problem
+      description: State the research question and why it matters now.
+      placeholder: What question should this issue answer?
+    validations:
+      required: true
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: State the expected result or decision this issue should test.
+      placeholder: We expect that...
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence_grade
+    attributes:
+      label: Evidence grade
+      description: How strong is the current evidence behind this issue?
+      options:
+        - observed
+        - inferred
+        - speculative
+        - blocked
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: List in-scope work, non-goals, variables, and comparison boundaries.
+      placeholder: |
+        In scope:
+        Non-goals:
+        Controls/comparators:
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true before this research issue is done?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: validation_command
+    attributes:
+      label: Validation command
+      description: Provide the canonical command or explain why this is docs-only.
+      placeholder: rtk uv run --active ...
+    validations:
+      required: true
+  - type: textarea
+    id: artifact_policy
+    attributes:
+      label: Artifact policy
+      description: Identify expected evidence category and durable storage boundary.
+      placeholder: |
+        Evidence category:
+        output/ usage:
+        Durable pointer or tracked evidence:
+    validations:
+      required: true
+  - type: dropdown
+    id: blocked_ready_state
+    attributes:
+      label: Blocked / ready state
+      description: Select the current execution state.
+      options:
+        - ready
+        - blocked by prerequisite implementation
+        - blocked by external asset/runtime
+        - execution-only
+        - decision required
+    validations:
+      required: true
+  - type: textarea
+    id: estimate_metadata
+    attributes:
+      label: Estimate metadata
+      description: Capture effort, complexity, risk, and uncertainty.
+      placeholder: |
+        Effort (h):
+        Complexity:
+        Risk:
+        Uncertainty:
+    validations:
+      required: true

@@ -1,0 +1,41 @@
+schema_version: experiment-record.v1
+experiment_id: issue_1151_manual_control_mvp_collection
+issue: 1151
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/1151
+question: >
+  Can a fixed local manual-control protocol produce replayable human
+  demonstrations that diagnose whether hard scenarios are policy-limited rather
+  than impossible?
+hypothesis: >
+  Once the local Pygame MVP runner lands, append-only manual-control sessions
+  with frozen baseline metadata will produce useful exploratory diagnostics and
+  BC-ready samples without making paper-facing claims.
+config:
+  - robot_sf/manual_control/
+  - scripts/manual_control/
+  - docs/context/issue_1151_manual_control_mvp_foundation.md
+command: |
+  uv run pytest tests/test_manual_control_*.py -q
+  # After #1219 lands, run the documented local Pygame MVP command for fixed
+  # scenario IDs and seeds before promoting any derived artifacts.
+inputs:
+  - path: robot_sf/manual_control/
+  - path: scripts/manual_control/
+  - path: docs/context/issue_1151_manual_control_mvp_foundation.md
+outputs:
+  - path: output/manual_control/issue1151_mvp_sessions/
+    durable_reference: null
+    evidence_role: local exploratory recording root
+expected_artifacts:
+  - name: manual_session_jsonl
+    path: output/manual_control/issue1151_mvp_sessions/session.jsonl
+  - name: manual_session_manifest
+    path: output/manual_control/issue1151_mvp_sessions/manifest.json
+  - name: bc_export
+    path: output/manual_control/issue1151_mvp_sessions/bc_samples.jsonl
+evidence_grade: observed
+paper_relevance: exploratory
+status: blocked_on_issue_1219
+notes: >
+  #1151 remains a parent epic. This record tracks the future collection
+  protocol, while #1219 owns the executable runner.

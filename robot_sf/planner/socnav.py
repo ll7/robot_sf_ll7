@@ -47,6 +47,9 @@ from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
     infer_predictive_feature_schema,
+    normalize_obstacle_lines,
+    obstacle_lines_from_map,
+    obstacle_lines_from_observation,
 )
 from robot_sf.planner.predictive_model import (
     PredictiveTrajectoryModel,
@@ -3705,6 +3708,24 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._load_error: Exception | None = None
         self._fallback_warned = False
         self._device = self._resolve_device()
+        self._bound_obstacle_lines: list = []
+
+    def bind_obstacle_lines(self, obstacle_lines: Any) -> None:
+        """Bind explicit runtime obstacle-line geometry for obstacle-feature inputs."""
+        self._bound_obstacle_lines = normalize_obstacle_lines(obstacle_lines)
+
+    def bind_env(self, env: Any) -> None:
+        """Bind static map obstacle geometry from a live Robot SF environment."""
+        simulator = getattr(env, "simulator", None)
+        map_def = getattr(env, "map_def", None)
+        if map_def is None:
+            map_def = getattr(simulator, "map_def", None)
+        lines = obstacle_lines_from_map(map_def)
+        if not lines and simulator is not None:
+            iter_segments = getattr(simulator, "iter_obstacle_segments", None)
+            if callable(iter_segments):
+                lines = normalize_obstacle_lines(iter_segments())
+        self._bound_obstacle_lines = lines
 
     def _resolve_device(self) -> str:
         """Resolve runtime device string for predictive model inference.
@@ -3900,9 +3921,12 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 state[:count, 8] = goal_dist
             if schema_metadata["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
                 extractor = LocalObstacleFeatureExtractor()
+                obstacle_lines = obstacle_lines_from_observation(observation)
+                if not obstacle_lines:
+                    obstacle_lines = self._bound_obstacle_lines
                 obstacle_rows = extractor.extract_many(
                     [tuple(point) for point in ped_positions[:count]],
-                    [],
+                    obstacle_lines,
                 )
                 end = min(expected_dim, base_feature_dim + extractor.feature_dim)
                 state[:count, base_feature_dim:end] = obstacle_rows[:, : end - base_feature_dim]

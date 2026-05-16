@@ -34,6 +34,7 @@ from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
 from robot_sf.benchmark.observation_noise import load_observation_noise_spec
+from robot_sf.benchmark.parquet_export import export_episodes_jsonl_to_parquet
 from robot_sf.benchmark.planner_inclusion import (
     DEFAULT_INCLUSION_MATRIX,
     InclusionCriteria,
@@ -469,6 +470,29 @@ def _handle_aggregate(args) -> int:
             logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
+        return 2
+
+
+def _handle_export_parquet(args) -> int:
+    """Export benchmark episode JSONL records to Parquet analytics tables.
+
+    Returns:
+        Exit code (0 success, 2 failure).
+    """
+    try:
+        result = export_episodes_jsonl_to_parquet(
+            args.in_path,
+            args.out_dir,
+            overwrite=bool(args.overwrite),
+        )
+        logging.info(
+            "Parquet analytics export written to %s (%d episode records)",
+            result.output_dir,
+            result.record_count,
+        )
+        return 0
+    except Exception:
+        logging.exception("Parquet analytics export failed")
         return 2
 
 
@@ -1477,6 +1501,24 @@ def _add_aggregate_subparser(
     p.set_defaults(cmd="aggregate")
 
 
+def _add_export_parquet_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the export-parquet subcommand parser."""
+    p = subparsers.add_parser(
+        "export-parquet",
+        help="Convert benchmark episode JSONL into Parquet analytics tables",
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out-dir", required=True, help="Output directory for Parquet tables")
+    p.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace existing export files in the output directory",
+    )
+    p.set_defaults(cmd="export-parquet")
+
+
 def _add_snqi_ablate_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -1833,6 +1875,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
     _add_aggregate_subparser(subparsers)
+    _add_export_parquet_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
     _add_snqi_ablate_subparser(subparsers)
@@ -2281,6 +2324,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "run": _handle_run,
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,
+        "export-parquet": _handle_export_parquet,
         "seed-variance": _handle_seed_variance,
         "extract-failures": _handle_extract_failures,
         "snqi-ablate": _handle_snqi_ablate,

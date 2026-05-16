@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -158,6 +159,7 @@ class ScenarioContractValidationError(ValueError):
         super().__init__(prefix + "; ".join(errors))
 
 
+@lru_cache(maxsize=1)
 def load_scenario_contract_schema() -> dict[str, Any]:
     """Load the public ``scenario_contract.v1`` JSON schema.
 

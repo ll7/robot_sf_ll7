@@ -18,8 +18,12 @@ from robot_sf.benchmark.scenario_contract import (
     validate_scenario_contract_references,
 )
 
-FIXTURE_PATH = Path(
-    "configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml"
+FIXTURE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "configs"
+    / "scenarios"
+    / "contracts"
+    / "station_platform_candidate_pack_issue736_contracts.yaml"
 )
 
 

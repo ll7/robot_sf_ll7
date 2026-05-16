@@ -1,0 +1,103 @@
+name: Test debt
+description: Track skipped, flaky, weak, or missing tests with a concrete validation target.
+title: "test: "
+labels:
+  - test
+  - validation
+  - technical-debt
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when the main work is improving test coverage, retiring skips,
+        or turning weak validation into a reliable proof.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal / Problem
+      description: Describe the test gap and why it matters.
+      placeholder: Which behavior is not currently protected?
+    validations:
+      required: true
+  - type: textarea
+    id: test_evidence
+    attributes:
+      label: Skipped or failing test evidence
+      description: Link the skip, failure, weak assertion, or missing coverage evidence.
+      placeholder: |
+        Test path:
+        Current failure/skip:
+        Why this is debt:
+    validations:
+      required: true
+  - type: textarea
+    id: intended_behavior
+    attributes:
+      label: Intended behavior
+      description: State the contract that the test should enforce.
+      placeholder: The system should...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: Bound the test work and avoid unrelated refactors.
+      placeholder: |
+        In scope:
+        Non-goals:
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Define the done state.
+      placeholder: |
+        - [ ] Test fails for the intended reason before the fix when practical.
+        - [ ] Test passes after the fix.
+        - [ ] Related targeted suite passes.
+    validations:
+      required: true
+  - type: textarea
+    id: targeted_validation
+    attributes:
+      label: Targeted validation
+      description: Name the test command that proves the change.
+      placeholder: rtk uv run --active pytest ...
+    validations:
+      required: true
+  - type: textarea
+    id: artifact_policy
+    attributes:
+      label: Artifact policy
+      description: State whether outputs are disposable, tracked fixtures, or durable evidence.
+      placeholder: |
+        Evidence category:
+        output/ usage:
+        Fixture or durable evidence:
+    validations:
+      required: true
+  - type: dropdown
+    id: blocked_ready_state
+    attributes:
+      label: Blocked / ready state
+      options:
+        - ready
+        - blocked by flaky environment
+        - blocked by missing fixture
+        - blocked by external dependency
+        - decision required
+    validations:
+      required: true
+  - type: textarea
+    id: estimate_metadata
+    attributes:
+      label: Estimate metadata
+      placeholder: |
+        Effort (h):
+        Complexity:
+        Risk:
+        Uncertainty:
+    validations:
+      required: true

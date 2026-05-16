@@ -1,0 +1,410 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/scenario_contract.v1.json",
+  "title": "RobotSF Scenario Contract (v1)",
+  "description": "Authored scenario-intent governance contract. This is not a runtime benchmark result or a scenario_cert.v1 feasibility certificate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "scenario_ref",
+    "odd",
+    "actors",
+    "invariants",
+    "observables",
+    "termination_conditions",
+    "certification",
+    "benchmark_eligibility",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "scenario_contract.v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$"
+    },
+    "scenario_ref": {
+      "$ref": "#/$defs/scenario_ref"
+    },
+    "odd": {
+      "$ref": "#/$defs/operating_design_domain"
+    },
+    "actors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/actor"
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/invariant"
+      }
+    },
+    "observables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/observable"
+      }
+    },
+    "termination_conditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/termination_condition"
+      }
+    },
+    "certification": {
+      "$ref": "#/$defs/certification"
+    },
+    "benchmark_eligibility": {
+      "$ref": "#/$defs/benchmark_eligibility"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "string_list": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "scenario_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "scenario_name",
+        "scenario_family"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario_family": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "operating_design_domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment_type",
+        "map_family",
+        "density",
+        "flow",
+        "assumptions"
+      ],
+      "properties": {
+        "environment_type": {
+          "type": "string",
+          "enum": [
+            "indoor_public_transit",
+            "indoor_corridor",
+            "indoor_room",
+            "outdoor_walkway",
+            "synthetic_atomic",
+            "mixed",
+            "unspecified"
+          ]
+        },
+        "map_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "density": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "mixed",
+            "stress",
+            "unspecified"
+          ]
+        },
+        "flow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assumptions": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "count_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum",
+        "maximum"
+      ],
+      "properties": {
+        "minimum": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maximum": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "count",
+        "motion_model",
+        "assumptions"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "robot",
+            "pedestrian",
+            "pedestrian_group",
+            "static_obstacle",
+            "semantic_region"
+          ]
+        },
+        "count": {
+          "$ref": "#/$defs/count_range"
+        },
+        "motion_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assumptions": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "scope",
+        "severity",
+        "description"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "authoring",
+            "pre_run",
+            "runtime",
+            "post_run"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "required",
+            "advisory"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "observable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "metric",
+        "source",
+        "required",
+        "interpretation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$"
+        },
+        "metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "interpretation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "termination_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "reason",
+        "source",
+        "description"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "success",
+            "collision",
+            "max_steps",
+            "truncated",
+            "terminated",
+            "excluded",
+            "unknown"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "certification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "required_before_benchmark_claim",
+        "expected_eligibility",
+        "notes"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "scenario_cert.v1"
+        },
+        "required_before_benchmark_claim": {
+          "type": "boolean"
+        },
+        "expected_eligibility": {
+          "type": "string",
+          "enum": [
+            "eligible",
+            "stress_only",
+            "excluded",
+            "unknown"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "benchmark_eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intended_use",
+        "requires_certification",
+        "claim_boundary",
+        "eligibility_hooks"
+      ],
+      "properties": {
+        "intended_use": {
+          "type": "string",
+          "enum": [
+            "fixture",
+            "exploratory",
+            "stress",
+            "paper_candidate",
+            "paper_baseline"
+          ]
+        },
+        "requires_certification": {
+          "type": "boolean"
+        },
+        "claim_boundary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eligibility_hooks": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_issue",
+        "authored_by",
+        "source_files",
+        "notes"
+      ],
+      "properties": {
+        "source_issue": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authored_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_files": {
+          "$ref": "#/$defs/string_list"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

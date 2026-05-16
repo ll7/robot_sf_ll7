@@ -87,7 +87,9 @@ experiments. The automated example pipeline writes run-specific configs to
 `output/tmp/imitation_pipeline/` so you can keep the checked-in YAML focused on
 reusable defaults. For checkpoint-specific observation contracts, set `training_config`
 and `scenario_config` in the BC config, or rely on those paths from trajectory dataset
-metadata.
+metadata. BC pre-training uses `device: auto` by default so capable hosts can use
+available accelerators; set `device: cpu` when you need a deterministic or
+resource-constrained CPU-only run.
 
 **What happens:**
 - Loads trajectory dataset

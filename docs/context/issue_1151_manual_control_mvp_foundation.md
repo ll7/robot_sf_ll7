@@ -76,16 +76,70 @@ Manual-control JSONL records use `record_schema=manual_control_v1` and include:
 
 Pause/countdown/retry events can be recorded with `training_sample=false`; behavior-cloning extraction should use only records explicitly marked `training_sample=true` unless a future exporter applies additional filtering.
 
-## Remaining MVP work
+## Issue #1219 MVP runner update
 
-- Add an interactive runner under `robot_sf/manual_control/` or `scripts/manual_control/`.
-- Wire Pygame events into `ManualKeyState` and `ManualSessionController`.
-- Step `RobotEnv` with `DifferentialDriveKeyboardMapper.map_action(...)`.
-- Add overlays for goal, current steering/action state, countdown, pause, speed multiplier, episode status, and terminal/failure reason.
-- Record simulator state and per-step metrics into `ManualControlRecord` rows.
-- Load and freeze policy-to-beat metadata at session start.
-- Add baseline comparison logic and session manifest summaries.
-- Add a documented smoke command and targeted tests for runner orchestration.
+Issue #1219 adds the first executable local Pygame manual-control runner on top of the pure
+foundation helpers.
+
+Implemented artifacts:
+
+- `robot_sf/manual_control/pygame_runner.py`
+  - `ManualPygameRunnerSettings`
+  - `ManualPygameRunner`
+  - `ManualPygameRunnerResult`
+- `scripts/manual_control/run_pygame_session.py`
+- `tests/test_manual_control_pygame_runner.py`
+
+Runner scope:
+
+- fixed-map `keyboard_hold` differential-drive MVP mode,
+- explicit policy-to-beat metadata at startup,
+- fail-closed baseline provenance when `--policy-to-beat` or `--policy-to-beat-source` is absent,
+- Pygame key events converted into `ManualKeyState`,
+- countdown, pause/play, retry, speed multiplier, and quit controls,
+- `RobotEnv` stepping via `DifferentialDriveKeyboardMapper.map_action(...)`,
+- compact manual-control overlay with scenario, seed, session state, keys, speed, baseline, countdown,
+  and terminal status,
+- append-only `manual_control_v1` JSONL records with training samples only for real step rows,
+- `manual_control_session_manifest_v1` manifest with frozen baseline, completed/unresolved attempts,
+  and artifact paths.
+
+Documented local command:
+
+```bash
+SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python scripts/manual_control/run_pygame_session.py \
+  --headless \
+  --scenario-id issue1219_smoke \
+  --seed 1219 \
+  --session-id issue1219-headless-smoke \
+  --policy-to-beat explicit-smoke-baseline \
+  --policy-to-beat-source issue-1219-cli-smoke \
+  --max-steps 2 \
+  --max-frames 5 \
+  --countdown-steps 0
+```
+
+Interactive use should omit `SDL_VIDEODRIVER=dummy` and `--headless` so `SimulationView` creates a
+real Pygame window. The MVP keyboard controls are:
+
+- `W`/up: forward,
+- `S`/down: reverse when the robot config allows backwards motion,
+- `A`/left and `D`/right: turn,
+- Space: brake,
+- `P`: pause/play,
+- `R`: retry the active scenario/seed,
+- `+`/`=` and `-`: adjust speed multiplier,
+- `Q` or Escape: quit.
+
+Remaining follow-up work after #1219:
+
+- load a policy-to-beat from the registry/latest-best discovery path instead of explicit CLI
+  metadata only,
+- support multi-scenario/seed session queues beyond the one-scenario MVP,
+- add richer baseline comparison against real policy-analysis outputs,
+- implement deferred `ego_up` and `robot_static` view modes only after renderer camera-transform
+  hooks are proven,
+- wire replay-to-step rewind into the live runner if #1162-style rewind is needed during play.
 
 ## Validation status
 
@@ -96,6 +150,14 @@ Validation has been run for this implementation slice:
 
 These checks cover the manual-control foundation helpers, BC export CLI path, and the
 branch-wide readiness gate for the main-based PR branch.
+
+Issue #1219 targeted validation:
+
+- `uv run ruff check robot_sf/manual_control/pygame_runner.py scripts/manual_control/run_pygame_session.py tests/test_manual_control_pygame_runner.py`
+- `uv run pytest tests/test_manual_control_pygame_runner.py tests/test_manual_control_input_mapping.py tests/test_manual_control_session.py tests/test_manual_control_recording.py tests/test_manual_control_manifest.py -q`
+- Headless CLI smoke command above; observed output wrote:
+  - `output/manual_control/issue1219-headless-smoke/records.jsonl`
+  - `output/manual_control/issue1219-headless-smoke/manifest.json`
 
 ## Additional foundation: baseline comparison
 

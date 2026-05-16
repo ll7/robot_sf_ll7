@@ -92,6 +92,8 @@ knowledge, not every transient iteration detail.
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
 * Issue #1255 open-issue dependency graph:
   [issue_1255_open_issue_dependency_graph.md](issue_1255_open_issue_dependency_graph.md)
+* Artifact evidence vocabulary:
+  [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:
   [pr_first_pass_review_audit_2026-05-14.md](pr_first_pass_review_audit_2026-05-14.md)
 * Note-maintenance skill:
@@ -371,7 +373,8 @@ why a change was made rather than a full issue execution transcript.
   graph prototype.
 * [Issue #1165 Predictive Obstacle-Feature Lifecycle](issue_1165_predictive_obstacle_lifecycle.md)
   records the schema/dimension contract for obstacle-feature predictive datasets, training,
-  checkpoints, and runtime loading before any same-seed performance comparison.
+  checkpoints, runtime loading, and the #1218 map-derived obstacle-line data source before any
+  same-seed performance comparison.
 * [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter` .

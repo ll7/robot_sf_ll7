@@ -1,0 +1,9 @@
+schema_version: experiment-registry.v1
+description: >
+  Question-first registry for exploratory Robot SF experiments. Records here
+  complement GitHub issues, W&B, model registries, and publication bundles; they
+  do not make local output artifacts durable by themselves.
+records:
+  - issue_1108_bc_warm_start_ppo.yaml
+  - issue_1236_adversarial_optimizer_sampler.yaml
+  - issue_1151_manual_control_mvp_collection.yaml

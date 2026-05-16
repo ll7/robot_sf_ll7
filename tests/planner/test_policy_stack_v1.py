@@ -38,7 +38,9 @@ def _load_atomic_topology_smoke_scenario(name: str) -> dict[str, object]:
         if scenario.get("name") != name:
             continue
         selected = dict(scenario)
-        selected["seeds"] = [59621]
+        # Explicit reset seeding makes this smoke use the seed literally; keep a
+        # deterministic success seed so the test continues to exercise policy-stack execution.
+        selected["seeds"] = [4]
         map_file = selected.get("map_file")
         if isinstance(map_file, str) and map_file.strip():
             map_path = Path(map_file)

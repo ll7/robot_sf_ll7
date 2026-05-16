@@ -1,0 +1,156 @@
+name: Benchmark Docker Repro Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/benchmark-docker-repro-smoke.yml"
+      - "docker/benchmark-repro.Dockerfile"
+      - "scripts/repro/**"
+      - "tests/repro/**"
+      - "docs/benchmark_docker_repro.md"
+      - "docs/context/issue_1086_docker_reproduction_path.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-repro-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUNBUFFERED: "1"
+      ROBOT_SF_REPRO_IMAGE: robot-sf-benchmark-repro:py312.3-uv0.11.9
+      ROBOT_SF_REPRO_OUTPUT_ROOT: output/docker_repro/benchmark_bundle_smoke
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Qualify runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="output/docker_repro/runner_qualification"
+          mkdir -p "$out"
+
+          uname -a > "$out/uname.txt"
+          dpkg --print-architecture > "$out/dpkg_architecture.txt"
+
+          set +e
+          docker version --format '{{json .}}' > "$out/docker_version.json" 2> "$out/docker_version.err"
+          docker_version_status=$?
+          docker info --format '{{json .}}' > "$out/docker_info.json" 2> "$out/docker_info.err"
+          docker_info_status=$?
+          nvidia-smi > "$out/nvidia_smi.txt" 2>&1
+          nvidia_status=$?
+          docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi \
+            > "$out/nvidia_docker_smi.txt" 2>&1
+          nvidia_docker_status=$?
+          set -e
+
+          python - "$out" \
+            "$docker_version_status" \
+            "$docker_info_status" \
+            "$nvidia_status" \
+            "$nvidia_docker_status" <<'PY'
+          from __future__ import annotations
+
+          import json
+          import platform
+          import sys
+          from pathlib import Path
+
+          out = Path(sys.argv[1])
+          docker_version_status = int(sys.argv[2])
+          docker_info_status = int(sys.argv[3])
+          nvidia_status = int(sys.argv[4])
+          nvidia_docker_status = int(sys.argv[5])
+
+          def _read(path: Path) -> str:
+              return path.read_text(encoding="utf-8", errors="replace").strip()
+
+          def _json(path: Path) -> object | None:
+              if not path.is_file() or path.stat().st_size == 0:
+                  return None
+              return json.loads(path.read_text(encoding="utf-8"))
+
+          summary = {
+              "runner_os": platform.platform(),
+              "machine": platform.machine(),
+              "uname": _read(out / "uname.txt"),
+              "dpkg_architecture": _read(out / "dpkg_architecture.txt"),
+              "docker_daemon_available": docker_version_status == 0 and docker_info_status == 0,
+              "docker_version_status": docker_version_status,
+              "docker_info_status": docker_info_status,
+              "docker_version": _json(out / "docker_version.json"),
+              "docker_info": _json(out / "docker_info.json"),
+              "nvidia_smi_available": nvidia_status == 0,
+              "nvidia_smi_status": nvidia_status,
+              "nvidia_docker_available": nvidia_docker_status == 0,
+              "nvidia_docker_status": nvidia_docker_status,
+              "nvidia_smi_output": _read(out / "nvidia_smi.txt"),
+              "nvidia_docker_output": _read(out / "nvidia_docker_smi.txt"),
+          }
+          (out / "runner_qualification.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          if not summary["docker_daemon_available"]:
+              raise SystemExit("Docker daemon is not available on this runner.")
+          PY
+
+      - name: Run Docker benchmark smoke
+        shell: bash
+        run: scripts/repro/run_benchmark_docker_smoke.sh
+
+      - name: Inspect built image
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output/docker_repro
+          docker image inspect "$ROBOT_SF_REPRO_IMAGE" > output/docker_repro/image_inspect.json
+          docker image inspect --format '{{.Id}}' "$ROBOT_SF_REPRO_IMAGE" \
+            > output/docker_repro/image_id.txt
+
+      - name: Summarize Docker proof
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Benchmark Docker Repro Smoke"
+            echo
+            echo "Runner qualification:"
+            echo
+            python -m json.tool output/docker_repro/runner_qualification/runner_qualification.json
+            echo
+            if [ -f output/docker_repro/image_id.txt ]; then
+              echo "Image ID:"
+              echo
+              sed 's/^/    /' output/docker_repro/image_id.txt
+              echo
+            fi
+            if [ -f output/docker_repro/benchmark_bundle_smoke/manifest.json ]; then
+              echo "Smoke manifest:"
+              echo
+              python -m json.tool output/docker_repro/benchmark_bundle_smoke/manifest.json
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Docker repro artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-docker-repro-smoke
+          path: |
+            output/docker_repro/runner_qualification/
+            output/docker_repro/image_inspect.json
+            output/docker_repro/image_id.txt
+            output/docker_repro/benchmark_bundle_smoke/
+          if-no-files-found: warn

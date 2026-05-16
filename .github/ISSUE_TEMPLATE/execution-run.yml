@@ -1,0 +1,131 @@
+name: Execution run
+description: Track a long-running local, SLURM, or release execution with artifact and decision state.
+title: "execution: "
+labels:
+  - workflow
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for execution-only work such as long training, SLURM campaigns,
+        release runs, or other jobs where status and artifact handoff matter.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal / Problem
+      description: State what the run is meant to prove or decide.
+      placeholder: This run should determine...
+    validations:
+      required: true
+  - type: textarea
+    id: runtime_location
+    attributes:
+      label: Runtime and execution location
+      description: Identify host, tmux/SLURM/job id, resources, and expected duration.
+      placeholder: |
+        Host/cluster:
+        Job/session id:
+        Resources:
+        Runtime estimate:
+    validations:
+      required: true
+  - type: dropdown
+    id: current_phase
+    attributes:
+      label: Current phase
+      options:
+        - planned
+        - queued
+        - running
+        - failed
+        - completed awaiting analysis
+        - analyzed
+    validations:
+      required: true
+  - type: input
+    id: owner_agent_handoff
+    attributes:
+      label: Owner / agent handoff
+      description: Name the current owner, agent, or handoff target.
+      placeholder: "@user, agent id, or handoff note"
+    validations:
+      required: true
+  - type: textarea
+    id: artifact_root
+    attributes:
+      label: Artifact root
+      description: Record local scratch root and durable promotion target.
+      placeholder: |
+        Local output/scratch:
+        Durable evidence target:
+        Files that must not be committed:
+    validations:
+      required: true
+  - type: input
+    id: last_log_timestamp
+    attributes:
+      label: Last log timestamp
+      description: Record the latest observed log/update time with timezone.
+      placeholder: "2026-05-16 10:15 Europe/Berlin"
+    validations:
+      required: true
+  - type: textarea
+    id: next_decision
+    attributes:
+      label: Next decision point
+      description: State the next maintainer or agent decision and the evidence needed.
+      placeholder: After the run, decide whether to...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      placeholder: |
+        In scope:
+        Non-goals:
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Runtime status is recorded.
+        - [ ] Summary evidence is captured.
+        - [ ] Follow-up decision is explicit.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation / Testing
+      description: Include launch, monitor, analysis, and smoke commands.
+      placeholder: |
+        Launch:
+        Monitor:
+        Analyze:
+    validations:
+      required: true
+  - type: textarea
+    id: artifact_policy
+    attributes:
+      label: Artifact policy
+      description: Classify outputs using the artifact evidence vocabulary.
+      placeholder: |
+        Evidence category:
+        output/ or scratch policy:
+        Durable pointer or summary:
+    validations:
+      required: true
+  - type: textarea
+    id: estimate_metadata
+    attributes:
+      label: Estimate metadata
+      placeholder: |
+        Effort to launch (h):
+        Runtime estimate:
+        Analysis effort (h):
+        Uncertainty:
+    validations:
+      required: true

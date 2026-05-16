@@ -1,10 +1,11 @@
-"""T016: Seed determinism test.
+"""Factory/reset seed determinism tests.
 
-Ensures two environments created with same seed yield identical initial observation arrays.
-If observation is not an array, test performs a simple equality check.
+Explicit factory and reset seeds should yield identical initial observation arrays.
 """
 
 from __future__ import annotations
+
+import random
 
 import numpy as np
 import pytest
@@ -32,36 +33,59 @@ def _extract_numeric(obs):
     try:
         return np.asarray(obs, dtype=float)
     except Exception as e:  # pragma: no cover
-        raise pytest.skip(f"Cannot extract numeric observation: {e}")
+        raise AssertionError(f"Cannot extract numeric observation: {e}") from e
 
 
 @pytest.mark.parametrize("debug", [False])
 def test_seed_determinism(debug):
-    """TODO docstring. Document this function.
+    """Explicit same-seed factory/reset calls should produce matching reset observations.
 
     Args:
-        debug: TODO docstring.
+        debug: Whether to create the environment in visual debug mode.
     """
-    config1 = RobotSimulationConfig()
-    config2 = RobotSimulationConfig()
-    # Assign same seed before creation if attribute exists
-    if hasattr(config1, "seed"):
-        config1.seed = SEED  # type: ignore[attr-defined]
-    if hasattr(config2, "seed"):
-        config2.seed = SEED  # type: ignore[attr-defined]
-    env1 = make_robot_env(config=config1, debug=debug)
-    env2 = make_robot_env(config=config2, debug=debug)
-    obs1 = env1.reset()
-    obs2 = env2.reset()
-    arr1 = _extract_numeric(obs1)
-    arr2 = _extract_numeric(obs2)
-    assert arr1.shape == arr2.shape
-    # Focus on a stable slice (exclude potential velocity noise row if present)
-    rows_to_compare = min(2, arr1.shape[0])
-    slice1 = arr1[:rows_to_compare]
-    slice2 = arr2[:rows_to_compare]
-    if not np.allclose(slice1, slice2, rtol=1e-6, atol=1e-8):  # pragma: no cover - diagnostic path
-        # If still divergent, treat as currently non-deterministic and skip (documenting need for deterministic reset)
-        pytest.skip("Environment reset appears stochastic; determinism not enforced yet.")
-    env1.close()
-    env2.close()
+    env1 = make_robot_env(config=RobotSimulationConfig(), debug=debug, seed=SEED)
+    env2 = make_robot_env(config=RobotSimulationConfig(), debug=debug, seed=SEED)
+    try:
+        obs1 = env1.reset(seed=SEED)
+        obs2 = env2.reset(seed=SEED)
+        arr1 = _extract_numeric(obs1)
+        arr2 = _extract_numeric(obs2)
+        assert arr1.shape == arr2.shape
+
+        # Focus on the robot/pedestrian rows and avoid coupling the test to future
+        # observation extensions appended after the stable state rows.
+        rows_to_compare = min(2, arr1.shape[0])
+        np.testing.assert_allclose(
+            arr1[:rows_to_compare],
+            arr2[:rows_to_compare],
+            rtol=1e-6,
+            atol=1e-8,
+        )
+    finally:
+        env1.close()
+        env2.close()
+
+
+def test_seeded_reset_does_not_leak_global_rng_state():
+    """Seeded reset should not advance caller-owned Python or NumPy RNG state."""
+    env = make_robot_env(config=RobotSimulationConfig(), debug=False, seed=SEED)
+    outer_random_state = random.getstate()
+    outer_numpy_state = np.random.get_state()
+    try:
+        random.seed(9876)
+        np.random.seed(9876)
+        expected_random_state = random.getstate()
+        expected_numpy_state = np.random.get_state()
+
+        env.reset(seed=SEED)
+        actual = (random.random(), np.random.random())
+
+        random.setstate(expected_random_state)
+        np.random.set_state(expected_numpy_state)
+        expected = (random.random(), np.random.random())
+
+        assert actual == expected
+    finally:
+        random.setstate(outer_random_state)
+        np.random.set_state(outer_numpy_state)
+        env.close()

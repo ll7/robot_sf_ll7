@@ -129,9 +129,7 @@ def _archive_entry(
 ) -> dict[str, Any]:
     """Build one compact archive entry."""
     config = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
-    attribution = candidate_payload.get("failure_attribution")
-    if not isinstance(attribution, dict):
-        attribution = {}
+    attribution = candidate_payload["failure_attribution"]
     bundle_path = _as_optional_str(candidate_payload.get("bundle_path"))
     scenario_yaml_path = _as_optional_str(candidate_payload.get("scenario_yaml_path"))
     entry = {
@@ -194,9 +192,7 @@ def _cluster_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _cluster_key(manifest: dict[str, Any], candidate_payload: dict[str, Any]) -> dict[str, str]:
     """Return a deterministic cluster key for one candidate."""
     config = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
-    attribution = candidate_payload.get("failure_attribution")
-    if not isinstance(attribution, dict):
-        attribution = {}
+    attribution = candidate_payload["failure_attribution"]
     details = attribution.get("details") if isinstance(attribution.get("details"), dict) else {}
     termination = details.get("termination_reason") or "unknown"
     return {

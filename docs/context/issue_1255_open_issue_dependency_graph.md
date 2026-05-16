@@ -19,8 +19,8 @@ inventing new labels or priority semantics:
 
 ### Covered By Open PR
 
-These issues already have open implementation or workflow PRs and remain `In progress` in Project
-#5:
+These issues already have open implementation or workflow PRs and remain `In progress` in
+Project #5:
 
 | Issue | PR | Notes |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ The CARLA parent epic #872 and manual-control parent epic #1151 remain `Tracked`
 their bodies already enumerate children and they should stay visible as umbrella work rather than
 single executable tasks.
 
-#1108 remains `In progress` because it is an active SLURM/training execution issue, not a local
+Issue #1108 remains `In progress` because it is an active SLURM/training execution issue, not a local
 implementation ticket for this machine.
 
 ## Metadata Changes Applied

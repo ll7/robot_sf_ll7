@@ -169,6 +169,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1082 Paper Cross-Kinematics Parity Sweep](issue_1082_paper_cross_kinematics_v1.md)
   adds the `paper-cross-kinematics-v1` profile, three-mode kinematics matrix, compatibility
   manifest, and smoke/preflight command boundary for cross-kinematics interpretation.
+* [Issue #1274 General Cross-Kinematics Parity Sweep](issue_1274_cross_kinematics_v1.md)
+  adds the non-paper `cross_kinematics_v1` profile, compact scenario surface, compatibility
+  manifest, and interpretation boundary for local parity checks.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.

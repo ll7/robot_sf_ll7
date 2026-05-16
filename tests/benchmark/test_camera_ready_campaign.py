@@ -693,6 +693,57 @@ def test_paper_cross_kinematics_v1_compatibility_manifest() -> None:
     assert manifest["validation_contract"]["supported_pairs_must_run"] is True
 
 
+def test_load_cross_kinematics_v1_campaign_config() -> None:
+    """General cross-kinematics profile should stay non-paper-facing and explicit."""
+    cfg = load_campaign_config(
+        get_repository_root() / "configs/benchmarks/cross_kinematics_v1.yaml"
+    )
+
+    assert cfg.name == "cross_kinematics_v1"
+    assert cfg.paper_facing is False
+    assert cfg.paper_profile_version is None
+    assert cfg.kinematics_matrix == ("differential_drive", "bicycle_drive", "holonomic")
+    assert cfg.holonomic_command_mode == "vx_vy"
+    assert cfg.export_publication_bundle is False
+    assert cfg.stop_on_failure is False
+    assert cfg.seed_policy.mode == "fixed-list"
+    assert list(cfg.seed_policy.seeds) == [111]
+    assert [planner.key for planner in cfg.planners] == ["goal", "social_force", "orca"]
+    assert all(planner.planner_group == "core" for planner in cfg.planners)
+
+    scenarios = _load_campaign_scenarios(cfg)
+    assert [scenario["name"] for scenario in scenarios] == ["classic_cross_trap_low"]
+
+
+def test_cross_kinematics_v1_compatibility_manifest() -> None:
+    """General compatibility manifest should expose supported and excluded rows."""
+    config_payload = yaml.safe_load(
+        (get_repository_root() / "configs/benchmarks/cross_kinematics_v1.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    manifest_path = get_repository_root() / config_payload["compatibility_manifest"]
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+
+    assert manifest["version"] == "cross-kinematics-v1"
+    assert manifest["profile"] == "cross-kinematics-v1"
+    assert manifest["kinematics"] == ["differential_drive", "bicycle_drive", "holonomic"]
+    planner_keys = [planner["key"] for planner in config_payload["planners"]]
+    assert set(manifest["planners"]) == set(planner_keys)
+    for planner_key in planner_keys:
+        support = manifest["planners"][planner_key]["support"]
+        assert set(support) == set(manifest["kinematics"])
+        assert all(entry["status"] == "supported" for entry in support.values())
+        assert all(str(entry["reason"]).strip() for entry in support.values())
+
+    excluded = manifest["excluded_planners"]
+    assert excluded["ppo"]["status"] == "degraded"
+    assert excluded["rvo"]["status"] == "unsupported"
+    assert excluded["dwa"]["status"] == "unsupported"
+    assert all(str(entry["reason"]).strip() for entry in excluded.values())
+    assert manifest["validation_contract"]["unsupported_or_degraded_pairs_must_have_reason"] is True
+
+
 def test_socnav_bench_reentry_probe_config_is_focused_and_fail_fast() -> None:
     """The SocNavBench re-entry probe should stay narrow and fail closed."""
 

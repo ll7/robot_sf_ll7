@@ -110,6 +110,12 @@ Current promoted all-planners baseline run:
   + runs only the first supported core rows (`goal`, `social_force`, `orca`) on one
     `classic_cross_trap_low` seed, with deferred planner coverage recorded in
     `configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml`
+* `configs/benchmarks/cross_kinematics_v1.yaml`
+  + issue #1274 non-paper cross-kinematics parity smoke surface
+  + uses the same three kinematics modes and core planner rows as the paper profile but keeps
+    `paper_facing: false`
+  + records supported, degraded, and unsupported rows in
+    `configs/benchmarks/cross_kinematics_v1_compatibility.yaml`
 * `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
   + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
   + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,

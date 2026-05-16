@@ -1,0 +1,107 @@
+name: Blocked external artifact or runtime
+description: Track work blocked by unavailable datasets, models, runtimes, licenses, or external stores.
+title: "blocked: "
+labels:
+  - blocked
+  - workflow
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for issues that cannot proceed until an external asset, runtime,
+        license, model, dataset, or artifact pointer is available.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal / Problem
+      description: Explain the capability or validation blocked by the missing external input.
+      placeholder: What would this issue do once unblocked?
+    validations:
+      required: true
+  - type: textarea
+    id: unavailable_artifact
+    attributes:
+      label: Unavailable asset or runtime
+      description: Name the missing dataset, model, checkpoint, CARLA runtime, image, license, or store pointer.
+      placeholder: |
+        Missing item:
+        Expected source:
+        Current local status:
+    validations:
+      required: true
+  - type: textarea
+    id: unblock_condition
+    attributes:
+      label: Unblock condition
+      description: State exactly what evidence makes this issue ready.
+      placeholder: This becomes ready when...
+    validations:
+      required: true
+  - type: textarea
+    id: fail_closed_policy
+    attributes:
+      label: Fail-closed policy
+      description: Describe how tools should behave while the external input is absent.
+      placeholder: Missing runtime/artifact should produce...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      placeholder: |
+        In scope:
+        Non-goals:
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Blocker is visible.
+        - [ ] Unblock condition is testable.
+        - [ ] Fail-closed behavior is documented.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation / Testing
+      description: Provide the availability check, smoke command, or docs validation.
+      placeholder: rtk uv run --active ...
+    validations:
+      required: true
+  - type: textarea
+    id: artifact_policy
+    attributes:
+      label: Artifact policy
+      description: Identify durable pointer/checksum requirements and local cache boundaries.
+      placeholder: |
+        Evidence category:
+        Durable source:
+        Local cache/output policy:
+    validations:
+      required: true
+  - type: dropdown
+    id: blocked_ready_state
+    attributes:
+      label: Blocked / ready state
+      options:
+        - blocked by external asset/runtime
+        - blocked by license decision
+        - blocked by artifact publication
+        - ready after durable pointer is recorded
+    validations:
+      required: true
+  - type: textarea
+    id: estimate_metadata
+    attributes:
+      label: Estimate metadata
+      placeholder: |
+        Effort once unblocked (h):
+        Complexity:
+        Risk:
+        Uncertainty:
+    validations:
+      required: true

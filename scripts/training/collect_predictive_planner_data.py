@@ -21,6 +21,7 @@ from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
     append_obstacle_features,
+    obstacle_lines_from_map,
     predictive_feature_schema_metadata,
 )
 
@@ -206,6 +207,7 @@ def _frames_to_samples(
     horizon_steps: int,
     ego_conditioning: bool,
     model_family: str = "predictive_legacy_v1",
+    obstacle_lines: list | tuple = (),
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Create supervised samples from temporal frame sequences."""
     schema_metadata = _effective_predictive_feature_schema(
@@ -297,6 +299,7 @@ def _frames_to_samples(
                 state_base=state_base,
                 frame=frame_t,
                 count=c,
+                obstacle_lines=obstacle_lines,
             )
         else:
             state = state_base
@@ -313,6 +316,7 @@ def _append_obstacle_feature_rows(
     state_base: np.ndarray,
     frame: Frame,
     count: int,
+    obstacle_lines: list | tuple = (),
 ) -> np.ndarray:
     """Append deterministic obstacle feature rows to base predictive state.
 
@@ -326,7 +330,7 @@ def _append_obstacle_feature_rows(
     if count > 0:
         obstacle_rows[:count] = extractor.extract_many(
             [tuple(point) for point in frame.ped_positions_world[:count]],
-            [],
+            obstacle_lines,
         )
     return append_obstacle_features(
         state_base,
@@ -417,6 +421,10 @@ def main() -> int:
     cfg.sim_config.max_peds_per_group = int(args.max_peds_per_group)
 
     env = make_robot_env(config=cfg, debug=False, recording_enabled=False)
+    map_def = getattr(env, "map_def", None)
+    if map_def is None:
+        map_def = getattr(getattr(env, "simulator", None), "map_def", None)
+    obstacle_lines = obstacle_lines_from_map(map_def)
 
     all_states: list[np.ndarray] = []
     all_targets: list[np.ndarray] = []
@@ -449,6 +457,7 @@ def main() -> int:
             horizon_steps=args.horizon_steps,
             ego_conditioning=bool(args.ego_conditioning),
             model_family=str(args.model_family),
+            obstacle_lines=obstacle_lines,
         )
         if states.shape[0] > 0:
             all_states.append(states)
@@ -503,6 +512,9 @@ def main() -> int:
         "ego_conditioning": bool(args.ego_conditioning),
         "dataset": str(args.output),
     }
+    if str(args.model_family) == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+        summary["obstacle_feature_source"] = "map_geometry" if obstacle_lines else "not_available"
+        summary["obstacle_line_count"] = len(obstacle_lines)
     summary_path = args.output.with_suffix(".json")
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     manifest_path = args.output.with_suffix(args.output.suffix + ".manifest.json")
@@ -513,6 +525,8 @@ def main() -> int:
                 "dataset_schema": "predictive_planner_dataset_v1",
                 "model_family": str(args.model_family),
                 "feature_schema": summary["feature_schema"],
+                "obstacle_feature_source": summary.get("obstacle_feature_source"),
+                "obstacle_line_count": summary.get("obstacle_line_count"),
                 "state_dim": int(states_cat.shape[2]),
                 "max_agents": int(args.max_agents),
                 "horizon_steps": int(args.horizon_steps),

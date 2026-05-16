@@ -1212,6 +1212,10 @@ uv run python scripts/training/train_ppo_with_pretrained_policy.py --config conf
 
 Set `--log-level DEBUG` if you need the full resolved-config dumps from the factory helpers (default is INFO to keep console noise down). Use `--backend <name>` to override the auto-selected simulator backend (defaults to the fastest available choice via `select_best_backend`). The end-to-end example auto-generates BC/ppo fine-tuning configs under `output/tmp/imitation_pipeline/`, so you only need to edit the YAML files when running the scripts manually.
 
+BC pre-training configs default to `device: auto`, which lets Stable-Baselines3 and
+`imitation` use available accelerators. Set `device: cpu` in the BC YAML when you need
+a deterministic or resource-constrained CPU-only run.
+
 **Also see:**
 - End-to-end example: `examples/advanced/16_imitation_learning_pipeline.py`
 - Detailed workflows: `specs/001-ppo-imitation-pretrain/quickstart.md`
@@ -1294,6 +1298,13 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 Use the following templates for specific tasks.
 
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
+- YAML issue forms for common backlog lanes:
+  [research validation](../.github/ISSUE_TEMPLATE/research-validation.yml),
+  [test debt](../.github/ISSUE_TEMPLATE/test-debt.yml),
+  [blocked external artifact/runtime](../.github/ISSUE_TEMPLATE/blocked-external-artifact.yml),
+  [execution run](../.github/ISSUE_TEMPLATE/execution-run.yml), and
+  [epic](../.github/ISSUE_TEMPLATE/epic.yml). These supplement the Markdown templates; they do
+  not replace the fallback template.
 - [issue creator skill](../.agents/skills/gh-issue-creator/SKILL.md) - Turn vague prompts into structured issues
 - [issue template auditor skill](../.agents/skills/gh-issue-template-auditor/SKILL.md) - Review and repair underspecified issues
 - [priority assessor skill](../.agents/skills/gh-issue-priority-assessor/SKILL.md) - Review Project #5 priority inputs against the rubric and explain plausibility

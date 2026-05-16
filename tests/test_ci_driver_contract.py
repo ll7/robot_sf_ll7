@@ -17,7 +17,9 @@ PHASE_PATTERN = re.compile(
     r"(?:^|\s)(?:\./)?scripts/dev/ci_driver\.sh(?P<args>(?:\s+--?[a-z0-9_-]+|\s+[a-z0-9_-]+)*)",
     re.MULTILINE,
 )
-USES_PATTERN = re.compile(r"^\s*uses:\s+(?P<value>\S+)(?:\s+#\s*(?P<comment>\S+))?\s*$")
+USES_PATTERN = re.compile(
+    r"^\s*(?:-\s+)?uses:\s+(?P<value>\S+)(?:\s+#\s*(?P<comment>\S+))?\s*$"
+)
 PINNED_ACTION_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 READABLE_ACTION_TAG_PATTERN = re.compile(r"^v[0-9][A-Za-z0-9_.-]*$")
 
@@ -88,6 +90,33 @@ def _workflow_text() -> str:
 def _workflow_files() -> list[Path]:
     """Return tracked GitHub Actions workflow YAML files."""
     return sorted(WORKFLOWS_DIR.glob("*.yml"))
+
+
+def _action_ref_failures_for_line(workflow_file: Path, line_number: int, line: str) -> list[str]:
+    """Return action-ref pinning failures for one workflow line."""
+    match = USES_PATTERN.match(line)
+    if not match:
+        return [f"{workflow_file.relative_to(ROOT)}:{line_number}: malformed uses line"]
+
+    value = match.group("value")
+    if value.startswith("./"):
+        return []
+
+    failures: list[str] = []
+    action, separator, ref = value.partition("@")
+    if not separator:
+        return [f"{workflow_file.relative_to(ROOT)}:{line_number}: missing action ref"]
+    if not PINNED_ACTION_SHA_PATTERN.fullmatch(ref):
+        failures.append(
+            f"{workflow_file.relative_to(ROOT)}:{line_number}: {action}@{ref} is not pinned"
+        )
+
+    comment = match.group("comment")
+    if comment is None or not READABLE_ACTION_TAG_PATTERN.fullmatch(comment):
+        failures.append(
+            f"{workflow_file.relative_to(ROOT)}:{line_number}: missing readable version comment"
+        )
+    return failures
 
 
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
@@ -163,29 +192,22 @@ def test_workflow_action_refs_are_pinned_with_readable_version_comments() -> Non
         ):
             if "uses:" not in line:
                 continue
-            match = USES_PATTERN.match(line)
-            if not match:
-                failures.append(
-                    f"{workflow_file.relative_to(ROOT)}:{line_number}: malformed uses line"
-                )
-                continue
-
-            value = match.group("value")
-            action, separator, ref = value.partition("@")
-            if not separator:
-                failures.append(
-                    f"{workflow_file.relative_to(ROOT)}:{line_number}: missing action ref"
-                )
-                continue
-            if not PINNED_ACTION_SHA_PATTERN.fullmatch(ref):
-                failures.append(
-                    f"{workflow_file.relative_to(ROOT)}:{line_number}: {action}@{ref} is not pinned"
-                )
-
-            comment = match.group("comment")
-            if comment is None or not READABLE_ACTION_TAG_PATTERN.fullmatch(comment):
-                failures.append(
-                    f"{workflow_file.relative_to(ROOT)}:{line_number}: missing readable version comment"
-                )
+            failures.extend(_action_ref_failures_for_line(workflow_file, line_number, line))
 
     assert not failures, "\n".join(failures)
+
+
+def test_action_ref_parser_handles_list_items_and_local_actions() -> None:
+    """Parse workflow action refs without false failures for YAML lists or local actions."""
+    workflow_file = WORKFLOWS_DIR / "ci.yml"
+    pinned_sha = "34e114876b0b11c390a56381ad16ebd13914f8d5"
+
+    assert (
+        _action_ref_failures_for_line(
+            workflow_file,
+            1,
+            f"      - uses: actions/checkout@{pinned_sha} # v4",
+        )
+        == []
+    )
+    assert _action_ref_failures_for_line(workflow_file, 2, "      - uses: ./.github/actions/cache") == []

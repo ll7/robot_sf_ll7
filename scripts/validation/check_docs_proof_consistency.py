@@ -33,6 +33,9 @@ _COMMAND_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)|<((?:\./)?[^ >]+)>")
+_LINE_START_ISSUE_REF_RE = re.compile(
+    r"^\s*(?:(?:[-*+]\s+)|(?:\d+[.)]\s+)|(?:>\s*)|(?:\|\s*))?#(?P<number>\d+)\b"
+)
 
 
 @dataclass(frozen=True)
@@ -261,11 +264,54 @@ def _validation_phrase_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     ]
 
 
+def _markdown_lines_outside_fences(text: str) -> Iterable[tuple[int, str]]:
+    """Yield Markdown source lines that are not inside fenced code blocks."""
+    in_fence = False
+    fence_marker: str | None = None
+    for line_number, line in enumerate(text.splitlines(), 1):
+        stripped = line.lstrip()
+        marker = stripped[:3]
+        if marker in {"```", "~~~"}:
+            if in_fence and marker == fence_marker:
+                in_fence = False
+                fence_marker = None
+            elif not in_fence:
+                in_fence = True
+                fence_marker = marker
+            continue
+        if not in_fence:
+            yield line_number, line
+
+
+def _issue_reference_style_diagnostics(path: Path, text: str) -> list[Diagnostic]:
+    """Flag bare line-start issue references that render poorly in Markdown."""
+    if path.suffix != ".md":
+        return []
+
+    diagnostics: list[Diagnostic] = []
+    for line_number, line in _markdown_lines_outside_fences(text):
+        match = _LINE_START_ISSUE_REF_RE.match(line)
+        if not match:
+            continue
+        issue_number = match.group("number")
+        diagnostics.append(
+            Diagnostic(
+                path=path,
+                message=(
+                    f"line {line_number}: bare issue reference #{issue_number} should use "
+                    f"'Issue #{issue_number}' at the start of Markdown prose, lists, or tables"
+                ),
+            )
+        )
+    return diagnostics
+
+
 def _file_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     """Collect all diagnostics for one changed file."""
     diagnostics: list[Diagnostic] = []
     diagnostics.extend(_evidence_path_diagnostics(path, text))
     diagnostics.extend(_validation_phrase_diagnostics(path, text))
+    diagnostics.extend(_issue_reference_style_diagnostics(path, text))
     return diagnostics
 
 

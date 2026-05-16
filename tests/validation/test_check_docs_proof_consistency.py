@@ -194,6 +194,74 @@ def test_stale_no_validation_phrase_with_commands_is_reported(tmp_path: Path) ->
     )
 
 
+def test_line_start_issue_reference_is_reported(tmp_path: Path) -> None:
+    """Markdown issue references should not start lines as bare #123 tokens."""
+    repo_root = tmp_path
+    (repo_root / "docs/context").mkdir(parents=True)
+    (repo_root / "docs/context/README.md").write_text(
+        "- [Issue 999 Example](issue_999_example.md)\n",
+        encoding="utf-8",
+    )
+    note = repo_root / "docs/context/issue_999_example.md"
+    note.write_text("#1108 needs a clearer reference style.\n", encoding="utf-8")
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/issue_999_example.md"))],
+        repo_root=repo_root,
+    )
+
+    assert any("Issue #1108" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_preferred_issue_reference_form_is_allowed(tmp_path: Path) -> None:
+    """The preferred prose form should satisfy the issue-reference style guard."""
+    repo_root = tmp_path
+    (repo_root / "docs/context").mkdir(parents=True)
+    (repo_root / "docs/context/README.md").write_text(
+        "- [Issue 999 Example](issue_999_example.md)\n",
+        encoding="utf-8",
+    )
+    note = repo_root / "docs/context/issue_999_example.md"
+    note.write_text("Issue #1108 keeps this link readable in Markdown.\n", encoding="utf-8")
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/issue_999_example.md"))],
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == []
+
+
+def test_issue_reference_guard_handles_bullets_tables_and_headings(tmp_path: Path) -> None:
+    """Flag bare issue references in lists/tables without banning numeric headings."""
+    repo_root = tmp_path
+    (repo_root / "docs/context").mkdir(parents=True)
+    (repo_root / "docs/context/README.md").write_text(
+        "- [Issue 999 Example](issue_999_example.md)\n",
+        encoding="utf-8",
+    )
+    note = repo_root / "docs/context/issue_999_example.md"
+    note.write_text(
+        "# 2026 plan\n\n"
+        "- #1108 should use prose.\n"
+        "| #1262 | missing prefix |\n"
+        "```\n"
+        "#999 is only an example inside a code block\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/issue_999_example.md"))],
+        repo_root=repo_root,
+    )
+
+    messages = [diagnostic.message for diagnostic in diagnostics]
+    assert any("Issue #1108" in message for message in messages)
+    assert any("Issue #1262" in message for message in messages)
+    assert not any("Issue #999" in message for message in messages)
+
+
 def test_explicit_path_new_context_note_is_treated_as_added(tmp_path: Path) -> None:
     """Explicit path checks should still enforce added-note index-link validation."""
     repo_root = tmp_path

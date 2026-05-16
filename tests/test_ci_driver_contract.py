@@ -55,10 +55,10 @@ def _extract_workflow_phases(run_text: str) -> set[str]:
 
 def _workflow_phases() -> set[str]:
     """Return CI driver phases referenced by the GitHub Actions workflow."""
-    workflow = yaml.safe_load(_workflow_text())
+    workflow = yaml.safe_load(_workflow_text()) or {}
 
     referenced_phases: set[str] = set()
-    for job in workflow["jobs"].values():
+    for job in workflow.get("jobs", {}).values():
         for step in job.get("steps", []):
             run_text = step.get("run")
             if not run_text:
@@ -89,8 +89,8 @@ def _workflow_text() -> str:
 
 def _workflow_jobs() -> dict[str, Any]:
     """Return the parsed CI workflow jobs mapping."""
-    workflow = yaml.safe_load(_workflow_text())
-    return workflow["jobs"]
+    workflow = yaml.safe_load(_workflow_text()) or {}
+    return workflow.get("jobs", {})
 
 
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
@@ -162,4 +162,4 @@ def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:
 
     assert set(CI_JOB_TIMEOUTS) == set(jobs)
     for job_name, expected_timeout in CI_JOB_TIMEOUTS.items():
-        assert jobs[job_name]["timeout-minutes"] == expected_timeout
+        assert jobs[job_name].get("timeout-minutes") == expected_timeout

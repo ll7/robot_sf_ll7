@@ -156,6 +156,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #1073 Robot SF Empirical-Expansion Gate](./context/issue_1073_empirical_expansion_gate_2026_06_08.md)** - June 8 checkpoint rule for deciding whether Robot SF can move beyond dissertation-floor examples into bounded empirical expansion
 * **[Benchmark Static Dashboard](./benchmark_static_dashboard.md)** - Self-contained static HTML dashboard generation from camera-ready benchmark bundles
+* **[Trajectory Debug Visualization](./debug_visualization.md)** - Optional JSON/Rerun timeline export for inspecting one episode JSONL without treating debug artifacts as benchmark evidence
 * **[PR Promoted Planner Smoke](./benchmark_pr_promoted_planner_smoke.md)** - Pull-request micro-benchmark workflow, runtime target, and fail-closed summary contract
 * **[Issue #1065 Route-Clearance Warning Audit](./context/issue_1065_route_clearance_warning_audit.md)** - Paper and h500 route-clearance warning classification, planner-attribution boundary, and repair/certification follow-up
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis

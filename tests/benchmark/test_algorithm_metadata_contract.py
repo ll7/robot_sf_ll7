@@ -100,6 +100,19 @@ def test_planner_kinematics_and_adapter_impact_fields() -> None:
     assert impact["adapted_steps"] == 0
 
 
+def test_sac_metadata_declares_native_unicycle_contract() -> None:
+    """SAC map-runner policy metadata should not fall back to unknown actions."""
+    meta = enrich_algorithm_metadata(algo="sac", metadata={"status": "ok"})
+    planner = meta["planner_kinematics"]
+    action = meta["planner_contract"]["action_contract"]
+
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["supports_native_commands"] is True
+    assert planner["supports_adapter_commands"] is False
+    assert action["command_space"] == "unicycle_vw"
+    assert action["output_keys"] == ["v", "omega"]
+
+
 def test_safety_barrier_metadata_marks_testing_only_native_spike() -> None:
     """Safety-barrier metadata should expose the testing-only adapter contract."""
     meta = enrich_algorithm_metadata(

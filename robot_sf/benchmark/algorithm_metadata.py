@@ -685,6 +685,12 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "default_execution_mode": "mixed",
         "default_adapter_name": "ppo_action_to_unicycle",
     },
+    "sac": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": True,
+        "supports_adapter_commands": False,
+        "default_execution_mode": "native",
+    },
     "guarded_ppo": {
         "planner_command_space": "mixed_vw_or_vxy",
         "supports_native_commands": True,

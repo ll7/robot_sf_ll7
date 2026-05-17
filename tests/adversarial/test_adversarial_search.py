@@ -40,6 +40,7 @@ from robot_sf.adversarial.samplers import (
     OptunaCandidateSampler,
     RandomCandidateSampler,
 )
+from robot_sf.adversarial.seed_sensitivity import run_seed_sensitivity
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -925,6 +926,130 @@ def test_optuna_candidate_sampler_reports_missing_dependency(
 
     with pytest.raises(RuntimeError, match="OptunaCandidateSampler requires optuna"):
         OptunaCandidateSampler(config.search_space, seed=7)
+
+
+def test_seed_sensitivity_classifies_stable_and_brittle_failures(tmp_path: Path) -> None:
+    """Seed sensitivity should separate persistent failures from one-seed artifacts."""
+    config = _config(tmp_path)
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        _scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        """Emit deterministic collision records for selected replay seeds."""
+        collision = candidate.scenario_seed in {7, 8}
+        record = {
+            "episode_id": f"seed-{candidate.scenario_seed}",
+            "seed": candidate.scenario_seed,
+            "status": "collision" if collision else "success",
+            "steps": 1,
+            "termination_reason": "collision" if collision else "success",
+            "outcome": {
+                "route_complete": not collision,
+                "collision": collision,
+                "timeout": False,
+            },
+            "metrics": {"success": 0.0 if collision else 1.0},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+        trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status("seed sensitivity test"),
+            objective_value=None,
+            failure_attribution=attribution_from_episode_record(record),
+            episode_record_path=episode_path,
+            trajectory_csv_path=trajectory_path,
+            scenario_yaml_path=_scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    stable = run_seed_sensitivity(
+        config,
+        candidate=_candidate(7),
+        seeds=[7, 8, 9],
+        output_dir=tmp_path / "stable",
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("seed sensitivity test"),
+        min_persistence_rate=0.5,
+    )
+    brittle = run_seed_sensitivity(
+        config,
+        candidate=_candidate(7),
+        seeds=[7, 9, 10],
+        output_dir=tmp_path / "brittle",
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("seed sensitivity test"),
+        min_persistence_rate=0.5,
+    )
+
+    assert stable.classification == "stable_failure"
+    assert stable.failure_persistence_rate == pytest.approx(2 / 3)
+    assert stable.objective_score_spread == pytest.approx(11.0)
+    assert [replay.outcome for replay in stable.replays] == ["collision", "collision", "success"]
+    assert (tmp_path / "stable" / "seed_sensitivity_summary.json").exists()
+
+    assert brittle.classification == "brittle_failure"
+    assert brittle.failure_persistence_rate == pytest.approx(1 / 3)
+
+
+def test_seed_sensitivity_records_fail_closed_rejected_perturbations(tmp_path: Path) -> None:
+    """Rejected perturbations should be recorded without weakening the failure denominator."""
+    config = _config(tmp_path, require_certification=True)
+    evaluated: list[int] = []
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        _scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        """Emit a successful replay for certified perturbations."""
+        evaluated.append(candidate.scenario_seed)
+        record = {
+            "episode_id": f"seed-{candidate.scenario_seed}",
+            "seed": candidate.scenario_seed,
+            "status": "success",
+            "steps": 1,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"success": 1.0},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status("seed sensitivity test"),
+            objective_value=None,
+            failure_attribution=attribution_from_episode_record(record),
+            episode_record_path=episode_path,
+            trajectory_csv_path=None,
+            scenario_yaml_path=_scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    summary = run_seed_sensitivity(
+        config,
+        candidate=_candidate(7),
+        seeds=[7, 8],
+        output_dir=tmp_path / "rejected",
+        evaluator=evaluator,
+        certifier=lambda candidate, _path, _required: (
+            not_available_status("seed 8 rejected by certification")
+            if candidate.scenario_seed == 8
+            else passed_status("seed sensitivity test")
+        ),
+    )
+
+    assert evaluated == [7]
+    assert summary.num_fail_closed_exclusions == 1
+    assert summary.failure_persistence_rate == 0.0
+    assert summary.replays[1].status == "not_available"
+    assert summary.replays[1].outcome == "fail_closed_exclusion"
+    assert summary.replays[1].reason == "seed 8 rejected by certification"
 
 
 def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:

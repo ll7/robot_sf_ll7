@@ -94,6 +94,8 @@ knowledge, not every transient iteration detail.
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1255 open-issue dependency graph:
   [issue_1255_open_issue_dependency_graph.md](issue_1255_open_issue_dependency_graph.md)
+* Issue #1271 seed-sensitivity explorer:
+  [issue_1271_seed_sensitivity_explorer.md](issue_1271_seed_sensitivity_explorer.md)
 * Artifact evidence vocabulary:
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:

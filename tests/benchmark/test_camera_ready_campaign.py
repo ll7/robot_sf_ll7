@@ -717,12 +717,11 @@ def test_load_cross_kinematics_v1_campaign_config() -> None:
 
 def test_cross_kinematics_v1_compatibility_manifest() -> None:
     """General compatibility manifest should expose supported and excluded rows."""
+    repo_root = Path(__file__).parents[2]
     config_payload = yaml.safe_load(
-        (get_repository_root() / "configs/benchmarks/cross_kinematics_v1.yaml").read_text(
-            encoding="utf-8"
-        )
+        (repo_root / "configs/benchmarks/cross_kinematics_v1.yaml").read_text(encoding="utf-8")
     )
-    manifest_path = get_repository_root() / config_payload["compatibility_manifest"]
+    manifest_path = repo_root / config_payload["compatibility_manifest"]
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
 
     assert manifest["version"] == "cross-kinematics-v1"
@@ -741,6 +740,7 @@ def test_cross_kinematics_v1_compatibility_manifest() -> None:
     assert excluded["rvo"]["status"] == "unsupported"
     assert excluded["dwa"]["status"] == "unsupported"
     assert all(str(entry["reason"]).strip() for entry in excluded.values())
+    assert manifest["validation_contract"]["supported_pairs_must_run"] is True
     assert manifest["validation_contract"]["unsupported_or_degraded_pairs_must_have_reason"] is True
 
 

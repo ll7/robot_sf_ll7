@@ -275,8 +275,11 @@ def run_bc_pretraining(
         or _dataset_contract_path(dataset, "training_config"),
         scenario_config_path=config.scenario_config_path
         or _dataset_contract_path(dataset, "scenario_config"),
+        scenario_id=config.scenario_id,
         seed=int(config.random_seeds[0]) if config.random_seeds else None,
         observation_keys=_observation_keys_from_dataset(dataset),
+        env_overrides=config.env_overrides,
+        env_factory_kwargs=config.env_factory_kwargs,
     )
     raw_observation_space = env.observation_space
     env = maybe_flatten_env_observations(env, context="BC pre-training")
@@ -357,6 +360,9 @@ def load_bc_config(config_path: Path) -> BCPretrainingConfig:
         random_seeds=tuple(raw.get("random_seeds", [42])),
         training_config_path=resolve_config_path(raw.get("training_config"), base_dir=base_dir),
         scenario_config_path=resolve_config_path(raw.get("scenario_config"), base_dir=base_dir),
+        scenario_id=raw.get("scenario_id"),
+        env_overrides=dict(raw.get("env_overrides") or {}),
+        env_factory_kwargs=dict(raw.get("env_factory_kwargs") or {}),
         device=raw.get("device", "auto"),
     )
 

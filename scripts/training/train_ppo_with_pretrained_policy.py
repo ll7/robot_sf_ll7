@@ -104,8 +104,11 @@ def _make_finetuning_env(config: PPOFineTuningConfig, *, context: str):
         or _metadata_path(metadata, "training_config"),
         scenario_config_path=config.scenario_config_path
         or _metadata_path(metadata, "scenario_config"),
+        scenario_id=config.scenario_id,
         seed=config.random_seeds[0] if config.random_seeds else None,
         observation_keys=_metadata_observation_keys(metadata),
+        env_overrides=config.env_overrides,
+        env_factory_kwargs=config.env_factory_kwargs,
     )
     return maybe_flatten_env_observations(env, context=context)
 
@@ -371,6 +374,9 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
         dataset_id=raw.get("dataset_id"),
         training_config_path=resolve_config_path(raw.get("training_config"), base_dir=base_dir),
         scenario_config_path=resolve_config_path(raw.get("scenario_config"), base_dir=base_dir),
+        scenario_id=raw.get("scenario_id"),
+        env_overrides=dict(raw.get("env_overrides") or {}),
+        env_factory_kwargs=dict(raw.get("env_factory_kwargs") or {}),
     )
 
 

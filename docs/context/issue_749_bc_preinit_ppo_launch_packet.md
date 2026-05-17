@@ -55,12 +55,13 @@ uv run python scripts/training/collect_expert_trajectories.py \
   --episodes 141 \
   --scenario-config configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml \
   --training-config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml \
+  --env-config configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml \
   --seeds 111 112 113
 ```
 
-The `--training-config` flag is required for this source checkpoint because it applies the
-BR-06 training `env_overrides` and lets collection persist the checkpoint-compatible observation
-contract for BC and PPO fine-tuning.
+The `--training-config` flag records the source expert provenance, while `--env-config` applies
+the issue-specific v10 warm-start env contract and factory kwargs. Collection persists the
+checkpoint-compatible observation contract for BC and PPO fine-tuning.
 
 Run BC pretraining:
 
@@ -119,6 +120,7 @@ uv run python scripts/training/collect_expert_trajectories.py \
   --episodes 1 \
   --scenario-config configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml \
   --training-config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml \
+  --env-config configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml \
   --seeds 111 \
   --dry-run
 uv run --group imitation python scripts/training/pretrain_from_expert.py \

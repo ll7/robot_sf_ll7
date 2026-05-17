@@ -249,6 +249,12 @@ def test_issue_749_warm_start_configs_load():
     assert fine_tune_config.snqi_weights_path.name == "snqi_weights_camera_ready_v3.json"
     assert fine_tune_config.snqi_baseline_path is not None
     assert fine_tune_config.snqi_baseline_path.name == "snqi_baseline_camera_ready_v3.json"
+    assert bc_config.env_overrides["observation_mode"] == "socnav_struct"
+    assert fine_tune_config.env_overrides["observation_mode"] == "socnav_struct"
+    assert bc_config.env_overrides["predictive_foresight_enabled"] is True
+    assert fine_tune_config.env_overrides["include_grid_in_observation"] is True
+    assert bc_config.env_factory_kwargs["reward_name"] == "route_completion_v3"
+    assert fine_tune_config.env_factory_kwargs["reward_name"] == "route_completion_v3"
 
 
 def test_issue_749_warm_start_configs_define_env_contract():

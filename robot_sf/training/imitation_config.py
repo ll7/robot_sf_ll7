@@ -152,9 +152,11 @@ class TrajectoryCollectionConfig:
     output_format: str
     random_seeds: tuple[int, ...]
     scenario_id: str | None = None
+    env_overrides: dict[str, object] = field(default_factory=dict)
+    env_factory_kwargs: dict[str, object] = field(default_factory=dict)
 
     @classmethod
-    def from_raw(
+    def from_raw(  # noqa: PLR0913
         cls,
         *,
         dataset_id: str,
@@ -165,6 +167,8 @@ class TrajectoryCollectionConfig:
         output_format: str,
         random_seeds: tuple[int, ...] | list[int],
         scenario_id: str | None = None,
+        env_overrides: dict[str, object] | None = None,
+        env_factory_kwargs: dict[str, object] | None = None,
     ) -> TrajectoryCollectionConfig:
         """Create a config while coercing sequences to canonical tuples.
 
@@ -181,6 +185,8 @@ class TrajectoryCollectionConfig:
             output_format=output_format,
             random_seeds=ensure_seed_tuple(random_seeds),
             scenario_id=scenario_id,
+            env_overrides=dict(env_overrides or {}),
+            env_factory_kwargs=dict(env_factory_kwargs or {}),
         )
 
 
@@ -208,6 +214,9 @@ class BCPretrainingConfig:
     random_seeds: tuple[int, ...]
     training_config_path: Path | None = None
     scenario_config_path: Path | None = None
+    scenario_id: str | None = None
+    env_overrides: dict[str, object] = field(default_factory=dict)
+    env_factory_kwargs: dict[str, object] = field(default_factory=dict)
     device: str = "auto"
 
     @classmethod
@@ -223,6 +232,9 @@ class BCPretrainingConfig:
         random_seeds: tuple[int, ...] | list[int],
         training_config_path: Path | None = None,
         scenario_config_path: Path | None = None,
+        scenario_id: str | None = None,
+        env_overrides: dict[str, object] | None = None,
+        env_factory_kwargs: dict[str, object] | None = None,
         device: str | None = "auto",
     ) -> BCPretrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
@@ -241,6 +253,9 @@ class BCPretrainingConfig:
             random_seeds=ensure_seed_tuple(random_seeds),
             training_config_path=training_config_path.resolve() if training_config_path else None,
             scenario_config_path=scenario_config_path.resolve() if scenario_config_path else None,
+            scenario_id=str(scenario_id) if scenario_id else None,
+            env_overrides=dict(env_overrides or {}),
+            env_factory_kwargs=dict(env_factory_kwargs or {}),
             device=str(device or "auto").strip() or "auto",
         )
 
@@ -259,6 +274,9 @@ class PPOFineTuningConfig:
     dataset_id: str | None = None
     training_config_path: Path | None = None
     scenario_config_path: Path | None = None
+    scenario_id: str | None = None
+    env_overrides: dict[str, object] = field(default_factory=dict)
+    env_factory_kwargs: dict[str, object] = field(default_factory=dict)
 
     @classmethod
     def from_raw(  # noqa: PLR0913
@@ -274,6 +292,9 @@ class PPOFineTuningConfig:
         dataset_id: str | None = None,
         training_config_path: Path | None = None,
         scenario_config_path: Path | None = None,
+        scenario_id: str | None = None,
+        env_overrides: dict[str, object] | None = None,
+        env_factory_kwargs: dict[str, object] | None = None,
     ) -> PPOFineTuningConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -292,6 +313,9 @@ class PPOFineTuningConfig:
             dataset_id=str(dataset_id).strip() if dataset_id else None,
             training_config_path=training_config_path.resolve() if training_config_path else None,
             scenario_config_path=scenario_config_path.resolve() if scenario_config_path else None,
+            scenario_id=str(scenario_id) if scenario_id else None,
+            env_overrides=dict(env_overrides or {}),
+            env_factory_kwargs=dict(env_factory_kwargs or {}),
         )
 
 

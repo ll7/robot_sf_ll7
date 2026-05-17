@@ -61,6 +61,19 @@ def load_training_env_overrides(training_config_path: Path | None) -> dict[str, 
     return dict(overrides)
 
 
+def load_training_env_factory_kwargs(training_config_path: Path | None) -> dict[str, object]:
+    """Load ``env_factory_kwargs`` from an expert training config."""
+    raw = _load_training_config_mapping(training_config_path)
+    if raw is None:
+        return {}
+    kwargs = raw.get("env_factory_kwargs", {})
+    if kwargs is None:
+        return {}
+    if not isinstance(kwargs, dict):
+        raise ValueError("training config env_factory_kwargs must be a mapping")
+    return dict(kwargs)
+
+
 def resolve_scenario_config_path(
     *,
     scenario_config_path: Path | None,
@@ -83,6 +96,8 @@ def make_training_contract_env(
     scenario_id: str | None = None,
     seed: int | None = None,
     observation_keys: Sequence[str] | None = None,
+    env_overrides: dict[str, object] | None = None,
+    env_factory_kwargs: dict[str, object] | None = None,
 ) -> Any:
     """Create an env using training-config overrides and optional observation-key filtering."""
     resolved_scenario_path = resolve_scenario_config_path(
@@ -99,8 +114,13 @@ def make_training_contract_env(
             scenario_path=resolved_scenario_path,
         )
 
-    _apply_env_overrides(env_config, load_training_env_overrides(training_config_path))
-    env = make_robot_env(config=env_config, seed=seed)
+    resolved_overrides = load_training_env_overrides(training_config_path)
+    resolved_overrides.update(env_overrides or {})
+    resolved_factory_kwargs = load_training_env_factory_kwargs(training_config_path)
+    resolved_factory_kwargs.update(env_factory_kwargs or {})
+
+    _apply_env_overrides(env_config, resolved_overrides)
+    env = make_robot_env(config=env_config, seed=seed, **resolved_factory_kwargs)
     if observation_keys:
         obs_space = getattr(env, "observation_space", None)
         if not isinstance(obs_space, spaces.Dict):

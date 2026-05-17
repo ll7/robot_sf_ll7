@@ -11,6 +11,7 @@ import argparse
 import shlex
 import subprocess
 import sys
+from collections.abc import Mapping as RuntimeMapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,7 +38,6 @@ from robot_sf.training.scenario_loader import (
     select_scenario,
 )
 from scripts.training.imitation_env_contract import (
-    load_training_env_overrides,
     observation_contract_from_space,
 )
 from scripts.training.train_ppo import _apply_env_overrides
@@ -50,14 +50,14 @@ def _resolve_scenario_config(
     scenario_arg: Path | None,
     training_config: Path | None,
 ) -> Path:
-    """TODO docstring. Document this function.
+    """Resolve the scenario config used for trajectory collection.
 
     Args:
-        scenario_arg: TODO docstring.
-        training_config: TODO docstring.
+        scenario_arg: Explicit scenario config path from the CLI.
+        training_config: Training config used as a fallback source for ``scenario_config``.
 
     Returns:
-        TODO docstring.
+        Absolute path to the scenario config.
     """
     if scenario_arg is not None:
         return scenario_arg.resolve()
@@ -75,12 +75,40 @@ def _resolve_scenario_config(
     return scenario_path
 
 
+def _load_env_contract(config_path: Path | None) -> tuple[dict[str, object], dict[str, object]]:
+    """Load env overrides and factory kwargs from a training-style YAML file."""
+    if config_path is None:
+        return {}, {}
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    env_overrides = raw.get("env_overrides") or {}
+    env_factory_kwargs = raw.get("env_factory_kwargs") or {}
+    if not isinstance(env_overrides, RuntimeMapping):
+        raise TypeError(f"{config_path}: env_overrides must be a mapping")
+    if not isinstance(env_factory_kwargs, RuntimeMapping):
+        raise TypeError(f"{config_path}: env_factory_kwargs must be a mapping")
+    return dict(env_overrides), dict(env_factory_kwargs)
+
+
+def _resolve_expert_checkpoint(policy_id: str) -> Path:
+    """Resolve an expert checkpoint from local output or the model registry."""
+    checkpoint = common.get_expert_policy_dir() / f"{policy_id}.zip"
+    if checkpoint.exists():
+        return checkpoint
+    try:
+        return resolve_model_path(policy_id, allow_download=True)
+    except (KeyError, RuntimeError, ValueError) as exc:
+        raise FileNotFoundError(
+            f"Expert policy checkpoint not found at {checkpoint}, and registry lookup for "
+            f"'{policy_id}' failed."
+        ) from exc
+
+
 def _git_commit_hash() -> str | None:
-    """TODO docstring. Document this function.
+    """Return the current Git commit hash for manifest provenance when available.
 
 
     Returns:
-        TODO docstring.
+        Commit hash string, or ``None`` when Git metadata cannot be read.
     """
     try:
         result = subprocess.run(
@@ -95,23 +123,23 @@ def _git_commit_hash() -> str | None:
 
 
 def _command_line() -> str:
-    """TODO docstring. Document this function.
+    """Return the shell-escaped command line used for the current process.
 
 
     Returns:
-        TODO docstring.
+        Command-line string suitable for manifest provenance.
     """
     return " ".join(shlex.quote(arg) for arg in sys.argv)
 
 
 def _zero_action(space: Any) -> np.ndarray:
-    """TODO docstring. Document this function.
+    """Create a zero-valued action compatible with an action space.
 
     Args:
-        space: TODO docstring.
+        space: Gymnasium action space exposing a shape.
 
     Returns:
-        TODO docstring.
+        Zero action array matching the space shape.
     """
     shape = getattr(space, "shape", ())
     dtype = float
@@ -173,7 +201,6 @@ def _record_dataset(
     scenario_label: str,
     scenario: Mapping[str, Any],
     scenario_path: Path,
-    env_overrides: Mapping[str, object],
     observation_adapter: Callable[[Mapping[str, Any]], Any] | None = None,
 ) -> tuple[dict[str, list[np.ndarray]], dict[str, int]]:
     """Record all requested episodes for one scenario.
@@ -185,7 +212,6 @@ def _record_dataset(
         scenario_label: Scenario identifier used for coverage metadata.
         scenario: Scenario payload selected from the scenario manifest.
         scenario_path: Path to the scenario manifest used to build the env config.
-        env_overrides: Training-config environment overrides to apply before env construction.
         observation_adapter: Optional adapter matching raw env observations to the policy contract.
 
     Returns:
@@ -201,8 +227,8 @@ def _record_dataset(
     for episode in range(config.episodes):
         seed = int(config.random_seeds[episode % len(config.random_seeds)])
         env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
-        _apply_env_overrides(env_config, env_overrides)
-        env = make_robot_env(config=env_config, seed=seed)
+        _apply_env_overrides(env_config, config.env_overrides)
+        env = make_robot_env(config=env_config, seed=seed, **config.env_factory_kwargs)
         try:
             positions, actions, observations = _record_episode(
                 env,
@@ -225,13 +251,13 @@ def _write_dataset(
     episode_count: int,
     metadata: Mapping[str, Any],
 ) -> None:
-    """TODO docstring. Document this function.
+    """Write the collected trajectory arrays and metadata to an NPZ dataset.
 
     Args:
-        path: TODO docstring.
-        arrays: TODO docstring.
-        episode_count: TODO docstring.
-        metadata: TODO docstring.
+        path: Output NPZ path.
+        arrays: Collected positions, actions, and observations by episode.
+        episode_count: Number of recorded episodes.
+        metadata: Dataset provenance and environment-contract metadata.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
@@ -245,11 +271,11 @@ def _write_dataset(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """TODO docstring. Document this function.
+    """Build the CLI argument parser for expert trajectory collection.
 
 
     Returns:
-        TODO docstring.
+        Configured argument parser.
     """
     parser = argparse.ArgumentParser(
         description="Collect expert trajectory datasets using an expert PPO policy."
@@ -272,7 +298,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--training-config",
         type=Path,
         default=None,
-        help="Expert training config to derive scenario metadata from.",
+        help="Training config to derive scenario metadata and env contract from.",
+    )
+    parser.add_argument(
+        "--env-config",
+        type=Path,
+        default=None,
+        help=(
+            "Training-style YAML whose env_overrides/env_factory_kwargs should be used during "
+            "collection. Defaults to --training-config when omitted."
+        ),
     )
     parser.add_argument(
         "--seeds",
@@ -321,7 +356,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     scenario_path = _resolve_scenario_config(args.scenario_config, args.training_config)
     training_config_path = args.training_config.resolve() if args.training_config else None
-    env_overrides = load_training_env_overrides(training_config_path)
+    env_contract_path = args.env_config or args.training_config
+    env_overrides, env_factory_kwargs = _load_env_contract(env_contract_path)
     seeds_arg: Sequence[int] | None = args.seeds
     if args.override_seed:
         override = tuple(int(value) for value in args.override_seed)
@@ -347,6 +383,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         scenario_overrides=(),
         output_format=args.output_format,
         random_seeds=seed_values,
+        env_overrides=env_overrides,
+        env_factory_kwargs=env_factory_kwargs,
     )
 
     common.set_global_seed(int(collection_config.random_seeds[0]))
@@ -355,9 +393,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     observation_contract: dict[str, object] | None = None
     observation_adapter: Callable[[Mapping[str, Any]], Any] | None = None
     if not args.dry_run:
-        checkpoint = common.get_expert_policy_dir() / f"{collection_config.source_policy_id}.zip"
-        if not checkpoint.exists():
-            checkpoint = resolve_model_path(collection_config.source_policy_id)
+        checkpoint = _resolve_expert_checkpoint(collection_config.source_policy_id)
         policy = PPO.load(str(checkpoint))
         observation_contract = observation_contract_from_space(policy.observation_space)
         observation_adapter = resolve_policy_obs_adapter(policy)
@@ -369,7 +405,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         scenario_label=scenario_label,
         scenario=selected_scenario,
         scenario_path=scenario_path,
-        env_overrides=env_overrides,
         observation_adapter=observation_adapter,
     )
 
@@ -382,10 +417,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "scenario_label": scenario_label,
         "scenario_id": collection_config.scenario_id,
         "scenario_overrides": list(collection_config.scenario_overrides),
+        "env_contract_config": str(env_contract_path) if env_contract_path is not None else None,
+        "env_overrides": dict(collection_config.env_overrides),
+        "env_factory_kwargs": dict(collection_config.env_factory_kwargs),
         "random_seeds": list(collection_config.random_seeds),
         "scenario_coverage": coverage,
         "training_config": str(training_config_path) if training_config_path else None,
-        "env_overrides": env_overrides,
         "observation_contract": observation_contract,
         "command": _command_line(),
         "git_commit": _git_commit_hash(),

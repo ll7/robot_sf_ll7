@@ -29,7 +29,7 @@ def test_nominal_v1_matrix_loads_expected_calibration_scenarios(
         "single_ped_crossing_orthogonal",
         "classic_doorway_low",
         "classic_bottleneck_low",
-    ]
+    ], f"Unexpected scenario list in nominal_v1 matrix: {names}"
 
 
 def test_nominal_v1_matrix_has_low_stress_metadata(
@@ -42,13 +42,19 @@ def test_nominal_v1_matrix_has_low_stress_metadata(
         "single_ped_crossing_orthogonal",
         "doorway",
         "bottleneck",
-    }
+    }, f"Unexpected nominal_v1 archetypes: {sorted(archetypes)}"
 
     for scenario in scenarios:
-        assert len(scenario.get("seeds", [])) >= 3
+        name = scenario["name"]
+        assert len(scenario.get("seeds", [])) >= 3, (
+            f"Scenario '{name}' must provide at least 3 seeds for variance checks."
+        )
         metadata = scenario["metadata"]
         assert (
             metadata.get("density") in {"low", "none"}
             or metadata.get("density_advisory") == "zero_baseline_route_spawn"
+        ), f"Scenario '{name}' has non-nominal density metadata: {metadata}"
+        max_episode_steps = scenario["simulation_config"]["max_episode_steps"]
+        assert max_episode_steps <= 500, (
+            f"Scenario '{name}' exceeds the 500-step nominal horizon limit: {max_episode_steps}"
         )
-        assert scenario["simulation_config"]["max_episode_steps"] <= 500

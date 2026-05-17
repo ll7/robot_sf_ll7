@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -61,6 +62,58 @@ def test_append_jsonl_record_handles_numpy_and_path_payloads(tmp_path: Path) -> 
         "iteration": 3,
         "reward": 1.25,
         "window": [1, 2, 3],
+    }
+
+
+def test_append_jsonl_record_sanitizes_nested_payloads_iteratively(tmp_path: Path) -> None:
+    """Nested runtime logging values should be explicit JSON-compatible structures."""
+    out_path = tmp_path / "result.jsonl"
+
+    append_jsonl_record(
+        out_path,
+        {
+            "nested": [
+                {"path": tmp_path / "model.pt"},
+                {"values": (np.float64(1.5), np.array([2, 3], dtype=np.int64))},
+            ],
+        },
+    )
+
+    assert json.loads(out_path.read_text(encoding="utf-8")) == {
+        "nested": [
+            {"path": str(tmp_path / "model.pt")},
+            {"values": [1.5, [2, 3]]},
+        ],
+    }
+
+
+def test_append_jsonl_record_rejects_non_string_object_keys(tmp_path: Path) -> None:
+    """JSONL records should fail fast before writing objects with non-string keys."""
+    out_path = tmp_path / "result.jsonl"
+
+    with pytest.raises(TypeError, match="JSON object keys must be strings"):
+        append_jsonl_record(out_path, {1: "bad"})  # type: ignore[dict-item]
+
+    assert not out_path.exists()
+
+
+def test_append_jsonl_record_writes_non_finite_numbers_as_null(tmp_path: Path) -> None:
+    """orjson-compatible JSONL should represent non-finite values as JSON null."""
+    out_path = tmp_path / "result.jsonl"
+
+    append_jsonl_record(
+        out_path,
+        {
+            "nan": math.nan,
+            "inf": math.inf,
+            "np_nan": np.float64(np.nan),
+        },
+    )
+
+    assert json.loads(out_path.read_text(encoding="utf-8")) == {
+        "nan": None,
+        "inf": None,
+        "np_nan": None,
     }
 
 

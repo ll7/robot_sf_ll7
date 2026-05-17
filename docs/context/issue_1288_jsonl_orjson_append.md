@@ -19,18 +19,22 @@ The helper now also serializes common runtime logging payload values:
 - NumPy arrays as lists,
 - NumPy scalar values as native Python scalars.
 
+Nested payload conversion is explicit and iterative before encoding, dictionary keys must be
+strings, and non-finite numeric values (`NaN`, `Infinity`) are emitted as JSON `null` values so
+standard JSON consumers can parse the JSONL stream.
+
 ## Validation
 
 Focused tests:
 
 ```bash
-./.venv/bin/python -m pytest tests/training/test_runtime_helpers.py -k append_jsonl -q
+./.venv/bin/python -m pytest tests/training/test_runtime_helpers.py -q
 ```
 
 Result:
 
 ```text
-4 passed, 3 deselected
+10 passed
 ```
 
 Local write-throughput microbenchmark, 1000 large records with decoded-record parity against

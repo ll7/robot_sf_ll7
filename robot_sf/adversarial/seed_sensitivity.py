@@ -151,6 +151,7 @@ def run_seed_sensitivity(
 
     replays: list[SeedSensitivityReplay] = []
     replay_index = 0
+    include_perturbation = len(replay_perturbations) > 1
     for seed in replay_seeds:
         for perturbation_index, perturbation in enumerate(replay_perturbations):
             replay_started_at = datetime.now(UTC).isoformat()
@@ -160,7 +161,7 @@ def run_seed_sensitivity(
                 index=replay_index,
                 seed=seed,
                 perturbation_index=perturbation_index,
-                include_perturbation=len(replay_perturbations) > 1,
+                include_perturbation=include_perturbation,
             )
             scenario_yaml_path, _route_path = write_candidate_inputs(
                 config=config,
@@ -225,7 +226,10 @@ def _normalize_perturbations(
     candidate: CandidateSpec,
 ) -> tuple[SeedSensitivityPerturbation, ...]:
     """Return validated perturbations, defaulting to one no-op replay."""
-    normalized = tuple(perturbations or (SeedSensitivityPerturbation(),))
+    if perturbations is None:
+        normalized = (SeedSensitivityPerturbation(),)
+    else:
+        normalized = tuple(perturbations)
     if not normalized:
         raise ValueError("perturbations must contain at least one entry")
     for perturbation in normalized:
@@ -248,20 +252,20 @@ def _validate_perturbation(
         if not math.isfinite(float(value)):
             raise ValueError(f"{name} must be finite")
 
-    if abs(float(perturbation.pedestrian_speed_delta_mps)) > MAX_ABS_SPEED_DELTA_MPS:
+    if abs(perturbation.pedestrian_speed_delta_mps) > MAX_ABS_SPEED_DELTA_MPS:
         raise ValueError(
-            "pedestrian_speed_delta_mps must be between "
+            f"pedestrian_speed_delta_mps must be between "
             f"{-MAX_ABS_SPEED_DELTA_MPS} and {MAX_ABS_SPEED_DELTA_MPS}"
         )
-    if abs(float(perturbation.pedestrian_delay_delta_s)) > MAX_ABS_TIMING_DELTA_S:
+    if abs(perturbation.pedestrian_delay_delta_s) > MAX_ABS_TIMING_DELTA_S:
         raise ValueError(
-            "pedestrian_delay_delta_s must be between "
+            f"pedestrian_delay_delta_s must be between "
             f"{-MAX_ABS_TIMING_DELTA_S} and {MAX_ABS_TIMING_DELTA_S}"
         )
-    if abs(float(perturbation.spawn_time_delta_s)) > MAX_ABS_TIMING_DELTA_S:
+    if abs(perturbation.spawn_time_delta_s) > MAX_ABS_TIMING_DELTA_S:
         raise ValueError(
-            f"spawn_time_delta_s must be between {-MAX_ABS_TIMING_DELTA_S} "
-            f"and {MAX_ABS_TIMING_DELTA_S}"
+            f"spawn_time_delta_s must be between "
+            f"{-MAX_ABS_TIMING_DELTA_S} and {MAX_ABS_TIMING_DELTA_S}"
         )
 
     perturbed = _apply_perturbation(

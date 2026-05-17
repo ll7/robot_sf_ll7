@@ -1156,6 +1156,30 @@ def test_seed_sensitivity_rejects_unbounded_perturbations(tmp_path: Path) -> Non
         )
 
 
+def test_seed_sensitivity_rejects_empty_perturbation_iterables(tmp_path: Path) -> None:
+    """Empty perturbation iterables should fail consistently for all iterable types."""
+    config = _config(tmp_path)
+
+    def evaluator(
+        _config: SearchConfig,
+        _candidate: CandidateSpec,
+        _scenario_yaml_path: Path,
+        _candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        raise AssertionError("empty perturbations should not evaluate")
+
+    for perturbations in ([], iter(())):
+        with pytest.raises(ValueError, match="perturbations must contain at least one entry"):
+            run_seed_sensitivity(
+                config,
+                candidate=_candidate(7),
+                seeds=[7],
+                output_dir=tmp_path / "empty_perturbations",
+                evaluator=evaluator,
+                perturbations=perturbations,
+            )
+
+
 def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:
     """Comparison helper should run random, coordinate, and optuna samplers."""
     template = tmp_path / "template.yaml"

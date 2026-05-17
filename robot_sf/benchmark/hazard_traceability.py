@@ -145,17 +145,19 @@ def summarize_hazard_coverage(
 
     requested_ids = [str(value) for value in scenario_ids]
     requested_families = [str(value) for value in scenario_families]
+    requested_id_set = set(requested_ids)
+    requested_family_set = set(requested_families)
     covered_hazards: set[str] = set()
     mapped_ids: set[str] = set()
     mapped_families: set[str] = set()
 
     for item in mapping.scenario_mappings:
-        if set(item.scenario_ids).intersection(requested_ids):
+        matched_ids = requested_id_set.intersection(item.scenario_ids)
+        matched_families = requested_family_set.intersection(item.scenario_families)
+        if matched_ids or matched_families:
             covered_hazards.update(item.hazards)
-            mapped_ids.update(set(item.scenario_ids).intersection(requested_ids))
-        if set(item.scenario_families).intersection(requested_families):
-            covered_hazards.update(item.hazards)
-            mapped_families.update(set(item.scenario_families).intersection(requested_families))
+            mapped_ids.update(matched_ids)
+            mapped_families.update(matched_families)
 
     hazards_by_id = {hazard.id: hazard for hazard in mapping.hazards}
     ordered_hazards = sorted(covered_hazards)
@@ -165,8 +167,8 @@ def summarize_hazard_coverage(
         "scenario_ids": requested_ids,
         "scenario_families": requested_families,
         "covered_hazards": ordered_hazards,
-        "unmapped_scenario_ids": sorted(set(requested_ids) - mapped_ids),
-        "unmapped_scenario_families": sorted(set(requested_families) - mapped_families),
+        "unmapped_scenario_ids": sorted(requested_id_set - mapped_ids),
+        "unmapped_scenario_families": sorted(requested_family_set - mapped_families),
         "supporting_metrics_by_hazard": {
             hazard_id: list(hazards_by_id[hazard_id].supporting_metrics)
             for hazard_id in ordered_hazards

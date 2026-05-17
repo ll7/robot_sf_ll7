@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ class SeedSensitivityReplay:
     bundle_path: Path | None
     episode_record_path: Path | None
     trajectory_csv_path: Path | None
+    started_at: str | None
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-compatible replay payload."""
@@ -49,6 +51,7 @@ class SeedSensitivityReplay:
             "trajectory_csv_path": self.trajectory_csv_path.as_posix()
             if self.trajectory_csv_path
             else None,
+            "started_at": self.started_at,
         }
 
 
@@ -98,7 +101,8 @@ def run_seed_sensitivity(
     valid candidate, so seed values are not constrained by the original search
     space's sampled seed range. Certification still runs for every perturbation
     and rejects fail closed when the configured certification policy disallows a
-    replay.
+    replay. The replay loop is intentionally single-process: evaluators and
+    environment setup may reset process-global RNG state for each seed.
     """
     config.validate()
     replay_seeds = tuple(int(seed) for seed in seeds)
@@ -114,6 +118,7 @@ def run_seed_sensitivity(
 
     replays: list[SeedSensitivityReplay] = []
     for index, seed in enumerate(replay_seeds):
+        replay_started_at = datetime.now(UTC).isoformat()
         replay_candidate = replace(candidate, scenario_seed=seed)
         replay_dir = output_dir / f"replay_{index:04d}_seed_{seed}"
         scenario_yaml_path, _route_path = write_candidate_inputs(
@@ -141,6 +146,7 @@ def run_seed_sensitivity(
                     bundle_path=replay_dir,
                     episode_record_path=None,
                     trajectory_csv_path=None,
+                    started_at=replay_started_at,
                 )
             )
             continue
@@ -149,7 +155,7 @@ def run_seed_sensitivity(
         evaluation = replace(evaluation, certification_status=certification_status)
         score = objective(evaluation)
         evaluation = evaluation.with_objective(score)
-        replays.append(_replay_from_evaluation(evaluation))
+        replays.append(_replay_from_evaluation(evaluation, started_at=replay_started_at))
 
     summary = _summarize(
         candidate=candidate,
@@ -175,18 +181,29 @@ def _default_certifier(
     )
 
 
-def _replay_from_evaluation(evaluation: CandidateEvaluation) -> SeedSensitivityReplay:
+def _replay_from_evaluation(
+    evaluation: CandidateEvaluation,
+    *,
+    started_at: str | None = None,
+) -> SeedSensitivityReplay:
     """Convert a candidate evaluation into a seed-sensitivity replay row."""
     record = read_first_jsonl_record(evaluation.episode_record_path)
+    fallback_status = (
+        evaluation.failure_attribution.status
+        if evaluation.failure_attribution is not None
+        else "evaluated"
+    )
+    record_status = record.get("status") if record else None
     return SeedSensitivityReplay(
         seed=int(evaluation.candidate.scenario_seed),
-        status=str(record.get("status", "evaluated")) if record else "evaluated",
+        status=str(record_status) if record_status else fallback_status,
         outcome=_outcome_from_evaluation(evaluation, record),
         reason=_reason_from_evaluation(evaluation),
         objective_value=evaluation.objective_value,
         bundle_path=evaluation.bundle_path,
         episode_record_path=evaluation.episode_record_path,
         trajectory_csv_path=evaluation.trajectory_csv_path,
+        started_at=started_at,
     )
 
 

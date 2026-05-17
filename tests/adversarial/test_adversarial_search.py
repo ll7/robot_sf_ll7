@@ -990,6 +990,7 @@ def test_seed_sensitivity_classifies_stable_and_brittle_failures(tmp_path: Path)
     assert stable.failure_persistence_rate == pytest.approx(2 / 3)
     assert stable.objective_score_spread == pytest.approx(11.0)
     assert [replay.outcome for replay in stable.replays] == ["collision", "collision", "success"]
+    assert all(replay.started_at for replay in stable.replays)
     assert (tmp_path / "stable" / "seed_sensitivity_summary.json").exists()
 
     assert brittle.classification == "brittle_failure"
@@ -1050,6 +1051,7 @@ def test_seed_sensitivity_records_fail_closed_rejected_perturbations(tmp_path: P
     assert summary.replays[1].status == "not_available"
     assert summary.replays[1].outcome == "fail_closed_exclusion"
     assert summary.replays[1].reason == "seed 8 rejected by certification"
+    assert summary.replays[1].started_at
 
 
 def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:
@@ -1379,12 +1381,13 @@ def test_failure_attribution_covers_primary_outcomes() -> None:
     assert error.to_json()["status"] == "evaluation_failed"
 
 
-def test_read_first_jsonl_record_skips_malformed_lines(tmp_path: Path) -> None:
-    """JSONL helper should fail soft for malformed records and keep scanning."""
+def test_read_first_jsonl_record_rejects_malformed_lines(tmp_path: Path) -> None:
+    """JSONL helper should fail closed for malformed records with source context."""
     path = tmp_path / "episode.jsonl"
     path.write_text("{bad json}\n\n" + json.dumps({"episode_id": "ok"}) + "\n", encoding="utf-8")
 
-    assert read_first_jsonl_record(path) == {"episode_id": "ok"}
+    with pytest.raises(ValueError, match=r"episode\.jsonl: invalid JSON on line 1"):
+        read_first_jsonl_record(path)
 
 
 def test_write_trajectory_csv_escapes_fields(tmp_path: Path) -> None:

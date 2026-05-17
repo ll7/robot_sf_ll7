@@ -126,11 +126,13 @@ class PedestrianEnv(SingleAgentEnv):
             peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
             **kwargs: Additional keyword arguments forwarded to ``SingleAgentEnv``.
         """
+        original_env_config = env_config
         env_config = _coerce_pedestrian_config(env_config)
 
         # Ensure pedestrian obstacle forces are configured consistently.
         if peds_have_obstacle_forces is not None:
-            env_config = deepcopy(env_config)
+            if env_config is original_env_config:
+                env_config = deepcopy(env_config)
             env_config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
 
         # Store robot model

@@ -76,6 +76,25 @@ def test_pedestrian_env_does_not_mutate_input_config_for_deprecated_force_flag()
         env.exit()
 
 
+def test_pedestrian_env_avoids_deepcopy_for_default_deprecated_force_flag(monkeypatch) -> None:
+    """Default config construction should not defensively copy an already-fresh config."""
+
+    def _fail_deepcopy(_value):
+        raise AssertionError("default config should not need a defensive copy")
+
+    monkeypatch.setattr(pedestrian_env_module, "deepcopy", _fail_deepcopy)
+
+    env = PedestrianEnv(
+        env_config=None,
+        robot_model=None,
+        peds_have_obstacle_forces=False,
+    )
+    try:
+        assert env.config.peds_have_static_obstacle_forces is False
+    finally:
+        env.exit()
+
+
 def test_pedestrian_env_adapts_legacy_config_to_unified_boundary() -> None:
     """Legacy PedEnvSettings should be explicitly adapted before base setup."""
     config = LegacyPedEnvSettings(spawn_near_robot=False)

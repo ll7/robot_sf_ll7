@@ -20,7 +20,7 @@ This keeps the public constructor compatible while making the canonical runtime 
 - environment setup and `SingleAgentEnv` receive `PedestrianSimulationConfig`,
 - legacy configs are copied into the unified dataclass through a small adapter,
 - deprecated `peds_have_obstacle_forces` overrides are applied only after normalization, so the
-  caller's config object is not mutated.
+  caller's unified config object is not mutated without deep-copying freshly-created defaults.
 
 ## Validation
 
@@ -39,12 +39,13 @@ PYTEST_NUM_WORKERS=8 BASE_REF=origin/main DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVE
 Observed focused proof:
 
 - legacy config adaptation and no-`Any`-cast regression tests failed before the implementation,
-- `tests/test_pedestrian_env_compat.py -q` passed after the adapter,
+- `tests/test_pedestrian_env_compat.py -q` passed after the adapter and review fix,
 - adjacent env utility and map tests passed,
 - Ruff and `ty` checks passed for the touched Python files.
-- Full readiness passed: `3633 passed, 10 skipped, 6 warnings in 450.98s`.
+- Full readiness passed after the review fix:
+  `3634 passed, 10 skipped, 3 warnings in 438.78s`.
 - Changed-file coverage stayed above the 80% minimum for the parent-plus-child diff:
-  `robot_sf/gym_env/env_util.py` 99.0%, `robot_sf/gym_env/pedestrian_env.py` 86.3%,
+  `robot_sf/gym_env/env_util.py` 99.0%, `robot_sf/gym_env/pedestrian_env.py` 86.4%,
   and `robot_sf/sim/simulator.py` 95.7%.
 
 ## Follow-Up Boundary

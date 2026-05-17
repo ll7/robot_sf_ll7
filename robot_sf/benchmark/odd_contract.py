@@ -189,7 +189,7 @@ def validate_odd_contract_references(
 
     try:
         contracts = load_odd_contracts(contract_path)
-    except Exception as exc:
+    except (OddContractValidationError, OSError, yaml.YAMLError) as exc:
         return [f"odd_contract_ref.source '{source}' could not be loaded: {exc}"]
 
     contract_ids = {contract.id for contract in contracts}

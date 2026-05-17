@@ -131,6 +131,23 @@ def test_odd_contract_reference_validation_names_missing_files_and_ids() -> None
     ]
 
 
+def test_odd_contract_reference_validation_reports_malformed_sources(tmp_path: Path) -> None:
+    """Reference validation should fail closed when the referenced ODD file is malformed."""
+
+    malformed = tmp_path / "malformed_odd.yaml"
+    malformed.write_text("contracts:\n  - schema_version: odd_contract.v2\n", encoding="utf-8")
+
+    errors = validate_odd_contract_references(
+        source=malformed.name,
+        contract_id="low_speed_public_space_v1",
+        repo_root=tmp_path,
+    )
+
+    assert len(errors) == 1
+    assert f"odd_contract_ref.source '{malformed.name}' could not be loaded" in errors[0]
+    assert "/schema_version" in errors[0]
+
+
 def test_odd_contract_classifies_supported_excluded_and_unknown_claims() -> None:
     """ODD metadata should make out-of-scope claims executable, not only prose."""
 

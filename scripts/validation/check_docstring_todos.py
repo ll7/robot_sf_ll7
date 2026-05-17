@@ -10,15 +10,19 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import subprocess
 import sys
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
+
+DEFAULT_BACKLOG_ROOTS = ("robot_sf", "scripts", "tests", "examples")
+DEFAULT_BASELINE_PATH = Path("scripts/validation/docstring_todo_baseline.json")
 
 
 @dataclass(frozen=True)
@@ -213,6 +217,91 @@ def _read_defs(path: Path) -> list[DefInfo]:
     return _collect_defs(tree)
 
 
+def build_backlog_report(
+    repo_root: Path,
+    *,
+    roots: Iterable[str] = DEFAULT_BACKLOG_ROOTS,
+) -> dict[str, Any]:
+    """Build a TODO-docstring backlog report by top-level area and file.
+
+    Returns:
+        JSON-serializable report with total, area-level, and file-level counts.
+    """
+    files: dict[str, int] = {}
+    areas: dict[str, dict[str, int]] = {}
+    for root in roots:
+        area = root.strip().strip("/")
+        if not area:
+            continue
+        area_path = repo_root / area
+        area_files = 0
+        area_occurrences = 0
+        if area_path.exists():
+            for path in sorted(area_path.rglob("*.py")):
+                rel_path = path.relative_to(repo_root).as_posix()
+                occurrences = _count_todo_docstrings(path)
+                if occurrences <= 0:
+                    continue
+                files[rel_path] = occurrences
+                area_files += 1
+                area_occurrences += occurrences
+        areas[area] = {
+            "files": area_files,
+            "occurrences": area_occurrences,
+        }
+    return {
+        "schema_version": "docstring-todo-backlog.v1",
+        "roots": [root.strip().strip("/") for root in roots if root.strip().strip("/")],
+        "totals": {
+            "files": len(files),
+            "total_occurrences": sum(files.values()),
+        },
+        "areas": areas,
+        "files": dict(sorted(files.items())),
+    }
+
+
+def compare_backlog_to_baseline(
+    current: Mapping[str, Any],
+    baseline: Mapping[str, Any],
+) -> list[str]:
+    """Return file-level TODO-docstring increases relative to a baseline report.
+
+    Returns:
+        Human-readable increase lines sorted by path.
+    """
+    current_files = _files_payload(current)
+    baseline_files = _files_payload(baseline)
+    increases: list[str] = []
+    for path, current_count in sorted(current_files.items()):
+        baseline_count = baseline_files.get(path, 0)
+        if current_count > baseline_count:
+            delta = current_count - baseline_count
+            increases.append(
+                f"{path}: {current_count} TODO docstring occurrences "
+                f"(baseline {baseline_count}, +{delta})"
+            )
+    return increases
+
+
+def _count_todo_docstrings(path: Path) -> int:
+    """Count TODO-docstring placeholder occurrences in definition docstrings."""
+    return sum(info.docstring.count("TODO docstring") for info in _read_defs(path))
+
+
+def _files_payload(report: Mapping[str, Any]) -> dict[str, int]:
+    """Read and validate the file-count payload from a report."""
+    raw_files = report.get("files")
+    if not isinstance(raw_files, dict):
+        raise ValueError("docstring TODO report must contain a files mapping")
+    files: dict[str, int] = {}
+    for raw_path, raw_count in raw_files.items():
+        if not isinstance(raw_count, int):
+            raw_count = int(raw_count)
+        files[str(raw_path)] = raw_count
+    return files
+
+
 def _overlaps(ranges: list[tuple[int, int]], start: int, end: int) -> bool:
     """Check whether a definition span overlaps any changed line range.
 
@@ -231,10 +320,28 @@ def _parse_args() -> argparse.Namespace:
     Returns:
         Parsed argparse namespace.
     """
-    parser = argparse.ArgumentParser(
-        description="Warn on TODO docstrings in touched definitions (diff-only).",
+    parser = argparse.ArgumentParser(description="Check TODO-docstring placeholder debt.")
+    parser.add_argument(
+        "--mode",
+        choices=("diff", "report", "write-baseline", "ratchet"),
+        default="diff",
+        help="diff preserves the historical touched-definition check; ratchet compares backlog "
+        "counts to a tracked baseline.",
     )
     parser.add_argument("--base", default="origin/main", help="Base ref to diff against")
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=DEFAULT_BASELINE_PATH,
+        help="Backlog baseline path for ratchet/write-baseline modes",
+    )
+    parser.add_argument(
+        "--root",
+        action="append",
+        dest="roots",
+        default=None,
+        help="Top-level root to include in backlog modes; repeat to include multiple roots",
+    )
     parser.add_argument(
         "--fail-on-warning",
         action="store_true",
@@ -256,10 +363,17 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Run the diff-only TODO-docstring warning check."""
+    """Run the selected TODO-docstring check."""
     args = _parse_args()
     repo_root = _repo_root()
 
+    if args.mode != "diff":
+        return _run_backlog_mode(args, repo_root)
+    return _run_diff_mode(args, repo_root)
+
+
+def _run_diff_mode(args: argparse.Namespace, repo_root: Path) -> int:
+    """Run the historical diff-only TODO-docstring warning check."""
     include_patterns = args.include or ["**/*.py"]
     exclude_patterns = args.exclude or []
 
@@ -290,6 +404,40 @@ def main() -> int:
     else:
         print("No TODO docstrings found in touched definitions.")
 
+    return 0
+
+
+def _run_backlog_mode(args: argparse.Namespace, repo_root: Path) -> int:
+    """Run report, write-baseline, or ratchet mode."""
+    roots = tuple(args.roots or DEFAULT_BACKLOG_ROOTS)
+    report = build_backlog_report(repo_root, roots=roots)
+    if args.mode == "report":
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+    baseline_path = repo_root / args.baseline
+    if args.mode == "write-baseline":
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        baseline_path.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote TODO-docstring backlog baseline: {baseline_path.relative_to(repo_root)}")
+        return 0
+
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    increases = compare_backlog_to_baseline(report, baseline)
+    if increases:
+        print("TODO-docstring backlog increased relative to baseline:")
+        for line in increases:
+            print(f"- {line}")
+        return 1
+    totals = cast("dict[str, int]", report["totals"])
+    if not isinstance(totals, dict):
+        raise ValueError("docstring TODO report totals must be a mapping")
+    print(
+        "TODO-docstring backlog ratchet passed: "
+        f"{totals['files']} files, {totals['total_occurrences']} occurrences."
+    )
     return 0
 
 

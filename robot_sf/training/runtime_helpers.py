@@ -6,9 +6,12 @@ behavior for Ray and durable JSONL progress logging.
 
 from __future__ import annotations
 
-import json
 import shlex
 from pathlib import Path
+from typing import Any
+
+import numpy as np
+import orjson
 
 DEFAULT_RAY_RUNTIME_ENV_EXCLUDES: tuple[str, ...] = (
     ".git",
@@ -25,12 +28,30 @@ DEFAULT_RAY_RUNTIME_ENV_EXCLUDES: tuple[str, ...] = (
 )
 
 
-def append_jsonl_record(path: Path, payload: dict[str, object]) -> None:
+def _json_default(value: Any) -> object:
+    """Convert common training payload values to JSON-compatible objects.
+
+    Returns:
+        JSON-compatible value for supported runtime logging objects.
+    """
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError
+
+
+def append_jsonl_record(path: Path, payload: dict[str, object], *, sort_keys: bool = False) -> None:
     """Append one JSON object as a single line in a JSONL file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        json.dump(payload, handle, sort_keys=True)
-        handle.write("\n")
+    options = orjson.OPT_APPEND_NEWLINE | orjson.OPT_SERIALIZE_NUMPY
+    if sort_keys:
+        options |= orjson.OPT_SORT_KEYS
+    encoded = orjson.dumps(payload, default=_json_default, option=options)
+    with path.open("ab") as handle:
+        handle.write(encoded)
 
 
 def _resolve_executable_path(raw_command: str) -> Path:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from robot_sf.training.runtime_helpers import append_jsonl_record, resolve_ray_runtime_env
@@ -22,6 +23,47 @@ def test_append_jsonl_record_appends_multiple_lines(tmp_path: Path) -> None:
     assert json.loads(lines[1])["iteration"] == 2
 
 
+def test_append_jsonl_record_preserves_input_order_by_default(tmp_path: Path) -> None:
+    """JSONL helper should avoid key sorting unless explicitly requested."""
+    out_path = tmp_path / "result.jsonl"
+
+    append_jsonl_record(out_path, {"z": 1, "a": 2})
+
+    assert out_path.read_text(encoding="utf-8") == '{"z":1,"a":2}\n'
+
+
+def test_append_jsonl_record_can_sort_keys_for_legacy_determinism(tmp_path: Path) -> None:
+    """Callers that need sorted keys should be able to request them explicitly."""
+    out_path = tmp_path / "result.jsonl"
+
+    append_jsonl_record(out_path, {"z": 1, "a": 2}, sort_keys=True)
+
+    assert out_path.read_text(encoding="utf-8") == '{"a":2,"z":1}\n'
+
+
+def test_append_jsonl_record_handles_numpy_and_path_payloads(tmp_path: Path) -> None:
+    """Runtime logging should serialize common training payload value types."""
+    out_path = tmp_path / "result.jsonl"
+
+    append_jsonl_record(
+        out_path,
+        {
+            "checkpoint": tmp_path / "checkpoint.pt",
+            "iteration": np.int64(3),
+            "reward": np.float64(1.25),
+            "window": np.array([1, 2, 3], dtype=np.int64),
+        },
+    )
+
+    record = json.loads(out_path.read_text(encoding="utf-8"))
+    assert record == {
+        "checkpoint": str(tmp_path / "checkpoint.pt"),
+        "iteration": 3,
+        "reward": 1.25,
+        "window": [1, 2, 3],
+    }
+
+
 def test_resolve_ray_runtime_env_sets_defaults() -> None:
     """Runtime env helper should fill deterministic defaults."""
     runtime_env = resolve_ray_runtime_env(
@@ -32,7 +74,9 @@ def test_resolve_ray_runtime_env_sets_defaults() -> None:
     )
     assert runtime_env["working_dir"] == str(Path.cwd().resolve())
     assert runtime_env["py_executable"] == "/tmp/python"
-    assert ".git" in runtime_env["excludes"]
+    excludes = runtime_env["excludes"]
+    assert isinstance(excludes, list)
+    assert ".git" in excludes
     assert runtime_env["env_vars"] == {}
 
 

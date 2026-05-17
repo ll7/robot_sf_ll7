@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from robot_sf.nav.obstacle import Obstacle
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_DIM,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
@@ -9,6 +10,7 @@ from robot_sf.planner.obstacle_features import (
     ObstacleFeatureSchema,
     ObstacleFeatureSchemaError,
     append_obstacle_features,
+    obstacle_lines_from_map,
 )
 
 
@@ -82,6 +84,25 @@ def test_obstacle_feature_many_empty_input_keeps_feature_width():
 
     assert features.shape == (0, PREDICTIVE_OBSTACLE_FEATURE_DIM)
     assert features.dtype == np.float32
+
+
+def test_obstacle_lines_from_map_converts_obstacles_and_legacy_flat_bounds():
+    """Map geometry should preserve obstacle/bound line order for predictive features."""
+    map_def = type(
+        "MapDef",
+        (),
+        {
+            "obstacles": [Obstacle([(0.0, 2.0), (2.0, 2.0), (2.0, 3.0), (0.0, 3.0)])],
+            "bounds": [(0.0, 4.0, 0.0, 0.0)],
+        },
+    )()
+
+    lines = obstacle_lines_from_map(map_def)
+
+    assert lines[0] == ((0.0, 2.0), (2.0, 2.0))
+    assert lines[-1] == ((0.0, 0.0), (4.0, 0.0))
+    features = LocalObstacleFeatureExtractor().extract((1.0, 1.0), lines)
+    np.testing.assert_allclose(features, [1.0, 0.0, -1.0, 1.0, 0.0, 1.0])
 
 
 def test_obstacle_feature_tie_breaks_by_input_order():

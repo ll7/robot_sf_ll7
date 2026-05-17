@@ -52,6 +52,14 @@ Use `gh-issue-creator` to turn the request into a repo-ready issue.
 
 Pick the narrowest GitHub issue template that fits the task:
 
+- `research-validation.yml` for bounded research questions with explicit evidence grade,
+  artifact policy, and validation command.
+- `test-debt.yml` for skipped, failing, flaky, weak, or missing tests.
+- `blocked-external-artifact.yml` for unavailable datasets, models, runtimes, licenses, or
+  artifact pointers.
+- `execution-run.yml` for long local, SLURM, or release executions with current phase and next
+  decision point.
+- `epic.yml` for parent issues that need child links or a child-creation task.
 - `issue_default.md` for mixed or vague requests.
 - `documentation.md` for guides and workflow docs.
 - `benchmark_experiment.md` for benchmark or scenario work.
@@ -145,6 +153,11 @@ Before opening the PR, also run a first-pass self-review against the current dif
 [docs/context/pr_first_pass_review_audit_2026-05-14.md](../context/pr_first_pass_review_audit_2026-05-14.md).
 Treat it as a reviewer-lens pass, not another full test suite:
 
+- For docs/proof-heavy branches, run
+  `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR creation to
+  catch high-confidence context/evidence drift such as missing context-note index links, absolute
+  local paths in tracked evidence, and durable evidence files that still point at ignored
+  `output/` artifacts.
 - docs/context changes: align PR-body validation, context-note validation, and exact proof output;
   add required `docs/README.md` and `docs/context/README.md` links.
 - schema, parser, path, JSON, artifact, and public-helper changes: check malformed payloads,

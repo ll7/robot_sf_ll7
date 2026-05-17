@@ -1,0 +1,37 @@
+schema_version: experiment-record.v1
+experiment_id: issue_1236_adversarial_optimizer_sampler
+issue: 1236
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/1236
+question: >
+  Do optimizer-backed adversarial samplers find lower-SNQI or failure-inducing
+  candidates more efficiently than the current random and coordinate-refinement
+  samplers?
+hypothesis: >
+  A bounded optimizer-backed feedback sampler will find a stronger
+  counterexample under the same candidate budget on the crossing TTC search
+  space.
+config:
+  - configs/adversarial/crossing_ttc_space.yaml
+command: |
+  uv run pytest tests/adversarial/test_adversarial_search.py -q
+  # After the optimizer-backed sampler lands in #1236, run a bounded random vs
+  # coordinate vs optimizer smoke using configs/adversarial/crossing_ttc_space.yaml
+  # and write the replayable bundle under output/adversarial/issue1236_optimizer_sampler_pilot/.
+inputs:
+  - path: configs/adversarial/crossing_ttc_space.yaml
+  - path: docs/context/issue_869_adversarial_runner.md
+outputs:
+  - path: output/adversarial/issue1236_optimizer_sampler_pilot/
+    durable_reference: null
+    evidence_role: exploratory local bundle
+expected_artifacts:
+  - name: sampler_comparison_manifest
+    path: output/adversarial/issue1236_optimizer_sampler_pilot/manifest.yaml
+  - name: best_counterexample_bundle
+    path: output/adversarial/issue1236_optimizer_sampler_pilot/best/
+evidence_grade: observed
+paper_relevance: exploratory
+status: planned
+notes: >
+  This pilot is explicitly not paper-facing until repeated-seed evidence and
+  durable replay bundles exist.

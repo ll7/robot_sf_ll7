@@ -137,6 +137,36 @@ into aggregate-ready `ped_impact_*` fields such as `ped_impact_accel_delta_mean`
 `ped_impact_far_samples`, and `ped_impact_near_sample_frac`, then reports the normal
 mean/median/p95 summaries.
 
+### Social-Acceptability Pilot Metrics
+
+The opt-in pedestrian-impact switch also emits a bounded pilot set of
+`social_proxemic_*` metrics. These metrics are exploratory trajectory proxies for proxemic
+intrusion analysis. They are not a replacement for SNQI, collision/TTC/clearance reporting,
+paper headline metrics, or human-subject validation.
+
+Episode records preserve flat `social_proxemic_*` fields and include a structured
+`metrics.social_acceptability` block with `schema_version: social-acceptability-pilot.v1`.
+Aggregation flattens the structured block into scalar columns when only the block is present.
+
+Default parameter:
+
+- `social_proxemic_radius_m`: `1.2` meters of robot-pedestrian surface clearance.
+
+Canonical pilot reductions:
+
+- `social_proxemic_available`: true when a trajectory contains at least one timestep and at
+  least one pedestrian; false for K=0 or empty trajectories.
+- `social_proxemic_ped_count`: number of pedestrians in the episode.
+- `social_proxemic_intrusion_steps`: number of timesteps where at least one pedestrian has
+  surface clearance below `social_proxemic_radius_m`.
+- `social_proxemic_intrusion_frac`: `intrusion_steps / trajectory_timesteps`.
+- `social_proxemic_intrusion_area_m_s`: sum of
+  `max(social_proxemic_radius_m - clearance_m, 0) * dt` across pedestrians and timesteps.
+- `social_proxemic_min_clearance_m`: minimum finite robot-pedestrian surface clearance observed.
+
+Missing pedestrian trajectories fail gracefully: availability is false, counts and intrusion
+reductions are zero, and minimum clearance is omitted from sanitized JSON output when unavailable.
+
 ### Motion Quality Metrics
 
 #### Smoothness (Jerk)
@@ -206,4 +236,4 @@ For SNQI computation, metrics are normalized using baseline statistics:
 - Force threshold calibrated empirically for current fast-pysf physics model
 - SNQI methodology follows bounded composite-index practice with versioned weights, baseline normalization, and explicit contract diagnostics
 
-*Last updated: February 2026*
+*Last updated: May 2026*

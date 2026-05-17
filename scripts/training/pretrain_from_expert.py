@@ -238,7 +238,7 @@ def _create_bc_trainer(
         "MlpPolicy",
         env,
         learning_rate=config.learning_rate,
-        device="cpu",
+        device=config.device,
         verbose=1,
     )
 
@@ -249,7 +249,7 @@ def _create_bc_trainer(
         policy=policy_model.policy,
         batch_size=config.batch_size,
         rng=np.random.default_rng(int(config.random_seeds[0])),
-        device="cpu",
+        device=config.device,
     )
 
     return trainer, policy_model
@@ -357,6 +357,7 @@ def load_bc_config(config_path: Path) -> BCPretrainingConfig:
         random_seeds=tuple(raw.get("random_seeds", [42])),
         training_config_path=resolve_config_path(raw.get("training_config"), base_dir=base_dir),
         scenario_config_path=resolve_config_path(raw.get("scenario_config"), base_dir=base_dir),
+        device=raw.get("device", "auto"),
     )
 
 

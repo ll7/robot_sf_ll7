@@ -35,12 +35,17 @@ from robot_sf.adversarial.runtime import (
     build_multi_ped_adversarial_robot_config,
     multi_ped_config_to_single_pedestrian_definitions,
 )
-from robot_sf.adversarial.samplers import CoordinateRefinementSampler, RandomCandidateSampler
+from robot_sf.adversarial.samplers import (
+    CoordinateRefinementSampler,
+    OptunaCandidateSampler,
+    RandomCandidateSampler,
+)
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.ped_npc.ped_population import populate_single_pedestrians
+from scripts.tools.compare_adversarial_samplers import run_sampler_comparison
 
 _MULTI_PED_FAMILY_FIXTURES = (
     (
@@ -859,6 +864,95 @@ def test_coordinate_refinement_sampler_improves_synthetic_objective(tmp_path: Pa
     assert [candidate.start.x for candidate in sampled[:2]] == [1.0, 2.0]
     assert result.best_bundle_path == config.output_dir / "candidate_0001"
     assert result.best_objective_value == pytest.approx(-0.0)
+
+
+def test_optuna_candidate_sampler_is_deterministic_and_feedback_capable(
+    tmp_path: Path,
+) -> None:
+    """Optuna-backed sampling should be deterministic and accept scored feedback."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    _write_space(search_space)
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "out",
+        seed=19,
+    )
+
+    left = OptunaCandidateSampler(config.search_space, seed=19)
+    right = OptunaCandidateSampler(config.search_space, seed=19)
+    first = left.sample()
+    assert first == right.sample()
+
+    left.observe(
+        CandidateEvaluation(
+            candidate=first,
+            certification_status=passed_status(),
+            objective_value=0.25,
+            failure_attribution=None,
+            episode_record_path=None,
+            trajectory_csv_path=None,
+            scenario_yaml_path=None,
+        )
+    )
+    second = left.sample()
+
+    assert config.search_space.validate_candidate(second) == []
+    assert second.scenario_seed == int(second.scenario_seed)
+
+
+def test_optuna_candidate_sampler_reports_missing_dependency(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The optimizer sampler should fail with an actionable dependency error."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    _write_space(search_space)
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "out",
+    )
+    monkeypatch.setitem(sys.modules, "optuna", None)
+
+    with pytest.raises(RuntimeError, match="OptunaCandidateSampler requires optuna"):
+        OptunaCandidateSampler(config.search_space, seed=7)
+
+
+def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:
+    """Comparison helper should run random, coordinate, and optuna samplers."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    _write_space(search_space)
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "comparison",
+        budget=2,
+        seed=23,
+    )
+
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("random", "coordinate", "optuna"),
+        synthetic=True,
+    )
+
+    assert [row.sampler for row in rows] == ["random", "coordinate", "optuna"]
+    assert {row.num_candidates for row in rows} == {2}
+    assert all(Path(row.manifest_path).exists() for row in rows)
+    assert all(row.num_failed_evaluations == 0 for row in rows)
 
 
 def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Path) -> None:

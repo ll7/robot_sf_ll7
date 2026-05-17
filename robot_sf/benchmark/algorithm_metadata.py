@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from robot_sf.baselines.interface import ActionContract, ObservationContract, PlannerMetadata
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 
 _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
@@ -684,6 +685,12 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "default_execution_mode": "mixed",
         "default_adapter_name": "ppo_action_to_unicycle",
     },
+    "sac": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": True,
+        "supports_adapter_commands": False,
+        "default_execution_mode": "native",
+    },
     "guarded_ppo": {
         "planner_command_space": "mixed_vw_or_vxy",
         "supports_native_commands": True,
@@ -911,6 +918,108 @@ def resolve_observation_mode(algo: str, requested_mode: str | None = None) -> st
     return active_mode
 
 
+def _action_output_keys(command_space: str) -> tuple[str, ...]:
+    """Return canonical action payload keys for a command-space label."""
+    command = command_space.strip().lower()
+    if command == "unicycle_vw":
+        return ("v", "omega")
+    if command == "body_velocity_xy_plus_omega":
+        return ("vx", "vy", "omega")
+    if command == "holonomic_vxy_world" or "velocity_xy" in command:
+        return ("vx", "vy")
+    if command == "discrete_delta_v_and_delta_theta":
+        return ("delta_v", "delta_theta")
+    if command in {"mixed_vw_or_vxy", "randomized_vxy_or_vw"}:
+        return ("v", "omega", "vx", "vy")
+    if command == "mixed_vw_or_unicycle":
+        return ("v", "omega")
+    raise ValueError(f"Unsupported planner command space: {command_space!r}")
+
+
+def _action_frame(command_space: str) -> str:
+    """Return the frame label associated with a command-space label."""
+    command = command_space.strip().lower()
+    if command == "body_velocity_xy_plus_omega":
+        return "body"
+    if command == "holonomic_vxy_world" or "velocity_xy" in command:
+        return "world"
+    return "robot"
+
+
+def _compatible_robot_kinematics(
+    profile: dict[str, Any],
+    robot_kinematics: str | None,
+) -> tuple[str, ...]:
+    """Return the kinematics labels the action contract actually covers."""
+    explicit = profile.get("compatible_robot_kinematics")
+    if isinstance(explicit, (list, tuple)):
+        values = tuple(str(value).strip().lower() for value in explicit if str(value).strip())
+        if values:
+            return values
+    active = str(robot_kinematics or "").strip().lower()
+    return (active or "unknown",)
+
+
+def _observation_normalization(active_mode: str) -> str:
+    """Return the normalization label for a planner observation mode."""
+    if active_mode == "sensor_fusion_state":
+        return "normalized_by_space_high"
+    return "raw"
+
+
+def planner_contract_for_algorithm(
+    algo: str,
+    *,
+    observation_mode: str | None = None,
+    planner_kinematics: dict[str, Any] | None = None,
+    robot_kinematics: str | None = None,
+) -> PlannerMetadata:
+    """Return typed planner compatibility metadata for a benchmark algorithm.
+
+    The contract is declarative compatibility metadata. It does not certify
+    benchmark quality or performance.
+    """
+    canonical = canonical_algorithm_name(algo)
+    active_mode = resolve_observation_mode(canonical, observation_mode)
+    observation_spec = observation_spec_for_algorithm(canonical)
+    profile = dict(_KINEMATICS_PROFILE_BY_CANONICAL.get(canonical, {}))
+    if planner_kinematics is not None:
+        profile.update(planner_kinematics)
+    command_space = str(profile.get("planner_command_space", "unknown"))
+    observation = ObservationContract(
+        mode=str(observation_spec["default_mode"]),
+        active_mode=active_mode,
+        supported_modes=tuple(str(mode) for mode in observation_spec["supported_modes"]),
+        required_inputs=tuple(str(value) for value in observation_spec.get("inputs", ())),
+        frame="world",
+        normalization=_observation_normalization(active_mode),
+        pedestrian_ordering="distance_ascending",
+        notes=str(observation_spec.get("notes", "")),
+    )
+    action = ActionContract(
+        command_space=command_space,
+        output_keys=_action_output_keys(command_space),
+        frame=_action_frame(command_space),
+        normalization="raw",
+        units="mps_radps",
+        compatible_robot_kinematics=_compatible_robot_kinematics(profile, robot_kinematics),
+        active_robot_kinematics=(
+            str(robot_kinematics)
+            if robot_kinematics not in {None, "", "mixed", "unknown"}
+            else None
+        ),
+        notes=str(profile.get("projection_policy") or profile.get("execution_detail") or ""),
+    )
+    return PlannerMetadata(
+        planner_id=canonical,
+        observation_contract=observation,
+        action_contract=action,
+        reset_contract="seeded_reset",
+        compatibility_scope="metadata_only",
+        notes="Compatibility metadata only; not a benchmark quality claim.",
+    )
+
+
 def _base_kinematics_metadata(
     canonical_algo: str,
     *,
@@ -1017,6 +1126,12 @@ def enrich_algorithm_metadata(
         merged["robot_kinematics"] = robot_kinematics
     merged["adapter_active"] = merged.get("execution_mode") in {"adapter", "mixed"}
     enriched["planner_kinematics"] = merged
+    enriched["planner_contract"] = planner_contract_for_algorithm(
+        canonical,
+        observation_mode=active_observation_mode,
+        planner_kinematics=merged,
+        robot_kinematics=str(merged.get("robot_kinematics", "unknown")),
+    ).to_metadata()
 
     if canonical == "random":
         enriched.setdefault("stochastic_reference", True)
@@ -1055,5 +1170,6 @@ __all__ = [
     "enrich_algorithm_metadata",
     "infer_execution_mode_from_counts",
     "observation_spec_for_algorithm",
+    "planner_contract_for_algorithm",
     "resolve_observation_mode",
 ]

@@ -9,6 +9,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
     observation_spec_for_algorithm,
+    planner_contract_for_algorithm,
     resolve_observation_mode,
 )
 
@@ -39,6 +40,38 @@ def test_observation_spec_declares_supported_modes_and_rejects_invalid_override(
     assert "socnav_state" in str(excinfo.value)
 
 
+def test_enriched_metadata_embeds_typed_planner_contract_payload() -> None:
+    """Algorithm metadata should expose normalized observation/action contract payloads."""
+    meta = enrich_algorithm_metadata(
+        algo="orca",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+        observation_mode="socnav_state",
+    )
+
+    contract = meta["planner_contract"]
+    assert contract["planner_id"] == "orca"
+    assert contract["observation_contract"]["active_mode"] == "socnav_state"
+    assert contract["action_contract"]["command_space"] == "unicycle_vw"
+    assert contract["action_contract"]["output_keys"] == ["v", "omega"]
+    assert contract["action_contract"]["active_robot_kinematics"] == "differential_drive"
+    assert contract["action_contract"]["compatible_robot_kinematics"] == ["differential_drive"]
+    assert contract["compatibility_scope"] == "metadata_only"
+
+
+def test_planner_contract_helper_rejects_unsupported_observation_mode() -> None:
+    """Typed contract resolution should fail closed on invalid observation overrides."""
+    with pytest.raises(ValueError, match="Observation mode 'goal_state' is not supported"):
+        planner_contract_for_algorithm("orca", observation_mode="goal_state")
+
+
+def test_planner_contract_helper_rejects_unknown_command_space() -> None:
+    """Typed contract resolution should fail closed on unknown action contracts."""
+    with pytest.raises(ValueError, match="Unsupported planner command space"):
+        planner_contract_for_algorithm("unknown_algo")
+
+
 def test_random_baseline_metadata_marks_stochastic_reference() -> None:
     """Random baseline metadata should expose diagnostic stochastic semantics."""
     meta = enrich_algorithm_metadata(algo="random", metadata={"status": "ok"})
@@ -65,6 +98,19 @@ def test_planner_kinematics_and_adapter_impact_fields() -> None:
     assert impact["requested"] is True
     assert impact["native_steps"] == 0
     assert impact["adapted_steps"] == 0
+
+
+def test_sac_metadata_declares_native_unicycle_contract() -> None:
+    """SAC map-runner policy metadata should not fall back to unknown actions."""
+    meta = enrich_algorithm_metadata(algo="sac", metadata={"status": "ok"})
+    planner = meta["planner_kinematics"]
+    action = meta["planner_contract"]["action_contract"]
+
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["supports_native_commands"] is True
+    assert planner["supports_adapter_commands"] is False
+    assert action["command_space"] == "unicycle_vw"
+    assert action["output_keys"] == ["v", "omega"]
 
 
 def test_safety_barrier_metadata_marks_testing_only_native_spike() -> None:

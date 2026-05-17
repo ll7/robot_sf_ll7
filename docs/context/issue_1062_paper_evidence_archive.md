@@ -56,6 +56,21 @@ tar -tzf output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_rel
 The SHA-256 should match
 `64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90`.
 
+The paper handoff parity test consumes the same durable bundle without requiring a committed raw
+benchmark output. After downloading the archive above, run:
+
+```bash
+ROBOT_SF_PAPER_HANDOFF_BUNDLE=output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz \
+  uv run --active pytest tests/benchmark/test_paper_results_handoff.py::test_canonical_handoff_matches_durable_release_campaign_table -q -rs
+```
+
+The test also discovers the archive automatically at
+`output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz`
+or an extracted bundle at
+`output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle`.
+It verifies the archive SHA-256 and the tracked embedded artifact checksums before asserting paper
+handoff parity.
+
 ## Validation Performed
 
 On 2026-05-09:

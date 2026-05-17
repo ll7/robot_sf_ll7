@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.nav.obstacle import Obstacle
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     ObstacleFeatureSchemaError,
@@ -90,3 +91,73 @@ def test_prediction_planner_adapter_places_legacy_obstacle_rows_after_legacy_bas
     assert np.allclose(state[0, 0:4], np.array([1.0, 0.0, 0.1, 0.0], dtype=np.float32))
     assert state[0, 4] == np.float32(50.0)
     assert state[0, 9] == np.float32(0.0)
+
+
+def test_prediction_planner_adapter_uses_bound_map_obstacle_rows() -> None:
+    """Runtime obstacle-feature inputs should use bound map geometry when available."""
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(
+            predictive_feature_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+            predictive_ego_conditioning=False,
+            predictive_max_agents=2,
+        )
+    )
+    adapter._ensure_model = lambda: SimpleNamespace(config=SimpleNamespace(input_dim=10))  # type: ignore[method-assign]
+    map_def = SimpleNamespace(
+        obstacles=[Obstacle([(0.0, 0.0), (2.0, 0.0), (2.0, 0.5), (0.0, 0.5)])],
+        bounds=[],
+    )
+    adapter.bind_env(SimpleNamespace(map_def=map_def, simulator=SimpleNamespace(map_def=map_def)))
+
+    state, mask, _robot_pos, _robot_heading = adapter._build_model_input(
+        {
+            "robot": {
+                "position": np.array([0.0, 0.0], dtype=np.float32),
+                "heading": np.array([0.0], dtype=np.float32),
+                "speed": np.array([0.0, 0.0], dtype=np.float32),
+            },
+            "goal": {"current": np.array([1.0, 0.0], dtype=np.float32)},
+            "pedestrians": {
+                "positions": np.array([[1.0, 1.0]], dtype=np.float32),
+                "velocities": np.array([[0.1, 0.0]], dtype=np.float32),
+                "count": np.array([1.0], dtype=np.float32),
+            },
+        }
+    )
+
+    assert mask[0] == 1.0
+    np.testing.assert_allclose(state[0, 4:10], [0.5, 0.0, 1.0, -1.0, 0.0, 1.0])
+
+
+def test_prediction_planner_adapter_prefers_observation_obstacle_lines() -> None:
+    """Runtime observations can carry explicit obstacle lines without using sentinels."""
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(
+            predictive_feature_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+            predictive_ego_conditioning=False,
+            predictive_max_agents=2,
+        )
+    )
+    adapter._ensure_model = lambda: SimpleNamespace(config=SimpleNamespace(input_dim=10))  # type: ignore[method-assign]
+
+    state, mask, _robot_pos, _robot_heading = adapter._build_model_input(
+        {
+            "robot": {
+                "position": np.array([0.0, 0.0], dtype=np.float32),
+                "heading": np.array([0.0], dtype=np.float32),
+                "speed": np.array([0.0, 0.0], dtype=np.float32),
+            },
+            "goal": {"current": np.array([1.0, 0.0], dtype=np.float32)},
+            "pedestrians": {
+                "positions": np.array([[1.0, 1.0]], dtype=np.float32),
+                "velocities": np.array([[0.1, 0.0]], dtype=np.float32),
+                "count": np.array([1.0], dtype=np.float32),
+            },
+            "map": {
+                "obstacle_lines": np.array([[[0.0, 0.0], [2.0, 0.0]]], dtype=np.float32),
+            },
+        }
+    )
+
+    assert mask[0] == 1.0
+    np.testing.assert_allclose(state[0, 4:10], [1.0, 0.0, 1.0, 1.0, 0.0, 1.0])

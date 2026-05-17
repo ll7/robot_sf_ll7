@@ -13,9 +13,11 @@ It also defines the action and observation spaces for the robot.
 import hashlib
 import importlib
 import json
+import random
 import time
 import uuid
 from collections.abc import Callable
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
@@ -69,6 +71,28 @@ _TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
     "jerk_mean",
 )
 _ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
+
+
+@contextmanager
+def _temporary_global_reset_seed(seed: int | None):
+    """Temporarily seed legacy global RNGs used by route sampling during reset.
+
+    This scope is intentionally narrow and restores caller-owned RNG state afterward, but
+    it still assumes resets do not run concurrently in the same Python process.
+    """
+    if seed is None:
+        yield
+        return
+
+    random_state = random.getstate()
+    numpy_state = np.random.get_state()
+    random.seed(int(seed))
+    np.random.seed(int(seed))
+    try:
+        yield
+    finally:
+        random.setstate(random_state)
+        np.random.set_state(numpy_state)
 
 
 @dataclass(slots=True)
@@ -634,6 +658,7 @@ class RobotEnv(BaseEnv):
 
         # Store last action executed by the robot
         self.last_action = None
+        self.applied_seed: int | None = None
         self._latest_observation: Any = None
         # Enable occupancy grid overlay visualization if requested
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
@@ -1001,99 +1026,104 @@ class RobotEnv(BaseEnv):
         """Reset the environment and start a new episode.
 
         Args:
-            seed: Optional random seed forwarded to ``BaseEnv`` reset.
+            seed: Optional random seed applied to Gymnasium and reset route sampling.
             options: Optional Gymnasium reset options.
 
         Returns:
             tuple: ``(obs, info)`` with the initial observation and placeholder info dict.
         """
-        super().reset(seed=seed, options=options)
-        self._telemetry_episode_id += 1
-        # Reset last_action
-        self.last_action = None
-        # Reset internal simulator state
-        self.simulator.reset_state()
-        # Reset the environment's state and return the initial observation
-        obs = self.state.reset()
-        self._prime_snqi_proxy_state()
+        if seed is not None:
+            self.applied_seed = int(seed)
 
-        # T044: Wrap observation as dict if observation space was converted for grid inclusion
-        if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
-            obs = {"agent_obs": obs}
+        with _temporary_global_reset_seed(seed):
+            super().reset(seed=seed, options=options)
+            self._telemetry_episode_id += 1
+            # Reset last_action
+            self.last_action = None
+            # Reset internal simulator state
+            self.simulator.reset_state()
+            # Reset the environment's state and return the initial observation
+            obs = self.state.reset()
+            self._prime_snqi_proxy_state()
 
-        # T043: Generate initial occupancy grid if enabled
-        if self.occupancy_grid is not None:
-            # Extract obstacles from map
-            obstacles, obstacle_polygons = self._normalize_obstacles_for_grid(
-                self.map_def.obstacles, self.map_def.bounds
-            )
-            # Extract pedestrian positions and radii from simulator
-            ped_positions = self.simulator.ped_pos
-            ped_radii = getattr(self.simulator, "ped_radii", None)
-            if ped_radii is None:
-                # Default pedestrian radius if not available
-                ped_radii = [0.35] * len(ped_positions)
-            pedestrians = [
-                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=True)
-            ]
-            # Get robot pose (already in RobotPose format: ((x, y), theta))
-            robot_pose = self.simulator.robot_poses[0]
-            # Generate grid (allow grid config to opt into ego frame)
-            self.occupancy_grid.generate(
-                obstacles=obstacles,
-                pedestrians=pedestrians,
-                robot_pose=robot_pose,
-                ego_frame=False,
-                obstacle_polygons=obstacle_polygons,
-            )
-            # Add grid to observation
-            if self.include_grid_in_observation:
-                obs["occupancy_grid"] = self.occupancy_grid.to_observation()
-                # Flatten metadata into individual fields for SB3 compatibility
-                obs.update(
-                    _flatten_occupancy_grid_metadata(self.occupancy_grid.metadata_observation())
-                )
-                logger.debug(
-                    f"Initial occupancy grid generated: "
-                    f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
-                )
-        obs = self._attach_asymmetric_critic_state(obs)
-        self._latest_observation = obs
+            # T044: Wrap observation as dict if observation space was converted for grid inclusion
+            if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
+                obs = {"agent_obs": obs}
 
-        # Handle recording for both systems
-        if self.recording_enabled:
-            if self.use_jsonl_recording:
-                # End previous episode if active, then start a new one
-                try:
-                    self.end_episode_recording()
-                except (
-                    RuntimeError,
-                    ValueError,
-                    AttributeError,
-                ):  # pragma: no cover - safe if none active
-                    pass
-                config_hash = _stable_config_hash(self.env_config)
-                telemetry_path = None
-                if self._telemetry_session is not None and self.env_config.telemetry_record:
-                    telemetry_path = str(self._telemetry_session.telemetry_path)
-                telemetry_episode_id = (
-                    self._telemetry_episode_id if telemetry_path is not None else None
+            # T043: Generate initial occupancy grid if enabled
+            if self.occupancy_grid is not None:
+                # Extract obstacles from map
+                obstacles, obstacle_polygons = self._normalize_obstacles_for_grid(
+                    self.map_def.obstacles, self.map_def.bounds
                 )
-                self.start_episode_recording(
-                    config_hash=config_hash,
-                    telemetry_path=telemetry_path,
-                    telemetry_episode_id=telemetry_episode_id,
+                # Extract pedestrian positions and radii from simulator
+                ped_positions = self.simulator.ped_pos
+                ped_radii = getattr(self.simulator, "ped_radii", None)
+                if ped_radii is None:
+                    # Default pedestrian radius if not available
+                    ped_radii = [0.35] * len(ped_positions)
+                pedestrians = [
+                    (tuple(pos), radius)
+                    for pos, radius in zip(ped_positions, ped_radii, strict=True)
+                ]
+                # Get robot pose (already in RobotPose format: ((x, y), theta))
+                robot_pose = self.simulator.robot_poses[0]
+                # Generate grid (allow grid config to opt into ego frame)
+                self.occupancy_grid.generate(
+                    obstacles=obstacles,
+                    pedestrians=pedestrians,
+                    robot_pose=robot_pose,
+                    ego_frame=False,
+                    obstacle_polygons=obstacle_polygons,
                 )
-            else:
-                # Legacy pickle recording
-                self.save_recording()
+                # Add grid to observation
+                if self.include_grid_in_observation:
+                    obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+                    # Flatten metadata into individual fields for SB3 compatibility
+                    obs.update(
+                        _flatten_occupancy_grid_metadata(self.occupancy_grid.metadata_observation())
+                    )
+                    logger.debug(
+                        f"Initial occupancy grid generated: "
+                        f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
+                    )
+            obs = self._attach_asymmetric_critic_state(obs)
+            self._latest_observation = obs
 
-        # info is necessary for the gym environment, but useless at the moment
-        info = {"info": "test"}
-        # Reset telemetry timing on new episode
-        self._last_wall_time = time.perf_counter()
-        self._frame_idx = 0
-        return obs, info
+            # Handle recording for both systems
+            if self.recording_enabled:
+                if self.use_jsonl_recording:
+                    # End previous episode if active, then start a new one
+                    try:
+                        self.end_episode_recording()
+                    except (
+                        RuntimeError,
+                        ValueError,
+                        AttributeError,
+                    ):  # pragma: no cover - safe if none active
+                        pass
+                    config_hash = _stable_config_hash(self.env_config)
+                    telemetry_path = None
+                    if self._telemetry_session is not None and self.env_config.telemetry_record:
+                        telemetry_path = str(self._telemetry_session.telemetry_path)
+                    telemetry_episode_id = (
+                        self._telemetry_episode_id if telemetry_path is not None else None
+                    )
+                    self.start_episode_recording(
+                        config_hash=config_hash,
+                        telemetry_path=telemetry_path,
+                        telemetry_episode_id=telemetry_episode_id,
+                    )
+                else:
+                    # Legacy pickle recording
+                    self.save_recording()
+
+            # info is necessary for the gym environment, but useless at the moment
+            info = {"info": "test"}
+            # Reset telemetry timing on new episode
+            self._last_wall_time = time.perf_counter()
+            self._frame_idx = 0
+            return obs, info
 
     def _emit_telemetry(
         self,

@@ -92,6 +92,8 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Project Prioritization](./project_prioritization.md)** - Priority-score model, Project #5 field semantics, and the local/manual score-sync workflow
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
 * **[Goal-Driven Agent Loops](./context/goal_driven_agent_loops_2026-05-13.md)** - Shared contract for autonomous issue discovery, issue implementation, PR review, and user-in-the-loop issue audit skills
+* **[Artifact Evidence Vocabulary](./context/artifact_evidence_vocabulary.md)** - Shared issue/PR vocabulary for exploratory outputs, durable evidence, release artifacts, benchmark claims, and paper-facing claims
+* **[Question-First Experiment Registry](../experiments/README.md)** - Register experiment intent, canonical configs, expected artifacts, and validation gates before launching runs
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
@@ -105,7 +107,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Awesome Copilot Adaptation](./ai/awesome_copilot_adaptation.md)** - Selective adaptation plan for Codex skills, including `autoresearch`,   `auto-improvement`, context-discovery, quality, and doc-sync skills
 * **[AI Retrieval Deferral Note](./ai/retrieval_deferral.md)** - Why MCP/retrieval layers stay out of scope until a real context boundary appears
 * **[Agent Memory Index](../memory/MEMORY.md)** - Repo-local Markdown memory taxonomy for durable agent context, with linked architecture, decision, experiment, failure, and benchmark notes
-* **[Issue #1151 Manual-Control MVP Foundation](./context/issue_1151_manual_control_mvp_foundation.md)** - Pygame manual-control benchmark recorder foundations: input mapping, session controller, recording module, and test suite
+* **[Issue #1151/#1219 Manual-Control MVP](./context/issue_1151_manual_control_mvp_foundation.md)** - Pygame manual-control benchmark recorder foundations plus the local `scripts/manual_control/run_pygame_session.py` runner, JSONL recording, session manifest, and headless smoke command
 * **[Issue #1163 Manual-Control Recording Format Decision](./context/issue_1163_manual_control_recording_format.md)** - No-change decision for compact manual-control recording formats, with JSONL size/throughput thresholds and provenance requirements for any future derived artifact
 * **[Issue #1154 Web-Game Data Collection Path](./context/issue_1154_web_game_data_collection_path.md)** - Deferred web-game data collection follow-up; rationale for keeping schema parity with the local recorder and sequenced implementation order
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
@@ -127,7 +129,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue 403 Grid PPO Training Runbook](./training/issue_403_grid_training.md)** - Step-by-step training for the grid+SocNav PPO expert.
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
-* **[Issue #1138 Predictive Obstacle Feature Schema](./context/issue_1138_predictive_obstacle_features_schema.md)** - Stable six-value obstacle-feature contract, sentinel behavior, and deferred lifecycle wiring for predictive planner inputs
+* **[Issue #1138 Predictive Obstacle Feature Schema](./context/issue_1138_predictive_obstacle_features_schema.md)** - Stable six-value obstacle-feature contract, sentinel behavior, and map-derived lifecycle follow-up for predictive planner inputs
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
 * **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Final no-promotion recommendation for the issue-708 PPO campaign family, plus the original retrain config, SLURM submission path, deterministic eval surface, and provenance record.
 * **[Issue #749 BC-Preinitialized PPO Launch Packet](./context/issue_749_bc_preinit_ppo_launch_packet.md)** - Config-first BC warm-start PPO challenger path, artifact boundary, and follow-up execution gate for the v10 fine-tune contract
@@ -153,10 +155,12 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Benchmarking & Metrics
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
+* **[Scenario Contracts](./scenario_contracts.md)** - `scenario_contract.v1` schema, typed loader, fixture, and boundary between authored intent, certification, and benchmark evidence
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #1073 Robot SF Empirical-Expansion Gate](./context/issue_1073_empirical_expansion_gate_2026_06_08.md)** - June 8 checkpoint rule for deciding whether Robot SF can move beyond dissertation-floor examples into bounded empirical expansion
 * **[Benchmark Static Dashboard](./benchmark_static_dashboard.md)** - Self-contained static HTML dashboard generation from camera-ready benchmark bundles
+* **[Trajectory Debug Visualization](./debug_visualization.md)** - Optional JSON/Rerun timeline export for inspecting one episode JSONL without treating debug artifacts as benchmark evidence
 * **[PR Promoted Planner Smoke](./benchmark_pr_promoted_planner_smoke.md)** - Pull-request micro-benchmark workflow, runtime target, and fail-closed summary contract
 * **[Issue #1065 Route-Clearance Warning Audit](./context/issue_1065_route_clearance_warning_audit.md)** - Paper and h500 route-clearance warning classification, planner-attribution boundary, and repair/certification follow-up
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
@@ -274,6 +278,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #601 CrowdNav Feasibility Note](./context/issue_601_crowdnav_feasibility_note.md)** - Family assessment, canonical source anchors, and integration shape decision for CrowdNav attention-based crowd navigation
 * **[Issue #695 `safe_control` Feasibility Note](./context/issue_695_safe_control_feasibility_note.md)** - External safety-controller assessment showing the current path is blocked by missing runtime dependencies, unclear license metadata, and a waypoint-tracking contract mismatch
 * **[Issue #581 Paper Evidence Delta Report](./context/issue_581_paper_evidence_delta.md)** - Canonical corrected benchmark artifact handoff, planner-quality claim boundary, and AMV paper-ingestion checklist
+* **[Issue #1236 Optimizer Adversarial Sampler](./context/issue_1236_optimizer_adversarial_sampler.md)** - Optuna-backed adversarial sampler pilot, synthetic comparison helper, and non-paper-facing evidence boundary
 * **[Planner Quality Audit Workflow](./benchmark_planner_quality_audit.md)** - Build the planner decision table, classify headline suitability, and record paper-faithfulness parity gaps
 
 ### Tooling
@@ -364,7 +369,9 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
 * [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
 * [**Scenario Specification Checklist**](./scenario_spec_checklist.md) - Authoring checklist for per-scenario/archetype/manifest files
+* [**Scenario Contracts**](./scenario_contracts.md) - Validate authored scenario-intent contracts before certification or benchmark execution
 * [**Scenario Certification**](./scenario_certification.md) - Generate machine-readable validity, feasibility, stress-only, and hard-but-solvable certificates for scenario manifests
+* [**Issue #1240 Scenario Coverage Entropy**](./context/issue_1240_scenario_coverage_entropy.md) - Config-only entropy and novelty report for diagnostic scenario-set curation; not benchmark-success evidence
 * **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, station-platform, and group crossing archetypes for benchmark coverage. See also [Issue #549 station-platform map rationale](./context/issue_549_station_platform_map.md).
 * **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
   scenario matrix in [configs/scenarios/francis2023.yaml](../configs/scenarios/francis2023.yaml).

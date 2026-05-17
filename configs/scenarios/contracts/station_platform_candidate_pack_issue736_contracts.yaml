@@ -1,0 +1,97 @@
+# Governance contract fixture for one existing station-platform scenario.
+#
+# This file intentionally describes authored intent only. It does not certify the
+# scenario as benchmark-ready and does not change benchmark runner behavior.
+
+contracts:
+  - schema_version: scenario_contract.v1
+    id: station_platform_waiting_passengers_medium_contract
+    scenario_ref:
+      source: configs/scenarios/sets/station_platform_candidate_pack_issue736.yaml
+      scenario_name: station_platform_waiting_passengers_medium
+      scenario_family: station_platform
+    odd:
+      environment_type: indoor_public_transit
+      map_family: classic_station_platform
+      density: medium
+      flow: bidirectional_with_dwell
+      assumptions:
+        - Pedestrian flow is synthetic and map-local, not calibrated to a real transit station.
+        - Waiting behavior is represented by authored pedestrian pauses near access points.
+        - The scenario remains exploratory until certification and benchmark evidence are produced.
+    actors:
+      - id: robot
+        kind: robot
+        count:
+          minimum: 1
+          maximum: 1
+        motion_model: configured_robot_policy
+        assumptions:
+          - Robot kinematics come from the scenario runner configuration.
+          - The contract does not choose or promote a planner.
+      - id: waiting_passengers
+        kind: pedestrian
+        count:
+          minimum: 2
+          maximum: 2
+        motion_model: authored_waypoints_with_waits
+        assumptions:
+          - Waiting passengers follow deterministic waypoint and dwell annotations in the scenario YAML.
+          - The actor model is intended to probe platform dwell interactions, not crowd realism.
+    invariants:
+      - id: station_platform_source_surface
+        scope: authoring
+        severity: required
+        description: The contract must keep pointing at the maintained station-platform scenario YAML entry.
+      - id: no_benchmark_claim_without_cert
+        scope: pre_run
+        severity: required
+        description: Benchmark claims require scenario_cert.v1 and run evidence in addition to this contract.
+    observables:
+      - id: collision_rate
+        metric: collision_rate
+        source: benchmark_episode_metrics
+        required: true
+        interpretation: Detects whether dwell interactions introduce unsafe contacts.
+      - id: comfort_exposure_s
+        metric: comfort_exposure_s
+        source: benchmark_episode_metrics
+        required: true
+        interpretation: Interprets platform waiting behavior through comfort exposure rather than success alone.
+      - id: time_to_goal_s
+        metric: time_to_goal_s
+        source: benchmark_episode_metrics
+        required: false
+        interpretation: Helps distinguish dwell-induced slowdowns from hard failures.
+    termination_conditions:
+      - id: route_success
+        reason: success
+        source: benchmark_runner
+        description: The robot reaches the configured route goal under the benchmark runner.
+      - id: safety_collision
+        reason: collision
+        source: benchmark_runner
+        description: A robot collision outcome is treated as a safety failure, not a scenario certification failure.
+      - id: horizon_timeout
+        reason: max_steps
+        source: benchmark_runner
+        description: Max-step termination is an execution outcome and must be interpreted with planner evidence.
+    certification:
+      schema_version: scenario_cert.v1
+      required_before_benchmark_claim: true
+      expected_eligibility: eligible
+      notes: scenario_contract.v1 records intent; scenario_cert.v1 remains the feasibility and eligibility gate.
+    benchmark_eligibility:
+      intended_use: exploratory
+      requires_certification: true
+      claim_boundary: Use this contract to audit scenario intent only; do not cite it as benchmark evidence.
+      eligibility_hooks:
+        - scenario_cert.v1 must classify the scenario as eligible before headline benchmark use.
+        - Runtime benchmark evidence must be reported separately with planner, seed, and metric provenance.
+    provenance:
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/736
+      authored_by: robot_sf_ll7
+      source_files:
+        - configs/scenarios/sets/station_platform_candidate_pack_issue736.yaml
+        - maps/svg_maps/classic_station_platform.svg
+      notes: Fixture chosen because the scenario YAML already carries ad hoc intent metadata.

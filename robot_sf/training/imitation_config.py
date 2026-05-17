@@ -208,6 +208,7 @@ class BCPretrainingConfig:
     random_seeds: tuple[int, ...]
     training_config_path: Path | None = None
     scenario_config_path: Path | None = None
+    device: str = "auto"
 
     @classmethod
     def from_raw(  # noqa: PLR0913
@@ -222,6 +223,7 @@ class BCPretrainingConfig:
         random_seeds: tuple[int, ...] | list[int],
         training_config_path: Path | None = None,
         scenario_config_path: Path | None = None,
+        device: str | None = "auto",
     ) -> BCPretrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -239,6 +241,7 @@ class BCPretrainingConfig:
             random_seeds=ensure_seed_tuple(random_seeds),
             training_config_path=training_config_path.resolve() if training_config_path else None,
             scenario_config_path=scenario_config_path.resolve() if scenario_config_path else None,
+            device=str(device or "auto").strip() or "auto",
         )
 
 

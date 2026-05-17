@@ -83,6 +83,7 @@ def test_pretraining_pipeline_smoke(tmp_path, monkeypatch, minimal_trajectory_da
     assert bc_config.dataset_id == dataset_id
     assert bc_config.bc_epochs == 1
     assert bc_config.run_id == "test_bc_pretrain_run"
+    assert bc_config.device == "auto"
 
     # Verify dataset path resolution
     dataset_path = common.get_trajectory_dataset_path(dataset_id)
@@ -92,6 +93,119 @@ def test_pretraining_pipeline_smoke(tmp_path, monkeypatch, minimal_trajectory_da
     policy_dir = common.get_expert_policy_dir()
     assert policy_dir.exists()
     # Note: actual policy file created by pretrain script, not tested here
+
+
+def test_bc_pretraining_config_accepts_explicit_cpu_device():
+    """BC pre-training config should allow deterministic CPU-only runs."""
+    from robot_sf.training.imitation_config import BCPretrainingConfig
+
+    bc_config = BCPretrainingConfig.from_raw(
+        run_id="test_bc_cpu_run",
+        dataset_id="test_traj_minimal",
+        policy_output_id="test_bc_policy",
+        bc_epochs=1,
+        batch_size=2,
+        learning_rate=0.0003,
+        random_seeds=(42,),
+        device="cpu",
+    )
+
+    assert bc_config.device == "cpu"
+
+
+def test_bc_pretraining_config_treats_none_device_as_auto():
+    """Null device inputs should fall back to the default auto policy."""
+    from robot_sf.training.imitation_config import BCPretrainingConfig
+
+    bc_config = BCPretrainingConfig.from_raw(
+        run_id="test_bc_none_device",
+        dataset_id="test_traj_minimal",
+        policy_output_id="test_bc_policy",
+        bc_epochs=1,
+        batch_size=2,
+        learning_rate=0.0003,
+        random_seeds=(42,),
+        device=None,
+    )
+
+    assert bc_config.device == "auto"
+
+
+def test_default_bc_pretraining_config_loads_auto_device():
+    """Checked-in BC config should expose the default accelerator policy."""
+    from scripts.training.pretrain_from_expert import load_bc_config
+
+    repo_root = Path(__file__).resolve().parents[2]
+    bc_config = load_bc_config(repo_root / "configs/training/ppo_imitation/bc_pretrain.yaml")
+
+    assert bc_config.device == "auto"
+
+
+def test_load_bc_config_accepts_cpu_device_override(tmp_path):
+    """BC YAML should be able to force a CPU-only pre-training run."""
+    from scripts.training.pretrain_from_expert import load_bc_config
+
+    config_path = tmp_path / "bc_pretrain_cpu.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "run_id: test_bc_cpu_run",
+                "dataset_id: test_traj_minimal",
+                "policy_output_id: test_bc_policy",
+                "bc_epochs: 1",
+                "batch_size: 2",
+                "learning_rate: 0.0003",
+                "random_seeds: [42]",
+                "device: cpu",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    bc_config = load_bc_config(config_path)
+
+    assert bc_config.device == "cpu"
+
+
+def test_create_bc_trainer_threads_configured_device(monkeypatch):
+    """BC trainer construction should pass the configured device to both trainers."""
+    from robot_sf.training.imitation_config import BCPretrainingConfig
+    from scripts.training import pretrain_from_expert
+
+    captured: dict[str, str] = {}
+
+    class _FakePPO:
+        def __init__(self, _policy_name, _env, **kwargs):
+            captured["ppo_device"] = kwargs["device"]
+            self.policy = object()
+
+    class _FakeBCModule:
+        class BC:
+            def __init__(self, **kwargs):
+                captured["bc_device"] = kwargs["device"]
+
+    fake_env = SimpleNamespace(
+        observation_space=spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32),
+        action_space=spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32),
+    )
+    config = BCPretrainingConfig.from_raw(
+        run_id="test_bc_cpu_run",
+        dataset_id="test_traj_minimal",
+        policy_output_id="test_bc_policy",
+        bc_epochs=1,
+        batch_size=2,
+        learning_rate=0.0003,
+        random_seeds=(42,),
+        device="cpu",
+    )
+
+    monkeypatch.setattr(pretrain_from_expert, "PPO", _FakePPO)
+    monkeypatch.setattr(pretrain_from_expert, "_require_imitation_bc", lambda: _FakeBCModule)
+
+    pretrain_from_expert._create_bc_trainer(fake_env, [], config)
+
+    assert captured == {"ppo_device": "cpu", "bc_device": "cpu"}
 
 
 def test_fine_tuning_config_structure(tmp_path, monkeypatch):

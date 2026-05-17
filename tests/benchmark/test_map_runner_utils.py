@@ -2634,6 +2634,9 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
     assert result["algorithm_metadata_contract"]["observation_spec"]["active_mode"] == (
         "socnav_state"
     )
+    planner_contract = result["algorithm_metadata_contract"]["planner_contract"]
+    assert planner_contract["observation_contract"]["active_mode"] == "socnav_state"
+    assert planner_contract["action_contract"]["command_space"] != "unknown"
     assert result["algorithm_metadata_contract"]["baseline_category"] == "classical"
     assert result["algorithm_metadata_contract"]["planner_kinematics"]["robot_kinematics"] in {
         "unknown",
@@ -2866,6 +2869,142 @@ def test_run_map_batch_skips_incompatible_kinematics(
     assert result["written"] == 0
     assert result["preflight"]["status"] == "skipped"
     assert "compatibility_reason" in result["preflight"]
+
+
+def test_run_map_batch_filters_per_scenario_kinematics_preflight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mixed-kinematics batches should still run entries with compatible contracts."""
+    scenarios = [
+        {
+            "name": "diff",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "differential_drive"},
+            "seeds": [1],
+        },
+        {
+            "name": "holo",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "holonomic"},
+            "seeds": [1],
+        },
+    ]
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+
+    from robot_sf.benchmark.planner_command_contract import (
+        PlannerContractValidationError,
+    )
+
+    def fake_validate_contract(**kwargs):
+        """Reject only holonomic entries to exercise per-scenario preflight filtering."""
+        if kwargs["robot_kinematics"] == "holonomic":
+            raise PlannerContractValidationError("holonomic contract blocked")
+        return {"action_contract": {"command_space": "unicycle_vw"}}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._validate_planner_contract",
+        fake_validate_contract,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._write_validated",
+        lambda *args, **kwargs: None,
+    )
+
+    result = run_map_batch(
+        scenarios,
+        tmp_path / "out.jsonl",
+        schema_path=tmp_path / "schema.json",
+        algo="goal",
+        workers=1,
+        resume=False,
+    )
+
+    assert result["total_jobs"] == 1
+    assert result["written"] == 1
+    assert result["skipped_jobs"] == 1
+    assert result["preflight"]["status"] == "partial"
+    assert result["preflight"]["compatibility_status"] == "partial"
+    assert result["preflight"]["incompatible_scenario_kinematics"] == {
+        "holonomic": "holonomic contract blocked"
+    }
+    assert result["preflight"]["incompatible_scenarios"] == {"holo": "holonomic contract blocked"}
+
+
+def test_run_map_batch_validates_effective_scenario_algo_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Preflight should validate each scenario's resolved policy-search config."""
+    scenarios = [
+        {
+            "name": "s1",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "differential_drive"},
+            "seeds": [1],
+        },
+        {
+            "name": "s2",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "differential_drive"},
+            "seeds": [1],
+        },
+    ]
+    config_path = tmp_path / "policy_search.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "params": {"marker": "base"},
+                "scenario_overrides": {
+                    "s1": {"marker": "one"},
+                    "s2": {"marker": "two"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    seen_markers: list[str] = []
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+
+    def fake_validate_contract(**kwargs):
+        """Record the effective scenario config used during preflight validation."""
+        seen_markers.append(str(kwargs["algo_config"].get("marker")))
+        return {"action_contract": {"command_space": "unicycle_vw"}}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._validate_planner_contract",
+        fake_validate_contract,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._write_validated",
+        lambda *args, **kwargs: None,
+    )
+
+    result = run_map_batch(
+        scenarios,
+        tmp_path / "out.jsonl",
+        schema_path=tmp_path / "schema.json",
+        algo="goal",
+        algo_config_path=str(config_path),
+        workers=1,
+        resume=False,
+    )
+
+    assert result["written"] == 2
+    assert seen_markers == ["one", "two"]
 
 
 def test_run_map_batch_preserves_runtime_planner_contract_in_summary(

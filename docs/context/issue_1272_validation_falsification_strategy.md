@@ -13,7 +13,8 @@ This is a repository strategy and evidence-boundary note. It does not introduce 
 certification, homologation, or proof-of-safety claim. It also does not claim that the current
 benchmark proves real-world deployment readiness.
 
-Historical predecessor: `docs/plan/plan_big_picture_2026-04-30.md`. That plan remains useful for
+Historical predecessor: [plan_big_picture_2026-04-30.md](../plan/plan_big_picture_2026-04-30.md).
+That plan remains useful for
 paper-vs-research sequencing, but this note is the concise current routing surface for the
 safety-oriented validation/falsification lane.
 
@@ -48,8 +49,8 @@ Use this wording discipline for future issues and PRs:
   real-world safety proof.
 
 Fallback or degraded planner execution remains a caveat or exclusion reason, following
-`docs/context/issue_691_benchmark_fallback_policy.md`; it must not be counted as successful
-benchmark evidence unless the task explicitly measures fallback behavior.
+[issue_691_benchmark_fallback_policy.md](issue_691_benchmark_fallback_policy.md); it must not be
+counted as successful benchmark evidence unless the task explicitly measures fallback behavior.
 
 ## Near-Term Delivery Lanes
 
@@ -58,8 +59,8 @@ backlog tickets instead of spawning broad duplicates.
 
 | Lane | Purpose | Current issue surfaces |
 | --- | --- | --- |
-| Scenario intent and contracts | Record authored scenario assumptions before execution. | `docs/scenario_contracts.md`, Issue #1235 |
-| Scenario certification | Classify valid, infeasible, stress-only, and hard-but-solvable cases. | `docs/scenario_certification.md`, Issue #1057 |
+| Scenario intent and contracts | Record authored scenario assumptions before execution. | [scenario_contracts.md](../scenario_contracts.md), Issue #1235 |
+| Scenario certification | Classify valid, infeasible, stress-only, and hard-but-solvable cases. | [scenario_certification.md](../scenario_certification.md), Issue #1057 |
 | Optimizer-backed falsification | Search for hard candidates without making paper claims from pilots. | Issue #1236 |
 | Failure archive curation | Preserve actionable counterexamples with minimization and caveats. | Issue #1237 |
 | Scenario diversity accounting | Quantify benchmark coverage gaps before expanding claims. | Issue #1240 |
@@ -116,7 +117,7 @@ git diff --check origin/main...HEAD
 
 Before any future PR converts this roadmap into public claim language, also review:
 
-- `docs/code_review.md`
-- `docs/benchmark_camera_ready.md`
-- `docs/benchmark_artifact_publication.md`
-- `docs/context/issue_691_benchmark_fallback_policy.md`
+- [code_review.md](../code_review.md)
+- [benchmark_camera_ready.md](../benchmark_camera_ready.md)
+- [benchmark_artifact_publication.md](../benchmark_artifact_publication.md)
+- [issue_691_benchmark_fallback_policy.md](issue_691_benchmark_fallback_policy.md)

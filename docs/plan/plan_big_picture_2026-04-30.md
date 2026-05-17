@@ -1,9 +1,9 @@
 # Robot-SF two-horizon improvement strategy - 2026-04-30
 
 > Status: historical predecessor to
-> `docs/context/issue_1272_validation_falsification_strategy.md` as of 2026-05-16. Keep this plan
-> for paper-vs-research sequencing context; use the issue #1272 note as the current concise
-> safety-oriented validation/falsification roadmap.
+> [issue_1272_validation_falsification_strategy.md](../context/issue_1272_validation_falsification_strategy.md)
+> as of 2026-05-16. Keep this plan for paper-vs-research sequencing context; use the Issue #1272
+> note as the current concise safety-oriented validation/falsification roadmap.
 
 ## Core recommendation
 

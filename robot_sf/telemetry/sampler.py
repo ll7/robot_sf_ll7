@@ -311,13 +311,13 @@ class TelemetrySampler:
 
     @staticmethod
     def _resource_memory_mb(notes: set[str]) -> float | None:
-        """Return process memory from ``resource.getrusage`` when psutil is absent.
+        """Return peak process memory from ``resource.getrusage`` when psutil is absent.
 
         Args:
             notes: Mutable set that receives availability markers.
 
         Returns:
-            Resident memory in MiB, normalized for Linux and macOS units, or
+            Peak resident memory in MiB, normalized for Linux and macOS units, or
             ``None`` when unavailable.
         """
         if resource is None:  # pragma: no cover - platform without resource

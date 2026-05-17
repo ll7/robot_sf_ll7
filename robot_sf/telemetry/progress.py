@@ -516,8 +516,9 @@ class _FailureSafeGuard:
         Args:
             has_work: Callback indicating whether a heartbeat flush is needed.
             flush_running: Callback used for periodic running-state flushes.
-            flush_failed: Callback used before shutdown or handled termination signals.
-            flush_interval: Minimum seconds between background heartbeat flushes.
+            flush_failed: Callback used when a handled termination signal is received.
+            flush_interval: Desired interval between background heartbeat flushes; values below
+                1.0 second are clamped.
             signals: Signals to intercept; defaults to SIGTERM/SIGINT where available.
         """
         self._has_work = has_work
@@ -537,7 +538,7 @@ class _FailureSafeGuard:
         self._install_signal_handlers()
 
         def _cleanup() -> None:
-            """Flush and restore handlers during interpreter shutdown."""
+            """Stop the guard and restore handlers during interpreter shutdown."""
             self.close()
 
         self._atexit_callback = _cleanup

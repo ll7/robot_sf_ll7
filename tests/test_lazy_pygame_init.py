@@ -112,6 +112,44 @@ def test_lazy_simulation_view_replays_pending_attributes(monkeypatch) -> None:
     assert materialized.render_calls == [(("state",), {"target_fps": 12})]
 
 
+def test_lazy_simulation_view_propagates_tracked_attribute_mutations(monkeypatch) -> None:
+    """Tracked view attributes should stay synchronized before and after materialization."""
+    from robot_sf.render.lazy_sim_view import LazySimulationView
+
+    created = {}
+
+    class FakeSimulationView:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.width = kwargs["width"]
+            self.height = kwargs["height"]
+            self.record_video = kwargs["record_video"]
+            created["view"] = self
+
+        def render(self):
+            return "rendered"
+
+    def fake_import_module(name: str):
+        assert name == "robot_sf.render.sim_view"
+        return SimpleNamespace(SimulationView=FakeSimulationView)
+
+    monkeypatch.setattr("robot_sf.render.lazy_sim_view.importlib.import_module", fake_import_module)
+
+    view = LazySimulationView(record_video=False, width=320, height=200)
+    view.width = 640
+    view.record_video = True
+
+    assert view.render() == "rendered"
+
+    materialized = created["view"]
+    assert materialized.kwargs["width"] == 640
+    assert materialized.kwargs["record_video"] is True
+
+    view.height = 480
+
+    assert materialized.height == 480
+
+
 def test_pysocialforce_visualization_export_remains_available() -> None:
     """The bundled pysocialforce package should still expose SimulationView lazily."""
     import pysocialforce

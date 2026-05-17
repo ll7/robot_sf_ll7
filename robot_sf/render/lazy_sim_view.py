@@ -64,7 +64,10 @@ class LazySimulationView:
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Store pre-materialization mutations and replay them on first visual use."""
-        if name.startswith("_") or name in {
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+            return
+        if name in {
             "record_video",
             "video_path",
             "video_fps",
@@ -72,6 +75,11 @@ class LazySimulationView:
             "height",
         }:
             object.__setattr__(self, name, value)
+            view = self._view
+            if view is None:
+                self._view_kwargs[name] = value
+            else:
+                setattr(view, name, value)
             return
         view = self._view
         if view is None:

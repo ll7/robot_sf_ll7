@@ -32,7 +32,7 @@ Focused red/green regression test:
 Result after implementation:
 
 ```text
-4 passed
+10 passed
 ```
 
 The test checks that recompute help lists only canonical method names and that each retired alias

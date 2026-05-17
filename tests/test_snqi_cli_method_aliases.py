@@ -225,7 +225,7 @@ def test_cmd_ablation_analysis_supports_weights_file_and_failure_modes(tmp_path:
     _write_episodes_jsonl(episodes_path)
     SNQIWeights(
         weights_version="test",
-        created_at="now",
+        created_at="2026-01-01T00:00:00",
         git_sha="test",
         baseline_stats_path="baseline.json",
         baseline_stats_hash="hash",

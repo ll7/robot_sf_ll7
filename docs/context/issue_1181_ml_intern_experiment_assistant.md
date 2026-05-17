@@ -79,7 +79,7 @@ Observed from the upstream `huggingface/ml-intern` README / PyPI page:
 { "share_traces": false }
 ```
 
-## Runtime Decision Checked on 2026-05-15
+## Issue #1181: Runtime Decision Checked on 2026-05-15
 
 Observed evidence from the issue-audit pass:
 
@@ -249,7 +249,7 @@ Observed outcomes:
   deprecated `evaluation.frequency_episodes` is ignored in favor of `evaluation.step_schedule`, and
   `randomize_seeds` causes the provided training seeds to be ignored.
 
-Issue #1191 Update Validation on 2026-05-15:
+## Issue #1191: Update Validation on 2026-05-15
 
 ```bash
 ls AGENTS.md docs/dev_guide.md .agents/skills docs/context/README.md docs/README.md \

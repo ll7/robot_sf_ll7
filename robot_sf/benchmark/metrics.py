@@ -1026,6 +1026,78 @@ def _bilinear(x: float, y: float, X: np.ndarray, Y: np.ndarray, V: np.ndarray) -
     )
 
 
+def _bilinear_many(
+    x: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Y: np.ndarray,
+    V: np.ndarray,
+) -> np.ndarray:
+    """Vectorized bilinear interpolation matching `_bilinear` boundary semantics.
+
+    Returns:
+        Interpolated values with NaN for samples outside the grid or on degenerate cells.
+    """
+    x_arr, y_arr = np.broadcast_arrays(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
+    out = np.full(x_arr.shape, np.nan, dtype=float)
+
+    xs = X[0]
+    ys = Y[:, 0]
+    if xs.size < 2 or ys.size < 2:
+        return out
+
+    flat_x = x_arr.ravel()
+    flat_y = y_arr.ravel()
+    valid = (
+        np.isfinite(flat_x)
+        & np.isfinite(flat_y)
+        & (xs[0] <= flat_x)
+        & (flat_x <= xs[-1])
+        & (ys[0] <= flat_y)
+        & (flat_y <= ys[-1])
+    )
+    if not np.any(valid):
+        return out
+
+    valid_idx = np.flatnonzero(valid)
+    x_valid = flat_x[valid_idx]
+    y_valid = flat_y[valid_idx]
+
+    ix = np.searchsorted(xs, x_valid) - 1
+    iy = np.searchsorted(ys, y_valid) - 1
+    ix = np.clip(ix, 0, xs.size - 2)
+    iy = np.clip(iy, 0, ys.size - 2)
+
+    x1 = xs[ix]
+    x2 = xs[ix + 1]
+    y1 = ys[iy]
+    y2 = ys[iy + 1]
+    nondegenerate = (x2 - x1 != 0) & (y2 - y1 != 0)
+    if not np.any(nondegenerate):
+        return out
+
+    target_idx = valid_idx[nondegenerate]
+    ix = ix[nondegenerate]
+    iy = iy[nondegenerate]
+    x_valid = x_valid[nondegenerate]
+    y_valid = y_valid[nondegenerate]
+    x1 = x1[nondegenerate]
+    x2 = x2[nondegenerate]
+    y1 = y1[nondegenerate]
+    y2 = y2[nondegenerate]
+
+    q11 = V[iy, ix]
+    q21 = V[iy, ix + 1]
+    q12 = V[iy + 1, ix]
+    q22 = V[iy + 1, ix + 1]
+    tx = (x_valid - x1) / (x2 - x1)
+    ty = (y_valid - y1) / (y2 - y1)
+    out.ravel()[target_idx] = (
+        (1 - tx) * (1 - ty) * q11 + tx * (1 - ty) * q21 + (1 - tx) * ty * q12 + tx * ty * q22
+    )
+    return out
+
+
 def force_gradient_norm_mean(data: EpisodeData) -> float:
     """Mean gradient norm of force magnitude along robot path.
 
@@ -1058,14 +1130,11 @@ def force_gradient_norm_mean(data: EpisodeData) -> float:
         return float("nan")
     dMy, dMx = np.gradient(M, dy, dx)
     grad_norm = np.sqrt(dMx * dMx + dMy * dMy)
-    samples = []
-    for x, y in data.robot_pos:
-        val = _bilinear(float(x), float(y), X, Y, grad_norm)
-        if np.isfinite(val):
-            samples.append(val)
-    if not samples:
+    samples = _bilinear_many(data.robot_pos[:, 0], data.robot_pos[:, 1], X, Y, grad_norm)
+    finite_samples = samples[np.isfinite(samples)]
+    if finite_samples.size == 0:
         return float("nan")
-    return float(np.mean(samples))
+    return float(np.mean(finite_samples))
 
 
 def snqi(

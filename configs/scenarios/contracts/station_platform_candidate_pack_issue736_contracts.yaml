@@ -19,6 +19,10 @@ contracts:
         - Pedestrian flow is synthetic and map-local, not calibrated to a real transit station.
         - Waiting behavior is represented by authored pedestrian pauses near access points.
         - The scenario remains exploratory until certification and benchmark evidence are produced.
+    odd_contract_ref:
+      source: configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml
+      contract_id: low_speed_public_space_v1
+      required_for_benchmark_claim: true
     actors:
       - id: robot
         kind: robot

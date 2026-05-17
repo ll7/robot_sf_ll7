@@ -1,0 +1,85 @@
+# Minimal public-space micromobility ODD declaration for benchmark claim boundaries.
+#
+# This file describes operating assumptions only. It does not certify safety,
+# promote scenarios into a paper matrix, or change benchmark runner behavior.
+
+contracts:
+  - schema_version: odd_contract.v1
+    id: low_speed_public_space_v1
+    operating_context:
+      environment_types:
+        - indoor_public_transit
+        - outdoor_walkway
+        - synthetic_atomic
+      map_families:
+        - classic_station_platform
+        - classic_crossing
+        - classic_corridor
+        - synthetic_atomic
+      surface_conditions:
+        - dry_flat_floor_or_pavement
+      visibility:
+        - unobstructed_line_of_sight_unless_scenario_declares_occlusion
+      semantic_features:
+        - pedestrian_flow
+        - static_obstacles
+        - keep_clear_regions
+        - hazard_regions
+    agents:
+      actor_types:
+        - autonomous_micromobility_robot
+        - pedestrian
+        - pedestrian_group
+        - static_obstacle
+      pedestrian_motion_models:
+        - social_force
+        - authored_waypoints
+        - benchmark_adapter
+      robot_kinematics:
+        - differential_drive
+        - bicycle_drive
+        - holonomic
+    speed_limits:
+      max_robot_speed_mps: 2.5
+      max_pedestrian_speed_mps: 2.0
+      notes: Speed bounds describe low-speed public-space simulation assumptions, not legal limits.
+    pedestrian_density:
+      density_bins:
+        - low
+        - medium
+        - high
+      max_pedestrians_per_scene: 12
+      notes: Density bins are benchmark categories and are not calibrated to a real pedestrian dataset.
+    observation:
+      observation_modes:
+        - goal_state
+        - socnav_state
+        - sensor_fusion_state
+      sensor_assumptions:
+        - Perfect simulator state may be used unless a scenario or benchmark config declares observation noise.
+        - Visibility and occlusion filters must be declared separately when they are part of the claim.
+    exclusions:
+      - public-road autonomy
+      - wet_or_icy_surface_dynamics
+      - vehicle_traffic_interaction
+      - legal_safety_certification
+      - human_subject_acceptability_validation
+    claim_boundaries:
+      evidence_status: metadata_only
+      supported_claims:
+        - benchmark_evidence_boundary
+        - counterexample_operating_assumptions
+      non_claims:
+        - safety_certification
+        - legal_compliance
+        - real_world_deployment_readiness
+      caveats:
+        - ODD metadata bounds evidence; it does not prove planner safety.
+        - Scenario certification and benchmark run artifacts remain separate required evidence.
+    provenance:
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/1269
+      authored_by: robot_sf_ll7
+      source_files:
+        - docs/scenario_contracts.md
+        - configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml
+      notes: Initial ODD contract fixture for low-speed public-space benchmark and falsification metadata.

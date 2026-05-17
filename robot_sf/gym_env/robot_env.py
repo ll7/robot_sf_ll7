@@ -42,7 +42,7 @@ from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.render.lidar_visual import render_lidar
-from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
+from robot_sf.render.sim_state import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sensor.sensor_fusion import OBS_IMAGE, SensorFusion

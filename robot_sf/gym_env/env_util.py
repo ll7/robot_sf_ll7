@@ -1,6 +1,4 @@
-"""
-env_util
-"""
+"""env_util."""
 
 from enum import Enum
 

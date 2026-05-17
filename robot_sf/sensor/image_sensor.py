@@ -2,13 +2,26 @@
 Image sensor for capturing visual observations from the pygame rendering system.
 """
 
+from __future__ import annotations
+
+import importlib
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
-import pygame
 from gymnasium import spaces
 
-from robot_sf.render.sim_view import SimulationView
+if TYPE_CHECKING:
+    from robot_sf.render.sim_view import SimulationView
+
+
+def _load_pygame():
+    """Import pygame only when image capture or resizing is requested.
+
+    Returns:
+        module: Imported pygame module.
+    """
+    return importlib.import_module("pygame")
 
 
 @dataclass
@@ -61,6 +74,8 @@ class ImageSensor:
         if self.sim_view is None:
             raise ValueError("SimulationView not set. Call set_sim_view() first.")
 
+        pygame = _load_pygame()
+
         # Capture frame using pygame's surfarray
         frame_data = pygame.surfarray.array3d(self.sim_view.screen)
         # pygame.surfarray returns (width, height, channels), we need (height, width, channels)
@@ -99,6 +114,8 @@ class ImageSensor:
         np.ndarray
             The resized frame.
         """
+        pygame = _load_pygame()
+
         # Convert to pygame surface for resizing
         surface = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
         resized_surface = pygame.transform.scale(

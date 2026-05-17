@@ -4,7 +4,9 @@ Provides common functionality for all environments.
 """
 
 import datetime
+import importlib
 import pickle
+from typing import TYPE_CHECKING
 
 from gymnasium import Env
 from loguru import logger
@@ -17,10 +19,24 @@ from robot_sf.planner import (
     PlannerConfig,
     attach_classic_global_planner,
 )
-from robot_sf.render.jsonl_recording import JSONLRecorder
-from robot_sf.render.sim_view import SimulationView, VisualizableSimState
+from robot_sf.render.lazy_sim_view import LazySimulationView
+from robot_sf.render.sim_state import VisualizableSimState
 from robot_sf.sim.registry import get_backend
 from robot_sf.sim.simulator import init_simulators
+
+if TYPE_CHECKING:
+    from robot_sf.render.jsonl_recording import JSONLRecorder
+    from robot_sf.render.sim_view import SimulationView
+
+
+def _make_jsonl_recorder(**kwargs):
+    """Create a JSONL recorder without importing recording/render modules on normal env startup.
+
+    Returns:
+        JSONLRecorder: Configured recorder instance.
+    """
+    module = importlib.import_module("robot_sf.render.jsonl_recording")
+    return module.JSONLRecorder(**kwargs)
 
 
 class BaseEnv(Env):
@@ -103,7 +119,7 @@ class BaseEnv(Env):
             # Use provided seed or generate from environment config
             seed = recording_seed if recording_seed is not None else getattr(env_config, "seed", 0)
 
-            self.jsonl_recorder = JSONLRecorder(
+            self.jsonl_recorder = _make_jsonl_recorder(
                 output_dir=self._recording_dir,
                 suite=suite_name,
                 scenario=scenario_name,
@@ -148,14 +164,14 @@ class BaseEnv(Env):
         self.last_action = None
 
         # Initialize sim_ui attribute (required for exit() method)
-        self.sim_ui = None
+        self.sim_ui: LazySimulationView | SimulationView | None = None
 
         # If in debug mode or video recording is enabled, create simulation view
         if debug or record_video:
             # Prefer config-driven render scaling when provided; else default to 20.
             scaling_value = getattr(env_config, "render_scaling", None)
             scaling_value = 20 if scaling_value is None else int(scaling_value)
-            self.sim_ui = SimulationView(
+            self.sim_ui = LazySimulationView(
                 scaling=scaling_value,
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,

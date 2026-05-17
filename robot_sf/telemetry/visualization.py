@@ -7,6 +7,7 @@ light and headless-friendly.
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING
 
 import matplotlib
@@ -16,14 +17,11 @@ import numpy as np
 matplotlib.use("Agg", force=True)
 from matplotlib import pyplot as plt
 
-try:  # Optional convenience when pygame is available
-    import pygame
-except ImportError:  # pragma: no cover - optional dependency
-    pygame = None
-
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
+
+    import pygame
 
 
 DEFAULT_TELEMETRY_METRICS = ("reward", "collisions", "min_ped_distance", "action_norm")
@@ -95,6 +93,14 @@ def render_metric_panel(
     return rgba
 
 
+def _load_pygame():
+    """Return pygame when available, importing it only for surface conversion."""
+    try:
+        return importlib.import_module("pygame")
+    except ImportError:  # pragma: no cover - optional dependency
+        return None
+
+
 def make_surface_from_rgba(rgba: np.ndarray) -> pygame.Surface | None:
     """Convert an RGBA array into a Pygame surface if pygame is available.
 
@@ -104,6 +110,7 @@ def make_surface_from_rgba(rgba: np.ndarray) -> pygame.Surface | None:
     Returns:
         pygame.Surface or None when pygame is unavailable.
     """
+    pygame = _load_pygame()
     if pygame is None:  # pragma: no cover - optional dependency
         return None
     if rgba.dtype != np.uint8:

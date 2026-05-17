@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 import numpy as np
 import pytest
 
@@ -59,6 +61,26 @@ def test_bootstrap_stability_rejects_missing_snqi_metric() -> None:
             {"snqi": 1.0},
             rng=np.random.default_rng(123),
         )
+
+
+def test_bootstrap_stability_accepts_mapping_episodes() -> None:
+    """Mapping-like episodes should be accepted by the public API."""
+    episodes = [
+        MappingProxyType({"algo": "alpha", "metrics": MappingProxyType({"snqi": 0.9})}),
+        MappingProxyType({"algo": "alpha", "metrics": MappingProxyType({"snqi": 0.8})}),
+        MappingProxyType({"algo": "beta", "metrics": MappingProxyType({"snqi": 0.4})}),
+        MappingProxyType({"algo": "beta", "metrics": MappingProxyType({"snqi": 0.3})}),
+    ]
+
+    result = bootstrap_stability(
+        episodes,
+        {"snqi": 1.0},
+        rng=np.random.default_rng(123),
+        samples=5,
+    )
+
+    assert result["status"] == "ok"
+    assert result["details"]["baseline_ordering"] == ["alpha", "beta"]
 
 
 def test_bootstrap_stability_requires_multiple_groups() -> None:

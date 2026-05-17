@@ -11,16 +11,14 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 __all__ = ["bootstrap_stability"]
 
 
 def bootstrap_stability(
-    episodes: Iterable[dict],
+    episodes: Iterable[Mapping[str, Any]],
     weights: Mapping[str, float],
     *,
     rng: Any | None = None,
@@ -101,7 +99,7 @@ def bootstrap_stability(
 
 
 def _group_snqi_scores(
-    episodes: Iterable[dict],
+    episodes: Iterable[Mapping[str, Any]],
     *,
     group_key: str,
 ) -> dict[str, list[float]]:
@@ -112,7 +110,7 @@ def _group_snqi_scores(
     """
     grouped: dict[str, list[float]] = defaultdict(list)
     for index, episode in enumerate(episodes):
-        if not isinstance(episode, dict):
+        if not isinstance(episode, Mapping):
             raise ValueError(f"episode[{index}] must be a mapping")
         group = episode.get(group_key)
         if group is None:
@@ -124,14 +122,14 @@ def _group_snqi_scores(
     return dict(grouped)
 
 
-def _episode_snqi(episode: dict[str, Any], *, index: int) -> float:
+def _episode_snqi(episode: Mapping[str, Any], *, index: int) -> float:
     """Read a finite SNQI value from one episode.
 
     Returns:
         Parsed per-episode SNQI value.
     """
     metrics = episode.get("metrics")
-    if not isinstance(metrics, dict) or "snqi" not in metrics:
+    if not isinstance(metrics, Mapping) or "snqi" not in metrics:
         raise ValueError(f"episode[{index}] must contain finite metrics.snqi")
     try:
         value = float(metrics["snqi"])
@@ -153,7 +151,7 @@ def _mean(values: Iterable[float]) -> float:
     values_list = [float(value) for value in values]
     if not values_list:
         raise ValueError("mean requires at least one value")
-    return float(sum(values_list) / len(values_list))
+    return float(math.fsum(values_list) / len(values_list))
 
 
 def _ordering(means: Mapping[str, float]) -> list[str]:

@@ -1072,7 +1072,9 @@ def _bilinear_many(
     x2 = xs[ix + 1]
     y1 = ys[iy]
     y2 = ys[iy + 1]
-    nondegenerate = (x2 - x1 != 0) & (y2 - y1 != 0)
+    dx = x2 - x1
+    dy = y2 - y1
+    nondegenerate = (dx != 0) & (dy != 0)
     if not np.any(nondegenerate):
         return out
 
@@ -1082,16 +1084,16 @@ def _bilinear_many(
     x_valid = x_valid[nondegenerate]
     y_valid = y_valid[nondegenerate]
     x1 = x1[nondegenerate]
-    x2 = x2[nondegenerate]
     y1 = y1[nondegenerate]
-    y2 = y2[nondegenerate]
+    dx = dx[nondegenerate]
+    dy = dy[nondegenerate]
 
     q11 = V[iy, ix]
     q21 = V[iy, ix + 1]
     q12 = V[iy + 1, ix]
     q22 = V[iy + 1, ix + 1]
-    tx = (x_valid - x1) / (x2 - x1)
-    ty = (y_valid - y1) / (y2 - y1)
+    tx = (x_valid - x1) / dx
+    ty = (y_valid - y1) / dy
     out.ravel()[target_idx] = (
         (1 - tx) * (1 - ty) * q11 + tx * (1 - ty) * q21 + (1 - tx) * ty * q12 + tx * ty * q22
     )

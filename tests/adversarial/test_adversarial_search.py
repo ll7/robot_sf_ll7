@@ -40,7 +40,10 @@ from robot_sf.adversarial.samplers import (
     OptunaCandidateSampler,
     RandomCandidateSampler,
 )
-from robot_sf.adversarial.seed_sensitivity import run_seed_sensitivity
+from robot_sf.adversarial.seed_sensitivity import (
+    SeedSensitivityPerturbation,
+    run_seed_sensitivity,
+)
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -1052,6 +1055,105 @@ def test_seed_sensitivity_records_fail_closed_rejected_perturbations(tmp_path: P
     assert summary.replays[1].outcome == "fail_closed_exclusion"
     assert summary.replays[1].reason == "seed 8 rejected by certification"
     assert summary.replays[1].started_at
+
+
+def test_seed_sensitivity_records_timing_speed_perturbation_grid(tmp_path: Path) -> None:
+    """Seed sensitivity should replay a deterministic grid of timing/speed perturbations."""
+    config = _config(tmp_path)
+    evaluated: list[CandidateSpec] = []
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        """Record perturbed candidates and emit a compact replay record."""
+        evaluated.append(candidate)
+        scenario_payload = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))
+        scenario = scenario_payload["scenarios"][0]
+        assert scenario["simulation_config"]["peds_speed_mult"] == pytest.approx(
+            candidate.pedestrian_speed_mps
+        )
+        assert scenario["metadata"]["adversarial_candidate"]["spawn_time_s"] == pytest.approx(
+            candidate.spawn_time_s
+        )
+        record = {
+            "episode_id": f"seed-{candidate.scenario_seed}",
+            "seed": candidate.scenario_seed,
+            "status": "success",
+            "steps": 1,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"success": 1.0, "snqi": candidate.pedestrian_speed_mps},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status("perturbation grid test"),
+            objective_value=None,
+            failure_attribution=attribution_from_episode_record(record),
+            episode_record_path=episode_path,
+            trajectory_csv_path=None,
+            scenario_yaml_path=scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    summary = run_seed_sensitivity(
+        config,
+        candidate=_candidate(7),
+        seeds=[7, 8],
+        output_dir=tmp_path / "perturbations",
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("perturbation grid test"),
+        perturbations=[
+            SeedSensitivityPerturbation(label="base"),
+            SeedSensitivityPerturbation(
+                label="faster_later",
+                pedestrian_speed_delta_mps=0.2,
+                pedestrian_delay_delta_s=0.3,
+                spawn_time_delta_s=0.1,
+            ),
+        ],
+    )
+
+    assert [
+        (
+            candidate.scenario_seed,
+            candidate.spawn_time_s,
+            candidate.pedestrian_speed_mps,
+            candidate.pedestrian_delay_s,
+        )
+        for candidate in evaluated
+    ] == [
+        (7, 0.0, 1.0, 0.0),
+        (7, 0.1, 1.2, 0.3),
+        (8, 0.0, 1.0, 0.0),
+        (8, 0.1, 1.2, 0.3),
+    ]
+    assert summary.perturbations[1].label == "faster_later"
+    assert summary.replays[1].perturbation.label == "faster_later"
+    payload = json.loads(summary.summary_path.read_text(encoding="utf-8"))
+    assert payload["perturbations"][1]["pedestrian_speed_delta_mps"] == pytest.approx(0.2)
+    assert payload["replays"][1]["perturbation"]["spawn_time_delta_s"] == pytest.approx(0.1)
+
+
+def test_seed_sensitivity_rejects_unbounded_perturbations(tmp_path: Path) -> None:
+    """Perturbation grids should fail early when deltas exceed the bounded opt-in surface."""
+    config = _config(tmp_path)
+
+    with pytest.raises(ValueError, match="pedestrian_speed_delta_mps"):
+        run_seed_sensitivity(
+            config,
+            candidate=_candidate(7),
+            seeds=[7],
+            output_dir=tmp_path / "invalid",
+            evaluator=lambda _config, _candidate, _scenario, _bundle: pytest.fail(
+                "invalid perturbation should not evaluate"
+            ),
+            perturbations=[SeedSensitivityPerturbation(pedestrian_speed_delta_mps=2.0)],
+        )
 
 
 def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:

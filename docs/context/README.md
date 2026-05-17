@@ -96,6 +96,8 @@ knowledge, not every transient iteration detail.
   [issue_1255_open_issue_dependency_graph.md](issue_1255_open_issue_dependency_graph.md)
 * Issue #1271 seed-sensitivity explorer:
   [issue_1271_seed_sensitivity_explorer.md](issue_1271_seed_sensitivity_explorer.md)
+* Issue #1294 seed-sensitivity perturbations:
+  [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Artifact evidence vocabulary:
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:
@@ -404,6 +406,8 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #1236 Optimizer Adversarial Sampler](issue_1236_optimizer_adversarial_sampler.md) -
   Optuna-backed feedback sampler pilot, synthetic comparison helper, and non-paper-facing evidence
   boundary.
+* [Issue #1294 Seed-Sensitivity Perturbations](issue_1294_seed_sensitivity_perturbations.md) -
+  bounded timing/speed perturbation grids for adversarial seed-sensitivity replays.
 * [Issue #923 Multi-Ped Adversarial Candidate Schema](issue_923_multi_ped_adversarial_schema.md) -
   schema-only first slice under #870 for scripted multi-pedestrian adversarial candidates.
 * [Issue #936 Multi-Ped Adversarial Overrides](issue_936_multi_ped_adversarial_overrides.md)

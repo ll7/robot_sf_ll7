@@ -26,6 +26,7 @@ from robot_sf.adversarial.samplers import (
 )
 from robot_sf.adversarial.search import run_adversarial_search
 from robot_sf.adversarial.seed_sensitivity import (
+    SeedSensitivityPerturbation,
     SeedSensitivityReplay,
     SeedSensitivitySummary,
     run_seed_sensitivity,
@@ -43,6 +44,7 @@ __all__ = [
     "SearchConfig",
     "SearchRunResult",
     "SearchSpaceConfig",
+    "SeedSensitivityPerturbation",
     "SeedSensitivityReplay",
     "SeedSensitivitySummary",
     "build_multi_ped_adversarial_robot_config",

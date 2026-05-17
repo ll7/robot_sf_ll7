@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -20,6 +21,27 @@ from robot_sf.adversarial.objectives import get_objective
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
 CandidateCertifier = Callable[[CandidateSpec, Path, bool], CertificationStatus]
+MAX_ABS_SPEED_DELTA_MPS = 1.0
+MAX_ABS_TIMING_DELTA_S = 5.0
+
+
+@dataclass(frozen=True)
+class SeedSensitivityPerturbation:
+    """Timing and speed deltas applied around a fixed adversarial candidate."""
+
+    label: str | None = None
+    pedestrian_speed_delta_mps: float = 0.0
+    pedestrian_delay_delta_s: float = 0.0
+    spawn_time_delta_s: float = 0.0
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-compatible perturbation payload."""
+        return {
+            "label": self.label,
+            "pedestrian_speed_delta_mps": float(self.pedestrian_speed_delta_mps),
+            "pedestrian_delay_delta_s": float(self.pedestrian_delay_delta_s),
+            "spawn_time_delta_s": float(self.spawn_time_delta_s),
+        }
 
 
 @dataclass(frozen=True)
@@ -27,6 +49,7 @@ class SeedSensitivityReplay:
     """One seed-perturbation replay result in a sensitivity summary."""
 
     seed: int
+    perturbation: SeedSensitivityPerturbation
     status: str
     outcome: str
     reason: str | None
@@ -40,6 +63,7 @@ class SeedSensitivityReplay:
         """Return a JSON-compatible replay payload."""
         return {
             "seed": int(self.seed),
+            "perturbation": self.perturbation.to_json(),
             "status": self.status,
             "outcome": self.outcome,
             "reason": self.reason,
@@ -67,6 +91,7 @@ class SeedSensitivitySummary:
     objective_score_spread: float | None
     min_persistence_rate: float
     num_fail_closed_exclusions: int
+    perturbations: tuple[SeedSensitivityPerturbation, ...]
     replays: tuple[SeedSensitivityReplay, ...]
     summary_path: Path
 
@@ -81,6 +106,7 @@ class SeedSensitivitySummary:
             "objective_score_spread": self.objective_score_spread,
             "min_persistence_rate": self.min_persistence_rate,
             "num_fail_closed_exclusions": self.num_fail_closed_exclusions,
+            "perturbations": [perturbation.to_json() for perturbation in self.perturbations],
             "replays": [replay.to_json() for replay in self.replays],
         }
 
@@ -94,6 +120,7 @@ def run_seed_sensitivity(
     evaluator: CandidateEvaluator,
     certifier: CandidateCertifier | None = None,
     min_persistence_rate: float = 0.5,
+    perturbations: Iterable[SeedSensitivityPerturbation] | None = None,
 ) -> SeedSensitivitySummary:
     """Replay one adversarial candidate over explicit scenario seeds.
 
@@ -101,8 +128,10 @@ def run_seed_sensitivity(
     valid candidate, so seed values are not constrained by the original search
     space's sampled seed range. Certification still runs for every perturbation
     and rejects fail closed when the configured certification policy disallows a
-    replay. The replay loop is intentionally single-process: evaluators and
-    environment setup may reset process-global RNG state for each seed.
+    replay. Optional perturbations apply bounded timing/speed deltas around the
+    fixed candidate in deterministic ``seed x perturbation`` order. The replay
+    loop is intentionally single-process: evaluators and environment setup may
+    reset process-global RNG state for each seed.
     """
     config.validate()
     replay_seeds = tuple(int(seed) for seed in seeds)
@@ -110,6 +139,10 @@ def run_seed_sensitivity(
         raise ValueError("seeds must contain at least one replay seed")
     if not 0.0 <= min_persistence_rate <= 1.0:
         raise ValueError("min_persistence_rate must be between 0 and 1")
+    replay_perturbations = _normalize_perturbations(
+        perturbations,
+        candidate=candidate,
+    )
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -117,55 +150,161 @@ def run_seed_sensitivity(
     active_certifier = certifier or _default_certifier
 
     replays: list[SeedSensitivityReplay] = []
-    for index, seed in enumerate(replay_seeds):
-        replay_started_at = datetime.now(UTC).isoformat()
-        replay_candidate = replace(candidate, scenario_seed=seed)
-        replay_dir = output_dir / f"replay_{index:04d}_seed_{seed}"
-        scenario_yaml_path, _route_path = write_candidate_inputs(
-            config=config,
-            candidate=replay_candidate,
-            candidate_dir=replay_dir,
-            index=index,
-        )
-        certification_status = active_certifier(
-            replay_candidate,
-            scenario_yaml_path,
-            config.require_certification,
-        )
-        if not candidate_allowed(
-            certification_status,
-            require_certification=config.require_certification,
-        ):
+    replay_index = 0
+    for seed in replay_seeds:
+        for perturbation_index, perturbation in enumerate(replay_perturbations):
+            replay_started_at = datetime.now(UTC).isoformat()
+            replay_candidate = _apply_perturbation(candidate, seed=seed, perturbation=perturbation)
+            replay_dir = _replay_dir(
+                output_dir,
+                index=replay_index,
+                seed=seed,
+                perturbation_index=perturbation_index,
+                include_perturbation=len(replay_perturbations) > 1,
+            )
+            scenario_yaml_path, _route_path = write_candidate_inputs(
+                config=config,
+                candidate=replay_candidate,
+                candidate_dir=replay_dir,
+                index=replay_index,
+            )
+            certification_status = active_certifier(
+                replay_candidate,
+                scenario_yaml_path,
+                config.require_certification,
+            )
+            if not candidate_allowed(
+                certification_status,
+                require_certification=config.require_certification,
+            ):
+                replays.append(
+                    SeedSensitivityReplay(
+                        seed=seed,
+                        perturbation=perturbation,
+                        status=certification_status.status,
+                        outcome="fail_closed_exclusion",
+                        reason=certification_status.reason,
+                        objective_value=None,
+                        bundle_path=replay_dir,
+                        episode_record_path=None,
+                        trajectory_csv_path=None,
+                        started_at=replay_started_at,
+                    )
+                )
+                replay_index += 1
+                continue
+
+            evaluation = evaluator(config, replay_candidate, scenario_yaml_path, replay_dir)
+            evaluation = replace(evaluation, certification_status=certification_status)
+            score = objective(evaluation)
+            evaluation = evaluation.with_objective(score)
             replays.append(
-                SeedSensitivityReplay(
-                    seed=seed,
-                    status=certification_status.status,
-                    outcome="fail_closed_exclusion",
-                    reason=certification_status.reason,
-                    objective_value=None,
-                    bundle_path=replay_dir,
-                    episode_record_path=None,
-                    trajectory_csv_path=None,
+                _replay_from_evaluation(
+                    evaluation,
+                    perturbation=perturbation,
                     started_at=replay_started_at,
                 )
             )
-            continue
-
-        evaluation = evaluator(config, replay_candidate, scenario_yaml_path, replay_dir)
-        evaluation = replace(evaluation, certification_status=certification_status)
-        score = objective(evaluation)
-        evaluation = evaluation.with_objective(score)
-        replays.append(_replay_from_evaluation(evaluation, started_at=replay_started_at))
+            replay_index += 1
 
     summary = _summarize(
         candidate=candidate,
         seeds=replay_seeds,
+        perturbations=replay_perturbations,
         replays=tuple(replays),
         min_persistence_rate=min_persistence_rate,
         summary_path=output_dir / "seed_sensitivity_summary.json",
     )
     write_json(summary.summary_path, summary.to_json())
     return summary
+
+
+def _normalize_perturbations(
+    perturbations: Iterable[SeedSensitivityPerturbation] | None,
+    *,
+    candidate: CandidateSpec,
+) -> tuple[SeedSensitivityPerturbation, ...]:
+    """Return validated perturbations, defaulting to one no-op replay."""
+    normalized = tuple(perturbations or (SeedSensitivityPerturbation(),))
+    if not normalized:
+        raise ValueError("perturbations must contain at least one entry")
+    for perturbation in normalized:
+        _validate_perturbation(perturbation, candidate=candidate)
+    return normalized
+
+
+def _validate_perturbation(
+    perturbation: SeedSensitivityPerturbation,
+    *,
+    candidate: CandidateSpec,
+) -> None:
+    """Validate one timing/speed perturbation against the bounded opt-in surface."""
+    values = {
+        "pedestrian_speed_delta_mps": perturbation.pedestrian_speed_delta_mps,
+        "pedestrian_delay_delta_s": perturbation.pedestrian_delay_delta_s,
+        "spawn_time_delta_s": perturbation.spawn_time_delta_s,
+    }
+    for name, value in values.items():
+        if not math.isfinite(float(value)):
+            raise ValueError(f"{name} must be finite")
+
+    if abs(float(perturbation.pedestrian_speed_delta_mps)) > MAX_ABS_SPEED_DELTA_MPS:
+        raise ValueError(
+            "pedestrian_speed_delta_mps must be between "
+            f"{-MAX_ABS_SPEED_DELTA_MPS} and {MAX_ABS_SPEED_DELTA_MPS}"
+        )
+    if abs(float(perturbation.pedestrian_delay_delta_s)) > MAX_ABS_TIMING_DELTA_S:
+        raise ValueError(
+            "pedestrian_delay_delta_s must be between "
+            f"{-MAX_ABS_TIMING_DELTA_S} and {MAX_ABS_TIMING_DELTA_S}"
+        )
+    if abs(float(perturbation.spawn_time_delta_s)) > MAX_ABS_TIMING_DELTA_S:
+        raise ValueError(
+            f"spawn_time_delta_s must be between {-MAX_ABS_TIMING_DELTA_S} "
+            f"and {MAX_ABS_TIMING_DELTA_S}"
+        )
+
+    perturbed = _apply_perturbation(
+        candidate, seed=candidate.scenario_seed, perturbation=perturbation
+    )
+    if perturbed.pedestrian_speed_mps <= 0.0:
+        raise ValueError("perturbed pedestrian_speed_mps must stay positive")
+    if perturbed.pedestrian_delay_s < 0.0:
+        raise ValueError("perturbed pedestrian_delay_s must stay non-negative")
+    if perturbed.spawn_time_s < 0.0:
+        raise ValueError("perturbed spawn_time_s must stay non-negative")
+
+
+def _apply_perturbation(
+    candidate: CandidateSpec,
+    *,
+    seed: int,
+    perturbation: SeedSensitivityPerturbation,
+) -> CandidateSpec:
+    """Apply one perturbation to a candidate while replacing the replay seed."""
+    return replace(
+        candidate,
+        scenario_seed=int(seed),
+        spawn_time_s=float(candidate.spawn_time_s) + float(perturbation.spawn_time_delta_s),
+        pedestrian_speed_mps=float(candidate.pedestrian_speed_mps)
+        + float(perturbation.pedestrian_speed_delta_mps),
+        pedestrian_delay_s=float(candidate.pedestrian_delay_s)
+        + float(perturbation.pedestrian_delay_delta_s),
+    )
+
+
+def _replay_dir(
+    output_dir: Path,
+    *,
+    index: int,
+    seed: int,
+    perturbation_index: int,
+    include_perturbation: bool,
+) -> Path:
+    """Return a deterministic replay directory name."""
+    if not include_perturbation:
+        return output_dir / f"replay_{index:04d}_seed_{seed}"
+    return output_dir / f"replay_{index:04d}_seed_{seed}_perturb_{perturbation_index:02d}"
 
 
 def _default_certifier(
@@ -184,6 +323,7 @@ def _default_certifier(
 def _replay_from_evaluation(
     evaluation: CandidateEvaluation,
     *,
+    perturbation: SeedSensitivityPerturbation,
     started_at: str | None = None,
 ) -> SeedSensitivityReplay:
     """Convert a candidate evaluation into a seed-sensitivity replay row."""
@@ -196,6 +336,7 @@ def _replay_from_evaluation(
     record_status = record.get("status") if record else None
     return SeedSensitivityReplay(
         seed=int(evaluation.candidate.scenario_seed),
+        perturbation=perturbation,
         status=str(record_status) if record_status else fallback_status,
         outcome=_outcome_from_evaluation(evaluation, record),
         reason=_reason_from_evaluation(evaluation),
@@ -219,7 +360,8 @@ def _outcome_from_evaluation(
         return evaluation.failure_attribution.primary_failure
     if record is None:
         return "unknown"
-    outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
+    raw_outcome = record.get("outcome")
+    outcome = raw_outcome if isinstance(raw_outcome, dict) else {}
     if bool(outcome.get("collision") or outcome.get("collision_event")):
         return "collision"
     if bool(outcome.get("timeout") or outcome.get("timeout_event")):
@@ -244,6 +386,7 @@ def _summarize(
     *,
     candidate: CandidateSpec,
     seeds: tuple[int, ...],
+    perturbations: tuple[SeedSensitivityPerturbation, ...],
     replays: tuple[SeedSensitivityReplay, ...],
     min_persistence_rate: float,
     summary_path: Path,
@@ -272,6 +415,7 @@ def _summarize(
         num_fail_closed_exclusions=sum(
             1 for replay in replays if replay.outcome == "fail_closed_exclusion"
         ),
+        perturbations=perturbations,
         replays=replays,
         summary_path=summary_path,
     )

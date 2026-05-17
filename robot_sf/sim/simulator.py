@@ -36,7 +36,7 @@ from pysocialforce.simulator import make_forces as pysf_make_forces
 
 from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
 from robot_sf.nav.occupancy import circle_collides_any_lines
@@ -623,7 +623,7 @@ class PedSimulator(Simulator):
 
 
 def init_ped_simulators(
-    env_config: PedEnvSettings,
+    env_config: PedEnvSettings | PedestrianSimulationConfig,
     map_def: MapDefinition,
     random_start_pos: bool = False,
     peds_have_obstacle_forces: bool = True,

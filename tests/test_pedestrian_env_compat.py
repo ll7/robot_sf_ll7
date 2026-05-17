@@ -12,6 +12,7 @@ from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv, _reward_function_name
 from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 
 
 def test_pedestrian_env_uses_stub_robot_model() -> None:
@@ -52,6 +53,34 @@ def test_make_pedestrian_env_uses_stub_robot_model() -> None:
     try:
         assert isinstance(env, PedestrianEnv)
         assert isinstance(env.robot_model, StubRobotModel)
+    finally:
+        env.exit()
+
+
+def test_pedestrian_env_does_not_mutate_input_config_for_deprecated_force_flag() -> None:
+    """Deprecated force override should be isolated to the constructed environment."""
+    config = PedestrianSimulationConfig()
+
+    env = PedestrianEnv(
+        env_config=config,
+        robot_model=None,
+        peds_have_obstacle_forces=False,
+    )
+    try:
+        assert config.peds_have_static_obstacle_forces is True
+        assert env.config.peds_have_static_obstacle_forces is False
+    finally:
+        env.exit()
+
+
+def test_pedestrian_env_create_spaces_matches_base_signature() -> None:
+    """PedestrianEnv._create_spaces should return action and observation spaces only."""
+    env = PedestrianEnv(robot_model=None)
+    try:
+        created_spaces = env._create_spaces()
+
+        assert len(created_spaces) == 2
+        assert env.orig_obs_space is not None
     finally:
         env.exit()
 

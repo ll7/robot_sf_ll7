@@ -100,6 +100,7 @@ class PedestrianEnv(SingleAgentEnv):
 
         # Ensure pedestrian obstacle forces are configured consistently.
         if peds_have_obstacle_forces is not None:
+            env_config = deepcopy(env_config)
             obstacle_force_attr = (
                 "peds_have_static_obstacle_forces"
                 if hasattr(env_config, "peds_have_static_obstacle_forces")
@@ -125,6 +126,7 @@ class PedestrianEnv(SingleAgentEnv):
 
         self.robot_action_space = None
         self._robot_action_space_valid = True
+        self.orig_obs_space = None
 
         # Initialize base class
         super().__init__(
@@ -155,7 +157,7 @@ class PedestrianEnv(SingleAgentEnv):
             self.map_def = self.config.map_pool.choose_random_map()
 
         # Initialize spaces
-        self.action_space, self.observation_space, self.orig_obs_space = self._create_spaces()
+        self.action_space, self.observation_space = self._create_spaces()
         self._configure_robot_model_action_space()
 
         # Setup simulator and sensors
@@ -166,22 +168,22 @@ class PedestrianEnv(SingleAgentEnv):
         if self.debug:
             self._setup_visualization()
 
-    def _create_spaces(self):
+    def _create_spaces(self) -> tuple[spaces.Space, spaces.Space]:
         """Create action and observation spaces.
 
         Returns:
-            Tuple of (action_space, observation_space, orig_obs_space) for the pedestrian.
+            Tuple of (action_space, observation_space) for the pedestrian.
         """
         # Use existing utility function
-        ped_config = cast("PedEnvSettings", self.config)
         combined_action_space, combined_observation_space, orig_obs_space = init_ped_spaces(
-            ped_config,
+            self.config,
             self.map_def,
         )
 
         # Return pedestrian spaces (index 1)
         self.robot_action_space = combined_action_space[0]
-        return combined_action_space[1], combined_observation_space[1], orig_obs_space
+        self.orig_obs_space = orig_obs_space
+        return combined_action_space[1], combined_observation_space[1]
 
     def _configure_robot_model_action_space(self) -> None:
         """Configure and validate the robot model action space if available."""
@@ -242,7 +244,7 @@ class PedestrianEnv(SingleAgentEnv):
         if isinstance(self.robot_action_space, spaces.Box):
             zeros = np.zeros(self.robot_action_space.shape, dtype=self.robot_action_space.dtype)
             return zeros
-        shape = getattr(self.robot_action_space, "shape", (2,))
+        shape = getattr(self.robot_action_space, "shape", (2,)) if self.robot_action_space else (2,)
         return np.zeros(shape, dtype=float)
 
     def _format_robot_action(self, action: Any) -> np.ndarray | None:
@@ -276,14 +278,13 @@ class PedestrianEnv(SingleAgentEnv):
 
     def _setup_simulator(self) -> None:
         """Initialize the simulator."""
-        ped_config = cast("PedEnvSettings", self.config)
         peds_have_obstacle_forces = getattr(
             self.config,
             "peds_have_static_obstacle_forces",
             getattr(self.config, "peds_have_obstacle_forces", True),
         )
         self.simulator = init_ped_simulators(
-            ped_config,
+            self.config,
             self.map_def,
             random_start_pos=True,
             peds_have_obstacle_forces=bool(peds_have_obstacle_forces),
@@ -291,10 +292,9 @@ class PedestrianEnv(SingleAgentEnv):
 
     def _setup_sensors_and_collision(self) -> None:
         """Initialize sensors and collision detection."""
-        ped_config = cast("PedEnvSettings", self.config)
         occupancies, sensors = init_ped_collision_and_sensors(
             self.simulator,
-            ped_config,
+            self.config,
             self.orig_obs_space,
         )
 
@@ -433,7 +433,7 @@ class PedestrianEnv(SingleAgentEnv):
         # Prepare robot action visualization
         robot_action = (
             None
-            if not self.last_action_robot
+            if self.last_action_robot is None
             else VisualizableAction(
                 self.simulator.robot_poses[0],
                 self.last_action_robot,
@@ -453,7 +453,7 @@ class PedestrianEnv(SingleAgentEnv):
         # Prepare pedestrian action visualization
         ego_ped_action = (
             None
-            if not self.last_action_ped
+            if self.last_action_ped is None
             else VisualizableAction(
                 self.simulator.ego_ped_pose,
                 self.last_action_ped,

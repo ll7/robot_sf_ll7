@@ -7,12 +7,11 @@ This document describes the extraction of a helper function to eliminate code du
 ## Problem Description
 
 ### Code Duplication Identified
-The logic for preparing pedestrian action visualization data was duplicated across 4 environment files:
+The logic for preparing pedestrian action visualization data was duplicated across 3 environment files:
 
 1. `robot_sf/gym_env/robot_env.py`
 2. `robot_sf/gym_env/crowd_sim_env.py`
 3. `robot_sf/gym_env/pedestrian_env.py`
-4. `robot_sf/gym_env/pedestrian_env.py`
 
 ### Duplicated Pattern
 Each file contained identical code:
@@ -57,7 +56,7 @@ def prepare_pedestrian_actions(simulator) -> np.ndarray:
 ```
 
 ### Refactoring Applied
-Updated all 4 environment files to use the helper function:
+Updated all 3 environment files to use the helper function:
 
 **Before:**
 ```python
@@ -78,7 +77,7 @@ ped_actions_np = prepare_pedestrian_actions(self.simulator)
 ## Benefits
 
 ### ✅ **Reduced Code Duplication**
-- Eliminated 4 instances of identical code
+- Eliminated 3 instances of identical code
 - Centralized logic in a single, well-documented function
 - Reduced maintenance burden
 
@@ -108,10 +107,9 @@ ped_actions_np = prepare_pedestrian_actions(self.simulator)
 - `robot_sf/gym_env/robot_env.py`
 - `robot_sf/gym_env/crowd_sim_env.py`
 - `robot_sf/gym_env/pedestrian_env.py`
-- `robot_sf/gym_env/pedestrian_env.py`
 
 **Replaced Duplicated Code:**
-- All 4 environment files now use the helper function
+- All 3 environment files now use the helper function
 
 ### Function Signature
 ```python

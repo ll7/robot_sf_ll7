@@ -10,11 +10,7 @@ from gymnasium import spaces
 from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
-from robot_sf.gym_env.pedestrian_env import PedestrianEnv
-from robot_sf.gym_env.pedestrian_env_refactored import (
-    RefactoredPedestrianEnv,
-    _reward_function_name,
-)
+from robot_sf.gym_env.pedestrian_env import PedestrianEnv, _reward_function_name
 from robot_sf.gym_env.reward import simple_ped_reward
 
 
@@ -41,7 +37,7 @@ def test_pedestrian_env_handles_mismatched_model_action_space() -> None:
 
     env = PedestrianEnv(robot_model=_BadModel())
     try:
-        assert isinstance(env, RefactoredPedestrianEnv)
+        assert isinstance(env, PedestrianEnv)
         assert env._robot_action_space_valid is False
         env.reset()
         action = env.action_space.sample()
@@ -54,6 +50,7 @@ def test_make_pedestrian_env_uses_stub_robot_model() -> None:
     """Factory should preserve stub model fallback for backwards compatibility."""
     env = make_pedestrian_env(robot_model=None)
     try:
+        assert isinstance(env, PedestrianEnv)
         assert isinstance(env.robot_model, StubRobotModel)
     finally:
         env.exit()
@@ -82,6 +79,6 @@ def test_pedestrian_env_records_and_resets(tmp_path, monkeypatch) -> None:
 
 def test_reward_function_name_handles_partial_wrapped_rewards() -> None:
     """Partial-wrapped reward functions should still log the underlying reward name."""
-    reward_func = partial(simple_ped_reward, constant=1.0)
+    reward_func = partial(simple_ped_reward, robot_coll_reward=1.0)
 
     assert _reward_function_name(reward_func) == "simple_ped_reward"

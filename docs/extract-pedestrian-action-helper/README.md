@@ -12,7 +12,7 @@ The logic for preparing pedestrian action visualization data was duplicated acro
 1. `robot_sf/gym_env/robot_env.py`
 2. `robot_sf/gym_env/crowd_sim_env.py`
 3. `robot_sf/gym_env/pedestrian_env.py`
-4. `robot_sf/gym_env/pedestrian_env_refactored.py`
+4. `robot_sf/gym_env/pedestrian_env.py`
 
 ### Duplicated Pattern
 Each file contained identical code:
@@ -108,7 +108,7 @@ ped_actions_np = prepare_pedestrian_actions(self.simulator)
 - `robot_sf/gym_env/robot_env.py`
 - `robot_sf/gym_env/crowd_sim_env.py`
 - `robot_sf/gym_env/pedestrian_env.py`
-- `robot_sf/gym_env/pedestrian_env_refactored.py`
+- `robot_sf/gym_env/pedestrian_env.py`
 
 **Replaced Duplicated Code:**
 - All 4 environment files now use the helper function

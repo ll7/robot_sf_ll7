@@ -1,4 +1,4 @@
-# Issue 1181: `ml-intern` bounded experiment-assistant assessment
+# Issue #1181: `ml-intern` Bounded Experiment-Assistant Assessment
 
 Date: 2026-05-13
 Issue: #1181
@@ -54,7 +54,7 @@ For current Robot SF practice, those concepts are already better expressed throu
 skills, issue-scoped branches, `scripts/dev/` validation gates, and durable context notes. The
 external runtime is therefore not required to keep the useful discipline.
 
-## Upstream contract checked on 2026-05-13
+## Upstream Contract Checked on 2026-05-13
 
 Observed from the upstream `huggingface/ml-intern` README / PyPI page:
 
@@ -79,7 +79,7 @@ Observed from the upstream `huggingface/ml-intern` README / PyPI page:
 { "share_traces": false }
 ```
 
-## Runtime decision checked on 2026-05-15
+## Runtime Decision Checked on 2026-05-15
 
 Observed evidence from the issue-audit pass:
 
@@ -249,7 +249,7 @@ Observed outcomes:
   deprecated `evaluation.frequency_episodes` is ignored in favor of `evaluation.step_schedule`, and
   `randomize_seeds` causes the provided training seeds to be ignored.
 
-Issue #1191 update validation on 2026-05-15:
+Issue #1191 Update Validation on 2026-05-15:
 
 ```bash
 ls AGENTS.md docs/dev_guide.md .agents/skills docs/context/README.md docs/README.md \
@@ -268,7 +268,7 @@ Observed outcomes:
 - PR handoff should use a post-commit readiness rerun so changed-file detection compares committed
   docs against `origin/main`.
 
-## Follow-up boundary
+## Follow-Up Boundary
 
 Issue #1191 resolved the first follow-up by extracting the useful workflow ideas into Robot SF's
 existing Codex-native practice instead of running the `ml-intern` CLI.

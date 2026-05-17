@@ -424,7 +424,9 @@ def _run_backlog_mode(args: argparse.Namespace, repo_root: Path) -> int:
         print(f"Wrote TODO-docstring backlog baseline: {baseline_path.relative_to(repo_root)}")
         return 0
 
-    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    baseline = _read_backlog_baseline(baseline_path, repo_root)
+    if baseline is None:
+        return 1
     increases = compare_backlog_to_baseline(report, baseline)
     if increases:
         print("TODO-docstring backlog increased relative to baseline:")
@@ -439,6 +441,43 @@ def _run_backlog_mode(args: argparse.Namespace, repo_root: Path) -> int:
         f"{totals['files']} files, {totals['total_occurrences']} occurrences."
     )
     return 0
+
+
+def _read_backlog_baseline(baseline_path: Path, repo_root: Path) -> dict[str, Any] | None:
+    """Read the ratchet baseline or emit an actionable error."""
+    display_path = _display_path(baseline_path, repo_root)
+    if not baseline_path.is_file():
+        print(
+            f"Error: Baseline file not found or is a directory at {display_path}",
+            file=sys.stderr,
+        )
+        print("Run with --mode write-baseline to create it.", file=sys.stderr)
+        return None
+
+    try:
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(
+            f"Error: Failed to read baseline file at {display_path}: {exc}",
+            file=sys.stderr,
+        )
+        return None
+
+    if not isinstance(baseline, dict):
+        print(
+            f"Error: Baseline file at {display_path} must contain a JSON object",
+            file=sys.stderr,
+        )
+        return None
+    return baseline
+
+
+def _display_path(path: Path, repo_root: Path) -> str:
+    """Return a repo-relative path for diagnostics when possible."""
+    try:
+        return path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 if __name__ == "__main__":

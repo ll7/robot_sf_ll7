@@ -118,3 +118,26 @@ def test_backlog_ratchet_detects_increased_and_new_files():
         "robot_sf/module.py: 2 TODO docstring occurrences (baseline 1, +1)",
         "scripts/new.py: 1 TODO docstring occurrences (baseline 0, +1)",
     ]
+
+
+def test_read_backlog_baseline_fails_closed_for_missing_or_invalid_files(tmp_path, capsys):
+    """Ratchet mode should explain unusable baseline files instead of crashing."""
+    missing = tmp_path / "missing.json"
+    baseline_dir = tmp_path / "baseline-dir"
+    baseline_dir.mkdir()
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{bad json}\n", encoding="utf-8")
+    non_object = tmp_path / "non-object.json"
+    non_object.write_text("[]\n", encoding="utf-8")
+
+    assert check_docstring_todos._read_backlog_baseline(missing, tmp_path) is None
+    assert "Run with --mode write-baseline to create it." in capsys.readouterr().err
+
+    assert check_docstring_todos._read_backlog_baseline(baseline_dir, tmp_path) is None
+    assert "not found or is a directory" in capsys.readouterr().err
+
+    assert check_docstring_todos._read_backlog_baseline(malformed, tmp_path) is None
+    assert "Failed to read baseline file" in capsys.readouterr().err
+
+    assert check_docstring_todos._read_backlog_baseline(non_object, tmp_path) is None
+    assert "must contain a JSON object" in capsys.readouterr().err

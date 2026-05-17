@@ -391,6 +391,131 @@ def test_collect_trajectories_filters_to_policy_observation_space(tmp_path, monk
     assert captured_metadata["observation_contract"]["keys"] == ["kept"]
 
 
+def test_collect_trajectories_merges_training_then_env_contract(tmp_path, monkeypatch):
+    """Collector env-config values should explicitly override training-config defaults."""
+    from scripts.training import collect_expert_trajectories as collector
+
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+
+    scenario_config = tmp_path / "scenario.yaml"
+    scenario_config.write_text("[]\n", encoding="utf-8")
+    training_config = tmp_path / "training.yaml"
+    training_config.write_text(
+        "\n".join(
+            [
+                "env_overrides:",
+                "  observation_mode: default",
+                "  predictive_foresight_enabled: false",
+                "env_factory_kwargs:",
+                "  reward_name: training_reward",
+                "  training_only: true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env_config = tmp_path / "env.yaml"
+    env_config.write_text(
+        "\n".join(
+            [
+                "env_overrides:",
+                "  predictive_foresight_enabled: true",
+                "  include_grid_in_observation: true",
+                "env_factory_kwargs:",
+                "  reward_name: env_reward",
+                "  env_only: 7",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    captured_overrides: dict[str, object] = {}
+    captured_factory_kwargs: dict[str, object] = {}
+    captured_metadata: dict[str, object] = {}
+
+    class _FakeEnv:
+        action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+
+        def __init__(self):
+            self.state = SimpleNamespace(max_sim_steps=1, nav=SimpleNamespace(pos=(0.0, 0.0)))
+
+        def reset(self):
+            return {"obs": np.array([0.25], dtype=np.float32)}, {}
+
+        def step(self, action):
+            return {"obs": np.array([0.5], dtype=np.float32)}, 0.0, True, False, {}
+
+        def close(self):
+            return None
+
+    def fake_apply_env_overrides(_env_config, overrides):
+        captured_overrides.update(overrides)
+
+    def fake_make_robot_env(**kwargs):
+        captured_factory_kwargs.update(kwargs)
+        return _FakeEnv()
+
+    monkeypatch.setattr(collector, "load_scenarios", lambda _path: ({"name": "demo"},))
+    monkeypatch.setattr(collector, "select_scenario", lambda scenarios, _scenario_id: scenarios[0])
+    monkeypatch.setattr(collector, "build_robot_config_from_scenario", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(collector, "_apply_env_overrides", fake_apply_env_overrides)
+    monkeypatch.setattr(collector, "make_robot_env", fake_make_robot_env)
+    monkeypatch.setattr(
+        collector,
+        "_write_dataset",
+        lambda _path, _arrays, _episode_count, metadata: captured_metadata.update(metadata),
+    )
+    monkeypatch.setattr(
+        collector,
+        "TrajectoryDatasetValidator",
+        lambda _path: SimpleNamespace(
+            validate=lambda minimum_episodes: SimpleNamespace(
+                episode_count=minimum_episodes,
+                scenario_coverage={"demo": minimum_episodes},
+                integrity_report={},
+                quality_status=common.TrajectoryQuality.VALIDATED,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        collector,
+        "write_trajectory_dataset_manifest",
+        lambda _artifact: tmp_path / "manifest.json",
+    )
+
+    exit_code = collector.main(
+        [
+            "--dataset-id",
+            "demo_dataset",
+            "--policy-id",
+            "demo_policy",
+            "--episodes",
+            "1",
+            "--scenario-config",
+            str(scenario_config),
+            "--training-config",
+            str(training_config),
+            "--env-config",
+            str(env_config),
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured_overrides["observation_mode"] == "default"
+    assert captured_overrides["predictive_foresight_enabled"] is True
+    assert captured_overrides["include_grid_in_observation"] is True
+    assert captured_factory_kwargs["reward_name"] == "env_reward"
+    assert captured_factory_kwargs["training_only"] is True
+    assert captured_factory_kwargs["env_only"] == 7
+    assert captured_metadata["env_contract_config"] == str(env_config.resolve())
+    assert captured_metadata["env_contract_configs"] == [
+        str(training_config.resolve()),
+        str(env_config.resolve()),
+    ]
+
+
 def test_comparative_metrics_structure():
     """Test structure of comparison report artifacts."""
     # This validates the expected fields in a comparison report

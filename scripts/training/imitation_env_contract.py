@@ -118,6 +118,13 @@ def make_training_contract_env(
     resolved_overrides.update(env_overrides or {})
     resolved_factory_kwargs = load_training_env_factory_kwargs(training_config_path)
     resolved_factory_kwargs.update(env_factory_kwargs or {})
+    reserved_factory_keys = {"config", "seed"}
+    conflicting_keys = sorted(
+        key for key in resolved_factory_kwargs if key in reserved_factory_keys
+    )
+    if conflicting_keys:
+        preview = ", ".join(conflicting_keys)
+        raise ValueError(f"env_factory_kwargs cannot override reserved keys: {preview}")
 
     _apply_env_overrides(env_config, resolved_overrides)
     env = make_robot_env(config=env_config, seed=seed, **resolved_factory_kwargs)

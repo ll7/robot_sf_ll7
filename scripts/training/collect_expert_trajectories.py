@@ -11,7 +11,6 @@ import argparse
 import shlex
 import subprocess
 import sys
-from collections.abc import Mapping as RuntimeMapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -38,6 +37,8 @@ from robot_sf.training.scenario_loader import (
     select_scenario,
 )
 from scripts.training.imitation_env_contract import (
+    load_training_env_factory_kwargs,
+    load_training_env_overrides,
     observation_contract_from_space,
 )
 from scripts.training.train_ppo import _apply_env_overrides
@@ -73,20 +74,6 @@ def _resolve_scenario_config(
     if not scenario_path.is_absolute():
         scenario_path = (training_config.parent / scenario_path).resolve()
     return scenario_path
-
-
-def _load_env_contract(config_path: Path | None) -> tuple[dict[str, object], dict[str, object]]:
-    """Load env overrides and factory kwargs from a training-style YAML file."""
-    if config_path is None:
-        return {}, {}
-    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    env_overrides = raw.get("env_overrides") or {}
-    env_factory_kwargs = raw.get("env_factory_kwargs") or {}
-    if not isinstance(env_overrides, RuntimeMapping):
-        raise TypeError(f"{config_path}: env_overrides must be a mapping")
-    if not isinstance(env_factory_kwargs, RuntimeMapping):
-        raise TypeError(f"{config_path}: env_factory_kwargs must be a mapping")
-    return dict(env_overrides), dict(env_factory_kwargs)
 
 
 def _resolve_expert_checkpoint(policy_id: str) -> Path:
@@ -356,8 +343,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     scenario_path = _resolve_scenario_config(args.scenario_config, args.training_config)
     training_config_path = args.training_config.resolve() if args.training_config else None
-    env_contract_path = args.env_config or args.training_config
-    env_overrides, env_factory_kwargs = _load_env_contract(env_contract_path)
+    env_config_path = args.env_config.resolve() if args.env_config else None
+    env_contract_path = env_config_path or training_config_path
+    env_overrides = load_training_env_overrides(training_config_path)
+    env_factory_kwargs = load_training_env_factory_kwargs(training_config_path)
+    if env_config_path is not None:
+        env_overrides.update(load_training_env_overrides(env_config_path))
+        env_factory_kwargs.update(load_training_env_factory_kwargs(env_config_path))
     seeds_arg: Sequence[int] | None = args.seeds
     if args.override_seed:
         override = tuple(int(value) for value in args.override_seed)
@@ -418,6 +410,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "scenario_id": collection_config.scenario_id,
         "scenario_overrides": list(collection_config.scenario_overrides),
         "env_contract_config": str(env_contract_path) if env_contract_path is not None else None,
+        "env_contract_configs": [
+            str(path) for path in (training_config_path, env_config_path) if path is not None
+        ],
         "env_overrides": dict(collection_config.env_overrides),
         "env_factory_kwargs": dict(collection_config.env_factory_kwargs),
         "random_seeds": list(collection_config.random_seeds),

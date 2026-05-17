@@ -98,6 +98,8 @@ knowledge, not every transient iteration detail.
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:
   [pr_first_pass_review_audit_2026-05-14.md](pr_first_pass_review_audit_2026-05-14.md)
+* Issue #1289 SNQI method alias retirement:
+  [issue_1289_snqi_method_alias_retirement.md](issue_1289_snqi_method_alias_retirement.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 

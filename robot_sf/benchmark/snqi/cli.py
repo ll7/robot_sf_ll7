@@ -13,8 +13,6 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-from loguru import logger
-
 from robot_sf.benchmark.snqi.compute import (
     WEIGHT_NAMES,
     compute_snqi_ablation,
@@ -38,35 +36,15 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
         with baseline_stats_path.open("r", encoding="utf-8") as f:
             baseline_stats = json.load(f)
 
-        # Map legacy/alias method names to canonical ones expected by the implementation
-        # Canonical: {"canonical", "balanced", "optimized"}
-        # Aliases maintained for backward compatibility with older docs/flags
-        method_aliases = {
-            "pareto_optimization": "optimized",
-            "equal_weights": "balanced",
-            "safety_focused": "optimized",  # closest existing behavior
-        }
         method = args.method
-        mapped_method = method_aliases.get(method, method)
-        if mapped_method != method:
-            logger.warning(
-                "SNQI recompute: method '{method}' is deprecated; using '{mapped_method}'",
-                method=method,
-                mapped_method=mapped_method,
-            )
 
-        # Validate after mapping to provide a clearer error early
-        if mapped_method not in {"canonical", "balanced", "optimized"}:
-            logger.error(
-                "Unknown SNQI recompute method '{method}'. Use one of: canonical|balanced|optimized",
-                method=method,
-            )
+        if method not in {"canonical", "balanced", "optimized"}:
             return 2
 
         # Recompute SNQI weights using baseline statistics
         weights = recompute_snqi_weights(
             baseline_stats=baseline_stats,
-            method=mapped_method,
+            method=method,
             seed=args.seed,
         )
 
@@ -262,20 +240,11 @@ def create_parser() -> argparse.ArgumentParser:
         "--method",
         default="canonical",
         choices=[
-            # Canonical options (preferred)
             "canonical",
             "balanced",
             "optimized",
-            # Backward-compatible aliases
-            "pareto_optimization",
-            "equal_weights",
-            "safety_focused",
         ],
-        help=(
-            "Weight computation method. Canonical: canonical|balanced|optimized. "
-            "Aliases (deprecated): pareto_optimization->optimized, equal_weights->balanced, "
-            "safety_focused->optimized. Default: canonical"
-        ),
+        help="Weight computation method: canonical|balanced|optimized. Default: canonical",
     )
     recompute_parser.add_argument(
         "--seed",

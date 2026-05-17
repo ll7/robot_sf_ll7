@@ -34,8 +34,10 @@ _COMMAND_HINT_RE = re.compile(
 )
 _MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)|<((?:\./)?[^ >]+)>")
 _LINE_START_ISSUE_REF_RE = re.compile(
-    r"^\s*(?:(?:[-*+]\s+)|(?:\d+[.)]\s+)|(?:>\s*)|(?:\|\s*))?#(?P<number>\d+)\b"
+    r"^(?:\s{0,3}|(?:\s*(?:(?:[-*+]\s+)|(?:\d+[.)]\s+)|(?:>\s*)|(?:\|\s*))))"
+    r"#(?P<number>\d+)\b"
 )
+_FENCE_START_RE = re.compile(r"^([`~]{3,})")
 
 
 @dataclass(frozen=True)
@@ -270,14 +272,16 @@ def _markdown_lines_outside_fences(text: str) -> Iterable[tuple[int, str]]:
     fence_marker: str | None = None
     for line_number, line in enumerate(text.splitlines(), 1):
         stripped = line.lstrip()
-        marker = stripped[:3]
-        if marker in {"```", "~~~"}:
-            if in_fence and marker == fence_marker:
+        indent = len(line) - len(stripped)
+        marker_match = _FENCE_START_RE.match(stripped) if indent < 4 else None
+        marker = marker_match.group(1) if marker_match else None
+        if marker is not None:
+            if in_fence and marker[0] == fence_marker:
                 in_fence = False
                 fence_marker = None
             elif not in_fence:
                 in_fence = True
-                fence_marker = marker
+                fence_marker = marker[0]
             continue
         if not in_fence:
             yield line_number, line

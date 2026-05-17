@@ -262,6 +262,52 @@ def test_issue_reference_guard_handles_bullets_tables_and_headings(tmp_path: Pat
     assert not any("Issue #999" in message for message in messages)
 
 
+def test_issue_reference_guard_ignores_indented_code_blocks(tmp_path: Path) -> None:
+    """Four-space indented Markdown code blocks should not be prose diagnostics."""
+    repo_root = tmp_path
+    (repo_root / "docs/context").mkdir(parents=True)
+    (repo_root / "docs/context/README.md").write_text(
+        "- [Issue 999 Example](issue_999_example.md)\n",
+        encoding="utf-8",
+    )
+    note = repo_root / "docs/context/issue_999_example.md"
+    note.write_text("    #1108 is literal code, not prose.\n", encoding="utf-8")
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/issue_999_example.md"))],
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == []
+
+
+def test_issue_reference_guard_handles_indented_long_fences(tmp_path: Path) -> None:
+    """Markdown fences can be indented up to three spaces and longer than three ticks."""
+    repo_root = tmp_path
+    (repo_root / "docs/context").mkdir(parents=True)
+    (repo_root / "docs/context/README.md").write_text(
+        "- [Issue 999 Example](issue_999_example.md)\n",
+        encoding="utf-8",
+    )
+    note = repo_root / "docs/context/issue_999_example.md"
+    note.write_text(
+        "   ````python\n"
+        "#1108 is only sample code.\n"
+        "   ````\n"
+        "#1262 is prose and should be flagged.\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/issue_999_example.md"))],
+        repo_root=repo_root,
+    )
+
+    messages = [diagnostic.message for diagnostic in diagnostics]
+    assert not any("Issue #1108" in message for message in messages)
+    assert any("Issue #1262" in message for message in messages)
+
+
 def test_explicit_path_new_context_note_is_treated_as_added(tmp_path: Path) -> None:
     """Explicit path checks should still enforce added-note index-link validation."""
     repo_root = tmp_path

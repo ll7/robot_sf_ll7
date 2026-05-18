@@ -6,6 +6,7 @@
 *.pyc
 .pytest_cache
 .scannerwork
+.github/cache/
 __pycache__/
 build
 file.log

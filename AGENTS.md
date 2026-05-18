@@ -223,10 +223,17 @@ Do not treat plans as throwaway scratch text when they influence benchmark seman
 
 When working issue batches or Project #5 updates:
 
+- use REST (`gh api repos/...`) for ordinary issue/PR/label/comment operations when GraphQL quota
+  is low or when the operation does not need Projects v2,
+- use local `git` for branch, diff, merge-base, and commit state instead of asking GitHub,
 - clean up issue text and labels first,
 - route Project #5 metadata in a separate pass,
 - run derived score sync once at the end of the batch,
-- cache project and field IDs once per shell session.
+- cache project and field IDs once per shell session or in the local gitignored
+  `.github/cache/project5.json` cache for long-running/multi-agent work,
+- reserve GraphQL for Projects v2, review threads, and nested reads that are genuinely cheaper,
+- check `gh api rate_limit` before large batches and degrade to REST/local state when GraphQL
+  remaining is low.
 
 Canonical note:
 

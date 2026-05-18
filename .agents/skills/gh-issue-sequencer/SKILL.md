@@ -26,7 +26,9 @@ Follow `docs/context/issue_713_batch_first_issue_workflow.md`:
 1. Do issue text, label, and clarification cleanup first.
 2. Do Project #5 field routing second.
 3. Run derived score sync once at the end of the batch.
-4. Cache project and field IDs once per shell session.
+4. Cache project and field IDs once per shell session or in the local Project #5 cache for
+   long-running/multi-agent work.
+5. Use REST/local `git` for non-project state and reserve GraphQL for Project #5 writes.
 
 Do not interleave body rewrites, status changes, and score sync issue-by-issue unless there is only
 one issue in scope.
@@ -34,9 +36,11 @@ one issue in scope.
 ## Workflow
 
 1. Inspect the queue
+   - Check `gh api rate_limit` before large queue work.
    - `gh project item-list 5 --owner ll7 --limit 400 --format json`
    - `gh project field-list 5 --owner ll7 --format json`
-   - `gh issue list --state open --limit 200 --json number,title,labels,milestone,url`
+   - Use REST (`gh api repos/ll7/robot_sf_ll7/issues?...`) for issue bodies and labels when
+     GraphQL quota is low.
 
 2. Identify blockers before sequencing
    - Mark ambiguous issues for `gh-issue-clarifier`.
@@ -60,6 +64,8 @@ one issue in scope.
    - Use `gh project item-edit` for status/priority/duration writeback.
    - Run `uv run python scripts/tools/project_priority_score.py sync` once after the batch if
      score inputs changed.
+   - If GraphQL is exhausted, leave a precise handoff with project ID, item ID, field ID, option ID,
+     and the reset time from `gh api rate_limit`.
 
 ## Output Requirements
 

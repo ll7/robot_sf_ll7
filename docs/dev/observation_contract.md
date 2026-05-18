@@ -102,9 +102,28 @@ Sources: `robot_sf/nav/occupancy_grid.py`, `robot_sf/gym_env/robot_env.py`.
 - Stacking: `RobotSimulationConfig.observation_stack.stack_steps`
 - Grid: `RobotSimulationConfig.grid_config`, `use_occupancy_grid`, `include_grid_in_observation`
 
+## Benchmark Observation Levels
+
+Benchmark runs may also declare an observation level. The level records the
+perception assumption separately from the raw environment observation mode:
+
+| Level | Meaning |
+| --- | --- |
+| `oracle_full_state` | Privileged simulator state. |
+| `tracked_agents_no_noise` | Perfect tracked-agent state without synthetic noise. |
+| `tracked_agents_with_noise` | Tracked-agent state with benchmark observation-noise metadata. |
+| `lidar_2d` | Range-sensor or lidar-style projection metadata. |
+| `occluded_partial_state` | Partial-state contract with visibility/occlusion assumptions. |
+
+The vocabulary lives in `robot_sf/benchmark/observation_levels.py` and is wired
+through planner compatibility metadata. Unsupported planner/level combinations
+fail before episodes are written. These levels are benchmark provenance labels;
+they are not detector, camera, lidar, or sim-to-real certification claims.
+
 ## Reference Files
 
 - `robot_sf/sensor/sensor_fusion.py`
 - `robot_sf/sensor/socnav_observation.py`
 - `robot_sf/gym_env/robot_env.py`
 - `robot_sf/nav/occupancy_grid.py`
+- `robot_sf/benchmark/observation_levels.py`

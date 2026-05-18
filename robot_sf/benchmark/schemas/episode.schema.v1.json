@@ -113,6 +113,10 @@
             "type": "string",
             "description": "Active planner observation-mode contract for this episode."
         },
+        "observation_level": {
+            "type": "string",
+            "description": "Active graded benchmark observation-level contract for this episode."
+        },
         "algorithm_metadata": {
             "type": "object",
             "description": "Metadata about the algorithm/policy used (name, config, status).",

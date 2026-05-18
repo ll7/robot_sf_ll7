@@ -19,6 +19,8 @@ class ObservationContract:
     supported_modes: tuple[str, ...]
     required_inputs: tuple[str, ...]
     active_mode: str | None = None
+    observation_level: str | None = None
+    perception_assumption: str | None = None
     frame: str = "world"
     normalization: str = "raw"
     pedestrian_ordering: str = "distance_ascending"
@@ -30,6 +32,8 @@ class ObservationContract:
         return {
             "mode": self.mode,
             "active_mode": self.active_mode or self.mode,
+            "observation_level": self.observation_level,
+            "perception_assumption": self.perception_assumption,
             "supported_modes": list(self.supported_modes),
             "required_inputs": list(self.required_inputs),
             "frame": self.frame,

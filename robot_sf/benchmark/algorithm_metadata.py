@@ -10,6 +10,10 @@ from typing import Any
 
 from robot_sf.baselines.interface import ActionContract, ObservationContract, PlannerMetadata
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
+from robot_sf.benchmark.observation_levels import (
+    observation_level_for_mode,
+    resolve_observation_level_contract,
+)
 
 _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
@@ -891,12 +895,18 @@ def observation_spec_for_algorithm(algo: str) -> dict[str, Any]:
     }
 
 
-def resolve_observation_mode(algo: str, requested_mode: str | None = None) -> str:
+def resolve_observation_mode(
+    algo: str,
+    requested_mode: str | None = None,
+    *,
+    observation_level: str | None = None,
+) -> str:
     """Resolve and validate the active observation mode for an algorithm.
 
     Args:
         algo: Algorithm label or alias.
         requested_mode: Optional explicit observation mode override.
+        observation_level: Optional graded observation-level override.
 
     Returns:
         The active observation mode.
@@ -906,9 +916,19 @@ def resolve_observation_mode(algo: str, requested_mode: str | None = None) -> st
     """
     spec = observation_spec_for_algorithm(algo)
     default_mode = str(spec["default_mode"])
+    supported = tuple(str(mode) for mode in spec["supported_modes"])
+    if observation_level is not None:
+        contract = resolve_observation_level_contract(
+            canonical_algorithm_name(algo),
+            observation_level=observation_level,
+            requested_observation_mode=requested_mode,
+            algorithm_default_mode=default_mode,
+            algorithm_supported_modes=supported,
+        )
+        return str(contract["active_observation_mode"])
+
     requested = str(requested_mode).strip() if requested_mode is not None else ""
     active_mode = requested or default_mode
-    supported = tuple(str(mode) for mode in spec["supported_modes"])
     if active_mode not in supported:
         supported_text = ", ".join(supported)
         raise ValueError(
@@ -971,6 +991,7 @@ def planner_contract_for_algorithm(
     algo: str,
     *,
     observation_mode: str | None = None,
+    observation_level: str | None = None,
     planner_kinematics: dict[str, Any] | None = None,
     robot_kinematics: str | None = None,
 ) -> PlannerMetadata:
@@ -980,8 +1001,24 @@ def planner_contract_for_algorithm(
     benchmark quality or performance.
     """
     canonical = canonical_algorithm_name(algo)
-    active_mode = resolve_observation_mode(canonical, observation_mode)
     observation_spec = observation_spec_for_algorithm(canonical)
+    if observation_level is None:
+        active_mode = resolve_observation_mode(canonical, observation_mode)
+        level_metadata = observation_level_for_mode(active_mode).to_metadata(
+            active_observation_mode=active_mode
+        )
+    else:
+        level_contract = resolve_observation_level_contract(
+            canonical,
+            observation_level=observation_level,
+            requested_observation_mode=observation_mode,
+            algorithm_default_mode=str(observation_spec["default_mode"]),
+            algorithm_supported_modes=tuple(
+                str(mode) for mode in observation_spec["supported_modes"]
+            ),
+        )
+        active_mode = str(level_contract["active_observation_mode"])
+        level_metadata = level_contract["observation_level"]
     profile = dict(_KINEMATICS_PROFILE_BY_CANONICAL.get(canonical, {}))
     if planner_kinematics is not None:
         profile.update(planner_kinematics)
@@ -989,6 +1026,8 @@ def planner_contract_for_algorithm(
     observation = ObservationContract(
         mode=str(observation_spec["default_mode"]),
         active_mode=active_mode,
+        observation_level=str(level_metadata["key"]),
+        perception_assumption=str(level_metadata["perception_assumption"]),
         supported_modes=tuple(str(mode) for mode in observation_spec["supported_modes"]),
         required_inputs=tuple(str(value) for value in observation_spec.get("inputs", ())),
         frame="world",
@@ -1064,6 +1103,7 @@ def enrich_algorithm_metadata(
     robot_kinematics: str | None = None,
     adapter_impact_requested: bool | None = None,
     observation_mode: str | None = None,
+    observation_level: str | None = None,
 ) -> dict[str, Any]:
     """Return metadata enriched with baseline category and compatibility fields.
 
@@ -1075,6 +1115,7 @@ def enrich_algorithm_metadata(
         robot_kinematics: Optional robot kinematics tag for this episode/run.
         adapter_impact_requested: Optional marker that adapter-impact probing was requested.
         observation_mode: Optional runtime observation-mode override.
+        observation_level: Optional benchmark observation-level override.
 
     Returns:
         A metadata dictionary with stable benchmark contract keys.
@@ -1098,15 +1139,33 @@ def enrich_algorithm_metadata(
     if upstream_reference is not None:
         enriched.setdefault("upstream_reference", dict(upstream_reference))
 
-    active_observation_mode = resolve_observation_mode(canonical, observation_mode)
     observation_spec = observation_spec_for_algorithm(canonical)
+    if observation_level is None:
+        active_observation_mode = resolve_observation_mode(canonical, observation_mode)
+        observation_level_metadata = observation_level_for_mode(
+            active_observation_mode
+        ).to_metadata(active_observation_mode=active_observation_mode)
+    else:
+        level_contract = resolve_observation_level_contract(
+            canonical,
+            observation_level=observation_level,
+            requested_observation_mode=observation_mode,
+            algorithm_default_mode=str(observation_spec["default_mode"]),
+            algorithm_supported_modes=tuple(
+                str(mode) for mode in observation_spec["supported_modes"]
+            ),
+        )
+        active_observation_mode = str(level_contract["active_observation_mode"])
+        observation_level_metadata = dict(level_contract["observation_level"])
     observation_spec["active_mode"] = active_observation_mode
+    observation_spec["observation_level"] = observation_level_metadata["key"]
     observation_spec["override_applied"] = bool(
         observation_mode is not None
         and str(observation_mode).strip()
         and active_observation_mode != observation_spec["default_mode"]
     )
     enriched["observation_spec"] = observation_spec
+    enriched["observation_level"] = observation_level_metadata
 
     current_kinematics = enriched.get("planner_kinematics")
     base_kinematics = _base_kinematics_metadata(
@@ -1129,6 +1188,7 @@ def enrich_algorithm_metadata(
     enriched["planner_contract"] = planner_contract_for_algorithm(
         canonical,
         observation_mode=active_observation_mode,
+        observation_level=observation_level_metadata["key"],
         planner_kinematics=merged,
         robot_kinematics=str(merged.get("robot_kinematics", "unknown")),
     ).to_metadata()

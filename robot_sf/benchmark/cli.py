@@ -279,6 +279,7 @@ def _handle_run(args) -> int:
             ped_impact_radius_m=float(getattr(args, "ped_impact_radius_m", 2.0)),
             ped_impact_window_steps=int(getattr(args, "ped_impact_window_steps", 5)),
             observation_mode=getattr(args, "observation_mode", None),
+            observation_level=getattr(args, "observation_level", None),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
                 if getattr(args, "observation_noise", None)
@@ -1334,6 +1335,21 @@ def _add_run_subparser(
         help=(
             "Optional planner observation-mode override. Unsupported planner/mode "
             "combinations fail before episodes are written."
+        ),
+    )
+    p.add_argument(
+        "--observation-level",
+        default=None,
+        choices=[
+            "oracle_full_state",
+            "tracked_agents_no_noise",
+            "tracked_agents_with_noise",
+            "lidar_2d",
+            "occluded_partial_state",
+        ],
+        help=(
+            "Optional graded benchmark observation-level override. Unsupported "
+            "planner/level combinations fail before episodes are written."
         ),
     )
     p.add_argument(

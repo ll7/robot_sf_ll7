@@ -4,12 +4,24 @@ The package must remain usable without CARLA installed. Runtime replay integrati
 the availability helpers before importing or invoking CARLA-specific APIs.
 """
 
+from robot_sf_carla_bridge import docker_runtime
 from robot_sf_carla_bridge.availability import (
     AVAILABILITY_SCHEMA_VERSION,
     CarlaUnavailableError,
     check_carla_availability,
     load_availability_schema,
     require_carla,
+)
+from robot_sf_carla_bridge.docker_runtime import (
+    CARLA_DOCKER_IMAGE,
+    CARLA_DOCKER_RUNTIME_SCHEMA_VERSION,
+    CARLA_PYTHON_API_REQUIREMENT,
+    CommandResult,
+    build_carla_client_health_summary,
+    build_carla_server_container_command,
+    run_carla_docker_preflight,
+    run_carla_docker_runtime_smoke,
+    validate_carla_image,
 )
 from robot_sf_carla_bridge.export import (
     BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
@@ -57,6 +69,9 @@ from robot_sf_carla_bridge.schema_catalog import (
 __all__ = [
     "AVAILABILITY_SCHEMA_VERSION",
     "BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION",
+    "CARLA_DOCKER_IMAGE",
+    "CARLA_DOCKER_RUNTIME_SCHEMA_VERSION",
+    "CARLA_PYTHON_API_REQUIREMENT",
     "DEFAULT_PARITY_METRICS",
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
@@ -64,6 +79,7 @@ __all__ = [
     "T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION",
     "CarlaUnavailableError",
     "CertificateRef",
+    "CommandResult",
     "MetricParityRow",
     "PedestrianReplaySpec",
     "Pose2D",
@@ -71,6 +87,8 @@ __all__ = [
     "ScenarioReplayRef",
     "SimulationSpec",
     "Waypoint2D",
+    "build_carla_client_health_summary",
+    "build_carla_server_container_command",
     "build_export_payload",
     "build_export_payload_from_map_definition",
     "build_export_payload_from_scenario_entry",
@@ -78,6 +96,7 @@ __all__ = [
     "build_t1_oracle_replay_smoke_setup",
     "check_carla_availability",
     "compare_oracle_replay_metrics",
+    "docker_runtime",
     "list_carla_bridge_schema_catalog",
     "load_availability_schema",
     "load_batch_validation_summary_schema",
@@ -89,7 +108,10 @@ __all__ = [
     "read_export_payload",
     "require_carla",
     "resolve_export_manifest_payload_paths",
+    "run_carla_docker_preflight",
+    "run_carla_docker_runtime_smoke",
     "select_t0_export_payload",
+    "validate_carla_image",
     "validate_export_payload",
     "validate_t1_replay_catalog_payload",
     "write_export_payload",

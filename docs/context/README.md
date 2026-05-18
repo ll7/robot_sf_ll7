@@ -547,6 +547,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1003 CARLA T1 Oracle Replay Smoke](issue_1003_carla_t1_oracle_smoke.md)
   adds a setup-only T1 oracle replay smoke command for one T0 export manifest payload, with
   schema-catalog validation and fail-closed `not-available` behavior when CARLA is absent.
+- [Issue #1179 CARLA Docker Runtime](issue_1179_carla_docker_runtime.md)
+  records the pinned `carlasim/carla:0.9.16` Docker runtime interface, preflight/smoke command,
+  local no-sudo Docker blocker, and boundary before true live replay semantics.
 
 ## DreamerV3 Notes
 

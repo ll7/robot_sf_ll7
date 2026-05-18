@@ -38,6 +38,15 @@ class OperatingDesignDomain:
 
 
 @dataclass(frozen=True, slots=True)
+class OddContractReference:
+    """Reference from a scenario contract to an ODD declaration."""
+
+    source: str
+    contract_id: str
+    required_for_benchmark_claim: bool
+
+
+@dataclass(frozen=True, slots=True)
 class CountRange:
     """Inclusive actor count range."""
 
@@ -132,6 +141,7 @@ class ScenarioContract:
     certification: ScenarioCertificationCompatibility
     benchmark_eligibility: BenchmarkEligibilityHooks
     provenance: ProvenanceContract
+    odd_contract_ref: OddContractReference | None = None
     extensions: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -142,6 +152,8 @@ class ScenarioContract:
         """
 
         payload = asdict(self)
+        if payload["odd_contract_ref"] is None:
+            payload.pop("odd_contract_ref")
         if not payload["extensions"]:
             payload.pop("extensions")
         return payload
@@ -239,6 +251,30 @@ def validate_scenario_contract_references(
     return errors
 
 
+def validate_scenario_odd_contract_reference(
+    contract: ScenarioContract,
+    *,
+    repo_root: Path = Path("."),
+) -> list[str]:
+    """Validate that a scenario contract's ODD reference resolves.
+
+    Returns:
+        List of reference errors. Contracts without an ODD reference return an empty list
+        so existing scenario contracts remain backward compatible.
+    """
+
+    if contract.odd_contract_ref is None:
+        return []
+
+    from robot_sf.benchmark.odd_contract import validate_odd_contract_references  # noqa: PLC0415
+
+    return validate_odd_contract_references(
+        source=contract.odd_contract_ref.source,
+        contract_id=contract.odd_contract_ref.contract_id,
+        repo_root=repo_root,
+    )
+
+
 def _contract_payloads(raw: Any, *, source: Path) -> list[Mapping[str, Any]]:
     """Normalize supported file shapes into a list of contract mappings.
 
@@ -304,6 +340,7 @@ def _contract_from_payload(payload: Mapping[str, Any]) -> ScenarioContract:
     certification = payload["certification"]
     benchmark_eligibility = payload["benchmark_eligibility"]
     provenance = payload["provenance"]
+    odd_contract_ref = payload.get("odd_contract_ref")
     return ScenarioContract(
         schema_version=str(payload["schema_version"]),
         id=str(payload["id"]),
@@ -365,6 +402,15 @@ def _contract_from_payload(payload: Mapping[str, Any]) -> ScenarioContract:
             authored_by=str(provenance["authored_by"]),
             source_files=list(provenance["source_files"]),
             notes=str(provenance["notes"]),
+        ),
+        odd_contract_ref=(
+            OddContractReference(
+                source=str(odd_contract_ref["source"]),
+                contract_id=str(odd_contract_ref["contract_id"]),
+                required_for_benchmark_claim=bool(odd_contract_ref["required_for_benchmark_claim"]),
+            )
+            if isinstance(odd_contract_ref, Mapping)
+            else None
         ),
         extensions=dict(payload.get("extensions", {})),
     )
@@ -433,6 +479,7 @@ __all__ = [
     "CountRange",
     "InvariantContract",
     "ObservableContract",
+    "OddContractReference",
     "OperatingDesignDomain",
     "ProvenanceContract",
     "ScenarioCertificationCompatibility",
@@ -444,4 +491,5 @@ __all__ = [
     "load_scenario_contracts",
     "scenario_contract_from_dict",
     "validate_scenario_contract_references",
+    "validate_scenario_odd_contract_reference",
 ]

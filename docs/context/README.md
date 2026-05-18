@@ -484,6 +484,8 @@ why a change was made rather than a full issue execution transcript.
   adds an explicit boolean to CARLA availability metadata and CLI JSON output.
 - [Issue #976 CARLA Availability Schema Version](issue_976_carla_availability_schema_version.md)
   adds a schema version to CARLA availability metadata for stable script consumption.
+- [Issue #1269 ODD Contract Schema](issue_1269_odd_contract_schema.md)
+  adds a versioned ODD metadata contract for benchmark and falsification evidence boundaries.
 - [Issue #978 CARLA Availability JSON Schema](issue_978_carla_availability_json_schema.md)
   adds a JSON Schema for validating CARLA availability metadata.
 - [Issue #980 CARLA Availability Schema CLI](issue_980_carla_availability_schema_cli.md)

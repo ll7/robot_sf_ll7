@@ -57,9 +57,59 @@ def _coerce_traj_with_heading(trajectory: Trajectory | np.ndarray) -> np.ndarray
     return traj
 
 
+def _coerce_traj_batch_with_heading(trajectory: Trajectory | np.ndarray) -> np.ndarray:
+    """Return trajectory data as a ``(batch, steps, 3)`` array."""
+    if isinstance(trajectory, Trajectory):
+        traj = trajectory.position_and_heading_nk3()
+    else:
+        traj = np.asarray(trajectory)
+
+    if traj.ndim == 1:
+        traj = traj.reshape(1, 1, -1)
+    elif traj.ndim == 2:
+        traj = traj.reshape(1, *traj.shape)
+    elif traj.ndim != 3:
+        raise ValueError("path metrics expect trajectory shape (T,D) or (B,T,D).")
+
+    if traj.shape[-1] == 2:
+        if traj.shape[1] < 2:
+            headings = np.zeros((traj.shape[0], traj.shape[1]), dtype=float)
+        else:
+            diffs = traj[:, 1:, :] - traj[:, :-1, :]
+            headings = np.arctan2(diffs[:, :, 1], diffs[:, :, 0])
+            headings = np.concatenate([headings, headings[:, -1:]], axis=1)
+        traj = np.concatenate([traj, headings[..., None]], axis=2)
+    if traj.shape[-1] != 3:
+        raise ValueError("path metrics expect XY or XY-heading trajectories.")
+    return traj
+
+
 def _coerce_traj_xy(trajectory: Trajectory | np.ndarray) -> np.ndarray:
     traj = _coerce_traj_with_heading(trajectory)
     return traj[:, :2]
+
+
+def _coerce_goal_xy_batch(
+    goal_config: SystemConfig | np.ndarray | None,
+    traj_batch: np.ndarray,
+) -> np.ndarray:
+    """Return goal XY rows compatible with ``traj_batch``."""
+    if goal_config is None:
+        return traj_batch[:, -1, :2]
+
+    if not isinstance(goal_config, Trajectory):
+        goal_arr = np.asarray(goal_config)
+        if goal_arr.ndim == 2 and goal_arr.shape[0] == traj_batch.shape[0]:
+            if goal_arr.shape[1] not in (2, 3):
+                raise ValueError("goal_config rows must contain XY or XY-heading values.")
+            return goal_arr[:, :2]
+
+    goal_batch = _coerce_traj_batch_with_heading(goal_config)[:, -1, :2]
+    if goal_batch.shape[0] == traj_batch.shape[0]:
+        return goal_batch
+    if goal_batch.shape[0] == 1:
+        return np.broadcast_to(goal_batch, (traj_batch.shape[0], 2))
+    raise ValueError("goal_config batch size must match trajectory batch size or contain one goal.")
 
 
 def asym_gauss(
@@ -111,15 +161,42 @@ def path_length(trajectory: Trajectory | np.ndarray) -> float:
     return distance
 
 
+def path_length_batch(trajectory: Trajectory | np.ndarray) -> np.ndarray:
+    """Return path length for each trajectory in a batch."""
+    traj_xy = _coerce_traj_batch_with_heading(trajectory)[:, :, :2]
+    distance_sq = np.sum(np.power(np.diff(traj_xy, axis=1), 2), axis=2)
+    return np.sum(np.sqrt(distance_sq), axis=1)
+
+
+def path_length_ratio_batch(
+    trajectory: Trajectory | np.ndarray,
+    goal_config: SystemConfig | np.ndarray | None = None,
+) -> np.ndarray:
+    """Return SocNavBench path length ratio for each trajectory in a batch."""
+    traj_batch = _coerce_traj_batch_with_heading(trajectory)
+    traj_xy = traj_batch[:, :, :2]
+    goal_xy = _coerce_goal_xy_batch(goal_config, traj_batch)
+
+    start_config = traj_xy[:, 0, :]
+    epsilon = 0.00001  # for numerical stability
+    distance = path_length_batch(traj_batch) + epsilon
+    displacement = np.linalg.norm(goal_xy - start_config, axis=1)
+    return displacement / distance
+
+
 def path_length_ratio(
-    trajectory: Trajectory | np.ndarray, goal_config: SystemConfig | np.ndarray | None = None
-) -> float:
+    trajectory: Trajectory | np.ndarray,
+    goal_config: SystemConfig | np.ndarray | None = None,
+    *,
+    return_batch: bool = False,
+) -> float | np.ndarray:
     """
     Returns displacement/distance -- displacement may be zero
     (Distance is an approximation based on the time resolution of stored trajectory)
     Higher should be better but also depends on your exact scenario
     """
-    # TODO: make this run in batch mode
+    if return_batch:
+        return path_length_ratio_batch(trajectory, goal_config)
 
     traj_xy = _coerce_traj_xy(trajectory)
 

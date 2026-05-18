@@ -485,6 +485,7 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #974 CARLA Availability Boolean Field](issue_974_carla_availability_boolean_field.md)
   adds an explicit boolean to CARLA availability metadata and CLI JSON output.
 - [Issue #976 CARLA Availability Schema Version](issue_976_carla_availability_schema_version.md)
+- [Issue #1270 Hazard Traceability Mapping](issue_1270_hazard_traceability.md)
   adds a schema version to CARLA availability metadata for stable script consumption.
 - [Issue #1269 ODD Contract Schema](issue_1269_odd_contract_schema.md)
   adds a versioned ODD metadata contract for benchmark and falsification evidence boundaries.

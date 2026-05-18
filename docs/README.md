@@ -156,6 +156,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Benchmarking & Metrics
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
+* **[Hazard Traceability](./hazard_traceability.md)** - `hazard_traceability.v1` schema, typed loader, fixture, and coverage summary for scenario-to-hazard evidence caveats
 * **[ODD Contracts](./odd_contracts.md)** - `odd_contract.v1` schema, typed loader, fixture, and boundary for benchmark and falsification evidence assumptions
 * **[Scenario Contracts](./scenario_contracts.md)** - `scenario_contract.v1` schema, typed loader, fixture, and boundary between authored intent, certification, and benchmark evidence
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
@@ -374,6 +375,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
 * [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
 * [**Scenario Specification Checklist**](./scenario_spec_checklist.md) - Authoring checklist for per-scenario/archetype/manifest files
+* [**Hazard Traceability**](./hazard_traceability.md) - Summarize intended hazard coverage for scenario IDs or families without treating traceability as safety proof
 * [**ODD Contracts**](./odd_contracts.md) - Validate operating-assumption metadata that bounds benchmark and falsification evidence without certifying safety
 * [**Scenario Contracts**](./scenario_contracts.md) - Validate authored scenario-intent contracts before certification or benchmark execution
 * [**Scenario Certification**](./scenario_certification.md) - Generate machine-readable validity, feasibility, stress-only, and hard-but-solvable certificates for scenario manifests

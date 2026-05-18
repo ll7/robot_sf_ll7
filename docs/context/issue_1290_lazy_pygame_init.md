@@ -27,7 +27,7 @@ is used.
   `debug=True` env creation.
 - Lazy-init regression tests:
   `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/test_lazy_pygame_init.py -q`
-  passed with `2 passed`.
+  passed with `5 passed`.
 - Adjacent rendering/recording tests:
   `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/test_pygame_headless.py tests/test_image_sensor.py tests/test_image_sensor_fusion.py tests/test_jsonl_recording.py tests/factories/test_recording_integration.py tests/factories/test_normalization.py tests/factories/test_incompatible_combinations.py -q`
   passed with `44 passed`.

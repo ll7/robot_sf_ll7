@@ -104,6 +104,8 @@ knowledge, not every transient iteration detail.
   [issue_1271_seed_sensitivity_explorer.md](issue_1271_seed_sensitivity_explorer.md)
 * Issue #1272 Safety-Oriented Validation And Falsification Strategy:
   [issue_1272_validation_falsification_strategy.md](issue_1272_validation_falsification_strategy.md)
+* Issue #1294 seed-sensitivity perturbations:
+  [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Artifact evidence vocabulary:
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:
@@ -431,6 +433,8 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #1236 Optimizer Adversarial Sampler](issue_1236_optimizer_adversarial_sampler.md) -
   Optuna-backed feedback sampler pilot, synthetic comparison helper, and non-paper-facing evidence
   boundary.
+* [Issue #1294 Seed-Sensitivity Perturbations](issue_1294_seed_sensitivity_perturbations.md) -
+  bounded timing/speed perturbation grids for adversarial seed-sensitivity replays.
 * [Issue #923 Multi-Ped Adversarial Candidate Schema](issue_923_multi_ped_adversarial_schema.md) -
   schema-only first slice under #870 for scripted multi-pedestrian adversarial candidates.
 * [Issue #936 Multi-Ped Adversarial Overrides](issue_936_multi_ped_adversarial_overrides.md)
@@ -467,8 +471,8 @@ why a change was made rather than a full issue execution transcript.
   exports one scenario-loader entry through `scenario_cert.v1` into a neutral CARLA T0 payload, 
   stacked on the issue #942 map-definition adapter.
 * [Issue #948 CARLA T0 Scenario File Export](issue_948_carla_t0_scenario_file_export.md)
-  batch-loads scenario manifests into ordered neutral export payload records, stacked on the issue
-  #946 scenario-entry helper.
+  batch-loads scenario manifests into ordered neutral export payload records, stacked on the
+  Issue #946 scenario-entry helper.
 * [Issue #950 CARLA T0 Export Record Writer](issue_950_carla_t0_export_record_writer.md)
   writes ordered neutral export records to deterministic JSON files plus a local manifest, stacked
   on the issue #948 scenario-file helper.
@@ -488,8 +492,8 @@ why a change was made rather than a full issue execution transcript.
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later, 
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
 * [Issue #962 CARLA T0 Manifest Payload Loader](issue_962_carla_t0_manifest_payload_loader.md)
-  loads and validates all payloads referenced by a local T0 export manifest, stacked on the issue
-  #960 path resolver.
+  loads and validates all payloads referenced by a local T0 export manifest, stacked on the
+  Issue #960 path resolver.
 * [Issue #964 CARLA T0 Batch Validation CLI](issue_964_carla_t0_batch_validation_cli.md)
   exposes the issue #962 manifest payload loader through a CARLA-free batch validation project
   script.

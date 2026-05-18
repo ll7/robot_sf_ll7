@@ -101,6 +101,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
   Safe-use boundary and 2026-05-15 decision to extract `ml-intern` workflow ideas into Robot SF's
   Codex-native proof-first practice instead of running the CLI smoke by default
 * **[Issue #1179 CARLA Docker Runtime](./context/issue_1179_carla_docker_runtime.md)** - Pinned `carlasim/carla:0.9.16` preflight/smoke command, local Docker-daemon blocker, and boundary before live replay semantics
+* **[Issue #1111 CARLA Setup-Only Smoke](./context/issue_1111_carla_setup_smoke.md)** - Ephemeral `carla==0.9.16` setup-only T1 smoke proof and boundary before Issue #1169 live replay
 * **[Issue #1237 Adversarial Failure Archive](./context/issue_1237_adversarial_failure_archive.md)** - Compact `adversarial_failure_archive.v1` manifests for deterministic adversarial failure grouping and replay pointers without copying raw bundles
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
 * **[PR First-Pass Review Audit](./context/pr_first_pass_review_audit_2026-05-14.md)** - Recent merged-PR review findings and the pre-opening self-review checklist for reducing repeated reviewer fixes

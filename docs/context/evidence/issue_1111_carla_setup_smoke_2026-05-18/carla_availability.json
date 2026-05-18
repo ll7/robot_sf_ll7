@@ -1,0 +1,1 @@
+{"available": true, "dependency": "carla", "reason": "CARLA Python API package is importable", "schema_version": "carla-availability.v1", "status": "available"}

@@ -1,0 +1,9 @@
+{
+  "exports": [
+    {
+      "path": "pr_promoted_planner_smoke.json",
+      "scenario_id": "pr_promoted_planner_smoke"
+    }
+  ],
+  "schema_version": "carla-replay-export-manifest.v1"
+}

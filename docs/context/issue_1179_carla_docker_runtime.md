@@ -56,6 +56,7 @@ rtk uv run pytest tests/carla_bridge/test_runtime.py tests/carla_bridge/test_t1_
 ```
 
 Result: `14 passed`.
+Post-review rerun after Docker runtime robustness fixes: `18 passed`.
 
 Broader CARLA bridge regression suite:
 
@@ -64,6 +65,7 @@ rtk uv run pytest tests/carla_bridge -q
 ```
 
 Result: `71 passed`.
+Post-review rerun after Docker runtime robustness fixes: `75 passed`.
 
 Post-merge PR readiness gate:
 
@@ -73,6 +75,8 @@ rtk bash -lc 'PYTEST_NUM_WORKERS=8 BASE_REF=origin/main scripts/dev/pr_ready_che
 
 Result: Ruff passed, the full pytest suite reported `3702 passed, 10 skipped`, and the touched
 definition TODO ratchet passed.
+Post-review rerun after Docker runtime robustness fixes: `3706 passed, 10 skipped`, with the
+touched-definition TODO ratchet still passing.
 
 Docs proof consistency:
 

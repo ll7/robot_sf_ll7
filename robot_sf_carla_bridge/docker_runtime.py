@@ -49,19 +49,34 @@ def run_command(command: list[str], *, timeout_s: float = 30.0) -> CommandResult
         Captured command result with args, return code, stdout, and stderr.
     """
 
-    completed = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=timeout_s,
-    )
-    return CommandResult(
-        args=list(command),
-        returncode=completed.returncode,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+        return CommandResult(
+            args=list(command),
+            returncode=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
+    except FileNotFoundError:
+        return CommandResult(
+            args=list(command),
+            returncode=127,
+            stdout="",
+            stderr=f"Command not found: {command[0]}",
+        )
+    except subprocess.TimeoutExpired:
+        return CommandResult(
+            args=list(command),
+            returncode=124,
+            stdout="",
+            stderr=f"Command timed out after {timeout_s}s",
+        )
 
 
 def validate_carla_image(image: str) -> str:
@@ -95,7 +110,7 @@ def build_carla_server_container_command(
         "--name",
         container_name,
     ]
-    for port in CARLA_PORTS:
+    for port in (rpc_port, rpc_port + 1, rpc_port + 2):
         command.extend(["-p", f"{port}:{port}"])
     command.extend(
         [
@@ -111,7 +126,7 @@ def build_carla_server_container_command(
 def check_carla_runtime_ports(
     ports: tuple[int, ...] = CARLA_PORTS,
     *,
-    host: str = CARLA_DEFAULT_HOST,
+    host: str = "",
 ) -> list[int]:
     """Return CARLA host ports that cannot be bound before container startup."""
 
@@ -365,7 +380,7 @@ def run_carla_docker_runtime_smoke(
                 summary["status"] = "connected"
                 summary["reason"] = "Python client connected to the pinned CARLA Docker server"
                 return summary
-            except (AttributeError, OSError, RuntimeError, TimeoutError) as exc:
+            except Exception as exc:  # noqa: BLE001 - CARLA client may raise custom API errors.
                 last_error = exc
                 if time.monotonic() >= deadline:
                     summary["status"] = "failed"

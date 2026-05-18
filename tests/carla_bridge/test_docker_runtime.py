@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -36,6 +37,72 @@ def test_build_carla_server_container_command_maps_ports_and_runs_headless() -> 
     assert "carlasim/carla:0.9.16" in command
     assert "-RenderOffScreen" in " ".join(command)
     assert "-carla-rpc-port=2000" in " ".join(command)
+
+
+def test_build_carla_server_container_command_derives_ports_from_rpc_port() -> None:
+    """Custom RPC ports should keep Docker mappings and CARLA startup args aligned."""
+    from robot_sf_carla_bridge.docker_runtime import build_carla_server_container_command
+
+    command = build_carla_server_container_command(rpc_port=2100)
+
+    assert "2100:2100" in command
+    assert "2101:2101" in command
+    assert "2102:2102" in command
+    assert "2000:2000" not in command
+    assert "-carla-rpc-port=2100" in " ".join(command)
+
+
+def test_run_command_reports_missing_executable_without_traceback() -> None:
+    """Host prerequisite probes should fail closed when a binary is absent."""
+    from robot_sf_carla_bridge.docker_runtime import run_command
+
+    result = run_command(["robot-sf-missing-cmd-for-test"], timeout_s=0.1)
+
+    assert result.returncode == 127
+    assert result.stdout == ""
+    assert result.stderr == "Command not found: robot-sf-missing-cmd-for-test"
+
+
+def test_run_command_reports_timeout_without_traceback(monkeypatch) -> None:
+    """Hung host commands should become machine-readable command results."""
+    from robot_sf_carla_bridge import docker_runtime
+    from robot_sf_carla_bridge.docker_runtime import run_command
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=["docker", "version"], timeout=3.5)
+
+    monkeypatch.setattr(docker_runtime.subprocess, "run", fake_run)
+
+    result = run_command(["docker", "version"], timeout_s=3.5)
+
+    assert result.returncode == 124
+    assert result.stdout == ""
+    assert result.stderr == "Command timed out after 3.5s"
+
+
+def test_check_carla_runtime_ports_defaults_to_all_interfaces(monkeypatch) -> None:
+    """The preflight check should match Docker's all-interface port binding behavior."""
+    from robot_sf_carla_bridge import docker_runtime
+
+    bind_calls: list[tuple[str, int]] = []
+
+    class FakeSocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def setsockopt(self, *args) -> None:
+            return None
+
+        def bind(self, address: tuple[str, int]) -> None:
+            bind_calls.append(address)
+
+    monkeypatch.setattr(docker_runtime.socket, "socket", lambda *args, **kwargs: FakeSocket())
+
+    assert docker_runtime.check_carla_runtime_ports((2000,)) == []
+    assert bind_calls == [("", 2000)]
 
 
 def test_preflight_reports_not_available_when_docker_daemon_is_unreachable() -> None:

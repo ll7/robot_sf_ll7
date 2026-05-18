@@ -105,7 +105,7 @@ def run_seed_sensitivity(
     environment setup may reset process-global RNG state for each seed.
     """
     config.validate()
-    replay_seeds = tuple(int(seed) for seed in seeds)
+    replay_seeds = tuple(_coerce_replay_seed(seed) for seed in seeds)
     if not replay_seeds:
         raise ValueError("seeds must contain at least one replay seed")
     if not 0.0 <= min_persistence_rate <= 1.0:
@@ -181,6 +181,21 @@ def run_seed_sensitivity(
     )
     write_json(summary.summary_path, summary.to_json())
     return summary
+
+
+def _coerce_replay_seed(seed: Any) -> int:
+    """Return a replay seed without silently truncating non-integer values."""
+    if isinstance(seed, bool):
+        raise ValueError(f"seed values must be integers, got {seed!r}")
+    if isinstance(seed, int):
+        return seed
+    if isinstance(seed, float) and seed.is_integer():
+        return int(seed)
+    if isinstance(seed, str):
+        stripped = seed.strip()
+        if stripped and stripped.lstrip("+-").isdigit():
+            return int(stripped)
+    raise ValueError(f"seed values must be integers, got {seed!r}")
 
 
 def _default_certifier(

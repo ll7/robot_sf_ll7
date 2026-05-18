@@ -116,7 +116,7 @@ knowledge, not every transient iteration detail.
   [issue_1289_snqi_method_alias_retirement.md](issue_1289_snqi_method_alias_retirement.md)
 * Issue #1288 JSONL append optimization:
   [issue_1288_jsonl_orjson_append.md](issue_1288_jsonl_orjson_append.md)
-* Issue #1111 CARLA setup-only smoke:
+* Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
@@ -137,7 +137,7 @@ knowledge, not every transient iteration detail.
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
   [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),
-  [issue 1111 CARLA setup-only smoke evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
+  [Issue #1111 CARLA Setup-Only Smoke Evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 

@@ -151,11 +151,26 @@ def run_seed_sensitivity(
             )
             continue
 
-        evaluation = evaluator(config, replay_candidate, scenario_yaml_path, replay_dir)
-        evaluation = replace(evaluation, certification_status=certification_status)
-        score = objective(evaluation)
-        evaluation = evaluation.with_objective(score)
-        replays.append(_replay_from_evaluation(evaluation, started_at=replay_started_at))
+        try:
+            evaluation = evaluator(config, replay_candidate, scenario_yaml_path, replay_dir)
+            evaluation = replace(evaluation, certification_status=certification_status)
+            score = objective(evaluation)
+            evaluation = evaluation.with_objective(score)
+            replays.append(_replay_from_evaluation(evaluation, started_at=replay_started_at))
+        except Exception as exc:  # noqa: BLE001 - replay grids must fail closed per seed.
+            replays.append(
+                SeedSensitivityReplay(
+                    seed=seed,
+                    status="evaluation_failed",
+                    outcome="fail_closed_exclusion",
+                    reason=repr(exc),
+                    objective_value=None,
+                    bundle_path=replay_dir,
+                    episode_record_path=replay_dir / "episode_records.jsonl",
+                    trajectory_csv_path=None,
+                    started_at=replay_started_at,
+                )
+            )
 
     summary = _summarize(
         candidate=candidate,

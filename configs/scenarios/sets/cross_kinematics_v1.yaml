@@ -1,0 +1,12 @@
+# Compact scenario surface for issue #1274 general cross-kinematics parity checks.
+#
+# Keep this surface intentionally small: one low-density classic scenario with one fixed seed in
+# the benchmark config is enough to prove planner/kinematics grouping and compatibility reporting
+# without turning the profile into a leaderboard.
+
+includes:
+  - ../archetypes/classic_cross_trap.yaml
+select_scenarios:
+  - classic_cross_trap_low
+map_search_paths:
+  - ../../../maps/svg_maps

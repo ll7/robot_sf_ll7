@@ -108,6 +108,8 @@ knowledge, not every transient iteration detail.
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:
   [pr_first_pass_review_audit_2026-05-14.md](pr_first_pass_review_audit_2026-05-14.md)
+* Issue #1288 JSONL append optimization:
+  [issue_1288_jsonl_orjson_append.md](issue_1288_jsonl_orjson_append.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 

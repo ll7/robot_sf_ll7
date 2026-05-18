@@ -39,5 +39,7 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   artifacts, analyzer output, and fixed-vs-scenario comparison for issue #1023.
 - `issue_1045_h500_solvability_mechanisms_2026-05-07/`: aggregate mechanism classification for
   h500 fixed-timeout relief, including explicit trace-required boundaries for wait-then-go claims.
+- `issue_1111_carla_setup_smoke_2026-05-18/`: compact setup-only CARLA T1 oracle smoke evidence
+  proving the optional Python API and T0 payload-selection boundary without live replay claims.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and
   reports from the May 4 run.

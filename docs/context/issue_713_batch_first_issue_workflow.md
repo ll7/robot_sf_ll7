@@ -1,17 +1,29 @@
 # Issue #713 Batch-First GitHub Workflow
 
 This note defines the repository-local workflow for batching GitHub issue and Project #5 updates
-without wasting GitHub API quota.
+without wasting GitHub API quota. It is the canonical instruction surface for GitHub API efficiency
+in agentic workflows.
 
 ## Rule
 
+- Prefer REST-backed reads and writes for ordinary GitHub objects: issues, labels, PRs, branches,
+  commits, workflow runs, and repository metadata.
+- Reserve GraphQL for GitHub Projects v2, review-thread operations, and genuinely cheaper nested
+  bulk reads.
 - Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project inspection when
-  available.
+  available. MCP means Model Context Protocol. Interactive inspection means ad-hoc review or triage
+  work such as opening a PR, checking review context, commenting, or linking issues; batch scripts,
+  CI updates, and read-only analytics should prefer REST or local `git` when those are cheaper.
+  Switch to REST when GraphQL quota is low or when MCP abstracts a simple REST operation through a
+  costly GraphQL path.
+- Prefer local `git` for repository state that is already available locally: current branch,
+  changed files, commit hashes, merge bases, and diffs.
 - Do issue cleanup first: body rewrites, labels, comments, and title fixes.
 - Do Project #5 routing second: status, priority, duration, and review metadata.
 - Do derived score sync last: run the score helper once after the batch, not after each issue.
-- Cache the project ID and field IDs once per shell session and reuse them for all edits in that batch.
-- Keep `gh` as the deterministic fallback for scripted project writes, score sync, and
+- Cache Project #5 IDs once per shell session, and prefer a local cache file for long-running or
+  multi-agent work.
+- Keep `gh` as the deterministic fallback for scripted project writes, score sync, REST reads, and
   auth/debugging.
 
 ## Recommended Sequence
@@ -26,22 +38,86 @@ without wasting GitHub API quota.
 4. Apply Project #5 updates in a separate pass.
 5. Run `scripts/tools/project_priority_score.py sync` once at the end.
 
+## API Selection
+
+Use the cheapest source of truth for the question:
+
+| Need | Preferred source | Notes |
+| --- | --- | --- |
+| Working tree, branch, changed files, merge base, commits | local `git` | Do not ask GitHub for state already present locally. |
+| Interactive issue, PR, and project inspection | GitHub MCP / GitHub app tools | Prefer this for ad-hoc triage, review context, commenting, and linking when authorized. Fall back to REST, local `git`, or narrow GraphQL when MCP/app tools are unavailable or would hide a costly GraphQL path. |
+| Issue body, labels, comments, assignees, open/closed state | REST via `gh api repos/ll7/robot_sf_ll7/issues/...` | Avoid `gh issue view/list` if GraphQL quota is low because those commands may use GraphQL. |
+| PR metadata, branch refs, commits, workflow runs | REST via `gh api` | Poll sparingly; use event/check URLs from known PRs when available. |
+| Project #5 item status, priority, duration, reviewed date | GraphQL / `gh project item-*` | Projects v2 is GraphQL-only; batch and cache aggressively. |
+| Review-thread resolution or nested review data | GraphQL | Keep queries narrow and use known node IDs. |
+
+Do not use a broad GraphQL query for ordinary issue or PR cleanup when a REST endpoint or local
+Git command can answer the same question.
+
+## Project #5 Cache
+
+For repeated Project #5 work, create a local, git-ignored cache at `.github/cache/project5.json`
+using `docs/templates/github.project5-cache.example.json` as the shape. The cache may store:
+
+- project ID,
+- item IDs for issues touched in the current batch,
+- field IDs,
+- single-select option IDs,
+- the timestamp/source command used to refresh the cache.
+
+Rules:
+
+- Treat cache values as hints, not permanent truth. Refresh before destructive or broad writes, or
+  when a mutation fails because an ID is stale.
+- Do not commit `.github/cache/` files; they are local state and may expose workflow assumptions.
+- In a single-agent batch, resolving IDs once per shell session is enough.
+- In multi-agent or long-running work, use the local cache to avoid each agent rediscovering the
+  same project, field, and option IDs.
+
 ## Why This Matters
 
 - It keeps issue cleanup and derived metadata from being mixed together.
 - It reduces repeated `gh project item-list` and `gh project field-list` calls.
 - It lowers the chance that GraphQL quota exhaustion interrupts the middle of a batch.
+- It prevents non-project operations from burning the Projects v2 GraphQL budget.
+- It makes failed project writes easier to resume because the batch has known item and field IDs.
 
 ## Operational Notes
 
-- If GraphQL quota is low, stop project writes and keep working on issue text first.
+- Check `gh api rate_limit` before a large GitHub batch and whenever GitHub calls start failing.
+  Pay attention to both `resources.core.remaining` and `resources.graphql.remaining`.
+- If GraphQL quota is low, stop Project #5 writes and keep working on issue text through REST.
+- If REST core quota is low, stop nonessential GitHub reads and use local repository state.
+- If `Retry-After` or reset headers indicate throttling, do not spin in a retry loop; leave a
+  handoff with the pending mutation and reset time.
 - MCP-first does not mean MCP-only: issue cleanup can use MCP, while score sync and some batch
   project writes may still be best done through `gh`.
 - Use `scripts/dev/gh_comment.sh` for multiline comments instead of ad hoc `gh` heredocs.
 - Keep the batch small enough that a retry does not make the project state ambiguous.
+- Project #5 mutations should happen only on meaningful state transitions, such as `Tracked`,
+  `Ready`, `In progress`, `Hold`, and `Done`; do not model transient agent phases as project
+  statuses.
+- When a Project #5 write is blocked by GraphQL exhaustion, finish the REST issue/body/label work,
+  report the exact pending project mutation, and resume the project write after reset.
+
+## Multi-Agent Coordination
+
+Avoid running several agents that independently poll GitHub with the same token. For broad issue or
+PR work:
+
+- appoint one main agent as the GitHub writer,
+- let side agents use local repository state or already-fetched issue bodies where possible,
+- deduplicate issue/PR/project reads before dispatching parallel work,
+- batch project writes through one process,
+- separate background IDE or automation tokens from the token used for Codex work when possible.
+
+For larger automation, prefer a GitHub App or brokered local queue over several PAT-backed agents
+sharing one rate-limit bucket. The broker should cache reads, throttle writes, prioritize project
+mutations, and degrade to local/REST-only mode when GraphQL quota is low.
 
 ## Diagnostic Boundary
 
 - This workflow is about GitHub issue/project hygiene.
 - It does not change Project #5 semantics or score math.
-- It is guidance for batching and ordering, not a new automation service.
+- It is guidance for batching, API selection, caching, and rate-limit behavior; it does not require
+  a new automation service before ordinary issue work can proceed.

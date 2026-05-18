@@ -43,6 +43,16 @@ Execution rules:
 
 When working in a linked Git worktree, detect bootstrap state before running expensive commands.
 
+- For manually created worktrees, prefer a sibling container next to the main checkout instead of a
+  directory inside the repository. Use `<repo-name>.worktrees/<branch-or-issue-slug>`; for this
+  checkout, that means paths like
+  `../robot_sf_ll7.worktrees/issue-123-short-description`.
+- Honor an explicit user or native-tool worktree location first. If no preference is given, prefer
+  an existing sibling `../robot_sf_ll7.worktrees/` container, then an existing project-local
+  `.worktrees/` or `worktrees/` container only when it is already established and ignored. Default
+  new manual worktree containers to the sibling `../robot_sf_ll7.worktrees/` path.
+- Name branch/worktree directories with the issue number and a short feature slug when possible,
+  for example `issue-123-short-description`.
 - Treat the checkout as a linked worktree when `.git` is a file pointing into `.git/worktrees/...`,
   or when `git rev-parse --git-common-dir` resolves to a different path than
   `git rev-parse --git-dir`.
@@ -223,10 +233,17 @@ Do not treat plans as throwaway scratch text when they influence benchmark seman
 
 When working issue batches or Project #5 updates:
 
+- use REST (`gh api repos/...`) for ordinary issue/PR/label/comment operations when GraphQL quota
+  is low or when the operation does not need Projects v2,
+- use local `git` for branch, diff, merge-base, and commit state instead of asking GitHub,
 - clean up issue text and labels first,
 - route Project #5 metadata in a separate pass,
 - run derived score sync once at the end of the batch,
-- cache project and field IDs once per shell session.
+- cache project and field IDs once per shell session or in the local gitignored
+  `.github/cache/project5.json` cache for long-running/multi-agent work,
+- reserve GraphQL for Projects v2, review threads, and nested reads that are genuinely cheaper,
+- check `gh api rate_limit` before large batches and degrade to REST/local state when GraphQL
+  remaining is low.
 
 Canonical note:
 

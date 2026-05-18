@@ -1,0 +1,155 @@
+{
+  "metrics": {
+    "trajectory_fields": [
+      "success",
+      "collision",
+      "min_distance",
+      "ttc",
+      "comfort",
+      "jerk",
+      "curvature",
+      "intervention_rate"
+    ]
+  },
+  "mode": "neutral-export",
+  "pedestrians": [],
+  "provenance": {
+    "certificate_generator": "scenario_cert.v1",
+    "created_by": "goal-issue-implementation",
+    "robot_sf_commit": "10c64e93"
+  },
+  "robot": {
+    "footprint": {
+      "radius_m": 1.0
+    },
+    "goal": {
+      "x": 17.5,
+      "y": 5.0
+    },
+    "kinematics": {
+      "max_angular_speed_radps": 1.0,
+      "max_speed_mps": 2.0,
+      "model": "differential_drive"
+    },
+    "start": {
+      "x": 2.5,
+      "y": 5.0
+    }
+  },
+  "scenario": {
+    "certificate": {
+      "schema_version": "scenario_cert.v1",
+      "source": "configs/scenarios/single/pr_promoted_planner_smoke.yaml",
+      "status": "valid"
+    },
+    "id": "pr_promoted_planner_smoke",
+    "map_id": "planner_sanity_open",
+    "source_config": "configs/scenarios/single/pr_promoted_planner_smoke.yaml"
+  },
+  "schema_version": "carla-replay-export.v1",
+  "simulation": {
+    "dt_s": 0.1,
+    "horizon_s": 30.0,
+    "termination": [
+      "success",
+      "collision",
+      "timeout"
+    ]
+  },
+  "static_geometry": {
+    "map_bounds": {
+      "height_m": 10.0,
+      "width_m": 20.0
+    },
+    "obstacles": [
+      {
+        "id": "obstacle_0_0",
+        "type": "polygon",
+        "vertices": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            0.5,
+            0.0
+          ],
+          [
+            0.5,
+            10.0
+          ],
+          [
+            0.0,
+            10.0
+          ]
+        ]
+      },
+      {
+        "id": "obstacle_1_0",
+        "type": "polygon",
+        "vertices": [
+          [
+            19.5,
+            0.0
+          ],
+          [
+            20.0,
+            0.0
+          ],
+          [
+            20.0,
+            10.0
+          ],
+          [
+            19.5,
+            10.0
+          ]
+        ]
+      },
+      {
+        "id": "obstacle_2_0",
+        "type": "polygon",
+        "vertices": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            20.0,
+            0.0
+          ],
+          [
+            20.0,
+            0.5
+          ],
+          [
+            0.0,
+            0.5
+          ]
+        ]
+      },
+      {
+        "id": "obstacle_3_0",
+        "type": "polygon",
+        "vertices": [
+          [
+            0.0,
+            9.5
+          ],
+          [
+            20.0,
+            9.5
+          ],
+          [
+            20.0,
+            10.0
+          ],
+          [
+            0.0,
+            10.0
+          ]
+        ]
+      }
+    ]
+  }
+}

@@ -65,7 +65,8 @@ Do not present `proposal` issues as bugs or benchmark regressions.
      small directory. The main agent owns issue creation and final judgment.
 
 3. De-duplicate before writing
-   - Search open and closed issues with `gh issue list` and `gh issue search` when available.
+   - Search open and closed issues with REST-backed `gh api` calls when GraphQL quota is low; use
+     `gh issue list` and `gh issue search` only when available and affordable.
    - If a related issue exists, update or comment on that issue instead of creating a duplicate.
    - If the existing issue is too broad, create a child/follow-up issue and link both directions.
 
@@ -78,7 +79,9 @@ Do not present `proposal` issues as bugs or benchmark regressions.
 
 5. Batch project metadata
    - Follow `docs/context/issue_713_batch_first_issue_workflow.md`.
-   - Cache Project #5 IDs once per shell session.
+   - Cache Project #5 IDs once per shell session or in the local Project #5 cache for
+     longer runs.
+   - Use REST/local `git` for non-project state; reserve GraphQL budget for Project #5 writes.
    - Set status and priority conservatively, then run score sync once if score inputs changed.
 
 6. Stop and hand off

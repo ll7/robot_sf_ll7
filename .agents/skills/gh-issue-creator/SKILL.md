@@ -13,6 +13,7 @@ into a repo-ready issue body with the right template, labels, and project metada
 Prefer GitHub MCP / GitHub app tools for interactive issue/project inspection when available.
 Keep the `gh` commands below as the deterministic fallback for issue creation and batched Project
 `#5` routing.
+Use REST-backed issue operations and reserve GraphQL for Project #5 routing.
 
 ## Read First
 
@@ -69,7 +70,8 @@ assumption you made.
    - Avoid inventing new project taxonomy in the issue body.
 
 4. Add project metadata
-   - Resolve the project and field IDs first:
+   - Resolve the project and field IDs first, or reuse the local Project #5 cache
+     values if they were refreshed for the current batch:
      - `gh project view 5 --owner ll7 --format json`
      - `gh project field-list 5 --owner ll7 --format json`
      - `gh project item-list 5 --owner ll7 --limit 200 --format json`
@@ -86,6 +88,8 @@ assumption you made.
    - Use the current Project #5 schema; do not invent missing fields.
    - When creating many issues, batch the project writes after the issue cleanup pass and run
      score sync once at the end rather than after each issue.
+   - If GraphQL quota is exhausted, keep the issue created and report the pending Project #5
+     add/update with enough IDs to resume after reset.
 
 5. Finalize the issue
    - Link dependencies or follow-ups only when they are concrete.

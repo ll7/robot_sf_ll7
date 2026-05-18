@@ -59,6 +59,10 @@ readiness blockers are exhausted.
 
 1. Gather issue state
    - Inspect open issues and Project #5 items.
+   - Prefer REST issue reads (`gh api repos/ll7/robot_sf_ll7/issues/...`) when GraphQL quota is
+     low; reserve GraphQL/`gh project` calls for Project #5 state.
+   - Cache Project #5 IDs once per session or use the local Project #5 cache
+     described in `docs/context/issue_713_batch_first_issue_workflow.md`.
    - Check for `decision-required` issues first. If none exist, build a priority-ordered open-issue
      queue and audit it for refinement opportunities instead of stopping.
    - Run or use `scripts/tools/issue_template_audit.py` where issue body readiness is unclear.
@@ -81,6 +85,8 @@ readiness blockers are exhausted.
    - Do issue text, label, and comment cleanup first.
    - Do Project #5 field routing second.
    - Run derived score sync once at the end of a batch if score inputs changed.
+   - If GraphQL is exhausted, finish REST issue cleanup and report the exact pending Project #5
+     mutation instead of retry-looping.
 
 5. Continue or hand off
    - Continue with the next readiness blocker.

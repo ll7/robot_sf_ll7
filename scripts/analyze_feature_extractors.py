@@ -49,13 +49,13 @@ class FeatureExtractorAnalyzer:
         self.analysis_dir.mkdir(exist_ok=True)
 
     def _load_from_summary(self, payload: dict) -> tuple[dict, dict]:
-        """TODO docstring. Document this function.
+        """Convert a compact multi-extractor summary payload into analyzer fields.
 
         Args:
-            payload: TODO docstring.
+            payload: Parsed summary JSON containing `extractor_results`.
 
         Returns:
-            TODO docstring.
+            Pair of normalized extractor result mapping and run metadata mapping.
         """
         records = payload.get("extractor_results", [])
         results: dict[str, dict] = {}
@@ -219,7 +219,7 @@ class FeatureExtractorAnalyzer:
 
     # ---- Visualization helpers (kept small for C901 compliance) ----
     def _set_plot_style(self) -> None:
-        """TODO docstring. Document this function."""
+        """Apply a preferred Matplotlib style with a default-style fallback."""
         preferred_styles = ["seaborn-v0_8", "seaborn"]
         for style in preferred_styles:
             if style in plt.style.available:
@@ -231,13 +231,13 @@ class FeatureExtractorAnalyzer:
             warnings.warn(f"Could not apply matplotlib style: {exc}", stacklevel=2)
 
     def _plot_reward_bar(self, df: pd.DataFrame) -> str | None:
-        """TODO docstring. Document this function.
+        """Create the best-reward bar chart when reward data is available.
 
         Args:
-            df: TODO docstring.
+            df: Summary DataFrame from `create_summary_dataframe`.
 
         Returns:
-            TODO docstring.
+            Saved plot path, or `None` when the required reward column is absent.
         """
         if "best_reward" not in df.columns or not df["best_reward"].notna().any():
             return None
@@ -271,13 +271,13 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_parameter_efficiency(self, df: pd.DataFrame) -> str | None:
-        """TODO docstring. Document this function.
+        """Plot reward against parameter count for completed extractors.
 
         Args:
-            df: TODO docstring.
+            df: Summary DataFrame with parameter and reward columns.
 
         Returns:
-            TODO docstring.
+            Saved plot path, or `None` when required columns are unavailable.
         """
         if not all(col in df.columns for col in ["total_parameters", "best_reward"]):
             return None
@@ -310,13 +310,13 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_training_time(self, df: pd.DataFrame) -> str | None:
-        """TODO docstring. Document this function.
+        """Create a bar chart comparing extractor training times.
 
         Args:
-            df: TODO docstring.
+            df: Summary DataFrame with `training_time` values in seconds.
 
         Returns:
-            TODO docstring.
+            Saved plot path, or `None` when no training-time data is present.
         """
         if "training_time" not in df.columns or not df["training_time"].notna().any():
             return None
@@ -350,13 +350,13 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_multi_metric_radar(self, df: pd.DataFrame) -> str | None:
-        """TODO docstring. Document this function.
+        """Create a normalized radar chart across available extractor metrics.
 
         Args:
-            df: TODO docstring.
+            df: Summary DataFrame containing reward, speed, and optional parameter data.
 
         Returns:
-            TODO docstring.
+            Saved plot path, or `None` when the radar chart cannot be produced.
         """
         if len(df) <= 1:
             return None
@@ -436,11 +436,10 @@ class FeatureExtractorAnalyzer:
 
     # ---- Report helper methods ----
     def _build_report_header(self) -> list[str]:
-        """TODO docstring. Document this function.
-
+        """Build the static report title and training-configuration section.
 
         Returns:
-            TODO docstring.
+            Markdown lines for the beginning of the analysis report.
         """
         return [
             "# Feature Extractor Comparison Analysis Report",
@@ -457,13 +456,13 @@ class FeatureExtractorAnalyzer:
         ]
 
     def _build_rankings_section(self, analysis: dict) -> list[str]:
-        """TODO docstring. Document this function.
+        """Build Markdown ranking sections from computed analysis results.
 
         Args:
-            analysis: TODO docstring.
+            analysis: Dictionary returned by `analyze_performance`.
 
         Returns:
-            TODO docstring.
+            Markdown lines describing reward, parameter, and speed rankings.
         """
         lines: list[str] = ["### Performance Rankings", ""]
         rankings = analysis.get("rankings", {})
@@ -494,13 +493,13 @@ class FeatureExtractorAnalyzer:
         return lines
 
     def _build_detailed_results_table(self, df: pd.DataFrame) -> list[str]:
-        """TODO docstring. Document this function.
+        """Build the per-extractor Markdown results table.
 
         Args:
-            df: TODO docstring.
+            df: Summary DataFrame for completed extractor runs.
 
         Returns:
-            TODO docstring.
+            Markdown table lines with reward, parameter, and timing columns.
         """
         lines: list[str] = [
             "### Detailed Results",
@@ -522,13 +521,13 @@ class FeatureExtractorAnalyzer:
         return lines
 
     def _build_insights_section(self, df: pd.DataFrame) -> list[str]:
-        """TODO docstring. Document this function.
+        """Build brief Markdown insight bullets from the summary DataFrame.
 
         Args:
-            df: TODO docstring.
+            df: Summary DataFrame for completed extractor runs.
 
         Returns:
-            TODO docstring.
+            Markdown lines identifying best, smallest, and fastest extractors when available.
         """
         lines: list[str] = ["", "## Key Insights", ""]
         if df.empty or "best_reward" not in df.columns:

@@ -1,0 +1,51 @@
+{
+  "schema_version": "human-model-transfer-smoke-evidence.v1",
+  "campaign_id": "issue1239-human-model-transfer-smoke",
+  "benchmark_success": false,
+  "planner_rows": [
+    {
+      "planner_key": "native_social_force_default",
+      "algo": "social_force",
+      "human_model_variant": "default_social_force",
+      "human_model_source": "robot_sf_native",
+      "status": "ok",
+      "episodes": 1,
+      "availability_status": "available",
+      "benchmark_success": "true",
+      "most_likely_failure_reason": ""
+    },
+    {
+      "planner_key": "upstream_hsfm_new_guo_proxy",
+      "algo": "social_navigation_pyenvs_hsfm_new_guo",
+      "human_model_variant": "upstream_hsfm_new_guo",
+      "human_model_source": "social_navigation_pyenvs_adapter",
+      "status": "failed",
+      "episodes": 0,
+      "availability_status": "failed",
+      "benchmark_success": "false",
+      "most_likely_failure_reason": "Social-Navigation-PyEnvs checkout not found; upstream checkout missing locally."
+    },
+    {
+      "planner_key": "upstream_sfm_helbing_proxy",
+      "algo": "social_navigation_pyenvs_sfm_helbing",
+      "human_model_variant": "upstream_sfm_helbing",
+      "human_model_source": "social_navigation_pyenvs_adapter",
+      "status": "failed",
+      "episodes": 0,
+      "availability_status": "failed",
+      "benchmark_success": "false",
+      "most_likely_failure_reason": "Social-Navigation-PyEnvs checkout not found; upstream checkout missing locally."
+    },
+    {
+      "planner_key": "upstream_socialforce_proxy",
+      "algo": "social_navigation_pyenvs_socialforce",
+      "human_model_variant": "upstream_socialforce",
+      "human_model_source": "social_navigation_pyenvs_adapter",
+      "status": "failed",
+      "episodes": 0,
+      "availability_status": "failed",
+      "benchmark_success": "false",
+      "most_likely_failure_reason": "Social-Navigation-PyEnvs checkout not found; upstream checkout missing locally."
+    }
+  ]
+}

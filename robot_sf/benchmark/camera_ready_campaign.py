@@ -154,6 +154,8 @@ class PlannerSpec:
 
     key: str
     algo: str
+    human_model_variant: str | None = None
+    human_model_source: str | None = None
     benchmark_profile: str = "baseline-safe"
     algo_config_path: Path | None = None
     socnav_missing_prereq_policy: str = "fail-fast"
@@ -1212,6 +1214,14 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
             PlannerSpec(
                 key=key,
                 algo=algo,
+                human_model_variant=_normalize_observation_mode(
+                    entry.get("human_model_variant"),
+                    label="Planner entry 'human_model_variant'",
+                ),
+                human_model_source=_normalize_observation_mode(
+                    entry.get("human_model_source"),
+                    label="Planner entry 'human_model_source'",
+                ),
                 benchmark_profile=str(entry.get("benchmark_profile", "baseline-safe")),
                 algo_config_path=_resolve_path(
                     entry.get("algo_config"), base_dir=config_path.parent
@@ -1480,6 +1490,8 @@ def _build_matrix_summary_rows(
                     "scenario_count": len(scenarios),
                     "planner_key": planner.key,
                     "algo": planner.algo,
+                    "human_model_variant": planner.human_model_variant,
+                    "human_model_source": planner.human_model_source,
                     "planner_group": planner.planner_group,
                     "benchmark_profile": planner.benchmark_profile,
                     "observation_mode": active_observation_mode,
@@ -2433,6 +2445,8 @@ def prepare_campaign_preflight(
             {
                 "key": planner.key,
                 "algo": planner.algo,
+                "human_model_variant": planner.human_model_variant,
+                "human_model_source": planner.human_model_source,
                 "planner_group": planner.planner_group,
                 "benchmark_profile": planner.benchmark_profile,
                 "algo_config_path": (
@@ -2582,6 +2596,8 @@ def _planner_report_row(  # noqa: C901
     row = {
         "planner_key": planner.key,
         "algo": planner.algo,
+        "human_model_variant": planner.human_model_variant or "",
+        "human_model_source": planner.human_model_source or "",
         "planner_group": planner.planner_group,
         "kinematics": kinematics,
         "status": status,
@@ -3247,6 +3263,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     "planner": {
                         "key": planner.key,
                         "algo": planner.algo,
+                        "human_model_variant": planner.human_model_variant,
+                        "human_model_source": planner.human_model_source,
                         "planner_group": planner.planner_group,
                         "benchmark_profile": planner.benchmark_profile,
                         "kinematics": kinematics,
@@ -3322,6 +3340,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "human_model_variant",
+            "human_model_source",
             "planner_group",
             "kinematics",
             "execution_mode",
@@ -3369,6 +3389,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "human_model_variant",
+            "human_model_source",
             "planner_group",
             "kinematics",
             "readiness_tier",
@@ -3389,6 +3411,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "human_model_variant",
+            "human_model_source",
             "planner_group",
             "kinematics",
             "readiness_tier",
@@ -3453,6 +3477,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             {
                 "planner_key": str(row.get("planner_key", "")),
                 "algo": str(row.get("algo", "")),
+                "human_model_variant": str(row.get("human_model_variant", "")),
+                "human_model_source": str(row.get("human_model_source", "")),
                 "planner_group": str(row.get("planner_group", "experimental")),
                 "kinematics": str(row.get("kinematics", "")),
                 "execution_mode": str(row.get("execution_mode", "unknown")),
@@ -3488,6 +3514,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         headers=(
             "planner_key",
             "algo",
+            "human_model_variant",
+            "human_model_source",
             "planner_group",
             "kinematics",
             "execution_mode",

@@ -1,0 +1,181 @@
+"""Tests for adversarial failure archive curation."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from robot_sf.adversarial.archive import curate_failure_archive
+from scripts.tools.curate_adversarial_failure_archive import main as archive_cli_main
+
+
+def _candidate(start_x: float, *, seed: int) -> dict:
+    """Build a compact candidate manifest payload."""
+    return {
+        "start": {"x": start_x, "y": 2.0, "theta": 0.0},
+        "goal": {"x": 5.0, "y": 2.0, "theta": 0.0},
+        "spawn_time_s": 0.0,
+        "pedestrian_speed_mps": 1.0,
+        "pedestrian_delay_s": 0.0,
+        "scenario_seed": seed,
+    }
+
+
+def _manifest(tmp_path: Path) -> Path:
+    """Write a synthetic adversarial search manifest."""
+    payload = {
+        "schema_version": "adversarial-search-manifest.v1",
+        "config": {
+            "policy": "goal",
+            "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+            "search_space": {
+                "variables": {
+                    "start_x": {"min": 0.0, "max": 4.0},
+                    "start_y": {"min": 2.0, "max": 2.0},
+                    "goal_x": {"min": 5.0, "max": 5.0},
+                    "goal_y": {"min": 2.0, "max": 2.0},
+                    "spawn_time_s": {"min": 0.0, "max": 0.0},
+                    "pedestrian_speed_mps": {"min": 1.0, "max": 1.0},
+                    "pedestrian_delay_s": {"min": 0.0, "max": 0.0},
+                    "scenario_seed": {"min": 7, "max": 9},
+                }
+            },
+        },
+        "candidates": [
+            {
+                "candidate": _candidate(0.25, seed=7),
+                "objective_value": 9.0,
+                "bundle_path": "output/adversarial/run/candidate_0000",
+                "scenario_yaml_path": "output/adversarial/run/candidate_0000/scenario.yaml",
+                "failure_attribution": {
+                    "status": "attributed",
+                    "primary_failure": "collision",
+                    "reasons": ["collision"],
+                    "details": {
+                        "termination_reason": "collision",
+                        "outcome": {"collision": True, "route_complete": False},
+                    },
+                },
+            },
+            {
+                "candidate": _candidate(1.75, seed=8),
+                "objective_value": 7.0,
+                "bundle_path": "output/adversarial/run/candidate_0001",
+                "scenario_yaml_path": "output/adversarial/run/candidate_0001/scenario.yaml",
+                "failure_attribution": {
+                    "status": "attributed",
+                    "primary_failure": "collision",
+                    "reasons": ["collision duplicate"],
+                    "details": {
+                        "termination_reason": "collision",
+                        "outcome": {"collision": True, "route_complete": False},
+                    },
+                },
+            },
+            {
+                "candidate": _candidate(2.0, seed=9),
+                "objective_value": 3.0,
+                "bundle_path": "output/adversarial/run/candidate_0002",
+                "scenario_yaml_path": "output/adversarial/run/candidate_0002/scenario.yaml",
+                "failure_attribution": {
+                    "status": "attributed",
+                    "primary_failure": "timeout",
+                    "reasons": ["timeout"],
+                    "details": {
+                        "termination_reason": "timeout",
+                        "outcome": {"timeout": True, "route_complete": False},
+                    },
+                },
+            },
+            {
+                "candidate": _candidate(2.0, seed=9),
+                "objective_value": -1.0,
+                "bundle_path": "output/adversarial/run/candidate_0003",
+                "scenario_yaml_path": "output/adversarial/run/candidate_0003/scenario.yaml",
+                "failure_attribution": {
+                    "status": "attributed",
+                    "primary_failure": "success",
+                    "reasons": ["success"],
+                    "details": {
+                        "termination_reason": "success",
+                        "outcome": {"route_complete": True},
+                    },
+                },
+            },
+            {
+                "candidate": _candidate(3.0, seed=9),
+                "objective_value": None,
+                "bundle_path": "output/adversarial/run/candidate_0004",
+                "scenario_yaml_path": "output/adversarial/run/candidate_0004/scenario.yaml",
+                "failure_attribution": {
+                    "status": "not_evaluated",
+                    "primary_failure": "invalid_candidate",
+                    "reasons": ["certification failed"],
+                    "details": {},
+                },
+            },
+        ],
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def test_curate_failure_archive_groups_and_selects_representatives(tmp_path: Path) -> None:
+    """Archive curation should group duplicate mechanisms and mark minimal representatives."""
+    manifest_path = _manifest(tmp_path)
+    output_path = tmp_path / "archive.json"
+
+    archive = curate_failure_archive([manifest_path], output_path=output_path)
+
+    assert output_path.exists()
+    assert archive["schema_version"] == "adversarial_failure_archive.v1"
+    assert archive["summary"] == {
+        "source_manifest_count": 1,
+        "source_candidate_count": 5,
+        "archived_failure_count": 3,
+        "cluster_count": 2,
+    }
+    assert [cluster["mechanism"]["primary_failure"] for cluster in archive["clusters"]] == [
+        "collision",
+        "timeout",
+    ]
+    collision_cluster = archive["clusters"][0]
+    assert collision_cluster["member_count"] == 2
+    assert collision_cluster["representative_archive_id"] == "failure_0001"
+    representative = next(
+        entry
+        for entry in archive["entries"]
+        if entry["archive_id"] == collision_cluster["representative_archive_id"]
+    )
+    assert representative["source_candidate_index"] == 1
+    assert representative["replay_command"].startswith("uv run robot_sf_bench run")
+
+
+def test_curate_failure_archive_is_deterministic(tmp_path: Path) -> None:
+    """Repeated curation of the same manifest should produce identical stable payloads."""
+    manifest_path = _manifest(tmp_path)
+
+    left = curate_failure_archive([manifest_path], output_path=tmp_path / "left.json")
+    right = curate_failure_archive([manifest_path], output_path=tmp_path / "right.json")
+
+    left.pop("created_at")
+    right.pop("created_at")
+    assert left == right
+
+
+def test_curate_failure_archive_cli_writes_summary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """CLI wrapper should write the archive and print a compact summary."""
+    manifest_path = _manifest(tmp_path)
+    output_path = tmp_path / "cli_archive.json"
+
+    assert archive_cli_main([manifest_path.as_posix(), "--out", output_path.as_posix()]) == 0
+
+    captured = json.loads(capsys.readouterr().out)
+    assert captured["path"] == output_path.as_posix()
+    assert captured["summary"]["archived_failure_count"] == 3
+    assert json.loads(output_path.read_text(encoding="utf-8"))["summary"]["cluster_count"] == 2

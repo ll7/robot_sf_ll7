@@ -1,5 +1,6 @@
 """Programmable adversarial scenario search helpers."""
 
+from robot_sf.adversarial.archive import curate_failure_archive
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
@@ -46,6 +47,7 @@ __all__ = [
     "SeedSensitivityReplay",
     "SeedSensitivitySummary",
     "build_multi_ped_adversarial_robot_config",
+    "curate_failure_archive",
     "materialize_multi_ped_scenario_payload",
     "materialize_multi_ped_single_pedestrian_overrides",
     "multi_ped_config_to_single_pedestrian_definitions",

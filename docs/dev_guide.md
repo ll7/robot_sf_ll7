@@ -885,6 +885,8 @@ Documentation should include:
 - Keep documentation up-to-date as code evolves
 - Use consistent formatting and follow markdown linting standards
 - Prefer GitHub-flavored Markdown (GFM) conventions so docs render correctly on GitHub
+- Write issue references as `Issue #123` in prose, lists, and tables instead of starting a
+  Markdown line with a bare `#123` token.
 - Avoid duplications. Link to existing documentation when relevant.
 - Always provide README.md files in new documentation folders for overview and reference.
 - When the document is longer than 50 lines, create a table of contents at the top for easy navigation. Ideally, use `markdown.extension.toc.create` to *Markdown All in One: Create Table of Contents*.

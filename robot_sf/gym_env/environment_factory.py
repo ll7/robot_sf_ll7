@@ -4,13 +4,12 @@ Overview
 --------
 Provides explicit, typed factory functions for creating navigation, pedestrian,
 and crowd-only simulation environments. Replaces legacy ad‑hoc kwargs surface
-with structured option objects while preserving backward compatibility via
-``apply_legacy_kwargs`` (T029). Deterministic seeding added in T030.
+with structured option objects. Deterministic seeding added in T030.
 
 Key Features
 ------------
 * Explicit signatures: discoverable parameters; no ``**kwargs`` reliance for
-    new behavior (only legacy capture path retained for deprecation window).
+    new behavior.
 * Option normalization: boolean convenience flags (``record_video``,
     ``video_path``, ``video_fps``) map into :class:`RecordingOptions` and
     :class:`RenderOptions` with documented precedence rules.
@@ -29,16 +28,10 @@ Key Features
 
 Precedence Summary
 ------------------
-1. Legacy mapped kwargs → merged first (if provided) producing / modifying option objects.
-2. Explicit ``render_options`` / ``recording_options`` objects override boolean flags.
-3. Robot/Image factories: ``record_video=True`` forces ``RecordingOptions.record=True``.
-4. Pedestrian factory: preserves explicit opt‑out (``record=False``) even with ``record_video=True``.
-5. ``video_fps`` populates ``RenderOptions.max_fps_override`` only when that field is unset.
-
-Environment Variables
----------------------
-* ``ROBOT_SF_FACTORY_LEGACY`` truthy → permissive legacy mapping (warnings only).
-* ``ROBOT_SF_FACTORY_STRICT`` truthy → strict legacy mode (unknown legacy params raise).
+1. Explicit ``render_options`` / ``recording_options`` objects override boolean flags.
+2. Robot/Image factories: ``record_video=True`` forces ``RecordingOptions.record=True``.
+3. Pedestrian factory: preserves explicit opt‑out (``record=False``) even with ``record_video=True``.
+4. ``video_fps`` populates ``RenderOptions.max_fps_override`` only when that field is unset.
 
 This module contains no top‑level heavy imports beyond core types to minimize cold‑start
 overhead (FR‑017). Rendering classes for image observations are imported lazily.
@@ -65,7 +58,6 @@ except (ImportError, ModuleNotFoundError):
     RobotEnv = None  # type: ignore
     RobotEnvWithImage = None  # type: ignore
 
-from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
 from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
 from robot_sf.gym_env.reward import (
@@ -398,44 +390,6 @@ class EnvironmentFactory:
         )  # type: ignore[return-value]
 
 
-def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):
-    """Apply legacy render option overrides from mapped kwargs.
-
-    Args:
-        mapped: Dictionary of mapped legacy kwargs (modified in-place).
-        render: Existing RenderOptions instance or None.
-
-    Returns:
-        RenderOptions | None: Updated or new RenderOptions if overrides found, else original.
-    """
-    if "render_options.max_fps_override" in mapped:
-        ro = render or RenderOptions()
-        ro.max_fps_override = mapped.pop("render_options.max_fps_override")
-        return ro
-    return render
-
-
-def _apply_recording(mapped: dict[str, Any], rec: RecordingOptions | None):
-    """Apply legacy recording option overrides from mapped kwargs.
-
-    Args:
-        mapped: Dictionary of mapped legacy kwargs (modified in-place).
-        rec: Existing RecordingOptions instance or None.
-
-    Returns:
-        RecordingOptions | None: Updated or new RecordingOptions if overrides found, else original.
-    """
-    keys = ("recording_options.record", "recording_options.video_path")
-    if any(k in mapped for k in keys):
-        out = rec or RecordingOptions()
-        if keys[0] in mapped:
-            out.record = mapped.pop(keys[0])
-        if keys[1] in mapped:
-            out.video_path = mapped.pop(keys[1])
-        return out
-    return rec
-
-
 def _validate_and_log_config(config: Any) -> None:
     """Validate configuration and log resolved config for reproducibility.
 
@@ -525,7 +479,6 @@ def make_robot_env(  # noqa: PLR0913
     telemetry_pane_layout: str = "vertical_split",
     telemetry_decimation: int = 1,
     asymmetric_critic: bool = False,
-    **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a robot environment with lidar-based observations (non-image).
 
@@ -579,8 +532,6 @@ def make_robot_env(  # noqa: PLR0913
             (>=1).
         asymmetric_critic: When True, add a critic-only privileged state vector to the
             observation space for asymmetric actor-critic training.
-        **legacy_kwargs: Deprecated legacy surface (mapped via apply_legacy_kwargs). Unknown
-            params rejected unless ROBOT_SF_FACTORY_LEGACY env var is truthy (permissive mode).
 
     Returns:
         SingleAgentEnv: Initialized robot environment instance with ``applied_seed`` attribute set.
@@ -589,16 +540,6 @@ def make_robot_env(  # noqa: PLR0913
         Side-effects: seeds RNGs (idempotent for same seed), logs creation line.
         Performance: heavy image rendering imports are avoided along this path.
     """
-    # Apply legacy parameter mapping FIRST so explicit new-style arguments win.
-    if legacy_kwargs:
-        mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
-        # Fold mapped flattened keys into current option objects.
-        render_options_local = _apply_render(mapped, render_options)
-        recording_options_local = _apply_recording(mapped, recording_options)
-        # Any leftover keys after application are ignored (already validated by strict handling).
-        render_options = render_options_local
-        recording_options = recording_options_local
-
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
         if reward_curriculum is not None:
@@ -686,7 +627,6 @@ def make_image_robot_env(  # noqa: PLR0913
     algorithm_name: str = "manual",
     recording_seed: int | None = None,
     asymmetric_critic: bool = False,
-    **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a robot environment with image observations.
 
@@ -697,10 +637,6 @@ def make_image_robot_env(  # noqa: PLR0913
     Returns:
         Initialized SingleAgentEnv with image observation capabilities.
     """
-    if legacy_kwargs:
-        mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
-        render_options = _apply_render(mapped, render_options)
-        recording_options = _apply_recording(mapped, recording_options)
     if reward_func is None:
         reward_name = reward_name or "route_completion_v2"
         if reward_curriculum is not None:
@@ -772,7 +708,6 @@ def make_pedestrian_env(  # noqa: PLR0913
     video_fps: float | None = None,
     render_options: RenderOptions | None = None,
     recording_options: RecordingOptions | None = None,
-    **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a pedestrian (adversarial) environment.
 
@@ -794,11 +729,6 @@ def make_pedestrian_env(  # noqa: PLR0913
         Initialized SingleAgentEnv for adversarial pedestrian training.
     """
     # Capture explicit override intent BEFORE normalization mutates structures.
-    if legacy_kwargs:
-        mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
-        render_options = _apply_render(mapped, render_options)
-        recording_options = _apply_recording(mapped, recording_options)
-
     _apply_global_seed(seed)
 
     # Validate configuration and log resolved config (T030/T031)

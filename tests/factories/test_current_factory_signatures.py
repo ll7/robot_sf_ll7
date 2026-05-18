@@ -24,11 +24,17 @@ def _param_names(fn) -> list[str]:
     return [p.name for p in inspect.signature(fn).parameters.values()]
 
 
+def _assert_no_var_keyword(fn) -> None:
+    """Assert a public factory has no catch-all keyword parameter."""
+    assert inspect.Parameter.VAR_KEYWORD not in [
+        p.kind for p in inspect.signature(fn).parameters.values()
+    ]
+
+
 def test_make_robot_env_signature_snapshot():
     """make_robot_env keeps the reviewed public parameter order."""
     params = _param_names(ef.make_robot_env)
-    # Adjust this list only when intentional API evolution occurs.
-    expected_prefix = [
+    expected = [
         "config",
         "seed",
         "peds_have_obstacle_forces",
@@ -43,15 +49,28 @@ def test_make_robot_env_signature_snapshot():
         "video_fps",
         "render_options",
         "recording_options",
+        "use_jsonl_recording",
+        "recording_dir",
+        "suite_name",
+        "scenario_name",
+        "algorithm_name",
+        "recording_seed",
+        "enable_telemetry_panel",
+        "telemetry_metrics",
+        "telemetry_record",
+        "telemetry_refresh_hz",
+        "telemetry_pane_layout",
+        "telemetry_decimation",
+        "asymmetric_critic",
     ]
-    assert params[: len(expected_prefix)] == expected_prefix, params
-    assert params[-2] == "asymmetric_critic"
+    assert params == expected
+    _assert_no_var_keyword(ef.make_robot_env)
 
 
 def test_make_image_robot_env_signature_snapshot():
     """make_image_robot_env keeps the reviewed public parameter order."""
     params = _param_names(ef.make_image_robot_env)
-    expected_prefix = [
+    expected = [
         "config",
         "seed",
         "peds_have_obstacle_forces",
@@ -66,9 +85,16 @@ def test_make_image_robot_env_signature_snapshot():
         "video_fps",
         "render_options",
         "recording_options",
+        "use_jsonl_recording",
+        "recording_dir",
+        "suite_name",
+        "scenario_name",
+        "algorithm_name",
+        "recording_seed",
+        "asymmetric_critic",
     ]
-    assert params[: len(expected_prefix)] == expected_prefix, params
-    assert params[-2] == "asymmetric_critic"
+    assert params == expected
+    _assert_no_var_keyword(ef.make_image_robot_env)
 
 
 def test_make_pedestrian_env_signature_snapshot():
@@ -85,3 +111,4 @@ def test_make_pedestrian_env_signature_snapshot():
         "peds_have_obstacle_forces",
     ]
     assert params[: len(expected_prefix)] == expected_prefix, params
+    _assert_no_var_keyword(ef.make_pedestrian_env)

@@ -35,13 +35,12 @@ Otherwise inherits core contract rules.
 Legacy kwargs mapping (non-exhaustive initial set):
 | Legacy | New | Action |
 |--------|-----|--------|
-| record_video | recording_options.record | Map + WARN |
-| video_output_path | recording_options.video_path | Map + WARN |
-| fps | render_options.max_fps_override | Map + WARN |
+| record_video | `record_video=` or `recording_options.record` | Explicit convenience flag remains |
+| video_output_path | `video_path=` or `recording_options.video_path` | Replace legacy name |
+| fps | `video_fps=` or `render_options.max_fps_override` | Replace legacy name |
 
 Unknown legacy kw:
-- Strict mode (default): raise ValueError listing allowed params.
-- Permissive (`ROBOT_SF_FACTORY_LEGACY=1`): WARN + ignore if unmapped.
+- Robot SF 2.0 and newer: raise `TypeError` from the public factory signature.
 
 ## Logging Contract
 | Event | Level | Message Pattern |

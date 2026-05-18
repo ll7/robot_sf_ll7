@@ -31,7 +31,7 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 
 When creating a new linked worktree, prefer a sibling container next to the main checkout rather
 than a directory inside the repository. For this checkout, use
-`/home/luttkule/git/robot_sf_ll7.worktrees/<branch-or-issue-slug>` unless a user or native tool
+`../robot_sf_ll7.worktrees/<branch-or-issue-slug>` unless a user or native tool
 chooses another location. Keep issue work readable with names such as
 `issue-123-short-description`.
 

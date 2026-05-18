@@ -60,7 +60,7 @@ Git worktree per branch. Submit from the worktree whose branch, configs, and SLU
 be used by the job:
 
 ```bash
-cd /home/luttkule/git/robot_sf_ll7
+cd ~/git/robot_sf_ll7
 mkdir -p ../robot_sf_ll7.worktrees
 git fetch origin codex/193-feature-extractor-evaluation
 git worktree add -b codex/193-feature-extractor-evaluation \
@@ -82,7 +82,7 @@ waiting.
 worktree, symlink it from the original checkout:
 
 ```bash
-ln -s /home/luttkule/git/robot_sf_ll7/local.machine.md local.machine.md
+ln -s ../../robot_sf_ll7/local.machine.md local.machine.md
 ```
 
 Keep `.venv` branch-local unless the branches are known to have identical dependencies; most SLURM

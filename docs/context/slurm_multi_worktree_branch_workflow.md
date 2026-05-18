@@ -15,7 +15,7 @@ there is to use the node for lightweight orchestration only and submit real comp
 Create one worktree per active branch:
 
 ```bash
-cd /home/luttkule/git/robot_sf_ll7
+cd ~/git/robot_sf_ll7
 mkdir -p ../robot_sf_ll7.worktrees
 git fetch origin codex/193-feature-extractor-evaluation
 git worktree add -b codex/193-feature-extractor-evaluation \
@@ -63,11 +63,11 @@ started or copied its run files.
 When the same machine policy should apply to every worktree on the same host, symlink it:
 
 ```bash
-ln -s /home/luttkule/git/robot_sf_ll7/local.machine.md local.machine.md
+ln -s ../../robot_sf_ll7/local.machine.md local.machine.md
 ```
 
-Use an absolute symlink when the sibling container adds another path segment, as shown above. If
-both worktrees live directly under the same parent directory, a relative symlink is also fine.
+Use a relative symlink with `../../` when the sibling container adds another path segment, as shown
+above. If both worktrees live directly under the same parent directory, a single `../` is also fine.
 
 ## Virtual Environment Boundary
 

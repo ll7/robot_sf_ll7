@@ -46,7 +46,7 @@ When working in a linked Git worktree, detect bootstrap state before running exp
 - For manually created worktrees, prefer a sibling container next to the main checkout instead of a
   directory inside the repository. Use `<repo-name>.worktrees/<branch-or-issue-slug>`; for this
   checkout, that means paths like
-  `/home/luttkule/git/robot_sf_ll7.worktrees/issue-123-short-description`.
+  `../robot_sf_ll7.worktrees/issue-123-short-description`.
 - Honor an explicit user or native-tool worktree location first. If no preference is given, prefer
   an existing sibling `../robot_sf_ll7.worktrees/` container, then an existing project-local
   `.worktrees/` or `worktrees/` container only when it is already established and ignored. Default

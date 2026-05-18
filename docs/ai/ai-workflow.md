@@ -91,6 +91,11 @@ For batches of issues:
 2. Route Project #5 metadata second.
 3. Run derived score sync last, once per batch.
 
+Use REST-backed `gh api repos/...` calls for ordinary issue/PR/label/comment operations and local
+`git` for repository state. Reserve GraphQL for Projects v2, review-thread operations, and nested
+queries that are genuinely cheaper. If GraphQL quota is low, finish issue cleanup through REST and
+leave Project #5 mutations as explicit pending work rather than retry-looping.
+
 The priority workflow uses [docs/project_prioritization.md](../project_prioritization.md) as the rubric.
 The fields to review are:
 

@@ -57,6 +57,8 @@ This keeps issue cleanup independent from project routing and makes it easier to
 quota exhaustion mid-batch.
 
 Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work when available.
+Use REST (`gh api repos/...`) for ordinary issue/PR/label/comment operations and local `git` for
+repository state. Reserve GraphQL for Projects v2 writes and review-thread operations.
 Keep `scripts/tools/project_priority_score.py` as the deterministic `gh` fallback for scripted
 batch sync and local/manual score recomputation.
 

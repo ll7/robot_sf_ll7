@@ -39,11 +39,18 @@ read the specific `SKILL.md` before applying a skill.
 
 ## GitHub Skill Policy
 
-- Prefer GitHub MCP / GitHub app tools for interactive reads and comments when available.
-- Use `gh` for deterministic batch/project operations, auth debugging, and GraphQL review-thread
-  state that MCP does not expose cleanly.
+- Prefer REST-backed issue/PR/label/comment operations for ordinary GitHub state; use local `git`
+  for branch, commit, diff, and merge-base state.
+- Reserve GraphQL for Projects v2, review-thread state, and nested reads that are genuinely cheaper.
+- Prefer GitHub MCP / GitHub app tools for interactive reads and comments when available, but
+  switch to REST when GraphQL quota is low.
+- Use `gh` for deterministic batch/project operations, REST fallback, auth debugging, and GraphQL
+  review-thread state that MCP does not expose cleanly.
 - Batch issue cleanup separately from Project #5 metadata writes; follow
   `docs/context/issue_713_batch_first_issue_workflow.md`.
+- Cache Project #5 IDs once per shell session; for long-running or multi-agent work, use the
+  local gitignored Project #5 cache shape from
+  `docs/templates/github.project5-cache.example.json`.
 - Use Project #5 `Priority Score` as the issue-ordering source; use `gh-issue-priority-assessor`
   when the score inputs need review.
 - Use `scripts/dev/gh_comment.sh` for multiline PR/issue comments.

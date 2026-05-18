@@ -204,10 +204,21 @@ not promoted into durable benchmark or paper-facing claims.
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`
-- Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work when available.
-- Keep `gh` for scripted batch operations, derived score sync, auth debugging, and one-off deterministic fallback commands.
+- Use REST-backed `gh api repos/...` calls for ordinary issue, label, PR, branch, commit, and
+  workflow-run operations when possible.
+- Reserve GraphQL for Projects v2 operations, review-thread operations, and nested reads that are
+  genuinely cheaper.
+- Use local `git` for branch, diff, merge-base, and commit state instead of asking GitHub.
+- Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work when available,
+  but switch to REST for issue cleanup when GraphQL quota is low.
+- Keep `gh` for scripted batch operations, derived score sync, auth debugging, REST fallback, and
+  one-off deterministic commands.
 - Clean up issues first, then route Project #5 metadata, then run derived score sync once at the end.
-- Cache project and field IDs once per shell session instead of rediscovering them for every issue.
+- Cache project and field IDs once per shell session instead of rediscovering them for every issue;
+  for long-running or multi-agent work, use a local gitignored `.github/cache/project5.json` cache
+  following `docs/templates/github.project5-cache.example.json`.
+- Check `gh api rate_limit` before large batches and leave Project #5 writes pending when GraphQL
+  is exhausted instead of retry-looping.
 
 ### Context note workflow
 

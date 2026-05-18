@@ -18,7 +18,9 @@ It is everyones guide on how to use this repository effectively.
   `docs/context/issue_691_benchmark_fallback_policy.md`.
 - For GitHub issue batches and Project #5 writes, follow the batch-first workflow in
   `docs/context/issue_713_batch_first_issue_workflow.md`: clean up issues first, route project
-  metadata second, run derived score sync last, and cache IDs once per shell session.
+  metadata second, run derived score sync last, use REST/local `git` for non-project state, reserve
+  GraphQL for Projects v2/review threads, and cache IDs once per shell session or in local
+  `.github/cache/project5.json` for long-running work.
 - For measurement-driven improvement loops, use `.agents/skills/autoresearch/SKILL.md`.
   For shorter refinement passes, use `.agents/skills/auto-improvement/SKILL.md`.
   See `docs/ai/awesome_copilot_adaptation.md` for the selection guide.

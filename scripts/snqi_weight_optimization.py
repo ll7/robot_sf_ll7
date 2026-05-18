@@ -952,13 +952,15 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
         except Exception as e:
             logger.warning("Bootstrap computation failed: %s", e)
     if args.ci_placeholder:
-        # Confidence interval scaffold referencing planned bootstrap integration
+        # Deprecated metadata scaffold kept for old callers; it is not benchmark evidence.
         results.setdefault("_metadata", {})["confidence_intervals_placeholder"] = {
             "status": "placeholder",
-            "method": "bootstrap_future",
+            "method": "deprecated_ci_placeholder",
             "details": {
-                "message": "CI computation not yet implemented; this is a forward-compatible scaffold.",
-                "planned_bootstrap_function": "robot_sf.benchmark.snqi.bootstrap.bootstrap_stability",
+                "message": (
+                    "Deprecated placeholder metadata only; use --bootstrap-samples and "
+                    "--bootstrap-confidence for computed score intervals."
+                ),
             },
         }
     results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines

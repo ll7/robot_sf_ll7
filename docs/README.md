@@ -283,6 +283,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #695 `safe_control` Feasibility Note](./context/issue_695_safe_control_feasibility_note.md)** - External safety-controller assessment showing the current path is blocked by missing runtime dependencies, unclear license metadata, and a waypoint-tracking contract mismatch
 * **[Issue #581 Paper Evidence Delta Report](./context/issue_581_paper_evidence_delta.md)** - Canonical corrected benchmark artifact handoff, planner-quality claim boundary, and AMV paper-ingestion checklist
 * **[Issue #1236 Optimizer Adversarial Sampler](./context/issue_1236_optimizer_adversarial_sampler.md)** - Optuna-backed adversarial sampler pilot, synthetic comparison helper, and non-paper-facing evidence boundary
+* **[Issue #1271 Seed-Sensitivity Explorer](./context/issue_1271_seed_sensitivity_explorer.md)** - API and summary contract for replaying adversarial candidates over explicit seed grids while keeping failure persistence and artifact claims bounded
 * **[Planner Quality Audit Workflow](./benchmark_planner_quality_audit.md)** - Build the planner decision table, classify headline suitability, and record paper-faithfulness parity gaps
 
 ### Tooling

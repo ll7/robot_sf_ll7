@@ -12,12 +12,14 @@ def read_first_jsonl_record(path: Path | None) -> dict[str, Any] | None:
     if path is None or not path.exists():
         return None
     with path.open(encoding="utf-8") as handle:
-        for line in handle:
+        for line_number, line in enumerate(handle, start=1):
             stripped = line.strip()
             if stripped:
                 try:
                     payload = json.loads(stripped)
-                except json.JSONDecodeError:
-                    continue
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"{path}: invalid JSON on line {line_number}: {exc.msg}"
+                    ) from exc
                 return payload if isinstance(payload, dict) else None
     return None

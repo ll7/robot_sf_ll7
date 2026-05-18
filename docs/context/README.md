@@ -118,6 +118,8 @@ knowledge, not every transient iteration detail.
   [issue_1288_jsonl_orjson_append.md](issue_1288_jsonl_orjson_append.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)
+* Issue #1245 BenchmarkClaim artifact:
+  [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 

@@ -16,11 +16,12 @@ Create one worktree per active branch:
 
 ```bash
 cd /home/luttkule/git/robot_sf_ll7
+mkdir -p ../robot_sf_ll7.worktrees
 git fetch origin codex/193-feature-extractor-evaluation
 git worktree add -b codex/193-feature-extractor-evaluation \
-  ../robot_sf_ll7_193_feature_extractor \
+  ../robot_sf_ll7.worktrees/codex-193-feature-extractor-evaluation \
   origin/codex/193-feature-extractor-evaluation
-cd ../robot_sf_ll7_193_feature_extractor
+cd ../robot_sf_ll7.worktrees/codex-193-feature-extractor-evaluation
 ```
 
 If the local branch already exists, omit `-b codex/193-feature-extractor-evaluation` and pass the
@@ -62,11 +63,11 @@ started or copied its run files.
 When the same machine policy should apply to every worktree on the same host, symlink it:
 
 ```bash
-ln -s ../robot_sf_ll7/local.machine.md ../robot_sf_ll7_193_feature_extractor/local.machine.md
+ln -s /home/luttkule/git/robot_sf_ll7/local.machine.md local.machine.md
 ```
 
-Use a relative symlink when both worktrees live under the same parent directory. If the target
-worktree lives elsewhere, use an absolute path instead.
+Use an absolute symlink when the sibling container adds another path segment, as shown above. If
+both worktrees live directly under the same parent directory, a relative symlink is also fine.
 
 ## Virtual Environment Boundary
 

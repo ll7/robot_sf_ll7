@@ -43,6 +43,16 @@ Execution rules:
 
 When working in a linked Git worktree, detect bootstrap state before running expensive commands.
 
+- For manually created worktrees, prefer a sibling container next to the main checkout instead of a
+  directory inside the repository. Use `<repo-name>.worktrees/<branch-or-issue-slug>`; for this
+  checkout, that means paths like
+  `/home/luttkule/git/robot_sf_ll7.worktrees/issue-123-short-description`.
+- Honor an explicit user or native-tool worktree location first. If no preference is given, prefer
+  an existing sibling `../robot_sf_ll7.worktrees/` container, then an existing project-local
+  `.worktrees/` or `worktrees/` container only when it is already established and ignored. Default
+  new manual worktree containers to the sibling `../robot_sf_ll7.worktrees/` path.
+- Name branch/worktree directories with the issue number and a short feature slug when possible,
+  for example `issue-123-short-description`.
 - Treat the checkout as a linked worktree when `.git` is a file pointing into `.git/worktrees/...`,
   or when `git rev-parse --git-common-dir` resolves to a different path than
   `git rev-parse --git-dir`.

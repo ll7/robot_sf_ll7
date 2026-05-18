@@ -94,6 +94,8 @@ knowledge, not every transient iteration detail.
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1255 open-issue dependency graph:
   [issue_1255_open_issue_dependency_graph.md](issue_1255_open_issue_dependency_graph.md)
+* Issue #1287 force-gradient interpolation vectorization:
+  [issue_1287_force_gradient_vectorization.md](issue_1287_force_gradient_vectorization.md)
 * Issue #1286 SNQI bootstrap stability:
   [issue_1286_snqi_bootstrap_stability.md](issue_1286_snqi_bootstrap_stability.md)
 * Issue #1285 TODO-docstring backlog ratchet:

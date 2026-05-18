@@ -961,7 +961,8 @@ committed entry points:
 - `smoke-artifacts` uploads map verification, benchmark, recording, and cold/warm performance
   artifacts from the canonical `output/` tree.
 - Cold/warm regression smoke is driven by
-  `python -m robot_sf.benchmark.perf_cold_warm` through `scripts/dev/ci_driver.sh smoke`.
+  `uv run python -m robot_sf.benchmark.perf_cold_warm` through
+  `scripts/dev/ci_driver.sh smoke`.
   Pull requests run the check in advisory mode; `main` and `workflow_dispatch` runs use the
   stricter regression gate.
 - Startup/reset performance is measured by `scripts/validation/performance_smoke_test.py` during
@@ -970,8 +971,8 @@ committed entry points:
 
 **Local Testing**:
 - Use `scripts/dev/run_ci_local.sh` for the canonical local CI-equivalent path.
-- Use `scripts/dev/ci_driver.sh <phase>` for narrower local phases such as `lint`, `test`,
-  `smoke`, or `artifact-policy`.
+- Use `scripts/dev/ci_driver.sh <phase>` for narrower local phases such as `lint`, `typecheck`,
+  `test`, `smoke`, or `artifact-policy`.
 - Use `uv run python scripts/dev/ci_timing_summary.py --run-id <github-actions-run-id> --top 10`
   to inspect GitHub-hosted CI queue time, job duration, and slowest-step timing from a completed
   run.

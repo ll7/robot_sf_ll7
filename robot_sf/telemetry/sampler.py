@@ -199,9 +199,20 @@ class TelemetrySampler:
 
         gpu_sample = collect_gpu_sample()
         gpu_util = gpu_mem_used = None
+        gpu_devices = None
         if gpu_sample:
             gpu_util = gpu_sample.util_percent
             gpu_mem_used = gpu_sample.memory_used_mb
+            if gpu_sample.devices:
+                gpu_devices = tuple(
+                    {
+                        "index": device.index,
+                        "util_percent": device.util_percent,
+                        "memory_used_mb": device.memory_used_mb,
+                        "memory_total_mb": device.memory_total_mb,
+                    }
+                    for device in gpu_sample.devices
+                )
             if gpu_sample.notes:
                 notes.add(gpu_sample.notes)
 
@@ -216,6 +227,7 @@ class TelemetrySampler:
             memory_rss_mb=memory_rss,
             gpu_util_percent=gpu_util,
             gpu_mem_used_mb=gpu_mem_used,
+            gpu_devices=gpu_devices,
             notes=", ".join(sorted(notes)) if notes else None,
         )
         return snapshot

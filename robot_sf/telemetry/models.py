@@ -83,6 +83,7 @@ class TelemetrySnapshot:
     memory_rss_mb: float | None = None
     gpu_util_percent: float | None = None
     gpu_mem_used_mb: float | None = None
+    gpu_devices: tuple[dict[str, Any], ...] | None = None
     notes: str | None = None
 
 

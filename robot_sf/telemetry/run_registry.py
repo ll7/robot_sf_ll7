@@ -24,10 +24,11 @@ class RunRegistry:
     """Create per-run directories and prune historical runs when necessary."""
 
     def __init__(self, config: RunTrackerConfig) -> None:
-        """TODO docstring. Document this function.
+        """Bind the registry to a run-tracker configuration.
 
         Args:
-            config: TODO docstring.
+            config: Configuration that supplies the root directory and retention
+                count for run-tracker artifacts.
         """
         if not isinstance(config, RunTrackerConfig):  # pragma: no cover - runtime guard
             raise TypeError(f"config must be RunTrackerConfig, received {type(config)!r}")
@@ -35,11 +36,11 @@ class RunRegistry:
 
     @property
     def base_dir(self) -> Path:
-        """TODO docstring. Document this function.
+        """Return the root directory that contains all tracked run directories.
 
 
         Returns:
-            TODO docstring.
+            Path resolved from ``RunTrackerConfig.run_tracker_root``.
         """
         return Path(self._config.run_tracker_root)
 

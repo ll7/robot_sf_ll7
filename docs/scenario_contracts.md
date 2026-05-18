@@ -34,6 +34,18 @@ The fixture uses the station-platform candidate pack because that YAML already c
 intent metadata such as density, flow, coverage probes, and evaluation scope. The contract fixture
 normalizes one representative entry without changing any scenario runner behavior.
 
+Scenario contracts may also reference an ODD declaration instead of duplicating all operating
+assumptions:
+
+```yaml
+odd_contract_ref:
+  source: configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml
+  contract_id: low_speed_public_space_v1
+  required_for_benchmark_claim: true
+```
+
+See [ODD Contracts](./odd_contracts.md) for the ODD metadata boundary.
+
 ## Library API
 
 ```python
@@ -41,6 +53,7 @@ from pathlib import Path
 
 from robot_sf.benchmark.scenario_contract import (
     load_scenario_contracts,
+    validate_scenario_odd_contract_reference,
     validate_scenario_contract_references,
 )
 
@@ -48,6 +61,7 @@ contracts = load_scenario_contracts(
     Path("configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml")
 )
 errors = validate_scenario_contract_references(contracts[0], repo_root=Path("."))
+odd_errors = validate_scenario_odd_contract_reference(contracts[0], repo_root=Path("."))
 ```
 
 `load_scenario_contracts(...)` validates JSON Schema first and raises
@@ -60,6 +74,8 @@ whether to require local scenario YAML availability.
 Keep v1 contracts narrow:
 
 - use closed enums for actor kind, termination reason, intended use, and ODD class,
+- reference `odd_contract.v1` declarations for shared operating assumptions when benchmark claims
+  depend on ODD metadata,
 - put future or experimental vocabulary under `extensions` only when it cannot fit the v1 fields,
 - point `scenario_ref.source` at a maintained scenario YAML file,
 - set `certification.required_before_benchmark_claim: true` unless the file is a test fixture,

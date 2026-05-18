@@ -74,6 +74,10 @@ Then branch by task type:
   durable Markdown handoff context
 - `docs/ai/ai-workflow.md`: end-to-end issue-to-PR workflow, validation gates, review loop, and
   traceability conventions
+- `docs/context/issue_1181_ml_intern_experiment_assistant.md`: `ml-intern` assessment and #1191
+  decision to keep the useful no-edit planning, command-budget, trace/privacy, and one-smoke
+  workflow ideas inside the Codex-native proof-first path unless a future opt-in runtime smoke is
+  explicitly approved
 - `CLAUDE.md` + `memory/MEMORY.md`: startup-oriented memory/index pair for agent runtimes that
   support imported project instructions
 - `.agents/skills/quality-playbook/`, `.agents/skills/agentic-eval/`,

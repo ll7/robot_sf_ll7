@@ -68,6 +68,11 @@ Result JSON includes:
 
 Normalization details are documented in `docs/snqi-weight-tools/normalization.md`.
 
+The public `robot_sf.benchmark.snqi.bootstrap.bootstrap_stability(...)` helper computes
+planner-ranking stability only for episode records that already contain finite `metrics.snqi`
+values. It fails closed on missing SNQI, missing group keys, single-group inputs, or missing RNG
+seed control; it no longer returns placeholder evidence.
+
 ## Standalone SNQI CLI
 
 The `robot_sf_snqi` command provides direct access to SNQI weight management tools:

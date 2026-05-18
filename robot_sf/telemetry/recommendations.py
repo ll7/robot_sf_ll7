@@ -47,11 +47,13 @@ class RecommendationEngine:
         rules: RecommendationRules | None = None,
         total_memory_mb: float | None = None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Initialize an engine with optional thresholds and memory capacity.
 
         Args:
-            rules: TODO docstring.
-            total_memory_mb: TODO docstring.
+            rules: Thresholds used to classify telemetry samples. Defaults to
+                ``RecommendationRules``.
+            total_memory_mb: Total system memory in MiB used for memory-pressure
+                ratios. When omitted, the value is detected with psutil when available.
         """
         self._rules = rules or RecommendationRules()
         self._snapshots: list[TelemetrySnapshot] = []

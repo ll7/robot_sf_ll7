@@ -53,13 +53,13 @@ class ProgressTracker:
         log_fn: LogFunction | None = None,
         time_provider: TimeProvider | None = None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Initialize step entries and persist the initial step index.
 
         Args:
-            steps: TODO docstring.
-            writer: TODO docstring.
-            log_fn: TODO docstring.
-            time_provider: TODO docstring.
+            steps: Ordered pipeline steps to track. At least one step is required.
+            writer: Optional manifest writer that receives step-index updates.
+            log_fn: Optional status logging callback. Defaults to ``logger.info``.
+            time_provider: Optional clock callback for deterministic tests.
         """
         if not steps:
             raise ValueError("ProgressTracker requires at least one step definition")
@@ -97,10 +97,10 @@ class ProgressTracker:
             return deepcopy(self._entries)
 
     def start_step(self, step_id: str) -> None:
-        """TODO docstring. Document this function.
+        """Mark a pending or skipped step as running and log its ETA snapshot.
 
         Args:
-            step_id: TODO docstring.
+            step_id: Identifier from the configured step definitions.
         """
         with self._lock:
             entry = self._get_entry_locked(step_id)
@@ -122,10 +122,10 @@ class ProgressTracker:
         self._log_once(step_id, message)
 
     def complete_step(self, step_id: str) -> None:
-        """TODO docstring. Document this function.
+        """Mark a running or never-started step complete and record duration.
 
         Args:
-            step_id: TODO docstring.
+            step_id: Identifier from the configured step definitions.
         """
         with self._lock:
             entry = self._get_entry_locked(step_id)
@@ -151,11 +151,11 @@ class ProgressTracker:
         self._log_once(step_id, message)
 
     def fail_step(self, step_id: str, *, reason: str | None = None) -> None:
-        """TODO docstring. Document this function.
+        """Mark a step failed and emit a failure status message.
 
         Args:
-            step_id: TODO docstring.
-            reason: TODO docstring.
+            step_id: Identifier from the configured step definitions.
+            reason: Optional human-readable failure reason appended to the log.
         """
         with self._lock:
             entry = self._get_entry_locked(step_id)
@@ -176,11 +176,11 @@ class ProgressTracker:
         self._emit_log(message)
 
     def skip_step(self, step_id: str, *, reason: str | None = None) -> None:
-        """TODO docstring. Document this function.
+        """Mark a pending step skipped without consuming elapsed time.
 
         Args:
-            step_id: TODO docstring.
-            reason: TODO docstring.
+            step_id: Identifier from the configured step definitions.
+            reason: Optional human-readable skip reason appended to the log.
         """
         with self._lock:
             entry = self._get_entry_locked(step_id)
@@ -205,31 +205,31 @@ class ProgressTracker:
         self._emit_log(message)
 
     def current_step(self) -> StepExecutionEntry | None:
-        """TODO docstring. Document this function.
+        """Return the currently running step entry.
 
 
         Returns:
-            TODO docstring.
+            Running step entry, or ``None`` when no step is running.
         """
         with self._lock:
             return self._current_step_locked()
 
     def completed_steps(self) -> int:
-        """TODO docstring. Document this function.
+        """Count completed steps.
 
 
         Returns:
-            TODO docstring.
+            Number of entries with ``COMPLETED`` status.
         """
         with self._lock:
             return sum(1 for entry in self._entries if entry.status == StepStatus.COMPLETED)
 
     def total_steps(self) -> int:
-        """TODO docstring. Document this function.
+        """Count configured pipeline steps.
 
 
         Returns:
-            TODO docstring.
+            Total number of tracked step entries.
         """
         with self._lock:
             return len(self._entries)
@@ -285,12 +285,12 @@ class ProgressTracker:
         mark_failed: bool = False,
         reason: str | None = None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Persist guard state and notify the heartbeat callback.
 
         Args:
-            status: TODO docstring.
-            mark_failed: TODO docstring.
-            reason: TODO docstring.
+            status: Pipeline status passed to the heartbeat callback.
+            mark_failed: Whether to convert the active step to failed before flushing.
+            reason: Optional failure reason used when ``mark_failed`` is true.
         """
         log_message: str | None = None
         with self._lock:
@@ -304,13 +304,13 @@ class ProgressTracker:
             callback(status)
 
     def _mark_running_step_failed_locked(self, reason: str | None) -> str | None:
-        """TODO docstring. Document this function.
+        """Convert the current running step to failed while the tracker lock is held.
 
         Args:
-            reason: TODO docstring.
+            reason: Optional failure reason included in the formatted status line.
 
         Returns:
-            TODO docstring.
+            Failure log message for the changed step, or ``None`` if no step changed.
         """
         entry = self._current_step_locked()
         if entry is None or entry.status == StepStatus.FAILED:
@@ -330,11 +330,11 @@ class ProgressTracker:
         )
 
     def _current_step_locked(self) -> StepExecutionEntry | None:
-        """TODO docstring. Document this function.
+        """Return the running step while the tracker lock is held.
 
 
         Returns:
-            TODO docstring.
+            Running step entry, or ``None`` when all steps are idle/terminal.
         """
         for entry in self._entries:
             if entry.status == StepStatus.RUNNING:
@@ -342,34 +342,34 @@ class ProgressTracker:
         return None
 
     def _has_active_steps(self) -> bool:
-        """TODO docstring. Document this function.
+        """Return whether any step still needs progress or terminal handling.
 
 
         Returns:
-            TODO docstring.
+            ``True`` when a step is pending or running.
         """
         with self._lock:
             return self._has_active_steps_locked()
 
     def _has_active_steps_locked(self) -> bool:
-        """TODO docstring. Document this function.
+        """Return active-step state while the tracker lock is already held.
 
 
         Returns:
-            TODO docstring.
+            ``True`` when a step is pending or running.
         """
         return any(
             entry.status in (StepStatus.PENDING, StepStatus.RUNNING) for entry in self._entries
         )
 
     def _get_entry_locked(self, step_id: str) -> StepExecutionEntry:
-        """TODO docstring. Document this function.
+        """Look up a step entry by id while the tracker lock is held.
 
         Args:
-            step_id: TODO docstring.
+            step_id: Identifier from the configured step definitions.
 
         Returns:
-            TODO docstring.
+            Matching step execution entry.
         """
         for entry in self._entries:
             if entry.step_id == step_id:
@@ -434,11 +434,11 @@ class ProgressTracker:
         return message
 
     def _log_once(self, step_id: str, message: str) -> None:
-        """TODO docstring. Document this function.
+        """Emit a status message once per step/message pair.
 
         Args:
-            step_id: TODO docstring.
-            message: TODO docstring.
+            step_id: Step id used to deduplicate repeated status messages.
+            message: Status message to emit through the configured logger.
         """
         with self._log_lock:
             last = self._last_log_messages.get(step_id)
@@ -448,33 +448,33 @@ class ProgressTracker:
         self._emit_log(message)
 
     def _emit_log(self, message: str) -> None:
-        """TODO docstring. Document this function.
+        """Send a status message to the configured logging callback.
 
         Args:
-            message: TODO docstring.
+            message: Human-readable progress status line.
         """
         self._log_fn(message)
 
     def _write_index(self) -> None:
-        """TODO docstring. Document this function."""
+        """Persist the step index after acquiring the tracker lock."""
         with self._lock:
             self._write_index_locked()
 
     def _write_index_locked(self) -> None:
-        """TODO docstring. Document this function."""
+        """Persist the step index when a manifest writer is configured."""
         if self._writer is None:
             return
         self._writer.write_step_index(self._entries)
 
     @staticmethod
     def _format_duration(value: float | None) -> str:
-        """TODO docstring. Document this function.
+        """Format a duration for compact progress log output.
 
         Args:
-            value: TODO docstring.
+            value: Duration in seconds, or ``None`` when unknown.
 
         Returns:
-            TODO docstring.
+            Human-readable duration such as ``3s``, ``2m04s``, ``1h02m``, or ``--``.
         """
         if value is None:
             return "--"
@@ -511,14 +511,15 @@ class _FailureSafeGuard:
         flush_interval: float,
         signals: Sequence[int | signal.Signals] | None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Start the guard thread and install termination-signal handlers.
 
         Args:
-            has_work: TODO docstring.
-            flush_running: TODO docstring.
-            flush_failed: TODO docstring.
-            flush_interval: TODO docstring.
-            signals: TODO docstring.
+            has_work: Callback indicating whether a heartbeat flush is needed.
+            flush_running: Callback used for periodic running-state flushes.
+            flush_failed: Callback used when a handled termination signal is received.
+            flush_interval: Desired interval between background heartbeat flushes; values below
+                1.0 second are clamped.
+            signals: Signals to intercept; defaults to SIGTERM/SIGINT where available.
         """
         self._has_work = has_work
         self._flush_running = flush_running
@@ -537,14 +538,14 @@ class _FailureSafeGuard:
         self._install_signal_handlers()
 
         def _cleanup() -> None:
-            """TODO docstring. Document this function."""
+            """Stop the guard and restore handlers during interpreter shutdown."""
             self.close()
 
         self._atexit_callback = _cleanup
         atexit.register(self._atexit_callback)
 
     def close(self) -> None:
-        """TODO docstring. Document this function."""
+        """Stop the guard thread and restore signal/atexit state."""
         if self._shutdown.is_set():
             return
         self._shutdown.set()
@@ -557,14 +558,14 @@ class _FailureSafeGuard:
             self._atexit_callback = None
 
     def _run(self) -> None:
-        """TODO docstring. Document this function."""
+        """Flush running progress periodically while work remains active."""
         while not self._shutdown.wait(self._flush_interval):
             if not self._has_work():
                 continue
             self._flush_running()
 
     def _install_signal_handlers(self) -> None:
-        """TODO docstring. Document this function."""
+        """Install configured signal handlers on the main thread when possible."""
         if not self._signals:
             return
         if threading.current_thread() is not threading.main_thread():
@@ -578,7 +579,7 @@ class _FailureSafeGuard:
             self._previous_handlers[signum] = previous
 
     def _restore_signal_handlers(self) -> None:
-        """TODO docstring. Document this function."""
+        """Restore signal handlers saved during guard installation."""
         if not self._previous_handlers:
             return
         for signum, handler in self._previous_handlers.items():
@@ -587,11 +588,11 @@ class _FailureSafeGuard:
         self._previous_handlers.clear()
 
     def _handle_signal(self, signum: int, frame: FrameType | None) -> None:
-        """TODO docstring. Document this function.
+        """Flush a failure manifest before delegating to the previous signal handler.
 
         Args:
-            signum: TODO docstring.
-            frame: TODO docstring.
+            signum: Received signal number.
+            frame: Current interpreter frame supplied by ``signal``.
         """
         signal_name = self._signal_name(signum)
         self._flush_failed(f"Signal {signal_name}")
@@ -606,13 +607,13 @@ class _FailureSafeGuard:
 
     @staticmethod
     def _signal_name(signum: int) -> str:
-        """TODO docstring. Document this function.
+        """Return a readable signal name.
 
         Args:
-            signum: TODO docstring.
+            signum: Signal number.
 
         Returns:
-            TODO docstring.
+            Enum name for known signals, otherwise the numeric value as text.
         """
         try:
             return signal.Signals(signum).name
@@ -621,13 +622,13 @@ class _FailureSafeGuard:
 
     @staticmethod
     def _normalize_signals(signals: Sequence[int | signal.Signals] | None) -> tuple[int, ...]:
-        """TODO docstring. Document this function.
+        """Normalize optional signal enums/ints into unique signal numbers.
 
         Args:
-            signals: TODO docstring.
+            signals: Optional sequence of signal enums or integer signal numbers.
 
         Returns:
-            TODO docstring.
+            Tuple of unique signal numbers preserving input order.
         """
         if signals is None:
             return tuple(int(sig) for sig in _DEFAULT_FAILURE_SIGNALS)

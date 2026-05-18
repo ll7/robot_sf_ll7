@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/hazard_traceability.v1.json",
+  "title": "RobotSF Hazard Traceability (v1)",
+  "description": "Mapping from scenario families or IDs to intended hazards and supporting evidence fields. This is traceability metadata, not safety proof.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "hazards",
+    "scenario_mappings",
+    "claim_boundary",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "hazard_traceability.v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$"
+    },
+    "hazards": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/hazard"
+      }
+    },
+    "scenario_mappings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/scenario_mapping"
+      }
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "string_list": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "optional_string_list": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "hazard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "severity",
+        "supporting_metrics",
+        "evidence_fields"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "safety",
+            "comfort",
+            "social",
+            "operational"
+          ]
+        },
+        "supporting_metrics": {
+          "$ref": "#/$defs/string_list"
+        },
+        "evidence_fields": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "scenario_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "hazards",
+        "notes"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "scenario_ids"
+          ]
+        },
+        {
+          "required": [
+            "scenario_families"
+          ]
+        }
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$"
+        },
+        "scenario_ids": {
+          "$ref": "#/$defs/optional_string_list"
+        },
+        "scenario_families": {
+          "$ref": "#/$defs/optional_string_list"
+        },
+        "hazards": {
+          "$ref": "#/$defs/string_list"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_issue",
+        "authored_by",
+        "source_files",
+        "notes"
+      ],
+      "properties": {
+        "source_issue": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authored_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_files": {
+          "$ref": "#/$defs/string_list"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

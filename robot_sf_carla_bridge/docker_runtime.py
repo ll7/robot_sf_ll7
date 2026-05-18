@@ -82,8 +82,10 @@ def run_command(command: list[str], *, timeout_s: float = 30.0) -> CommandResult
 def validate_carla_image(image: str) -> str:
     """Return a CARLA image reference only when it is explicitly pinned."""
 
-    if not image or image.endswith(":latest") or ":" not in image:
-        raise ValueError("CARLA Docker image must be pinned; do not use carlasim/carla:latest")
+    if image != CARLA_DOCKER_IMAGE:
+        raise ValueError(
+            f"CARLA Docker image must be pinned to {CARLA_DOCKER_IMAGE}; got {image!r}"
+        )
     return image
 
 
@@ -222,7 +224,16 @@ def run_carla_docker_preflight(  # noqa: C901
     )
 
     nvidia_docker = runner(
-        ["docker", "run", "--rm", "--gpus", "all", NVIDIA_DOCKER_TEST_IMAGE, "nvidia-smi"],
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--pull=never",
+            "--gpus",
+            "all",
+            NVIDIA_DOCKER_TEST_IMAGE,
+            "nvidia-smi",
+        ],
         timeout_s=120.0,
     )
     if nvidia_docker.returncode != 0:
@@ -286,7 +297,26 @@ def run_carla_docker_preflight(  # noqa: C901
                 reason=f"Failed to pull pinned CARLA image {image}",
             )
         image_inspect = runner(["docker", "image", "inspect", image], timeout_s=30.0)
+    if image_inspect.returncode != 0:
+        return _not_available(
+            status,
+            check={
+                "name": "carla_image_inspect",
+                "status": "failed",
+                "command": image_inspect.args,
+                "stderr": image_inspect.stderr,
+            },
+            missing_capability="carla-image",
+            reason=f"Failed to inspect image metadata for {image}",
+        )
     image_metadata = _image_metadata(image_inspect.stdout)
+    if not image_metadata.get("digest") or image_metadata.get("size_bytes") is None:
+        return _not_available(
+            status,
+            check={"name": "carla_image", "status": "failed", "image": image},
+            missing_capability="carla-image",
+            reason=f"Image metadata for {image} is missing digest or size information",
+        )
     status["image_digest"] = image_metadata.get("digest")
     status["image_size_bytes"] = image_metadata.get("size_bytes")
     status["checks"].append({"name": "carla_image", "status": "available", **image_metadata})
@@ -356,24 +386,25 @@ def run_carla_docker_runtime_smoke(
     command = build_carla_server_container_command(image=image, container_name=container_name)
     start = runner(command, timeout_s=60.0)
     container_id = start.stdout.strip() or container_name
+    started = start.returncode == 0
     summary: dict[str, Any] = {
         **preflight,
         "docker_command": command,
         "container": {"name": container_name, "id": container_id},
     }
-    if start.returncode != 0:
-        summary.update(
-            {
-                "status": "failed",
-                "reason": "Failed to start pinned CARLA server container",
-                "stderr": start.stderr,
-            }
-        )
-        return summary
 
     deadline = time.monotonic() + startup_timeout_s
     last_error: Exception | None = None
     try:
+        if not started:
+            summary.update(
+                {
+                    "status": "failed",
+                    "reason": "Failed to start pinned CARLA server container",
+                    "stderr": start.stderr,
+                }
+            )
+            return summary
         while True:
             try:
                 summary["health"] = build_carla_client_health_summary()

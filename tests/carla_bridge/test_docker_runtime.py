@@ -17,6 +17,10 @@ def test_carla_docker_runtime_uses_pinned_0_9_16_image() -> None:
 
     with pytest.raises(ValueError, match="must be pinned"):
         validate_carla_image("carlasim/carla:latest")
+    with pytest.raises(ValueError, match="carlasim/carla:0.9.16"):
+        validate_carla_image("carlasim/carla:0.9.15")
+    with pytest.raises(ValueError, match="carlasim/carla:0.9.16"):
+        validate_carla_image("localhost:5000/carlasim/carla")
 
 
 def test_build_carla_server_container_command_maps_ports_and_runs_headless() -> None:
@@ -143,7 +147,7 @@ def test_preflight_requires_50_gib_free_before_pull_when_image_absent(monkeypatc
                 "",
             )
         ),
-        ("docker", "run", "--rm", "--gpus", "all"): CommandResult(
+        ("docker", "run", "--rm", "--pull=never", "--gpus", "all"): CommandResult(
             ["docker", "run"],
             0,
             "NVIDIA-SMI 580.142\n",
@@ -178,6 +182,92 @@ def test_preflight_requires_50_gib_free_before_pull_when_image_absent(monkeypatc
     assert status["missing_capability"] == "docker-storage"
     assert "50 GiB" in status["reason"]
     assert status["docker_storage"]["free_gib"] == pytest.approx(49.0)
+
+
+def test_preflight_nvidia_container_check_does_not_pull_test_image() -> None:
+    """NVIDIA runtime probing should not download CUDA images unless explicitly prepared."""
+    from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_preflight
+
+    observed_commands: list[list[str]] = []
+
+    def fake_runner(command: list[str], *, timeout_s: float) -> CommandResult:
+        observed_commands.append(command)
+        if command[:2] == ["docker", "version"]:
+            return CommandResult(command, 0, '{"Server": {}}', "")
+        if command[:1] == ["nvidia-smi"]:
+            return CommandResult(command, 0, "NVIDIA GeForce RTX 3080, 580.142, 10240 MiB\n", "")
+        if command[:2] == ["docker", "run"]:
+            return CommandResult(command, 1, "", "pull access denied")
+        raise AssertionError(f"unexpected command: {command}")
+
+    status = run_carla_docker_preflight(runner=fake_runner, require_carla_api=False)
+
+    docker_run = next(command for command in observed_commands if command[:2] == ["docker", "run"])
+    assert "--pull=never" in docker_run
+    assert status["status"] == "not-available"
+    assert status["missing_capability"] == "nvidia-container-toolkit"
+
+
+def test_preflight_fails_when_post_pull_image_inspect_fails(monkeypatch) -> None:
+    """Pulled images should not be marked available until metadata inspection succeeds."""
+    from robot_sf_carla_bridge import docker_runtime
+    from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_preflight
+
+    image_inspect_count = 0
+
+    def fake_runner(command: list[str], *, timeout_s: float) -> CommandResult:
+        nonlocal image_inspect_count
+        if command[:2] == ["docker", "version"]:
+            return CommandResult(command, 0, '{"Server": {}}', "")
+        if command[:1] == ["nvidia-smi"]:
+            return CommandResult(command, 0, "NVIDIA GeForce RTX 3080, 580.142, 10240 MiB\n", "")
+        if command[:2] == ["docker", "run"]:
+            return CommandResult(command, 0, "NVIDIA-SMI 580.142\n", "")
+        if command[:3] == ["docker", "image", "inspect"]:
+            image_inspect_count += 1
+            return CommandResult(command, 1, "", "No such image metadata")
+        if command[:2] == ["docker", "info"]:
+            return CommandResult(command, 0, '"/var/lib/docker"\n', "")
+        if command[:2] == ["docker", "pull"]:
+            return CommandResult(command, 0, "pulled\n", "")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(
+        docker_runtime.shutil, "disk_usage", lambda path: (100, 80 * 1024**3, 80 * 1024**3)
+    )
+    monkeypatch.setattr(docker_runtime, "check_carla_runtime_ports", lambda ports: [])
+
+    status = run_carla_docker_preflight(runner=fake_runner, pull=True, require_carla_api=False)
+
+    assert image_inspect_count == 2
+    assert status["status"] == "not-available"
+    assert status["missing_capability"] == "carla-image"
+    assert status["checks"][-1]["name"] == "carla_image_inspect"
+
+
+def test_preflight_requires_image_digest_and_size(monkeypatch) -> None:
+    """Image metadata without digest or size should fail before runtime evidence is trusted."""
+    from robot_sf_carla_bridge import docker_runtime
+    from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_preflight
+
+    def fake_runner(command: list[str], *, timeout_s: float) -> CommandResult:
+        if command[:2] == ["docker", "version"]:
+            return CommandResult(command, 0, '{"Server": {}}', "")
+        if command[:1] == ["nvidia-smi"]:
+            return CommandResult(command, 0, "NVIDIA GeForce RTX 3080, 580.142, 10240 MiB\n", "")
+        if command[:2] == ["docker", "run"]:
+            return CommandResult(command, 0, "NVIDIA-SMI 580.142\n", "")
+        if command[:3] == ["docker", "image", "inspect"]:
+            return CommandResult(command, 0, json.dumps([{"RepoDigests": [], "Size": None}]), "")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(docker_runtime, "check_carla_runtime_ports", lambda ports: [])
+
+    status = run_carla_docker_preflight(runner=fake_runner, require_carla_api=False)
+
+    assert status["status"] == "not-available"
+    assert status["missing_capability"] == "carla-image"
+    assert "missing digest or size" in status["reason"]
 
 
 def test_build_carla_client_health_summary_records_versions_and_map(monkeypatch) -> None:
@@ -289,4 +379,44 @@ def test_runtime_smoke_stops_container_when_health_check_fails(monkeypatch) -> N
     assert summary["reason"] == "client failed"
     assert summary["container"]["id"] == "container-123"
     assert summary["logs_tail"] == "log tail\n"
+    assert any(command[:2] == ["docker", "stop"] for command in commands)
+
+
+def test_runtime_smoke_attempts_cleanup_when_container_start_fails(monkeypatch) -> None:
+    """Startup failures should still produce log-tail and cleanup evidence."""
+    from robot_sf_carla_bridge import docker_runtime
+    from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_runtime_smoke
+
+    commands: list[list[str]] = []
+
+    def fake_runner(command: list[str], *, timeout_s: float) -> CommandResult:
+        commands.append(command)
+        if command[:2] == ["docker", "run"]:
+            return CommandResult(command, 1, "", "startup failed")
+        if command[:2] == ["docker", "logs"]:
+            return CommandResult(command, 1, "", "no logs")
+        if command[:2] == ["docker", "stop"]:
+            return CommandResult(command, 1, "", "no such container")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(
+        docker_runtime,
+        "run_carla_docker_preflight",
+        lambda **kwargs: {
+            "schema_version": "carla-docker-runtime.v1",
+            "status": "available",
+            "reason": "CARLA Docker runtime prerequisites are available",
+            "image": "carlasim/carla:0.9.16",
+            "image_digest": "sha256:abc",
+            "checks": [],
+        },
+    )
+
+    summary = run_carla_docker_runtime_smoke(runner=fake_runner)
+
+    assert summary["status"] == "failed"
+    assert summary["reason"] == "Failed to start pinned CARLA server container"
+    assert summary["stderr"] == "startup failed"
+    assert summary["logs_tail"] == "no logs"
+    assert summary["cleanup"]["stderr"] == "no such container"
     assert any(command[:2] == ["docker", "stop"] for command in commands)

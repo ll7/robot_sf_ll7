@@ -305,6 +305,59 @@
                         }
                     },
                     "additionalProperties": true
+                },
+                "safety_shield_contract": {
+                    "type": "object",
+                    "description": "Benchmark-facing shield contract; not a formal safety certificate.",
+                    "properties": {
+                        "schema_version": {
+                            "const": "safety-shield-contract.v1"
+                        },
+                        "shield_name": {
+                            "type": "string"
+                        },
+                        "prediction_source": {
+                            "type": "string"
+                        },
+                        "fallback_policy": {
+                            "type": "string"
+                        },
+                        "calibration_status": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "shield_stats": {
+                    "type": "object",
+                    "properties": {
+                        "schema_version": {
+                            "const": "safety-shield-stats.v1"
+                        },
+                        "decision_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "intervention_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "override_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "hard_constraint_violation_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "last_decision": {
+                            "type": [
+                                "object",
+                                "null"
+                            ]
+                        }
+                    },
+                    "additionalProperties": true
                 }
             },
             "additionalProperties": true
@@ -364,6 +417,49 @@
                         "integer"
                     ],
                     "minimum": 0
+                },
+                "shield_decision_count": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_intervention_count": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_override_count": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_hard_constraint_violation_count": {
+                    "type": [
+                        "number",
+                        "integer"
+                    ],
+                    "minimum": 0
+                },
+                "shield_intervention_rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "shield_override_rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "shield_hard_constraint_violation_rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
                 },
                 "pedestrian_impact": {
                     "type": "object",

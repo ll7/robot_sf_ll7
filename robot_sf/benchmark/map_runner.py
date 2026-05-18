@@ -120,6 +120,13 @@ from robot_sf.planner.safety_barrier import (
     SafetyBarrierPlannerAdapter,
     build_safety_barrier_config,
 )
+from robot_sf.planner.safety_shield import (
+    ShieldDecision,
+    new_shield_stats,
+    shield_contract_metadata,
+    shield_metrics_from_stats,
+    update_shield_stats,
+)
 from robot_sf.planner.social_navigation_pyenvs_force_model import (
     SocialNavigationPyEnvsForceModelAdapter,
     build_social_navigation_pyenvs_force_model_config,
@@ -1099,6 +1106,35 @@ class _GoalFallbackAdapter:
         return _goal_policy(observation, max_speed=self._max_speed)
 
 
+def _choose_shield_command(
+    shield: Any,
+    observation: dict[str, Any],
+    proposed_command: tuple[float, float],
+) -> ShieldDecision:
+    """Return a structured shield decision, adapting legacy guard implementations."""
+    decision_fn = getattr(shield, "choose_command_decision", None)
+    if callable(decision_fn):
+        decision = decision_fn(observation, proposed_command)
+        if isinstance(decision, ShieldDecision):
+            return decision
+        if hasattr(decision, "as_command_result"):
+            command, label = decision.as_command_result()
+            return ShieldDecision(
+                proposed_action=(float(proposed_command[0]), float(proposed_command[1])),
+                filtered_action=(float(command[0]), float(command[1])),
+                decision_label=str(label),
+                intervention_reason="legacy_structured_guard_decision",
+            )
+
+    command, label = shield.choose_command(observation, proposed_command)
+    return ShieldDecision(
+        proposed_action=(float(proposed_command[0]), float(proposed_command[1])),
+        filtered_action=(float(command[0]), float(command[1])),
+        decision_label=str(label),
+        intervention_reason="legacy_guard_decision",
+    )
+
+
 def _normalize_heading(value: float) -> float:
     """Normalize heading to [-pi, pi].
 
@@ -1757,6 +1793,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "stop_best_effort": 0,
             "goal_reached": 0,
         }
+        meta["safety_shield_contract"] = shield_contract_metadata(
+            shield_name="GuardedPPOAdapter",
+            prediction_source="short_horizon_rollout",
+            fallback_policy=type(guard_adapter.fallback_adapter).__name__,
+        )
+        meta["shield_stats"] = new_shield_stats()
         planner_meta = meta.get("planner_kinematics")
         if isinstance(planner_meta, dict):
             planner_meta["planner_command_space"] = _default_robot_command_space(
@@ -1790,10 +1832,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 kinematics_model=ppo_kinematics_model,
                 project_command=False,
             )
-            chosen, decision = guard_adapter.choose_command(
+            shield_decision = _choose_shield_command(
+                guard_adapter,
                 obs,
                 (float(linear), float(angular)),
             )
+            chosen, decision = shield_decision.as_command_result()
             linear, angular = _project_with_feasibility(
                 model=ppo_kinematics_model,
                 command=(float(chosen[0]), float(chosen[1])),
@@ -1802,6 +1846,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             guard_stats = meta.get("guard_stats")
             if isinstance(guard_stats, dict):
                 guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            shield_stats = meta.get("shield_stats")
+            if isinstance(shield_stats, dict):
+                update_shield_stats(shield_stats, shield_decision)
             _update_adapter_impact_metrics(
                 meta,
                 conversion_mode,
@@ -1896,6 +1943,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "stop_best_effort": 0,
             "goal_reached": 0,
         }
+        meta["safety_shield_contract"] = shield_contract_metadata(
+            shield_name="GuardedPPOAdapter",
+            prediction_source="short_horizon_rollout",
+            fallback_policy="goal",
+        )
+        meta["shield_stats"] = new_shield_stats()
         planner_meta = meta.get("planner_kinematics")
         if isinstance(planner_meta, dict):
             planner_meta["planner_command_space"] = _default_robot_command_space(
@@ -1918,10 +1971,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 tuple[float, float]: Guard-selected and projected command.
             """
             sonic_command = sonic_adapter.plan(obs)
-            chosen, decision = guard_adapter.choose_command(
+            shield_decision = _choose_shield_command(
+                guard_adapter,
                 obs,
                 (float(sonic_command[0]), float(sonic_command[1])),
             )
+            chosen, decision = shield_decision.as_command_result()
             linear, angular = _project_with_feasibility(
                 model=guarded_kinematics_model,
                 command=(float(chosen[0]), float(chosen[1])),
@@ -1930,6 +1985,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             guard_stats = meta.get("guard_stats")
             if isinstance(guard_stats, dict):
                 guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            shield_stats = meta.get("shield_stats")
+            if isinstance(shield_stats, dict):
+                update_shield_stats(shield_stats, shield_decision)
             _update_adapter_impact_metrics(
                 meta,
                 "adapter",
@@ -2904,6 +2962,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     visibility_settings = getattr(config, "observation_visibility", None)
     if visibility_settings is not None and hasattr(visibility_settings, "to_metadata"):
         algo_meta["observation_visibility"] = visibility_settings.to_metadata()
+    shield_stats = algo_meta.get("shield_stats")
+    if isinstance(shield_stats, dict):
+        metrics_raw.update(shield_metrics_from_stats(shield_stats))
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,

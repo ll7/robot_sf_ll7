@@ -7,6 +7,8 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
 
 - `classic_interactions.yaml`, `francis2023.yaml`: manifest entry points for the two suites.
 - `classic_interactions_francis2023.yaml`: combined manifest for both suites.
+- `nominal_v1.yaml`: compact nominal shared-space calibration matrix for routine, low-stress
+  planner checks. It is intentionally separate from stress, adversarial, and camera-ready evidence.
 - `confirmation_v1.yaml`: compact confirmation matrix with issue-596 atomic and sparse
   interaction archetypes for non-paper robustness checks.
 - `single/`: one scenario per file (manual fine-tuning and small edits).
@@ -164,3 +166,7 @@ uv run python scripts/tools/policy_analysis_run.py \
 - `sanity_v1.yaml` is a non-paper-facing nominal calibration manifest for issue #1083. It selects
   four low-ambiguity scenes from existing validated surfaces so `goal` and `orca` can be checked
   on easy deployment-like cases before hard-matrix failures are interpreted.
+- `nominal_v1.yaml` is a small shared-space calibration matrix for issue #1273. It selects one
+  straight open-space route, one gentle crossing, one low-density doorway, and one low-density
+  bottleneck. Use it for local sanity checks and nominal-vs-stress interpretation; do not treat
+  success on this matrix as stress robustness or safety evidence.

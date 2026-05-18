@@ -1,0 +1,30 @@
+## Nominal Shared-Space Scenario Matrix v1
+#
+# Purpose:
+#   Provide a compact, low-stress calibration surface for routine shared-space
+#   planner competence. Keep these results separate from stress, adversarial,
+#   and camera-ready evidence: nominal success is a sanity check, not a safety
+#   or robustness claim.
+#
+# Canonical validation:
+#   robot_sf_bench validate-config --matrix configs/scenarios/nominal_v1.yaml
+#   robot_sf_bench preview-scenarios --matrix configs/scenarios/nominal_v1.yaml
+#
+# Smoke example:
+#   robot_sf_bench run --matrix configs/scenarios/nominal_v1.yaml \
+#     --algo simple_policy --out output/benchmarks/nominal_v1/episodes.jsonl \
+#     --workers 1 --no-resume
+
+includes:
+  - sets/verified_simple_subset_v1.yaml
+  - archetypes/classic_doorway.yaml
+  - archetypes/classic_bottleneck.yaml
+
+select_scenarios:
+  - empty_map_8_directions_east
+  - single_ped_crossing_orthogonal
+  - classic_doorway_low
+  - classic_bottleneck_low
+
+map_search_paths:
+  - ../../maps/svg_maps

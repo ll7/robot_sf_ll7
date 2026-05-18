@@ -259,6 +259,18 @@ class Simulator:
         """Current (vx, vy) velocities of all pedestrians."""
         return self.pysf_state.ped_velocities
 
+    def _validate_robot_action_count(self, actions: list[RobotAction]) -> None:
+        """Raise when a simulator step receives the wrong number of robot actions."""
+
+        expected = len(self.robots)
+        actual = len(actions)
+        if actual != expected:
+            action_word = "action" if expected == 1 else "actions"
+            raise ValueError(
+                f"{type(self).__name__}.step_once expected {expected} robot "
+                f"{action_word}, got {actual}."
+            )
+
     def reset_state(self):
         """Reset robot navigation and spawn positions.
 
@@ -284,13 +296,14 @@ class Simulator:
         Args:
             actions: Control actions for each robot (velocity, angular velocity, etc.).
         """
+        self._validate_robot_action_count(actions)
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
         self.pysf_sim.peds.step(ped_forces, groups)
-        for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=False):
+        for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=True):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
 
@@ -551,13 +564,14 @@ class PedSimulator(Simulator):
             actions: Control actions for each robot.
             ego_ped_actions: Control actions for the ego pedestrian.
         """
+        self._validate_robot_action_count(actions)
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
         self.pysf_sim.peds.step(ped_forces, groups)
-        for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=False):
+        for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=True):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
 

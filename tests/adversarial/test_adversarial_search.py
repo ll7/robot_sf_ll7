@@ -1180,6 +1180,115 @@ def test_seed_sensitivity_rejects_empty_perturbation_iterables(tmp_path: Path) -
             )
 
 
+def test_seed_sensitivity_records_fail_closed_evaluator_rejections(tmp_path: Path) -> None:
+    """Evaluator failures should be recorded per seed instead of aborting the summary."""
+    config = _config(tmp_path)
+    evaluated: list[int] = []
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        _scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        """Reject one replay and emit a successful record for the other."""
+        evaluated.append(candidate.scenario_seed)
+        if candidate.scenario_seed == 8:
+            raise RuntimeError("seed 8 benchmark rejected")
+        record = {
+            "episode_id": f"seed-{candidate.scenario_seed}",
+            "seed": candidate.scenario_seed,
+            "status": "success",
+            "steps": 1,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"success": 1.0},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status("seed sensitivity test"),
+            objective_value=None,
+            failure_attribution=attribution_from_episode_record(record),
+            episode_record_path=episode_path,
+            trajectory_csv_path=None,
+            scenario_yaml_path=_scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    summary = run_seed_sensitivity(
+        config,
+        candidate=_candidate(7),
+        seeds=[7, 8],
+        output_dir=tmp_path / "rejected_evaluator",
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("seed sensitivity test"),
+    )
+
+    assert evaluated == [7, 8]
+    assert summary.num_fail_closed_exclusions == 1
+    assert summary.failure_persistence_rate == 0.0
+    assert summary.classification == "no_failure"
+    assert summary.replays[1].status == "evaluation_failed"
+    assert summary.replays[1].outcome == "fail_closed_exclusion"
+    assert "seed 8 benchmark rejected" in str(summary.replays[1].reason)
+    assert summary.replays[1].started_at
+
+
+def test_seed_sensitivity_rejects_non_integral_replay_seeds(tmp_path: Path) -> None:
+    """Replay seed coercion should reject lossy non-integer values."""
+    config = _config(tmp_path)
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        _scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        """Return a no-failure replay for valid seeds."""
+        record = {
+            "episode_id": f"seed-{candidate.scenario_seed}",
+            "seed": candidate.scenario_seed,
+            "status": "success",
+            "steps": 1,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"success": 1.0},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status("seed sensitivity test"),
+            objective_value=None,
+            failure_attribution=attribution_from_episode_record(record),
+            episode_record_path=episode_path,
+            trajectory_csv_path=None,
+            scenario_yaml_path=_scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    summary = run_seed_sensitivity(
+        config,
+        candidate=_candidate(7),
+        seeds=["7", "+8", 9.0],
+        output_dir=tmp_path / "valid_seed_coercion",
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("seed sensitivity test"),
+    )
+    assert summary.seeds == (7, 8, 9)
+
+    with pytest.raises(ValueError, match="seed values must be integers"):
+        run_seed_sensitivity(
+            config,
+            candidate=_candidate(7),
+            seeds=[7, 8.5],
+            output_dir=tmp_path / "invalid_seed_coercion",
+            evaluator=evaluator,
+        )
+
+
 def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:
     """Comparison helper should run random, coordinate, and optuna samplers."""
     template = tmp_path / "template.yaml"

@@ -65,6 +65,8 @@ PY
 Observed result: `stable_failure`, `failure_persistence_rate=0.5`,
 `objective_score_spread=11.0`, summary written to
 `output/adversarial/issue1271_seed_sensitivity_smoke/seed_sensitivity_summary.json`.
+A persistence rate at the configured threshold is enough for the v1 helper to flag the candidate
+as stable, but the small two-seed smoke still remains low-confidence development evidence.
 That output is disposable local smoke evidence unless promoted through the artifact policy.
 
 Before PR handoff, also run:

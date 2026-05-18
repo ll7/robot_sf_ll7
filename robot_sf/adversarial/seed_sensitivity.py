@@ -134,7 +134,7 @@ def run_seed_sensitivity(
     reset process-global RNG state for each seed.
     """
     config.validate()
-    replay_seeds = tuple(int(seed) for seed in seeds)
+    replay_seeds = tuple(_coerce_replay_seed(seed) for seed in seeds)
     if not replay_seeds:
         raise ValueError("seeds must contain at least one replay seed")
     if not 0.0 <= min_persistence_rate <= 1.0:
@@ -195,17 +195,33 @@ def run_seed_sensitivity(
                 replay_index += 1
                 continue
 
-            evaluation = evaluator(config, replay_candidate, scenario_yaml_path, replay_dir)
-            evaluation = replace(evaluation, certification_status=certification_status)
-            score = objective(evaluation)
-            evaluation = evaluation.with_objective(score)
-            replays.append(
-                _replay_from_evaluation(
-                    evaluation,
-                    perturbation=perturbation,
-                    started_at=replay_started_at,
+            try:
+                evaluation = evaluator(config, replay_candidate, scenario_yaml_path, replay_dir)
+                evaluation = replace(evaluation, certification_status=certification_status)
+                score = objective(evaluation)
+                evaluation = evaluation.with_objective(score)
+                replays.append(
+                    _replay_from_evaluation(
+                        evaluation,
+                        perturbation=perturbation,
+                        started_at=replay_started_at,
+                    )
                 )
-            )
+            except Exception as exc:  # noqa: BLE001 - replay grids must fail closed per replay.
+                replays.append(
+                    SeedSensitivityReplay(
+                        seed=seed,
+                        perturbation=perturbation,
+                        status="evaluation_failed",
+                        outcome="fail_closed_exclusion",
+                        reason=repr(exc),
+                        objective_value=None,
+                        bundle_path=replay_dir,
+                        episode_record_path=replay_dir / "episode_records.jsonl",
+                        trajectory_csv_path=None,
+                        started_at=replay_started_at,
+                    )
+                )
             replay_index += 1
 
     summary = _summarize(
@@ -309,6 +325,21 @@ def _replay_dir(
     if not include_perturbation:
         return output_dir / f"replay_{index:04d}_seed_{seed}"
     return output_dir / f"replay_{index:04d}_seed_{seed}_perturb_{perturbation_index:02d}"
+
+
+def _coerce_replay_seed(seed: Any) -> int:
+    """Return a replay seed without silently truncating non-integer values."""
+    if isinstance(seed, bool):
+        raise ValueError(f"seed values must be integers, got {seed!r}")
+    if isinstance(seed, int):
+        return seed
+    if isinstance(seed, float) and seed.is_integer():
+        return int(seed)
+    if isinstance(seed, str):
+        stripped = seed.strip()
+        if stripped and stripped.lstrip("+-").isdigit():
+            return int(stripped)
+    raise ValueError(f"seed values must be integers, got {seed!r}")
 
 
 def _default_certifier(

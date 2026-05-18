@@ -47,6 +47,16 @@ Certification still runs per perturbed candidate. Rejected perturbations are rec
   `uv run ruff check robot_sf/adversarial/seed_sensitivity.py robot_sf/adversarial/__init__.py tests/adversarial/test_adversarial_search.py`
   passed.
   `uvx ty check robot_sf/adversarial/seed_sensitivity.py --exit-zero` passed.
+- Post-merge proof after refreshing against `origin/issue-1271-seed-sensitivity-explorer`:
+  `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run --active pytest tests/adversarial/test_adversarial_search.py::test_seed_sensitivity_classifies_stable_and_brittle_failures tests/adversarial/test_adversarial_search.py::test_seed_sensitivity_records_fail_closed_rejected_perturbations tests/adversarial/test_adversarial_search.py::test_seed_sensitivity_records_timing_speed_perturbation_grid tests/adversarial/test_adversarial_search.py::test_seed_sensitivity_rejects_unbounded_perturbations tests/adversarial/test_adversarial_search.py::test_seed_sensitivity_rejects_empty_perturbation_iterables tests/adversarial/test_adversarial_search.py::test_seed_sensitivity_records_fail_closed_evaluator_rejections tests/adversarial/test_adversarial_search.py::test_seed_sensitivity_rejects_non_integral_replay_seeds -q`
+  passed with `7 passed`.
+  `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run --active pytest tests/adversarial/test_adversarial_search.py -q`
+  passed with `45 passed`.
+  `uv run --active ruff check robot_sf/adversarial/seed_sensitivity.py tests/adversarial/test_adversarial_search.py`
+  and
+  `uv run --active ruff format --check robot_sf/adversarial/seed_sensitivity.py tests/adversarial/test_adversarial_search.py`
+  passed.
+  `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` passed.
 
 ## Remaining Notes
 

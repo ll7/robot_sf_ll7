@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import inspect
 from functools import partial
 
 import numpy as np
 from gymnasium import spaces
 
+import robot_sf.gym_env.pedestrian_env as pedestrian_env_module
 from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.gym_env._stub_robot_model import StubRobotModel
+from robot_sf.gym_env.env_config import PedEnvSettings as LegacyPedEnvSettings
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv, _reward_function_name
 from robot_sf.gym_env.reward import simple_ped_reward
@@ -71,6 +74,45 @@ def test_pedestrian_env_does_not_mutate_input_config_for_deprecated_force_flag()
         assert env.config.peds_have_static_obstacle_forces is False
     finally:
         env.exit()
+
+
+def test_pedestrian_env_avoids_deepcopy_for_default_deprecated_force_flag(monkeypatch) -> None:
+    """Default config construction should not defensively copy an already-fresh config."""
+
+    def _fail_deepcopy(_value):
+        raise AssertionError("default config should not need a defensive copy")
+
+    monkeypatch.setattr(pedestrian_env_module, "deepcopy", _fail_deepcopy)
+
+    env = PedestrianEnv(
+        env_config=None,
+        robot_model=None,
+        peds_have_obstacle_forces=False,
+    )
+    try:
+        assert env.config.peds_have_static_obstacle_forces is False
+    finally:
+        env.exit()
+
+
+def test_pedestrian_env_adapts_legacy_config_to_unified_boundary() -> None:
+    """Legacy PedEnvSettings should be explicitly adapted before base setup."""
+    config = LegacyPedEnvSettings(spawn_near_robot=False)
+
+    env = PedestrianEnv(env_config=config, robot_model=None)
+    try:
+        assert isinstance(env.config, PedestrianSimulationConfig)
+        assert env.config is not config
+        assert env.config.spawn_near_robot is False
+    finally:
+        env.exit()
+
+
+def test_pedestrian_env_constructor_avoids_bare_any_config_cast() -> None:
+    """PedestrianEnv should not hide legacy config typing with a bare Any cast."""
+    source = inspect.getsource(pedestrian_env_module.PedestrianEnv.__init__)
+
+    assert 'cast("Any", env_config)' not in source
 
 
 def test_pedestrian_env_create_spaces_matches_base_signature() -> None:

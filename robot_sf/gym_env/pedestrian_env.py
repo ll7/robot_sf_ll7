@@ -8,8 +8,9 @@ import datetime
 import pickle
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import fields
 from functools import partial
-from typing import Any, cast
+from typing import Any
 
 import loguru
 import numpy as np
@@ -40,6 +41,36 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import PedSimulator, init_ped_simulators
 
 logger = loguru.logger
+
+
+def _adapt_legacy_pedestrian_config(env_config: PedEnvSettings) -> PedestrianSimulationConfig:
+    """Convert legacy ``PedEnvSettings`` into the unified pedestrian config type.
+
+    Returns:
+        PedestrianSimulationConfig: Unified config populated from shared legacy fields.
+    """
+    values = {
+        field.name: deepcopy(getattr(env_config, field.name))
+        for field in fields(PedestrianSimulationConfig)
+        if hasattr(env_config, field.name)
+    }
+    return PedestrianSimulationConfig(**values)
+
+
+def _coerce_pedestrian_config(
+    env_config: PedestrianSimulationConfig | PedEnvSettings | None,
+) -> PedestrianSimulationConfig:
+    """Return a unified pedestrian config for ``PedestrianEnv`` setup."""
+    if env_config is None:
+        return PedestrianSimulationConfig()
+    if isinstance(env_config, PedestrianSimulationConfig):
+        return env_config
+    if isinstance(env_config, PedEnvSettings):
+        return _adapt_legacy_pedestrian_config(env_config)
+    raise TypeError(
+        "env_config must be PedestrianSimulationConfig, legacy PedEnvSettings, or None; "
+        f"got {type(env_config).__name__}",
+    )
 
 
 def _reward_function_name(reward_func: Callable[..., object]) -> str:
@@ -95,18 +126,14 @@ class PedestrianEnv(SingleAgentEnv):
             peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
             **kwargs: Additional keyword arguments forwarded to ``SingleAgentEnv``.
         """
-        if env_config is None:
-            env_config = PedestrianSimulationConfig()
+        original_env_config = env_config
+        env_config = _coerce_pedestrian_config(env_config)
 
         # Ensure pedestrian obstacle forces are configured consistently.
         if peds_have_obstacle_forces is not None:
-            env_config = deepcopy(env_config)
-            obstacle_force_attr = (
-                "peds_have_static_obstacle_forces"
-                if hasattr(env_config, "peds_have_static_obstacle_forces")
-                else "peds_have_obstacle_forces"
-            )
-            setattr(env_config, obstacle_force_attr, peds_have_obstacle_forces)
+            if env_config is original_env_config:
+                env_config = deepcopy(env_config)
+            env_config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
 
         # Store robot model
         if robot_model is None:
@@ -130,7 +157,7 @@ class PedestrianEnv(SingleAgentEnv):
 
         # Initialize base class
         super().__init__(
-            config=cast("Any", env_config),
+            config=env_config,
             debug=debug,
             recording_enabled=recording_enabled,
             **kwargs,

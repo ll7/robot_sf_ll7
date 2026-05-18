@@ -104,6 +104,8 @@ knowledge, not every transient iteration detail.
   [issue_1271_seed_sensitivity_explorer.md](issue_1271_seed_sensitivity_explorer.md)
 * Issue #1272 Safety-Oriented Validation And Falsification Strategy:
   [issue_1272_validation_falsification_strategy.md](issue_1272_validation_falsification_strategy.md)
+* Issue #1304 pedestrian config boundary:
+  [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Artifact evidence vocabulary:

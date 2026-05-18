@@ -577,6 +577,32 @@ def test_force_gradient_norm_mean():
     assert 0.9 <= g <= 1.1
 
 
+def test_bilinear_many_matches_scalar_contract():
+    """Vectorized bilinear interpolation should match scalar samples and NaN handling."""
+    xs = np.linspace(-2.0, 3.0, 8)
+    ys = np.linspace(1.0, 5.0, 7)
+    X, Y = np.meshgrid(xs, ys)
+    V = X * 0.75 - Y * 0.25 + X * Y * 0.1
+    points = np.array(
+        [
+            [-2.0, 1.0],
+            [-1.3, 1.7],
+            [0.5, 3.4],
+            [3.0, 5.0],
+            [-2.1, 3.0],
+            [2.0, 5.1],
+            [np.nan, 2.0],
+        ],
+    )
+
+    expected = np.array(
+        [metrics_mod._bilinear(float(x), float(y), X, Y, V) for x, y in points],
+    )
+    actual = metrics_mod._bilinear_many(points[:, 0], points[:, 1], X, Y, V)
+
+    np.testing.assert_allclose(actual, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
+
+
 def test_experimental_ped_impact_metrics_are_opt_in() -> None:
     """Experimental pedestrian-impact keys should only appear when explicitly enabled."""
     ep = _make_episode(T=8, K=1)

@@ -29,9 +29,9 @@
 - Convenience functions: `make_robot_env()`, `make_image_robot_env()`, etc.
 - Consistent interface across all environment types
 
-#### Refactored Pedestrian Environment (`pedestrian_env_refactored.py`)
+#### Pedestrian Environment (`pedestrian_env.py`)
 - Canonical pedestrian environment implementation using the new architecture
-- Backward-compatible via `robot_sf.gym_env.pedestrian_env` re-export
+- Transition-only `_refactored` shim removed after consolidation
 - Consistent interface implementation
 
 ### 3. Demonstrated Working Solution
@@ -67,8 +67,8 @@
    ```
 
 2. **Migrate PedestrianEnv**:
-   - ✅ Completed: canonical implementation is now `RefactoredPedestrianEnv`
-   - Keep backward-compatible import path via `robot_sf.gym_env.pedestrian_env`
+   - ✅ Completed: canonical implementation now lives directly in `robot_sf.gym_env.pedestrian_env`
+   - Transition aliases remain inside the canonical module for external import compatibility
 
 3. **Update RobotEnvWithImage**:
    - Ensure it uses `ImageRobotConfig` by default

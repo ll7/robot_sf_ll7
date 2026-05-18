@@ -7,7 +7,7 @@ from gymnasium import spaces
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
 from robot_sf.gym_env.observation_config import get_observation_stack_steps
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 from robot_sf.nav.occupancy_grid import GridConfig
@@ -360,7 +360,10 @@ def create_spaces(  # noqa: C901
     return action_space, observation_space, orig_obs_space
 
 
-def init_ped_spaces(env_config: PedEnvSettings, map_def: MapDefinition):
+def init_ped_spaces(
+    env_config: PedEnvSettings | PedestrianSimulationConfig,
+    map_def: MapDefinition,
+):
     """
     Initialize the action and observation spaces for the environment.
 
@@ -405,7 +408,7 @@ def init_ped_spaces(env_config: PedEnvSettings, map_def: MapDefinition):
 
 def init_ped_collision_and_sensors(
     sim: PedSimulator,
-    env_config: PedEnvSettings,
+    env_config: PedEnvSettings | PedestrianSimulationConfig,
     orig_obs_space: list[spaces.Dict],
 ):
     """Initialize collision detection and sensor fusion for robot + ego pedestrian.

@@ -116,7 +116,7 @@ The refactoring created these new core files:
 | [`robot_sf/gym_env/abstract_envs.py`](../../robot_sf/gym_env/abstract_envs.py) | Abstract base classes |
 | [`robot_sf/gym_env/unified_config.py`](../../robot_sf/gym_env/unified_config.py) | Consolidated configuration |
 | [`robot_sf/gym_env/environment_factory.py`](../../robot_sf/gym_env/environment_factory.py) | Factory pattern |
-| [`robot_sf/gym_env/pedestrian_env_refactored.py`](../../robot_sf/gym_env/pedestrian_env_refactored.py) | Canonical refactored pedestrian environment |
+| [`robot_sf/gym_env/pedestrian_env.py`](../../robot_sf/gym_env/pedestrian_env.py) | Canonical pedestrian environment |
 
 ## 📋 Migration Tools
 

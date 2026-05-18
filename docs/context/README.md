@@ -278,6 +278,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1037 RL Environment Patterns](./issue_1037_rl_environment_patterns.md)
   maps the May 2026 Hugging Face RL environment guide to Robot SF training, reward,
   rollout, benchmark, scaling, and provenance boundaries.
+* [Issue #1291 PedestrianEnv Consolidation](./issue_1291_pedestrian_env_consolidation.md)
+  records the removal of the transition-only `pedestrian_env_refactored.py` module and
+  the compatibility aliases retained in the canonical `pedestrian_env.py` implementation.
 
 ## Training Notes
 

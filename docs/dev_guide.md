@@ -1010,7 +1010,9 @@ committed entry points:
   when a refactor needs a local snapshot of large modules, long functions, or captured pytest
   duration rows.
 - Optional local GitHub Actions execution with `act` is not currently a supported repository
-  workflow; evaluate and document that path through #1308 before adding `act` commands here.
+  workflow. Issue #1308 evaluated this path on 2026-05-18 and did not adopt it because Docker was
+  available but `act` was not installed, so no workflow job could be proven locally. See
+  [the evaluation note](context/issue_1308_act_local_workflow_evaluation.md).
 
 **Performance Breach Handling**:
 - Cold/warm PR smoke uses advisory thresholds by default; `main` and `workflow_dispatch` runs

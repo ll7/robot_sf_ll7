@@ -47,6 +47,12 @@ Observed focused proof:
 - Changed-file coverage stayed above the 80% minimum for the parent-plus-child diff:
   `robot_sf/gym_env/env_util.py` 99.0%, `robot_sf/gym_env/pedestrian_env.py` 86.4%,
   and `robot_sf/sim/simulator.py` 95.7%.
+- Post-retarget proof after PR #1302 merged and this branch was refreshed against `origin/main`:
+  `tests/test_pedestrian_env_compat.py -q` passed with `10 passed`,
+  `tests/test_env_util_additional_coverage.py tests/map_test.py -q` passed with `14 passed`,
+  and `tests/test_pedestrian_env_consolidation.py -q` passed with `2 passed`.
+  Ruff check/format also passed for `robot_sf/gym_env/pedestrian_env.py` and
+  `tests/test_pedestrian_env_compat.py`.
 
 ## Follow-Up Boundary
 

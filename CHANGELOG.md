@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now, deferred follow-up, or handoff-only blockers; safe actionable gaps should be repaired and
   revalidated before withholding `merge-ready`; and the skill index plus shared goal-loop note now
   reflect the new validation-and-reassess contract.
+* Removed deprecated `robot_sf_snqi recompute --method` aliases (`pareto_optimization`,
+  `equal_weights`, and `safety_focused`). Use canonical method names
+  `canonical`, `balanced`, or `optimized`; deprecated names now fail argument parsing.
 
 ### Fixed
 

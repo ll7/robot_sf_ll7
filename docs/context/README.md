@@ -80,7 +80,7 @@ knowledge, not every transient iteration detail.
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
-* `ml-intern` bounded assistant assessment:
+* Issue #1181/#1191 ML-Intern Bounded Assistant Assessment and Codex-Native Workflow Extraction:
   [issue_1181_ml_intern_experiment_assistant.md](issue_1181_ml_intern_experiment_assistant.md)
 * Route-clearance certification: [issue_1105_route_clearance_certification.md](issue_1105_route_clearance_certification.md)
 * Negative route-clearance repair: [issue_1130_negative_route_clearance_repair.md](issue_1130_negative_route_clearance_repair.md)
@@ -94,12 +94,26 @@ knowledge, not every transient iteration detail.
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1255 open-issue dependency graph:
   [issue_1255_open_issue_dependency_graph.md](issue_1255_open_issue_dependency_graph.md)
+* Issue #1287 force-gradient interpolation vectorization:
+  [issue_1287_force_gradient_vectorization.md](issue_1287_force_gradient_vectorization.md)
+* Issue #1286 SNQI bootstrap stability:
+  [issue_1286_snqi_bootstrap_stability.md](issue_1286_snqi_bootstrap_stability.md)
+* Issue #1285 TODO-docstring backlog ratchet:
+  [issue_1285_docstring_todo_ratchet.md](issue_1285_docstring_todo_ratchet.md)
+* Issue #1271 seed-sensitivity explorer:
+  [issue_1271_seed_sensitivity_explorer.md](issue_1271_seed_sensitivity_explorer.md)
+* Issue #1272 Safety-Oriented Validation And Falsification Strategy:
+  [issue_1272_validation_falsification_strategy.md](issue_1272_validation_falsification_strategy.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Artifact evidence vocabulary:
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:
   [pr_first_pass_review_audit_2026-05-14.md](pr_first_pass_review_audit_2026-05-14.md)
+* Issue #1289 SNQI Method Alias Retirement:
+  [issue_1289_snqi_method_alias_retirement.md](issue_1289_snqi_method_alias_retirement.md)
+* Issue #1288 JSONL append optimization:
+  [issue_1288_jsonl_orjson_append.md](issue_1288_jsonl_orjson_append.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
@@ -171,6 +185,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1082 Paper Cross-Kinematics Parity Sweep](issue_1082_paper_cross_kinematics_v1.md)
   adds the `paper-cross-kinematics-v1` profile, three-mode kinematics matrix, compatibility
   manifest, and smoke/preflight command boundary for cross-kinematics interpretation.
+* [Issue #1274 General Cross-Kinematics Parity Sweep](issue_1274_cross_kinematics_v1.md)
+  adds the non-paper `cross_kinematics_v1` profile, compact scenario surface, compatibility
+  manifest, and interpretation boundary for local parity checks.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.
@@ -198,6 +215,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1090 Observation Visibility](issue_1090_observation_visibility.md)
   records the planner-facing FOV/range/static-occlusion boundary, ground-truth separation, and
   dynamic-occlusion follow-up boundary.
+* [Issue #1108 BC Warm-Start PPO Execution](issue_1108_bc_warm_start_execution.md)
+  records the imitation observation-contract blocker, unblock patch, one-episode real collection
+  preflight, and Slurm job IDs for the #749 BC-preinitialized PPO chain.
 * [Issue #1083 Sanity V1 Nominal Matrix](issue_1083_sanity_v1_nominal_matrix.md)
   records the non-paper-facing nominal calibration matrix, smoke config, baseline threshold, and
   local proof run for easier deployment-like scenes.
@@ -289,6 +309,9 @@ knowledge, not every transient iteration detail.
   2026-05-05 refactor-prioritization snapshot.
 * [Issue #1006 GitHub CI Runtime Drift Diagnosis](./issue_1006_ci_runtime_drift.md)
   adds `scripts/dev/ci_timing_summary.py` and records timing evidence from PRs #1007 and #1008.
+* [Issue #1290 Lazy Pygame Initialization](./issue_1290_lazy_pygame_init.md)
+  records the lazy `SimulationView` proxy and pygame-free headless `make_robot_env(debug=False)`
+  import contract, plus the cold/warm smoke caveat that backend/JIT startup still dominates.
 * [Issue #513 High-Density Perf Gate Calibration](./issue_513_high_density_perf_gate.md)
   keeps `classic_cross_trap_high` advisory because no stable local trend-history window was
   available; documents the rerun evidence and non-blocking policy.
@@ -404,6 +427,9 @@ why a change was made rather than a full issue execution transcript.
   evidence collection path for diagnosing low CPU utilization without launching new jobs.
 * [Issue #869 Adversarial Runner](issue_869_adversarial_runner.md) - programmable adversarial
   scenario search API, bundle contract, certification boundary, and deferred optimizer scope.
+* [Issue #1237 Adversarial Failure Archive](issue_1237_adversarial_failure_archive.md) -
+  compact `adversarial_failure_archive.v1` manifests for deterministic failure grouping and
+  replay pointers without copying raw bundles.
 * [Issue #1236 Optimizer Adversarial Sampler](issue_1236_optimizer_adversarial_sampler.md) -
   Optuna-backed feedback sampler pilot, synthetic comparison helper, and non-paper-facing evidence
   boundary.
@@ -443,8 +469,8 @@ why a change was made rather than a full issue execution transcript.
   exports one scenario-loader entry through `scenario_cert.v1` into a neutral CARLA T0 payload, 
   stacked on the issue #942 map-definition adapter.
 * [Issue #948 CARLA T0 Scenario File Export](issue_948_carla_t0_scenario_file_export.md)
-  batch-loads scenario manifests into ordered neutral export payload records, stacked on the issue
-  #946 scenario-entry helper.
+  batch-loads scenario manifests into ordered neutral export payload records, stacked on the
+  Issue #946 scenario-entry helper.
 * [Issue #950 CARLA T0 Export Record Writer](issue_950_carla_t0_export_record_writer.md)
   writes ordered neutral export records to deterministic JSON files plus a local manifest, stacked
   on the issue #948 scenario-file helper.
@@ -464,8 +490,8 @@ why a change was made rather than a full issue execution transcript.
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later, 
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
 * [Issue #962 CARLA T0 Manifest Payload Loader](issue_962_carla_t0_manifest_payload_loader.md)
-  loads and validates all payloads referenced by a local T0 export manifest, stacked on the issue
-  #960 path resolver.
+  loads and validates all payloads referenced by a local T0 export manifest, stacked on the
+  Issue #960 path resolver.
 * [Issue #964 CARLA T0 Batch Validation CLI](issue_964_carla_t0_batch_validation_cli.md)
   exposes the issue #962 manifest payload loader through a CARLA-free batch validation project
   script.
@@ -480,7 +506,10 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #974 CARLA Availability Boolean Field](issue_974_carla_availability_boolean_field.md)
   adds an explicit boolean to CARLA availability metadata and CLI JSON output.
 - [Issue #976 CARLA Availability Schema Version](issue_976_carla_availability_schema_version.md)
+- [Issue #1270 Hazard Traceability Mapping](issue_1270_hazard_traceability.md)
   adds a schema version to CARLA availability metadata for stable script consumption.
+- [Issue #1269 ODD Contract Schema](issue_1269_odd_contract_schema.md)
+  adds a versioned ODD metadata contract for benchmark and falsification evidence boundaries.
 - [Issue #978 CARLA Availability JSON Schema](issue_978_carla_availability_json_schema.md)
   adds a JSON Schema for validating CARLA availability metadata.
 - [Issue #980 CARLA Availability Schema CLI](issue_980_carla_availability_schema_cli.md)

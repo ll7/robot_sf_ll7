@@ -67,3 +67,27 @@ def test_make_training_contract_env_rejects_non_dict_observation_space(
             scenario_config_path=None,
             observation_keys=["robot"],
         )
+
+
+def test_make_training_contract_env_rejects_reserved_factory_kwargs(
+    tmp_path: Path,
+) -> None:
+    """Factory kwargs should fail before Python raises duplicate-argument TypeError."""
+    config_path = tmp_path / "training.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "env_factory_kwargs:",
+                "  seed: 123",
+                "  config: ignored",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="config, seed"):
+        make_training_contract_env(
+            training_config_path=config_path,
+            scenario_config_path=None,
+        )

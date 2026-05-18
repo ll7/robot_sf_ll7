@@ -58,15 +58,17 @@ class TelemetrySampler:
         frame_idx_provider: Callable[[], int | None] | None = None,
         status_provider: Callable[[], str | None] | None = None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Configure a background sampler for manifest telemetry snapshots.
 
         Args:
-            writer: TODO docstring.
-            progress_tracker: TODO docstring.
-            started_at: TODO docstring.
-            interval_seconds: TODO docstring.
-            time_provider: TODO docstring.
-            step_rate_provider: TODO docstring.
+            writer: Manifest writer that receives every collected snapshot.
+            progress_tracker: Optional tracker used to resolve the current step and
+                default completed-step throughput.
+            started_at: Run start time used by the default step-rate calculation.
+            interval_seconds: Desired sampling period; values below 0.5 seconds are
+                clamped to avoid overly tight polling.
+            time_provider: Optional clock callback, primarily for deterministic tests.
+            step_rate_provider: Optional callback that returns the current step rate.
             frame_idx_provider: Optional callback providing current frame index.
             status_provider: Optional callback providing run status string.
         """
@@ -113,22 +115,22 @@ class TelemetrySampler:
         self.stop()
 
     def __enter__(self) -> TelemetrySampler:
-        """TODO docstring. Document this function.
+        """Start sampling and return this sampler for context-manager use.
 
 
         Returns:
-            TODO docstring.
+            The running sampler instance.
         """
         self.start()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[override]
-        """TODO docstring. Document this function.
+        """Stop sampling when leaving a context-manager block.
 
         Args:
-            exc_type: TODO docstring.
-            exc: TODO docstring.
-            tb: TODO docstring.
+            exc_type: Exception type raised by the managed block, if any.
+            exc: Exception instance raised by the managed block, if any.
+            tb: Traceback raised by the managed block, if any.
         """
         self.stop()
 
@@ -166,7 +168,7 @@ class TelemetrySampler:
         return snapshot
 
     def _run_loop(self) -> None:
-        """TODO docstring. Document this function."""
+        """Emit snapshots until stopped, preserving the configured interval."""
         while not self._stop_event.is_set():
             start = time.perf_counter()
             with contextlib.suppress(Exception):
@@ -176,11 +178,12 @@ class TelemetrySampler:
             self._stop_event.wait(timeout=sleep_for)
 
     def _collect_snapshot(self) -> TelemetrySnapshot:
-        """TODO docstring. Document this function.
+        """Collect one CPU, memory, GPU, progress, and status snapshot.
 
 
         Returns:
-            TODO docstring.
+            Snapshot with unavailable metrics left as ``None`` and explanatory
+            notes for recoverable sampling failures.
         """
         timestamp = self._clock()
         timestamp_ms = int(timestamp.timestamp() * 1000)
@@ -218,11 +221,11 @@ class TelemetrySampler:
         return snapshot
 
     def _resolve_current_step(self) -> str | None:
-        """TODO docstring. Document this function.
+        """Return the currently running progress step id, if one is available.
 
 
         Returns:
-            TODO docstring.
+            Current step id, or ``None`` when no tracker/active step can be read.
         """
         tracker = self._progress_tracker
         if tracker is None:
@@ -234,11 +237,12 @@ class TelemetrySampler:
         return None
 
     def _default_step_rate(self) -> float | None:
-        """TODO docstring. Document this function.
+        """Estimate completed pipeline steps per second from the tracker.
 
 
         Returns:
-            TODO docstring.
+            Completed-step rate, or ``None`` when no tracker or elapsed time is
+            available.
         """
         tracker = self._progress_tracker
         if tracker is None:
@@ -250,13 +254,13 @@ class TelemetrySampler:
         return completed / elapsed
 
     def _sample_process_cpu(self, notes: set[str]) -> float | None:
-        """TODO docstring. Document this function.
+        """Sample CPU usage for the current process.
 
         Args:
-            notes: TODO docstring.
+            notes: Mutable set that receives availability or error markers.
 
         Returns:
-            TODO docstring.
+            Process CPU percentage, or ``None`` when psutil is unavailable/fails.
         """
         if self._process is None:
             notes.add("psutil-unavailable")
@@ -269,13 +273,13 @@ class TelemetrySampler:
             return None
 
     def _sample_system_cpu(self, notes: set[str]) -> float | None:
-        """TODO docstring. Document this function.
+        """Sample whole-system CPU usage.
 
         Args:
-            notes: TODO docstring.
+            notes: Mutable set that receives availability or error markers.
 
         Returns:
-            TODO docstring.
+            System CPU percentage, or ``None`` when sampling is unavailable/fails.
         """
         if not self._system_cpu_fn:
             notes.add("system-cpu-unavailable")
@@ -288,13 +292,13 @@ class TelemetrySampler:
             return None
 
     def _sample_memory_mb(self, notes: set[str]) -> float | None:
-        """TODO docstring. Document this function.
+        """Sample resident memory in MiB with a resource-module fallback.
 
         Args:
-            notes: TODO docstring.
+            notes: Mutable set that receives availability or error markers.
 
         Returns:
-            TODO docstring.
+            Resident memory in MiB, or ``None`` if no memory source is available.
         """
         if self._process is not None:
             try:
@@ -307,13 +311,14 @@ class TelemetrySampler:
 
     @staticmethod
     def _resource_memory_mb(notes: set[str]) -> float | None:
-        """TODO docstring. Document this function.
+        """Return peak process memory from ``resource.getrusage`` when psutil is absent.
 
         Args:
-            notes: TODO docstring.
+            notes: Mutable set that receives availability markers.
 
         Returns:
-            TODO docstring.
+            Peak resident memory in MiB, normalized for Linux and macOS units, or
+            ``None`` when unavailable.
         """
         if resource is None:  # pragma: no cover - platform without resource
             notes.add("resource-module-unavailable")
@@ -326,13 +331,13 @@ class TelemetrySampler:
 
     @staticmethod
     def _safe_call(func: Callable[[], object | None] | None) -> object | None:
-        """TODO docstring. Document this function.
+        """Call an optional provider without letting provider failures escape.
 
         Args:
-            func: TODO docstring.
+            func: Zero-argument provider callback.
 
         Returns:
-            TODO docstring.
+            Provider result, or ``None`` when the provider is missing or raises.
         """
         if func is None:
             return None

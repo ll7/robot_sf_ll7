@@ -1,0 +1,86 @@
+schema_version: hazard_traceability.v1
+id: low_speed_public_space_hazards_v1
+claim_boundary: Hazard traceability records intended scenario coverage only; it is not safety proof.
+hazards:
+  - id: robot_pedestrian_collision
+    description: Robot contact or collision with a pedestrian actor.
+    severity: safety
+    supporting_metrics:
+      - collision_rate
+    evidence_fields:
+      - termination_reason
+      - metrics.collision
+      - metrics.collision_rate
+  - id: near_miss
+    description: Close interaction without contact that should be visible in proximity metrics.
+    severity: safety
+    supporting_metrics:
+      - min_ttc
+      - pet
+    evidence_fields:
+      - metrics.min_ttc
+      - metrics.pet
+      - metrics.min_clearance
+  - id: blind_corner_emergence
+    description: Pedestrian emergence or visibility-limited interaction near a corner or occluder.
+    severity: safety
+    supporting_metrics:
+      - min_ttc
+      - clearance
+    evidence_fields:
+      - scenario.metadata.visibility
+      - scenario.metadata.occlusion
+      - metrics.min_ttc
+  - id: keep_clear_violation
+    description: Robot or pedestrian intrusion into a keep-clear or platform hazard region.
+    severity: operational
+    supporting_metrics:
+      - keep_clear_intrusion_s
+    evidence_fields:
+      - scenario.metadata.platform_semantics
+      - metrics.keep_clear_intrusion_s
+  - id: pedestrian_flow_disruption
+    description: Robot motion disrupts intended pedestrian flow, dwell, or crossing behavior.
+    severity: social
+    supporting_metrics:
+      - comfort_exposure_s
+      - path_efficiency
+    evidence_fields:
+      - scenario.metadata.flow
+      - metrics.comfort_exposure_s
+      - metrics.path_efficiency
+scenario_mappings:
+  - id: station_platform_family
+    scenario_families:
+      - station_platform
+    hazards:
+      - robot_pedestrian_collision
+      - near_miss
+      - keep_clear_violation
+      - pedestrian_flow_disruption
+    notes: Station-platform scenarios exercise dwell, flow disruption, and platform-region semantics.
+  - id: classic_crossing_family
+    scenario_families:
+      - classic_crossing
+      - crossing
+    hazards:
+      - robot_pedestrian_collision
+      - near_miss
+      - pedestrian_flow_disruption
+    notes: Crossing scenarios exercise pedestrian-flow interaction and proximity risk.
+  - id: blind_corner_fixture
+    scenario_ids:
+      - francis2023_blind_corner
+      - observation_visibility_blind_corner_smoke
+    hazards:
+      - blind_corner_emergence
+      - near_miss
+    notes: Blind-corner fixtures exercise visibility-limited emergence risk.
+provenance:
+  source_issue: https://github.com/ll7/robot_sf_ll7/issues/1270
+  authored_by: robot_sf_ll7
+  source_files:
+    - configs/scenarios/sets/station_platform_candidate_pack_issue736.yaml
+    - configs/scenarios/classic_interactions.yaml
+    - configs/scenarios/single/observation_visibility_blind_corner_smoke.yaml
+  notes: Initial traceability mapping for low-speed public-space benchmark and falsification metadata.

@@ -68,6 +68,11 @@ Result JSON includes:
 
 Normalization details are documented in `docs/snqi-weight-tools/normalization.md`.
 
+The public `robot_sf.benchmark.snqi.bootstrap.bootstrap_stability(...)` helper computes
+planner-ranking stability only for episode records that already contain finite `metrics.snqi`
+values. It fails closed on missing SNQI, missing group keys, single-group inputs, or missing RNG
+seed control; it no longer returns placeholder evidence.
+
 ## Standalone SNQI CLI
 
 The `robot_sf_snqi` command provides direct access to SNQI weight management tools:
@@ -88,7 +93,7 @@ uv run robot_sf_snqi ablation \
   --seed 123
 ```
 
-### Method Names and Compatibility
+### Method Names
 
 The standalone CLI uses **canonical method names** that match the implementation:
 
@@ -96,19 +101,9 @@ The standalone CLI uses **canonical method names** that match the implementation
 - **`balanced`**: Equal weights across all components
 - **`optimized`**: Adaptive weights based on baseline statistics
 
-**Legacy aliases** are supported for backward compatibility but will show deprecation warnings:
-- `pareto_optimization` → `optimized`
-- `equal_weights` → `balanced` 
-- `safety_focused` → `optimized`
-
-Example with legacy alias:
-```bash
-# This will work but show a deprecation warning
-uv run robot_sf_snqi recompute \
-  --baseline-stats baseline_stats.json \
-  --out weights.json \
-  --method pareto_optimization  # deprecated, maps to "optimized"
-```
+Legacy aliases (`pareto_optimization`, `equal_weights`, and `safety_focused`) have been retired
+from the standalone `robot_sf_snqi` CLI. Use the canonical method names above; deprecated names
+now fail argument parsing with the supported choices in the error message.
 
 ### Inline SNQI during benchmark run
 You can compute SNQI on the fly while generating episodes via the unified benchmark CLI `run` subcommand by providing a weights JSON and baseline stats JSON:
@@ -299,9 +294,10 @@ Recompute specific:
 - `--external-weights-file <path>`: Evaluate user‑provided weight set.
 
 **Note**: The standalone `robot_sf_snqi` CLI uses canonical method names:
-- **Canonical methods**: `canonical`, `balanced`, `optimized` (preferred)
-- **Legacy aliases**: `pareto_optimization`→`optimized`, `equal_weights`→`balanced`, `safety_focused`→`optimized`
-- Default: `canonical`. Alias usage logs deprecation warnings.
+- **Methods**: `canonical`, `balanced`, `optimized`
+- **Breaking change**: deprecated aliases (`pareto_optimization`, `equal_weights`, and
+  `safety_focused`) are no longer accepted by `robot_sf_snqi recompute`.
+- Default: `canonical`.
  - `--missing-metric-max-list <int>`: Include up to N example episode IDs per missing baseline metric in diagnostics.
  - `--fail-on-missing-metric`: Treat missing baseline metrics (present in episodes) as error (exit code 4).
  - `--progress`: Show progress bars (if `tqdm` installed).

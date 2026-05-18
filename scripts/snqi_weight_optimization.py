@@ -73,15 +73,15 @@ try:  # pragma: no cover - optional dependency
         desc: str | None = None,
         total: int | None = None,
     ) -> Iterator:  # type: ignore[name-defined]
-        """TODO docstring. Document this function.
+        """Wrap an iterable in `tqdm` when the optional dependency is installed.
 
         Args:
-            iterable: TODO docstring.
-            desc: TODO docstring.
-            total: TODO docstring.
+            iterable: Values to iterate over.
+            desc: Optional progress-bar label.
+            total: Optional total item count for progress reporting.
 
         Returns:
-            TODO docstring.
+            Iterator that yields the original values while updating progress.
         """
         return tqdm(iterable, desc=desc, total=total)  # type: ignore[no-any-return]
 
@@ -94,15 +94,15 @@ except Exception:
         total: int | None = None,
     ) -> Iterator:  # type: ignore[unused-argument]
         # Fallback: ignore progress parameters when tqdm unavailable
-        """TODO docstring. Document this function.
+        """Return a plain iterator when `tqdm` is unavailable.
 
         Args:
-            iterable: TODO docstring.
-            desc: TODO docstring.
-            total: TODO docstring.
+            iterable: Values to iterate over.
+            desc: Ignored progress-bar label.
+            total: Ignored total item count.
 
         Returns:
-            TODO docstring.
+            Iterator over the original values without progress reporting.
         """
         return iter(iterable)
 
@@ -132,11 +132,11 @@ class SNQIWeightOptimizer:
     """
 
     def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
-        """TODO docstring. Document this function.
+        """Store optimization inputs and the canonical SNQI weight order.
 
         Args:
-            episodes_data: TODO docstring.
-            baseline_stats: TODO docstring.
+            episodes_data: Episode dictionaries containing metric payloads.
+            baseline_stats: Normalization medians and p95 values keyed by metric name.
         """
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
@@ -148,15 +148,15 @@ class SNQIWeightOptimizer:
         simplex: bool,
         total: float = 10.0,
     ) -> dict[str, float]:
-        """TODO docstring. Document this function.
+        """Optionally rescale weights so their sum equals a target total.
 
         Args:
-            weights: TODO docstring.
-            simplex: TODO docstring.
-            total: TODO docstring.
+            weights: Candidate SNQI weight mapping.
+            simplex: Whether to project the mapping onto a fixed-sum simplex.
+            total: Desired sum when simplex projection is enabled.
 
         Returns:
-            TODO docstring.
+            Original weights or a rescaled copy preserving relative proportions.
         """
         if not simplex:
             return weights
@@ -166,25 +166,25 @@ class SNQIWeightOptimizer:
         return {k: (v / s) * total for k, v in weights.items()}
 
     def _episode_snqi(self, metrics: dict[str, float], weights: dict[str, float]) -> float:
-        """TODO docstring. Document this function.
+        """Compute SNQI for one episode metrics payload.
 
         Args:
-            metrics: TODO docstring.
-            weights: TODO docstring.
+            metrics: Episode metric values.
+            weights: Candidate SNQI weights.
 
         Returns:
-            TODO docstring.
+            SNQI score normalized with this optimizer's baseline statistics.
         """
         return compute_snqi(metrics, weights, self.baseline_stats)
 
     def compute_ranking_stability(self, weights: dict[str, float]) -> float:
-        """TODO docstring. Document this function.
+        """Estimate ranking stability for a candidate weight mapping.
 
         Args:
-            weights: TODO docstring.
+            weights: Candidate SNQI weights.
 
         Returns:
-            TODO docstring.
+            Stability score in the approximate range [0, 1].
         """
         if len(self.episodes) < 2:
             return 1.0
@@ -325,14 +325,14 @@ class SNQIWeightOptimizer:
         stagnant_iters = 0
 
         def _callback(xk: np.ndarray, _convergence: float) -> bool:
-            """TODO docstring. Document this function.
+            """Update progress and decide whether differential evolution should stop early.
 
             Args:
-                xk: TODO docstring.
-                _convergence: TODO docstring.
+                xk: Current SciPy candidate vector.
+                _convergence: SciPy convergence estimate, unused by this callback.
 
             Returns:
-                TODO docstring.
+                `True` when early stopping should terminate optimization.
             """
             nonlocal best_positive_obj, stagnant_iters
             current_positive = -self.objective_function(xk, simplex=simplex)
@@ -427,18 +427,18 @@ class SNQIWeightOptimizer:
         early_stop_patience: int,
         early_stop_min_delta: float,
     ) -> OptimizationResult:
-        """TODO docstring. Document this function.
+        """Run SciPy differential evolution and convert the result.
 
         Args:
-            maxiter: TODO docstring.
-            seed: TODO docstring.
-            show_progress: TODO docstring.
-            simplex: TODO docstring.
-            early_stop_patience: TODO docstring.
-            early_stop_min_delta: TODO docstring.
+            maxiter: Maximum differential-evolution iterations.
+            seed: Optional random seed forwarded to SciPy.
+            show_progress: Whether to show a progress bar when available.
+            simplex: Whether to evaluate candidates after fixed-sum projection.
+            early_stop_patience: Iterations without improvement before stopping; zero disables it.
+            early_stop_min_delta: Minimum positive objective improvement that resets patience.
 
         Returns:
-            TODO docstring.
+            Normalized optimization result with weights, objective score, and convergence info.
         """
         bounds = [(0.1, 3.0)] * len(self.weight_names)
         callback, pbar = self._build_de_callback(
@@ -469,13 +469,13 @@ class SNQIWeightOptimizer:
         """Execute SciPy differential_evolution with provided configuration."""
 
         def _wrapped(vec: np.ndarray) -> float:
-            """TODO docstring. Document this function.
+            """Evaluate a SciPy candidate vector with the configured simplex setting.
 
             Args:
-                vec: TODO docstring.
+                vec: Candidate weight vector from SciPy.
 
             Returns:
-                TODO docstring.
+                Negative heuristic objective value for minimization.
             """
             return self.objective_function(vec, simplex=simplex)
 
@@ -527,13 +527,13 @@ class SNQIWeightOptimizer:
 
 
 def _load_initial_weights(path: Path) -> dict[str, float]:
-    """TODO docstring. Document this function.
+    """Load and validate an initial SNQI weight mapping from JSON.
 
     Args:
-        path: TODO docstring.
+        path: JSON file containing a metric-to-weight object.
 
     Returns:
-        TODO docstring.
+        Validated weight mapping keyed by SNQI weight name.
     """
     with open(path, encoding="utf-8") as f:
         raw = json.load(f)
@@ -567,13 +567,13 @@ def load_episodes_data(path: Path) -> tuple[list[dict[str, Any]], int]:
 
 
 def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
-    """TODO docstring. Document this function.
+    """Load baseline normalization statistics from JSON.
 
     Args:
-        path: TODO docstring.
+        path: JSON file containing metric baseline statistics.
 
     Returns:
-        TODO docstring.
+        Baseline statistics mapping used by `compute_snqi`.
     """
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
@@ -586,13 +586,13 @@ def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
 def _load_inputs(
     args: argparse.Namespace,
 ) -> tuple[list[dict], dict[str, dict[str, float]], int]:
-    """TODO docstring. Document this function.
+    """Load episodes and baseline statistics from parsed CLI arguments.
 
     Args:
-        args: TODO docstring.
+        args: Parsed arguments with `episodes` and `baseline` paths.
 
     Returns:
-        TODO docstring.
+        Tuple of valid episodes, baseline statistics, and skipped malformed-line count.
     """
     episodes, skipped = load_episodes_data(args.episodes)
     baseline_stats = load_baseline_stats(args.baseline)
@@ -600,11 +600,11 @@ def _load_inputs(
 
 
 def _select_best(results: dict[str, Any], method: str) -> None:
-    """TODO docstring. Document this function.
+    """Populate `results["recommended"]` from the requested optimization method.
 
     Args:
-        results: TODO docstring.
-        method: TODO docstring.
+        results: Mutable result dictionary containing optimizer outputs.
+        method: Requested method name: `grid`, `evolution`, or `both`.
     """
     if method == "both":
         best_method = "grid_search"
@@ -631,24 +631,23 @@ def _augment_metadata(
     original_episode_count: int | None = None,
     used_episode_count: int | None = None,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Attach provenance metadata and a compact summary to optimization results.
 
     Args:
-        results: TODO docstring.
-        args: TODO docstring.
-        start_iso: TODO docstring.
-        start_perf: TODO docstring.
-        phase_timings: TODO docstring.
-        original_episode_count: TODO docstring.
-        used_episode_count: TODO docstring.
+        results: Mutable optimization results dictionary.
+        args: Parsed CLI arguments used for the run.
+        start_iso: ISO timestamp captured at run start.
+        start_perf: Perf-counter timestamp captured at run start.
+        phase_timings: Optional per-phase runtime measurements.
+        original_episode_count: Episode count before optional sampling.
+        used_episode_count: Episode count after optional sampling.
     """
 
     def _git_commit() -> str:
-        """TODO docstring. Document this function.
-
+        """Return the current short Git commit, or `UNKNOWN` outside a checkout.
 
         Returns:
-            TODO docstring.
+            Short commit hash for provenance metadata.
         """
         try:
             return (
@@ -763,11 +762,11 @@ def _detect_missing_baseline_metrics(
 
 
 def _print_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
-    """TODO docstring. Document this function.
+    """Print the recommended weights and optional sensitivity summary.
 
     Args:
-        results: TODO docstring.
-        args: TODO docstring.
+        results: Optimization results containing a `recommended` entry.
+        args: Parsed CLI arguments controlling optional sensitivity output.
     """
     recommended = results["recommended"]
     print("\nOptimization Summary:")
@@ -953,13 +952,15 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
         except Exception as e:
             logger.warning("Bootstrap computation failed: %s", e)
     if args.ci_placeholder:
-        # Confidence interval scaffold referencing planned bootstrap integration
+        # Deprecated metadata scaffold kept for old callers; it is not benchmark evidence.
         results.setdefault("_metadata", {})["confidence_intervals_placeholder"] = {
             "status": "placeholder",
-            "method": "bootstrap_future",
+            "method": "deprecated_ci_placeholder",
             "details": {
-                "message": "CI computation not yet implemented; this is a forward-compatible scaffold.",
-                "planned_bootstrap_function": "robot_sf.benchmark.snqi.bootstrap.bootstrap_stability",
+                "message": (
+                    "Deprecated placeholder metadata only; use --bootstrap-samples and "
+                    "--bootstrap-confidence for computed score intervals."
+                ),
             },
         }
     results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
@@ -1000,13 +1001,13 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """TODO docstring. Document this function.
+    """Parse SNQI weight-optimization CLI arguments.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument vector; uses `sys.argv` when omitted.
 
     Returns:
-        TODO docstring.
+        Parsed argument namespace for `run`.
     """
     parser = argparse.ArgumentParser(description="Optimize SNQI weights")
     parser.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
@@ -1115,13 +1116,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover
-    """TODO docstring. Document this function.
+    """CLI entry point for SNQI weight optimization.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument vector; uses `sys.argv` when omitted.
 
     Returns:
-        TODO docstring.
+        Process exit code from `run`.
     """
     args = parse_args(argv)
     _apply_log_level(getattr(args, "log_level", None))

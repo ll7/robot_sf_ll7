@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Benchmark `run_batch` throughput with different worker counts."""
 
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _make_scenarios(repeats: int) -> list[dict]:
-    """TODO docstring. Document this function.
+    """Build the fixed smoke scenario used by the worker-count benchmark.
 
     Args:
-        repeats: TODO docstring.
+        repeats: Number of repeated jobs to request for the scenario.
 
     Returns:
-        TODO docstring.
+        Single-scenario matrix accepted by `robot_sf.benchmark.runner.run_batch`.
     """
     return [
         {
@@ -38,15 +38,15 @@ def _make_scenarios(repeats: int) -> list[dict]:
 
 
 def bench(workers: int, repeats: int, out_dir: Path) -> dict:
-    """TODO docstring. Document this function.
+    """Run the smoke batch once and report elapsed time for a worker count.
 
     Args:
-        workers: TODO docstring.
-        repeats: TODO docstring.
-        out_dir: TODO docstring.
+        workers: Number of parallel workers to pass to `run_batch`.
+        repeats: Number of jobs to run for the fixed scenario.
+        out_dir: Directory where benchmark episode JSONL files are written.
 
     Returns:
-        TODO docstring.
+        Summary containing worker count, repeats, elapsed seconds, and run counts.
     """
     ensure_output_dir(out_dir)
     out_file = out_dir / f"episodes_w{workers}.jsonl"
@@ -75,11 +75,10 @@ def bench(workers: int, repeats: int, out_dir: Path) -> dict:
 
 
 def main() -> int:
-    """TODO docstring. Document this function.
-
+    """Parse CLI options, run each worker-count benchmark, and write summary JSON.
 
     Returns:
-        TODO docstring.
+        Process exit code; zero indicates the benchmark summary was written.
     """
     parser = argparse.ArgumentParser(description="Benchmark run_batch with varying workers")
     parser.add_argument("--max-workers", type=int, default=2)

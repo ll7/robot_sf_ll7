@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
+from loguru import logger
 
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
@@ -691,6 +692,57 @@ def test_paper_cross_kinematics_v1_compatibility_manifest() -> None:
     assert excluded["ppo"]["status"] == "degraded"
     assert str(excluded["ppo"]["reason"]).strip()
     assert manifest["validation_contract"]["supported_pairs_must_run"] is True
+
+
+def test_load_cross_kinematics_v1_campaign_config() -> None:
+    """General cross-kinematics profile should stay non-paper-facing and explicit."""
+    cfg = load_campaign_config(
+        get_repository_root() / "configs/benchmarks/cross_kinematics_v1.yaml"
+    )
+
+    assert cfg.name == "cross_kinematics_v1"
+    assert cfg.paper_facing is False
+    assert cfg.paper_profile_version is None
+    assert cfg.kinematics_matrix == ("differential_drive", "bicycle_drive", "holonomic")
+    assert cfg.holonomic_command_mode == "vx_vy"
+    assert cfg.export_publication_bundle is False
+    assert cfg.stop_on_failure is False
+    assert cfg.seed_policy.mode == "fixed-list"
+    assert list(cfg.seed_policy.seeds) == [111]
+    assert [planner.key for planner in cfg.planners] == ["goal", "social_force", "orca"]
+    assert all(planner.planner_group == "core" for planner in cfg.planners)
+
+    scenarios = _load_campaign_scenarios(cfg)
+    assert [scenario["name"] for scenario in scenarios] == ["classic_cross_trap_low"]
+
+
+def test_cross_kinematics_v1_compatibility_manifest() -> None:
+    """General compatibility manifest should expose supported and excluded rows."""
+    repo_root = Path(__file__).parents[2]
+    config_payload = yaml.safe_load(
+        (repo_root / "configs/benchmarks/cross_kinematics_v1.yaml").read_text(encoding="utf-8")
+    )
+    manifest_path = repo_root / config_payload["compatibility_manifest"]
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+
+    assert manifest["version"] == "cross-kinematics-v1"
+    assert manifest["profile"] == "cross-kinematics-v1"
+    assert manifest["kinematics"] == ["differential_drive", "bicycle_drive", "holonomic"]
+    planner_keys = [planner["key"] for planner in config_payload["planners"]]
+    assert set(manifest["planners"]) == set(planner_keys)
+    for planner_key in planner_keys:
+        support = manifest["planners"][planner_key]["support"]
+        assert set(support) == set(manifest["kinematics"])
+        assert all(entry["status"] == "supported" for entry in support.values())
+        assert all(str(entry["reason"]).strip() for entry in support.values())
+
+    excluded = manifest["excluded_planners"]
+    assert excluded["ppo"]["status"] == "degraded"
+    assert excluded["rvo"]["status"] == "unsupported"
+    assert excluded["dwa"]["status"] == "unsupported"
+    assert all(str(entry["reason"]).strip() for entry in excluded.values())
+    assert manifest["validation_contract"]["supported_pairs_must_run"] is True
+    assert manifest["validation_contract"]["unsupported_or_degraded_pairs_must_have_reason"] is True
 
 
 def test_socnav_bench_reentry_probe_config_is_focused_and_fail_fast() -> None:
@@ -2754,6 +2806,75 @@ def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     manifest_payload = prepared["manifest_payload"]
     assert manifest_payload["route_clearance_warning_count"] == 1
     assert manifest_payload["route_clearance_warnings"] == warnings
+
+
+def test_prepare_campaign_preflight_warns_when_route_clearance_map_parse_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Map parse failures should be visible without DEBUG logging."""
+    broken_map_path = tmp_path / "broken.svg"
+    broken_map_path.write_text("<svg><path d='broken'/></svg>\n", encoding="utf-8")
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "\n".join(
+            [
+                "- name: parse_failure_case",
+                f"  map_file: {broken_map_path.as_posix()}",
+                "  seeds: [111]",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: parse_visibility_contract",
+                f"scenario_matrix: {scenario_path.as_posix()}",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def fail_convert_map(_path: str) -> object:
+        raise ValueError("invalid SVG path data")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.convert_map",
+        fail_convert_map,
+    )
+    captured: list[str] = []
+
+    def capture_message(message: object) -> None:
+        captured.append(str(message))
+
+    handle = logger.add(capture_message, level="WARNING", format="{level}:{message}")
+    try:
+        cfg = load_campaign_config(config_path)
+        prepared = prepare_campaign_preflight(
+            cfg,
+            output_root=tmp_path / "out",
+            label="parse",
+        )
+    finally:
+        logger.remove(handle)
+
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+    assert validate_payload["route_clearance_warning_count"] == 0
+
+    log_text = "\n".join(captured)
+    assert "WARNING:" in log_text
+    assert "parse_failure_case" in log_text
+    assert broken_map_path.as_posix() in log_text
+    assert "invalid SVG path data" in log_text
 
 
 def test_prepare_campaign_preflight_attaches_route_clearance_certifications(

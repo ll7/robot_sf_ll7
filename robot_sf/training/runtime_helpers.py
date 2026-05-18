@@ -6,9 +6,11 @@ behavior for Ray and durable JSONL progress logging.
 
 from __future__ import annotations
 
-import json
 import shlex
 from pathlib import Path
+
+import numpy as np
+import orjson
 
 DEFAULT_RAY_RUNTIME_ENV_EXCLUDES: tuple[str, ...] = (
     ".git",
@@ -24,13 +26,109 @@ DEFAULT_RAY_RUNTIME_ENV_EXCLUDES: tuple[str, ...] = (
     "*.gif",
 )
 
+_JsonContainer = dict[str, object] | list[object]
 
-def append_jsonl_record(path: Path, payload: dict[str, object]) -> None:
+
+def _json_compatible(value: object) -> object:
+    """Convert a runtime logging payload to JSON-compatible values.
+
+    Returns:
+        JSON-compatible value with string-only dictionary keys.
+    """
+    root, root_is_container = _json_shell(value)
+    if not root_is_container:
+        return root
+
+    if not isinstance(root, dict | list):
+        raise TypeError("JSON root container must be an object or array")
+
+    stack: list[tuple[object, _JsonContainer]] = [(_json_container_source(value), root)]
+    while stack:
+        source, target = stack.pop()
+        if isinstance(source, dict):
+            _extend_json_object(source, target, stack)
+        elif isinstance(source, list | tuple):
+            _extend_json_array(source, target, stack)
+    return root
+
+
+def _extend_json_object(
+    source: dict[object, object],
+    target: _JsonContainer,
+    stack: list[tuple[object, _JsonContainer]],
+) -> None:
+    """Append converted object children to the traversal stack."""
+    if not isinstance(target, dict):
+        raise TypeError("JSON object target must be a dictionary")
+    for key, child in source.items():
+        if not isinstance(key, str):
+            raise TypeError("JSON object keys must be strings")
+        converted, is_container = _json_shell(child)
+        target[key] = converted
+        if is_container:
+            stack.append((_json_container_source(child), _require_json_container(converted)))
+
+
+def _extend_json_array(
+    source: list[object] | tuple[object, ...],
+    target: _JsonContainer,
+    stack: list[tuple[object, _JsonContainer]],
+) -> None:
+    """Append converted array children to the traversal stack."""
+    if not isinstance(target, list):
+        raise TypeError("JSON array target must be a list")
+    for child in source:
+        converted, is_container = _json_shell(child)
+        target.append(converted)
+        if is_container:
+            stack.append((_json_container_source(child), _require_json_container(converted)))
+
+
+def _require_json_container(value: object) -> _JsonContainer:
+    """Return a JSON container or raise an internal conversion error."""
+    if isinstance(value, dict | list):
+        return value
+    raise TypeError("JSON container conversion produced a scalar")
+
+
+def _json_container_source(
+    value: object,
+) -> dict[object, object] | list[object] | tuple[object, ...]:
+    """Return the source container that corresponds to a converted shell."""
+    if isinstance(value, np.ndarray):
+        value = value.tolist()
+    elif isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, dict | list | tuple):
+        return value
+    raise TypeError("JSON container source must be an object or array")
+
+
+def _json_shell(value: object) -> tuple[object, bool]:
+    """Return a converted scalar or empty container shell."""
+    if isinstance(value, np.ndarray):
+        value = value.tolist()
+    elif isinstance(value, np.generic):
+        value = value.item()
+
+    if isinstance(value, Path):
+        return str(value), False
+    if isinstance(value, dict):
+        return {}, True
+    if isinstance(value, list | tuple):
+        return [], True
+    return value, False
+
+
+def append_jsonl_record(path: Path, payload: dict[str, object], *, sort_keys: bool = False) -> None:
     """Append one JSON object as a single line in a JSONL file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        json.dump(payload, handle, sort_keys=True)
-        handle.write("\n")
+    options = orjson.OPT_APPEND_NEWLINE | orjson.OPT_SERIALIZE_NUMPY
+    if sort_keys:
+        options |= orjson.OPT_SORT_KEYS
+    encoded = orjson.dumps(_json_compatible(payload), option=options)
+    with path.open("ab") as handle:
+        handle.write(encoded)
 
 
 def _resolve_executable_path(raw_command: str) -> Path:

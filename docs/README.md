@@ -97,7 +97,10 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
-* **[Issue #1181 `ml-intern` Bounded Assistant Assessment](./context/issue_1181_ml_intern_experiment_assistant.md)** - Safe-use boundary for evaluating `huggingface/ml-intern` against Robot SF without replacing the local/SLURM proof-first workflow
+* **[Issue #1181/#1191 `ml-intern` Workflow Extraction](./context/issue_1181_ml_intern_experiment_assistant.md)** -
+  Safe-use boundary and 2026-05-15 decision to extract `ml-intern` workflow ideas into Robot SF's
+  Codex-native proof-first practice instead of running the CLI smoke by default
+* **[Issue #1237 Adversarial Failure Archive](./context/issue_1237_adversarial_failure_archive.md)** - Compact `adversarial_failure_archive.v1` manifests for deterministic adversarial failure grouping and replay pointers without copying raw bundles
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
 * **[PR First-Pass Review Audit](./context/pr_first_pass_review_audit_2026-05-14.md)** - Recent merged-PR review findings and the pre-opening self-review checklist for reducing repeated reviewer fixes
 * **[AI Planner Zoo Context](./ai/planner_zoo_context.md)** - Planner-zoo integration context, readiness framing, and provenance/adapter questions to answer explicitly
@@ -153,8 +156,11 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Benchmarking & Metrics
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
+* **[Hazard Traceability](./hazard_traceability.md)** - `hazard_traceability.v1` schema, typed loader, fixture, and coverage summary for scenario-to-hazard evidence caveats
+* **[ODD Contracts](./odd_contracts.md)** - `odd_contract.v1` schema, typed loader, fixture, and boundary for benchmark and falsification evidence assumptions
 * **[Scenario Contracts](./scenario_contracts.md)** - `scenario_contract.v1` schema, typed loader, fixture, and boundary between authored intent, certification, and benchmark evidence
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
+* **[Issue #1272 Safety-Oriented Validation And Falsification Strategy](./context/issue_1272_validation_falsification_strategy.md)** - Current roadmap note for positioning Robot SF as validation/falsification infrastructure without certification or proof-of-safety claims
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #1073 Robot SF Empirical-Expansion Gate](./context/issue_1073_empirical_expansion_gate_2026_06_08.md)** - June 8 checkpoint rule for deciding whether Robot SF can move beyond dissertation-floor examples into bounded empirical expansion
 * **[Benchmark Static Dashboard](./benchmark_static_dashboard.md)** - Self-contained static HTML dashboard generation from camera-ready benchmark bundles
@@ -206,6 +212,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #1075 Operating Envelope And Non-Claims](./context/issue_1075_operating_envelope.md)** - Canonical Robot-SF dissertation-floor evidence envelope, supported evidence types, non-claims, and future-work boundaries
 * **[Issue #1083 Sanity V1 Nominal Matrix](./context/issue_1083_sanity_v1_nominal_matrix.md)** - Non-paper-facing nominal calibration matrix and smoke command for easier deployment-like scenes
 * **[Issue #1082 Paper Cross-Kinematics Parity Sweep](./context/issue_1082_paper_cross_kinematics_v1.md)** - Versioned paper-facing cross-kinematics smoke profile, compatibility manifest, and interpretation boundary
+* **[Issue #1274 General Cross-Kinematics Parity Sweep](./context/issue_1274_cross_kinematics_v1.md)** - Non-paper cross-kinematics parity profile, compatibility manifest, and interpretation boundary
 * **[Issue #1084 Planner Inclusion Gate](./context/issue_1084_planner_inclusion_gate.md)** - Mechanical `planner-inclusion-check` command, report schema, thresholds, and pass/revise proof cases for promotion review
 * **[Benchmark Mechanism Roadmap Plan (2026-05-07)](./superpowers/plans/2026-05-07-benchmark-mechanism-roadmap.md)** - Agent-executable plan for the trace-backed h500 mechanism pilot, deferred planner-improvement capture, and deferred CARLA-transfer capture
 * **[Goal Sequence Spec (2026-05-07)](./superpowers/specs/2026-05-07_goal_sequence.md)** - Issue sequencing rationale that keeps paper evidence first, h500 mechanism interpretation next, and deferred strategic alternatives explicit
@@ -277,6 +284,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #695 `safe_control` Feasibility Note](./context/issue_695_safe_control_feasibility_note.md)** - External safety-controller assessment showing the current path is blocked by missing runtime dependencies, unclear license metadata, and a waypoint-tracking contract mismatch
 * **[Issue #581 Paper Evidence Delta Report](./context/issue_581_paper_evidence_delta.md)** - Canonical corrected benchmark artifact handoff, planner-quality claim boundary, and AMV paper-ingestion checklist
 * **[Issue #1236 Optimizer Adversarial Sampler](./context/issue_1236_optimizer_adversarial_sampler.md)** - Optuna-backed adversarial sampler pilot, synthetic comparison helper, and non-paper-facing evidence boundary
+* **[Issue #1271 Seed-Sensitivity Explorer](./context/issue_1271_seed_sensitivity_explorer.md)** - API and summary contract for replaying adversarial candidates over explicit seed grids while keeping failure persistence and artifact claims bounded
 * **[Planner Quality Audit Workflow](./benchmark_planner_quality_audit.md)** - Build the planner decision table, classify headline suitability, and record paper-faithfulness parity gaps
 
 ### Tooling
@@ -367,6 +375,8 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
 * [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
 * [**Scenario Specification Checklist**](./scenario_spec_checklist.md) - Authoring checklist for per-scenario/archetype/manifest files
+* [**Hazard Traceability**](./hazard_traceability.md) - Summarize intended hazard coverage for scenario IDs or families without treating traceability as safety proof
+* [**ODD Contracts**](./odd_contracts.md) - Validate operating-assumption metadata that bounds benchmark and falsification evidence without certifying safety
 * [**Scenario Contracts**](./scenario_contracts.md) - Validate authored scenario-intent contracts before certification or benchmark execution
 * [**Scenario Certification**](./scenario_certification.md) - Generate machine-readable validity, feasibility, stress-only, and hard-but-solvable certificates for scenario manifests
 * [**Issue #1240 Scenario Coverage Entropy**](./context/issue_1240_scenario_coverage_entropy.md) - Config-only entropy and novelty report for diagnostic scenario-set curation; not benchmark-success evidence

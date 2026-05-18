@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.common.math_utils import wrap_angle_pi
+
 if TYPE_CHECKING:
     from robot_sf.common.types import PolarVec2D, RobotPose
 
@@ -117,7 +119,7 @@ class HolonomicDriveRobot:
             omega = float(
                 np.clip(cmd_y, -self.config.max_angular_speed, self.config.max_angular_speed)
             )
-            heading = float((heading + omega * dt + np.pi) % (2.0 * np.pi) - np.pi)
+            heading = wrap_angle_pi(heading + omega * dt)
             vx = v * cos(heading)
             vy = v * sin(heading)
 

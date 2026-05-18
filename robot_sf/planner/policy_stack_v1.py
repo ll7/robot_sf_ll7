@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.planner.risk_dwa import (
     RiskDWAPlannerAdapter,
     RiskDWAPlannerConfig,
@@ -466,15 +467,6 @@ def _as_vector(value: Any, *, pad: int) -> np.ndarray:
     if arr.size < pad:
         arr = np.pad(arr, (0, pad - arr.size), constant_values=0.0)
     return arr
-
-
-def _wrap_angle(angle: float) -> float:
-    """Wrap an angle to the ``[-pi, pi)`` interval.
-
-    Returns:
-        float: Wrapped angle in radians.
-    """
-    return float((float(angle) + np.pi) % (2.0 * np.pi) - np.pi)
 
 
 def _tuple_of_strings(value: Any, *, default: tuple[str, ...] = ()) -> tuple[str, ...]:

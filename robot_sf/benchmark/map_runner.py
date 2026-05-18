@@ -64,6 +64,7 @@ from robot_sf.benchmark.utils import (
     index_existing,
     validate_episode_success_integrity,
 )
+from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
@@ -940,7 +941,7 @@ def _goal_policy(obs: dict[str, Any], *, max_speed: float = 1.0) -> tuple[float,
     if dist < 1e-6:
         return 0.0, 0.0
     desired_heading = float(np.arctan2(vec[1], vec[0]))
-    heading_error = ((desired_heading - heading + np.pi) % (2 * np.pi)) - np.pi
+    heading_error = _normalize_heading(desired_heading - heading)
     angular = float(np.clip(heading_error, -1.0, 1.0))
     linear = float(np.clip(dist, 0.0, max_speed * max(0.0, 1.0 - abs(heading_error) / np.pi)))
     return linear, angular
@@ -1097,15 +1098,6 @@ class _GoalFallbackAdapter:
             tuple[float, float]: Linear and angular command.
         """
         return _goal_policy(observation, max_speed=self._max_speed)
-
-
-def _normalize_heading(value: float) -> float:
-    """Normalize heading to [-pi, pi].
-
-    Returns:
-        Wrapped heading angle in radians.
-    """
-    return float((value + np.pi) % (2.0 * np.pi) - np.pi)
 
 
 def _ppo_action_to_unicycle(

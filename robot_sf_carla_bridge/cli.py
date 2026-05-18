@@ -14,6 +14,10 @@ from robot_sf_carla_bridge.availability import (
     check_carla_availability,
     load_availability_schema,
 )
+from robot_sf_carla_bridge.docker_runtime import (
+    run_carla_docker_preflight,
+    run_carla_docker_runtime_smoke,
+)
 from robot_sf_carla_bridge.export import (
     BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
     build_export_payloads_from_scenario_file,
@@ -304,6 +308,66 @@ def replay_t1_oracle_smoke_main(argv: list[str] | None = None) -> int:
         f"{summary['selected_payload']['scenario_id']} ready for CARLA T1 oracle replay setup\n"
     )
     return 0
+
+
+def carla_docker_runtime_main(argv: list[str] | None = None) -> int:
+    """Run the opt-in pinned CARLA Docker runtime preflight or smoke workflow.
+
+    Returns:
+        Process-style exit code.
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Preflight or smoke-test the pinned CARLA 0.9.16 Docker runtime."
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    preflight = subparsers.add_parser("preflight", help="Check host prerequisites only.")
+    preflight.add_argument("--json", action="store_true", help="Print a machine-readable status.")
+    preflight.add_argument(
+        "--pull",
+        action="store_true",
+        help="Pull carlasim/carla:0.9.16 when missing after disk-space checks pass.",
+    )
+    preflight.add_argument(
+        "--skip-api-check",
+        action="store_true",
+        help="Skip host-side carla==0.9.16 import validation.",
+    )
+
+    smoke = subparsers.add_parser(
+        "smoke", help="Start CARLA, connect a Python client, and stop it."
+    )
+    smoke.add_argument("--json", action="store_true", help="Print a machine-readable status.")
+    smoke.add_argument(
+        "--pull",
+        action="store_true",
+        help="Pull carlasim/carla:0.9.16 when missing after disk-space checks pass.",
+    )
+    smoke.add_argument(
+        "--startup-timeout-s",
+        type=float,
+        default=120.0,
+        help="Seconds to wait for Python-client connectivity.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.command == "preflight":
+        status = run_carla_docker_preflight(
+            pull=args.pull,
+            require_carla_api=not args.skip_api_check,
+        )
+    else:
+        status = run_carla_docker_runtime_smoke(
+            pull=args.pull,
+            startup_timeout_s=args.startup_timeout_s,
+        )
+
+    exit_code = 0 if status["status"] in {"available", "connected"} else 1
+    if args.json:
+        sys.stdout.write(f"{json.dumps(status, sort_keys=True)}\n")
+    else:
+        sys.stdout.write(f"{status['status']}: {status['reason']}\n")
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -467,8 +467,8 @@ why a change was made rather than a full issue execution transcript.
   exports one scenario-loader entry through `scenario_cert.v1` into a neutral CARLA T0 payload, 
   stacked on the issue #942 map-definition adapter.
 * [Issue #948 CARLA T0 Scenario File Export](issue_948_carla_t0_scenario_file_export.md)
-  batch-loads scenario manifests into ordered neutral export payload records, stacked on the issue
-  #946 scenario-entry helper.
+  batch-loads scenario manifests into ordered neutral export payload records, stacked on the
+  Issue #946 scenario-entry helper.
 * [Issue #950 CARLA T0 Export Record Writer](issue_950_carla_t0_export_record_writer.md)
   writes ordered neutral export records to deterministic JSON files plus a local manifest, stacked
   on the issue #948 scenario-file helper.
@@ -488,8 +488,8 @@ why a change was made rather than a full issue execution transcript.
   documents the first CARLA transfer boundary: neutral export first, optional oracle replay later, 
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
 * [Issue #962 CARLA T0 Manifest Payload Loader](issue_962_carla_t0_manifest_payload_loader.md)
-  loads and validates all payloads referenced by a local T0 export manifest, stacked on the issue
-  #960 path resolver.
+  loads and validates all payloads referenced by a local T0 export manifest, stacked on the
+  Issue #960 path resolver.
 * [Issue #964 CARLA T0 Batch Validation CLI](issue_964_carla_t0_batch_validation_cli.md)
   exposes the issue #962 manifest payload loader through a CARLA-free batch validation project
   script.
@@ -541,6 +541,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1003 CARLA T1 Oracle Replay Smoke](issue_1003_carla_t1_oracle_smoke.md)
   adds a setup-only T1 oracle replay smoke command for one T0 export manifest payload, with
   schema-catalog validation and fail-closed `not-available` behavior when CARLA is absent.
+- [Issue #1179 CARLA Docker Runtime](issue_1179_carla_docker_runtime.md)
+  records the pinned `carlasim/carla:0.9.16` Docker runtime interface, preflight/smoke command,
+  local no-sudo Docker blocker, and boundary before true live replay semantics.
 
 ## DreamerV3 Notes
 

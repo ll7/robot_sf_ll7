@@ -12,15 +12,15 @@ import pygame
 from loguru import logger
 
 from robot_sf.common.geometry import euclid_dist
-from robot_sf.common.types import DifferentialDriveAction, PedPose, RgbColor, RobotPose, Vec2D
+from robot_sf.common.types import PedPose, RgbColor, RobotPose, Vec2D
 from robot_sf.nav.map_config import MapDefinition, Obstacle
 from robot_sf.nav.occupancy_grid import (
     OCCUPANCY_FREE_THRESHOLD,
     GridChannel,
     OccupancyGrid,
 )
-from robot_sf.ped_ego.unicycle_drive import UnicycleAction
-from robot_sf.robot.bicycle_drive import BicycleAction
+from robot_sf.render.sim_state import VisualizableAction
+from robot_sf.render.sim_state import VisualizableSimState as _VisualizableSimState
 
 # Make moviepy optional
 try:
@@ -103,58 +103,11 @@ def _empty_map_definition() -> MapDefinition:
 
 
 @dataclass
-class VisualizableAction:
-    """Action payload rendered alongside an agent pose and goal."""
-
-    pose: RobotPose
-    action: DifferentialDriveAction | BicycleAction | UnicycleAction
-    goal: Vec2D
-
-
-@dataclass
-class VisualizableSimState:
-    """
-    VisualizableSimState represents a collection of properties to display
-    the simulator's state at a discrete timestep.
-    """
-
-    timestep: int
-    """The discrete timestep of the simulation."""
-
-    robot_action: VisualizableAction | None
-    """The action taken by the robot at this timestep."""
-
-    robot_pose: RobotPose
-    """The pose of the robot at this timestep."""
-
-    pedestrian_positions: np.ndarray
-    """The positions of pedestrians at this timestep."""
-
-    ray_vecs: np.ndarray
-    """The ray vectors associated with the robot's sensors."""
-
-    ped_actions: np.ndarray
-    """The actions taken by pedestrians at this timestep."""
-
-    ego_ped_pose: PedPose | None = None
-    """The pose of the ego pedestrian at this timestep. Defaults to None."""
-
-    ego_ped_ray_vecs: np.ndarray | None = None
-    """The ray vectors associated with the ego pedestrian's sensors. Defaults to None."""
-
-    ego_ped_action: VisualizableAction | None = None
-    """The action taken by the ego pedestrian at this timestep. Defaults to None."""
-
-    time_per_step_in_secs: float | None = None
-    """The time taken for each step in seconds. Defaults to None. Usually 0.1 seconds."""
-
-    planned_path: list[Vec2D] | None = None
-    """Optional planned path waypoints for debugging (world coordinates)."""
-    observation_image: np.ndarray | None = None
-    """Optional image observation payload for observation-space visualization."""
+class VisualizableSimState(_VisualizableSimState):
+    """Backward-compatible sim_view export using this module's patchable logger."""
 
     def __post_init__(self):
-        """validate the visualizable state"""
+        """Validate the visualizable state."""
         if self.time_per_step_in_secs is None:
             logger.warning("time_per_step_in_secs is None, defaulting to 0.1s.")
             self.time_per_step_in_secs = 0.1

@@ -301,6 +301,9 @@ knowledge, not every transient iteration detail.
   2026-05-05 refactor-prioritization snapshot.
 * [Issue #1006 GitHub CI Runtime Drift Diagnosis](./issue_1006_ci_runtime_drift.md)
   adds `scripts/dev/ci_timing_summary.py` and records timing evidence from PRs #1007 and #1008.
+* [Issue #1290 Lazy Pygame Initialization](./issue_1290_lazy_pygame_init.md)
+  records the lazy `SimulationView` proxy and pygame-free headless `make_robot_env(debug=False)`
+  import contract, plus the cold/warm smoke caveat that backend/JIT startup still dominates.
 * [Issue #513 High-Density Perf Gate Calibration](./issue_513_high_density_perf_gate.md)
   keeps `classic_cross_trap_high` advisory because no stable local trend-history window was
   available; documents the rerun evidence and non-blocking policy.

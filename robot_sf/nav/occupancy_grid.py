@@ -67,6 +67,7 @@ grid.render_pygame(surface=my_pygame_surface, robot_pose=robot_pose)
 
 from __future__ import annotations
 
+import importlib
 import math
 from dataclasses import dataclass, field
 from enum import Enum
@@ -79,11 +80,6 @@ from shapely.geometry import Point as _ShapelyPoint
 from shapely.geometry import Polygon as _ShapelyPolygon
 from shapely.prepared import PreparedGeometry, prep
 
-try:
-    import pygame
-except ImportError:  # pragma: no cover - handled at runtime
-    pygame = None
-
 if TYPE_CHECKING:
     from robot_sf.common.types import Circle2D, Line2D, RobotPose
 
@@ -92,6 +88,25 @@ from robot_sf.nav import occupancy_grid_utils as grid_utils
 
 # Threshold below which a cell/region is treated as free for spawning or visualization.
 OCCUPANCY_FREE_THRESHOLD = 0.05
+_PYGAME_UNLOADED = object()
+pygame: Any = _PYGAME_UNLOADED
+
+
+def _load_pygame():
+    """Import pygame only when optional occupancy-grid rendering is requested.
+
+    Returns:
+        module | None: Imported pygame module, or ``None`` when unavailable.
+    """
+    global pygame
+    if pygame is not _PYGAME_UNLOADED:
+        return pygame
+    try:
+        pygame = importlib.import_module("pygame")
+    except ImportError:  # pragma: no cover - handled at runtime
+        pygame = None
+        return None
+    return pygame
 
 
 class GridChannel(Enum):
@@ -882,6 +897,7 @@ class OccupancyGrid:
         if self._grid_data is None:
             raise RuntimeError("Grid has not been generated yet. Call generate() first.")
 
+        pygame = _load_pygame()
         if pygame is None:
             raise RuntimeError("Pygame is required for occupancy grid rendering")
 

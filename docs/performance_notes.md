@@ -195,7 +195,10 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
   `robot_sf.training.scenario_loader`) lets you verify hit/miss counts at runtime.
 
 ### Known Performance Bottlenecks
-1. **pygame/SDL initialization**: ~1s for headless setup
+1. **Cold backend/map startup**: first-process map parsing and FastPysf/JIT setup dominate
+   headless cold starts. Pygame/SDL is no longer imported by
+   `make_robot_env(debug=False)` after #1290; it is still initialized on explicit
+   rendering, image-observation, occupancy-grid rendering, or video paths.
 2. **FastPysf compilation**: JIT overhead on first use  
 3. **Large episode JSON**: Serialization cost grows with trajectory length
 4. **File I/O**: JSONL append becomes slow with very large files

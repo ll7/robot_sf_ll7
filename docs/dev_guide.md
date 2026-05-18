@@ -983,34 +983,42 @@ The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 - System packages are installed through the supported `apt-get` path in one update/install step per
   job; the workflow does not download `apt-fast` at runtime.
 
-The smoke lane still includes performance monitoring and regression checks:
+The smoke lane still includes performance monitoring and regression checks through current,
+committed entry points:
 
-**Performance Targets**:
-- Package installation: < 73 seconds (50% reduction from 2min 26sec baseline)
-- Overall CI job completion within acceptable time limits
-
-**Monitoring Infrastructure**:
-- **CI Monitoring Script**: `scripts/ci_monitoring.py` - Tracks job and step timing
-- **Performance Metrics**: `scripts/ci-tests/performance_metrics.py` - Analyzes and reports metrics
-- **Package Validation**: `scripts/ci-tests/package_validation.py` - Validates package availability
-
-**CI Workflow Integration**:
+**Workflow Integration**:
 - Fast lint/typecheck/test feedback is reported before smoke/artifact completion.
-- Performance data saved as artifacts for analysis
-- Automatic validation against performance targets
-- Cold/warm regression smoke on `main`: startup-only regressions (`env_create_sec`,
-  `first_step_sec`) are advisory (`WARN`), while steady-state regressions
-  (`episode_sec`, `steps_per_sec`) remain blocking (`FAIL`).
+- `smoke-artifacts` uploads map verification, benchmark, recording, and cold/warm performance
+  artifacts from the canonical `output/` tree.
+- Cold/warm regression smoke is driven by
+  `uv run python -m robot_sf.benchmark.perf_cold_warm` through
+  `scripts/dev/ci_driver.sh smoke`.
+  Pull requests run the check in advisory mode; `main` and `workflow_dispatch` runs use the
+  stricter regression gate.
+- Startup/reset performance is measured by `scripts/validation/performance_smoke_test.py` during
+  strict smoke runs, and telemetry smoke/perf coverage is exercised by
+  `scripts/validation/run_examples_smoke.py --perf-tests-only`.
 
 **Local Testing**:
-- Use `act` tool for local CI workflow testing: `act push --container-architecture linux/amd64 --job ci --verbose`
-- See `scripts/ci-tests/README.md` for comprehensive `act` usage guide
-- Performance metrics can be analyzed locally using the metrics scripts
+- Use `scripts/dev/run_ci_local.sh` for the canonical local CI-equivalent path.
+- Use `scripts/dev/ci_driver.sh <phase>` for narrower local phases such as `lint`, `typecheck`,
+  `test`, `smoke`, or `artifact-policy`.
+- Use `uv run python scripts/dev/ci_timing_summary.py --run-id <github-actions-run-id> --top 10`
+  to inspect GitHub-hosted CI queue time, job duration, and slowest-step timing from a completed
+  run.
+- Use `uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests`
+  when a refactor needs a local snapshot of large modules, long functions, or captured pytest
+  duration rows.
+- Optional local GitHub Actions execution with `act` is not currently a supported repository
+  workflow; evaluate and document that path through #1308 before adding `act` commands here.
 
 **Performance Breach Handling**:
-- Soft breaches (< 20s): Warning logged, CI continues
-- Hard breaches (≥ 60s): Test failure, CI stops
-- Override with `ROBOT_SF_PERF_RELAX=1` for known variance (temporary only)
+- Cold/warm PR smoke uses advisory thresholds by default; `main` and `workflow_dispatch` runs
+  enforce the stricter regression gate.
+- Startup/reset smoke supports soft and hard thresholds through
+  `ROBOT_SF_PERF_CREATION_SOFT`, `ROBOT_SF_PERF_CREATION_HARD`,
+  `ROBOT_SF_PERF_RESET_SOFT`, `ROBOT_SF_PERF_RESET_HARD`, and
+  `ROBOT_SF_PERF_ENFORCE=1`.
 
 ## Validation scenarios and performance
 ### Validation scenarios (run after changes)

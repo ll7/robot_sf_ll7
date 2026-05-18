@@ -65,6 +65,23 @@ rtk uv run pytest tests/carla_bridge -q
 
 Result: `71 passed`.
 
+Post-merge PR readiness gate:
+
+```bash
+rtk bash -lc 'PYTEST_NUM_WORKERS=8 BASE_REF=origin/main scripts/dev/pr_ready_check.sh'
+```
+
+Result: Ruff passed, the full pytest suite reported `3702 passed, 10 skipped`, and the touched
+definition TODO ratchet passed.
+
+Docs proof consistency:
+
+```bash
+rtk bash -lc 'BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh'
+```
+
+Result: passed for the changed docs files.
+
 Host-side Python package resolver check:
 
 ```bash
@@ -87,3 +104,7 @@ fails with permission denied while connecting to `unix:///var/run/docker.sock`.
 This local result is a precise runtime blocker, not live CARLA proof. A Docker/NVIDIA-capable host
 still needs to run `robot-sf-carla-docker-runtime smoke --pull --json` to record image digest,
 client/server versions, active map, Docker command, status, and log tail.
+
+Generated `output/coverage/` files from validation remain ignored and disposable. No generated
+CARLA Docker image, benchmark bundle, model checkpoint, or durable runtime artifact was produced on
+this host.

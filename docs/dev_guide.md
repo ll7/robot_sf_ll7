@@ -499,6 +499,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Keep it brief and accurate (one or two sentences is enough); focus on intent and non-obvious behavior.
 - Purely mechanical edits (formatting, imports, lint fixes) do not require docstring updates.
 - Avoid mass docstring sweeps; improve documentation incrementally as code changes.
+- Use `uv run python scripts/validation/check_docstring_todos.py --mode report` to inspect the current placeholder backlog by top-level area and file.
+- `scripts/validation/docstring_todo_baseline.json` is an increase-only ratchet. Update it with `--mode write-baseline` only after an intentional cleanup or maintainer-approved backlog change.
 
 ### Map Bounds Format
 
@@ -811,7 +813,7 @@ Examples (copy‑ready):
   - VS Code task “Run Tests” (default suite)
   - “Run Tests (Show All Warnings)” for diagnostics
   - “Run Tests (GUI)” for display‑dependent tests (headless via environment vars)
-  - VS Code task “PR Ready Check” runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, and diff‑only TODO docstring warnings
+  - VS Code task “PR Ready Check” runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, diff‑only TODO docstring warnings, and the TODO-docstring backlog ratchet
 - Code quality checks: VS Code task “Check Code Quality” (Ruff + ty errors‑only)
 - Diagrams: VS Code task “Generate UML”
 

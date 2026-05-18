@@ -11,8 +11,11 @@ in agentic workflows.
 - Reserve GraphQL for GitHub Projects v2, review-thread operations, and genuinely cheaper nested
   bulk reads.
 - Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project inspection when
-  available, but switch to REST when GraphQL quota is low or when MCP abstracts a simple REST
-  operation through a costly GraphQL path.
+  available. MCP means Model Context Protocol. Interactive inspection means ad-hoc review or triage
+  work such as opening a PR, checking review context, commenting, or linking issues; batch scripts,
+  CI updates, and read-only analytics should prefer REST or local `git` when those are cheaper.
+  Switch to REST when GraphQL quota is low or when MCP abstracts a simple REST operation through a
+  costly GraphQL path.
 - Prefer local `git` for repository state that is already available locally: current branch,
   changed files, commit hashes, merge bases, and diffs.
 - Do issue cleanup first: body rewrites, labels, comments, and title fixes.
@@ -42,6 +45,7 @@ Use the cheapest source of truth for the question:
 | Need | Preferred source | Notes |
 | --- | --- | --- |
 | Working tree, branch, changed files, merge base, commits | local `git` | Do not ask GitHub for state already present locally. |
+| Interactive issue, PR, and project inspection | GitHub MCP / GitHub app tools | Prefer this for ad-hoc triage, review context, commenting, and linking when authorized. Fall back to REST, local `git`, or narrow GraphQL when MCP/app tools are unavailable or would hide a costly GraphQL path. |
 | Issue body, labels, comments, assignees, open/closed state | REST via `gh api repos/ll7/robot_sf_ll7/issues/...` | Avoid `gh issue view/list` if GraphQL quota is low because those commands may use GraphQL. |
 | PR metadata, branch refs, commits, workflow runs | REST via `gh api` | Poll sparingly; use event/check URLs from known PRs when available. |
 | Project #5 item status, priority, duration, reviewed date | GraphQL / `gh project item-*` | Projects v2 is GraphQL-only; batch and cache aggressively. |

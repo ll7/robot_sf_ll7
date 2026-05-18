@@ -118,6 +118,8 @@ knowledge, not every transient iteration detail.
   [issue_1288_jsonl_orjson_append.md](issue_1288_jsonl_orjson_append.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)
+* Issue #1169 CARLA Live T1 Oracle Replay:
+  [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
@@ -138,6 +140,7 @@ knowledge, not every transient iteration detail.
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
   [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),
   [Issue #1111 CARLA Setup-Only Smoke Evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
+  [Issue #1169 CARLA Live Replay Evidence](evidence/issue_1169_carla_live_replay_2026-05-18/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
@@ -553,6 +556,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1179 CARLA Docker Runtime](issue_1179_carla_docker_runtime.md)
   records the pinned `carlasim/carla:0.9.16` Docker runtime interface, preflight/smoke command,
   local no-sudo Docker blocker, and boundary before true live replay semantics.
+- [Issue #1169 CARLA Live T1 Oracle Replay](issue_1169_carla_live_replay.md)
+  adds the Docker-backed live replay command, records a real CARLA `0.9.16` connection on
+  `Town10HD_Opt`, and fails closed on static-geometry replay for the inherited #1111 payload.
 
 ## DreamerV3 Notes
 

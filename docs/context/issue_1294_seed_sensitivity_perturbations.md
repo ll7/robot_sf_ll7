@@ -57,6 +57,10 @@ Certification still runs per perturbed candidate. Rejected perturbations are rec
   `uv run --active ruff format --check robot_sf/adversarial/seed_sensitivity.py tests/adversarial/test_adversarial_search.py`
   passed.
   `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` passed.
+- Post-retarget proof after Issue #1271 merged and this branch refreshed against `origin/main`:
+  the same seven focused seed-sensitivity tests passed with `7 passed`, and
+  `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run --active pytest tests/adversarial/test_adversarial_search.py -q`
+  passed with `45 passed`.
 
 ## Remaining Notes
 

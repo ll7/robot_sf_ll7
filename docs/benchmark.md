@@ -18,6 +18,10 @@ runtime/readiness metadata; training reward totals are not benchmark-success evi
 [Robot SF Environment Contract And Training Provenance](./training/environment_contract.md) and the
 [benchmark fallback policy](./context/issue_691_benchmark_fallback_policy.md).
 
+For routine, low-stress planner calibration, use `configs/scenarios/nominal_v1.yaml`. This matrix
+is intentionally separate from stress, adversarial, and camera-ready surfaces; nominal success is a
+sanity check for basic shared-space competence, not safety or robustness evidence.
+
 ### Canonical Schema Location
 
 **Single source of truth**: `robot_sf/benchmark/schemas/`

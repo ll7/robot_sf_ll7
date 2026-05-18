@@ -65,6 +65,10 @@ from robot_sf.benchmark.seed_variance import (
 from robot_sf.benchmark.summary import summarize_to_plots
 from robot_sf.common.seed import get_seed_state_sample as _seed_sample
 from robot_sf.common.seed import set_global_seed as _set_seed
+from robot_sf.training.task_bundles import (
+    describe_task_bundle_source,
+    is_task_bundle_reference,
+)
 
 DEFAULT_SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
@@ -828,6 +832,9 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
     Returns:
         dict[str, object]: Source metadata including format, include list, and selector list.
     """
+    if is_task_bundle_reference(matrix_path):
+        return describe_task_bundle_source(matrix_path)
+
     path = Path(matrix_path)
     includes: list[str] = []
     select_scenarios: list[str] = []
@@ -946,7 +953,7 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
         )
 
     warnings: list[dict[str, Any]] = []
-    base_dir = Path(matrix_path).parent if matrix_path is not None else None
+    base_dir = _resolve_warning_base_dir(matrix_path)
     for idx, scenario in enumerate(scenarios):
         scenario_id = str(
             scenario.get("id") or scenario.get("name") or scenario.get("scenario_id") or idx
@@ -1069,6 +1076,25 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
             warn(idx, scenario_id, "seeds list should contain at least 3 entries", "/seeds")
 
     return warnings
+
+
+def _resolve_warning_base_dir(matrix_path: str | Path | None) -> Path | None:
+    """Resolve the best base directory for warning-only relative path checks.
+
+    Returns:
+        Path | None: Directory used for relative map checks, if known.
+    """
+    if matrix_path is None:
+        return None
+    if is_task_bundle_reference(matrix_path):
+        source = describe_task_bundle_source(matrix_path)
+        scenario_files = source.get("scenario_files")
+        if isinstance(scenario_files, list) and scenario_files:
+            first = scenario_files[0]
+            if isinstance(first, str):
+                return Path(first).parent
+        return None
+    return Path(matrix_path).parent
 
 
 def _handle_validate_config(args) -> int:
@@ -1370,16 +1396,16 @@ def _add_list_subparser(
 
     p2 = subparsers.add_parser(
         "list-scenarios",
-        help="List scenario IDs from a scenario matrix YAML",
+        help="List scenario IDs from a scenario matrix YAML or bundle:<name>",
     )
-    p2.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p2.add_argument("--matrix", required=True, help="Path to scenario matrix YAML or bundle:<name>")
     p2.set_defaults(cmd="list-scenarios")
 
     p3 = subparsers.add_parser(
         "validate-config",
-        help="Validate a scenario matrix YAML for required fields and duplicates",
+        help="Validate a scenario matrix YAML or bundle:<name> for required fields and duplicates",
     )
-    p3.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p3.add_argument("--matrix", required=True, help="Path to scenario matrix YAML or bundle:<name>")
     # optional: later we could add --verbose to print detailed schema errors
     p3.set_defaults(cmd="validate-config")
 
@@ -1387,7 +1413,7 @@ def _add_list_subparser(
         "preview-scenarios",
         help="Preview scenarios with warn-only plausibility checks",
     )
-    p4.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p4.add_argument("--matrix", required=True, help="Path to scenario matrix YAML or bundle:<name>")
     p4.set_defaults(cmd="preview-scenarios")
 
 

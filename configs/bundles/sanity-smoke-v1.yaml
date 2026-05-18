@@ -1,0 +1,5 @@
+schema_version: robot_sf.task_bundle.v1
+name: sanity-smoke-v1
+description: Compact non-paper smoke bundle for validating scenario plumbing and easy planner runs.
+scenario_files:
+  - ../scenarios/sanity_v1.yaml

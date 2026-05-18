@@ -60,3 +60,15 @@ def test_load_scenario_matrix_yaml_stream_legacy(tmp_path: Path) -> None:
     scenarios = load_scenario_matrix(stream_path)
 
     assert [sc["name"] for sc in scenarios] == ["sc_a", "sc_b"]
+
+
+def test_load_scenario_matrix_accepts_task_bundle_reference() -> None:
+    """Benchmark matrix loading should consume named task bundles."""
+    scenarios = load_scenario_matrix("bundle:sanity-smoke-v1")
+
+    assert [scenario["name"] for scenario in scenarios] == [
+        "planner_sanity_simple",
+        "empty_map_8_directions_east",
+        "goal_behind_robot",
+        "single_ped_crossing_orthogonal",
+    ]

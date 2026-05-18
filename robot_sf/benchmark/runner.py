@@ -73,6 +73,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
+from robot_sf.training.task_bundles import is_task_bundle_reference
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -155,6 +156,9 @@ def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     Returns:
         List of scenario dictionaries.
     """
+    if is_task_bundle_reference(path):
+        return [dict(s) for s in load_scenarios(path)]
+
     scenario_path = Path(path)
     with scenario_path.open("r", encoding="utf-8") as f:
         docs = list(yaml.safe_load_all(f))

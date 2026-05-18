@@ -170,3 +170,15 @@ uv run python scripts/tools/policy_analysis_run.py \
   straight open-space route, one gentle crossing, one low-density doorway, and one low-density
   bottleneck. Use it for local sanity checks and nominal-vs-stress interpretation; do not treat
   success on this matrix as stress robustness or safety evidence.
+
+## Task bundles
+
+Named task bundles live under `configs/bundles/` and expand into existing scenario manifests through
+the same loader. Use `bundle:<name>` when a benchmark or training command should consume a reusable
+scenario package without copying scenario lists:
+
+```bash
+uv run robot_sf_bench validate-config --matrix bundle:sanity-smoke-v1
+```
+
+See `configs/bundles/README.md` for the versioned schema and the durable-input boundary.

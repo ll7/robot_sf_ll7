@@ -87,7 +87,7 @@ def _load_scenario_manifest(
     return scenarios, includes, local_map_search_paths
 
 
-def load_scenarios(path: Path, *, base_dir: Path | None = None) -> list[Mapping[str, Any]]:
+def load_scenarios(path: str | Path, *, base_dir: Path | None = None) -> list[Mapping[str, Any]]:
     """Load scenario definitions from a YAML file.
 
     Supports a list of scenarios, a mapping with ``scenarios``, and optional
@@ -102,6 +102,15 @@ def load_scenarios(path: Path, *, base_dir: Path | None = None) -> list[Mapping[
     Returns:
         list[Mapping[str, Any]]: Parsed scenario entries from the file(s).
     """
+    from robot_sf.training.task_bundles import (  # noqa: PLC0415
+        is_task_bundle_reference,
+        load_task_bundle_scenarios,
+    )
+
+    if is_task_bundle_reference(path):
+        return load_task_bundle_scenarios(path)
+
+    path = Path(path)
     resolved = path.resolve()
     if base_dir is None:
         root = resolved

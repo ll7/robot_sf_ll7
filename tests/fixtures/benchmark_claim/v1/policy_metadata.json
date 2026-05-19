@@ -1,0 +1,10 @@
+{
+  "schema_version": "policy-metadata.v1",
+  "policies": [
+    {
+      "policy_id": "ppo-final",
+      "artifact_path": "model/ppo-final.zip",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}

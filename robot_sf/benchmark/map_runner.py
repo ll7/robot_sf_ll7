@@ -120,6 +120,13 @@ from robot_sf.planner.safety_barrier import (
     SafetyBarrierPlannerAdapter,
     build_safety_barrier_config,
 )
+from robot_sf.planner.safety_shield import (
+    ShieldDecision,
+    new_shield_stats,
+    shield_contract_metadata,
+    shield_metrics_from_stats,
+    update_shield_stats,
+)
 from robot_sf.planner.social_navigation_pyenvs_force_model import (
     SocialNavigationPyEnvsForceModelAdapter,
     build_social_navigation_pyenvs_force_model_config,
@@ -1099,6 +1106,35 @@ class _GoalFallbackAdapter:
         return _goal_policy(observation, max_speed=self._max_speed)
 
 
+def _choose_shield_command(
+    shield: Any,
+    observation: dict[str, Any],
+    proposed_command: tuple[float, float],
+) -> ShieldDecision:
+    """Return a structured shield decision, adapting legacy guard implementations."""
+    decision_fn = getattr(shield, "choose_command_decision", None)
+    if callable(decision_fn):
+        decision = decision_fn(observation, proposed_command)
+        if isinstance(decision, ShieldDecision):
+            return decision
+        if hasattr(decision, "as_command_result"):
+            command, label = decision.as_command_result()
+            return ShieldDecision(
+                proposed_action=(float(proposed_command[0]), float(proposed_command[1])),
+                filtered_action=(float(command[0]), float(command[1])),
+                decision_label=str(label),
+                intervention_reason="legacy_structured_guard_decision",
+            )
+
+    command, label = shield.choose_command(observation, proposed_command)
+    return ShieldDecision(
+        proposed_action=(float(proposed_command[0]), float(proposed_command[1])),
+        filtered_action=(float(command[0]), float(command[1])),
+        decision_label=str(label),
+        intervention_reason="legacy_guard_decision",
+    )
+
+
 def _normalize_heading(value: float) -> float:
     """Normalize heading to [-pi, pi].
 
@@ -1757,6 +1793,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "stop_best_effort": 0,
             "goal_reached": 0,
         }
+        meta["safety_shield_contract"] = shield_contract_metadata(
+            shield_name="GuardedPPOAdapter",
+            prediction_source="short_horizon_rollout",
+            fallback_policy=type(guard_adapter.fallback_adapter).__name__,
+        )
+        meta["shield_stats"] = new_shield_stats()
         planner_meta = meta.get("planner_kinematics")
         if isinstance(planner_meta, dict):
             planner_meta["planner_command_space"] = _default_robot_command_space(
@@ -1790,10 +1832,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 kinematics_model=ppo_kinematics_model,
                 project_command=False,
             )
-            chosen, decision = guard_adapter.choose_command(
+            shield_decision = _choose_shield_command(
+                guard_adapter,
                 obs,
                 (float(linear), float(angular)),
             )
+            chosen, decision = shield_decision.as_command_result()
             linear, angular = _project_with_feasibility(
                 model=ppo_kinematics_model,
                 command=(float(chosen[0]), float(chosen[1])),
@@ -1802,6 +1846,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             guard_stats = meta.get("guard_stats")
             if isinstance(guard_stats, dict):
                 guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            shield_stats = meta.get("shield_stats")
+            if isinstance(shield_stats, dict):
+                update_shield_stats(shield_stats, shield_decision)
             _update_adapter_impact_metrics(
                 meta,
                 conversion_mode,
@@ -1896,6 +1943,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "stop_best_effort": 0,
             "goal_reached": 0,
         }
+        meta["safety_shield_contract"] = shield_contract_metadata(
+            shield_name="GuardedPPOAdapter",
+            prediction_source="short_horizon_rollout",
+            fallback_policy="goal",
+        )
+        meta["shield_stats"] = new_shield_stats()
         planner_meta = meta.get("planner_kinematics")
         if isinstance(planner_meta, dict):
             planner_meta["planner_command_space"] = _default_robot_command_space(
@@ -1918,10 +1971,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 tuple[float, float]: Guard-selected and projected command.
             """
             sonic_command = sonic_adapter.plan(obs)
-            chosen, decision = guard_adapter.choose_command(
+            shield_decision = _choose_shield_command(
+                guard_adapter,
                 obs,
                 (float(sonic_command[0]), float(sonic_command[1])),
             )
+            chosen, decision = shield_decision.as_command_result()
             linear, angular = _project_with_feasibility(
                 model=guarded_kinematics_model,
                 command=(float(chosen[0]), float(chosen[1])),
@@ -1930,6 +1985,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             guard_stats = meta.get("guard_stats")
             if isinstance(guard_stats, dict):
                 guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+            shield_stats = meta.get("shield_stats")
+            if isinstance(shield_stats, dict):
+                update_shield_stats(shield_stats, shield_decision)
             _update_adapter_impact_metrics(
                 meta,
                 "adapter",
@@ -2309,7 +2367,7 @@ def _select_seeds(
     return [0]
 
 
-def _scenario_identity_payload(
+def _scenario_identity_payload(  # noqa: PLR0913
     scenario: dict[str, Any],
     *,
     algo: str,
@@ -2318,6 +2376,7 @@ def _scenario_identity_payload(
     dt: float | None,
     record_forces: bool,
     observation_mode: str | None = None,
+    observation_level: str | None = None,
     observation_noise: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
@@ -2338,6 +2397,8 @@ def _scenario_identity_payload(
     payload["record_forces"] = bool(record_forces)
     if observation_mode is not None:
         payload["observation_mode"] = str(observation_mode)
+    if observation_level is not None:
+        payload["observation_level"] = str(observation_level)
     noise_spec = normalize_observation_noise_spec(observation_noise)
     if bool(noise_spec["enabled"]):
         payload["observation_noise_profile"] = str(noise_spec["profile"])
@@ -2664,6 +2725,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
+    observation_level: str | None = None,
     observation_noise: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
@@ -2706,12 +2768,17 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo_config=raw_policy_cfg,
         scenario=scenario,
     )
-    active_observation_mode = resolve_observation_mode(algo, observation_mode)
+    active_observation_mode = resolve_observation_mode(
+        algo,
+        observation_mode,
+        observation_level=observation_level,
+    )
     _validate_planner_contract(
         algo=algo,
         robot_kinematics=robot_kinematics,
         algo_config=policy_cfg,
         observation_mode=active_observation_mode,
+        observation_level=observation_level,
     )
     policy_fn, algo_meta = _build_policy(
         algo,
@@ -2725,7 +2792,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         metadata=algo_meta,
         robot_kinematics=robot_kinematics,
         observation_mode=active_observation_mode,
+        observation_level=observation_level,
     )
+    active_observation_level = str(algo_meta["observation_level"]["key"])
     planner_close = getattr(policy_fn, "_planner_close", None)
     planner_reset = getattr(policy_fn, "_planner_reset", None)
     planner_bind_env = getattr(policy_fn, "_planner_bind_env", None)
@@ -2894,6 +2963,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 execution_mode=execution_mode,
                 robot_kinematics=robot_kinematics,
                 observation_mode=active_observation_mode,
+                observation_level=active_observation_level,
             )
         else:
             impact["status"] = "not_applicable"
@@ -2904,6 +2974,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     visibility_settings = getattr(config, "observation_visibility", None)
     if visibility_settings is not None and hasattr(visibility_settings, "to_metadata"):
         algo_meta["observation_visibility"] = visibility_settings.to_metadata()
+    shield_stats = algo_meta.get("shield_stats")
+    if isinstance(shield_stats, dict):
+        metrics_raw.update(shield_metrics_from_stats(shield_stats))
     metrics = post_process_metrics(
         metrics_raw,
         snqi_weights=snqi_weights,
@@ -2919,6 +2992,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         dt=dt,
         record_forces=record_forces,
         observation_mode=active_observation_mode,
+        observation_level=active_observation_level,
         observation_noise=noise_spec,
     )
     steps_taken = int(robot_pos_arr.shape[0])
@@ -2955,6 +3029,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "observation_noise_stats": noise_stats,
         "algo": algo,
         "observation_mode": active_observation_mode,
+        "observation_level": active_observation_level,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {"start": ts_start, "end": ts_end},
@@ -3025,6 +3100,7 @@ def _run_map_job_worker(
         ped_impact_radius_m=float(params.get("ped_impact_radius_m", 2.0)),
         ped_impact_window_steps=int(params.get("ped_impact_window_steps", 5)),
         observation_mode=params.get("observation_mode"),
+        observation_level=params.get("observation_level"),
         observation_noise=params.get("observation_noise"),
     )
 
@@ -3161,6 +3237,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
+    observation_level: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
@@ -3220,8 +3297,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         robot_kinematics=kinematics_tag,
         adapter_impact_requested=adapter_impact_eval,
         observation_mode=batch_observation_mode,
+        observation_level=observation_level,
     )
     active_observation_mode = str(algo_contract["observation_spec"]["active_mode"])
+    active_observation_level = str(algo_contract["observation_level"]["key"])
     planner_meta = algo_contract.get("planner_kinematics")
     if isinstance(planner_meta, dict):
         planner_meta["scenario_kinematics"] = scenario_kinematics
@@ -3285,12 +3364,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             validation_observation_mode = resolve_observation_mode(
                 validation_algo,
                 batch_observation_mode,
+                observation_level=observation_level,
             )
             compatible_contract = _validate_planner_contract(
                 algo=validation_algo,
                 robot_kinematics=validation_kinematics,
                 algo_config=validation_cfg,
                 observation_mode=validation_observation_mode,
+                observation_level=observation_level,
             )
             algo_contract["planner_contract"] = compatible_contract
         except planner_commands.PlannerContractValidationError as exc:
@@ -3365,7 +3446,15 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 identity_observation_mode = resolve_observation_mode(
                     identity_algo,
                     batch_observation_mode,
+                    observation_level=observation_level,
                 )
+                identity_contract = enrich_algorithm_metadata(
+                    algo=identity_algo,
+                    metadata={},
+                    observation_mode=identity_observation_mode,
+                    observation_level=observation_level,
+                )
+                identity_observation_level = str(identity_contract["observation_level"]["key"])
                 identity_payload = _scenario_identity_payload(
                     sc,
                     algo=identity_algo,
@@ -3374,6 +3463,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     dt=dt,
                     record_forces=record_forces,
                     observation_mode=identity_observation_mode,
+                    observation_level=identity_observation_level,
                     observation_noise=noise_spec,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
@@ -3396,6 +3486,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "ped_impact_window_steps": int(ped_impact_window_steps),
         "observation_noise": noise_spec,
         "observation_mode": batch_observation_mode,
+        "observation_level": observation_level,
     }
 
     total_jobs = len(jobs)
@@ -3507,6 +3598,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 execution_mode=execution_mode,
                 robot_kinematics=kinematics_tag,
                 observation_mode=active_observation_mode,
+                observation_level=active_observation_level,
             )
         else:
             impact_contract["status"] = "not_applicable"
@@ -3573,6 +3665,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "preflight": preflight,
         "observation_noise": noise_spec,
         "observation_noise_hash": noise_hash,
+        "observation_level": active_observation_level,
     }
     summary["benchmark_availability"] = availability_payload(summary)
     return summary

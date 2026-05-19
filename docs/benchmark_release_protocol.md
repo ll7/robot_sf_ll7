@@ -74,6 +74,38 @@ Canonical fields:
 - repository URL and DOI placeholder
 - citation/checklist references
 
+## Benchmark Claim Artifact
+
+The BenchmarkClaim artifact is the reviewable boundary for paper-facing
+benchmark statements. It does not replace release manifests or publication
+bundles: release manifests define the frozen execution contract, publication
+bundles package the durable files, and BenchmarkClaim records the compact
+machine-checkable evidence for one claim.
+
+Use:
+
+```bash
+uv run robot_sf_bench claim \
+  --claim-id <claim-id> \
+  --statement "<paper-facing benchmark statement>" \
+  --scenario-matrix <scenario-matrix.yaml> \
+  --scenario-matrix-sha256 <sha256> \
+  --policy-metadata <policy-metadata.json> \
+  --training-episodes <training-episodes.jsonl> \
+  --validation-episodes <validation-episodes.jsonl> \
+  --final-benchmark-episodes <final-benchmark-episodes.jsonl> \
+  --aggregate-report <aggregate-summary.json> \
+  --dependency-group dev \
+  --output-json <benchmark-claim.json>
+```
+
+The command writes a `schema_version: benchmark_claim.v1` JSON artifact. The
+artifact keeps training, validation, and final benchmark episodes distinct, and
+fails closed when the scenario matrix hash, policy artifact hashes, or
+schema/version markers are missing. Final benchmark episodes are required;
+training and validation episodes are optional provenance inputs and must not be
+silently substituted for final benchmark evidence.
+
 ## Release Entrypoint
 
 Use:

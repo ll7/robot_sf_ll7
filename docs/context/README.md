@@ -92,8 +92,14 @@ knowledge, not every transient iteration detail.
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
 * Issue #1240 scenario coverage entropy:
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
+* Issue #1246 graded observation levels:
+  [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
+* Issue #1239 human-model transfer robustness:
+  [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:
   [issue_1255_open_issue_dependency_graph.md](issue_1255_open_issue_dependency_graph.md)
+* Issue #1247 safety shield contract:
+  [issue_1247_safety_shield_contract.md](issue_1247_safety_shield_contract.md)
 * Issue #1287 force-gradient interpolation vectorization:
   [issue_1287_force_gradient_vectorization.md](issue_1287_force_gradient_vectorization.md)
 * Issue #1286 SNQI bootstrap stability:
@@ -120,6 +126,12 @@ knowledge, not every transient iteration detail.
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)
 * Issue #1322 SocNavBench device-placement cleanup:
   [issue_1322_socnavbench_device_placement_cleanup.md](issue_1322_socnavbench_device_placement_cleanup.md)
+* Issue #1319 task bundles:
+  [issue_1319_task_bundles.md](issue_1319_task_bundles.md)
+* Issue #1245 Benchmark Claim Artifact:
+  [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
+* Issue #1169 CARLA Live T1 Oracle Replay:
+  [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
@@ -140,6 +152,8 @@ knowledge, not every transient iteration detail.
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
   [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),
   [Issue #1111 CARLA Setup-Only Smoke Evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
+  [Issue #1239 Human-Model Transfer Evidence](evidence/issue_1239_human_model_transfer_2026-05-18/README.md),
+  [Issue #1169 CARLA Live Replay Evidence](evidence/issue_1169_carla_live_replay_2026-05-18/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
@@ -555,6 +569,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1179 CARLA Docker Runtime](issue_1179_carla_docker_runtime.md)
   records the pinned `carlasim/carla:0.9.16` Docker runtime interface, preflight/smoke command,
   local no-sudo Docker blocker, and boundary before true live replay semantics.
+- [Issue #1169 CARLA Live T1 Oracle Replay](issue_1169_carla_live_replay.md)
+  adds the Docker-backed live replay command, records a real CARLA `0.9.16` connection on
+  `Town10HD_Opt`, and fails closed on static-geometry replay for the inherited #1111 payload.
 
 ## DreamerV3 Notes
 

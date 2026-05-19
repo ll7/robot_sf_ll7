@@ -12,6 +12,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, _wrap_angle, build_risk_dwa_config
+from robot_sf.planner.safety_shield import ShieldDecision
 from robot_sf.planner.socnav import (
     OccupancyAwarePlannerMixin,
     ORCAPlannerAdapter,
@@ -301,7 +302,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             "min_ttc": float(min_ttc),
         }
 
-    def choose_command(  # noqa: C901
+    def choose_command(
         self, observation: dict[str, Any], ppo_command: tuple[float, float]
     ) -> tuple[tuple[float, float], str]:
         """Choose between PPO, fallback planner, and stop.
@@ -309,9 +310,27 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         Returns:
             tuple[tuple[float, float], str]: Selected command and decision label.
         """
+        return self.choose_command_decision(observation, ppo_command).as_command_result()
+
+    def choose_command_decision(  # noqa: C901
+        self, observation: dict[str, Any], ppo_command: tuple[float, float]
+    ) -> ShieldDecision:
+        """Choose a command and return structured safety-shield metadata.
+
+        Returns:
+            ShieldDecision: Proposed action, selected action, and shield decision metadata.
+        """
         robot_pos, _heading, goal, ped_pos, _ped_vel = self._extract_state(observation)
         if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
-            return (0.0, 0.0), "goal_reached"
+            return self._shield_decision(
+                ppo_command=ppo_command,
+                filtered_command=(0.0, 0.0),
+                label="goal_reached",
+                reason="goal_within_tolerance",
+                ppo_eval={"safe": True},
+                selected_eval={"safe": True},
+                intervened=False,
+            )
 
         if ped_pos.size > 0:
             current_min_dist = float(np.min(np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)))
@@ -330,34 +349,168 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             blended_command = self._blend_commands(ppo_command, prior_command, prior_weight)
             blended_eval = self._evaluate_command(observation, blended_command)
             if self._blend_is_preferred(ppo_eval, blended_eval):
-                return blended_command, "prior_blend_safe"
+                return self._shield_decision(
+                    ppo_command=ppo_command,
+                    filtered_command=blended_command,
+                    label="prior_blend_safe",
+                    reason="prior_blend_improved_short_horizon_safety",
+                    ppo_eval=ppo_eval,
+                    selected_eval=blended_eval,
+                    fallback_policy=type(self.prior_adapter).__name__,
+                )
 
         if current_min_dist > float(self.config.near_field_distance) and bool(ppo_eval["safe"]):
-            return (float(ppo_command[0]), float(ppo_command[1])), "ppo_clear"
+            return self._shield_decision(
+                ppo_command=ppo_command,
+                filtered_command=(float(ppo_command[0]), float(ppo_command[1])),
+                label="ppo_clear",
+                reason="proposed_action_clear_of_near_field",
+                ppo_eval=ppo_eval,
+                selected_eval=ppo_eval,
+                intervened=False,
+            )
         if bool(ppo_eval["safe"]):
-            return (float(ppo_command[0]), float(ppo_command[1])), "ppo_safe"
+            return self._shield_decision(
+                ppo_command=ppo_command,
+                filtered_command=(float(ppo_command[0]), float(ppo_command[1])),
+                label="ppo_safe",
+                reason="proposed_action_satisfies_shield",
+                ppo_eval=ppo_eval,
+                selected_eval=ppo_eval,
+                intervened=False,
+            )
 
         if prior_command is not None:
             prior_eval = self._evaluate_command(observation, prior_command)
             if bool(prior_eval["safe"]):
-                return (float(prior_command[0]), float(prior_command[1])), "prior_safe"
+                return self._shield_decision(
+                    ppo_command=ppo_command,
+                    filtered_command=(float(prior_command[0]), float(prior_command[1])),
+                    label="prior_safe",
+                    reason="prior_command_satisfied_short_horizon_constraints",
+                    ppo_eval=ppo_eval,
+                    selected_eval=prior_eval,
+                    fallback_policy=type(self.prior_adapter).__name__,
+                )
 
         fallback_command = self.fallback_adapter.plan(observation)
         fallback_eval = self._evaluate_command(observation, fallback_command)
         if bool(fallback_eval["safe"]):
-            return (float(fallback_command[0]), float(fallback_command[1])), "fallback_safe"
+            return self._shield_decision(
+                ppo_command=ppo_command,
+                filtered_command=(float(fallback_command[0]), float(fallback_command[1])),
+                label="fallback_safe",
+                reason="fallback_command_satisfied_short_horizon_constraints",
+                ppo_eval=ppo_eval,
+                selected_eval=fallback_eval,
+                fallback_policy=type(self.fallback_adapter).__name__,
+            )
 
         stop_eval = self._evaluate_command(observation, (0.0, 0.0))
         if bool(stop_eval["safe"]):
-            return (0.0, 0.0), "stop_safe"
+            return self._shield_decision(
+                ppo_command=ppo_command,
+                filtered_command=(0.0, 0.0),
+                label="stop_safe",
+                reason="stop_command_satisfied_short_horizon_constraints",
+                ppo_eval=ppo_eval,
+                selected_eval=stop_eval,
+                fallback_policy="stop",
+            )
 
         if float(fallback_eval["min_ped_clear"]) > max(
             float(ppo_eval["min_ped_clear"]),
             float(stop_eval["min_ped_clear"]),
             float(prior_eval["min_ped_clear"]) if prior_eval is not None else float("-inf"),
         ):
-            return (float(fallback_command[0]), float(fallback_command[1])), "fallback_best_effort"
-        return (0.0, 0.0), "stop_best_effort"
+            return self._shield_decision(
+                ppo_command=ppo_command,
+                filtered_command=(float(fallback_command[0]), float(fallback_command[1])),
+                label="fallback_best_effort",
+                reason="no_safe_command_available_fallback_has_largest_clearance",
+                ppo_eval=ppo_eval,
+                selected_eval=fallback_eval,
+                fallback_policy=type(self.fallback_adapter).__name__,
+                hard_constraint_violation=True,
+            )
+        return self._shield_decision(
+            ppo_command=ppo_command,
+            filtered_command=(0.0, 0.0),
+            label="stop_best_effort",
+            reason="no_safe_command_available_stop_has_largest_clearance",
+            ppo_eval=ppo_eval,
+            selected_eval=stop_eval,
+            fallback_policy="stop",
+            hard_constraint_violation=True,
+        )
+
+    def _shield_decision(  # noqa: PLR0913
+        self,
+        *,
+        ppo_command: tuple[float, float],
+        filtered_command: tuple[float, float],
+        label: str,
+        reason: str,
+        ppo_eval: dict[str, float | bool],
+        selected_eval: dict[str, float | bool],
+        fallback_policy: str | None = None,
+        intervened: bool | None = None,
+        hard_constraint_violation: bool | None = None,
+    ) -> ShieldDecision:
+        """Build a structured shield decision for benchmark metadata.
+
+        Returns:
+            ShieldDecision: Serialized-ready action-filter decision.
+        """
+        explicit_intervened = (
+            label not in {"ppo_clear", "ppo_safe", "goal_reached"}
+            if intervened is None
+            else bool(intervened)
+        )
+        explicit_violation = (
+            bool(selected_eval.get("safe") is False)
+            if hard_constraint_violation is None
+            else bool(hard_constraint_violation)
+        )
+        return ShieldDecision(
+            proposed_action=(float(ppo_command[0]), float(ppo_command[1])),
+            filtered_action=(float(filtered_command[0]), float(filtered_command[1])),
+            decision_label=label,
+            intervention_reason=reason,
+            violated_constraints=self._violated_constraints(ppo_eval),
+            prediction_source="short_horizon_rollout",
+            prediction_horizon_steps=int(self.config.rollout_steps),
+            prediction_dt=float(self.config.rollout_dt),
+            uncertainty_metadata={"mode": "deterministic_rollout"},
+            calibration_metadata={"status": "not_calibrated"},
+            fallback_controller_state={
+                "policy": fallback_policy or type(self.fallback_adapter).__name__,
+                "prior_available": self.prior_adapter is not None,
+            },
+            proposed_evaluation=dict(ppo_eval),
+            selected_evaluation=dict(selected_eval),
+            intervened=explicit_intervened,
+            hard_constraint_violation=explicit_violation,
+        )
+
+    def _violated_constraints(self, evaluation: dict[str, float | bool]) -> tuple[str, ...]:
+        """Return hard constraints violated by an evaluated proposed command."""
+        if bool(evaluation.get("safe", True)):
+            return ()
+        violations: list[str] = []
+        min_ped_clear = float(evaluation.get("min_ped_clear", float("inf")))
+        first_ped_clear = float(evaluation.get("first_ped_clear", float("inf")))
+        min_obs_clear = float(evaluation.get("min_obs_clear", float("inf")))
+        min_ttc = float(evaluation.get("min_ttc", float("inf")))
+        if min_ped_clear < float(self.config.hard_ped_clearance):
+            violations.append("pedestrian_clearance")
+        if first_ped_clear < float(self.config.first_step_ped_clearance):
+            violations.append("first_step_pedestrian_clearance")
+        if min_obs_clear < float(self.config.hard_obstacle_clearance):
+            violations.append("obstacle_clearance")
+        if np.isfinite(min_ttc) and min_ttc < float(self.config.min_ttc):
+            violations.append("time_to_collision")
+        return tuple(violations)
 
 
 def build_guarded_ppo_config(cfg: dict[str, Any] | None) -> GuardedPPOConfig:

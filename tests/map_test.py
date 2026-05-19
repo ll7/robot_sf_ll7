@@ -1,13 +1,25 @@
-"""TODO docstring. Document this module."""
+"""Map occupancy and simulator obstacle collision tests."""
 
-from math import dist
+from math import dist, pi
+from pathlib import Path
 
 import numpy as np
+import pytest
 
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.sim.simulator import init_ped_simulators
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_DEBUG_SVG_MAP = _REPO_ROOT / "maps" / "svg_maps" / "debug_06.svg"
+
+
+def _debug_ped_simulator():
+    """Build the debug SVG pedestrian simulator used by map obstacle tests."""
+    env_config = PedEnvSettings()
+    map_def = convert_map(str(_DEBUG_SVG_MAP))
+    return init_ped_simulators(env_config, map_def)[0]
 
 
 def test_create_map():
@@ -133,8 +145,7 @@ def test_proximity_point():
     lower_bound = 15
     upper_bound = 20
     env_config = PedEnvSettings()
-    svg_file = "maps/svg_maps/debug_06.svg"
-    map_def = convert_map(svg_file)
+    map_def = convert_map(str(_DEBUG_SVG_MAP))
     _sim = init_ped_simulators(env_config, map_def)[0]
     new_point = _sim.get_proximity_point(
         fixed_point,
@@ -146,10 +157,40 @@ def test_proximity_point():
     # TODO: Add test to check with obstacle
 
 
+def test_ped_simulator_detects_svg_obstacle_collision():
+    """Map-derived obstacle lines should reject positions intersecting static obstacles."""
+    sim = _debug_ped_simulator()
+    obstacle_lines = sim.get_obstacle_lines()
+    assert obstacle_lines.shape[0] > 0
+
+    first_line = obstacle_lines[0]
+    midpoint = (
+        float((first_line[0] + first_line[2]) / 2.0),
+        float((first_line[1] + first_line[3]) / 2.0),
+    )
+
+    assert sim.is_obstacle_collision(*midpoint)
+    assert not sim.is_obstacle_collision(6.0, 1.0)
+
+
+def test_proximity_point_resamples_when_candidate_hits_obstacle(monkeypatch):
+    """Proximity sampling should skip obstacle-colliding candidates before returning."""
+    sim = _debug_ped_simulator()
+    fixed_point = (5.0, 1.0)
+    draws = iter([pi / 2.0, 3.0, 0.0, 1.0])
+
+    monkeypatch.setattr("robot_sf.sim.simulator.uniform", lambda _low, _high: next(draws))
+
+    point = sim.get_proximity_point(fixed_point, lower_bound=1.0, upper_bound=3.0)
+
+    assert point == pytest.approx((6.0, 1.0))
+    assert not sim.is_obstacle_collision(*point)
+
+
 def test_simulator_obstacle_lines_helpers():
     """Validate simulator obstacle helpers return stable shapes and types."""
     env_config = PedEnvSettings()
-    map_def = convert_map("maps/svg_maps/debug_06.svg")
+    map_def = convert_map(str(_DEBUG_SVG_MAP))
     sim = init_ped_simulators(env_config, map_def)[0]
 
     lines = sim.get_obstacle_lines()

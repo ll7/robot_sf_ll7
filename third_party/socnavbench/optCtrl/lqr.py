@@ -117,9 +117,6 @@ class LQRSolver:
                                              t:t + 1], u_ref_nkf[:, t:t + 1]
             error_t_n1d = x_next_n1d - x_ref_n1d
 
-            # TODO: Currently calling numpy() here as tfe.DEVICE_PLACEMENT_SILENT
-            # is not working to place non-gpu ops (i.e. mod) on the cpu
-            # turning tensors into numpy arrays is a hack around this.
             error_t_n1d = np.concatenate([error_t_n1d[:, :, :angle_dims],
                                           angle_normalize(error_t_n1d[:, :,
                                                                       angle_dims:angle_dims + 1]),
@@ -162,10 +159,6 @@ class LQRSolver:
         # to prepare the backpropagation
         Vxx_ndd = lqr_sys['dldxx_nkdd'][:, -1]
         Vx_nd1 = lqr_sys['dldx_nkd'][:, -1, :, None]
-
-        # TODO: Currently calling numpy() here as tfe.DEVICE_PLACEMENT_SILENT
-        # is not working to place non-gpu ops (i.e. mod) on the cpu
-        # turning tensors into numpy arrays is a hack around this.
 
         for t in reversed(range(self.T)):
             error_t_nd = lqr_sys['f_nkd'][:, t] - x_nkd[:, t + 1]

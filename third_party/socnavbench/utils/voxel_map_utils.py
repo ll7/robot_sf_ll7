@@ -45,25 +45,15 @@ class VoxelMap:
         voxel_indices_nk4 = np.concatenate(
             [lower_voxel_indices_nk2_xy, upper_voxel_indices_nk2_xy], axis=2)
 
-        # TODO: Casting as int64 because tfe.DEVICE_PLACEMENT_SILENT
-        # is not working to place non-gpu ops (i.e. gather for (int32, int 32)) on
-        # the cpu. This is potentially slowing things down as it copies to cpu
-        voxel_indices_int64_nk4 = voxel_indices_nk4.astype(np.int32)
+        voxel_indices_nk4 = voxel_indices_nk4.astype(np.int32, copy=False)
 
-        def gather_nd(data, indices):
-            # very similar to tf.gather_nd but with numpy slicing
-            return data[indices[:, :, 0], indices[:, :, 1]]
         # Voxel function values at corner points
         data = self.voxel_function_mn
-        indices_1 = voxel_indices_int64_nk4[:, :, [1, 0]]
-        data11_nk = gather_nd(data, indices_1)
-        indices_2 = voxel_indices_int64_nk4[:, :, [1, 2]]
-        data21_nk = gather_nd(data, indices_2)
-        # equivalent to np.take (since its a 3D matrix)
-        indices_3 = voxel_indices_int64_nk4[:, :, [3, 0]]
-        data12_nk = gather_nd(data, indices_3)
-        indices_4 = voxel_indices_int64_nk4[:, :, [3, 2]]
-        data22_nk = gather_nd(data, indices_4)
+        x1, y1, x2, y2 = voxel_indices_nk4.transpose(2, 0, 1)
+        data11_nk = data[y1, x1]
+        data21_nk = data[y1, x2]
+        data12_nk = data[y2, x1]
+        data22_nk = data[y2, x2]
 
         # Define gammas for x interpolation
         gamma1 = upper_voxel_float_nk2[:, :, 0] - \

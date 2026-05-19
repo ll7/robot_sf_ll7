@@ -38,9 +38,6 @@ class DubinsCar(Dynamics):
                             heading_nk1=heading_nk1, speed_nk1=speed_nk1,
                             angular_speed_nk1=angular_speed_nk1)
 
-    # TODO: Currently calling numpy() here as tfe.DEVICE_PLACEMENT_SILENT
-    # is not working to place non-gpu ops (i.e. mod) on the cpu
-    # turning tensors into numpy arrays is a hack around this.
     @staticmethod
     def to_egocentric_coordinates(ref_config, traj_world, traj_egocentric=None, mode='assign'):
         """ Converts traj_world to an egocentric reference frame assuming

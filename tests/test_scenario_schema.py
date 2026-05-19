@@ -79,6 +79,19 @@ def test_cli_validate_config_manifest_source(tmp_path: Path, capsys):
     assert "include.yaml" in report["source"]["includes"]
 
 
+def test_cli_validate_config_task_bundle_source(capsys):
+    """Ensure validate-config reports task-bundle provenance when using bundle:<name>."""
+    rc = cli_main(["validate-config", "--matrix", "bundle:sanity-smoke-v1"])
+    out = capsys.readouterr().out
+    report = json.loads(out)
+
+    assert rc == 0
+    assert report["num_scenarios"] == 4
+    assert report["source"]["format"] == "task_bundle"
+    assert report["source"]["bundle_name"] == "sanity-smoke-v1"
+    assert report["source"]["scenario_files"]
+
+
 def test_cli_preview_scenarios_warn_only(tmp_path: Path, capsys):
     """Ensure preview-scenarios returns warn-only output so plausibility checks stay non-blocking."""
     map_path = tmp_path / "map.svg"

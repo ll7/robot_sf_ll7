@@ -2019,8 +2019,11 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     algo_md = record["algorithm_metadata"]
     assert algo_md["baseline_category"] == "classical"
     assert record["observation_mode"] == "goal_state"
+    assert record["observation_level"] == "oracle_full_state"
     assert record["scenario_params"]["observation_mode"] == "goal_state"
+    assert record["scenario_params"]["observation_level"] == "oracle_full_state"
     assert algo_md["observation_spec"]["active_mode"] == "goal_state"
+    assert algo_md["observation_level"]["key"] == "oracle_full_state"
     assert algo_md["planner_kinematics"]["robot_kinematics"] in {"unknown", "differential_drive"}
     feasibility = algo_md.get("kinematics_feasibility")
     assert isinstance(feasibility, dict)
@@ -2625,12 +2628,16 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         [scenario],
         out_path,
         schema_path=tmp_path / "schema.json",
-        observation_mode="socnav_state",
+        observation_level="tracked_agents_no_noise",
         workers=1,
         resume=False,
     )
     assert result["written"] == 1
-    assert captured_params[0]["observation_mode"] == "socnav_state"
+    assert captured_params[0]["observation_level"] == "tracked_agents_no_noise"
+    assert captured_params[0]["observation_mode"] is None
+    assert result["algorithm_metadata_contract"]["observation_level"]["key"] == (
+        "tracked_agents_no_noise"
+    )
     assert result["algorithm_metadata_contract"]["observation_spec"]["active_mode"] == (
         "socnav_state"
     )

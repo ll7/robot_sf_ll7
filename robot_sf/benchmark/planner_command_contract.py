@@ -124,6 +124,7 @@ def validate_planner_contract(
     robot_kinematics: str,
     algo_config: dict[str, Any],
     observation_mode: str | None = None,
+    observation_level: str | None = None,
 ) -> dict[str, Any]:
     """Validate planner observation/action compatibility before benchmark execution.
 
@@ -139,6 +140,7 @@ def validate_planner_contract(
         contract = planner_contract_for_algorithm(
             algo_key,
             observation_mode=observation_mode,
+            observation_level=observation_level,
             robot_kinematics=robot_kinematics,
         )
     except ValueError as exc:

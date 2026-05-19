@@ -38,6 +38,7 @@ from robot_sf.benchmark.distributions import collect_grouped_values as _dist_col
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
+from robot_sf.benchmark.observation_levels import OBSERVATION_LEVEL_KEYS
 from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.parquet_export import export_episodes_jsonl_to_parquet
 from robot_sf.benchmark.planner_inclusion import (
@@ -284,6 +285,7 @@ def _handle_run(args) -> int:
             ped_impact_radius_m=float(getattr(args, "ped_impact_radius_m", 2.0)),
             ped_impact_window_steps=int(getattr(args, "ped_impact_window_steps", 5)),
             observation_mode=getattr(args, "observation_mode", None),
+            observation_level=getattr(args, "observation_level", None),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
                 if getattr(args, "observation_noise", None)
@@ -1380,6 +1382,15 @@ def _add_run_subparser(
         help=(
             "Optional planner observation-mode override. Unsupported planner/mode "
             "combinations fail before episodes are written."
+        ),
+    )
+    p.add_argument(
+        "--observation-level",
+        default=None,
+        choices=OBSERVATION_LEVEL_KEYS,
+        help=(
+            "Optional graded benchmark observation-level override. Unsupported "
+            "planner/level combinations fail before episodes are written."
         ),
     )
     p.add_argument(

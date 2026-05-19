@@ -171,3 +171,18 @@ def test_benchmark_claim_fails_closed_for_missing_hashes_and_versions(tmp_path: 
             policy_metadata_path=Path(str(inputs["policy_metadata"])),
             final_benchmark_episodes=[bad_final],
         )
+
+    bad_json = tmp_path / "bad_json.jsonl"
+    bad_json.write_text('{"version": "v1", "seed": 1}\n{bad json}\n', encoding="utf-8")
+    with pytest.raises(
+        BenchmarkClaimError,
+        match="Line 2 in episode_groups\\.final_benchmark\\[0\\]",
+    ):
+        build_benchmark_claim(
+            claim_id="bad-episode-json",
+            statement="Bad episode JSON",
+            scenario_matrix_path=Path(str(inputs["matrix"])),
+            scenario_matrix_sha256=str(inputs["matrix_sha256"]),
+            policy_metadata_path=Path(str(inputs["policy_metadata"])),
+            final_benchmark_episodes=[bad_json],
+        )

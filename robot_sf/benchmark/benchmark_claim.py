@@ -141,29 +141,6 @@ def _load_policy_metadata(path: Path) -> dict[str, Any]:
     }
 
 
-def _read_jsonl_records(path: Path, field_name: str) -> list[dict[str, Any]]:
-    """Read JSONL records from ``path`` and require each line to be an object.
-
-    Returns:
-        Parsed JSONL records.
-    """
-    records: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            if not line.strip():
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise BenchmarkClaimError(f"{field_name}:{line_number} must be valid JSON") from exc
-            if not isinstance(record, dict):
-                raise BenchmarkClaimError(f"{field_name}:{line_number} must be a JSON object")
-            records.append(record)
-    if not records:
-        raise BenchmarkClaimError(f"{field_name} must contain at least one episode record")
-    return records
-
-
 def _episode_schema_version(record: dict[str, Any]) -> str:
     """Extract the schema/version marker from an episode record.
 
@@ -189,21 +166,39 @@ def _episode_artifact(path: Path, field_name: str) -> dict[str, Any]:
         Normalized schema-backed episode artifact entry.
     """
     resolved = _require_file(path, field_name)
-    records = _read_jsonl_records(resolved, field_name)
-    schema_versions = sorted({_episode_schema_version(record) for record in records})
-    seeds = sorted(
-        {
-            int(record["seed"])
-            for record in records
-            if isinstance(record.get("seed"), int) and not isinstance(record.get("seed"), bool)
-        }
-    )
+    schema_versions: set[str] = set()
+    seeds: set[int] = set()
+    count = 0
+    with resolved.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise BenchmarkClaimError(
+                    f"Line {line_number} in {field_name} must be valid JSON"
+                ) from exc
+            if not isinstance(record, dict):
+                raise BenchmarkClaimError(
+                    f"Line {line_number} in {field_name} must be a JSON object"
+                )
+            try:
+                schema_versions.add(_episode_schema_version(record))
+            except BenchmarkClaimError as exc:
+                raise BenchmarkClaimError(f"Line {line_number} in {field_name}: {exc}") from exc
+            seed = record.get("seed")
+            if isinstance(seed, int) and not isinstance(seed, bool):
+                seeds.add(int(seed))
+            count += 1
+    if count == 0:
+        raise BenchmarkClaimError(f"{field_name} must contain at least one episode record")
     return {
         "path": _repo_relative(resolved),
         "sha256": _sha256_file(resolved),
-        "schema_version": ",".join(schema_versions),
-        "episode_count": len(records),
-        "seed_suite": seeds,
+        "schema_version": ",".join(sorted(schema_versions)),
+        "episode_count": count,
+        "seed_suite": sorted(seeds),
     }
 
 

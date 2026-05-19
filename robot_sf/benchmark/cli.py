@@ -515,6 +515,7 @@ def _handle_claim(args) -> int:
         print(f"Benchmark claim error: {exc}", file=sys.stderr)
         return 2
     except Exception:  # pragma: no cover - error path
+        logging.exception("Unexpected error during benchmark claim generation")
         return 2
 
 

@@ -411,6 +411,16 @@ class PedSimulator(Simulator):
     """
 
     ego_ped: UnicycleDrivePedestrian
+
+    @staticmethod
+    def _validate_ego_ped_action_count(ego_ped_actions: list[UnicycleAction]) -> None:
+        """Raise when a pedestrian simulator step receives the wrong ego-ped action count."""
+
+        actual = len(ego_ped_actions)
+        if actual != 1:
+            raise ValueError(
+                f"PedSimulator.step_once expected 1 ego pedestrian action, got {actual}."
+            )
     spawn_near_robot: bool = True
 
     def __post_init__(self):
@@ -565,6 +575,7 @@ class PedSimulator(Simulator):
             ego_ped_actions: Control actions for the ego pedestrian.
         """
         self._validate_robot_action_count(actions)
+        self._validate_ego_ped_action_count(ego_ped_actions)
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()

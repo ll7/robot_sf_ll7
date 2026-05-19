@@ -84,3 +84,22 @@ def test_ped_simulator_step_once_rejects_mismatched_robot_action_count(actions):
 
     with pytest.raises(ValueError, match="expected 1 robot action"):
         simulator.step_once(actions, ego_ped_actions=[(0.0, 0.0)])
+
+
+@pytest.mark.parametrize("ego_ped_actions", [[], [(0.0, 0.0), (0.1, 0.0)]])
+def test_ped_simulator_step_once_rejects_mismatched_ego_ped_action_count(ego_ped_actions):
+    """PedSimulator should fail loudly when ego-ped action count is not exactly one."""
+    map_def = _minimal_map()
+    config = PedestrianSimulationConfig(
+        map_pool=MapDefinitionPool(map_defs={"test": map_def}),
+        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.0]),
+    )
+    simulator = init_ped_simulators(
+        config,
+        map_def,
+        random_start_pos=False,
+        peds_have_obstacle_forces=True,
+    )[0]
+
+    with pytest.raises(ValueError, match="expected 1 ego pedestrian action"):
+        simulator.step_once([(0.0, 0.0)], ego_ped_actions=ego_ped_actions)

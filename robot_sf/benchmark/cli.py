@@ -29,10 +29,16 @@ from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_comp
 from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
+from robot_sf.benchmark.benchmark_claim import (
+    BenchmarkClaimError,
+    build_benchmark_claim,
+    write_benchmark_claim,
+)
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
+from robot_sf.benchmark.observation_levels import OBSERVATION_LEVEL_KEYS
 from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.parquet_export import export_episodes_jsonl_to_parquet
 from robot_sf.benchmark.planner_inclusion import (
@@ -65,6 +71,10 @@ from robot_sf.benchmark.seed_variance import (
 from robot_sf.benchmark.summary import summarize_to_plots
 from robot_sf.common.seed import get_seed_state_sample as _seed_sample
 from robot_sf.common.seed import set_global_seed as _set_seed
+from robot_sf.training.task_bundles import (
+    describe_task_bundle_source,
+    is_task_bundle_reference,
+)
 
 DEFAULT_SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
@@ -279,6 +289,7 @@ def _handle_run(args) -> int:
             ped_impact_radius_m=float(getattr(args, "ped_impact_radius_m", 2.0)),
             ped_impact_window_steps=int(getattr(args, "ped_impact_window_steps", 5)),
             observation_mode=getattr(args, "observation_mode", None),
+            observation_level=getattr(args, "observation_level", None),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
                 if getattr(args, "observation_noise", None)
@@ -470,6 +481,47 @@ def _handle_aggregate(args) -> int:
             logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
+        return 2
+
+
+def _handle_claim(args) -> int:
+    """Build a benchmark claim artifact and write a compact JSON payload.
+
+    Returns:
+        Exit code (0 success, 2 failure).
+    """
+    try:
+        claim = build_benchmark_claim(
+            claim_id=args.claim_id,
+            statement=args.statement,
+            scenario_matrix_path=Path(args.scenario_matrix),
+            scenario_matrix_sha256=args.scenario_matrix_sha256,
+            policy_metadata_path=Path(args.policy_metadata),
+            training_episodes=[Path(path) for path in (args.training_episodes or [])],
+            validation_episodes=[Path(path) for path in (args.validation_episodes or [])],
+            final_benchmark_episodes=[Path(path) for path in (args.final_benchmark_episodes or [])],
+            aggregate_reports=[Path(path) for path in (args.aggregate_report or [])],
+            dependency_group=args.dependency_group,
+            container_image_digest=args.container_image_digest,
+        )
+        output_path = Path(args.output_json)
+        write_benchmark_claim(output_path, claim)
+        print(
+            json.dumps(
+                {
+                    "claim_path": str(output_path),
+                    "schema_version": claim["schema_version"],
+                    "claim_id": claim["claim_id"],
+                },
+                indent=2,
+            )
+        )
+        return 0
+    except BenchmarkClaimError as exc:
+        print(f"Benchmark claim error: {exc}", file=sys.stderr)
+        return 2
+    except Exception:  # pragma: no cover - error path
+        logging.exception("Unexpected error during benchmark claim generation")
         return 2
 
 
@@ -828,6 +880,9 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
     Returns:
         dict[str, object]: Source metadata including format, include list, and selector list.
     """
+    if is_task_bundle_reference(matrix_path):
+        return describe_task_bundle_source(matrix_path)
+
     path = Path(matrix_path)
     includes: list[str] = []
     select_scenarios: list[str] = []
@@ -946,7 +1001,7 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
         )
 
     warnings: list[dict[str, Any]] = []
-    base_dir = Path(matrix_path).parent if matrix_path is not None else None
+    base_dir = _resolve_warning_base_dir(matrix_path)
     for idx, scenario in enumerate(scenarios):
         scenario_id = str(
             scenario.get("id") or scenario.get("name") or scenario.get("scenario_id") or idx
@@ -1069,6 +1124,25 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
             warn(idx, scenario_id, "seeds list should contain at least 3 entries", "/seeds")
 
     return warnings
+
+
+def _resolve_warning_base_dir(matrix_path: str | Path | None) -> Path | None:
+    """Resolve the best base directory for warning-only relative path checks.
+
+    Returns:
+        Path | None: Directory used for relative map checks, if known.
+    """
+    if matrix_path is None:
+        return None
+    if is_task_bundle_reference(matrix_path):
+        source = describe_task_bundle_source(matrix_path)
+        scenario_files = source.get("scenario_files")
+        if isinstance(scenario_files, list) and scenario_files:
+            first = scenario_files[0]
+            if isinstance(first, str):
+                return Path(first).parent
+        return None
+    return Path(matrix_path).parent
 
 
 def _handle_validate_config(args) -> int:
@@ -1337,6 +1411,15 @@ def _add_run_subparser(
         ),
     )
     p.add_argument(
+        "--observation-level",
+        default=None,
+        choices=OBSERVATION_LEVEL_KEYS,
+        help=(
+            "Optional graded benchmark observation-level override. Unsupported "
+            "planner/level combinations fail before episodes are written."
+        ),
+    )
+    p.add_argument(
         "--structured-output",
         choices=["none", "json", "jsonl"],
         default="none",
@@ -1370,16 +1453,16 @@ def _add_list_subparser(
 
     p2 = subparsers.add_parser(
         "list-scenarios",
-        help="List scenario IDs from a scenario matrix YAML",
+        help="List scenario IDs from a scenario matrix YAML or bundle:<name>",
     )
-    p2.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p2.add_argument("--matrix", required=True, help="Path to scenario matrix YAML or bundle:<name>")
     p2.set_defaults(cmd="list-scenarios")
 
     p3 = subparsers.add_parser(
         "validate-config",
-        help="Validate a scenario matrix YAML for required fields and duplicates",
+        help="Validate a scenario matrix YAML or bundle:<name> for required fields and duplicates",
     )
-    p3.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p3.add_argument("--matrix", required=True, help="Path to scenario matrix YAML or bundle:<name>")
     # optional: later we could add --verbose to print detailed schema errors
     p3.set_defaults(cmd="validate-config")
 
@@ -1387,7 +1470,7 @@ def _add_list_subparser(
         "preview-scenarios",
         help="Preview scenarios with warn-only plausibility checks",
     )
-    p4.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p4.add_argument("--matrix", required=True, help="Path to scenario matrix YAML or bundle:<name>")
     p4.set_defaults(cmd="preview-scenarios")
 
 
@@ -1499,6 +1582,69 @@ def _add_aggregate_subparser(
         help="Optional baseline stats JSON used for SNQI normalization",
     )
     p.set_defaults(cmd="aggregate")
+
+
+def _add_claim_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the benchmark claim subcommand parser."""
+    p = subparsers.add_parser(
+        "claim",
+        help="Generate a schema-checked BenchmarkClaim JSON artifact",
+    )
+    p.add_argument("--claim-id", required=True, help="Stable claim identifier")
+    p.add_argument("--statement", required=True, help="Human-readable benchmark statement")
+    p.add_argument(
+        "--scenario-matrix",
+        required=True,
+        help="Frozen scenario matrix file used by the claim",
+    )
+    p.add_argument(
+        "--scenario-matrix-sha256",
+        required=True,
+        help="Expected SHA-256 digest for --scenario-matrix",
+    )
+    p.add_argument(
+        "--policy-metadata",
+        required=True,
+        help="JSON policy metadata with schema_version and policy SHA-256 values",
+    )
+    p.add_argument(
+        "--training-episodes",
+        nargs="*",
+        default=[],
+        help="Optional training episode JSONL artifacts, distinct from claim evidence",
+    )
+    p.add_argument(
+        "--validation-episodes",
+        nargs="*",
+        default=[],
+        help="Optional validation episode JSONL artifacts, distinct from final evidence",
+    )
+    p.add_argument(
+        "--final-benchmark-episodes",
+        nargs="+",
+        required=True,
+        help="Final benchmark episode JSONL artifacts that support the claim",
+    )
+    p.add_argument(
+        "--aggregate-report",
+        action="append",
+        default=[],
+        help="Optional schema/version-tagged aggregate or statistical report JSON",
+    )
+    p.add_argument(
+        "--dependency-group",
+        default="dev",
+        help="Dependency group/profile used to create the benchmark environment",
+    )
+    p.add_argument(
+        "--container-image-digest",
+        default=None,
+        help="Optional container image digest used for the benchmark environment",
+    )
+    p.add_argument("--output-json", required=True, help="Output claim JSON path")
+    p.set_defaults(cmd="claim")
 
 
 def _add_export_parquet_subparser(
@@ -1875,6 +2021,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
     _add_aggregate_subparser(subparsers)
+    _add_claim_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
@@ -2324,6 +2471,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "run": _handle_run,
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,
+        "claim": _handle_claim,
         "export-parquet": _handle_export_parquet,
         "seed-variance": _handle_seed_variance,
         "extract-failures": _handle_extract_failures,

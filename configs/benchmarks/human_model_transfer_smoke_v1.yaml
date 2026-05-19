@@ -1,0 +1,57 @@
+name: human_model_transfer_smoke_v1
+paper_facing: false
+scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+
+workers: 1
+horizon: 60
+dt: 0.1
+stop_on_failure: false
+resume: true
+record_forces: false
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+seed_policy:
+  mode: fixed-list
+  seeds: [111]
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+paper_interpretation_profile: exploratory-human-model-transfer-smoke
+
+planners:
+  - key: native_social_force_default
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+    human_model_variant: default_social_force
+    human_model_source: robot_sf_native
+  - key: upstream_socialforce_proxy
+    algo: social_navigation_pyenvs_socialforce
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/social_navigation_pyenvs_socialforce_probe.yaml
+    human_model_variant: upstream_socialforce
+    human_model_source: social_navigation_pyenvs_adapter
+    socnav_missing_prereq_policy: fail-fast
+  - key: upstream_sfm_helbing_proxy
+    algo: social_navigation_pyenvs_sfm_helbing
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/social_navigation_pyenvs_sfm_helbing_probe.yaml
+    human_model_variant: upstream_sfm_helbing
+    human_model_source: social_navigation_pyenvs_adapter
+    socnav_missing_prereq_policy: fail-fast
+  - key: upstream_hsfm_new_guo_proxy
+    algo: social_navigation_pyenvs_hsfm_new_guo
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/social_navigation_pyenvs_hsfm_new_guo_probe.yaml
+    human_model_variant: upstream_hsfm_new_guo
+    human_model_source: social_navigation_pyenvs_adapter
+    socnav_missing_prereq_policy: fail-fast

@@ -19,6 +19,7 @@ import pytest
 from gymnasium import spaces
 
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig, OccupancyGrid
 
@@ -383,6 +384,52 @@ class TestEnvironmentResetWithGrid:
 
 class TestEnvironmentStepWithGridUpdate:
     """Test T039: Environment step with occupancy observation updates."""
+
+    def test_step_reuses_cached_static_obstacle_grid_inputs(self, monkeypatch):
+        """Verify static map geometry is normalized once per reset, not every step.
+
+        This protects occupancy-grid step throughput while preserving reset-time cache refresh for
+        future map changes between episodes.
+        """
+        grid_config = _make_grid_config(width_m=7.0, height_m=7.0, resolution=0.2)
+        config = RobotSimulationConfig(
+            use_occupancy_grid=True,
+            grid_config=grid_config,
+            include_grid_in_observation=True,
+        )
+        normalize_calls = 0
+        original_normalize = RobotEnv._normalize_obstacles_for_grid
+
+        def counting_normalize(obstacles, bounds):
+            """Count normalization calls while preserving the production conversion."""
+            nonlocal normalize_calls
+            normalize_calls += 1
+            return original_normalize(obstacles, bounds)
+
+        monkeypatch.setattr(
+            RobotEnv,
+            "_normalize_obstacles_for_grid",
+            staticmethod(counting_normalize),
+        )
+
+        env = make_robot_env(config=config, seed=42)
+        try:
+            env.reset(seed=42)
+            assert normalize_calls == 1
+
+            for _ in range(3):
+                env.step(env.action_space.sample())
+
+            assert normalize_calls == 1
+
+            env.map_def.obstacles = list(env.map_def.obstacles)
+            env._get_static_grid_obstacles()
+            assert normalize_calls == 2
+
+            env.reset(seed=123)
+            assert normalize_calls == 3
+        finally:
+            env.close()
 
     def test_step_updates_grid_observation(self):
         """Verify step() updates occupancy grid each timestep."""

@@ -76,8 +76,6 @@ class QuadraticRegulatorRef(DiscreteCost):
             J_nkg[:, :, :self._x_dim] + Hz_nkg[:, :, :self._x_dim], \
             J_nkg[:, :, self._x_dim:] + Hz_nkg[:, :, self._x_dim:]
 
-    # TODO: Currently calling numpy() here as tfe.DEVICE_PLACEMENT_SILENT is not working in the eager mode to place
-    # non-gpu ops (i.e. mod) on the cpu turning tensors into numpy arrays is a hack around this.
     def construct_z(self, trajectory):
         """ Input: A trajectory with x_dim =d and u_dim=f
             Output: z_nkg - a tensor of size n,k,g where g=d+f

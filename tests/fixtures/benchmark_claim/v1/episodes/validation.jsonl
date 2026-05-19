@@ -1,0 +1,1 @@
+{"version":"v1","episode_id":"validation-1","scenario_id":"claim-smoke-s1","seed":5,"metrics":{"success":1.0,"collisions":0},"termination_reason":"goal_reached","outcome":{"success":true,"collision_event":false},"integrity":{"schema_version":"episode.schema.v1"}}

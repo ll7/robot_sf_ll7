@@ -2525,6 +2525,8 @@ def test_load_campaign_config_accepts_planner_group_and_paper_profile(tmp_path: 
                 "  - key: goal",
                 "    algo: goal",
                 "    planner_group: core",
+                "    human_model_variant: default_social_force",
+                "    human_model_source: robot_sf_native",
             ],
         )
         + "\n",
@@ -2534,6 +2536,8 @@ def test_load_campaign_config_accepts_planner_group_and_paper_profile(tmp_path: 
     assert cfg.paper_facing is True
     assert cfg.paper_profile_version == "paper-matrix-v1"
     assert cfg.planners[0].planner_group == "core"
+    assert cfg.planners[0].human_model_variant == "default_social_force"
+    assert cfg.planners[0].human_model_source == "robot_sf_native"
 
 
 def test_load_campaign_config_rejects_invalid_planner_group(tmp_path: Path) -> None:
@@ -2684,6 +2688,8 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
                 "  - key: goal",
                 "    algo: goal",
                 "    planner_group: core",
+                "    human_model_variant: default_social_force",
+                "    human_model_source: robot_sf_native",
             ],
         )
         + "\n",
@@ -2701,6 +2707,8 @@ def test_prepare_campaign_preflight_writes_matrix_summary(tmp_path: Path) -> Non
     assert matrix_payload["rows"]
     first = matrix_payload["rows"][0]
     assert first["planner_group"] == "core"
+    assert first["human_model_variant"] == "default_social_force"
+    assert first["human_model_source"] == "robot_sf_native"
     assert first["kinematics"] == "differential_drive"
     assert first["observation_mode"] == "socnav_state"
 

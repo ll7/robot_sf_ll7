@@ -21,12 +21,23 @@ else:  # pragma: no cover - runtime fallback since annotations are postponed
 
 
 @dataclass(slots=True)
+class GpuDeviceSample:
+    """Snapshot of one visible GPU device."""
+
+    index: int
+    util_percent: float
+    memory_used_mb: float
+    memory_total_mb: float
+
+
+@dataclass(slots=True)
 class GpuSample:
-    """Snapshot of aggregate GPU utilization across all visible devices."""
+    """Snapshot of GPU utilization across all visible devices."""
 
     util_percent: float | None = None
     memory_used_mb: float | None = None
     memory_total_mb: float | None = None
+    devices: tuple[GpuDeviceSample, ...] = ()
     notes: str | None = None
 
 
@@ -110,17 +121,32 @@ def collect_gpu_sample() -> GpuSample | None:
     total_util = 0.0
     total_memory_used = 0.0
     total_memory = 0.0
+    devices: list[GpuDeviceSample] = []
     for index in range(device_count):
         handle = pynvml.nvmlDeviceGetHandleByIndex(index)
         util = pynvml.nvmlDeviceGetUtilizationRates(handle)
         mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        total_util += float(util.gpu)
-        total_memory_used += float(mem.used)
-        total_memory += float(mem.total)
+        util_percent = float(util.gpu)
+        memory_used_mb = float(mem.used) / (1024**2)
+        memory_total_mb = float(mem.total) / (1024**2)
+        total_util += util_percent
+        total_memory_used += memory_used_mb
+        total_memory += memory_total_mb
+        devices.append(
+            GpuDeviceSample(
+                index=index,
+                util_percent=util_percent,
+                memory_used_mb=memory_used_mb,
+                memory_total_mb=memory_total_mb,
+            )
+        )
     avg_util = total_util / max(device_count, 1)
-    used_mb = total_memory_used / (1024**2)
-    total_mb = total_memory / (1024**2)
-    return GpuSample(util_percent=avg_util, memory_used_mb=used_mb, memory_total_mb=total_mb)
+    return GpuSample(
+        util_percent=avg_util,
+        memory_used_mb=total_memory_used,
+        memory_total_mb=total_memory,
+        devices=tuple(devices),
+    )
 
 
 def shutdown_gpu_telemetry() -> None:

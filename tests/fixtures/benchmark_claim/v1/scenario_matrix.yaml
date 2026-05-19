@@ -1,0 +1,5 @@
+- id: claim-smoke-s1
+  map: maps/svg_maps/empty.svg
+  start: [0.0, 0.0]
+  goal: [1.0, 0.0]
+  pedestrians: 0

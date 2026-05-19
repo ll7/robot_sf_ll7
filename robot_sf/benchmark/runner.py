@@ -73,6 +73,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
+from robot_sf.training.task_bundles import is_task_bundle_reference
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -155,6 +156,9 @@ def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     Returns:
         List of scenario dictionaries.
     """
+    if is_task_bundle_reference(path):
+        return [dict(s) for s in load_scenarios(path)]
+
     scenario_path = Path(path)
     with scenario_path.open("r", encoding="utf-8") as f:
         docs = list(yaml.safe_load_all(f))
@@ -1486,6 +1490,7 @@ def run_batch(  # noqa: PLR0913
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
+    observation_level: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
@@ -1526,6 +1531,7 @@ def run_batch(  # noqa: PLR0913
             ped_impact_radius_m=ped_impact_radius_m,
             ped_impact_window_steps=ped_impact_window_steps,
             observation_mode=observation_mode,
+            observation_level=observation_level,
             observation_noise=observation_noise,
             workers=workers,
             resume=resume,

@@ -111,6 +111,34 @@ def test_guarded_ppo_uses_fallback_when_ppo_is_unsafe() -> None:
     assert decision == "fallback_safe"
 
 
+def test_guarded_ppo_exposes_structured_shield_decision_for_fallback() -> None:
+    """Guard decisions should preserve proposed, filtered, and constraint metadata."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "guard_near_field_distance": 2.5,
+                "guard_hard_ped_clearance": 0.45,
+                "guard_first_step_ped_clearance": 0.55,
+            }
+        ),
+        fallback_adapter=_FallbackAdapter((0.0, 1.0)),
+    )
+
+    decision = guard.choose_command_decision(
+        _obs(ped_positions=[(0.58, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.6, 0.0),
+    )
+
+    assert decision.decision_label == "fallback_safe"
+    assert decision.proposed_action == (0.6, 0.0)
+    assert decision.filtered_action == (0.0, 1.0)
+    assert decision.intervened is True
+    assert "pedestrian_clearance" in decision.violated_constraints
+    assert decision.prediction_source == "short_horizon_rollout"
+    assert decision.fallback_controller_state["policy"] == "_FallbackAdapter"
+    assert decision.hard_constraint_violation is False
+
+
 def test_guarded_ppo_blends_safe_orca_prior_in_near_field() -> None:
     """Near-field ORCA-prior blending should apply only when it remains safe."""
     guard = GuardedPPOAdapter(

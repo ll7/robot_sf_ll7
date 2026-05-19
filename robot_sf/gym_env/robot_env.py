@@ -1238,13 +1238,19 @@ class RobotEnv(BaseEnv):
         """
 
         cache_key = (id(self.map_def), id(self.map_def.obstacles), id(self.map_def.bounds))
-        if self._grid_obstacle_cache_key != cache_key or self._grid_obstacle_cache_value is None:
-            self._grid_obstacle_cache_value = self._normalize_obstacles_for_grid(
-                self.map_def.obstacles,
-                self.map_def.bounds,
-            )
-            self._grid_obstacle_cache_key = cache_key
-        return self._grid_obstacle_cache_value
+        if (
+            self._grid_obstacle_cache_key == cache_key
+            and self._grid_obstacle_cache_value is not None
+        ):
+            return self._grid_obstacle_cache_value
+
+        value = self._normalize_obstacles_for_grid(
+            self.map_def.obstacles,
+            self.map_def.bounds,
+        )
+        self._grid_obstacle_cache_key = cache_key
+        self._grid_obstacle_cache_value = value
+        return value
 
     def _prepare_visualizable_state(self):
         """Build a renderer-friendly simulation snapshot from the current environment state.

@@ -333,6 +333,47 @@ def test_carla_docker_runtime_cli_prints_preflight_json(monkeypatch, capsys) -> 
     assert json.loads(capsys.readouterr().out)["image"] == "carlasim/carla:0.9.16"
 
 
+def test_carla_docker_runtime_cli_prints_live_replay_json(monkeypatch, capsys) -> None:
+    """The packaged Docker runtime CLI should expose the live replay workflow."""
+    import robot_sf_carla_bridge.cli as cli_module
+    from robot_sf_carla_bridge.cli import carla_docker_runtime_main
+
+    observed: dict[str, object] = {}
+
+    def fake_live_replay(**kwargs):
+        observed.update(kwargs)
+        return {
+            "schema_version": "carla-docker-runtime.v1",
+            "stage": "live-replay",
+            "status": "oracle-replay",
+            "mode": "oracle-replay",
+            "reason": "Oracle transforms were replayed against a live CARLA world",
+        }
+
+    monkeypatch.setattr(cli_module, "run_carla_docker_live_replay", fake_live_replay)
+
+    exit_code = carla_docker_runtime_main(
+        [
+            "live-replay",
+            "--manifest",
+            "output/carla/manifest.json",
+            "--scenario-id",
+            "unit_crossing",
+            "--max-steps",
+            "3",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["stage"] == "live-replay"
+    assert status["status"] == "oracle-replay"
+    assert observed["manifest_path"] == "output/carla/manifest.json"
+    assert observed["scenario_id"] == "unit_crossing"
+    assert observed["max_steps"] == 3
+
+
 def test_runtime_smoke_stops_container_when_health_check_fails(monkeypatch) -> None:
     """Lifecycle failures should still collect logs and remove the CARLA container."""
     from robot_sf_carla_bridge import docker_runtime
@@ -419,4 +460,73 @@ def test_runtime_smoke_attempts_cleanup_when_container_start_fails(monkeypatch) 
     assert summary["stderr"] == "startup failed"
     assert summary["logs_tail"] == "no logs"
     assert summary["cleanup"]["stderr"] == "no such container"
+    assert any(command[:2] == ["docker", "stop"] for command in commands)
+
+
+def test_docker_live_replay_runs_replay_before_cleanup(monkeypatch) -> None:
+    """The live replay wrapper should keep CARLA up for replay, then stop the container."""
+    from robot_sf_carla_bridge import docker_runtime
+    from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_live_replay
+
+    commands: list[list[str]] = []
+    health_calls = 0
+
+    def fake_runner(command: list[str], *, timeout_s: float) -> CommandResult:
+        commands.append(command)
+        if command[:2] == ["docker", "run"]:
+            return CommandResult(command, 0, "container-123\n", "")
+        if command[:2] == ["docker", "logs"]:
+            return CommandResult(command, 0, "live log tail\n", "")
+        if command[:2] == ["docker", "stop"]:
+            return CommandResult(command, 0, "container-123\n", "")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(
+        docker_runtime,
+        "run_carla_docker_preflight",
+        lambda **kwargs: {
+            "schema_version": "carla-docker-runtime.v1",
+            "status": "available",
+            "reason": "CARLA Docker runtime prerequisites are available",
+            "image": "carlasim/carla:0.9.16",
+            "image_digest": "sha256:abc",
+            "checks": [],
+        },
+    )
+
+    def fake_health_summary(**kwargs):
+        nonlocal health_calls
+        health_calls += 1
+        if health_calls == 1:
+            raise RuntimeError("simulator not ready")
+        return {"status": "connected", "map": "Town01"}
+
+    monkeypatch.setattr(docker_runtime, "build_carla_client_health_summary", fake_health_summary)
+    monkeypatch.setattr(
+        docker_runtime,
+        "run_t1_oracle_live_replay_against_server",
+        lambda *args, **kwargs: {
+            "schema_version": "carla-t1-oracle-live-replay.v1",
+            "status": "oracle-replay",
+            "mode": "oracle-replay",
+            "stage": "live-replay",
+            "reason": "Oracle transforms were replayed against a live CARLA world",
+        },
+    )
+
+    summary = run_carla_docker_live_replay(
+        "output/carla/manifest.json",
+        runner=fake_runner,
+        startup_timeout_s=1,
+        retry_interval_s=0,
+    )
+
+    assert summary["status"] == "oracle-replay"
+    assert summary["stage"] == "live-replay"
+    assert summary["reason"] == "Oracle transforms were replayed against a live CARLA world"
+    assert summary["container"]["id"] == "container-123"
+    assert summary["health"] == {"status": "connected", "map": "Town01"}
+    assert summary["replay"]["status"] == "oracle-replay"
+    assert summary["logs_tail"] == "live log tail\n"
+    assert health_calls == 2
     assert any(command[:2] == ["docker", "stop"] for command in commands)

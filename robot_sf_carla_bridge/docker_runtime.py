@@ -9,9 +9,13 @@ import socket
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from robot_sf_carla_bridge.availability import check_carla_availability, require_carla
+from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 CARLA_DOCKER_RUNTIME_SCHEMA_VERSION = "carla-docker-runtime.v1"
 CARLA_DOCKER_IMAGE = "carlasim/carla:0.9.16"
@@ -431,6 +435,97 @@ def run_carla_docker_runtime_smoke(
             "stderr": stop.stderr,
         }
         if last_error is not None and summary.get("status") != "connected":
+            summary["reason"] = str(last_error)
+
+
+def run_carla_docker_live_replay(  # noqa: PLR0913
+    manifest_path: str | Path,
+    *,
+    scenario_id: str | None = None,
+    image: str = CARLA_DOCKER_IMAGE,
+    container_name: str = CARLA_DEFAULT_CONTAINER_NAME,
+    runner: CommandRunner = run_command,
+    pull: bool = False,
+    startup_timeout_s: float = 120.0,
+    retry_interval_s: float = 2.0,
+    log_tail_lines: int = 80,
+    max_steps: int | None = None,
+) -> dict[str, Any]:
+    """Start pinned CARLA Docker runtime, run one T1 live replay, and clean up.
+
+    Returns:
+        Replay status with preflight, Docker lifecycle, client health, replay, logs, and cleanup.
+    """
+
+    preflight = run_carla_docker_preflight(image=image, runner=runner, pull=pull)
+    if preflight["status"] != "available":
+        return {**preflight, "stage": "live-replay-preflight"}
+
+    command = build_carla_server_container_command(image=image, container_name=container_name)
+    start = runner(command, timeout_s=60.0)
+    container_id = start.stdout.strip() or container_name
+    summary: dict[str, Any] = {
+        **preflight,
+        "stage": "live-replay",
+        "docker_command": command,
+        "container": {"name": container_name, "id": container_id},
+    }
+
+    last_error: Exception | None = None
+    try:
+        if start.returncode != 0:
+            summary.update(
+                {
+                    "status": "failed",
+                    "mode": "failed",
+                    "reason": "Failed to start pinned CARLA server container",
+                    "stderr": start.stderr,
+                }
+            )
+            return summary
+
+        deadline = time.monotonic() + startup_timeout_s
+        while True:
+            try:
+                summary["health"] = build_carla_client_health_summary()
+                last_error = None
+                break
+            except Exception as exc:  # noqa: BLE001 - CARLA client may raise custom API errors.
+                last_error = exc
+                if time.monotonic() >= deadline:
+                    summary.update(
+                        {
+                            "status": "failed",
+                            "mode": "failed",
+                            "reason": str(exc),
+                        }
+                    )
+                    return summary
+                time.sleep(retry_interval_s)
+
+        replay = run_t1_oracle_live_replay_against_server(
+            manifest_path,
+            scenario_id=scenario_id,
+            max_steps=max_steps,
+        )
+        summary["replay"] = replay
+        summary["status"] = replay["status"]
+        summary["mode"] = replay.get("mode", replay["status"])
+        summary["reason"] = replay["reason"]
+        return summary
+    finally:
+        logs = runner(
+            ["docker", "logs", "--tail", str(log_tail_lines), container_id], timeout_s=30.0
+        )
+        summary["logs_tail"] = logs.stdout if logs.returncode == 0 else logs.stderr
+        stop = runner(["docker", "stop", container_id], timeout_s=30.0)
+        summary["cleanup"] = {
+            "command": stop.args,
+            "returncode": stop.returncode,
+            "stdout": stop.stdout,
+            "stderr": stop.stderr,
+        }
+        if last_error is not None and "replay" not in summary:
             summary["reason"] = str(last_error)
 
 

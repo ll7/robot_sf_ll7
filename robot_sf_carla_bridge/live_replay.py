@@ -133,11 +133,7 @@ def run_t1_oracle_live_replay_against_server(
             "boundary": _live_replay_boundary(),
         }
     finally:
-        for actor in reversed(actors):
-            try:
-                actor.destroy()
-            except Exception:  # noqa: BLE001 - cleanup must tolerate CARLA-specific failures.
-                pass
+        _destroy_actors(actors)
 
 
 def _base_summary(
@@ -177,6 +173,7 @@ def _unsupported_payload_reasons(payload: dict[str, Any]) -> dict[str, Any] | No
         return {
             "reason": "T0 payload static obstacle replay is not implemented",
             "static_obstacle_count": len(obstacles),
+            "boundary": _live_replay_boundary(),
         }
     return None
 
@@ -198,23 +195,27 @@ def _spawn_replay_actors(
     )
 
     pedestrian_actors: list[_Actor] = []
-    for index, pedestrian in enumerate(pedestrians):
-        pedestrian_actors.append(
-            _spawn_actor(
-                world,
-                _blueprint(
-                    blueprints,
-                    "walker.pedestrian.0001",
-                    "walker.pedestrian.*",
-                    role_name=f"robot_sf_pedestrian_{index}",
-                ),
-                robot_sf_pose_to_carla_transform(
-                    carla_module,
-                    cast("dict[str, Any]", pedestrian["start"]),
-                ),
-                label=f"pedestrian {pedestrian['id']}",
+    try:
+        for index, pedestrian in enumerate(pedestrians):
+            pedestrian_actors.append(
+                _spawn_actor(
+                    world,
+                    _blueprint(
+                        blueprints,
+                        "walker.pedestrian.0001",
+                        "walker.pedestrian.*",
+                        role_name=f"robot_sf_pedestrian_{index}",
+                    ),
+                    robot_sf_pose_to_carla_transform(
+                        carla_module,
+                        cast("dict[str, Any]", pedestrian["start"]),
+                    ),
+                    label=f"pedestrian {pedestrian['id']}",
+                )
             )
-        )
+    except Exception:
+        _destroy_actors([robot_actor, *pedestrian_actors])
+        raise
 
     return {
         "_actors": [robot_actor, *pedestrian_actors],
@@ -248,6 +249,15 @@ def _spawn_actor(world: Any, blueprint: Any, transform: Any, *, label: str) -> _
     if actor is None:
         raise RuntimeError(f"CARLA failed to spawn {label}")
     return cast("_Actor", actor)
+
+
+def _destroy_actors(actors: list[_Actor]) -> None:
+    """Best-effort actor cleanup for partially initialized CARLA replay state."""
+    for actor in reversed(actors):
+        try:
+            actor.destroy()
+        except Exception:  # noqa: BLE001 - cleanup must tolerate CARLA-specific failures.
+            pass
 
 
 def _replay_oracle_transforms(

@@ -82,6 +82,15 @@ class _FakeWorld:
         return self.ticks
 
 
+class _PedestrianSpawnFailureWorld(_FakeWorld):
+    def try_spawn_actor(
+        self, blueprint: _FakeBlueprint, transform: _FakeTransform
+    ) -> _FakeActor | None:
+        if blueprint.id.startswith("walker."):
+            return None
+        return super().try_spawn_actor(blueprint, transform)
+
+
 def _fake_carla_module(world: _FakeWorld):
     class FakeClient:
         def __init__(self, host: str, port: int) -> None:
@@ -129,6 +138,7 @@ def test_live_replay_fails_closed_for_static_geometry(tmp_path: Path) -> None:
     assert summary["stage"] == "live-replay"
     assert summary["reason"] == "T0 payload static obstacle replay is not implemented"
     assert summary["unsupported"]["static_obstacle_count"] == 1
+    assert summary["unsupported"]["boundary"]["static_geometry_replay"] is False
 
 
 def test_live_replay_spawns_replays_and_cleans_up_actors(tmp_path: Path) -> None:
@@ -161,6 +171,30 @@ def test_live_replay_spawns_replays_and_cleans_up_actors(tmp_path: Path) -> None
     assert len(world.actors) == 2
     assert all(actor.destroyed for actor in world.actors)
     assert len(world.actors[0].transforms) == 4
+
+
+def test_live_replay_cleans_up_robot_when_pedestrian_spawn_fails(tmp_path: Path) -> None:
+    """Partial CARLA actor spawn failures should not leave earlier actors live."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    world = _PedestrianSpawnFailureWorld()
+    manifest_path = _write_manifest(
+        tmp_path,
+        [{"scenario_id": "unit_crossing", "payload": _minimal_t0_payload()}],
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=3,
+    )
+
+    assert summary["status"] == "failed"
+    assert summary["mode"] == "failed"
+    assert summary["reason"] == "CARLA failed to spawn pedestrian ped_0"
+    assert len(world.actors) == 1
+    assert world.actors[0].destroyed is True
+    assert world.ticks == 0
 
 
 def test_live_replay_uses_carla_coordinate_boundary() -> None:

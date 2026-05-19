@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import numpy as np
 import pytest
 
 from robot_sf.planner.safety_shield import (
@@ -40,6 +43,39 @@ def test_shield_decision_metadata_separates_proposed_filtered_and_prediction_fie
     assert metadata["violated_constraints"] == ["pedestrian_clearance", "time_to_collision"]
     assert metadata["prediction"]["source"] == "short_horizon_rollout"
     assert metadata["prediction"]["calibration"]["status"] == "not_calibrated"
+    assert metadata["finished_at_utc"] is None
+    assert metadata["total_runtime"] is None
+
+
+def test_shield_decision_metadata_sanitizes_complex_payloads_without_shape_drift() -> None:
+    """Serialization should preserve fixed-size containers while removing invalid numbers."""
+    decision = ShieldDecision(
+        proposed_action=(np.float32(0.8), np.float64("nan")),
+        filtered_action=(0.0, 1.0),
+        decision_label="fallback_safe",
+        intervention_reason="ppo_action_violated_short_horizon_constraints",
+        uncertainty_metadata={
+            "scores": np.array([0.2, np.inf], dtype=np.float32),
+            Path("path_key"): Path("evidence/shield.json"),
+        },
+        proposed_evaluation={"clearance": [np.nan, 0.5]},
+        selected_evaluation={"safe": np.bool_(True), "attempts": np.array([1, 2])},
+        finished_at_utc="2026-05-18T17:00:00Z",
+        total_runtime=np.float32(0.25),
+    )
+
+    metadata = decision.to_metadata()
+
+    assert metadata["proposed_action"] == [0.800000011920929, None]
+    scores = metadata["prediction"]["uncertainty"]["scores"]
+    assert scores[0] == pytest.approx(0.2)
+    assert scores[1] is None
+    assert metadata["prediction"]["uncertainty"]["path_key"] == "evidence/shield.json"
+    assert metadata["proposed_evaluation"]["clearance"] == [None, 0.5]
+    assert metadata["selected_evaluation"]["safe"] is True
+    assert metadata["selected_evaluation"]["attempts"] == [1, 2]
+    assert metadata["finished_at_utc"] == "2026-05-18T17:00:00Z"
+    assert metadata["total_runtime"] == pytest.approx(0.25)
 
 
 def test_update_shield_stats_and_metrics_track_interventions_and_violations() -> None:

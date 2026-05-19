@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
+
+import numpy as np
 
 ActionCommand = tuple[float, float]
 
@@ -39,6 +42,8 @@ class ShieldDecision:
     selected_evaluation: dict[str, Any] = field(default_factory=dict)
     intervened: bool | None = None
     hard_constraint_violation: bool | None = None
+    finished_at_utc: str | None = None
+    total_runtime: float | None = None
 
     @property
     def override_applied(self) -> bool:
@@ -69,27 +74,31 @@ class ShieldDecision:
 
     def to_metadata(self) -> dict[str, Any]:
         """Return a JSON-serializable shield decision payload."""
-        return {
-            "schema_version": "shield-decision.v1",
-            "decision_label": self.decision_label,
-            "proposed_action": [float(self.proposed_action[0]), float(self.proposed_action[1])],
-            "filtered_action": [float(self.filtered_action[0]), float(self.filtered_action[1])],
-            "intervened": self.is_intervention,
-            "override_applied": self.override_applied,
-            "hard_constraint_violation": self.final_constraint_violation,
-            "violated_constraints": list(self.violated_constraints),
-            "intervention_reason": self.intervention_reason,
-            "prediction": {
-                "source": self.prediction_source,
-                "horizon_steps": self.prediction_horizon_steps,
-                "dt": self.prediction_dt,
-                "uncertainty": _sanitize_payload(self.uncertainty_metadata),
-                "calibration": _sanitize_payload(self.calibration_metadata),
-            },
-            "fallback_controller_state": _sanitize_payload(self.fallback_controller_state),
-            "proposed_evaluation": _sanitize_payload(self.proposed_evaluation),
-            "selected_evaluation": _sanitize_payload(self.selected_evaluation),
-        }
+        return _sanitize_payload(
+            {
+                "schema_version": "shield-decision.v1",
+                "decision_label": self.decision_label,
+                "proposed_action": [float(self.proposed_action[0]), float(self.proposed_action[1])],
+                "filtered_action": [float(self.filtered_action[0]), float(self.filtered_action[1])],
+                "intervened": self.is_intervention,
+                "override_applied": self.override_applied,
+                "hard_constraint_violation": self.final_constraint_violation,
+                "violated_constraints": list(self.violated_constraints),
+                "intervention_reason": self.intervention_reason,
+                "prediction": {
+                    "source": self.prediction_source,
+                    "horizon_steps": self.prediction_horizon_steps,
+                    "dt": self.prediction_dt,
+                    "uncertainty": self.uncertainty_metadata,
+                    "calibration": self.calibration_metadata,
+                },
+                "fallback_controller_state": self.fallback_controller_state,
+                "proposed_evaluation": self.proposed_evaluation,
+                "selected_evaluation": self.selected_evaluation,
+                "finished_at_utc": self.finished_at_utc,
+                "total_runtime": self.total_runtime,
+            }
+        )
 
 
 def shield_contract_metadata(
@@ -190,14 +199,16 @@ def shield_metrics_from_stats(stats: dict[str, Any]) -> dict[str, float]:
 
 def _sanitize_payload(value: Any) -> Any:
     """Return a JSON-friendly payload without NaN or infinite numeric values."""
+    if isinstance(value, np.ndarray):
+        return _sanitize_payload(value.tolist())
+    if isinstance(value, np.generic):
+        return _sanitize_payload(value.item())
+    if isinstance(value, Path):
+        return str(value)
     if isinstance(value, dict):
-        return {
-            str(key): cleaned
-            for key, item in value.items()
-            if (cleaned := _sanitize_payload(item)) is not None
-        }
+        return {str(key): _sanitize_payload(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
-        return [cleaned for item in value if (cleaned := _sanitize_payload(item)) is not None]
+        return [_sanitize_payload(item) for item in value]
     if isinstance(value, float):
         return value if math.isfinite(value) else None
     return value

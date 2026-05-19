@@ -113,6 +113,7 @@ def test_sampler_serializes_per_device_gpu_metrics(monkeypatch: pytest.MonkeyPat
     assert writer.snapshots == [snapshot]
     assert snapshot.gpu_util_percent == pytest.approx(40.0)
     assert snapshot.gpu_mem_used_mb == pytest.approx(6.0)
+    assert snapshot.gpu_devices == sample.devices
     assert payload["gpu_devices"] == [
         {
             "index": 0,

@@ -938,6 +938,38 @@ def resolve_observation_mode(
     return active_mode
 
 
+def _resolve_observation_metadata(
+    canonical: str,
+    *,
+    observation_mode: str | None = None,
+    observation_level: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve active observation mode and level metadata for an algorithm.
+
+    Returns:
+        tuple[str, dict[str, Any]]: Active observation mode and level metadata.
+    """
+    observation_spec = observation_spec_for_algorithm(canonical)
+    if observation_level is None:
+        active_mode = resolve_observation_mode(canonical, observation_mode)
+        level_metadata = observation_level_for_mode(active_mode).to_metadata(
+            active_observation_mode=active_mode
+        )
+    else:
+        level_contract = resolve_observation_level_contract(
+            canonical,
+            observation_level=observation_level,
+            requested_observation_mode=observation_mode,
+            algorithm_default_mode=str(observation_spec["default_mode"]),
+            algorithm_supported_modes=tuple(
+                str(mode) for mode in observation_spec["supported_modes"]
+            ),
+        )
+        active_mode = str(level_contract["active_observation_mode"])
+        level_metadata = dict(level_contract["observation_level"])
+    return active_mode, level_metadata
+
+
 def _action_output_keys(command_space: str) -> tuple[str, ...]:
     """Return canonical action payload keys for a command-space label."""
     command = command_space.strip().lower()
@@ -1002,23 +1034,11 @@ def planner_contract_for_algorithm(
     """
     canonical = canonical_algorithm_name(algo)
     observation_spec = observation_spec_for_algorithm(canonical)
-    if observation_level is None:
-        active_mode = resolve_observation_mode(canonical, observation_mode)
-        level_metadata = observation_level_for_mode(active_mode).to_metadata(
-            active_observation_mode=active_mode
-        )
-    else:
-        level_contract = resolve_observation_level_contract(
-            canonical,
-            observation_level=observation_level,
-            requested_observation_mode=observation_mode,
-            algorithm_default_mode=str(observation_spec["default_mode"]),
-            algorithm_supported_modes=tuple(
-                str(mode) for mode in observation_spec["supported_modes"]
-            ),
-        )
-        active_mode = str(level_contract["active_observation_mode"])
-        level_metadata = level_contract["observation_level"]
+    active_mode, level_metadata = _resolve_observation_metadata(
+        canonical,
+        observation_mode=observation_mode,
+        observation_level=observation_level,
+    )
     profile = dict(_KINEMATICS_PROFILE_BY_CANONICAL.get(canonical, {}))
     if planner_kinematics is not None:
         profile.update(planner_kinematics)
@@ -1140,23 +1160,11 @@ def enrich_algorithm_metadata(
         enriched.setdefault("upstream_reference", dict(upstream_reference))
 
     observation_spec = observation_spec_for_algorithm(canonical)
-    if observation_level is None:
-        active_observation_mode = resolve_observation_mode(canonical, observation_mode)
-        observation_level_metadata = observation_level_for_mode(
-            active_observation_mode
-        ).to_metadata(active_observation_mode=active_observation_mode)
-    else:
-        level_contract = resolve_observation_level_contract(
-            canonical,
-            observation_level=observation_level,
-            requested_observation_mode=observation_mode,
-            algorithm_default_mode=str(observation_spec["default_mode"]),
-            algorithm_supported_modes=tuple(
-                str(mode) for mode in observation_spec["supported_modes"]
-            ),
-        )
-        active_observation_mode = str(level_contract["active_observation_mode"])
-        observation_level_metadata = dict(level_contract["observation_level"])
+    active_observation_mode, observation_level_metadata = _resolve_observation_metadata(
+        canonical,
+        observation_mode=observation_mode,
+        observation_level=observation_level,
+    )
     observation_spec["active_mode"] = active_observation_mode
     observation_spec["observation_level"] = observation_level_metadata["key"]
     observation_spec["override_applied"] = bool(

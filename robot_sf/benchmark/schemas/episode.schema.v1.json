@@ -115,6 +115,13 @@
         },
         "observation_level": {
             "type": "string",
+            "enum": [
+                "oracle_full_state",
+                "tracked_agents_no_noise",
+                "tracked_agents_with_noise",
+                "lidar_2d",
+                "occluded_partial_state"
+            ],
             "description": "Active graded benchmark observation-level contract for this episode."
         },
         "algorithm_metadata": {

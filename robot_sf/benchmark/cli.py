@@ -33,6 +33,7 @@ from robot_sf.benchmark.distributions import collect_grouped_values as _dist_col
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
+from robot_sf.benchmark.observation_levels import OBSERVATION_LEVEL_KEYS
 from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.parquet_export import export_episodes_jsonl_to_parquet
 from robot_sf.benchmark.planner_inclusion import (
@@ -1340,13 +1341,7 @@ def _add_run_subparser(
     p.add_argument(
         "--observation-level",
         default=None,
-        choices=[
-            "oracle_full_state",
-            "tracked_agents_no_noise",
-            "tracked_agents_with_noise",
-            "lidar_2d",
-            "occluded_partial_state",
-        ],
+        choices=OBSERVATION_LEVEL_KEYS,
         help=(
             "Optional graded benchmark observation-level override. Unsupported "
             "planner/level combinations fail before episodes are written."

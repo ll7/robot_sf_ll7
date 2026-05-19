@@ -3387,6 +3387,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     batch_observation_mode,
                     observation_level=observation_level,
                 )
+                identity_contract = enrich_algorithm_metadata(
+                    algo=identity_algo,
+                    metadata={},
+                    observation_mode=identity_observation_mode,
+                    observation_level=observation_level,
+                )
+                identity_observation_level = str(identity_contract["observation_level"]["key"])
                 identity_payload = _scenario_identity_payload(
                     sc,
                     algo=identity_algo,
@@ -3395,7 +3402,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     dt=dt,
                     record_forces=record_forces,
                     observation_mode=identity_observation_mode,
-                    observation_level=active_observation_level,
+                    observation_level=identity_observation_level,
                     observation_noise=noise_spec,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:

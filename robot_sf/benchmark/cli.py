@@ -29,6 +29,11 @@ from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_comp
 from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
+from robot_sf.benchmark.benchmark_claim import (
+    BenchmarkClaimError,
+    build_benchmark_claim,
+    write_benchmark_claim,
+)
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
@@ -470,6 +475,47 @@ def _handle_aggregate(args) -> int:
             logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
+        return 2
+
+
+def _handle_claim(args) -> int:
+    """Build a benchmark claim artifact and write a compact JSON payload.
+
+    Returns:
+        Exit code (0 success, 2 failure).
+    """
+    try:
+        claim = build_benchmark_claim(
+            claim_id=args.claim_id,
+            statement=args.statement,
+            scenario_matrix_path=Path(args.scenario_matrix),
+            scenario_matrix_sha256=args.scenario_matrix_sha256,
+            policy_metadata_path=Path(args.policy_metadata),
+            training_episodes=[Path(path) for path in (args.training_episodes or [])],
+            validation_episodes=[Path(path) for path in (args.validation_episodes or [])],
+            final_benchmark_episodes=[Path(path) for path in (args.final_benchmark_episodes or [])],
+            aggregate_reports=[Path(path) for path in (args.aggregate_report or [])],
+            dependency_group=args.dependency_group,
+            container_image_digest=args.container_image_digest,
+        )
+        output_path = Path(args.output_json)
+        write_benchmark_claim(output_path, claim)
+        print(
+            json.dumps(
+                {
+                    "claim_path": str(output_path),
+                    "schema_version": claim["schema_version"],
+                    "claim_id": claim["claim_id"],
+                },
+                indent=2,
+            )
+        )
+        return 0
+    except BenchmarkClaimError as exc:
+        print(f"Benchmark claim error: {exc}", file=sys.stderr)
+        return 2
+    except Exception:  # pragma: no cover - error path
+        logging.exception("Unexpected error during benchmark claim generation")
         return 2
 
 
@@ -1501,6 +1547,69 @@ def _add_aggregate_subparser(
     p.set_defaults(cmd="aggregate")
 
 
+def _add_claim_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the benchmark claim subcommand parser."""
+    p = subparsers.add_parser(
+        "claim",
+        help="Generate a schema-checked BenchmarkClaim JSON artifact",
+    )
+    p.add_argument("--claim-id", required=True, help="Stable claim identifier")
+    p.add_argument("--statement", required=True, help="Human-readable benchmark statement")
+    p.add_argument(
+        "--scenario-matrix",
+        required=True,
+        help="Frozen scenario matrix file used by the claim",
+    )
+    p.add_argument(
+        "--scenario-matrix-sha256",
+        required=True,
+        help="Expected SHA-256 digest for --scenario-matrix",
+    )
+    p.add_argument(
+        "--policy-metadata",
+        required=True,
+        help="JSON policy metadata with schema_version and policy SHA-256 values",
+    )
+    p.add_argument(
+        "--training-episodes",
+        nargs="*",
+        default=[],
+        help="Optional training episode JSONL artifacts, distinct from claim evidence",
+    )
+    p.add_argument(
+        "--validation-episodes",
+        nargs="*",
+        default=[],
+        help="Optional validation episode JSONL artifacts, distinct from final evidence",
+    )
+    p.add_argument(
+        "--final-benchmark-episodes",
+        nargs="+",
+        required=True,
+        help="Final benchmark episode JSONL artifacts that support the claim",
+    )
+    p.add_argument(
+        "--aggregate-report",
+        action="append",
+        default=[],
+        help="Optional schema/version-tagged aggregate or statistical report JSON",
+    )
+    p.add_argument(
+        "--dependency-group",
+        default="dev",
+        help="Dependency group/profile used to create the benchmark environment",
+    )
+    p.add_argument(
+        "--container-image-digest",
+        default=None,
+        help="Optional container image digest used for the benchmark environment",
+    )
+    p.add_argument("--output-json", required=True, help="Output claim JSON path")
+    p.set_defaults(cmd="claim")
+
+
 def _add_export_parquet_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -1875,6 +1984,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
     _add_aggregate_subparser(subparsers)
+    _add_claim_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
@@ -2324,6 +2434,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "run": _handle_run,
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,
+        "claim": _handle_claim,
         "export-parquet": _handle_export_parquet,
         "seed-variance": _handle_seed_variance,
         "extract-failures": _handle_extract_failures,

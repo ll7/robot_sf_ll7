@@ -120,6 +120,8 @@ knowledge, not every transient iteration detail.
   [issue_1288_jsonl_orjson_append.md](issue_1288_jsonl_orjson_append.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)
+* Issue #1245 Benchmark Claim Artifact:
+  [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
 * Issue #1169 CARLA Live T1 Oracle Replay:
   [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
 * Note-maintenance skill:

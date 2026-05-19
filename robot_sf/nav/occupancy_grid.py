@@ -90,6 +90,7 @@ from robot_sf.nav import occupancy_grid_utils as grid_utils
 OCCUPANCY_FREE_THRESHOLD = 0.05
 _PYGAME_UNLOADED = object()
 pygame: Any = _PYGAME_UNLOADED
+_StaticObstacleLayerCacheKey = tuple[Any, ...]
 
 
 def _load_pygame():
@@ -397,6 +398,8 @@ class OccupancyGrid:
         self._last_use_ego_frame: bool = False
         self._prepared_obstacles: list[PreparedGeometry] | None = None
         self._obstacle_polygons: list[Any] = []
+        self._static_obstacle_layer_cache_key: _StaticObstacleLayerCacheKey | None = None
+        self._static_obstacle_layer_cache: np.ndarray | None = None
 
         logger.debug(
             f"OccupancyGrid initialized: "
@@ -416,6 +419,117 @@ class OccupancyGrid:
             ) from exc
 
         return float(x), float(y), float(theta)
+
+    @staticmethod
+    def _line_cache_signature(obstacles: list[Line2D]) -> tuple[Any, ...]:
+        """Return a stable signature for obstacle line input."""
+
+        signature: list[Any] = []
+        for obstacle in obstacles:
+            try:
+                start, end = obstacle
+                signature.append(
+                    (
+                        (float(start[0]), float(start[1])),
+                        (float(end[0]), float(end[1])),
+                    )
+                )
+            except (TypeError, ValueError, IndexError):
+                signature.append(repr(obstacle))
+        return tuple(signature)
+
+    @staticmethod
+    def _polygon_cache_signature(obstacle_polygons: list[Any] | None) -> tuple[Any, ...]:
+        """Return a stable signature for optional filled obstacle geometry."""
+
+        if not obstacle_polygons:
+            return ()
+
+        signature: list[Any] = []
+        for polygon in obstacle_polygons:
+            if isinstance(polygon, (_ShapelyPolygon, _ShapelyMultiPolygon)):
+                signature.append(("shapely", polygon.wkb))
+                continue
+            try:
+                signature.append(tuple((float(vertex[0]), float(vertex[1])) for vertex in polygon))
+            except (TypeError, ValueError, IndexError):
+                signature.append(repr(polygon))
+        return tuple(signature)
+
+    def _build_static_obstacle_layer_cache_key(
+        self,
+        obstacles: list[Line2D],
+        obstacle_polygons: list[Any] | None,
+        grid_origin_x: float,
+        grid_origin_y: float,
+    ) -> _StaticObstacleLayerCacheKey:
+        """Build the cache key for fixed-origin world-frame obstacle layers.
+
+        Returns:
+            Tuple key describing grid geometry and static obstacle inputs.
+        """
+
+        return (
+            self.config.grid_height,
+            self.config.grid_width,
+            self.config.width,
+            self.config.height,
+            self.config.resolution,
+            np.dtype(self.config.dtype).str,
+            grid_origin_x,
+            grid_origin_y,
+            self._line_cache_signature(obstacles),
+            self._polygon_cache_signature(obstacle_polygons),
+        )
+
+    def _get_or_create_static_obstacle_layer(
+        self,
+        obstacles: list[Line2D],
+        obstacle_polygons: list[Any] | None,
+        grid_origin_x: float,
+        grid_origin_y: float,
+    ) -> np.ndarray:
+        """Return a cached fixed-origin obstacle layer, rasterizing on cache miss."""
+
+        cache_key = self._build_static_obstacle_layer_cache_key(
+            obstacles,
+            obstacle_polygons,
+            grid_origin_x,
+            grid_origin_y,
+        )
+        if (
+            self._static_obstacle_layer_cache_key == cache_key
+            and self._static_obstacle_layer_cache is not None
+        ):
+            logger.debug("Reused cached static obstacle layer")
+            return self._static_obstacle_layer_cache
+
+        layer = np.zeros((self.config.grid_height, self.config.grid_width), dtype=self.config.dtype)
+        num_rasterized = rasterization.rasterize_obstacles(
+            obstacles,
+            layer,
+            self.config,
+            grid_origin_x,
+            grid_origin_y,
+            value=1.0,
+        )
+        logger.debug(f"Rasterized {num_rasterized} obstacles")
+        if obstacle_polygons:
+            filled = 0
+            for polygon in obstacle_polygons:
+                filled += rasterization.rasterize_polygon(
+                    polygon,
+                    layer,
+                    self.config,
+                    grid_origin_x,
+                    grid_origin_y,
+                    value=1.0,
+                )
+            logger.debug("Filled %s obstacle cells via polygon rasterization", filled)
+
+        self._static_obstacle_layer_cache_key = cache_key
+        self._static_obstacle_layer_cache = layer
+        return layer
 
     def generate(  # noqa: C901,PLR0912,PLR0915
         self,
@@ -551,28 +665,36 @@ class OccupancyGrid:
                 continue
 
             if channel == GridChannel.OBSTACLES:
-                # Rasterize obstacles into this channel
-                num_rasterized = rasterization.rasterize_obstacles(
-                    transformed_obstacles,
-                    self._grid_data[channel_idx],
-                    self.config,
-                    grid_origin_x,
-                    grid_origin_y,
-                    value=1.0,
-                )
-                logger.debug(f"Rasterized {num_rasterized} obstacles")
-                if transformed_polygons:
-                    filled = 0
-                    for polygon in transformed_polygons:
-                        filled += rasterization.rasterize_polygon(
-                            polygon,
-                            self._grid_data[channel_idx],
-                            self.config,
-                            grid_origin_x,
-                            grid_origin_y,
-                            value=1.0,
-                        )
-                    logger.debug("Filled %s obstacle cells via polygon rasterization", filled)
+                if not use_ego_frame and not self.config.center_on_robot:
+                    self._grid_data[channel_idx] = self._get_or_create_static_obstacle_layer(
+                        transformed_obstacles,
+                        transformed_polygons,
+                        grid_origin_x,
+                        grid_origin_y,
+                    )
+                else:
+                    # Rasterize obstacles into this channel
+                    num_rasterized = rasterization.rasterize_obstacles(
+                        transformed_obstacles,
+                        self._grid_data[channel_idx],
+                        self.config,
+                        grid_origin_x,
+                        grid_origin_y,
+                        value=1.0,
+                    )
+                    logger.debug(f"Rasterized {num_rasterized} obstacles")
+                    if transformed_polygons:
+                        filled = 0
+                        for polygon in transformed_polygons:
+                            filled += rasterization.rasterize_polygon(
+                                polygon,
+                                self._grid_data[channel_idx],
+                                self.config,
+                                grid_origin_x,
+                                grid_origin_y,
+                                value=1.0,
+                            )
+                        logger.debug("Filled %s obstacle cells via polygon rasterization", filled)
 
             elif channel == GridChannel.PEDESTRIANS:
                 # Rasterize pedestrians into this channel

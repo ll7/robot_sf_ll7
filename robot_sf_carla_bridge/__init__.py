@@ -19,6 +19,7 @@ from robot_sf_carla_bridge.docker_runtime import (
     CommandResult,
     build_carla_client_health_summary,
     build_carla_server_container_command,
+    run_carla_docker_live_replay,
     run_carla_docker_preflight,
     run_carla_docker_runtime_smoke,
     validate_carla_image,
@@ -49,6 +50,11 @@ from robot_sf_carla_bridge.export import (
     write_export_payload,
     write_export_records,
 )
+from robot_sf_carla_bridge.live_replay import (
+    T1_ORACLE_LIVE_REPLAY_SCHEMA_VERSION,
+    robot_sf_pose_to_carla_transform,
+    run_t1_oracle_live_replay_against_server,
+)
 from robot_sf_carla_bridge.parity import (
     DEFAULT_PARITY_METRICS,
     MetricParityRow,
@@ -76,6 +82,7 @@ __all__ = [
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
     "SCHEMA_CATALOG_VERSION",
+    "T1_ORACLE_LIVE_REPLAY_SCHEMA_VERSION",
     "T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION",
     "CarlaUnavailableError",
     "CertificateRef",
@@ -108,8 +115,11 @@ __all__ = [
     "read_export_payload",
     "require_carla",
     "resolve_export_manifest_payload_paths",
+    "robot_sf_pose_to_carla_transform",
+    "run_carla_docker_live_replay",
     "run_carla_docker_preflight",
     "run_carla_docker_runtime_smoke",
+    "run_t1_oracle_live_replay_against_server",
     "select_t0_export_payload",
     "validate_carla_image",
     "validate_export_payload",

@@ -22,6 +22,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from robot_sf.nav import occupancy_grid_rasterization as rasterization
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig, OccupancyGrid
 
 
@@ -136,6 +137,132 @@ class TestGridGeneration:
         )
 
         assert grid_data.shape == occupancy_grid.shape
+
+
+class TestGridStaticObstacleLayerCache:
+    """Regression tests for fixed-origin static obstacle-layer reuse."""
+
+    def test_world_frame_reuses_static_obstacle_layer(self, monkeypatch):
+        """Avoid rerasterizing unchanged static obstacles while preserving dynamic output."""
+        config = GridConfig(
+            resolution=0.1,
+            width=6.0,
+            height=6.0,
+            channels=[
+                GridChannel.OBSTACLES,
+                GridChannel.PEDESTRIANS,
+                GridChannel.COMBINED,
+            ],
+        )
+        obstacles = [
+            ((0.5, 0.5), (5.5, 0.5)),
+            ((5.5, 0.5), (5.5, 5.5)),
+            ((5.5, 5.5), (0.5, 5.5)),
+            ((0.5, 5.5), (0.5, 0.5)),
+        ]
+        robot_pose = ((3.0, 3.0), 0.0)
+        rasterize_calls = 0
+        original_rasterize = rasterization.rasterize_obstacles
+
+        def counting_rasterize(*args, **kwargs):
+            """Count obstacle rasterization calls while preserving behavior."""
+            nonlocal rasterize_calls
+            rasterize_calls += 1
+            return original_rasterize(*args, **kwargs)
+
+        monkeypatch.setattr(rasterization, "rasterize_obstacles", counting_rasterize)
+
+        grid = OccupancyGrid(config=config)
+        first = grid.generate(
+            obstacles=obstacles,
+            pedestrians=[((2.0, 2.0), 0.25)],
+            robot_pose=robot_pose,
+        ).copy()
+        assert rasterize_calls == 1
+
+        second = grid.generate(
+            obstacles=obstacles,
+            pedestrians=[((4.0, 4.0), 0.25)],
+            robot_pose=robot_pose,
+        ).copy()
+        assert rasterize_calls == 1
+
+        expected = OccupancyGrid(config=config).generate(
+            obstacles=obstacles,
+            pedestrians=[((4.0, 4.0), 0.25)],
+            robot_pose=robot_pose,
+        )
+        np.testing.assert_array_equal(second, expected)
+        np.testing.assert_array_equal(second[0], first[0])
+        assert not np.array_equal(second[1], first[1])
+
+    def test_world_frame_cache_refreshes_when_obstacles_change(self, monkeypatch):
+        """Obstacle input changes must refresh the cached static layer."""
+        config = GridConfig(
+            resolution=0.1,
+            width=6.0,
+            height=6.0,
+            channels=[GridChannel.OBSTACLES],
+        )
+        obstacles = [((0.5, 0.5), (5.5, 0.5))]
+        changed_obstacles = [*obstacles, ((0.5, 5.5), (5.5, 5.5))]
+        robot_pose = ((3.0, 3.0), 0.0)
+        rasterize_calls = 0
+        original_rasterize = rasterization.rasterize_obstacles
+
+        def counting_rasterize(*args, **kwargs):
+            """Count obstacle rasterization calls while preserving behavior."""
+            nonlocal rasterize_calls
+            rasterize_calls += 1
+            return original_rasterize(*args, **kwargs)
+
+        monkeypatch.setattr(rasterization, "rasterize_obstacles", counting_rasterize)
+
+        grid = OccupancyGrid(config=config)
+        grid.generate(obstacles=obstacles, pedestrians=[], robot_pose=robot_pose)
+        grid.generate(obstacles=obstacles, pedestrians=[], robot_pose=robot_pose)
+        assert rasterize_calls == 1
+
+        changed = grid.generate(
+            obstacles=changed_obstacles,
+            pedestrians=[],
+            robot_pose=robot_pose,
+        ).copy()
+        assert rasterize_calls == 2
+
+        expected = OccupancyGrid(config=config).generate(
+            obstacles=changed_obstacles,
+            pedestrians=[],
+            robot_pose=robot_pose,
+        )
+        np.testing.assert_array_equal(changed, expected)
+
+    def test_centered_world_frame_does_not_reuse_static_obstacle_layer(self, monkeypatch):
+        """Moving-origin grids cannot reuse a fixed obstacle layer."""
+        config = GridConfig(
+            resolution=0.1,
+            width=6.0,
+            height=6.0,
+            channels=[GridChannel.OBSTACLES],
+            center_on_robot=True,
+        )
+        obstacles = [((0.5, 0.5), (5.5, 0.5))]
+        rasterize_calls = 0
+        original_rasterize = rasterization.rasterize_obstacles
+
+        def counting_rasterize(*args, **kwargs):
+            """Count obstacle rasterization calls while preserving behavior."""
+            nonlocal rasterize_calls
+            rasterize_calls += 1
+            return original_rasterize(*args, **kwargs)
+
+        monkeypatch.setattr(rasterization, "rasterize_obstacles", counting_rasterize)
+
+        grid = OccupancyGrid(config=config)
+        grid.generate(obstacles=obstacles, pedestrians=[], robot_pose=((2.0, 2.0), 0.0))
+        grid.generate(obstacles=obstacles, pedestrians=[], robot_pose=((3.0, 3.0), 0.0))
+
+        assert rasterize_calls == 2
 
 
 class TestGridChannels:

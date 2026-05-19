@@ -421,6 +421,7 @@ class PedSimulator(Simulator):
             raise ValueError(
                 f"PedSimulator.step_once expected 1 ego pedestrian action, got {actual}."
             )
+
     spawn_near_robot: bool = True
 
     def __post_init__(self):

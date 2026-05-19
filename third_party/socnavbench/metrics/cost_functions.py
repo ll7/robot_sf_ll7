@@ -164,8 +164,7 @@ def path_length(trajectory: Trajectory | np.ndarray) -> float:
 def path_length_batch(trajectory: Trajectory | np.ndarray) -> np.ndarray:
     """Return path length for each trajectory in a batch."""
     traj_xy = _coerce_traj_batch_with_heading(trajectory)[:, :, :2]
-    distance_sq = np.sum(np.power(np.diff(traj_xy, axis=1), 2), axis=2)
-    return np.sum(np.sqrt(distance_sq), axis=1)
+    return np.sum(np.linalg.norm(np.diff(traj_xy, axis=1), axis=2), axis=1)
 
 
 def path_length_ratio_batch(

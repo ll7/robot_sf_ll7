@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/benchmark_claim.schema.v1.json",
+  "title": "RobotSF Benchmark Claim (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_id",
+    "statement",
+    "created_at_utc",
+    "environment",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "benchmark_claim.v1"
+    },
+    "claim_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_sha",
+        "python_version",
+        "dependency_group",
+        "uv_lock_sha256"
+      ],
+      "properties": {
+        "git_sha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "python_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependency_group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uv_lock_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "container_image_digest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_matrix",
+        "policy_metadata",
+        "episode_groups",
+        "aggregate_reports"
+      ],
+      "properties": {
+        "scenario_matrix": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "policy_metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "schema_version",
+            "policies"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "schema_version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "policies": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "policy_id",
+                  "sha256"
+                ],
+                "properties": {
+                  "policy_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "artifact_path": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "episode_groups": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "training",
+            "validation",
+            "final_benchmark"
+          ],
+          "properties": {
+            "training": {
+              "$ref": "#/$defs/episodeArtifacts"
+            },
+            "validation": {
+              "$ref": "#/$defs/episodeArtifacts"
+            },
+            "final_benchmark": {
+              "$ref": "#/$defs/requiredEpisodeArtifacts"
+            }
+          }
+        },
+        "aggregate_reports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/schemaBackedArtifact"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "schemaBackedArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "schema_version"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "schema_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "episode_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed_suite": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "episodeArtifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/schemaBackedArtifact"
+      }
+    },
+    "requiredEpisodeArtifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/schemaBackedArtifact"
+      }
+    }
+  }
+}

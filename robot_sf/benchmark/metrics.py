@@ -2525,6 +2525,10 @@ def post_process_metrics(
         "ped_impact_turn_rate_delta_valid",
         "social_proxemic_ped_count",
         "social_proxemic_intrusion_steps",
+        "shield_decision_count",
+        "shield_intervention_count",
+        "shield_override_count",
+        "shield_hard_constraint_violation_count",
     ):
         if count_key in metrics and metrics[count_key] is not None:
             try:

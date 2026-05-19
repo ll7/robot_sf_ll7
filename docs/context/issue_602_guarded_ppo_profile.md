@@ -102,6 +102,8 @@ What `guarded_ppo` already covers:
 - benchmark-runnable internal safety-aware profile
 - clear fallback controller and threshold contract
 - practical evidence that the guard changes the policy behavior materially
+- additive `ShieldDecision`/`shield_stats` instrumentation for intervention, override, and
+  best-effort hard-constraint violation rates
 
 What it still lacks relative to a SoNIC-style method:
 - no learned uncertainty model
@@ -118,6 +120,9 @@ safety-aware benchmark representative.
 Treat `guarded_ppo` as an experimental documentation-backed safety-aware profile.
 
 It is not baseline-ready and should not be promoted as a headline benchmark row.
+
+The issue #1247 safety-shield instrumentation makes guard behavior easier to audit, but it does
+not change that claim boundary.
 
 ## Recommended Claim Boundary
 

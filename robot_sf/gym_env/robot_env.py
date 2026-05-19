@@ -71,6 +71,8 @@ _TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
     "jerk_mean",
 )
 _ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
+_GridObstacleCacheKey = tuple[int, int, int]
+_GridObstacleCacheValue = tuple[list[Line2D], list[ShapelyPolygon]]
 
 
 @contextmanager
@@ -670,6 +672,8 @@ class RobotEnv(BaseEnv):
         self._frame_idx = 0
         self._telemetry_episode_id = -1
         self._snqi_proxy_state = _StepSNQIProxyState()
+        self._grid_obstacle_cache_key: _GridObstacleCacheKey | None = None
+        self._grid_obstacle_cache_value: _GridObstacleCacheValue | None = None
         self._prime_snqi_proxy_state()
 
     def _prime_snqi_proxy_state(self) -> None:
@@ -947,10 +951,7 @@ class RobotEnv(BaseEnv):
 
         # T044: Update occupancy grid if enabled
         if self.occupancy_grid is not None:
-            # Extract obstacles from map
-            obstacles, obstacle_polygons = self._normalize_obstacles_for_grid(
-                self.map_def.obstacles, self.map_def.bounds
-            )
+            obstacles, obstacle_polygons = self._get_static_grid_obstacles()
             # Extract updated pedestrian positions and radii
             ped_positions = self.simulator.ped_pos
             ped_radii = getattr(self.simulator, "ped_radii", None)
@@ -1052,10 +1053,8 @@ class RobotEnv(BaseEnv):
 
             # T043: Generate initial occupancy grid if enabled
             if self.occupancy_grid is not None:
-                # Extract obstacles from map
-                obstacles, obstacle_polygons = self._normalize_obstacles_for_grid(
-                    self.map_def.obstacles, self.map_def.bounds
-                )
+                self._clear_grid_obstacle_cache()
+                obstacles, obstacle_polygons = self._get_static_grid_obstacles()
                 # Extract pedestrian positions and radii from simulator
                 ped_positions = self.simulator.ped_pos
                 ped_radii = getattr(self.simulator, "ped_radii", None)
@@ -1223,6 +1222,35 @@ class RobotEnv(BaseEnv):
             _add_line(bound)
 
         return line_segments, polygons
+
+    def _clear_grid_obstacle_cache(self) -> None:
+        """Invalidate cached static grid geometry before a new episode begins."""
+
+        self._grid_obstacle_cache_key = None
+        self._grid_obstacle_cache_value = None
+
+    def _get_static_grid_obstacles(self) -> _GridObstacleCacheValue:
+        """Return normalized static map geometry for occupancy-grid generation.
+
+        Map obstacle and bound objects are static during a RobotEnv episode, so step() can reuse the
+        reset-time normalized primitives. The identity key still refreshes the cache if a caller
+        swaps the map, obstacle list, or bounds list before the next grid generation.
+        """
+
+        cache_key = (id(self.map_def), id(self.map_def.obstacles), id(self.map_def.bounds))
+        if (
+            self._grid_obstacle_cache_key == cache_key
+            and self._grid_obstacle_cache_value is not None
+        ):
+            return self._grid_obstacle_cache_value
+
+        value = self._normalize_obstacles_for_grid(
+            self.map_def.obstacles,
+            self.map_def.bounds,
+        )
+        self._grid_obstacle_cache_key = cache_key
+        self._grid_obstacle_cache_value = value
+        return value
 
     def _prepare_visualizable_state(self):
         """Build a renderer-friendly simulation snapshot from the current environment state.

@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "groups": {
+    "ppo-final": {
+      "metrics": {
+        "success": {
+          "mean": 1.0,
+          "median": 1.0,
+          "p95": 1.0
+        }
+      }
+    }
+  }
+}

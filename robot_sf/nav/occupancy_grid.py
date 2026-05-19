@@ -447,7 +447,7 @@ class OccupancyGrid:
 
         signature: list[Any] = []
         for polygon in obstacle_polygons:
-            if isinstance(polygon, _ShapelyPolygon | _ShapelyMultiPolygon):
+            if isinstance(polygon, (_ShapelyPolygon, _ShapelyMultiPolygon)):
                 signature.append(("shapely", polygon.wkb))
                 continue
             try:

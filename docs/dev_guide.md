@@ -18,6 +18,9 @@ LLM Constitution and guides can be found here:
 ### Installation and setup
 
 ```bash
+# Check host tools that live outside uv.
+scripts/dev/check_runtime_requirements.sh
+
 # One‑time setup with dev extras and pre-commit
 uv sync --all-extras
 source .venv/bin/activate
@@ -26,6 +29,9 @@ uv run pre-commit install
 # Quick import check
 uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
 ```
+
+Host tools and optional machine capabilities that are not installed by `uv` are tracked in
+[`docs/dev_runtime_requirements.md`](dev_runtime_requirements.md).
 
 ### Fresh linked-worktree bootstrap
 
@@ -1009,8 +1015,11 @@ committed entry points:
 - Use `uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests`
   when a refactor needs a local snapshot of large modules, long functions, or captured pytest
   duration rows.
-- Optional local GitHub Actions execution with `act` is not currently a supported repository
-  workflow; evaluate and document that path through #1308 before adding `act` commands here.
+- Optional local GitHub Actions execution with `gh act` is experimental. Issue #1342 proved
+  installation and non-interactive `--dryrun` workflow graph validation, but not a real local
+  workflow execution. Keep using `scripts/dev/run_ci_local.sh` and
+  `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` as the supported local proof paths until a
+  real narrow `gh act` target is recorded.
 
 **Performance Breach Handling**:
 - Cold/warm PR smoke uses advisory thresholds by default; `main` and `workflow_dispatch` runs

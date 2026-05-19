@@ -85,6 +85,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Getting Started
 
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+* **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
 * **[Open-Issues Implementation Status](./context/open_issues_implementation_status_2026-05-12.md)** - Handoff record for the May 2026 open-issues pass, including implemented slices, blocked items, and remaining follow-up surface
 * **[Open-Issues Maintainer Input Triage](./context/open_issues_maintainer_input_triage.md)** - Consolidated maintainer-decision inventory for open issues that still need scope, contract, or prioritization guidance
@@ -295,6 +296,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Tooling
 
 * **[SNQI Weight Tools](./snqi-weight-tools/README.md)** - Recompute, optimize, and analyze SNQI weights; command reference and workflow examples
+* **[Runtime Requirements Checker](./dev_runtime_requirements.md)** - Inventory non-Python host tools with `scripts/dev/check_runtime_requirements.sh`
 * **[Pyreverse UML Generation](./pyreverse.md)** - Generate class diagrams from code
 * **[Data Analysis Utilities](./DATA_ANALYSIS.md)** - Analysis helpers and data processing tools
 * **[Imitation Results Analysis](./imitation_results_analysis.md)** - Compare baseline vs pre-trained runs, emit training summaries and figures
@@ -346,6 +348,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Hardware & Environment
 
 * **[Environment Configuration](./ENVIRONMENT.md)** - Detailed environment setup and usage
+* **[Runtime Requirements](./dev_runtime_requirements.md)** - Host tool, Docker, GPU, SLURM, and headless rendering requirements outside `uv`
 
 ---
 

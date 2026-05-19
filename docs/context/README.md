@@ -112,6 +112,8 @@ knowledge, not every transient iteration detail.
   [issue_1272_validation_falsification_strategy.md](issue_1272_validation_falsification_strategy.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
+* Issue #1342 gh-act runtime requirements:
+  [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Artifact evidence vocabulary:

@@ -14,9 +14,14 @@ attempt on May 18, 2026.
 * `live_replay_no_pull_before_image.json` - `live-replay` without `--pull`, also failing closed on
   the missing pinned CARLA image.
 * `live_replay_static_boundary_fixed.json` - `live-replay` after pulling `carlasim/carla:0.9.16`;
-  the Python client connected to CARLA `0.9.16` on `Town10HD_Opt`, then replay failed closed
-  because the certified T0 payload includes four static obstacles and static-geometry replay is
-  not implemented.
+  the Python client connected to CARLA `0.9.16` on `Town10HD_Opt`, then replay failed closed under
+  the pre-#1329 implementation because the certified T0 payload includes four static obstacles and
+  static-geometry replay was not implemented.
+
+No #1329 live rerun is stored in this bundle yet. The #1329 branch updates the code and CARLA-free
+tests so rectangular static obstacles are no longer rejected, but the Docker-backed live replay
+command still needs to be rerun on a CARLA-capable host before this bundle gains a replacement live
+JSON summary.
 
 ## Checksums
 

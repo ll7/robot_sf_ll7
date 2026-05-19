@@ -11,6 +11,7 @@ from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import (
     TASK_BUNDLE_SCHEMA_VERSION,
     describe_task_bundle_source,
+    is_task_bundle_reference,
     load_task_bundle,
     load_task_bundle_scenarios,
 )
@@ -83,6 +84,93 @@ def test_load_task_bundle_scenarios_applies_selection_order(tmp_path: Path) -> N
     assert [scenario["name"] for scenario in scenarios] == ["gamma", "alpha"]
 
 
+def test_load_task_bundle_scenarios_expands_nested_bundles(tmp_path: Path) -> None:
+    """Bundles may reuse smaller bundles without changing deterministic order."""
+    scenario_file = tmp_path / "scenarios.yaml"
+    _write_scenario_file(scenario_file, ["alpha", "beta"])
+    inner_bundle = tmp_path / "inner.yaml"
+    outer_bundle = tmp_path / "outer.yaml"
+    _write_yaml(
+        inner_bundle,
+        {
+            "schema_version": TASK_BUNDLE_SCHEMA_VERSION,
+            "name": "inner-bundle",
+            "scenario_files": ["scenarios.yaml"],
+            "select_scenarios": ["beta"],
+        },
+    )
+    _write_yaml(
+        outer_bundle,
+        {
+            "schema_version": TASK_BUNDLE_SCHEMA_VERSION,
+            "name": "outer-bundle",
+            "scenario_files": ["inner.yaml"],
+        },
+    )
+
+    scenarios = load_task_bundle_scenarios(outer_bundle)
+
+    assert [scenario["name"] for scenario in scenarios] == ["beta"]
+
+
+def test_load_task_bundle_scenarios_rejects_bundle_cycles(tmp_path: Path) -> None:
+    """Recursive bundle references should fail closed with a useful cycle error."""
+    bundle_a = tmp_path / "bundle_a.yaml"
+    bundle_b = tmp_path / "bundle_b.yaml"
+    _write_yaml(
+        bundle_a,
+        {
+            "schema_version": TASK_BUNDLE_SCHEMA_VERSION,
+            "name": "bundle-a",
+            "scenario_files": ["bundle_b.yaml"],
+        },
+    )
+    _write_yaml(
+        bundle_b,
+        {
+            "schema_version": TASK_BUNDLE_SCHEMA_VERSION,
+            "name": "bundle-b",
+            "scenario_files": ["bundle_a.yaml"],
+        },
+    )
+
+    with pytest.raises(ValueError, match="Task bundle include cycle detected"):
+        load_task_bundle_scenarios(bundle_a)
+
+
+def test_load_task_bundle_selection_ignores_plain_id_field(tmp_path: Path) -> None:
+    """Bundle selection should match the scenario-loader name/scenario_id contract."""
+    map_path = tmp_path / "map.svg"
+    map_path.write_text("<svg></svg>", encoding="utf-8")
+    scenario_file = tmp_path / "scenarios.yaml"
+    _write_yaml(
+        scenario_file,
+        {
+            "scenarios": [
+                {
+                    "name": "alpha",
+                    "id": "legacy-id",
+                    "map_file": "map.svg",
+                    "simulation_config": {"max_episode_steps": 50},
+                }
+            ]
+        },
+    )
+    bundle_path = tmp_path / "bundle.yaml"
+    _write_yaml(
+        bundle_path,
+        {
+            "schema_version": TASK_BUNDLE_SCHEMA_VERSION,
+            "name": "demo-bundle",
+            "scenario_files": ["scenarios.yaml"],
+            "select_scenarios": ["legacy-id"],
+        },
+    )
+
+    with pytest.raises(ValueError, match="Unknown select_scenarios entry 'legacy-id'"):
+        load_task_bundle_scenarios(bundle_path)
+
+
 def test_load_scenarios_accepts_named_registry_bundle() -> None:
     """The default registry should resolve bundle:<name> through load_scenarios."""
     scenarios = load_scenarios("bundle:sanity-smoke-v1")
@@ -103,6 +191,24 @@ def test_describe_task_bundle_source_reports_inputs() -> None:
     assert source["bundle_name"] == "sanity-smoke-v1"
     assert source["schema_version"] == TASK_BUNDLE_SCHEMA_VERSION
     assert len(source["scenario_files"]) == 1
+
+
+def test_is_task_bundle_reference_uses_yaml_header_guard(tmp_path: Path) -> None:
+    """Task-bundle detection should avoid parsing unrelated YAML documents."""
+    scenario_file = tmp_path / "scenarios.yaml"
+    _write_scenario_file(scenario_file, ["alpha"])
+    bundle_path = tmp_path / "bundle.yaml"
+    _write_yaml(
+        bundle_path,
+        {
+            "schema_version": TASK_BUNDLE_SCHEMA_VERSION,
+            "name": "demo-bundle",
+            "scenario_files": ["scenarios.yaml"],
+        },
+    )
+
+    assert not is_task_bundle_reference(scenario_file)
+    assert is_task_bundle_reference(bundle_path)
 
 
 def test_load_task_bundle_rejects_unsupported_schema(tmp_path: Path) -> None:

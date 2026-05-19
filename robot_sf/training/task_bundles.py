@@ -40,7 +40,11 @@ def is_task_bundle_reference(reference: str | Path) -> bool:
     if text.startswith(TASK_BUNDLE_REF_PREFIX):
         return True
     path = Path(reference)
+    if path.suffix.lower() not in {".yaml", ".yml"}:
+        return False
     if not path.exists() or not path.is_file():
+        return False
+    if not _has_task_bundle_header(path):
         return False
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -108,19 +112,28 @@ def load_task_bundle(reference: str | Path) -> TaskBundle:
     )
 
 
-def load_task_bundle_scenarios(reference: str | Path) -> list[Mapping[str, Any]]:
+def load_task_bundle_scenarios(
+    reference: str | Path,
+    *,
+    _bundle_stack: tuple[Path, ...] = (),
+) -> list[Mapping[str, Any]]:
     """Expand a task bundle into scenario entries using the scenario loader.
 
     Returns:
         list[Mapping[str, Any]]: Expanded scenario entries in deterministic bundle order.
     """
     bundle = load_task_bundle(reference)
-
-    from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
+    bundle_path = bundle.path.resolve()
+    if bundle_path in _bundle_stack:
+        cycle = (*_bundle_stack, bundle_path)
+        raise ValueError(
+            "Task bundle include cycle detected: " + " -> ".join(str(path) for path in cycle)
+        )
 
     scenarios: list[Mapping[str, Any]] = []
+    bundle_stack = (*_bundle_stack, bundle_path)
     for scenario_file in bundle.scenario_files:
-        scenarios.extend(load_scenarios(scenario_file, base_dir=scenario_file))
+        scenarios.extend(_load_bundle_scenario_file(scenario_file, bundle_stack=bundle_stack))
     if bundle.select_scenarios:
         return _apply_bundle_selection(
             scenarios,
@@ -163,6 +176,16 @@ def _optional_string(data: Mapping[str, Any], key: str, *, source: Path) -> str:
     return value.strip()
 
 
+def _has_task_bundle_header(path: Path) -> bool:
+    """Return whether the first YAML lines look like a task-bundle document."""
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            header = "".join(handle.readline() for _ in range(20))
+    except OSError:
+        return False
+    return "schema_version:" in header and TASK_BUNDLE_SCHEMA_VERSION in header
+
+
 def _validate_bundle_name(name: str, *, source: object) -> None:
     if not name:
         raise ValueError(f"Task bundle reference '{source}' must name a bundle.")
@@ -181,15 +204,11 @@ def _resolve_scenario_files(raw: object, *, source: Path) -> list[Path]:
     scenario_files: list[Path] = []
     seen: set[Path] = set()
     for entry in raw:
-        if not isinstance(entry, str) or not entry.strip():
+        if not isinstance(entry, (str, Path)) or not str(entry).strip():
             raise ValueError(
                 f"Task bundle '{source}' scenario_files entries must be non-empty strings."
             )
-        candidate = Path(entry.strip())
-        if not candidate.is_absolute():
-            candidate = (source.parent / candidate).resolve()
-        else:
-            candidate = candidate.resolve()
+        candidate = _resolve_bundle_relative_path(entry, source=source)
         _reject_local_output_path(candidate, source=source)
         if candidate in seen:
             raise ValueError(f"Task bundle '{source}' has duplicate scenario file '{candidate}'.")
@@ -200,6 +219,18 @@ def _resolve_scenario_files(raw: object, *, source: Path) -> list[Path]:
         seen.add(candidate)
         scenario_files.append(candidate)
     return scenario_files
+
+
+def _resolve_bundle_relative_path(entry: str | Path, *, source: Path) -> Path:
+    """Resolve a bundle-owned file path relative to the bundle source file.
+
+    Returns:
+        Path: Absolute path for the referenced bundle-owned file.
+    """
+    candidate = Path(str(entry).strip())
+    if not candidate.is_absolute():
+        candidate = source.parent / candidate
+    return candidate.resolve()
 
 
 def _resolve_select_scenarios(raw: object, *, source: Path) -> list[str]:
@@ -235,12 +266,34 @@ def _reject_local_output_path(candidate: Path, *, source: Path) -> None:
     )
 
 
+def _load_bundle_scenario_file(
+    scenario_file: Path,
+    *,
+    bundle_stack: tuple[Path, ...],
+) -> list[Mapping[str, Any]]:
+    """Load a scenario file or nested task bundle with bundle cycle tracking.
+
+    Returns:
+        list[Mapping[str, Any]]: Expanded scenario entries.
+    """
+    if is_task_bundle_reference(scenario_file):
+        return load_task_bundle_scenarios(scenario_file, _bundle_stack=bundle_stack)
+
+    from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
+
+    return load_scenarios(scenario_file, base_dir=scenario_file)
+
+
 def _scenario_name(scenario: Mapping[str, Any], *, source: Path, index: int) -> str:
-    value = scenario.get("name") or scenario.get("scenario_id") or scenario.get("id")
-    if not isinstance(value, str) or not value.strip():
+    value = scenario.get("name") or scenario.get("scenario_id")
+    if value is None:
         raise ValueError(
-            f"Task bundle '{source}' scenario entry {index} is missing a name, scenario_id, or id."
+            f"Task bundle '{source}' scenario entry {index} is missing a name or scenario_id."
         )
+    if not isinstance(value, str):
+        raise ValueError(f"Task bundle '{source}' scenario entry {index} name must be a string.")
+    if not value.strip():
+        raise ValueError(f"Task bundle '{source}' scenario entry {index} name must be non-empty.")
     return value.strip()
 
 

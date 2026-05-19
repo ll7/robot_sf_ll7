@@ -116,7 +116,7 @@ knowledge, not every transient iteration detail.
   [issue_1289_snqi_method_alias_retirement.md](issue_1289_snqi_method_alias_retirement.md)
 * Issue #1288 JSONL append optimization:
   [issue_1288_jsonl_orjson_append.md](issue_1288_jsonl_orjson_append.md)
-* Issue #1308 local `act` workflow evaluation:
+* Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)

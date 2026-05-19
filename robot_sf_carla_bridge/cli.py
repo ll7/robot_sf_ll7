@@ -15,6 +15,7 @@ from robot_sf_carla_bridge.availability import (
     load_availability_schema,
 )
 from robot_sf_carla_bridge.docker_runtime import (
+    run_carla_docker_live_replay,
     run_carla_docker_preflight,
     run_carla_docker_runtime_smoke,
 )
@@ -349,6 +350,31 @@ def carla_docker_runtime_main(argv: list[str] | None = None) -> int:
         default=120.0,
         help="Seconds to wait for Python-client connectivity.",
     )
+    live_replay = subparsers.add_parser(
+        "live-replay", help="Start CARLA, run one T1 oracle live replay, and stop it."
+    )
+    live_replay.add_argument("--manifest", required=True, help="Path to a T0 export manifest JSON.")
+    live_replay.add_argument(
+        "--scenario-id",
+        help="Optional scenario id to select from the manifest; defaults to the first payload.",
+    )
+    live_replay.add_argument("--json", action="store_true", help="Print a machine-readable status.")
+    live_replay.add_argument(
+        "--pull",
+        action="store_true",
+        help="Pull carlasim/carla:0.9.16 when missing after disk-space checks pass.",
+    )
+    live_replay.add_argument(
+        "--startup-timeout-s",
+        type=float,
+        default=120.0,
+        help="Seconds to wait for Python-client connectivity before replay.",
+    )
+    live_replay.add_argument(
+        "--max-steps",
+        type=int,
+        help="Maximum oracle replay steps to execute for a smoke run.",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "preflight":
@@ -356,13 +382,21 @@ def carla_docker_runtime_main(argv: list[str] | None = None) -> int:
             pull=args.pull,
             require_carla_api=not args.skip_api_check,
         )
-    else:
+    elif args.command == "smoke":
         status = run_carla_docker_runtime_smoke(
             pull=args.pull,
             startup_timeout_s=args.startup_timeout_s,
         )
+    else:
+        status = run_carla_docker_live_replay(
+            manifest_path=args.manifest,
+            scenario_id=args.scenario_id,
+            pull=args.pull,
+            startup_timeout_s=args.startup_timeout_s,
+            max_steps=args.max_steps,
+        )
 
-    exit_code = 0 if status["status"] in {"available", "connected"} else 1
+    exit_code = 0 if status["status"] in {"available", "connected", "oracle-replay"} else 1
     if args.json:
         sys.stdout.write(f"{json.dumps(status, sort_keys=True)}\n")
     else:

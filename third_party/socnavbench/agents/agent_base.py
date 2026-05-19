@@ -389,9 +389,6 @@ class AgentBase:
 
             norm_angle = angle_norm(error_t_n1d[:, :, angle_dims : angle_dims + 1])
 
-            # TODO: Currently calling numpy() here as tfe.DEVICE_PLACEMENT_SILENT
-            # is not working to place non-gpu ops (i.e. mod) on the cpu
-            # turning tensors into numpy arrays is a hack around this.
             error_t_n1d = np.concatenate(
                 [
                     error_t_n1d[:, :, :angle_dims],

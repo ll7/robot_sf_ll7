@@ -1015,11 +1015,14 @@ committed entry points:
 - Use `uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests`
   when a refactor needs a local snapshot of large modules, long functions, or captured pytest
   duration rows.
-- Optional local GitHub Actions execution with `gh act` is experimental. Issue #1342 proved
-  installation and non-interactive `--dryrun` workflow graph validation, but not a real local
-  workflow execution. Keep using `scripts/dev/run_ci_local.sh` and
-  `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` as the supported local proof paths until a
-  real narrow `gh act` target is recorded.
+- Optional local GitHub Actions execution with `act` is not currently a supported repository
+  workflow. Issue #1308 evaluated this path on 2026-05-18 and did not adopt it because Docker was
+  available but `act` was not installed, so no workflow job could be proven locally. See
+  [the evaluation note](context/issue_1308_act_local_workflow_evaluation.md).
+- `gh act` is now installed on one local machine and Issue #1342 proved non-interactive `--dryrun`
+  workflow graph validation, but not a real local workflow execution. Keep using
+  `scripts/dev/run_ci_local.sh` and `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` as the
+  supported local proof paths until a real narrow `gh act` target is recorded.
 
 **Performance Breach Handling**:
 - Cold/warm PR smoke uses advisory thresholds by default; `main` and `workflow_dispatch` runs

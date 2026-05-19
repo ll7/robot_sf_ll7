@@ -9,8 +9,6 @@ from utils.angle_utils import angle_normalize
 class ControlPipelineV0Helper:
     """A collection of useful helper functions for ControlPipelineV0."""
 
-    # TODO: Currently calling numpy() here as tfe.DEVICE_PLACEMENT_SILENT is not working in the eager mode to place
-    # non-gpu ops (i.e. mod) on the cpu turning tensors into numpy arrays is a hack around this.
     def compute_closest_waypt_idx(self, desired_waypt_config, waypt_configs):
         """" Given desired_waypoint_config and a list of precomputed waypoints in waypt_configs returns the index of
         the closest (in wrapped l2 distance) precomputed waypoint."""

@@ -825,6 +825,7 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Guarded Ours_GST alias should wire guard decisions and expose mixed metadata."""
+    from robot_sf.planner.safety_shield import ShieldDecision
 
     planners: list[object] = []
 
@@ -852,8 +853,22 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
 
         def choose_command(self, observation, ppo_command):
             """Select the guard fallback command for the test."""
-            del ppo_command
-            return self.fallback_adapter.plan(observation), "fallback_safe"
+            return self.choose_command_decision(observation, ppo_command).as_command_result()
+
+        def choose_command_decision(self, observation, ppo_command):
+            """Select the guard fallback command with structured shield metadata."""
+            filtered = self.fallback_adapter.plan(observation)
+            return ShieldDecision(
+                proposed_action=(float(ppo_command[0]), float(ppo_command[1])),
+                filtered_action=(float(filtered[0]), float(filtered[1])),
+                decision_label="fallback_safe",
+                intervention_reason="ppo_action_violated_short_horizon_constraints",
+                violated_constraints=("pedestrian_clearance",),
+                prediction_source="short_horizon_rollout",
+                fallback_controller_state={"policy": "goal"},
+                proposed_evaluation={"safe": False},
+                selected_evaluation={"safe": True},
+            )
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
     monkeypatch.setattr("robot_sf.benchmark.map_runner.GuardedPPOAdapter", _DummyGuard)
@@ -881,6 +896,10 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
     assert meta["planner_kinematics"]["execution_mode"] == "mixed"
     assert meta["planner_kinematics"]["fallback_policy"] == "goal"
     assert meta["guard_stats"]["fallback_safe"] == 1
+    assert meta["shield_stats"]["decision_count"] == 1
+    assert meta["shield_stats"]["intervention_count"] == 1
+    assert meta["shield_stats"]["override_count"] == 1
+    assert meta["shield_stats"]["last_decision"]["decision_label"] == "fallback_safe"
     assert meta["adapter_impact"]["native_steps"] == 0
     assert meta["adapter_impact"]["adapted_steps"] == 1
 

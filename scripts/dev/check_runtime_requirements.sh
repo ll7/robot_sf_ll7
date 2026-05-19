@@ -90,7 +90,8 @@ recommend_command gh "GitHub issues, PRs, checks, and Actions log inspection"
 recommend_command jq "JSON validation in CI smoke paths and local diagnostics"
 recommend_command ffmpeg "video/rendering workflows and GitHub CI parity"
 
-if command -v gh >/dev/null 2>&1 && gh extension list 2>/dev/null | grep -qE '(^|[[:space:]])gh act[[:space:]]'; then
+gh_act_pattern='(^|[[:space:]])((nektos/)?gh-act|gh[[:space:]]+act|act)([[:space:]]|$)'
+if command -v gh >/dev/null 2>&1 && gh extension list 2>/dev/null | grep -qE "$gh_act_pattern"; then
   version="$(gh act --version 2>/dev/null || true)"
   print_result "ok" "gh-act" "${version:-GitHub CLI extension installed}"
 else
@@ -120,6 +121,10 @@ print_result "info" "DISPLAY" "${DISPLAY:-empty is acceptable for headless tests
 
 if [[ "$failures" -gt 0 ]]; then
   echo
-  echo "Runtime requirement check failed with ${failures} missing required tool(s)." >&2
+  if [[ "$strict" == true ]]; then
+    echo "Runtime requirement check failed with ${failures} missing required/recommended tool(s)." >&2
+  else
+    echo "Runtime requirement check failed with ${failures} missing required tool(s)." >&2
+  fi
   exit 1
 fi

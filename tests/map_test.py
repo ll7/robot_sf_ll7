@@ -1,6 +1,7 @@
 """Map occupancy and simulator obstacle collision tests."""
 
 from math import dist, pi
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -10,11 +11,14 @@ from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupanc
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.sim.simulator import init_ped_simulators
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_DEBUG_SVG_MAP = _REPO_ROOT / "maps" / "svg_maps" / "debug_06.svg"
+
 
 def _debug_ped_simulator():
     """Build the debug SVG pedestrian simulator used by map obstacle tests."""
     env_config = PedEnvSettings()
-    map_def = convert_map("maps/svg_maps/debug_06.svg")
+    map_def = convert_map(str(_DEBUG_SVG_MAP))
     return init_ped_simulators(env_config, map_def)[0]
 
 
@@ -141,8 +145,7 @@ def test_proximity_point():
     lower_bound = 15
     upper_bound = 20
     env_config = PedEnvSettings()
-    svg_file = "maps/svg_maps/debug_06.svg"
-    map_def = convert_map(svg_file)
+    map_def = convert_map(str(_DEBUG_SVG_MAP))
     _sim = init_ped_simulators(env_config, map_def)[0]
     new_point = _sim.get_proximity_point(
         fixed_point,
@@ -187,7 +190,7 @@ def test_proximity_point_resamples_when_candidate_hits_obstacle(monkeypatch):
 def test_simulator_obstacle_lines_helpers():
     """Validate simulator obstacle helpers return stable shapes and types."""
     env_config = PedEnvSettings()
-    map_def = convert_map("maps/svg_maps/debug_06.svg")
+    map_def = convert_map(str(_DEBUG_SVG_MAP))
     sim = init_ped_simulators(env_config, map_def)[0]
 
     lines = sim.get_obstacle_lines()

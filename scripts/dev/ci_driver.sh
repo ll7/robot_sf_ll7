@@ -218,7 +218,7 @@ run_phase() {
       uvx ty check . --exit-zero
       ;;
     test)
-      "$SCRIPT_DIR/run_tests_parallel.sh" tests
+      "$SCRIPT_DIR/run_tests_parallel.sh"
       ;;
     smoke)
       run_smoke_phase "$event_name" "$github_ref"

@@ -60,6 +60,7 @@ Example for a new script:
 | `dreamer_br08_gate.sl` | DreamerV3 BR-08 gate launcher (CPU-only) |
 | `dreamer_br08_full.sl` | DreamerV3 BR-08 full launcher (1x A30)   |
 | `interactive.sh`     | Launch an interactive session on a30/l40s  |
+| `camera_ready_benchmark.sl` | Generic camera-ready benchmark launcher |
 | `issue_791_*.sl`     | Issue-791 training campaign scripts        |
 
 Submit with max wall time via the repo wrapper:
@@ -101,3 +102,40 @@ scripts/dev/sbatch_auxme_issue791.sh \
 - Prefer spreading long jobs across `a30` and `l40s` to respect `QOSMaxJobsPerUserLimit=2` and maximize concurrency.
 - If one partition is saturated (low `free_gpu`, high `pending`, or `slots_left=0`), submit the next job to the other partition.
 - Treat `srun: Unable to confirm allocation ... Zero Bytes were transmitted or received` as transient infrastructure noise; resubmit once with identical config.
+
+## Generic Camera-Ready Benchmark Launcher
+
+Use `SLURM/Auxme/camera_ready_benchmark.sl` for new config-driven benchmark campaigns instead of
+copying the issue-791 wrapper. It calls `scripts/tools/run_camera_ready_benchmark.py` with an
+explicit config, mode, output root, and campaign label or id.
+
+Preflight-only dry run:
+
+```bash
+CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml \
+CAMERA_READY_BENCHMARK_LABEL=issue999-preflight \
+CAMERA_READY_BENCHMARK_MODE=preflight \
+scripts/dev/sbatch_use_max_time.sh --dry-run SLURM/Auxme/camera_ready_benchmark.sl
+```
+
+Submit a full campaign:
+
+```bash
+CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml \
+CAMERA_READY_BENCHMARK_LABEL=issue999-camera-ready \
+CAMERA_READY_BENCHMARK_OUTPUT_ROOT=output/benchmarks/issue_999 \
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/camera_ready_benchmark.sl
+```
+
+Useful options:
+
+- `CAMERA_READY_BENCHMARK_MODE=run|preflight` selects full execution or preflight artifacts.
+- `CAMERA_READY_BENCHMARK_CAMPAIGN_ID=<id>` pins an exact campaign directory, useful for resumable
+  reruns.
+- `CAMERA_READY_SKIP_PUBLICATION_BUNDLE=true` forwards `--skip-publication-bundle`.
+- `CAMERA_READY_RESULTS_DIR=<path>` overrides the final sync root; by default, job artifacts sync
+  under `output/slurm/camera-ready-benchmark-job-<jobid>/`.
+
+The launcher fails closed unless a config and either a label or campaign id are set. Keep generated
+campaign outputs under `output/benchmarks/...` and promote only compact manifests, summaries, or
+durable artifact pointers into git.

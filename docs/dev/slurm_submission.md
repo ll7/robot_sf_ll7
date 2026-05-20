@@ -114,3 +114,30 @@ Machine-readable recommendation only:
 ```bash
 scripts/dev/auxme_partition_status.sh --recommend
 ```
+
+## Camera-ready benchmark campaigns
+
+For new camera-ready benchmark campaigns, use the generic Auxme launcher rather than cloning an
+issue-specific script:
+
+```bash
+CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml \
+CAMERA_READY_BENCHMARK_LABEL=issue999-preflight \
+CAMERA_READY_BENCHMARK_MODE=preflight \
+scripts/dev/sbatch_use_max_time.sh --dry-run SLURM/Auxme/camera_ready_benchmark.sl
+```
+
+Submit the full run by removing `--dry-run` and setting the intended artifact root:
+
+```bash
+CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml \
+CAMERA_READY_BENCHMARK_LABEL=issue999-camera-ready \
+CAMERA_READY_BENCHMARK_OUTPUT_ROOT=output/benchmarks/issue_999 \
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/camera_ready_benchmark.sl
+```
+
+`CAMERA_READY_BENCHMARK_MODE=preflight` and `run` are both supported. The launcher requires an
+explicit config and either `CAMERA_READY_BENCHMARK_LABEL` or `CAMERA_READY_BENCHMARK_CAMPAIGN_ID`
+so queued jobs have a reviewable identity before they consume cluster time. Slurm logs stay under
+`output/slurm/`; campaign outputs should stay under `output/benchmarks/...` unless a small
+manifest, summary, or durable artifact pointer is intentionally promoted.

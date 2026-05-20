@@ -1,130 +1,3302 @@
-version: 1
+version: 2
+schema: robot_sf.map_catalog.v2
+parser_version: parser-capability-metadata.v1
 maps:
 - map_id: 02_simple_maps
   path: svg_maps/02_simple_maps.svg
+  source_sha256: 884184e8ed4a4081f89801d9b8afc1bca436ac46d41957e86ac2c96a36c6d0e0
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: true
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 1
+    synthetic_ped_goal_zones: 1
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 2
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: true
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - PED_ROUTE_ONLY_MODE
+  limitations:
+  - PED_ROUTE_ONLY_MODE
+  - route_derived_zones
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: MIT_corridor
   path: svg_maps/MIT_corridor.svg
-- map_id: classic_bottleneck
-  path: svg_maps/classic_bottleneck.svg
-- map_id: classic_bottleneck_high
-  path: svg_maps/classic_bottleneck_high.svg
-- map_id: classic_bottleneck_medium
-  path: svg_maps/classic_bottleneck_medium.svg
-- map_id: classic_crossing
-  path: svg_maps/classic_crossing.svg
-- map_id: classic_cross_trap
-  path: svg_maps/classic_crossing.svg
-- map_id: classic_doorway
-  path: svg_maps/classic_doorway.svg
-- map_id: classic_group_crossing
-  path: svg_maps/classic_group_crossing.svg
-- map_id: classic_head_on_corridor
-  path: svg_maps/classic_head_on_corridor.svg
-- map_id: classic_merging
-  path: svg_maps/classic_merging.svg
-- map_id: classic_overtaking
-  path: svg_maps/classic_overtaking.svg
-- map_id: classic_t_intersection
-  path: svg_maps/classic_t_intersection.svg
-- map_id: crossing
-  path: svg_maps/crossing.svg
+  source_sha256: f305f36734b670e88b97d2df6ed5372168479905dd2dbb89ca534b6dfe03201b
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_corner_90_test
   path: svg_maps/atomic_corner_90_test.svg
+  source_sha256: 7f29daba3f02b4fa27aeabeabfcdf9ef1b4693d7ce0151cd778ae24d45062842
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_corridor_test
   path: svg_maps/atomic_corridor_test.svg
+  source_sha256: a39ed50e06a6eb9bb5e3666d08c7ad6dd838721ef6edf9bceb2e69ae1d97aa0c
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_empty_frame_test
   path: svg_maps/atomic_empty_frame_test.svg
+  source_sha256: 692c81005b8519ce59ca17ba450343e213abc84dc82811ff393e494031d50f40
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 9
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 9
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 9
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_goal_close_test
   path: svg_maps/atomic_goal_close_test.svg
+  source_sha256: c1235bdc867d704791c36ac205737be1ebb82755bca144bfd04852d5016e081e
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_goal_inside_obstacle_invalid
   path: svg_maps/atomic_goal_inside_obstacle_invalid.svg
+  source_sha256: d3de519aac0d5153a132b921b57efd86408c1711b80f6c532d85c154d84833d6
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_line_wall_obstacle
   path: svg_maps/atomic_line_wall_obstacle.svg
+  source_sha256: 678724d1265a82df457e1f4765eb6bf69fb99de8ef5ce817bf5bc8d7fe6d9cce
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_narrow_passage_test
   path: svg_maps/atomic_narrow_passage_test.svg
+  source_sha256: f512212ef68b2629daa9dd273eb0efa4c4ed89a25d9732ecc7ad0d660d8600f0
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_single_circle_obstacle
   path: svg_maps/atomic_single_circle_obstacle.svg
+  source_sha256: 1e4303fc272b10830015351d48f6b579b3380bc6116af8f5a0ac08e247704dba
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_single_rectangle_obstacle
   path: svg_maps/atomic_single_rectangle_obstacle.svg
+  source_sha256: 71b65eda2fdda677da88ca0550779f1c5369b0769dd1641fb4511f7067a291f6
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_start_near_obstacle_test
   path: svg_maps/atomic_start_near_obstacle_test.svg
+  source_sha256: df573c2f4548c95b7cef3e41e9ff019ee04379a0b2b3ac51290051e944004e67
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_symmetry_split_test
   path: svg_maps/atomic_symmetry_split_test.svg
+  source_sha256: 683587955964d53fe51bb5a26092df023b7515863da49b69fe9ea4b540d2bb02
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: atomic_u_trap_test
   path: svg_maps/atomic_u_trap_test.svg
+  source_sha256: 56edca7212dd8868b517920fb1cae15de5cceaa340c3500b63668674a683b9cc
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 7
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_bottleneck
+  path: svg_maps/classic_bottleneck.svg
+  source_sha256: 65772c0ec5ef521b9ee1332fdee433e8bfa25b8c06753692ea1bf2c667b74357
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_bottleneck_high
+  path: svg_maps/classic_bottleneck_high.svg
+  source_sha256: bf074d4cbf53a9b6785604f32053d44b6694caa41e5222aa66e59ce90b7b4403
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 3
+    single_ped_goal_markers: 3
+    single_pedestrian_definitions: 3
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_bottleneck_medium
+  path: svg_maps/classic_bottleneck_medium.svg
+  source_sha256: d8401829a4828fca80083f506096389218b5d1178c4f3c4ac35f47340bdbdc4b
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_cross_trap
+  path: svg_maps/classic_crossing.svg
+  source_sha256: dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: true
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 1
+    synthetic_ped_goal_zones: 1
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: true
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - PED_ROUTE_ONLY_MODE
+  limitations:
+  - PED_ROUTE_ONLY_MODE
+  - route_derived_zones
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_crossing
+  path: svg_maps/classic_crossing.svg
+  source_sha256: dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: true
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 1
+    synthetic_ped_goal_zones: 1
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: true
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - PED_ROUTE_ONLY_MODE
+  limitations:
+  - PED_ROUTE_ONLY_MODE
+  - route_derived_zones
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_doorway
+  path: svg_maps/classic_doorway.svg
+  source_sha256: 42f3911d15c8a2edc61e177d2d25fbb8416810ba937b2ec5009ad6220308cb48
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_group_crossing
+  path: svg_maps/classic_group_crossing.svg
+  source_sha256: fcd08b528c091e4b929f06dd5e268f8e092e89ac75df348d2a7346445420476b
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_head_on_corridor
+  path: svg_maps/classic_head_on_corridor.svg
+  source_sha256: 89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_merging
+  path: svg_maps/classic_merging.svg
+  source_sha256: 3a9d1d566542d60a3a9feab57e7c225b818eb37a3e26c1ca30f12a469e22397a
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 7
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_overtaking
+  path: svg_maps/classic_overtaking.svg
+  source_sha256: dbcbaaf8eb96b89017451b5dbd8cc1806c610a2c29b39c132a9fa71e7cd47153
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_realworld_bottleneck
+  path: svg_maps/classic_realworld_bottleneck.svg
+  source_sha256: 6219c0dc6e8ede2ea91bd0916c1224ff43df3bacb6332bdabcc7eba829095c11
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 2
+    explicit_ped_goal_zones: 2
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 2
+    parsed_ped_goal_zones: 2
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 2
+    obstacle_count: 10
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 8
+    single_ped_goal_markers: 8
+    single_pedestrian_definitions: 8
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_station_platform
+  path: svg_maps/classic_station_platform.svg
+  source_sha256: 5f03421ac3d16d6008e92e00634fa9f3d0c896304ffd204691d79a3a115be156
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 2
+    explicit_ped_goal_zones: 2
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 2
+    parsed_ped_goal_zones: 2
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 2
+    obstacle_count: 7
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 4
+    single_ped_goal_markers: 4
+    single_pedestrian_definitions: 4
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_t_intersection
+  path: svg_maps/classic_t_intersection.svg
+  source_sha256: c6dea0b640bc23d7c95c7c5e1dddf0e4df6e30ee4942f7e93af8556f41b4beb5
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 9
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: classic_urban_crossing
+  path: svg_maps/classic_urban_crossing.svg
+  source_sha256: 305261b242008fcaa9b298cdc5fa0334ddaf96bf7a2c83c11d49f5ea0fdaf5e0
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: true
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 1
+    synthetic_ped_goal_zones: 1
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: true
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - PED_ROUTE_ONLY_MODE
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - PED_ROUTE_ONLY_MODE
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  - route_derived_zones
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: corner
+  path: svg_maps/masterthesis/corner.svg
+  source_sha256: 72f0ec83bd4cd6445dcb79553ff21740d49653d3d2eab78885ced599320d8ec4
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 2
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: crossing
+  path: svg_maps/crossing.svg
+  source_sha256: 3eb08faaddac30d6af06a01b6cafce3e6a71be9d6da20a66a8680564d504e688
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: debug_05
   path: svg_maps/debug_05.svg
+  source_sha256: 53735a51208f7fdb2a64d96405b234da58348f6e6527cb65f10711f72f15a0f5
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 2
+    explicit_robot_goal_zones: 2
+    explicit_ped_spawn_zones: 3
+    explicit_ped_goal_zones: 3
+    parsed_robot_spawn_zones: 2
+    parsed_robot_goal_zones: 2
+    parsed_ped_spawn_zones: 3
+    parsed_ped_goal_zones: 3
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 4
+    ped_routes: 5
+    obstacle_count: 7
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: debug_06
   path: svg_maps/debug_06.svg
+  source_sha256: 2c5b000a59bdf05c1c4cccefc0abfd4489d8fd941f7acc85d1a29ef516d0bea0
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 2
+    explicit_robot_goal_zones: 2
+    explicit_ped_spawn_zones: 3
+    explicit_ped_goal_zones: 3
+    parsed_robot_spawn_zones: 2
+    parsed_robot_goal_zones: 2
+    parsed_ped_spawn_zones: 3
+    parsed_ped_goal_zones: 3
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 4
+    ped_routes: 5
+    obstacle_count: 11
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: debug_07
   path: svg_maps/debug_07.svg
+  source_sha256: 4ec9cc819cf0972800643a0c4d901d8991ec47c26e9cba0c3b1b2e5bf02b0f8d
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 4
+    explicit_ped_goal_zones: 4
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 4
+    parsed_ped_goal_zones: 4
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 4
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: door_passing
   path: svg_maps/door_passing.svg
+  source_sha256: 5efa5c1a0acbbd9fb18a1133656008dfdb7be321caaf202ee383e1c59f6b0031
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: example_map
   path: svg_maps/example_map.svg
+  source_sha256: 2e86036ffe26c64c5f287e6c1e313ff878d9240f1233c9857d4724c20dd4c9ff
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 2
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 2
+    parsed_robot_spawn_zones: 2
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 2
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 2
+    ped_routes: 2
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: example_map_with_obstacles
   path: svg_maps/example_map_with_obstacles.svg
+  source_sha256: 818cca2f176c57cc0364f97cb08173c60620121b0728702431173fcd7027b0f0
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 2
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 2
+    parsed_robot_spawn_zones: 2
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 2
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 2
+    ped_routes: 2
+    obstacle_count: 16
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_blind_corner
   path: svg_maps/francis2023/francis2023_blind_corner.svg
+  source_sha256: 8359a5d5999552b8abd9781c82ee7cad4b2052bb458b94d348578e5dda586ef8
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_circular_crossing
   path: svg_maps/francis2023/francis2023_circular_crossing.svg
+  source_sha256: c67c90be944dab027603cd4f0823979150d6a900aad2070fc7d2f8cce915fa5a
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_crowd_navigation
   path: svg_maps/francis2023/francis2023_crowd_navigation.svg
+  source_sha256: 90dcec15efdd3ff8c9bc9eab31229c22526d4cb946e7d2e8bfd6f83de2c463f4
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 1
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_down_path
   path: svg_maps/francis2023/francis2023_down_path.svg
+  source_sha256: a195335ea021714a93a2aaab6e8494580d7c442f84d648b995a003104ff1c519
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_entering_elevator
   path: svg_maps/francis2023/francis2023_entering_elevator.svg
+  source_sha256: fa52e7b55bae9ae8a1fdfc0c13cd3e18e43d2c005cb325fe9a978fa1c39f6c10
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 9
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_entering_room
   path: svg_maps/francis2023/francis2023_entering_room.svg
+  source_sha256: 3d18c06ee133949b14e4274c548b19b61f10ed518c105b5a94f660b53376c945
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 9
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_exiting_elevator
   path: svg_maps/francis2023/francis2023_exiting_elevator.svg
+  source_sha256: 3e09a3ef263b0ba0b2f0ad68a33157db6c78bb8794535675f4db33457cf76e75
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 9
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_exiting_room
   path: svg_maps/francis2023/francis2023_exiting_room.svg
+  source_sha256: 6968e1d3459f213638406340a258a3b61c7e80bf56976802b110491cd9d4d6fc
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 9
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_frontal_approach
   path: svg_maps/francis2023/francis2023_frontal_approach.svg
+  source_sha256: 685092e88811f450f47e5350965122f9a4cc8aff084b2584a628804a96f20e33
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_intersection_no_gesture
   path: svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  source_sha256: 416caeb391a0f8a12d25c6346a38d023e210c173c9275e08823171fbce172723
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_join_group
   path: svg_maps/francis2023/francis2023_join_group.svg
+  source_sha256: 787bddcc270cc56e0703616ff2d9ad9a1a63890227fbbc6257670c1503aa8c7a
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 3
+    single_ped_goal_markers: 3
+    single_pedestrian_definitions: 3
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_leave_group
   path: svg_maps/francis2023/francis2023_leave_group.svg
+  source_sha256: 869256f3d5d3b32810873dd3ab668678774a86b043d1612c58e8492d4c9c02a7
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 3
+    single_ped_goal_markers: 3
+    single_pedestrian_definitions: 3
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_narrow_doorway
   path: svg_maps/francis2023/francis2023_narrow_doorway.svg
+  source_sha256: 7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_narrow_hallway
   path: svg_maps/francis2023/francis2023_narrow_hallway.svg
+  source_sha256: d592f0fff7fe604119db92fba6146acee6f55f99c360e8768cd5c6a8bf670467
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_parallel_traffic
   path: svg_maps/francis2023/francis2023_parallel_traffic.svg
+  source_sha256: df1ec5f272601901b9d820ef8d3b0cb61ee592c031a215474db0bee37a29ad7f
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 2
+    explicit_ped_goal_zones: 2
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 2
+    parsed_ped_goal_zones: 2
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 2
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_ped_obstruction
   path: svg_maps/francis2023/francis2023_ped_obstruction.svg
+  source_sha256: 5360ced91b6bb3f2d36510988c0b23a69a7baa40c3bf909f1816bce4eb9a35bc
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_ped_overtaking
   path: svg_maps/francis2023/francis2023_ped_overtaking.svg
+  source_sha256: 76f0746da014d61f50ee0f96914cb2d42c11aa78f0ecfe2022d0e4ddff7344d1
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_perpendicular_traffic
   path: svg_maps/francis2023/francis2023_perpendicular_traffic.svg
+  source_sha256: 67ae3c66be2057e7da9a0182458de7e68c9c41d2f13848790fb73eb12664ee99
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_robot_crowding
   path: svg_maps/francis2023/francis2023_robot_crowding.svg
+  source_sha256: 202c0222a132e9c5e67316646765541aca92ccb56fd5416b604a1ff77bc15617
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 1
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: francis2023_robot_overtaking
   path: svg_maps/francis2023/francis2023_robot_overtaking.svg
+  source_sha256: 13f5927f1aec35b8653b2daa13d0e2832f300b1d808ce7a9a317a8fa93d264fe
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: headon
+  path: svg_maps/masterthesis/headon.svg
+  source_sha256: 86938f446e57fe8cf8baf5bcd88a231fe7783139030d5fe332825f84f0bf83a9
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 2
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: intersection
+  path: svg_maps/masterthesis/intersection.svg
+  source_sha256: 8032a60bd76f9cee0688908a6e25cc5df0dd3ff8f664d899062e4b0dc6346ea6
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: labeled_example
   path: svg_maps/labeled_example.svg
+  source_sha256: 862c979be70fdcabd673b9403069c0aee527b28bb13796ac4e98f77ac9f1882d
+  role: obstacle_only
+  capabilities:
+    robot_runtime: false
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: obstacle_only
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 0
+    explicit_robot_goal_zones: 0
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 0
+    parsed_robot_goal_zones: 0
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 0
+    ped_routes: 0
+    obstacle_count: 1
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: false
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: false
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  - no_robot_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: map3_1350_buildings_inkscape
   path: svg_maps/map3_1350_buildings_inkscape.svg
+  source_sha256: aa24d28e056a20562f7343fb2b3163fe90ed1f12bfc6187d5b61dc1cf9b446fe
+  role: obstacle_only
+  capabilities:
+    robot_runtime: false
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: obstacle_only
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 0
+    explicit_robot_goal_zones: 0
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 0
+    parsed_robot_goal_zones: 0
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 0
+    ped_routes: 0
+    obstacle_count: 29
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: false
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: false
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  - no_robot_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: narrow_corridor
   path: svg_maps/narrow_corridor.svg
+  source_sha256: 457352cc0d2705d29177eb830c95aaf621f0e14183b633c6656cdfb85420b9a3
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: narrow_corridor2
   path: svg_maps/narrow_corridor2.svg
+  source_sha256: de87e286d917f6fae3d722d99c972d687d113836acbd552a7ab0b194ed628de1
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 2
+    explicit_ped_goal_zones: 2
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 2
+    parsed_ped_goal_zones: 2
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 2
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: overtaking
   path: svg_maps/overtaking.svg
+  source_sha256: 90030ef2709d72c9a6470db14433b180ca0d4ba41cc0f79983e768f1d76d8916
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 2
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: paper_bench
   path: svg_maps/paper_bench.svg
+  source_sha256: 4974d1a2cb0da9497c7d6aa639a049cd5eac48ca8d8255e05bcdde3ea8cf4e10
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 6
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: ped_metrics_example
   path: svg_maps/ped_metrics_example.svg
+  source_sha256: 58dec00cc513a08547e86988ff80c6cebc4be5c7dc710f329b20c17c0eb2603f
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 2
+    explicit_ped_goal_zones: 2
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 2
+    parsed_ped_goal_zones: 2
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 2
+    obstacle_count: 5
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: planner_comparison
   path: svg_maps/planner_comparison.svg
+  source_sha256: f7a8f9512c1097b79bc30ed1de6468a2cf50dd6061427ae5d21aefbe794dfd80
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 2
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 3
+    single_ped_goal_markers: 2
+    single_pedestrian_definitions: 3
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
+- map_id: planner_sanity_open
+  path: svg_maps/planner_sanity_open.svg
+  source_sha256: 69332a2331fc5aa4ca0d94688fa336f659145305b0cf5fb6ac4f658c6d13f729
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 4
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: planner_test_corridor
   path: svg_maps/planner_test_corridor.svg
+  source_sha256: fffc5ae36b682950929cb044f205c47257a29b0a5e09913c92108c476e31fcbc
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 1
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: planner_test_simple
   path: svg_maps/planner_test_simple.svg
+  source_sha256: 5d3f1485d78af6d48b91be160c94dec63b3af815ef1da5e87ba7896ff0d64b21
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: static_humans
   path: svg_maps/static_humans.svg
+  source_sha256: 01820511fdfd90ef5ffa2bc572c2adeda64b5bdae66a414c2eb3ab2e831ca7a8
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: false
+    route_only: false
+    obstacle_source: false
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 0
+    explicit_ped_goal_zones: 0
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 0
+    parsed_ped_goal_zones: 0
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 0
+    obstacle_count: 0
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 3
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 3
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: false
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: false
+    has_obstacles: false
+    parser_limitation_codes: []
+  limitations:
+  - no_pedestrian_routes
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: test_spawn_in_obstacle
   path: svg_maps/test_spawn_in_obstacle.svg
+  source_sha256: f87015c9e4f6c5f9596e3205cfacd8db7d05e08423920d8ed3e5efdde6584723
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 2
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 2
+    parsed_robot_spawn_zones: 2
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 2
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 2
+    ped_routes: 2
+    obstacle_count: 19
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 0
+    single_ped_goal_markers: 0
+    single_pedestrian_definitions: 0
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes:
+    - ROUTE_CROSSES_OBSTACLE_INTERIOR
+    - ROUTE_USES_RISKY_PATH_COMMANDS
+  limitations:
+  - ROUTE_CROSSES_OBSTACLE_INTERIOR
+  - ROUTE_USES_RISKY_PATH_COMMANDS
+  validation:
+    status: unchecked
+    rule_ids: []

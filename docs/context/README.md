@@ -96,6 +96,8 @@ knowledge, not every transient iteration detail.
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #1414 parser capability metadata:
   [issue_1414_parser_capability_metadata.md](issue_1414_parser_capability_metadata.md)
+* Issue #1413 map catalog schema and sync checker:
+  [issue_1413_map_catalog_schema_sync.md](issue_1413_map_catalog_schema_sync.md)
 * Issue #1246 graded observation levels:
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
 * Issue #1239 human-model transfer robustness:

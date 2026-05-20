@@ -28,6 +28,7 @@ _SUPPORTED_VARIANTS = {
     "hybrid_rule_v3_teb_like_rollout",
     "hybrid_rule_v4_recovery_aware",
     "hybrid_rule_v5_ensemble_selector",
+    "tentabot_value_scorer_v0",
 }
 _EPS = 1e-9
 
@@ -212,6 +213,13 @@ class HybridRuleLocalPlannerConfig:
     # diagnostics, but benchmark evidence rejected it due static collisions.
     route_guide_commitment_progress_threshold: float = 0.5
 
+    # Experimental clean-room value-scorer metadata for issue #1387. The v0
+    # scorer uses the existing Robot SF candidate lattice and hand-auditable
+    # linear score terms; it does not import upstream Tentabot code, data, or
+    # weights.
+    value_scorer_profile: str = "manual_linear"
+    value_scorer_training_source: str = "hand_scored_hybrid_rule_teacher"
+
 
 class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
     """Minimal deterministic hybrid-rule local planner."""
@@ -284,6 +292,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._route_distance_history: deque[tuple[float, float]] = deque(maxlen=256)
         self._selected_source_counts: Counter[str] = Counter()
         self._rejection_counts: Counter[str] = Counter()
+        self._unavailable_counts: Counter[str] = Counter()
         self._fallback_count = 0
         self._last_decision: dict[str, Any] | None = None
         self._clearance_context: _ObstacleClearanceContext | None = None
@@ -1974,8 +1983,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._recent_commands.append(self._last_command)
         self._selected_source_counts[str(source)] += 1
         self._step_index += 1
+        unavailable_counts, unavailable_examples = self._unavailable_diagnostics(corridor_subgoal)
+        self._unavailable_counts.update(unavailable_counts)
         self._last_decision = {
             "planner_variant": self.config.planner_variant,
+            "value_scorer": self._value_scorer_metadata(),
             "planner_mode": mode,
             "selected_command": [float(command[0]), float(command[1])],
             "selected_source": source,
@@ -1990,6 +2002,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "moving_rejection_counts": dict(sorted((moving_rejection_counts or {}).items())),
             "rejection_counts_by_source": rejection_counts_by_source or {},
             "rejected_examples": rejected_examples or [],
+            "unavailable_counts": unavailable_counts,
+            "unavailable_examples": unavailable_examples,
             "nearest_pedestrian_distance": _finite_or_none(nearest_ped),
             "nearest_static_obstacle_distance": _finite_or_none(nearest_static),
             "predicted_ttc": _finite_or_none(predicted_ttc),
@@ -2002,9 +2016,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """Return aggregate planner diagnostics for benchmark episode metadata."""
         return {
             "planner_variant": self.config.planner_variant,
+            "value_scorer": self._value_scorer_metadata(),
             "steps": int(self._step_index),
             "selected_source_counts": dict(sorted(self._selected_source_counts.items())),
             "rejection_counts": dict(sorted(self._rejection_counts.items())),
+            "unavailable_counts": dict(sorted(self._unavailable_counts.items())),
             "fallback_count": int(self._fallback_count),
             "last_decision": dict(self._last_decision) if self._last_decision else None,
         }
@@ -2012,6 +2028,34 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
     def last_decision(self) -> dict[str, Any] | None:
         """Return the latest selected-command diagnostics for step-level tooling."""
         return dict(self._last_decision) if self._last_decision else None
+
+    def _value_scorer_metadata(self) -> dict[str, Any] | None:
+        """Return clean-room value-scorer metadata for experimental variants."""
+        if self.config.planner_variant != "tentabot_value_scorer_v0":
+            return None
+        return {
+            "profile": str(self.config.value_scorer_profile),
+            "training_source": str(self.config.value_scorer_training_source),
+            "candidate_lattice": "hybrid_rule_local_planner",
+            "source_parity_claim": False,
+            "upstream_code_used": False,
+            "observation_scope": (
+                "route_progress, static_clearance, pedestrian_distance_ttc, "
+                "smoothness, and command_bounds"
+            ),
+        }
+
+    def _unavailable_diagnostics(
+        self, corridor_subgoal: dict[str, Any] | None
+    ) -> tuple[dict[str, int], list[dict[str, Any]]]:
+        """Return candidate-source unavailable diagnostics for optional sources."""
+        counts: dict[str, int] = {}
+        examples: list[dict[str, Any]] = []
+        if isinstance(corridor_subgoal, dict) and not bool(corridor_subgoal.get("active")):
+            reason = str(corridor_subgoal.get("reason", "unavailable"))
+            counts["corridor_subgoal"] = 1
+            examples.append({"source": "corridor_subgoal", "reason": reason})
+        return counts, examples
 
 
 def build_hybrid_rule_local_planner_config(

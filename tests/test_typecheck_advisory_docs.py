@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
 VSCODE_TASKS = ROOT / ".vscode" / "tasks.json"
+
+
+def _load_vscode_tasks() -> dict[str, str]:
+    """Load VS Code tasks as structured data despite JSON-with-trailing-comma syntax."""
+    text = VSCODE_TASKS.read_text(encoding="utf-8")
+    normalized = re.sub(r",(\s*[}\]])", r"\1", text)
+    return {task["label"]: task["command"] for task in json.loads(normalized)["tasks"]}
 
 
 def test_dev_guide_documents_typecheck_as_advisory() -> None:
@@ -26,10 +35,12 @@ def test_dev_guide_documents_typecheck_as_advisory() -> None:
 def test_vscode_typecheck_tasks_are_labeled_advisory() -> None:
     """VS Code task labels should not imply fail-closed typecheck behavior."""
     text = VSCODE_TASKS.read_text(encoding="utf-8")
+    tasks = _load_vscode_tasks()
 
-    assert '"label": "Type Check (advisory)"' in text
-    assert '"command": "uvx ty check . --exit-zero"' in text
-    assert '"label": "Check Code Quality (Ruff + advisory ty)"' in text
-    assert '"command": "uv run ruff check . && uv run ty check . --exit-zero"' in text
+    assert tasks["Type Check (advisory)"] == "uvx ty check . --exit-zero"
+    assert (
+        tasks["Check Code Quality (Ruff + advisory ty)"]
+        == "uv run ruff check . && uvx ty check . --exit-zero"
+    )
     assert '"label": "Type Check",' not in text
     assert '"label": "Check Code Quality",' not in text

@@ -309,6 +309,42 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
   dependency, and the method can be reduced to a learned scorer over existing Robot SF rollout
   candidates with a clear falsification experiment.
 
+### DWA-RL / Learned Dynamic-Window Navigation
+
+- Source URL: pending exact source verification in the 2026-05-20 candidate screen; do not treat
+  DWA-RL as usable until a public repository, license, and inference asset path are recorded.
+- Current status: `source-side reproduction first`
+- Evidence grade: `proposal`
+- Source-backed facts: The candidate screen identified DWA-RL-style work as a learned extension of
+  dynamic-window local navigation rather than a ready Robot SF baseline.
+- Robot SF synthesis: This family is only interesting if the learned component can be isolated from
+  simulator-specific state and expressed as a local planner with deployment-observable inputs. A
+  from-scratch reimplementation would not be comparable evidence for the original method.
+- Related Robot SF work: #1359, #1355.
+- Reopen if: a public source/checkpoint path is identified, the source-side demo runs from pinned
+  assets, and the learned policy can be reduced to Robot SF's `observation_t -> action_t` or
+  short-horizon trajectory contract without privileged future state.
+
+### Generic Visual-Language / Object-Goal / Foundation-Model Navigation
+
+- Source URL: family-level reject; representative systems vary by visual-language model,
+  object-goal benchmark, or embodied foundation-model stack rather than one canonical source.
+- Current status: `reject for now`
+- Evidence grade: `proposal`
+- Source-backed facts: The 2026-05-20 screen explicitly called out generic visual-language
+  navigation, object-goal navigation, foundation-model scoring policies, and full embodied visual
+  navigation stacks as tempting but poorly bounded learned-policy follow-ups.
+- Robot SF synthesis: Do not open local-planner implementation work for these families unless the
+  method exposes a bounded local `observation_t -> action_t` policy under Robot SF scenario, seed,
+  and metric contracts. Full embodied navigation stacks usually assume RGB/RGB-D observations,
+  semantic goals, global mapping, language/object labels, or simulator assets that Robot SF's
+  current AMV benchmark does not provide.
+- Related Robot SF work: #1359, #1355,
+  `docs/context/policy_search/candidate_registry.yaml`.
+- Reopen if: a specific public method has reproducible source assets and a narrow reduction proof
+  showing that the policy can act only from Robot SF-available local observations without semantic
+  oracle inputs, global-map leakage, or changing the benchmark task.
+
 ## Maintenance Rules
 
 - Before opening a new learned-policy issue, search this file and the linked prior context notes.

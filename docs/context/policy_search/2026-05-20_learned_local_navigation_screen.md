@@ -1,4 +1,4 @@
-# Learned Local-Navigation Candidate Screen
+# Learned Local-Navigation Candidate Screen - Issue #1355 - 2026-05-20
 
 Date: 2026-05-20
 

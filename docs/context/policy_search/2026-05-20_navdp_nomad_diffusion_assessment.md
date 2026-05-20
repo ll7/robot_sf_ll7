@@ -1,4 +1,4 @@
-# NavDP And NoMaD Diffusion Navigation Assessment
+# NavDP and NoMaD Diffusion Navigation Assessment - Issue #1356 - 2026-05-20
 
 Date: 2026-05-20
 

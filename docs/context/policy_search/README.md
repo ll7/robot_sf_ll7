@@ -11,7 +11,11 @@ Use it for three things only:
 
 ## Layout
 
-- `candidate_registry.yaml`: canonical candidate list and config pointers.
+- `candidate_registry.yaml`: canonical candidate list and config pointers for implemented or
+  concrete runnable Robot SF candidates.
+- `reject_monitor_registry.md`: reusable negative/monitor trail for learned-policy families such as
+  CrowdNav descendants, Dreamer/world-model approaches, diffusion/visual navigation, SAC/TD3/PPO
+  variants, DRL-VO, and source-side-only candidates. Check this before proposing a new follow-up.
 - `experiment_ledger.md`: compact execution log for implemented candidates.
 - `contracts/`: project contract, gates, taxonomy, and runbook.
 - `reasoning/`: bounded planning and design notes.
@@ -44,6 +48,11 @@ Use it for three things only:
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
 - `../issue_769_drl_vo_assessment.md`: DRL-VO metadata history plus issue #1364 privileged-state
   audit verdict; current status is prototype-only/tracked-agent diagnostic, not main-table ready.
+- `2026-05-20_tentabot_motion_primitive_assessment.md`: issue #1357 assessment of Tentabot-style
+  motion-primitive value policies, recommending a Robot SF-native scorer spike without source-code
+  reuse.
+- `contracts/learned_local_policy_eligibility.md`: learned-policy eligibility checklist for
+  observation/action leakage, registry entry, and required raw/adapted/guarded action logging.
 
 ## Reproducible Entry Points
 
@@ -55,6 +64,14 @@ Use it for three things only:
 - Pareto plot: `uv run python scripts/tools/plot_policy_search_pareto_front.py`
 - Promotion decision: `uv run python scripts/tools/promote_policy_search_candidate.py`
 - SLURM candidate sweep: `scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --all-implemented`
+
+## Learned-Policy Intake
+
+Before adding a learned local-navigation method to `candidate_registry.yaml`, apply
+`contracts/learned_local_policy_eligibility.md`. The registry is reserved for implemented or
+concrete runnable Robot SF candidates with config pointers; source-only, monitor-only, or
+privileged-evaluation methods should stay in context notes until they have a runnable adapter
+contract.
 
 ## Scope Boundary
 

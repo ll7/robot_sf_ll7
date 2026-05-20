@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 from loguru import logger
 
-from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.errors import AggregationMetadataError, EpisodeRecordInputError
 from robot_sf.benchmark.metrics import snqi as snqi_fn
 from robot_sf.benchmark.thresholds import validate_threshold_parameter_consistency
 
@@ -33,8 +33,43 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
 
-def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]:
+def _format_jsonl_input_error(
+    *,
+    missing_paths: list[Path],
+    malformed_lines: list[tuple[Path, int, str]],
+) -> str:
+    """Build an actionable JSONL input error message.
+
+    Returns:
+        Compact error message with counts and representative locations.
+    """
+    details = [
+        "Episode JSONL input is not suitable for benchmark aggregation",
+        f"missing_paths={len(missing_paths)}",
+        f"malformed_lines={len(malformed_lines)}",
+    ]
+    if missing_paths:
+        preview = ", ".join(str(path) for path in missing_paths[:5])
+        details.append(f"missing=[{preview}]")
+    if malformed_lines:
+        preview = "; ".join(
+            f"{path}:{line_number}: {message}" for path, line_number, message in malformed_lines[:5]
+        )
+        details.append(f"malformed=[{preview}]")
+    return "; ".join(details)
+
+
+def read_jsonl(
+    paths: Sequence[str | Path] | str | Path,
+    *,
+    strict: bool = True,
+) -> list[dict[str, Any]]:
     """Read one or more JSONL files into a list of records.
+
+    Args:
+        paths: One or more JSONL files.
+        strict: When true, fail closed on missing paths and malformed records. When false, skip
+            missing/malformed records for explicitly exploratory/advisory use.
 
     Returns:
         List of parsed episode records.
@@ -44,20 +79,33 @@ def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]
     else:
         path_list = list(paths)  # type: ignore[arg-type]
     records: list[dict[str, Any]] = []
+    missing_paths: list[Path] = []
+    malformed_lines: list[tuple[Path, int, str]] = []
     for p in path_list:
         p = Path(p)
         if not p.exists():
+            if strict:
+                missing_paths.append(p)
             continue
         with p.open("r", encoding="utf-8") as f:
-            for line in f:
+            for line_number, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
                     continue
                 try:
                     rec = json.loads(line)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as exc:
+                    if strict:
+                        malformed_lines.append((p, line_number, exc.msg))
                     continue
                 records.append(rec)
+    if missing_paths or malformed_lines:
+        raise EpisodeRecordInputError(
+            _format_jsonl_input_error(
+                missing_paths=missing_paths,
+                malformed_lines=malformed_lines,
+            )
+        )
     return records
 
 

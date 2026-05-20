@@ -130,6 +130,8 @@ knowledge, not every transient iteration detail.
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)
 * Issue #1322 SocNavBench device-placement cleanup:
   [issue_1322_socnavbench_device_placement_cleanup.md](issue_1322_socnavbench_device_placement_cleanup.md)
+* Issue #1323 SocNavBench personal-space velocity:
+  [issue_1323_socnavbench_personal_space_velocity.md](issue_1323_socnavbench_personal_space_velocity.md)
 * Issue #1319 task bundles:
   [issue_1319_task_bundles.md](issue_1319_task_bundles.md)
 * Issue #769/#1364 DRL-VO Assessment and Privileged-State Audit:
@@ -138,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
 * Issue #1169 CARLA Live T1 Oracle Replay:
   [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
+* Issue #1363 Learned Local Policy Eligibility Checklist:
+  [policy_search/contracts/learned_local_policy_eligibility.md](policy_search/contracts/learned_local_policy_eligibility.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
@@ -376,6 +380,9 @@ knowledge, not every transient iteration detail.
   evaluation funnel, SLURM handoff notes, and the current
   [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training
   policy-search workstream.
+* [Issue #1357 Tentabot-Style Motion-Primitive Assessment](./policy_search/2026-05-20_tentabot_motion_primitive_assessment.md)
+  records the source-backed verdict that Tentabot-style learned primitive-value scoring is a
+  Robot SF-native spike candidate, not an upstream adapter or benchmark-ready planner.
 * [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
   defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
   claim boundary before runtime implementation under #871.

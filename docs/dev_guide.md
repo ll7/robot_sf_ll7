@@ -174,6 +174,9 @@ registry from training pipelines.
 uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest -n auto tests
 ```
 
+`ty` currently runs in advisory mode with `--exit-zero`: it reports findings, but the canonical
+typecheck phase is not a PR-readiness merge blocker by itself.
+
 ### Reusable dev scripts
 
 Prefer calling shared scripts from `scripts/dev/` so VS Code tasks, local shells, and Codex
@@ -521,7 +524,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
   `reference_adapter` path before adding a new map-runner planner key.
 - Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `output/`.
 - Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
-- Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
+- Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality (Ruff +
+  advisory ty) → Type Check (advisory) → Run Tests (see VS Code Tasks).
 
 ### Test style conventions
 
@@ -722,7 +726,8 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 - [ ] Use factory env creators; do not instantiate env classes directly.
 - [ ] Set config via `robot_sf.gym_env.unified_config` before env creation; avoid ad‑hoc kwargs.
 - [ ] Keep lib code print-free; use logging from loguru for info and warnings.
-- [ ] Run VS Code Tasks: Install Dependencies, Ruff: Format and Fix, Check Code Quality, Type Check, Run Tests.
+- [ ] Run VS Code Tasks: Install Dependencies, Ruff: Format and Fix, Check Code Quality (Ruff +
+      advisory ty), Type Check (advisory), Run Tests.
 - [ ] Add a test or smoke (e.g., env reset/step) when you change public behavior.
 - [ ] For GUI-dependent tests, set headless env vars; avoid flaky display usage in CI.
 - [ ] Treat `fast-pysf/` as part of the repository, changes can be made.
@@ -842,19 +847,25 @@ Examples (copy‑ready):
 - Lint/format: Ruff
   - VS Code task “Ruff: Format and Fix” (keeps repo ruff‑clean with the expanded rule set; document exceptions with comments)
 - Type checking: ty
-  - VS Code task "Type Check" (uvx ty check . --exit-zero; runs type checking with exit-zero for current compatibility)
-  - **All type errors must be addressed before merging PRs**
-  - Warnings are allowed but should be triaged and gradually resolved
+  - VS Code task "Type Check (advisory)" (`uvx ty check . --exit-zero`; reports findings while
+    exiting zero for current compatibility)
+  - Type findings are useful quality signals and should be fixed when practical, especially in
+    substantially touched files or stable contracts such as public interfaces, benchmark schemas,
+    planner contracts, config parsing, map definitions, artifact metadata, and CLI boundaries.
+  - PRs are not blocked solely because the advisory `ty` phase reports findings. Reviewers may
+    still request typing fixes when findings affect changed code or stable contracts.
+  - A fail-closed typecheck gate, changed-files ratchet, or baseline-reduction workflow must be
+    proposed separately before becoming a merge requirement.
 - Tests: pytest
   - VS Code task “Run Tests” (default suite)
   - “Run Tests (Show All Warnings)” for diagnostics
   - “Run Tests (GUI)” for display‑dependent tests (headless via environment vars)
   - VS Code task “PR Ready Check” runs Ruff fix/format, full tests (incl. slow), changed‑files coverage gate, diff‑only TODO docstring warnings, and the TODO-docstring backlog ratchet
-- Code quality checks: VS Code task “Check Code Quality” (Ruff + ty errors‑only)
+- Code quality checks: VS Code task “Check Code Quality (Ruff + advisory ty)”
 - Diagrams: VS Code task “Generate UML”
 
 Quality gates to run locally before pushing:
-1) Install Dependencies → 2) Ruff: Format and Fix → 3) Check Code Quality → 4) Type Check → 5) Run Tests
+1) Install Dependencies → 2) Ruff: Format and Fix → 3) Check Code Quality (Ruff + advisory ty) → 4) Type Check (advisory) → 5) Run Tests
 
 Shortcuts (optional shell):
 - Break down complex problems into smaller, manageable tasks
@@ -1356,8 +1367,9 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Requirements clarified (with options/assumptions recorded).
 - Design doc added/updated and linked (if non‑trivial).
 - Code implemented with tests (unit/integration; GUI when needed).
-- Ruff clean and “Check Code Quality” clean locally.
-- Type check clean (no type errors; warnings documented if present).
+- Ruff clean and “Check Code Quality (Ruff + advisory ty)” reviewed locally.
+- Advisory typecheck reviewed. Fix practical findings in touched files and stable contracts, and
+  document any meaningful remaining findings in the PR when they affect the change.
 - Docs updated (README in feature folder, diagrams if changed).
 - Feature branch synced with latest `origin/main` before PR creation, then validation scripts run
   and pass; optional benchmark if perf‑sensitive.
@@ -1413,12 +1425,16 @@ DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 source .venv/bin/activate
 ```
 
+The `uvx ty check . --exit-zero` step is advisory: it should report findings without failing the
+command. Treat findings in touched code and stable contracts as reviewer-actionable even though the
+phase exits zero.
+
 ### TL;DR workflow checklist
 1) Clarify requirements (ask concise, optioned questions)
 2) Draft design doc under `docs/` (link issue, add test plan)
 3) Implement with small, reviewed commits
 4) Add/extend tests in `tests/` or `test_pygame/`
-5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests
+5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality (Ruff + advisory ty) → Type Check (advisory) → Run Tests
 6) Update docs/diagrams; run “Generate UML” if classes changed
 7) Open PR with summary, risks, and links to docs/tests
 

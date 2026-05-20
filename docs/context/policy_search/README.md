@@ -49,6 +49,9 @@ Use it for three things only:
   `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress`.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
+- `../issue_1368_neupan_point_obstacle_assessment.md`: source-side NeuPAN assessment; current
+  verdict is monitor/source-side only because GPL-3.0, source-environment, runtime, and
+  point-obstacle/social-claim boundaries block a Robot SF adapter for now.
 - `issue_1367_crowdnav_family_verdict.md`: CrowdNav-family learned-policy consolidation for
   CrowdNav / SARL, RGL, DS-RNN, CrowdNav++ / IGAT, HEIGHT, and GenSafeNav / SoNIC; current verdict
   is no new first integration until the relevant graph/history, checklist, and source-reproduction

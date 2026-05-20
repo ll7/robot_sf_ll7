@@ -293,7 +293,7 @@ def _axis_aligned_rectangle_bounds(obstacle: dict[str, Any]) -> dict[str, float]
         return None
     try:
         points = [(float(vertex[0]), float(vertex[1])) for vertex in vertices]
-    except (TypeError, ValueError, IndexError):
+    except (TypeError, ValueError, IndexError, KeyError):
         return None
     xs = {point[0] for point in points}
     ys = {point[1] for point in points}

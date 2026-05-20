@@ -176,6 +176,31 @@ def test_live_replay_fails_closed_for_unsupported_static_geometry(tmp_path: Path
     assert world.actors == []
 
 
+def test_live_replay_fails_closed_for_malformed_static_geometry(tmp_path: Path) -> None:
+    """Malformed T0 static obstacle vertices should fail closed before CARLA replay."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    world = _FakeWorld()
+    payload = _minimal_t0_payload()
+    payload["static_geometry"]["obstacles"] = [
+        {"id": "dict_vertices", "type": "polygon", "vertices": [{"x": 0, "y": 0}] * 4}
+    ]
+    manifest_path = _write_manifest(
+        tmp_path, [{"scenario_id": "unit_crossing", "payload": payload}]
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+    )
+
+    assert summary["status"] == "failed"
+    assert summary["reason"] == "T0 payload contains unsupported static obstacle geometry"
+    assert summary["unsupported"]["static_obstacle_count"] == 1
+    assert summary["unsupported"]["unsupported_static_obstacle_count"] == 1
+    assert world.actors == []
+
+
 def test_live_replay_spawns_replays_and_cleans_up_actors(tmp_path: Path) -> None:
     """Representable payloads should run an oracle transform replay against a live world."""
     from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server

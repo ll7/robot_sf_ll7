@@ -132,7 +132,7 @@ knowledge, not every transient iteration detail.
   [issue_1322_socnavbench_device_placement_cleanup.md](issue_1322_socnavbench_device_placement_cleanup.md)
 * Issue #1319 task bundles:
   [issue_1319_task_bundles.md](issue_1319_task_bundles.md)
-* Issue #1369 SAGE MPC-transfer planner reproducibility:
+* Issue #1369 SAGE MPC-Transfer Planner Reproducibility:
   [issue_1369_sage_mpc_transfer_assessment.md](issue_1369_sage_mpc_transfer_assessment.md)
 * Issue #1245 Benchmark Claim Artifact:
   [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)

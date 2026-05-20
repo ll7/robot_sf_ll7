@@ -2906,7 +2906,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             obstacle_collision_seen = obstacle_collision_seen or bool(
                 meta.get("is_obstacle_collision", False)
             )
-            robot_collision_seen = robot_collision_seen or bool(meta.get("is_robot_collision", False))
+            robot_collision_seen = robot_collision_seen or bool(
+                meta.get("is_robot_collision", False)
+            )
             timeout_seen = timeout_seen or step_timeout
             if reached_goal_step is None and step_success:
                 reached_goal_step = step_idx

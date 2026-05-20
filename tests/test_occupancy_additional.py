@@ -349,7 +349,12 @@ def test_check_quality_of_map_point_supports_flat_bounds_and_invalid_entries() -
         "skip-me",
         (0.0, 0.0, 0.0, 2.0),
     ]
-    map_def = _make_map(obstacles=[], bounds=flat_bounds)
+    map_def = SimpleNamespace(
+        width=2.0,
+        height=2.0,
+        obstacles=[],
+        bounds=flat_bounds,
+    )
 
     assert check_quality_of_map_point(map_def, (1.0, 1.0), radius=0.1) is True
     assert check_quality_of_map_point(map_def, (1.0, 0.0), radius=0.1) is False

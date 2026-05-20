@@ -3,7 +3,7 @@
 These tests ensure each new classical interaction SVG map:
   * Parses without exception using SvgMapConverter
   * Produces a MapDefinition object
-  * Contains at least one robot spawn zone and goal zone (MapDefinition logs error otherwise)
+  * Contains at least one robot spawn zone and goal zone (MapDefinition rejects them otherwise)
   * Has width/height > 0
   * Contains obstacles (except explicitly documented minimal cases)
   * Ensures any route labels with indices reference existing spawn/goal zone indices

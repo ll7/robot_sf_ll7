@@ -158,6 +158,10 @@ def test_compound_obstacle_paths_preserve_detached_members(tmp_path: Path) -> No
               <path id="compound_obstacle"
                     inkscape:label="obstacle"
                     d="M 0 0 L 4 0 L 4 4 L 0 4 Z M 6 0 L 10 0 L 10 4 L 6 4 Z"/>
+              <rect id="spawn" inkscape:label="robot_spawn_zone"
+                    x="4.4" y="1" width="0.4" height="0.4"/>
+              <rect id="goal" inkscape:label="robot_goal_zone"
+                    x="10.6" y="1" width="0.4" height="0.4"/>
             </svg>
             """
         ).strip(),

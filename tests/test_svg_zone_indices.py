@@ -86,15 +86,14 @@ def test_zone_index_helpers_handle_duplicates_and_gaps() -> None:
     assert assembled[1] == second_zone
 
 
-def test_process_rects_supports_bounds_obstacles_and_fallback_routes(tmp_path: Path) -> None:
-    """Ensure rect parsing handles bounds/obstacles and id-based zone labels."""
+def test_process_rects_supports_obstacles_zones_and_fallback_routes(tmp_path: Path) -> None:
+    """Ensure rect parsing handles obstacles, id-based zones, and fallback routes."""
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg"
          xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
          width="10" height="10">
       <rect id="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
       <rect id="robot_goal_zone_0" x="8" y="8" width="1" height="1" />
-      <rect id="extra_bound" inkscape:label="bound" x="0" y="0" width="10" height="1" />
       <rect id="wall" inkscape:label="obstacle" x="2" y="2" width="1" height="1" />
       <rect id="crowd" inkscape:label="ped_crowded_zone" x="3" y="3" width="1" height="1" />
       <rect id="decor" inkscape:label="decorative" x="4" y="4" width="1" height="1" />
@@ -109,6 +108,7 @@ def test_process_rects_supports_bounds_obstacles_and_fallback_routes(tmp_path: P
     assert len(map_def.ped_crowded_zones) == 1
     assert len(map_def.robot_spawn_zones) == 1
     assert len(map_def.robot_goal_zones) == 1
+    assert len(map_def.bounds) == 4
     assert map_def.robot_routes  # fallback route generated when none defined
 
 

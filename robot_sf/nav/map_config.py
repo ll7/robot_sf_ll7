@@ -337,11 +337,28 @@ class MapDefinition:
         """
         Validates the map definition and initializes the obstacles_pysf and
         robot_routes_by_spawn_id attributes.
-        Raises a ValueError if the width or height is less than 0,
+        Raises a ValueError if the width or height is non-positive,
         if the robot spawn zones or goal zones are empty,
         or if the bounds are not exactly 4.
         """
+        if self.width <= 0 or self.height <= 0:
+            raise ValueError(
+                "Map width and height must be positive. "
+                + f"Width: {self.width}, Height: {self.height}",
+            )
+
+        if not self.robot_spawn_zones:
+            raise ValueError("Robot spawn zones mustn't be empty!")
+
+        if not self.robot_goal_zones:
+            raise ValueError("Robot goal zones mustn't be empty!")
+
         self.bounds = _normalize_bounds(self.bounds)
+        if len(self.bounds) != 4:
+            raise ValueError(
+                "Invalid bounds! Expected exactly 4 bounds! " + f"Found {len(self.bounds)} bounds!",
+            )
+
         obstacle_lines = [line for obstacle in self.obstacles for line in obstacle.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
@@ -353,23 +370,6 @@ class MapDefinition:
                 self.robot_routes_by_spawn_id[route.spawn_id] = [route]
         if not self.robot_routes:
             logger.warning("MapDefinition has no robot routes; planners may synthesize defaults.")
-
-        if self.width <= 0 or self.height <= 0:
-            logger.critical(
-                "Map width and height mustn't be zero or negative! "
-                + f"Width: {self.width}, Height: {self.height}",
-            )
-
-        if not self.robot_spawn_zones:
-            logger.error("Robot spawn zones mustn't be empty!")
-
-        if not self.robot_goal_zones:
-            logger.error("Robot goal zones mustn't be empty!")
-
-        if len(self.bounds) != 4:
-            logger.critical(
-                "Invalid bounds! Expected exactly 4 bounds! " + f"Found {len(self.bounds)} bounds!",
-            )
 
         # Validate single pedestrians
         self._validate_single_pedestrians()
@@ -1054,16 +1054,35 @@ def _normalize_bounds(bounds: list[Line2D]) -> list[Line2D]:
         list[Line2D]: Bounds normalized into flat tuple format.
     """
     normalized: list[Line2D] = []
-    for bound in bounds:
-        if isinstance(bound, (tuple, list)) and len(bound) == 2:
+    for index, bound in enumerate(bounds):
+        if not isinstance(bound, (tuple, list)):
+            raise ValueError(
+                f"Invalid bound at index {index}: expected a 4-tuple or pair-of-points, got {bound!r}"
+            )
+
+        if len(bound) == 4:
+            try:
+                x_start, x_end, y_start, y_end = bound  # type: ignore[misc]
+                normalized.append((float(x_start), float(x_end), float(y_start), float(y_end)))
+                continue
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Invalid bound at index {index}: failed to parse flat bound {bound!r}"
+                ) from exc
+
+        if len(bound) == 2:
             try:
                 (x1, y1), (x2, y2) = bound  # type: ignore[misc]
                 normalized.append((float(x1), float(x2), float(y1), float(y2)))
                 continue
-            except (TypeError, ValueError):
-                # Fall back to raw bound when unpacking fails.
-                pass
-        normalized.append(bound)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Invalid bound at index {index}: failed to parse pair-of-points bound {bound!r}"
+                ) from exc
+
+        raise ValueError(
+            f"Invalid bound at index {index}: expected a 4-tuple or pair-of-points, got {bound!r}"
+        )
     return normalized
 
 

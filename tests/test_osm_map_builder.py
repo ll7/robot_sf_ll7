@@ -213,14 +213,15 @@ class TestBackwardCompat:
         self, pbf_fixture: str, tag_filters: OSMTagFilters
     ) -> None:
         """Test MapDefinition works with allowed_areas=None (legacy)."""
+        zone = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0))
         # Create a legacy MapDefinition (without allowed_areas)
         legacy_map = MapDefinition(
             width=100.0,
             height=100.0,
             obstacles=[],
-            robot_spawn_zones=[],
+            robot_spawn_zones=[zone],
             ped_spawn_zones=[],
-            robot_goal_zones=[],
+            robot_goal_zones=[zone],
             ped_goal_zones=[],
             robot_routes=[],
             ped_crowded_zones=[],

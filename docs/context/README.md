@@ -378,6 +378,7 @@ knowledge, not every transient iteration detail.
   unjustified.
 * [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 * [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
+* [Issue #1366 GenSafeNav / SoNIC Conformal Contract](./policy_search/issue_1366_gensafenav_sonic_conformal_contract.md)
 * [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local
   evaluation funnel, SLURM handoff notes, and the current
   [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training

@@ -110,6 +110,37 @@ Cross-kinematics #1354 interpretation snapshot:
 - This is a successful bounded compatibility/evidence pass across `goal`, `orca`, and `social_force` for `differential_drive`, `bicycle_drive`, and `holonomic`.
 - The analyzer still reported row-level SNQI mismatches, so treat this as a successful execution proof rather than a final paper-facing #1354 evidence campaign.
 
+Post-`origin/main` rerun after #1384:
+
+- After merging latest `origin/main`, commit `44b0f6e3` from #1384 was present in this branch. That
+  upstream fix preserves exact collision metrics in the map runner and directly matched the
+  collision-event/collision-metric contradiction seen in jobs `12569` and `12570`.
+- Rerun jobs:
+  - `12572`: #1344 nominal post-#1384 rerun on `a30`, `COMPLETED` exit `0:0`.
+  - `12573`: #1344 stress post-#1384 rerun queued on `l40s`, canceled before start because its
+    predicted start moved to 2026-05-21.
+  - `12574`: #1344 stress post-#1384 rerun on `a30`, `COMPLETED` exit `0:0`.
+  - `12575`: #1354 cross-kinematics post-#1384 rerun on `a30`, `COMPLETED` exit `0:0`.
+- Post-#1384 #1344 nominal:
+  - Output root:
+    `output/benchmarks/issue_1344_post1384/amv_paired_nominal_primary_v1_issue1344-nominal-post1384_20260520_165927/`
+  - Campaign summary: `total_runs=3`, `successful_runs=3`, `total_episodes=36`,
+    `benchmark_success=true`, no warnings.
+  - Analyzer finding: no inconsistencies detected by automated checks.
+- Post-#1384 #1344 stress:
+  - Output root:
+    `output/benchmarks/issue_1344_post1384/amv_paired_stress_primary_v1_issue1344-stress-post1384_20260520_170126/`
+  - Campaign summary: `total_runs=3`, `successful_runs=3`, `total_episodes=432`,
+    `benchmark_success=true`, no warnings.
+  - Analyzer finding: no inconsistencies detected by automated checks.
+- Post-#1384 #1354 cross-kinematics:
+  - Output root:
+    `output/benchmarks/issue_1354_post1384/cross_kinematics_v1_issue1354-cross-post1384_20260520_170814/`
+  - Campaign summary: `total_runs=9`, `successful_runs=9`, `total_episodes=9`,
+    `benchmark_success=true`, no warnings.
+  - Analyzer still reports row-level SNQI mismatches, so #1354 remains execution-proof only until
+    the row/episode SNQI rollup is reconciled.
+
 Recheck command:
 
 ```bash
@@ -141,6 +172,10 @@ tail -n 120 output/slurm/12571-camera-ready-benchmark.out
 
 - The #1344 runs are primary-row first-pass evidence only: compare nominal competence and stress robustness separately.
 - Do not treat nominal success as safety evidence.
-- For #1354, unsupported/degraded/fallback rows must remain caveats; the current submitted run is the existing bounded compatibility surface.
+- The post-#1384 #1344 reruns cleared the earlier collision/integrity blocker and are suitable for
+  primary-row paired-report interpretation.
+- For #1354, unsupported/degraded/fallback rows must remain caveats; the post-#1384 run is the
+  existing bounded compatibility surface, and SNQI rollup interpretation still blocks
+  paper-facing expansion.
 - Generated artifacts under `output/` are local and ignored. Promote only compact summaries/manifests under `docs/context/evidence/` after interpreting the jobs.
-- Follow-up issue for the metric/integrity blocker: #1398, "benchmark: reconcile episode-integrity flags with collision and SNQI rollups".
+- Follow-up issue for the remaining metric/integrity boundary: #1398, "benchmark: reconcile episode-integrity flags with collision and SNQI rollups". The collision side appears cleared by #1384; the row-level SNQI mismatch remains for #1354.

@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 from scipy.ndimage import distance_transform_edt
 
+from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
@@ -29,15 +30,6 @@ _SUPPORTED_VARIANTS = {
     "hybrid_rule_v5_ensemble_selector",
 }
 _EPS = 1e-9
-
-
-def _wrap_angle(angle: float) -> float:
-    """Wrap an angle to ``[-pi, pi]`` radians.
-
-    Returns:
-        float: Wrapped angle in radians.
-    """
-    return float((float(angle) + np.pi) % (2.0 * np.pi) - np.pi)
 
 
 def _clip01(value: float) -> float:

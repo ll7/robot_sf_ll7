@@ -20,6 +20,8 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
+from robot_sf.common.math_utils import wrap_angle_pi, wrap_angle_pi_closed
+
 try:  # pragma: no cover - optional dependency
     import torch
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
@@ -596,10 +598,7 @@ class TrivialReferencePlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Wrapped angle in radians.
         """
-        wrapped = (angle + pi) % (2 * pi) - pi
-        if wrapped == -pi and angle > 0:
-            return pi
-        return wrapped
+        return wrap_angle_pi_closed(angle)
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """Return a bounded goal-facing command from a SocNav observation.
@@ -1128,11 +1127,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Wrapped angle in radians.
         """
-        while angle > pi:
-            angle -= 2 * pi
-        while angle < -pi:
-            angle += 2 * pi
-        return angle
+        return wrap_angle_pi_closed(angle)
 
 
 class SocNavPlannerPolicy:
@@ -4577,7 +4572,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             first_seg_end = min(max(1, segment_steps), max(horizon, 1)) - 1
             first_heading = robot_heading + (local_headings[first_seg_end] if horizon > 0 else 0.0)
             goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
-            heading_err = abs((goal_heading - first_heading + np.pi) % (2.0 * np.pi) - np.pi)
+            heading_err = abs(wrap_angle_pi(goal_heading - first_heading))
             phase_cost += float(self.config.predictive_phase_align_weight) * heading_err
             if min_clearance >= float(self.config.predictive_phase_commit_clearance):
                 phase_cost -= float(self.config.predictive_phase_commit_weight) * max(0.0, first_v)
@@ -4894,7 +4889,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return best, best_cost
 
         goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
-        heading_err = (goal_heading - robot_heading + np.pi) % (2.0 * np.pi) - np.pi
+        heading_err = wrap_angle_pi(goal_heading - robot_heading)
         heading_scale = max(0.2, 1.0 - abs(float(heading_err)) / np.pi)
         forced_v = float(np.clip(min_v * heading_scale, 0.0, max_v))
         forced_w = float(

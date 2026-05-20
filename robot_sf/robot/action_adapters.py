@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
+
 if TYPE_CHECKING:
     from robot_sf.common.types import RobotPose
 
@@ -26,15 +28,6 @@ class DiffDriveAdapterConfig:
     heading_slowdown: float = 0.6
     min_speed: float = 1e-4
     allow_backwards: bool = False
-
-
-def _wrap_angle(angle: float) -> float:
-    """Wrap angle to [-pi, pi].
-
-    Returns:
-        float: Wrapped angle in radians.
-    """
-    return (angle + pi) % (2 * pi) - pi
 
 
 def holonomic_to_diff_drive_action(

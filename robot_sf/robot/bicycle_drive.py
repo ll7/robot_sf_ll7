@@ -1,11 +1,12 @@
 """Bicycle drive model for vehicle dynamics simulation."""
 
 from dataclasses import dataclass, field
-from math import atan2, cos, sin, tan
+from math import cos, sin, tan
 
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.common.math_utils import normalize_angle_atan2
 from robot_sf.common.types import BicycleAction, PolarVec2D, RobotPose, Vec2D
 
 
@@ -101,24 +102,11 @@ class BicycleMotion:
         new_y = y + velocity * sin(orient) * d_t
 
         # Normalize new orientation to ensure it stays within the valid range
-        new_orient = self._norm_angle(orient + angular_velocity * d_t)
+        new_orient = normalize_angle_atan2(orient + angular_velocity * d_t)
 
         # Update state with new pose and velocity
         state.pose = ((new_x, new_y), new_orient)
         state.velocity = new_velocity
-
-    def _norm_angle(self, angle: float) -> float:
-        """
-        Normalize an angle to be within the range [-π, π].
-
-        Args:
-            angle (float): The angle to normalize.
-
-        Returns:
-            float: Normalized angle within range [-π, π].
-        TODO: I think that this function is implemented in multiple places in the codebase.
-        """
-        return atan2(sin(angle), cos(angle))
 
 
 @dataclass

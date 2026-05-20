@@ -8,17 +8,9 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
-
-
-def _wrap_angle(angle: float) -> float:
-    """Wrap angle to ``[-pi, pi]``.
-
-    Returns:
-        float: Wrapped angle in radians.
-    """
-    return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
 
 
 @dataclass

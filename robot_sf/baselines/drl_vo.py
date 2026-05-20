@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover - envs without PyTorch
 
 from robot_sf.baselines.social_force import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.models import resolve_model_path
 
 
@@ -331,7 +332,7 @@ class DrlVoPlanner:
         heading_source = obs.robot.get("heading", [0.0])
         heading = float(np.asarray(heading_source, dtype=float).reshape(-1)[0])
         desired_heading = float(np.arctan2(direction[1], direction[0]))
-        heading_error = float((desired_heading - heading + np.pi) % (2.0 * np.pi) - np.pi)
+        heading_error = wrap_angle_pi(desired_heading - heading)
         omega = float(np.clip(heading_error, -self.config.omega_max, self.config.omega_max))
         return {"v": float(speed), "omega": omega}
 

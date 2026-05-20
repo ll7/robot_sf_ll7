@@ -12,17 +12,8 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
-
-
-def _wrap_angle(angle: float) -> float:
-    """Wrap angle to ``[-pi, pi]``.
-
-    Returns:
-        float: Wrapped angle.
-    """
-    wrapped = (float(angle) + np.pi) % (2.0 * np.pi) - np.pi
-    return float(wrapped)
 
 
 def _safe_mean(values: np.ndarray) -> float:

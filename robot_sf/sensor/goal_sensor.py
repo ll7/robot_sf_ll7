@@ -5,21 +5,10 @@ from math import atan2, dist
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.common.math_utils import wrap_angle_pi as norm_angle
 from robot_sf.common.types import PolarVec2D, RobotPose, Vec2D
 
 TARGET_DISTANCE_CAP_M = 50.0
-
-
-def norm_angle(angle: float) -> float:
-    """Normalize an angle to the ``[-pi, pi)`` interval.
-
-    Args:
-        angle: Angle in radians.
-
-    Returns:
-        Equivalent wrapped angle in radians.
-    """
-    return (angle + np.pi) % (2 * np.pi) - np.pi
 
 
 def calculate_trajectory_angle(p_1: Vec2D, p_2: Vec2D, p_3: Vec2D) -> float:

@@ -44,6 +44,11 @@ from robot_sf.common.hardware import (
     detect_hardware_capacity,
     recommend_env_runners,
 )
+from robot_sf.common.math_utils import (
+    normalize_angle_atan2,
+    wrap_angle_pi,
+    wrap_angle_pi_closed,
+)
 from robot_sf.common.matplotlib_utils import ensure_interactive_backend, is_headless_environment
 from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.common.seed import SeedReport, set_global_seed
@@ -110,6 +115,10 @@ __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     # Matplotlib utilities (from .matplotlib_utils)
     "ensure_interactive_backend",
     "is_headless_environment",
+    # Math utilities (from .math_utils)
+    "normalize_angle_atan2",
+    "wrap_angle_pi",
+    "wrap_angle_pi_closed",
     # Metrics utilities
     "metric_samples",
     # Errors (from .errors)

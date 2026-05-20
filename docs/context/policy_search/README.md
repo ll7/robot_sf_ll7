@@ -25,6 +25,9 @@ Use it for three things only:
 
 ## Current Diagnostic Notes
 
+- `../issue_1369_sage_mpc_transfer_assessment.md`: SAGE / `TIB-K330/drl_planner`
+  reproducibility assessment; classifies the MPC-transfer graph-RL source as monitor-only because
+  dependency pins, checkpoints, offline MPC source buffer, and an inference command are absent.
 - `portfolio_overview_2026-05-05.md`: current candidate portfolio overview generated from the
   policy-search registry and tracked reports; includes current leaders, success/collision/near-miss
   evidence, why the best candidates look promising, coverage gaps, and reproduction commands.

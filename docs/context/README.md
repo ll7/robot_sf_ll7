@@ -134,6 +134,8 @@ knowledge, not every transient iteration detail.
   [issue_1323_socnavbench_personal_space_velocity.md](issue_1323_socnavbench_personal_space_velocity.md)
 * Issue #1319 task bundles:
   [issue_1319_task_bundles.md](issue_1319_task_bundles.md)
+* Issue #1369 SAGE MPC-Transfer Planner Reproducibility:
+  [issue_1369_sage_mpc_transfer_assessment.md](issue_1369_sage_mpc_transfer_assessment.md)
 * Issue #769/#1364 DRL-VO Assessment and Privileged-State Audit:
   [issue_769_drl_vo_assessment.md](issue_769_drl_vo_assessment.md)
 * Issue #1245 Benchmark Claim Artifact:

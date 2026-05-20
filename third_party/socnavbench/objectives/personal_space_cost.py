@@ -18,13 +18,16 @@ class PersonalSpaceCost(Objective):
         """Initialize the personal-space objective."""
         self.p: DotMap = params
         self.tag: str = "personal_space_cost_per_nonego_agent"
+        self._use_agent_velocity = bool(self.p.get("use_agent_velocity", False))
+        self._agent_velocity_scale = float(self.p.get("agent_velocity_scale", 1.0))
+        self._min_agent_speed = float(self.p.get("min_agent_speed", 1e-3))
 
     def _agent_velocity_from_config(
         self, agent_vals: AgentState, theta: float
     ) -> tuple[float, float]:
         """Return the velocity vector used to orient and scale personal space."""
         heading_velocity = (float(np.cos(theta)), float(np.sin(theta)))
-        if not self.p.get("use_agent_velocity", False):
+        if not self._use_agent_velocity:
             return heading_velocity
 
         current_config = agent_vals.get_current_config()
@@ -40,20 +43,22 @@ class PersonalSpaceCost(Objective):
             return heading_velocity
 
         speed = float(speed_values[-1])
-        min_speed = float(self.p.get("min_agent_speed", 1e-3))
-        if not np.isfinite(speed) or abs(speed) <= min_speed:
+        if not np.isfinite(speed) or abs(speed) <= self._min_agent_speed:
             return heading_velocity
 
-        velocity_scale = float(self.p.get("agent_velocity_scale", 1.0))
         return (
-            float(velocity_scale * speed * np.cos(theta)),
-            float(velocity_scale * speed * np.sin(theta)),
+            float(self._agent_velocity_scale * speed * np.cos(theta)),
+            float(self._agent_velocity_scale * speed * np.sin(theta)),
         )
 
     def evaluate_objective(
         self, trajectory: Trajectory, sim_state_hist: dict[int, SimState]
     ) -> np.ndarray:
-        """Evaluate personal-space cost along a candidate ego trajectory."""
+        """Evaluate personal-space cost along a candidate ego trajectory.
+
+        Returns:
+            Cost values for each batch item and trajectory step.
+        """
         # get ego agent trajectory
         ego_traj = trajectory.position_and_heading_nk3()
 

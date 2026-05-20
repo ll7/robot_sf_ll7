@@ -1,4 +1,4 @@
-# Issue 1365 Social Graph Observation Adapter
+# Issue #1365 Social Graph Observation Adapter 2026-05-20
 
 Date: 2026-05-20
 

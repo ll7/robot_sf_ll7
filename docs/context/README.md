@@ -180,6 +180,9 @@ knowledge, not every transient iteration detail.
   records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
   full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
   promotion boundary.
+* [Issue #1318 TEB Corridor-Deadlock Evaluation](issue_1318_teb_corridor_deadlock_eval.md)
+  records the tracked classic-merging corridor-deadlock slice, exact-collision metric integrity
+  fix, TEB/ORCA/hybrid-rule comparison, and compact evidence bundle.
 * [Issue #1081 Observation Noise](issue_1081_observation_noise.md) records the opt-in benchmark
   observation-noise profile contract, provenance fields, resume identity behavior, and
   non-calibrated robustness interpretation limit.

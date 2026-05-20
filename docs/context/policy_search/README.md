@@ -11,7 +11,11 @@ Use it for three things only:
 
 ## Layout
 
-- `candidate_registry.yaml`: canonical candidate list and config pointers.
+- `candidate_registry.yaml`: canonical candidate list and config pointers for implemented or
+  concrete runnable Robot SF candidates.
+- `reject_monitor_registry.md`: reusable negative/monitor trail for learned-policy families such as
+  CrowdNav descendants, Dreamer/world-model approaches, diffusion/visual navigation, SAC/TD3/PPO
+  variants, DRL-VO, and source-side-only candidates. Check this before proposing a new follow-up.
 - `experiment_ledger.md`: compact execution log for implemented candidates.
 - `contracts/`: project contract, gates, taxonomy, and runbook.
 - `reasoning/`: bounded planning and design notes.

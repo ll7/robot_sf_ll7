@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -32,9 +34,33 @@ from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
 _MAP_REGISTRY_PATH = Path("maps/registry.yaml")
+_MAP_CATALOG_SCHEMA = "robot_sf.map_catalog.v2"
+_MAP_CATALOG_PARSER_VERSION = "parser-capability-metadata.v1"
+_DEFAULT_MAP_PROFILE = "robot_runtime"
+_MAP_PROFILE_CAPABILITIES = {
+    "robot_runtime": "robot_runtime",
+    "pedestrian_runtime": "pedestrian_runtime",
+    "route_only": "route_only",
+    "obstacle_source": "obstacle_source",
+    "benchmark_candidate": "benchmark_candidate",
+}
 _PLATFORM_SEMANTIC_STATUSES = {"metadata_only", "require_consumers"}
 _PLATFORM_SEMANTIC_KINDS = {"hazard", "keep_clear"}
 _PLATFORM_SEMANTIC_SHAPES = {"polygon", "bbox"}
+
+
+@dataclass(frozen=True)
+class _MapRegistryEntry:
+    """One map registry row resolved to local filesystem state."""
+
+    map_id: str
+    path: Path
+    capabilities: Mapping[str, bool] | None = None
+    source_sha256: str | None = None
+    role: str | None = None
+    profile: str | None = None
+    limitations: tuple[str, ...] = ()
+    validation_status: str | None = None
 
 
 def _load_yaml_documents(path: Path) -> Any:
@@ -530,11 +556,11 @@ def _resolve_map_registry_path() -> Path | None:
     return repo_root / _MAP_REGISTRY_PATH
 
 
-def _iter_registry_mapping(entries: Mapping[str, Any]) -> Iterable[tuple[str, str]]:
+def _iter_registry_mapping(entries: Mapping[str, Any]) -> Iterable[tuple[str, Mapping[str, Any]]]:
     """Yield map_id/path pairs from a mapping-form registry.
 
     Yields:
-        tuple[str, str]: Map id and path entries.
+        tuple[str, Mapping[str, Any]]: Map id and normalized row data.
     """
     for map_id, map_path in entries.items():
         if map_id == "version":
@@ -542,14 +568,14 @@ def _iter_registry_mapping(entries: Mapping[str, Any]) -> Iterable[tuple[str, st
         if not isinstance(map_path, str):
             logger.warning("Skipping map registry entry '{}' with non-string path.", map_id)
             continue
-        yield str(map_id), map_path
+        yield str(map_id), {"map_id": str(map_id), "path": map_path}
 
 
-def _iter_registry_list(entries: list[Any]) -> Iterable[tuple[str, str]]:
+def _iter_registry_list(entries: list[Any]) -> Iterable[tuple[str, Mapping[str, Any]]]:
     """Yield map_id/path pairs from a list-form registry.
 
     Yields:
-        tuple[str, str]: Map id and path entries.
+        tuple[str, Mapping[str, Any]]: Map id and normalized row data.
     """
     for entry in entries:
         if not isinstance(entry, Mapping):
@@ -560,18 +586,18 @@ def _iter_registry_list(entries: list[Any]) -> Iterable[tuple[str, str]]:
         if not isinstance(map_id, str) or not isinstance(map_path, str):
             logger.warning("Skipping invalid map registry entry: {}", entry)
             continue
-        yield map_id, map_path
+        yield map_id, entry
 
 
 def _iter_map_registry_entries(
     data: Mapping[str, Any],
     *,
     registry_path: Path,
-) -> Iterable[tuple[str, str]]:
+) -> Iterable[tuple[str, Mapping[str, Any]]]:
     """Yield map registry entries from the loaded registry data.
 
     Yields:
-        tuple[str, str]: Map id and path entries.
+        tuple[str, Mapping[str, Any]]: Map id and row entries.
     """
     entries = data.get("maps", data if "maps" not in data else None)
     if isinstance(entries, Mapping):
@@ -584,10 +610,10 @@ def _iter_map_registry_entries(
 
 
 def _register_map_entry(
-    registry: dict[str, Path],
+    registry: dict[str, _MapRegistryEntry],
     *,
     map_id: str,
-    map_path: str,
+    row: Mapping[str, Any],
     registry_path: Path,
 ) -> None:
     """Insert a map registry entry, resolving relative paths."""
@@ -596,18 +622,82 @@ def _register_map_entry(
         raise ValueError(f"Map registry entry in '{registry_path}' has empty map_id.")
     if key in registry:
         raise ValueError(f"Duplicate map_id '{key}' in map registry '{registry_path}'.")
+    map_path = row.get("path") or row.get("map_file")
+    if not isinstance(map_path, str):
+        raise ValueError(f"Map registry entry '{key}' in '{registry_path}' has invalid path.")
     candidate = Path(map_path)
     if not candidate.is_absolute():
         candidate = (registry_path.parent / candidate).resolve()
-    registry[key] = candidate
+    registry[key] = _MapRegistryEntry(
+        map_id=key,
+        path=candidate,
+        capabilities=_coerce_capabilities(row.get("capabilities")),
+        source_sha256=row.get("source_sha256")
+        if isinstance(row.get("source_sha256"), str)
+        else None,
+        role=row.get("role") if isinstance(row.get("role"), str) else None,
+        profile=row.get("profile") if isinstance(row.get("profile"), str) else None,
+        limitations=_coerce_limitations(row.get("limitations")),
+        validation_status=_coerce_validation_status(row.get("validation")),
+    )
+
+
+def _coerce_capabilities(raw: Any) -> Mapping[str, bool] | None:
+    """Return boolean capability fields from a registry row, if present."""
+    if not isinstance(raw, Mapping):
+        return None
+    return {
+        key: value for key, value in raw.items() if isinstance(key, str) and isinstance(value, bool)
+    }
+
+
+def _coerce_limitations(raw: Any) -> tuple[str, ...]:
+    """Return stable limitation labels from a registry row."""
+    if not isinstance(raw, list):
+        return ()
+    return tuple(str(item) for item in raw if isinstance(item, str))
+
+
+def _coerce_validation_status(raw: Any) -> str | None:
+    """Return the catalog validation status string, if present."""
+    if not isinstance(raw, Mapping):
+        return None
+    status = raw.get("status")
+    return status if isinstance(status, str) else None
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest for a file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_catalog_header(data: Mapping[str, Any], *, registry_path: Path) -> None:
+    """Fail closed when a v2 catalog has stale schema/parser headers."""
+    version = data.get("version")
+    if version != 2:
+        return
+    if data.get("schema") != _MAP_CATALOG_SCHEMA:
+        raise ValueError(
+            f"Map registry '{registry_path}' has stale schema "
+            f"{data.get('schema')!r}; expected {_MAP_CATALOG_SCHEMA}."
+        )
+    if data.get("parser_version") != _MAP_CATALOG_PARSER_VERSION:
+        raise ValueError(
+            f"Map registry '{registry_path}' has stale parser_version "
+            f"{data.get('parser_version')!r}; expected {_MAP_CATALOG_PARSER_VERSION}."
+        )
 
 
 @lru_cache(maxsize=4)
-def _load_map_registry(path: Path | None = None) -> dict[str, Path]:
-    """Load map registry entries, returning map_id -> absolute path.
+def _load_map_registry(path: Path | None = None) -> dict[str, _MapRegistryEntry]:
+    """Load map registry entries, returning map_id -> catalog entry.
 
     Returns:
-        dict[str, Path]: Map registry map_id to absolute map file path.
+        dict[str, _MapRegistryEntry]: Map registry map_id to resolved catalog entries.
     """
     registry_path = path or _resolve_map_registry_path()
     if registry_path is None or not registry_path.exists():
@@ -615,12 +705,13 @@ def _load_map_registry(path: Path | None = None) -> dict[str, Path]:
     data = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, Mapping):
         raise ValueError(f"Map registry '{registry_path}' must contain a mapping.")
-    registry: dict[str, Path] = {}
-    for map_id, map_path in _iter_map_registry_entries(data, registry_path=registry_path):
+    _validate_catalog_header(data, registry_path=registry_path)
+    registry: dict[str, _MapRegistryEntry] = {}
+    for map_id, row in _iter_map_registry_entries(data, registry_path=registry_path):
         _register_map_entry(
             registry,
             map_id=map_id,
-            map_path=map_path,
+            row=row,
             registry_path=registry_path,
         )
     return registry
@@ -629,8 +720,9 @@ def _load_map_registry(path: Path | None = None) -> dict[str, Path]:
 def _resolve_map_id(
     map_id: str,
     *,
-    map_registry: Mapping[str, Path],
+    map_registry: Mapping[str, _MapRegistryEntry],
     source: Path,
+    required_profile: str = _DEFAULT_MAP_PROFILE,
 ) -> Path:
     """Resolve a map_id to a filesystem path using the registry.
 
@@ -643,10 +735,46 @@ def _resolve_map_id(
         )
     if map_id not in map_registry:
         raise ValueError(f"Unknown map_id '{map_id}' in '{source}'.")
-    resolved = map_registry[map_id]
-    if not resolved.exists():
-        raise ValueError(f"Map registry entry '{map_id}' points to missing file: {resolved}")
-    return resolved
+    entry = map_registry[map_id]
+    if not entry.path.exists():
+        raise ValueError(f"Map registry entry '{map_id}' points to missing file: {entry.path}")
+    _validate_map_catalog_entry(
+        entry,
+        source=source,
+        required_profile=required_profile,
+    )
+    return entry.path
+
+
+def _validate_map_catalog_entry(
+    entry: _MapRegistryEntry,
+    *,
+    source: Path,
+    required_profile: str,
+) -> None:
+    """Validate a resolved catalog entry for a requested map profile."""
+    if entry.source_sha256 is not None and _sha256_file(entry.path) != entry.source_sha256:
+        raise ValueError(
+            f"Scenario in '{source}' requested profile '{required_profile}' for map_id "
+            f"'{entry.map_id}', but registry source_sha256 is stale for {entry.path}."
+        )
+    if entry.capabilities is None:
+        return
+    required_capability = _MAP_PROFILE_CAPABILITIES.get(required_profile)
+    if required_capability is None:
+        raise ValueError(
+            f"Scenario in '{source}' requested unknown map profile '{required_profile}' "
+            f"for map_id '{entry.map_id}'."
+        )
+    if entry.capabilities.get(required_capability):
+        return
+    raise ValueError(
+        f"Scenario in '{source}' requested profile '{required_profile}' for map_id "
+        f"'{entry.map_id}', but missing capability '{required_capability}' for {entry.path}. "
+        f"catalog_status={entry.validation_status or 'unknown'}; "
+        f"role={entry.role or 'unknown'}; profile={entry.profile or 'unknown'}; "
+        f"limitations={list(entry.limitations)}"
+    )
 
 
 def _normalize_scenarios(
@@ -661,7 +789,7 @@ def _normalize_scenarios(
     Returns:
         list[Mapping[str, Any]]: Normalized scenario entries.
     """
-    map_registry: dict[str, Path] = {}
+    map_registry: dict[str, _MapRegistryEntry] = {}
     if any(isinstance(entry, Mapping) and entry.get("map_id") for entry in scenarios):
         map_registry = _load_map_registry()
     normalized: list[Mapping[str, Any]] = []
@@ -696,6 +824,7 @@ def _validate_scenario_entry(
         raise ValueError(f"Scenario name must be a string in '{source}' at index {index}.")
 
     _validate_map_reference(scenario, name=name, source=source, index=index)
+    _resolve_required_map_profile(scenario, source=source)
     _validate_optional_mapping(scenario, key="simulation_config", source=source, index=index)
     _validate_optional_mapping(scenario, key="robot_config", source=source, index=index)
     _validate_optional_mapping(scenario, key="observation_visibility", source=source, index=index)
@@ -730,13 +859,34 @@ def _validate_map_reference(
         )
 
 
+def _resolve_required_map_profile(
+    scenario: Mapping[str, Any],
+    *,
+    source: Path,
+) -> str:
+    """Resolve the capability profile a scenario requires from a map_id row.
+
+    Returns:
+        str: Required map capability profile.
+    """
+    raw = scenario.get("required_map_profile") or scenario.get("map_profile")
+    if raw is None:
+        return _DEFAULT_MAP_PROFILE
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError(f"required_map_profile must be a non-empty string in '{source}'.")
+    profile = raw.strip()
+    if profile not in _MAP_PROFILE_CAPABILITIES:
+        raise ValueError(f"Unknown required_map_profile '{profile}' in '{source}'.")
+    return profile
+
+
 def _rebase_scenario_paths(
     scenario: Mapping[str, Any],
     *,
     source: Path,
     root: Path,
     map_search_paths: list[Path],
-    map_registry: Mapping[str, Path],
+    map_registry: Mapping[str, _MapRegistryEntry],
 ) -> Mapping[str, Any]:
     """Rewrite relative map paths to be relative to the root scenario file.
 
@@ -746,7 +896,12 @@ def _rebase_scenario_paths(
     search_root = root if root.is_dir() else root.parent
     map_id = scenario.get("map_id")
     if isinstance(map_id, str) and map_id.strip():
-        resolved = _resolve_map_id(map_id, map_registry=map_registry, source=source)
+        resolved = _resolve_map_id(
+            map_id,
+            map_registry=map_registry,
+            source=source,
+            required_profile=_resolve_required_map_profile(scenario, source=source),
+        )
         rel = os.path.relpath(resolved, search_root)
         updated = dict(scenario)
         updated["map_file"] = Path(rel).as_posix()

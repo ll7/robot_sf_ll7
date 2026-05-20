@@ -89,7 +89,9 @@ def test_load_map_definition_unsupported_extension(tmp_path: Path) -> None:
 def test_iter_registry_mapping_skips_version_and_bad_entries() -> None:
     """Registry mapping iterators should skip metadata and invalid paths."""
     entries = {"version": 1, "demo": "maps/demo.svg", "bad": 123}
-    assert list(scenario_loader._iter_registry_mapping(entries)) == [("demo", "maps/demo.svg")]
+    assert list(scenario_loader._iter_registry_mapping(entries)) == [
+        ("demo", {"map_id": "demo", "path": "maps/demo.svg"})
+    ]
 
 
 def test_iter_registry_list_handles_invalid_entries() -> None:
@@ -100,10 +102,11 @@ def test_iter_registry_list_handles_invalid_entries() -> None:
         {"map_id": 1, "path": "maps/other.svg"},
         {"id": "alt", "map_file": "maps/alt.svg"},
     ]
-    assert list(scenario_loader._iter_registry_list(entries)) == [
-        ("demo", "maps/demo.svg"),
-        ("alt", "maps/alt.svg"),
-    ]
+    rows = list(scenario_loader._iter_registry_list(entries))
+    assert rows[0][0] == "demo"
+    assert rows[0][1]["path"] == "maps/demo.svg"
+    assert rows[1][0] == "alt"
+    assert rows[1][1]["map_file"] == "maps/alt.svg"
 
 
 def test_iter_map_registry_entries_rejects_invalid_format(tmp_path: Path) -> None:
@@ -116,6 +119,25 @@ def test_iter_map_registry_entries_rejects_invalid_format(tmp_path: Path) -> Non
                 registry_path=tmp_path / "registry.yaml",
             )
         )
+
+
+def test_load_map_registry_rejects_stale_v2_headers(tmp_path: Path) -> None:
+    """V2 catalog schema and parser versions should fail closed when stale."""
+    registry = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry,
+        """
+version: 2
+schema: old.schema
+parser_version: parser-capability-metadata.v1
+maps: []
+""",
+    )
+
+    scenario_loader._load_map_registry.cache_clear()
+    with pytest.raises(ValueError, match="stale schema"):
+        scenario_loader._load_map_registry(registry)
+    scenario_loader._load_map_registry.cache_clear()
 
 
 @pytest.mark.parametrize("scenarios_value", ["", None, "{}"])
@@ -142,30 +164,30 @@ def test_load_scenarios_rejects_non_list_scenarios_key(
 
 def test_register_map_entry_resolves_relative_paths_and_duplicates(tmp_path: Path) -> None:
     """Registry entries should resolve relative paths and reject duplicates."""
-    registry: dict[str, Path] = {}
+    registry: dict[str, scenario_loader._MapRegistryEntry] = {}
     registry_path = tmp_path / "registry.yaml"
 
     with pytest.raises(ValueError, match="empty map_id"):
         scenario_loader._register_map_entry(
             registry,
             map_id=" ",
-            map_path="maps/demo.svg",
+            row={"path": "maps/demo.svg"},
             registry_path=registry_path,
         )
 
     scenario_loader._register_map_entry(
         registry,
         map_id="demo",
-        map_path="maps/demo.svg",
+        row={"path": "maps/demo.svg"},
         registry_path=registry_path,
     )
-    assert registry["demo"] == (registry_path.parent / "maps/demo.svg").resolve()
+    assert registry["demo"].path == (registry_path.parent / "maps/demo.svg").resolve()
 
     with pytest.raises(ValueError, match="Duplicate map_id"):
         scenario_loader._register_map_entry(
             registry,
             map_id="demo",
-            map_path="maps/other.svg",
+            row={"path": "maps/other.svg"},
             registry_path=registry_path,
         )
 

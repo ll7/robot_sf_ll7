@@ -45,7 +45,7 @@ Repository evidence:
 * `docs/context/issue_601_crowdnav_feasibility_note.md`
 * `docs/context/issue_600_dsrnn_stretch_follow_up.md`
 * `docs/context/issue_627_sonic_wrapper_followup.md`
-* `docs/context/760_model_shortcoming_hypothesis.md`
+* [`760_model_shortcoming_hypothesis.md`](../760_model_shortcoming_hypothesis.md)
 * `docs/context/issue_770_igat_st2_attention_assessment.md`
 * `docs/benchmark_planner_family_coverage.md`
 * `robot_sf/planner/crowdnav_height.py`

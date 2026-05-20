@@ -386,6 +386,7 @@ knowledge, not every transient iteration detail.
 * [Issue #1368 NeuPAN Point-Obstacle Comparator Assessment (2026-05-20)](issue_1368_neupan_point_obstacle_assessment.md)
 * [Issue #1367 CrowdNav-Family Learned-Policy Verdict](./policy_search/issue_1367_crowdnav_family_verdict.md)
 * [Issue #1366 GenSafeNav / SoNIC Conformal Contract](./policy_search/issue_1366_gensafenav_sonic_conformal_contract.md)
+* [Issue #1393 GenSafeNav / SoNIC Source-Harness Reproduction](./policy_search/issue_1393_gensafenav_source_harness.md)
 * [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local
   evaluation funnel, SLURM handoff notes, and the current
   [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training

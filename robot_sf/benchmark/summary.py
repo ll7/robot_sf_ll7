@@ -17,36 +17,107 @@ import numpy as np
 mpl.use("Agg", force=True)
 import matplotlib.pyplot as plt
 
+from robot_sf.benchmark.errors import EpisodeRecordInputError
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
 
-def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[dict[str, Any]]:
-    """Iterate over JSONL episode records stored at one or more paths.
+def _path_list(paths: Sequence[str | Path] | str | Path) -> list[Path]:
+    """Normalize one or more path-like inputs into ``Path`` objects.
+
+    Returns:
+        List of paths to read.
+    """
+    if isinstance(paths, str | Path):
+        return [Path(paths)]
+    return [Path(path) for path in paths]  # type: ignore[arg-type]
+
+
+def _raise_record_input_error(
+    *,
+    missing_paths: list[Path],
+    malformed_lines: list[tuple[Path, int, str]],
+    fallback_errors: list[str] | None = None,
+) -> None:
+    """Raise a compact error summarizing benchmark input data-loss risks."""
+    fallback_errors = fallback_errors or []
+    if not missing_paths and not malformed_lines and not fallback_errors:
+        return
+    details: list[str] = [
+        "Episode JSONL input is not suitable for benchmark evidence",
+        f"missing_paths={len(missing_paths)}",
+        f"malformed_lines={len(malformed_lines)}",
+        f"fallback_derivation_errors={len(fallback_errors)}",
+    ]
+    if missing_paths:
+        preview = ", ".join(str(path) for path in missing_paths[:5])
+        details.append(f"missing=[{preview}]")
+    if malformed_lines:
+        preview = "; ".join(
+            f"{path}:{line_number}: {message}" for path, line_number, message in malformed_lines[:5]
+        )
+        details.append(f"malformed=[{preview}]")
+    if fallback_errors:
+        preview = "; ".join(fallback_errors[:5])
+        details.append(f"fallback_errors=[{preview}]")
+    raise EpisodeRecordInputError("; ".join(details))
+
+
+def load_episode_records(
+    paths: Sequence[str | Path] | str | Path,
+    *,
+    strict: bool = True,
+) -> list[dict[str, Any]]:
+    """Load episode records from JSONL paths.
 
     Args:
         paths: Single path or collection of JSONL file paths to scan.
+        strict: When true, fail closed on missing paths and malformed JSONL lines. When false,
+            skip malformed or missing inputs for explicitly exploratory/advisory use.
 
-    Yields:
-        dict[str, Any]: Parsed JSON record for each non-empty line across the provided files.
+    Returns:
+        Parsed episode records.
     """
-    if isinstance(paths, str | Path):
-        path_list = [paths]
-    else:
-        path_list = list(paths)  # type: ignore[arg-type]
-    for p in path_list:
-        p = Path(p)
-        if not p.exists():
+    records: list[dict[str, Any]] = []
+    missing_paths: list[Path] = []
+    malformed_lines: list[tuple[Path, int, str]] = []
+
+    for path in _path_list(paths):
+        if not path.exists():
+            if strict:
+                missing_paths.append(path)
             continue
-        with p.open("r", encoding="utf-8") as f:
-            for line in f:
+        with path.open("r", encoding="utf-8") as f:
+            for line_number, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
                     continue
                 try:
-                    yield json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+                    records.append(json.loads(line))
+                except json.JSONDecodeError as exc:
+                    if strict:
+                        malformed_lines.append((path, line_number, exc.msg))
+
+    _raise_record_input_error(missing_paths=missing_paths, malformed_lines=malformed_lines)
+    return records
+
+
+def _iter_records(
+    paths: Sequence[str | Path] | str | Path,
+    *,
+    strict: bool = True,
+) -> Iterable[dict[str, Any]]:
+    """Iterate over JSONL episode records stored at one or more paths.
+
+    Args:
+        paths: Single path or collection of JSONL file paths to scan.
+        strict: When true, fail closed on malformed or missing input.
+
+    Yields:
+        dict[str, Any]: Parsed JSON record for each non-empty line across the provided files.
+    """
+    yield from load_episode_records(paths, strict=strict)
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
@@ -89,6 +160,8 @@ def _safe_number(x: Any) -> float | None:
 
 def collect_values(
     records: Iterable[dict[str, Any]],
+    *,
+    strict: bool = True,
 ) -> tuple[list[float], list[float]]:
     """Collect min_distance and avg_speed from episode records.
 
@@ -103,6 +176,7 @@ def collect_values(
     """
     mins: list[float] = []
     speeds: list[float] = []
+    fallback_errors: list[str] = []
     for rec in records:
         md = _get_nested(rec, "metrics.min_distance")
         mdv = _safe_number(md)
@@ -122,8 +196,15 @@ def collect_values(
                     s = np.linalg.norm(arr, axis=1).mean()
                     if np.isfinite(s):
                         speeds.append(float(s))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    if strict:
+                        record_id = rec.get("episode_id") or rec.get("scenario_id") or "<unknown>"
+                        fallback_errors.append(f"{record_id}: {exc}")
+    _raise_record_input_error(
+        missing_paths=[],
+        malformed_lines=[],
+        fallback_errors=fallback_errors,
+    )
     return mins, speeds
 
 
@@ -174,13 +255,18 @@ def plot_histograms(
     return out_paths
 
 
-def summarize_to_plots(paths: Sequence[str | Path] | str | Path, out_dir: str | Path) -> list[str]:
+def summarize_to_plots(
+    paths: Sequence[str | Path] | str | Path,
+    out_dir: str | Path,
+    *,
+    strict: bool = True,
+) -> list[str]:
     """Load episodes and write summary histogram plots.
 
     Returns:
         List of written image paths.
     """
-    mins, speeds = collect_values(_iter_records(paths))
+    mins, speeds = collect_values(_iter_records(paths, strict=strict), strict=strict)
     return plot_histograms(mins, speeds, out_dir)
 
 

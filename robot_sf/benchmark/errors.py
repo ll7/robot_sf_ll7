@@ -44,4 +44,8 @@ class AggregationMetadataError(ValueError):
         return payload
 
 
-__all__ = ["AggregationMetadataError"]
+class EpisodeRecordInputError(ValueError):
+    """Raised when benchmark episode JSONL input is missing or malformed."""
+
+
+__all__ = ["AggregationMetadataError", "EpisodeRecordInputError"]

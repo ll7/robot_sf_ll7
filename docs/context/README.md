@@ -136,6 +136,8 @@ knowledge, not every transient iteration detail.
   [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
 * Issue #1169 CARLA Live T1 Oracle Replay:
   [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
+* Learned local policy eligibility checklist:
+  [policy_search/contracts/learned_local_policy_eligibility.md](policy_search/contracts/learned_local_policy_eligibility.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 

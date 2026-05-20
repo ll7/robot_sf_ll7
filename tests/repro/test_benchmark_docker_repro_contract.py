@@ -5,6 +5,8 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = ROOT / "docker" / "benchmark-repro.Dockerfile"
 SMOKE_SCRIPT = ROOT / "scripts" / "repro" / "benchmark_bundle_smoke.sh"
@@ -22,6 +24,16 @@ def _read_text_file(path: Path) -> str:
     if not path.is_file():
         raise FileNotFoundError(f"Expected file does not exist: {path}")
     return path.read_text(encoding="utf-8")
+
+
+def _read_workflow(path: Path) -> dict:
+    """Read a GitHub Actions workflow as structured YAML."""
+    return yaml.safe_load(_read_text_file(path))
+
+
+def _workflow_on(workflow_config: dict) -> dict:
+    """Return the GitHub Actions on block despite YAML 1.1 boolean parsing."""
+    return workflow_config.get("on") or workflow_config[True]
 
 
 def test_benchmark_repro_dockerfile_is_pinned_and_uses_frozen_uv_sync() -> None:
@@ -91,6 +103,8 @@ def test_benchmark_repro_workflow_qualifies_runner_before_smoke() -> None:
     """Docker CI proof should record runner capabilities before running the smoke."""
 
     workflow = _read_text_file(WORKFLOW)
+    workflow_config = _read_workflow(WORKFLOW)
+    pull_request_paths = _workflow_on(workflow_config)["pull_request"]["paths"]
 
     for fragment in [
         "workflow_dispatch:",
@@ -110,4 +124,5 @@ def test_benchmark_repro_workflow_qualifies_runner_before_smoke() -> None:
 
     assert "docker_daemon_available" in workflow
     assert "nvidia_docker_available" in workflow
-    assert "configs/scenarios/**" not in workflow
+    assert PINNED_REPRO_MATRIX in pull_request_paths
+    assert "configs/scenarios/**" not in pull_request_paths

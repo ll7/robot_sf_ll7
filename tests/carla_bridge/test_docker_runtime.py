@@ -9,6 +9,14 @@ from types import SimpleNamespace
 import pytest
 
 
+def _pretend_linux_x86_64(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make preflight tests exercise Docker checks past the CARLA host-platform gate."""
+    from robot_sf_carla_bridge import docker_runtime
+
+    monkeypatch.setattr(docker_runtime.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(docker_runtime.platform, "machine", lambda: "x86_64")
+
+
 def test_carla_docker_runtime_uses_pinned_0_9_16_image() -> None:
     """The runtime contract should never default to CARLA latest."""
     from robot_sf_carla_bridge.docker_runtime import CARLA_DOCKER_IMAGE, validate_carla_image
@@ -137,6 +145,7 @@ def test_preflight_requires_50_gib_free_before_pull_when_image_absent(monkeypatc
     from robot_sf_carla_bridge import docker_runtime
     from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_preflight
 
+    _pretend_linux_x86_64(monkeypatch)
     responses = {
         ("docker", "version"): CommandResult(["docker", "version"], 0, '{"Server": {}}', ""),
         ("nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"): (
@@ -184,10 +193,11 @@ def test_preflight_requires_50_gib_free_before_pull_when_image_absent(monkeypatc
     assert status["docker_storage"]["free_gib"] == pytest.approx(49.0)
 
 
-def test_preflight_nvidia_container_check_does_not_pull_test_image() -> None:
+def test_preflight_nvidia_container_check_does_not_pull_test_image(monkeypatch) -> None:
     """NVIDIA runtime probing should not download CUDA images unless explicitly prepared."""
     from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_preflight
 
+    _pretend_linux_x86_64(monkeypatch)
     observed_commands: list[list[str]] = []
 
     def fake_runner(command: list[str], *, timeout_s: float) -> CommandResult:
@@ -213,6 +223,7 @@ def test_preflight_fails_when_post_pull_image_inspect_fails(monkeypatch) -> None
     from robot_sf_carla_bridge import docker_runtime
     from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_preflight
 
+    _pretend_linux_x86_64(monkeypatch)
     image_inspect_count = 0
 
     def fake_runner(command: list[str], *, timeout_s: float) -> CommandResult:
@@ -249,6 +260,8 @@ def test_preflight_requires_image_digest_and_size(monkeypatch) -> None:
     """Image metadata without digest or size should fail before runtime evidence is trusted."""
     from robot_sf_carla_bridge import docker_runtime
     from robot_sf_carla_bridge.docker_runtime import CommandResult, run_carla_docker_preflight
+
+    _pretend_linux_x86_64(monkeypatch)
 
     def fake_runner(command: list[str], *, timeout_s: float) -> CommandResult:
         if command[:2] == ["docker", "version"]:

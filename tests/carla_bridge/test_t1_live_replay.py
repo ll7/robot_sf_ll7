@@ -118,27 +118,87 @@ def _fake_carla_module(world: _FakeWorld):
     )
 
 
-def test_live_replay_fails_closed_for_static_geometry(tmp_path: Path) -> None:
-    """Live replay should not silently ignore Robot-SF static obstacles."""
+def test_live_replay_spawns_static_geometry_and_cleans_up(tmp_path: Path) -> None:
+    """Rectangular T0 static obstacles should be represented by CARLA proxy actors."""
     from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
 
+    world = _FakeWorld()
     payload = _minimal_t0_payload()
-    payload["static_geometry"]["obstacles"] = [{"id": "wall", "type": "polygon"}]
+    payload["static_geometry"]["obstacles"] = [
+        {"id": "wall", "type": "polygon", "vertices": [[0, 0], [2, 0], [2, 1], [0, 1]]}
+    ]
     manifest_path = _write_manifest(
         tmp_path, [{"scenario_id": "unit_crossing", "payload": payload}]
     )
 
     summary = run_t1_oracle_live_replay_against_server(
         manifest_path,
-        carla_module=_fake_carla_module(_FakeWorld()),
+        carla_module=_fake_carla_module(world),
+        max_steps=2,
+    )
+
+    assert summary["status"] == "oracle-replay"
+    assert summary["actors"] == {"static_obstacles": 1, "robot": 1, "pedestrians": 1}
+    assert summary["boundary"]["static_geometry_replay"] is True
+    assert len(world.actors) == 3
+    static_actor = world.actors[0]
+    assert static_actor.blueprint.id == "static.prop.box01"
+    assert static_actor.blueprint.attributes["role_name"] == "robot_sf_static_obstacle_0"
+    assert static_actor.transforms[0].location.x == pytest.approx(1.0)
+    assert static_actor.transforms[0].location.y == pytest.approx(-0.5)
+    assert all(actor.destroyed for actor in world.actors)
+
+
+def test_live_replay_fails_closed_for_unsupported_static_geometry(tmp_path: Path) -> None:
+    """Unsupported T0 static obstacle shapes should fail closed before CARLA replay."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    world = _FakeWorld()
+    payload = _minimal_t0_payload()
+    payload["static_geometry"]["obstacles"] = [
+        {"id": "triangle", "type": "polygon", "vertices": [[0, 0], [1, 0], [0, 1]]}
+    ]
+    manifest_path = _write_manifest(
+        tmp_path, [{"scenario_id": "unit_crossing", "payload": payload}]
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
     )
 
     assert summary["status"] == "failed"
     assert summary["mode"] == "failed"
     assert summary["stage"] == "live-replay"
-    assert summary["reason"] == "T0 payload static obstacle replay is not implemented"
+    assert summary["reason"] == "T0 payload contains unsupported static obstacle geometry"
     assert summary["unsupported"]["static_obstacle_count"] == 1
-    assert summary["unsupported"]["boundary"]["static_geometry_replay"] is False
+    assert summary["unsupported"]["unsupported_static_obstacle_count"] == 1
+    assert world.actors == []
+
+
+def test_live_replay_fails_closed_for_malformed_static_geometry(tmp_path: Path) -> None:
+    """Malformed T0 static obstacle vertices should fail closed before CARLA replay."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    world = _FakeWorld()
+    payload = _minimal_t0_payload()
+    payload["static_geometry"]["obstacles"] = [
+        {"id": "dict_vertices", "type": "polygon", "vertices": [{"x": 0, "y": 0}] * 4}
+    ]
+    manifest_path = _write_manifest(
+        tmp_path, [{"scenario_id": "unit_crossing", "payload": payload}]
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+    )
+
+    assert summary["status"] == "failed"
+    assert summary["reason"] == "T0 payload contains unsupported static obstacle geometry"
+    assert summary["unsupported"]["static_obstacle_count"] == 1
+    assert summary["unsupported"]["unsupported_static_obstacle_count"] == 1
+    assert world.actors == []
 
 
 def test_live_replay_spawns_replays_and_cleans_up_actors(tmp_path: Path) -> None:
@@ -164,7 +224,7 @@ def test_live_replay_spawns_replays_and_cleans_up_actors(tmp_path: Path) -> None
     assert summary["carla"]["client_version"] == "0.9.16"
     assert summary["carla"]["server_version"] == "0.9.16"
     assert summary["carla"]["map"] == "Town01"
-    assert summary["actors"] == {"robot": 1, "pedestrians": 1}
+    assert summary["actors"] == {"static_obstacles": 0, "robot": 1, "pedestrians": 1}
     assert summary["trajectory"]["steps"] == 3
     assert summary["trajectory"]["truncated_by_max_steps"] is True
     assert world.ticks == 3

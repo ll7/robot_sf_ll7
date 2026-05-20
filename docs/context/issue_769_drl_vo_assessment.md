@@ -51,7 +51,7 @@ Result:
 * Historical note from #769: there was no runtime planner in the codebase at that time.
   That statement is superseded by the #1364 audit below.
 
-## Issue #1364 privileged-state audit update
+## Issue #1364 Privileged-State Audit Update 2026-05-20
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1364>
 

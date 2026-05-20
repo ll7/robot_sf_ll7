@@ -103,8 +103,11 @@ episode records or candidate-specific diagnostics:
 - `post_guard_action`: the final command after safety guard, fallback, or projection,
 - `guard_applied`: boolean,
 - `guard_or_fallback_reason`: stable string or `none`,
-- `observation_level`: active observation level and planner observation mode,
-- `action_bounds`: action bounds or projection metadata when a command was clipped or transformed.
+- `observation_level`: active observation level,
+- `planner_observation_mode`: planner observation mode when it differs from the global
+  observation level or adds planner-specific preprocessing,
+- `action_bounds`: action bounds used by the candidate,
+- `action_projection_metadata`: projection metadata when a command was clipped or transformed.
 
 For candidates without a guard, `post_guard_action` may equal `adapted_action`, but the equality
 should be explicit so reviewers can distinguish unguarded success from guard-mediated success.

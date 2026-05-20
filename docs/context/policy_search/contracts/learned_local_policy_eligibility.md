@@ -1,4 +1,4 @@
-# Learned Local Policy Eligibility Checklist
+# Issue #1363 Learned Local Policy Eligibility Checklist 2026-05-20
 
 Related issues: <https://github.com/ll7/robot_sf_ll7/issues/1363>,
 <https://github.com/ll7/robot_sf_ll7/issues/1355>, and
@@ -103,8 +103,8 @@ episode records or candidate-specific diagnostics:
 - `post_guard_action`: the final command after safety guard, fallback, or projection,
 - `guard_applied`: boolean,
 - `guard_or_fallback_reason`: stable string or `none`,
-- `observation_level` and planner observation mode,
-- action bounds or projection metadata when a command was clipped or transformed.
+- `observation_level`: active observation level and planner observation mode,
+- `action_bounds`: action bounds or projection metadata when a command was clipped or transformed.
 
 For candidates without a guard, `post_guard_action` may equal `adapted_action`, but the equality
 should be explicit so reviewers can distinguish unguarded success from guard-mediated success.

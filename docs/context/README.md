@@ -221,6 +221,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1274 General Cross-Kinematics Parity Sweep](issue_1274_cross_kinematics_v1.md)
   adds the non-paper `cross_kinematics_v1` profile, compact scenario surface, compatibility
   manifest, and interpretation boundary for local parity checks.
+* [Issue #1344 AMV Paired Primary Protocol](issue_1344_amv_paired_primary_protocol.md)
+  records the paired nominal/stress primary-row configs and generic SLURM commands for the first
+  AMV protocol run.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.

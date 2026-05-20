@@ -114,3 +114,24 @@ Machine-readable recommendation only:
 ```bash
 scripts/dev/auxme_partition_status.sh --recommend
 ```
+
+## Generic camera-ready benchmark campaigns
+
+For camera-ready benchmark configs driven by `scripts/tools/run_camera_ready_benchmark.py`, use the
+generic Auxme launcher:
+
+```bash
+CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/sanity_v1_smoke.yaml \
+CAMERA_READY_BENCHMARK_MODE=preflight \
+CAMERA_READY_BENCHMARK_LABEL=sanity-v1-preflight \
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/camera_ready_benchmark.sl
+```
+
+For a full run, set `CAMERA_READY_BENCHMARK_MODE=run` and provide either
+`CAMERA_READY_BENCHMARK_LABEL` or `CAMERA_READY_BENCHMARK_CAMPAIGN_ID`. The launcher writes logs
+to `output/slurm/` and campaign artifacts to `CAMERA_READY_BENCHMARK_OUTPUT_ROOT`, defaulting to
+`output/benchmarks/camera_ready`.
+
+When selecting a partition other than the launcher's script default, pass both the wrapper
+discovery override and the actual `sbatch` override, for example
+`--partition a30 --qos a30-gpu --sbatch-arg=--partition=a30 --sbatch-arg=--qos=a30-gpu`.

@@ -7,8 +7,8 @@
 #SBATCH --mem=16G
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
-#SBATCH --output=slurm_logs/single_extractor_%EXTRACTOR_NAME%_%j.out
-#SBATCH --error=slurm_logs/single_extractor_%EXTRACTOR_NAME%_%j.err
+#SBATCH --output=output/slurm/%j-single-extractor-%EXTRACTOR_NAME%.out
+#SBATCH --error=output/slurm/%j-single-extractor-%EXTRACTOR_NAME%.err
 
 # SLURM script for training a single feature extractor
 # This template is used to submit individual extractor training jobs
@@ -30,8 +30,8 @@ export PYTHONPATH="${SLURM_SUBMIT_DIR}:${PYTHONPATH}"
 export CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES
 
 # Create output directories
-mkdir -p slurm_logs
-mkdir -p results/single_extractor_%EXTRACTOR_NAME%
+mkdir -p output/slurm
+mkdir -p output/feature_extractor_comparison/single_extractor_%EXTRACTOR_NAME%
 
 # Change to project directory
 cd $SLURM_SUBMIT_DIR
@@ -47,7 +47,7 @@ export SDL_VIDEODRIVER="dummy"
 # Run single extractor training with the new CLI
 echo "Starting training with %EXTRACTOR_NAME% extractor..."
 
-OUTPUT_ROOT="results/single_extractor_%EXTRACTOR_NAME%"
+OUTPUT_ROOT="${FEATURE_EXTRACTOR_OUTPUT_ROOT:-output/feature_extractor_comparison/single_extractor_%EXTRACTOR_NAME%}"
 CONFIG_PATH="$OUTPUT_ROOT/single_extractor_config.yaml"
 
 mkdir -p "$OUTPUT_ROOT"

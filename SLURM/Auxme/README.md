@@ -61,6 +61,7 @@ Example for a new script:
 | `dreamer_br08_full.sl` | DreamerV3 BR-08 full launcher (1x A30)   |
 | `interactive.sh`     | Launch an interactive session on a30/l40s  |
 | `issue_791_*.sl`     | Issue-791 training campaign scripts        |
+| `camera_ready_benchmark.sl` | Generic config-driven camera-ready benchmark campaign launcher |
 
 Submit with max wall time via the repo wrapper:
 
@@ -101,3 +102,43 @@ scripts/dev/sbatch_auxme_issue791.sh \
 - Prefer spreading long jobs across `a30` and `l40s` to respect `QOSMaxJobsPerUserLimit=2` and maximize concurrency.
 - If one partition is saturated (low `free_gpu`, high `pending`, or `slots_left=0`), submit the next job to the other partition.
 - Treat `srun: Unable to confirm allocation ... Zero Bytes were transmitted or received` as transient infrastructure noise; resubmit once with identical config.
+
+## Generic Camera-Ready Benchmark Launcher
+
+Use `SLURM/Auxme/camera_ready_benchmark.sl` for new config-driven camera-ready benchmark
+campaigns instead of copying issue-specific wrappers.
+
+Preflight:
+
+```bash
+CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/sanity_v1_smoke.yaml \
+CAMERA_READY_BENCHMARK_MODE=preflight \
+CAMERA_READY_BENCHMARK_LABEL=sanity-v1-preflight \
+CAMERA_READY_BENCHMARK_OUTPUT_ROOT=output/benchmarks/camera_ready \
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/camera_ready_benchmark.sl
+```
+
+Full run:
+
+```bash
+CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/camera_ready_baseline_safe.yaml \
+CAMERA_READY_BENCHMARK_MODE=run \
+CAMERA_READY_BENCHMARK_LABEL=baseline-safe \
+CAMERA_READY_BENCHMARK_OUTPUT_ROOT=output/benchmarks/camera_ready \
+scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/camera_ready_benchmark.sl
+```
+
+Full runs fail closed unless `CAMERA_READY_BENCHMARK_CONFIG` and either
+`CAMERA_READY_BENCHMARK_LABEL` or `CAMERA_READY_BENCHMARK_CAMPAIGN_ID` are set. Logs use
+`output/slurm/%j-camera-ready-benchmark.out`; campaign artifacts use the configured
+`output/benchmarks/...` root and remain ignored until a small manifest or durable artifact pointer
+is intentionally promoted.
+
+When overriding the partition, pass both the wrapper discovery override and the forwarded `sbatch`
+override, for example:
+
+```bash
+scripts/dev/sbatch_use_max_time.sh --partition a30 --qos a30-gpu \
+  --sbatch-arg=--partition=a30 --sbatch-arg=--qos=a30-gpu \
+  SLURM/Auxme/camera_ready_benchmark.sl
+```

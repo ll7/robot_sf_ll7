@@ -7,8 +7,8 @@
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --time=24:00:00
-#SBATCH --output=slurm_logs/feature_comparison_%j.out
-#SBATCH --error=slurm_logs/feature_comparison_%j.err
+#SBATCH --output=output/slurm/%j-feature-extractor-comparison.out
+#SBATCH --error=output/slurm/%j-feature-extractor-comparison.err
 
 # SLURM script for comprehensive feature extractor comparison
 # This script runs the complete comparison with all extractors
@@ -29,8 +29,8 @@ export PYTHONPATH="${SLURM_SUBMIT_DIR}:${PYTHONPATH}"
 export CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES
 
 # Create output directories
-mkdir -p slurm_logs
-mkdir -p results/feature_extractor_comparison
+mkdir -p output/slurm
+mkdir -p output/feature_extractor_comparison
 
 # Change to project directory
 cd $SLURM_SUBMIT_DIR
@@ -49,7 +49,7 @@ export SDL_VIDEODRIVER="dummy"
 # Run the complete comparison
 echo "Starting multi-extractor training comparison..."
 
-OUTPUT_ROOT="results/feature_extractor_comparison"
+OUTPUT_ROOT="${FEATURE_EXTRACTOR_OUTPUT_ROOT:-output/feature_extractor_comparison}"
 CONFIG_PATH="configs/scenarios/multi_extractor_gpu.yaml"
 
 mkdir -p "$OUTPUT_ROOT"

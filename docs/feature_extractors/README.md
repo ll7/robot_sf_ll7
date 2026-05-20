@@ -93,17 +93,17 @@ Run systematic comparison across all extractors:
 uv run python scripts/multi_extractor_training.py \
   --config configs/scenarios/multi_extractor_default.yaml \
   --run-id doc-demo \
-  --output-root results/feature_extractor_comparison
+  --output-root output/feature_extractor_comparison
 
 # Run the GPU/vectorized comparison (skips gracefully when CUDA is absent)
 uv run python scripts/multi_extractor_training.py \
   --config configs/scenarios/multi_extractor_gpu.yaml \
   --run-id doc-gpu \
-  --output-root results/feature_extractor_comparison
+  --output-root output/feature_extractor_comparison
 
 # Analyze any `complete_results.json` or `summary.json`
 uv run python scripts/analyze_feature_extractors.py \
-  results/feature_extractor_comparison/complete_results.json
+  output/feature_extractor_comparison/complete_results.json
 ```
 
 Each run writes:
@@ -121,6 +121,11 @@ sbatch SLURM/feature_extractor_comparison/run_comparison.slurm
 # Or submit the comparison as a throttled Slurm job array
 ./SLURM/feature_extractor_comparison/submit_parallel.sh
 ```
+
+SLURM stdout/stderr lands under `output/slurm/`, while generated feature-extractor comparison
+artifacts land under `output/feature_extractor_comparison/` by default. Override
+`FEATURE_EXTRACTOR_OUTPUT_ROOT` for a single job or `FEATURE_EXTRACTOR_BASE_OUTPUT_ROOT` for the
+array workflow when a campaign needs a custom ignored artifact root.
 
 ## Files and Structure
 

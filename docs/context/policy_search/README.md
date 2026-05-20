@@ -55,6 +55,9 @@ Use it for three things only:
 - `../issue_1318_teb_corridor_deadlock_eval.md`: issue #1318 classic-merging corridor-deadlock
   comparison showing current in-repo TEB collides on the selected #1022 seeds while the hybrid-rule
   incumbent solves four of five.
+- `2026-05-20_learned_local_navigation_screen.md`: Issue #1355 Source-Backed Screening Matrix for
+  learning-based local-navigation candidates, with implement/source-first/monitor/reject verdicts
+  and links to existing Robot SF duplicate boundaries.
 - `../issue_1368_neupan_point_obstacle_assessment.md`: source-side NeuPAN assessment; current
   verdict is monitor/source-side only because GPL-3.0, source-environment, runtime, and
   point-obstacle/social-claim boundaries block a Robot SF adapter for now.

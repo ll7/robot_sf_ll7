@@ -8,6 +8,7 @@ on:
       - "docker/benchmark-repro.Dockerfile"
       - "scripts/repro/**"
       - "tests/repro/**"
+      - "configs/scenarios/planner_sanity_matrix_v1.yaml"
       - "docs/benchmark_docker_repro.md"
       - "docs/context/issue_1086_docker_reproduction_path.md"
 

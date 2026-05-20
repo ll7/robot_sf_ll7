@@ -62,6 +62,11 @@ report `snqi_contract_status=fail`. This evidence should not be promoted into pa
 without a separate BenchmarkClaim/claim-scope review and an explicit decision about AMV annotation
 coverage and SNQI positioning.
 
+Issue #1398 records the follow-up metric-accounting boundary: analyzer SNQI row-vs-episode checks
+use the same canonical episode metric helper as campaign table generation. That reconciliation
+prevents false SNQI mismatches when episode artifacts carry SNQI at the top level, but it does not
+change the `snqi_contract_status=fail` interpretation above.
+
 ## Evidence
 
 Compact evidence is tracked in:

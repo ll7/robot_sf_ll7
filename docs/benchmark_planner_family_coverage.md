@@ -83,6 +83,12 @@ and kinematics/adapters in this repository, not a generic literature survey.
   by `allow_testing_algorithms: true` to prevent accidental inclusion in broad or paper-facing runs.
 * `DSRNN-style graph-attention family` is currently a sequencing note, not an implementation plan:
   keep it behind the first attention-family and prediction-family source-harness spikes.
+* For the current consolidated CrowdNav-family learned-policy decision, see
+  `docs/context/policy_search/issue_1367_crowdnav_family_verdict.md`. That note keeps
+  `crowdnav_height` as the existing experimental representative and recommends no new first
+  integration from CrowdNav / SARL, RGL, DS-RNN, CrowdNav++ / IGAT, HEIGHT, or GenSafeNav / SoNIC
+  until the relevant graph/history, checklist, and source-reproduction gates for each candidate
+  land.
 * Manuscript-facing repos should cite this matrix alongside concrete benchmark artifacts and should
   not infer that a partially related planner family is fully covered unless it appears above as
 `implemented and benchmarkable` .

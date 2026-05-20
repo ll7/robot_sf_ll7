@@ -30,6 +30,8 @@ entry points, contracts, and where to change behavior.
 ## Observation Modes
 - `ObservationMode.DEFAULT_GYM` - stacked `drive_state` + `rays` observation dict.
 - `ObservationMode.SOCNAV_STRUCT` - structured SocNav observations (flattened for SB3).
+- `robot_sf/sensor/social_graph_observation.py` - shared SocNav-to-graph adapter for
+  graph/social-RL candidate screening; deployment-only and current-timestep by contract.
 - Reference: `docs/dev/observation_contract.md`.
 
 ## Multi-Robot LiDAR

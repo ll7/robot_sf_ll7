@@ -25,6 +25,9 @@ Use it for three things only:
 
 ## Current Diagnostic Notes
 
+- `../issue_1365_social_graph_observation_adapter.md`: shared SocNav-to-graph observation adapter
+  contract for graph/social-RL candidate screening; documents masks, caps, history, static-obstacle
+  tokens, and the deployment-only leakage boundary.
 - `../issue_1369_sage_mpc_transfer_assessment.md`: SAGE / `TIB-K330/drl_planner`
   reproducibility assessment; classifies the MPC-transfer graph-RL source as monitor-only because
   dependency pins, checkpoints, offline MPC source buffer, and an inference command are absent.
@@ -52,6 +55,15 @@ Use it for three things only:
 - `../issue_1318_teb_corridor_deadlock_eval.md`: issue #1318 classic-merging corridor-deadlock
   comparison showing current in-repo TEB collides on the selected #1022 seeds while the hybrid-rule
   incumbent solves four of five.
+- `../issue_1368_neupan_point_obstacle_assessment.md`: source-side NeuPAN assessment; current
+  verdict is monitor/source-side only because GPL-3.0, source-environment, runtime, and
+  point-obstacle/social-claim boundaries block a Robot SF adapter for now.
+- `issue_1367_crowdnav_family_verdict.md`: CrowdNav-family learned-policy consolidation for
+  CrowdNav / SARL, RGL, DS-RNN, CrowdNav++ / IGAT, HEIGHT, and GenSafeNav / SoNIC; current verdict
+  is no new first integration until the relevant graph/history, checklist, and source-reproduction
+  gates for each candidate land.
+- `issue_1366_gensafenav_sonic_conformal_contract.md`: GenSafeNav / SoNIC conformal uncertainty
+  assessment; current verdict is source-side reproduction first before benchmark promotion.
 - `../issue_769_drl_vo_assessment.md`: DRL-VO metadata history plus issue #1364 privileged-state
   audit verdict; current status is prototype-only/tracked-agent diagnostic, not main-table ready.
 - `2026-05-20_tentabot_motion_primitive_assessment.md`: issue #1357 assessment of Tentabot-style

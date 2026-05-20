@@ -5,11 +5,11 @@ Date: 2026-05-20
 Related issues:
 
 * <https://github.com/ll7/robot_sf_ll7/issues/1366>
-* `#626` SoNIC source-harness reproduction probe
-* `#627` SoNIC / GenSafeNav model-only wrapper follow-up
-* `#1247` prediction-aware safety shield contract
-* `#1355` external learned-policy candidate matrix
-* `#1359` learned-policy reject/monitor registry
+* [Issue #626 SoNIC Source-Harness Reproduction Probe](../issue_626_sonic_source_harness_probe.md)
+* [Issue #627 SoNIC / GenSafeNav Model-Only Wrapper Follow-Up](../issue_627_sonic_wrapper_followup.md)
+* [Issue #1247 Prediction-Aware Safety Shield Contract](../issue_1247_safety_shield_contract.md)
+* Issue #1355 External Learned-Policy Candidate Matrix
+* Issue #1359 Learned-Policy Reject/Monitor Registry
 
 ## Goal
 

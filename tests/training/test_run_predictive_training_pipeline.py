@@ -6,8 +6,10 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 
+from robot_sf.planner.obstacle_features import PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
 from scripts.training import run_predictive_training_pipeline as pipeline
 
 
@@ -257,6 +259,174 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     ]
     assert len(collector_cmds) == 2
     assert all("--ego-conditioning" in cmd for cmd in collector_cmds)
+
+
+def test_pipeline_passes_obstacle_model_family_to_collectors_and_training(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Obstacle-feature pipeline configs should thread model family through all stages."""
+    config_path = tmp_path / "predictive_obstacle.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment": {"run_id": "predictive_obstacle_smoke"},
+                "model_family": PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "scenarios": {
+                    "scenario_matrix": "scenarios.yaml",
+                    "hard_seed_manifest": "hard.yaml",
+                    "planner_grid": "grid.yaml",
+                },
+                "base_collection": {"seeds_per_scenario": 1},
+                "hardcase_collection": {},
+                "mixing": {},
+                "training": {"model_id": "predictive_obstacle_smoke"},
+                "wandb": {"enabled": False},
+                "evaluation": {},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "scenarios.yaml").write_text("[]\n", encoding="utf-8")
+    (tmp_path / "hard.yaml").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "grid.yaml").write_text("{}\n", encoding="utf-8")
+
+    monkeypatch.setattr(pipeline, "_sha1_file", lambda _path: "cfghash")
+    monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
+    monkeypatch.setattr(
+        pipeline,
+        "_build_random_seed_manifest",
+        lambda **kwargs: Path(kwargs["output_path"]),
+    )
+
+    invoked: list[list[str]] = []
+
+    def _fake_dataset(path: Path) -> None:
+        """Write an obstacle-schema predictive dataset fixture."""
+        np.savez(
+            path,
+            state=np.zeros((2, 3, 10), dtype=np.float32),
+            target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+            mask=np.ones((2, 3), dtype=np.float32),
+            target_mask=np.ones((2, 3, 5), dtype=np.float32),
+        )
+        path.with_suffix(".json").write_text(json.dumps({"num_samples": 2}), encoding="utf-8")
+
+    def _fake_run(cmd: list[str], *, log_level: str) -> None:
+        """Simulate pipeline commands and record schema-routing flags."""
+        invoked.append(list(cmd))
+        if any("collect_predictive_hardcase_data.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _fake_dataset(output)
+            return
+        if any("build_predictive_mixed_dataset.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _fake_dataset(output)
+            return
+        if any("train_predictive_planner.py" in part for part in cmd):
+            out_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "training_summary.json").write_text(
+                json.dumps(
+                    {"selection": {"selected_epoch": 1}, "selected_checkpoint_reason": "proxy"}
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "predictive_model.pt").write_text("stub", encoding="utf-8")
+            return
+        if any("run_predictive_success_campaign.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "campaign_summary.json").write_text(
+                json.dumps({"run_id": "predictive_obstacle_smoke", "status": "success"}),
+                encoding="utf-8",
+            )
+            return
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(pipeline, "_run", _fake_run)
+    monkeypatch.setattr(
+        pipeline,
+        "_run_capture_json",
+        lambda _cmd, **_kwargs: {"status": "ok", "return_code": 0},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_parse_args",
+        lambda: pipeline.argparse.Namespace(
+            config=config_path,
+            run_id="predictive_obstacle_smoke",
+            log_level="INFO",
+        ),
+    )
+
+    assert pipeline.main() == 0
+    collector_cmds = [
+        cmd for cmd in invoked if any("collect_predictive_hardcase_data.py" in part for part in cmd)
+    ]
+    train_cmd = next(
+        cmd for cmd in invoked if any("train_predictive_planner.py" in part for part in cmd)
+    )
+    assert len(collector_cmds) == 2
+    assert all(
+        cmd[cmd.index("--model-family") + 1] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+        for cmd in collector_cmds
+    )
+    assert train_cmd[train_cmd.index("--model-family") + 1] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+
+
+def test_pipeline_rejects_mismatched_collection_model_families(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Base and hardcase datasets must share the same predictive feature schema."""
+    config_path = tmp_path / "predictive_bad_schema.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment": {"run_id": "predictive_bad_schema"},
+                "model_family": PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "scenarios": {
+                    "scenario_matrix": "scenarios.yaml",
+                    "hard_seed_manifest": "hard.yaml",
+                    "planner_grid": "grid.yaml",
+                },
+                "base_collection": {},
+                "hardcase_collection": {"model_family": "predictive_legacy_v1"},
+                "mixing": {},
+                "training": {},
+                "wandb": {"enabled": False},
+                "evaluation": {},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "scenarios.yaml").write_text("[]\n", encoding="utf-8")
+    (tmp_path / "hard.yaml").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "grid.yaml").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(
+        pipeline,
+        "_parse_args",
+        lambda: pipeline.argparse.Namespace(
+            config=config_path,
+            run_id="predictive_bad_schema",
+            log_level="INFO",
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_build_random_seed_manifest",
+        lambda **kwargs: Path(kwargs["output_path"]),
+    )
+
+    with pytest.raises(ValueError, match="model families"):
+        pipeline.main()
 
 
 def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(

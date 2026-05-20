@@ -14,6 +14,15 @@ import yaml
 
 from robot_sf.benchmark.map_runner import _build_env_config
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    LocalObstacleFeatureExtractor,
+    append_obstacle_features,
+    obstacle_lines_from_map,
+    predictive_feature_schema_metadata,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 
@@ -28,6 +37,25 @@ class Frame:
     ped_positions_world: np.ndarray
     ped_velocities_world: np.ndarray
     ped_count: int
+
+
+def _effective_predictive_feature_schema(
+    *,
+    model_family: str,
+    ego_conditioning: bool,
+) -> dict[str, object]:
+    """Resolve the predictive feature schema emitted by the hardcase collector."""
+    normalized = str(model_family).strip() or PREDICTIVE_LEGACY_FEATURE_SCHEMA
+    if normalized == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+        effective_family = PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+    elif normalized == PREDICTIVE_EGO_FEATURE_SCHEMA or bool(ego_conditioning):
+        effective_family = PREDICTIVE_EGO_FEATURE_SCHEMA
+    else:
+        effective_family = PREDICTIVE_LEGACY_FEATURE_SCHEMA
+    return predictive_feature_schema_metadata(
+        model_family=effective_family,
+        ego_conditioning=bool(ego_conditioning),
+    )
 
 
 def _extract_socnav_blocks(obs: dict) -> tuple[dict, dict, dict]:
@@ -172,11 +200,19 @@ def _frames_to_samples(
     max_agents: int,
     horizon_steps: int,
     ego_conditioning: bool,
+    model_family: str = PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    obstacle_lines: list | tuple = (),
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Create supervised samples from temporal frame sequences."""
+    schema_metadata = _effective_predictive_feature_schema(
+        model_family=model_family,
+        ego_conditioning=ego_conditioning,
+    )
+    state_dim = int(schema_metadata["input_dim"])
+    base_dim = int(schema_metadata["base_feature_dim"])
     if len(frames) <= horizon_steps:
         return (
-            np.zeros((0, max_agents, 9 if ego_conditioning else 4), dtype=np.float32),
+            np.zeros((0, max_agents, state_dim), dtype=np.float32),
             np.zeros((0, max_agents, horizon_steps, 2), dtype=np.float32),
             np.zeros((0, max_agents), dtype=np.float32),
             np.zeros((0, max_agents, horizon_steps), dtype=np.float32),
@@ -190,7 +226,7 @@ def _frames_to_samples(
     for t in range(0, len(frames) - horizon_steps):
         frame_t = frames[t]
         c = min(frame_t.ped_count, max_agents)
-        state = np.zeros((max_agents, 9 if ego_conditioning else 4), dtype=np.float32)
+        state_base = np.zeros((max_agents, base_dim), dtype=np.float32)
         target = np.zeros((max_agents, horizon_steps, 2), dtype=np.float32)
         mask = np.zeros((max_agents,), dtype=np.float32)
         target_mask = np.zeros((max_agents, horizon_steps), dtype=np.float32)
@@ -201,12 +237,12 @@ def _frames_to_samples(
                 frame_t.robot_pos,
                 frame_t.robot_heading,
             )
-            state[:c, 0:2] = pos_rel
-            state[:c, 2:4] = _vel_world_to_ego(
+            state_base[:c, 0:2] = pos_rel
+            state_base[:c, 2:4] = _vel_world_to_ego(
                 frame_t.ped_velocities_world[:c],
                 frame_t.robot_heading,
             )
-            if ego_conditioning:
+            if base_dim >= 9:
                 goal_rel = _world_to_ego(
                     frame_t.goal_current.reshape(1, 2),
                     frame_t.robot_pos,
@@ -224,7 +260,7 @@ def _frames_to_samples(
                     ],
                     dtype=np.float32,
                 )
-                state[:c, 4:9] = ego_features
+                state_base[:c, 4:9] = ego_features
             mask[:c] = 1.0
 
             for k in range(1, horizon_steps + 1):
@@ -247,12 +283,43 @@ def _frames_to_samples(
                     target[src_idx, k - 1, :] = tgt_rel
                     target_mask[src_idx, k - 1] = 1.0
 
+        if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+            state = _append_obstacle_feature_rows(
+                state_base=state_base,
+                frame=frame_t,
+                count=c,
+                obstacle_lines=obstacle_lines,
+            )
+        else:
+            state = state_base
         states.append(state)
         targets.append(target)
         masks.append(mask)
         target_masks.append(target_mask)
 
     return np.stack(states), np.stack(targets), np.stack(masks), np.stack(target_masks)
+
+
+def _append_obstacle_feature_rows(
+    *,
+    state_base: np.ndarray,
+    frame: Frame,
+    count: int,
+    obstacle_lines: list | tuple = (),
+) -> np.ndarray:
+    """Append deterministic map-derived obstacle feature rows to predictive state."""
+    extractor = LocalObstacleFeatureExtractor()
+    obstacle_rows = np.zeros((state_base.shape[0], extractor.feature_dim), dtype=np.float32)
+    if count > 0:
+        obstacle_rows[:count] = extractor.extract_many(
+            [tuple(point) for point in frame.ped_positions_world[:count]],
+            obstacle_lines,
+        )
+    return append_obstacle_features(
+        state_base,
+        obstacle_rows,
+        schema_metadata=extractor.schema_metadata,
+    )
 
 
 def _load_seed_manifest(path: Path) -> dict[str, list[int]]:
@@ -267,6 +334,30 @@ def _load_seed_manifest(path: Path) -> dict[str, list[int]]:
     return out
 
 
+def _obstacle_lines_for_env(env) -> list:
+    """Return map-derived obstacle lines for an environment when available."""
+    map_def = getattr(env, "map_def", None)
+    if map_def is None:
+        map_def = getattr(getattr(env, "simulator", None), "map_def", None)
+    return obstacle_lines_from_map(map_def)
+
+
+def _annotate_obstacle_feature_summary(
+    summary: dict[str, object],
+    *,
+    model_family: str,
+    obstacle_line_counts: list[int],
+) -> None:
+    """Add obstacle-source diagnostics for obstacle-feature hardcase datasets."""
+    if str(model_family) != PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+        return
+    max_obstacle_lines = max(obstacle_line_counts, default=0)
+    summary["obstacle_feature_source"] = (
+        "map_geometry" if max_obstacle_lines > 0 else "not_available"
+    )
+    summary["obstacle_line_count"] = int(max_obstacle_lines)
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI args for hard-case data collection."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -277,6 +368,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--horizon-steps", type=int, default=8)
     parser.add_argument("--max-speed", type=float, default=1.2)
     parser.add_argument("--ego-conditioning", action="store_true")
+    parser.add_argument(
+        "--model-family",
+        choices=(
+            PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+            PREDICTIVE_EGO_FEATURE_SCHEMA,
+            PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        ),
+        default=PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+        help="Predictive input schema/model family to collect.",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -313,11 +414,14 @@ def main() -> int:
     all_targets: list[np.ndarray] = []
     all_masks: list[np.ndarray] = []
     all_target_masks: list[np.ndarray] = []
+    obstacle_line_counts: list[int] = []
 
     for scenario, seed in selected:
         config = _build_env_config(scenario, scenario_path=args.scenario_matrix)
         env = make_robot_env(config=config, seed=int(seed), debug=False)
         try:
+            obstacle_lines = _obstacle_lines_for_env(env)
+            obstacle_line_counts.append(len(obstacle_lines))
             obs, _ = env.reset(seed=int(seed))
             episode_frames: list[Frame] = []
             for _step in range(int(args.max_steps)):
@@ -332,6 +436,8 @@ def main() -> int:
                 max_agents=int(args.max_agents),
                 horizon_steps=int(args.horizon_steps),
                 ego_conditioning=bool(args.ego_conditioning),
+                model_family=str(args.model_family),
+                obstacle_lines=obstacle_lines,
             )
             if states.shape[0] > 0:
                 all_states.append(states)
@@ -356,6 +462,13 @@ def main() -> int:
         target=targets_cat,
         mask=masks_cat,
         target_mask=target_masks_cat,
+        feature_schema_json=json.dumps(
+            _effective_predictive_feature_schema(
+                model_family=str(args.model_family),
+                ego_conditioning=bool(args.ego_conditioning),
+            ),
+            sort_keys=True,
+        ),
     )
 
     summary = {
@@ -368,9 +481,19 @@ def main() -> int:
         "max_agents": int(states_cat.shape[1]),
         "state_dim": int(states_cat.shape[2]),
         "horizon_steps": int(targets_cat.shape[2]),
+        "model_family": str(args.model_family),
+        "feature_schema": _effective_predictive_feature_schema(
+            model_family=str(args.model_family),
+            ego_conditioning=bool(args.ego_conditioning),
+        ),
         "ego_conditioning": bool(args.ego_conditioning),
         "output": str(args.output),
     }
+    _annotate_obstacle_feature_summary(
+        summary,
+        model_family=str(args.model_family),
+        obstacle_line_counts=obstacle_line_counts,
+    )
     summary_path = args.output.with_suffix(".json")
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))

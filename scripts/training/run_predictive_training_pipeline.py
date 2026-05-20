@@ -18,6 +18,7 @@ import numpy as np
 import yaml
 from loguru import logger
 
+from robot_sf.planner.obstacle_features import PREDICTIVE_LEGACY_FEATURE_SCHEMA
 from robot_sf.training.scenario_loader import load_scenarios
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -349,6 +350,24 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     base_collection = cfg.get("base_collection", {})
     if not isinstance(base_collection, dict):
         raise TypeError("base_collection must be a mapping")
+    training_cfg_for_schema = cfg.get("training", {})
+    if not isinstance(training_cfg_for_schema, dict):
+        raise TypeError("training must be a mapping")
+    model_family = str(
+        cfg.get("model_family")
+        or base_collection.get("model_family")
+        or training_cfg_for_schema.get("model_family", PREDICTIVE_LEGACY_FEATURE_SCHEMA)
+    )
+    hardcase_cfg = cfg.get("hardcase_collection", {})
+    if not isinstance(hardcase_cfg, dict):
+        raise TypeError("hardcase_collection must be a mapping")
+    hardcase_model_family = str(hardcase_cfg.get("model_family", model_family))
+    if hardcase_model_family != model_family:
+        raise ValueError(
+            "Incompatible predictive dataset model families: "
+            f"base_collection/model_family={model_family!r} "
+            f"hardcase_collection.model_family={hardcase_model_family!r}"
+        )
     base_manifest = paths.root / "base_random_seed_manifest.yaml"
     _build_random_seed_manifest(
         scenario_matrix=scenario_matrix,
@@ -374,6 +393,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             str(int(base_collection.get("horizon_steps", 8))),
             "--max-speed",
             str(float(base_collection.get("max_speed", 1.2))),
+            "--model-family",
+            model_family,
             "--output",
             str(paths.base_dataset),
         ]
@@ -391,13 +412,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         extra={
             "seed_manifest": str(base_manifest),
             "ego_conditioning": bool(base_collection.get("ego_conditioning", False)),
+            "model_family": model_family,
         },
     )
 
     # 2) Collect hardcase dataset from fixed manifest.
-    hardcase_cfg = cfg.get("hardcase_collection", {})
-    if not isinstance(hardcase_cfg, dict):
-        raise TypeError("hardcase_collection must be a mapping")
     base_ego = bool(base_collection.get("ego_conditioning", False))
     hardcase_ego = bool(hardcase_cfg.get("ego_conditioning", False))
     if base_ego != hardcase_ego:
@@ -424,6 +443,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             str(int(hardcase_cfg.get("horizon_steps", 8))),
             "--max-speed",
             str(float(hardcase_cfg.get("max_speed", 1.2))),
+            "--model-family",
+            hardcase_model_family,
             "--output",
             str(paths.hardcase_dataset),
         ]
@@ -441,6 +462,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         extra={
             "seed_manifest": str(hard_seed_manifest),
             "ego_conditioning": bool(hardcase_cfg.get("ego_conditioning", False)),
+            "model_family": hardcase_model_family,
         },
     )
 
@@ -509,6 +531,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         str(float(train_cfg.get("val_split", 0.2))),
         "--seed",
         str(int(train_cfg.get("seed", 42))),
+        "--model-family",
+        str(train_cfg.get("model_family", model_family)),
         "--hidden-dim",
         str(int(train_cfg.get("hidden_dim", 128))),
         "--message-passing-steps",
@@ -682,6 +706,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 str(paths.checkpoint),
                 "--training-summary",
                 str(training_summary_path),
+                "--model-family",
+                str(train_cfg.get("model_family", model_family)),
                 "--register-model",
             ],
             log_level=args.log_level,
@@ -712,6 +738,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "scenario_matrix": str(scenario_matrix),
         "hard_seed_manifest": str(hard_seed_manifest),
         "planner_grid": str(planner_grid),
+        "model_family": model_family,
         "dataset_manifests": {
             "base": str(base_dataset_manifest),
             "hardcase": str(hardcase_dataset_manifest),

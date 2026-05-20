@@ -427,7 +427,8 @@ def _handle_summary(args) -> int:
         except Exception:
             logging.debug("Logging 'Summary plots written' failed", exc_info=True)
         return 0
-    except Exception:  # pragma: no cover - error path
+    except Exception as exc:  # pragma: no cover - error path
+        logging.exception("Summary generation failed: %s", exc)
         return 2
 
 
@@ -480,7 +481,8 @@ def _handle_aggregate(args) -> int:
         except Exception:
             logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
-    except Exception:  # pragma: no cover - error path
+    except Exception as exc:  # pragma: no cover - error path
+        logging.exception("Aggregation failed: %s", exc)
         return 2
 
 

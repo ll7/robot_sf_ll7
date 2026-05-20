@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.aggregate import (
     compute_aggregates,
     compute_aggregates_with_ci,
@@ -11,6 +13,7 @@ from robot_sf.benchmark.aggregate import (
     read_jsonl,
     write_episode_csv,
 )
+from robot_sf.benchmark.errors import AggregationMetadataError, EpisodeRecordInputError
 from robot_sf.benchmark.runner import run_batch
 
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
@@ -84,6 +87,88 @@ def test_read_and_flatten_and_write_csv(tmp_path: Path):
     assert Path(out).exists()
     text = Path(out).read_text(encoding="utf-8")
     assert text.splitlines()[0].startswith("episode_id,scenario_id,seed")
+
+
+def test_read_jsonl_fails_closed_on_malformed_line(tmp_path: Path) -> None:
+    """Aggregate input loading should not silently drop malformed benchmark records."""
+    path = tmp_path / "episodes_bad.jsonl"
+    path.write_text('{"episode_id":"ok","metrics":{}}\n{bad json\n', encoding="utf-8")
+
+    with pytest.raises(EpisodeRecordInputError) as excinfo:
+        read_jsonl(path)
+
+    message = str(excinfo.value)
+    assert "malformed_lines=1" in message
+    assert f"{path}:2" in message
+
+
+def test_read_jsonl_fails_closed_on_missing_path(tmp_path: Path) -> None:
+    """Aggregate input loading should report missing benchmark inputs by default."""
+    path = tmp_path / "missing.jsonl"
+
+    with pytest.raises(EpisodeRecordInputError) as excinfo:
+        read_jsonl(path)
+
+    message = str(excinfo.value)
+    assert "missing_paths=1" in message
+    assert str(path) in message
+
+
+def test_read_jsonl_best_effort_mode_is_explicit(tmp_path: Path) -> None:
+    """Exploratory aggregate callers can opt into partial parsing explicitly."""
+    path = tmp_path / "episodes_bad.jsonl"
+    path.write_text('{"episode_id":"ok","metrics":{}}\n{bad json\n', encoding="utf-8")
+
+    assert [record["episode_id"] for record in read_jsonl(path, strict=False)] == ["ok"]
+
+
+def test_aggregate_cli_reports_malformed_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The benchmark-facing aggregate command should fail closed with diagnostics."""
+    from robot_sf.benchmark import cli
+
+    src = tmp_path / "episodes_bad.jsonl"
+    src.write_text('{"episode_id":"ok","metrics":{}}\n{bad json\n', encoding="utf-8")
+    errors: list[str] = []
+
+    def _record_exception(message: str, *args: object, **_kwargs: object) -> None:
+        errors.append(message % args)
+
+    monkeypatch.setattr(cli.logging, "exception", _record_exception)
+
+    exit_code = cli.cli_main(
+        [
+            "aggregate",
+            "--in",
+            str(src),
+            "--out",
+            str(tmp_path / "summary.json"),
+        ]
+    )
+
+    assert exit_code == 2
+    assert errors
+    assert "malformed_lines=1" in errors[0]
+    assert f"{src}:2" in errors[0]
+
+
+def test_aggregation_metadata_error_to_dict_includes_optional_context() -> None:
+    """Structured aggregation errors should expose optional context fields."""
+    error = AggregationMetadataError(
+        "missing metadata",
+        episode_id="episode-1",
+        missing_fields=["scenario_params.algo", "algo"],
+        advice="add algorithm metadata",
+    )
+
+    assert error.to_dict() == {
+        "message": "missing metadata",
+        "episode_id": "episode-1",
+        "missing_fields": ["scenario_params.algo", "algo"],
+        "advice": "add algorithm metadata",
+    }
 
 
 def test_compute_aggregates_group_by_algo(tmp_path: Path):

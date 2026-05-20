@@ -12,11 +12,22 @@ candidate-registry entry, or benchmark evaluation. It extends the generic planne
 `robot_sf/benchmark/planner_command_contract.py` with learned-policy-specific leakage,
 observation, action, and logging gates.
 
-Treat this document as the docs-first `LearnedLocalPolicySpec`: a stable review contract for
-candidate intake until a later helper issue turns the checks into executable validation.
+Treat this document as the `LearnedLocalPolicySpec`: a stable review contract for candidate intake
+with an executable helper for validating structured checklist metadata.
 
 Passing this checklist means a candidate has an auditable local-policy contract. It is not
 performance evidence, baseline readiness, safety certification, or a paper-facing benchmark claim.
+
+For repeatable preflight checks, encode the candidate's checklist answers in a YAML or JSON mapping
+and run:
+
+```bash
+uv run python scripts/validation/check_learned_policy_eligibility.py <candidate-spec.yaml>
+```
+
+The helper validates that required verdict inputs are present and internally consistent. A passing
+helper result has the same boundary as this checklist: it means metadata completeness, not
+benchmark performance, adapter acceptance, or runtime safety proof.
 
 ## Required Verdict
 
@@ -154,3 +165,9 @@ BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
 
 Code changes that implement a candidate or helper must add targeted tests for the adapter path and
 then run the normal PR readiness gate.
+
+The executable preflight helper is:
+
+```bash
+uv run python scripts/validation/check_learned_policy_eligibility.py <candidate-spec.yaml>
+```

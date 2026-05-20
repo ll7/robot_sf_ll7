@@ -17,7 +17,7 @@ the full test suite, and resolve the review threads after pushing.
 
 2. Retrieve review threads and comments.
    - Use GraphQL for review threads:
-     `gh api graphql -F owner=<owner> -F repo=<repo> -F number=<pr_number> -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:20){nodes{id body path line url}}}}}}}'`
+     `gh api graphql -F owner=<owner> -F repo=<repo> -F number=<pr_number> -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:100){nodes{id body path line url}}}}}}}'`
    - Keep the review thread `id` with each requested change. GitHub resolves review threads by
      thread id, not by the inline comment id or a reply id.
    - Use `gh pr view --json comments` for top-level discussion comments.
@@ -75,7 +75,7 @@ the full test suite, and resolve the review threads after pushing.
        -F owner=<owner> \
        -F repo=<repo> \
        -F number=<pr_number> \
-       -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:20){nodes{id body path line url}}}}}}}'
+       -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:100){nodes{id body path line url}}}}}}}'
      ```
 
    - If GraphQL auth, rate limits, or permissions block resolution, leave the PR comment or final

@@ -2699,6 +2699,47 @@ def _normalize_pedestrian_impact_controls(
     return radius, window_steps
 
 
+def _collision_metric_value(metrics: dict[str, Any], key: str) -> float:
+    """Return a finite collision metric value, treating missing/non-finite values as zero."""
+    try:
+        value = float(metrics.get(key, 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if math.isfinite(value) else 0.0
+
+
+def _floor_collision_metrics_from_flags(
+    metrics: dict[str, Any],
+    *,
+    collision_seen: bool,
+    ped_collision_seen: bool,
+    obstacle_collision_seen: bool,
+    robot_collision_seen: bool,
+) -> None:
+    """Preserve exact environment collision flags when sampled metrics miss the contact."""
+
+    collision_keys = {
+        "ped_collision_count": ped_collision_seen,
+        "obstacle_collision_count": obstacle_collision_seen,
+        "agent_collision_count": robot_collision_seen,
+    }
+    for key, typed_collision_seen in collision_keys.items():
+        if typed_collision_seen and _collision_metric_value(metrics, key) <= 0.0:
+            metrics[key] = 1.0
+
+    total_collision_count = sum(_collision_metric_value(metrics, key) for key in collision_keys)
+    if total_collision_count > 0.0:
+        metrics["total_collision_count"] = total_collision_count
+        metrics["collisions"] = total_collision_count
+        if obstacle_collision_seen and _collision_metric_value(metrics, "wall_collisions") <= 0.0:
+            metrics["wall_collisions"] = _collision_metric_value(
+                metrics, "obstacle_collision_count"
+            )
+    elif collision_seen and _collision_metric_value(metrics, "collisions") <= 0.0:
+        metrics["total_collision_count"] = 1.0
+        metrics["collisions"] = 1.0
+
+
 def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any],
     seed: int,
@@ -2808,6 +2849,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     reached_goal_step: int | None = None
     termination_reason = "max_steps"
     collision_seen = False
+    ped_collision_seen = False
+    obstacle_collision_seen = False
+    robot_collision_seen = False
     timeout_seen = False
 
     map_def = None
@@ -2856,6 +2900,13 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             step_success = step_route_complete and not step_collision
             step_timeout = bool(meta.get("is_timesteps_exceeded", False))
             collision_seen = collision_seen or step_collision
+            ped_collision_seen = ped_collision_seen or bool(
+                meta.get("is_pedestrian_collision", False)
+            )
+            obstacle_collision_seen = obstacle_collision_seen or bool(
+                meta.get("is_obstacle_collision", False)
+            )
+            robot_collision_seen = robot_collision_seen or bool(meta.get("is_robot_collision", False))
             timeout_seen = timeout_seen or step_timeout
             if reached_goal_step is None and step_success:
                 reached_goal_step = step_idx
@@ -2939,6 +2990,13 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             ped_impact_radius_m=ped_impact_radius_m,
             ped_impact_window_steps=ped_impact_window_steps,
         )
+    _floor_collision_metrics_from_flags(
+        metrics_raw,
+        collision_seen=collision_seen,
+        ped_collision_seen=ped_collision_seen,
+        obstacle_collision_seen=obstacle_collision_seen,
+        robot_collision_seen=robot_collision_seen,
+    )
     impact = algo_meta.get("adapter_impact")
     if isinstance(impact, dict) and bool(impact.get("requested", False)):
         native_steps = int(impact.get("native_steps", 0))

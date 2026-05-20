@@ -208,7 +208,13 @@ class _PlannerStepProcess:
                 self._terminate_worker()
                 raise FuturesTimeoutError()
             if self._conn.poll(min(remaining, 0.01)):
-                status, payload = self._conn.recv()
+                try:
+                    status, payload = self._conn.recv()
+                except EOFError as exc:
+                    self.close()
+                    raise RuntimeError(
+                        "planner step worker exited before returning an action"
+                    ) from exc
                 if status == "ok":
                     return payload
                 error_type, message = payload

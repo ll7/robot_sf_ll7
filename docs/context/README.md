@@ -116,6 +116,8 @@ knowledge, not every transient iteration detail.
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
 * Issue #1344 paired AMV primary protocol report:
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
+* Issue #1353 broader AMV baseline preflight:
+  [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Artifact evidence vocabulary:

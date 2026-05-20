@@ -25,6 +25,9 @@ Use it for three things only:
 
 ## Current Diagnostic Notes
 
+- `../issue_1365_social_graph_observation_adapter.md`: shared SocNav-to-graph observation adapter
+  contract for graph/social-RL candidate screening; documents masks, caps, history, static-obstacle
+  tokens, and the deployment-only leakage boundary.
 - `../issue_1369_sage_mpc_transfer_assessment.md`: SAGE / `TIB-K330/drl_planner`
   reproducibility assessment; classifies the MPC-transfer graph-RL source as monitor-only because
   dependency pins, checkpoints, offline MPC source buffer, and an inference command are absent.

@@ -53,6 +53,8 @@ Use it for three things only:
   CrowdNav / SARL, RGL, DS-RNN, CrowdNav++ / IGAT, HEIGHT, and GenSafeNav / SoNIC; current verdict
   is no new first integration until the relevant graph/history, checklist, and source-reproduction
   gates for each candidate land.
+- `issue_1366_gensafenav_sonic_conformal_contract.md`: GenSafeNav / SoNIC conformal uncertainty
+  assessment; current verdict is source-side reproduction first before benchmark promotion.
 - `../issue_769_drl_vo_assessment.md`: DRL-VO metadata history plus issue #1364 privileged-state
   audit verdict; current status is prototype-only/tracked-agent diagnostic, not main-table ready.
 - `2026-05-20_tentabot_motion_primitive_assessment.md`: issue #1357 assessment of Tentabot-style

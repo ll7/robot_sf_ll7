@@ -16,7 +16,7 @@ Run one or more canonical CI validation phases.
 Phases:
   lint             Ruff lint + format check
   typecheck        Ty type check (advisory, matches CI)
-  test             Main pytest suite
+  test             Main pytest suite (configured testpaths)
   smoke            Validation and benchmark smoke checks
   artifact-policy  Canonical artifact root policy guard
 
@@ -217,7 +217,7 @@ run_phase() {
       uvx ty check . --exit-zero
       ;;
     test)
-      "$SCRIPT_DIR/run_tests_parallel.sh" tests
+      "$SCRIPT_DIR/run_tests_parallel.sh"
       ;;
     smoke)
       run_smoke_phase "$event_name" "$github_ref"

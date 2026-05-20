@@ -1,0 +1,82 @@
+{
+  "issue": 1318,
+  "date": "2026-05-20",
+  "scenario_slice": "configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml",
+  "horizon": 600,
+  "benchmark_profile": "experimental",
+  "command_reference": "docs/context/issue_1318_teb_corridor_deadlock_eval.md#reproduction",
+  "results": {
+    "teb": {
+      "classic_merging_low": {
+        "episodes": 2,
+        "successes": 0,
+        "route_complete": 0,
+        "collisions": 2,
+        "timeouts": 0,
+        "avg_steps": 247.5,
+        "total_collision_count": 2.0,
+        "termination_reasons": {"collision": 2}
+      },
+      "classic_merging_medium": {
+        "episodes": 3,
+        "successes": 0,
+        "route_complete": 0,
+        "collisions": 3,
+        "timeouts": 0,
+        "avg_steps": 249.0,
+        "total_collision_count": 3.0,
+        "termination_reasons": {"collision": 3}
+      }
+    },
+    "orca": {
+      "classic_merging_low": {
+        "episodes": 2,
+        "successes": 1,
+        "route_complete": 1,
+        "collisions": 1,
+        "timeouts": 0,
+        "avg_steps": 280.5,
+        "total_collision_count": 1.0,
+        "termination_reasons": {"collision": 1, "success": 1}
+      },
+      "classic_merging_medium": {
+        "episodes": 3,
+        "successes": 1,
+        "route_complete": 1,
+        "collisions": 2,
+        "timeouts": 0,
+        "avg_steps": 307.0,
+        "total_collision_count": 2.0,
+        "termination_reasons": {"collision": 2, "success": 1}
+      }
+    },
+    "hybrid_rule_local_planner": {
+      "classic_merging_low": {
+        "episodes": 2,
+        "successes": 2,
+        "route_complete": 2,
+        "collisions": 0,
+        "timeouts": 0,
+        "avg_steps": 427.0,
+        "total_collision_count": 0.0,
+        "termination_reasons": {"success": 2}
+      },
+      "classic_merging_medium": {
+        "episodes": 3,
+        "successes": 2,
+        "route_complete": 2,
+        "collisions": 1,
+        "timeouts": 0,
+        "avg_steps": 487.7,
+        "total_collision_count": 1.0,
+        "termination_reasons": {"collision": 1, "success": 2}
+      }
+    }
+  },
+  "interpretation": {
+    "teb": "The in-repo TEB adapter is runnable on the corridor slice but collides with static geometry on every selected seed.",
+    "orca": "ORCA is runnable and mixed on the same slice, with two route-complete successes and three pedestrian collisions.",
+    "hybrid_rule_local_planner": "The current hybrid-rule incumbent solves four of five selected seeds and remains the stronger local baseline for this slice."
+  },
+  "metric_caveat": "Map-runner floors collision metrics from exact environment or top-level collision flags when sampled wall/pedestrian metrics miss a flagged collision, preserving outcome/metric integrity without treating fallback as success."
+}

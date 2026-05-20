@@ -6,8 +6,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=8G
 #SBATCH --time=2:00:00
-#SBATCH --output=slurm_logs/analyze_results_%j.out
-#SBATCH --error=slurm_logs/analyze_results_%j.err
+#SBATCH --output=output/slurm/%j-feature-extractor-analysis.out
+#SBATCH --error=output/slurm/%j-feature-extractor-analysis.err
 
 # SLURM script for analyzing feature extractor results
 # This runs after all training jobs complete
@@ -45,13 +45,20 @@ combined_results = {
     'results': {}
 }
 
-results_dir = Path('results')
-individual_dirs = list(results_dir.glob('single_extractor_*'))
+results_dir = Path('output/training/feature_extractors')
+individual_dirs = sorted({
+    *results_dir.glob('single_*'),
+    *results_dir.glob('single_extractor_*'),
+})
 
 print(f'Found {len(individual_dirs)} individual result directories')
 
 for individual_dir in individual_dirs:
-    extractor_name = individual_dir.name.replace('single_extractor_', '')
+    extractor_name = individual_dir.name
+    if extractor_name.startswith('single_extractor_'):
+        extractor_name = extractor_name.replace('single_extractor_', '', 1)
+    elif extractor_name.startswith('single_'):
+        extractor_name = extractor_name.replace('single_', '', 1)
     results_file = individual_dir / 'complete_results.json'
     
     if results_file.exists():
@@ -70,7 +77,7 @@ for individual_dir in individual_dirs:
 
 if combined_results['results']:
     # Save combined results
-    combined_dir = Path('results/combined_analysis')
+    combined_dir = Path('output/training/feature_extractors/combined_analysis')
     combined_dir.mkdir(parents=True, exist_ok=True)
     
     combined_file = combined_dir / 'complete_results.json'
@@ -85,14 +92,14 @@ else:
 "
 
 # Check if combination was successful
-COMBINED_RESULTS="results/combined_analysis/complete_results.json"
+COMBINED_RESULTS="output/training/feature_extractors/combined_analysis/complete_results.json"
 if [ -f "$COMBINED_RESULTS" ]; then
     echo "Running statistical analysis on combined results..."
     python scripts/analyze_feature_extractors.py "$COMBINED_RESULTS"
     
     if [ $? -eq 0 ]; then
         echo "Analysis completed successfully!"
-        echo "Results available in: results/combined_analysis/analysis/"
+        echo "Results available in: output/training/feature_extractors/combined_analysis/analysis/"
     else
         echo "Analysis failed!"
     fi

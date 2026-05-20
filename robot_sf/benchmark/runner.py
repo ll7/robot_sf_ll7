@@ -15,10 +15,11 @@ multi-processing are future work.
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 import os
 import platform
 import time
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import (
     UTC,  # type: ignore[attr-defined]
@@ -150,6 +151,126 @@ FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 _episode_identity_hash = episode_identity_hash
 
 
+def _planner_step_worker(conn: Any, planner: Any) -> None:
+    """Run planner steps in an isolated child process."""
+    try:
+        while True:
+            try:
+                command, payload = conn.recv()
+            except EOFError:
+                break
+            if command == "close":
+                break
+            if command != "step":
+                conn.send(("error", ("RuntimeError", f"unknown command: {command!r}")))
+                continue
+            try:
+                conn.send(("ok", planner.step(payload)))
+            except Exception as exc:  # pragma: no cover - defensive child-process path
+                conn.send(("error", (type(exc).__name__, str(exc))))
+    finally:
+        conn.close()
+
+
+class _PlannerStepProcess:
+    """Persistent process boundary for planner.step with hard timeout cleanup."""
+
+    def __init__(self, planner: Any, *, timeout_s: float) -> None:
+        if "fork" not in mp.get_all_start_methods():
+            raise RuntimeError(
+                "planner step timeout isolation requires multiprocessing fork support"
+            )
+        self._planner = planner
+        self._timeout_s = timeout_s
+        self._ctx = mp.get_context("fork")
+        self._process: mp.Process | None = None
+        self._conn: Any | None = None
+
+    def step(self, obs: Any) -> Any:
+        """Run one planner step or raise when timeout/isolation fails.
+
+        Returns:
+            Planner action payload returned by the worker process.
+        """
+        self._ensure_worker()
+        assert self._conn is not None
+        assert self._process is not None
+        try:
+            self._conn.send(("step", obs))
+        except (BrokenPipeError, EOFError, OSError) as exc:
+            self.close()
+            raise RuntimeError("planner step worker was unavailable") from exc
+
+        deadline = time.monotonic() + self._timeout_s
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._terminate_worker()
+                raise FuturesTimeoutError()
+            if self._conn.poll(min(remaining, 0.01)):
+                status, payload = self._conn.recv()
+                if status == "ok":
+                    return payload
+                error_type, message = payload
+                raise RuntimeError(f"Planner step failed in worker ({error_type}: {message})")
+            if not self._process.is_alive():
+                self._process.join(timeout=0)
+                self.close()
+                raise RuntimeError("planner step worker exited without returning an action")
+
+    def close(self) -> None:
+        """Close the worker process and IPC handle."""
+        conn = self._conn
+        process = self._process
+        self._conn = None
+        self._process = None
+
+        if conn is not None:
+            try:
+                if process is not None and process.is_alive():
+                    conn.send(("close", None))
+            except (BrokenPipeError, EOFError, OSError):
+                pass
+            conn.close()
+        if process is not None:
+            process.join(timeout=0.1)
+            if process.is_alive():
+                self._terminate_process(process)
+
+    def _ensure_worker(self) -> None:
+        """Start the persistent worker process if needed."""
+        if self._process is not None and self._process.is_alive() and self._conn is not None:
+            return
+        self.close()
+        parent_conn, child_conn = self._ctx.Pipe(duplex=True)
+        process = self._ctx.Process(target=_planner_step_worker, args=(child_conn, self._planner))
+        process.start()
+        child_conn.close()
+        self._process = process
+        self._conn = parent_conn
+
+    def _terminate_worker(self) -> None:
+        """Terminate the current worker after a timeout."""
+        process = self._process
+        conn = self._conn
+        self._process = None
+        self._conn = None
+        if conn is not None:
+            conn.close()
+        if process is not None:
+            self._terminate_process(process)
+
+    @staticmethod
+    def _terminate_process(process: mp.Process) -> None:
+        """Terminate, then kill if necessary, and reap a worker process."""
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=0.1)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=0.1)
+
+
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     """Load a scenario matrix from YAML (stream, list, or dict with scenarios).
 
@@ -270,7 +391,7 @@ def _build_episode_data(  # noqa: PLR0913
     )
 
 
-def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  # noqa: C901
+def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  # noqa: C901, PLR0915
     """Create a robot policy function based on the specified algorithm.
 
     Returns:
@@ -372,6 +493,24 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
             return _clamp_speed(vel)
         raise ValueError(f"Invalid action format from {algo}: {action}")
 
+    metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
+    timeout_metadata: dict[str, Any] = {
+        "isolation": "process",
+        "step_timeout_s": POLICY_STEP_TIMEOUT_SECS,
+        "step_timeouts": 0,
+        "worker_errors": 0,
+        "fallback_actions": 0,
+    }
+    step_runner: _PlannerStepProcess | None
+    try:
+        step_runner = _PlannerStepProcess(planner, timeout_s=POLICY_STEP_TIMEOUT_SECS)
+    except RuntimeError as exc:
+        step_runner = None
+        timeout_metadata["isolation"] = "unavailable"
+        timeout_metadata["error"] = str(exc)
+        metadata["status"] = "policy_step_isolation_unavailable"
+        metadata["fallback_reason"] = "policy_step_isolation_unavailable"
+
     def policy_fn(
         robot_pos: np.ndarray,
         robot_vel: np.ndarray,
@@ -386,37 +525,36 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         """
         obs = _build_observation(Observation, robot_pos, robot_vel, robot_goal, ped_positions, dt)
 
-        # Execute planner.step with a small timeout to avoid stalls
-        def _do_step():
-            """Execute planner step in thread pool.
-
-            Returns:
-                Action dict from planner.
-            """
-            return planner.step(obs)
-
         try:
-            with ThreadPoolExecutor(max_workers=1) as ex:
-                fut = ex.submit(_do_step)
-                action = fut.result(timeout=POLICY_STEP_TIMEOUT_SECS)
+            if step_runner is None:
+                raise RuntimeError("policy step isolation unavailable")
+            action = step_runner.step(obs)
         except FuturesTimeoutError:
-            # Safe fallback: zero action in current space
-            # Prefer preserving action-space contract when possible
+            timeout_metadata["step_timeouts"] += 1
+            timeout_metadata["fallback_actions"] += 1
+            metadata["status"] = "policy_step_timeout_fallback"
+            metadata["fallback_reason"] = "policy_step_timeout"
             action = {"vx": 0.0, "vy": 0.0}
         except (RuntimeError, TypeError, ValueError) as exc:
-            # Any unexpected planner errors -> fallback but log for diagnostics
+            timeout_metadata["worker_errors"] += 1
+            timeout_metadata["fallback_actions"] += 1
+            metadata["status"] = "policy_step_error_fallback"
+            metadata["fallback_reason"] = "policy_step_error"
+            timeout_metadata["last_error"] = str(exc)
             logger.warning("Planner step failed unexpectedly: %s", exc)
             action = {"vx": 0.0, "vy": 0.0}
 
         # Convert action to velocity (handle both action spaces)
         return _action_to_velocity(action, robot_pos, robot_vel, robot_goal)
 
-    metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
+    if step_runner is not None:
+        policy_fn.close = step_runner.close  # type: ignore[attr-defined]
     # Ensure consistent metadata schema
     metadata.setdefault("algorithm", algo)
     metadata["config"] = algo_config
     metadata["config_hash"] = _config_hash(algo_config)
     metadata.setdefault("status", "ok")
+    metadata["policy_step_timeout"] = timeout_metadata
     metadata = enrich_algorithm_metadata(
         algo=algo,
         metadata=metadata,
@@ -424,6 +562,13 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
     )
 
     return policy_fn, metadata
+
+
+def _close_robot_policy(policy: Any) -> None:
+    """Close optional policy resources after an episode."""
+    close_fn = getattr(policy, "close", None)
+    if callable(close_fn):
+        close_fn()
 
 
 def _append_video_skip_note(record: dict[str, Any], note: str) -> None:
@@ -965,16 +1110,19 @@ def run_episode(  # noqa: PLR0913
     robot_policy, algo_metadata = _create_robot_policy(algo, algo_config_path, seed)
 
     # Simulate episode
-    trajectories = _simulate_episode_with_policy(
-        scenario_params,
-        seed,
-        robot_policy,
-        horizon,
-        dt,
-        robot_start,
-        robot_goal,
-        record_forces,
-    )
+    try:
+        trajectories = _simulate_episode_with_policy(
+            scenario_params,
+            seed,
+            robot_policy,
+            horizon,
+            dt,
+            robot_start,
+            robot_goal,
+            record_forces,
+        )
+    finally:
+        _close_robot_policy(robot_policy)
     (
         robot_pos_traj,
         robot_vel_traj,

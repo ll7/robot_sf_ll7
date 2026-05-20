@@ -66,13 +66,13 @@ Initial #1344 submissions:
 - `12567`: nominal, intended a30, failed in 1 second before benchmark execution because `srun` could not confirm allocation.
 - `12568`: cross-kinematics l40s, canceled before start because it had the pre-fallback launcher script captured by `sbatch`.
 
-Current live jobs:
+Resolved jobs after the follow-up check:
 
 | Job | Issue | Config | Partition | State at handoff | Output root |
 | --- | --- | --- | --- | --- | --- |
 | `12569` | #1344 nominal | `configs/benchmarks/amv_paired_nominal_primary_v1.yaml` | `a30/a30-gpu` | completed benchmark execution, Slurm `FAILED` exit `2:0` because `benchmark_success=false` | `output/benchmarks/issue_1344/amv_paired_nominal_primary_v1_issue1344-nominal-primary_20260520_154231/` |
-| `12570` | #1344 stress | `configs/benchmarks/amv_paired_stress_primary_v1.yaml` | `a30/a30-gpu` | running on `auxme-imech172` | `output/benchmarks/issue_1344/amv_paired_stress_primary_v1_issue1344-stress-primary_20260520_154229/` |
-| `12571` | #1354 cross-kinematics | `configs/benchmarks/cross_kinematics_v1.yaml` | `l40s/l40s-gpu` | pending, expected start was `2026-05-21T08:10:02` in the first `squeue` snapshot | `output/benchmarks/issue_1354/` |
+| `12570` | #1344 stress | `configs/benchmarks/amv_paired_stress_primary_v1.yaml` | `a30/a30-gpu` | completed benchmark execution, Slurm `FAILED` exit `2:0` because `benchmark_success=false` | `output/benchmarks/issue_1344/amv_paired_stress_primary_v1_issue1344-stress-primary_20260520_154229/` |
+| `12571` | #1354 cross-kinematics | `configs/benchmarks/cross_kinematics_v1.yaml` | `l40s/l40s-gpu` | completed successfully, Slurm `COMPLETED` exit `0:0` | `output/benchmarks/issue_1354/cross_kinematics_v1_issue1354-cross-kinematics-v1_20260520_155913/` |
 
 Nominal #1344 interpretation snapshot:
 
@@ -87,24 +87,39 @@ Nominal #1344 interpretation snapshot:
   - `social_force`: ran without runner failure but had `success_mean=0.0000`.
 - This should be interpreted as useful #1344 evidence that the proposed nominal primary surface is not a clean routine-competence gate yet; it is not an infrastructure failure.
 
-Monitor:
+Stress #1344 interpretation snapshot:
+
+- `scripts/tools/analyze_camera_ready_campaign.py` completed for the stress campaign root.
+- Analyzer output:
+  - `output/benchmarks/issue_1344/amv_paired_stress_primary_v1_issue1344-stress-primary_20260520_154229/reports/campaign_analysis.json`
+  - `output/benchmarks/issue_1344/amv_paired_stress_primary_v1_issue1344-stress-primary_20260520_154229/reports/campaign_analysis.md`
+- Campaign summary reported `total_runs=3`, `successful_runs=0`, `total_episodes=350`, and `benchmark_success=false`.
+- Failure reasons:
+  - `goal`: partial failure from an episode-integrity contradiction on `classic_bottleneck_low`, seed `113`.
+  - `social_force`: partial failure from an episode-integrity contradiction on `classic_cross_trap_medium`, seed `111`.
+  - `orca`: partial failure from an episode-integrity contradiction on `classic_station_platform_medium`, seed `112`.
+- Stress result is useful negative #1344 evidence: the primary stress surface is harsh enough that no planner row completed cleanly, and the remaining blocker is benchmark/metric integrity interpretation rather than Slurm infrastructure.
+
+Cross-kinematics #1354 interpretation snapshot:
+
+- `scripts/tools/analyze_camera_ready_campaign.py` completed for the cross-kinematics campaign root.
+- Analyzer output:
+  - `output/benchmarks/issue_1354/cross_kinematics_v1_issue1354-cross-kinematics-v1_20260520_155913/reports/campaign_analysis.json`
+  - `output/benchmarks/issue_1354/cross_kinematics_v1_issue1354-cross-kinematics-v1_20260520_155913/reports/campaign_analysis.md`
+- Campaign summary reported `total_runs=9`, `successful_runs=9`, `total_episodes=9`, and `benchmark_success=true`.
+- This is a successful bounded compatibility/evidence pass across `goal`, `orca`, and `social_force` for `differential_drive`, `bicycle_drive`, and `holonomic`.
+- The analyzer still reported row-level SNQI mismatches, so treat this as a successful execution proof rather than a final paper-facing #1354 evidence campaign.
+
+Recheck command:
 
 ```bash
 cd /home/luttkule/git/robot_sf_ll7.worktrees/1391-1392-slurm-workflow
-squeue -j 12569,12570,12571 --format='%i %j %T %P %Q %y %b %M %l %S %R'
+squeue --me --format='%i %j %T %P %Q %y %b %M %l %S %R %Z'
 sacct -j 12569,12570,12571 --format=JobID,JobName%28,State,ExitCode,Partition,Elapsed,Start,End -P
 tail -n 120 output/slurm/12569-camera-ready-benchmark.out
 tail -n 120 output/slurm/12570-camera-ready-benchmark.out
+tail -n 120 output/slurm/12571-camera-ready-benchmark.out
 ```
-
-After completion, analyze remaining campaign roots:
-
-```bash
-uv run python scripts/tools/analyze_camera_ready_campaign.py \
-  --campaign-root output/benchmarks/issue_1344/amv_paired_stress_primary_v1_issue1344-stress-primary_20260520_154229
-```
-
-For #1354, wait for the exact campaign directory under `output/benchmarks/issue_1354/`, then run the same analyzer.
 
 ## Deliberately Not Submitted Yet
 

@@ -46,6 +46,8 @@ Use it for three things only:
   `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress`.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
+- `contracts/learned_local_policy_eligibility.md`: learned-policy eligibility checklist for
+  observation/action leakage, registry entry, and required raw/adapted/guarded action logging.
 
 ## Reproducible Entry Points
 
@@ -57,6 +59,14 @@ Use it for three things only:
 - Pareto plot: `uv run python scripts/tools/plot_policy_search_pareto_front.py`
 - Promotion decision: `uv run python scripts/tools/promote_policy_search_candidate.py`
 - SLURM candidate sweep: `scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --all-implemented`
+
+## Learned-Policy Intake
+
+Before adding a learned local-navigation method to `candidate_registry.yaml`, apply
+`contracts/learned_local_policy_eligibility.md`. The registry is reserved for implemented or
+concrete runnable Robot SF candidates with config pointers; source-only, monitor-only, or
+privileged-evaluation methods should stay in context notes until they have a runnable adapter
+contract.
 
 ## Scope Boundary
 

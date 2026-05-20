@@ -134,6 +134,8 @@ knowledge, not every transient iteration detail.
   [issue_1323_socnavbench_personal_space_velocity.md](issue_1323_socnavbench_personal_space_velocity.md)
 * Issue #1319 task bundles:
   [issue_1319_task_bundles.md](issue_1319_task_bundles.md)
+* Issue #1365 Social Graph Observation Adapter:
+  [issue_1365_social_graph_observation_adapter.md](issue_1365_social_graph_observation_adapter.md)
 * Issue #1369 SAGE MPC-Transfer Planner Reproducibility:
   [issue_1369_sage_mpc_transfer_assessment.md](issue_1369_sage_mpc_transfer_assessment.md)
 * Issue #769/#1364 DRL-VO Assessment and Privileged-State Audit:
@@ -178,6 +180,9 @@ knowledge, not every transient iteration detail.
   records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
   full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
   promotion boundary.
+* [Issue #1318 TEB Corridor-Deadlock Evaluation](issue_1318_teb_corridor_deadlock_eval.md)
+  records the tracked classic-merging corridor-deadlock slice, exact-collision metric integrity
+  fix, TEB/ORCA/hybrid-rule comparison, and compact evidence bundle.
 * [Issue #1081 Observation Noise](issue_1081_observation_noise.md) records the opt-in benchmark
   observation-noise profile contract, provenance fields, resume identity behavior, and
   non-calibrated robustness interpretation limit.
@@ -378,6 +383,9 @@ knowledge, not every transient iteration detail.
   unjustified.
 * [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 * [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
+* [Issue #1368 NeuPAN Point-Obstacle Comparator Assessment (2026-05-20)](issue_1368_neupan_point_obstacle_assessment.md)
+* [Issue #1367 CrowdNav-Family Learned-Policy Verdict](./policy_search/issue_1367_crowdnav_family_verdict.md)
+* [Issue #1366 GenSafeNav / SoNIC Conformal Contract](./policy_search/issue_1366_gensafenav_sonic_conformal_contract.md)
 * [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local
   evaluation funnel, SLURM handoff notes, and the current
   [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training

@@ -19,6 +19,7 @@ from robot_sf.benchmark.map_runner import (
     _default_robot_command_space,
     _extract_ppo_pedestrians,
     _finalize_feasibility_metadata,
+    _floor_collision_metrics_from_flags,
     _goal_policy,
     _normalize_xy_rows,
     _parse_algo_config,
@@ -2613,6 +2614,159 @@ def test_run_map_episode_collision_wins_over_route_complete(
     assert record["termination_reason"] == "collision"
     assert record["outcome"]["collision_event"] is True
     assert record["outcome"]["route_complete"] is False
+
+
+def test_run_map_episode_floors_exact_obstacle_collision_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exact env obstacle collisions must not be dropped by sampled wall metrics."""
+
+    class _DummySim:
+        """Simulator stub for map-runner episode tests."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            """Accept reset propagation from map-runner code."""
+            del seed
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            """Return a collision event whose metric sampler misses the wall contact."""
+            del action
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            info = {"meta": {"is_obstacle_collision": True}}
+            return obs, 0.0, True, False, info
+
+        def close(self) -> None:
+            """Accept cleanup from map-runner code."""
+            return None
+
+    map_def = _minimal_map_def()
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_env = _DummyEnv(map_def)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: dummy_env,
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {
+            "success": 0.0,
+            "collisions": 0.0,
+            "ped_collision_count": 0.0,
+            "obstacle_collision_count": 0.0,
+            "agent_collision_count": 0.0,
+            "total_collision_count": 0.0,
+            "wall_collisions": 0.0,
+        },
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    scenario = {"name": "s1", "simulation_config": {"max_episode_steps": 999}}
+    record = _run_map_episode(
+        scenario,
+        seed=1,
+        horizon=50,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+
+    assert record["termination_reason"] == "collision"
+    assert record["outcome"]["collision_event"] is True
+    assert record["metrics"]["obstacle_collision_count"] == pytest.approx(1.0)
+    assert record["metrics"]["total_collision_count"] == pytest.approx(1.0)
+    assert record["metrics"]["collisions"] == pytest.approx(1.0)
+    assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
+
+
+def test_collision_metric_floor_preserves_untyped_collision_event() -> None:
+    """Top-level collision events should still satisfy outcome/metric integrity."""
+    metrics = {
+        "success": 0.0,
+        "collisions": 0.0,
+        "ped_collision_count": 0.0,
+        "obstacle_collision_count": 0.0,
+        "agent_collision_count": 0.0,
+        "total_collision_count": 0.0,
+        "wall_collisions": 0.0,
+    }
+
+    _floor_collision_metrics_from_flags(
+        metrics,
+        collision_seen=True,
+        ped_collision_seen=False,
+        obstacle_collision_seen=False,
+        robot_collision_seen=False,
+    )
+
+    assert metrics["collisions"] == pytest.approx(1.0)
+    assert metrics["total_collision_count"] == pytest.approx(1.0)
+    assert metrics["ped_collision_count"] == pytest.approx(0.0)
+    assert metrics["obstacle_collision_count"] == pytest.approx(0.0)
+    assert metrics["agent_collision_count"] == pytest.approx(0.0)
+
+
+def test_collision_metric_floor_preserves_larger_sampled_totals() -> None:
+    """Exact typed collision floors must not lower sampled aggregate totals."""
+    metrics = {
+        "success": 0.0,
+        "collisions": 2.0,
+        "ped_collision_count": 0.0,
+        "obstacle_collision_count": 0.0,
+        "agent_collision_count": 0.0,
+        "total_collision_count": 2.0,
+        "wall_collisions": 2.0,
+    }
+
+    _floor_collision_metrics_from_flags(
+        metrics,
+        collision_seen=True,
+        ped_collision_seen=False,
+        obstacle_collision_seen=True,
+        robot_collision_seen=False,
+    )
+
+    assert metrics["obstacle_collision_count"] == pytest.approx(1.0)
+    assert metrics["wall_collisions"] == pytest.approx(2.0)
+    assert metrics["collisions"] == pytest.approx(2.0)
+    assert metrics["total_collision_count"] == pytest.approx(2.0)
 
 
 def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

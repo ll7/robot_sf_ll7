@@ -42,6 +42,8 @@ Use it for three things only:
   `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress`.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
+- `issue_1366_gensafenav_sonic_conformal_contract.md`: GenSafeNav / SoNIC conformal uncertainty
+  assessment; current verdict is source-side reproduction first before benchmark promotion.
 
 ## Reproducible Entry Points
 

@@ -1,4 +1,4 @@
-# Issue #1368 NeuPAN Point-Obstacle Comparator Assessment
+# Issue #1368 NeuPAN Point-Obstacle Comparator Assessment (2026-05-20)
 
 Date: 2026-05-20
 

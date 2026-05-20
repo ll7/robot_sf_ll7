@@ -378,6 +378,9 @@ knowledge, not every transient iteration detail.
   evaluation funnel, SLURM handoff notes, and the current
   [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training
   policy-search workstream.
+* [Issue #1357 Tentabot-Style Motion-Primitive Assessment](./policy_search/2026-05-20_tentabot_motion_primitive_assessment.md)
+  records the source-backed verdict that Tentabot-style learned primitive-value scoring is a
+  Robot SF-native spike candidate, not an upstream adapter or benchmark-ready planner.
 * [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
   defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
   claim boundary before runtime implementation under #871.

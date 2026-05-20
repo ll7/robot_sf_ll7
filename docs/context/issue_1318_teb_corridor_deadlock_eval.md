@@ -67,6 +67,23 @@ experimental`, `--horizon 600`, `--workers 1`, `--no-resume`, `--no-video`, and
 | `hybrid_rule_local_planner` | `classic_merging_low` | 2 | 2 | 0 | 0 | 427.0 | `success=2` |
 | `hybrid_rule_local_planner` | `classic_merging_medium` | 3 | 2 | 1 | 0 | 487.7 | `collision=1`, `success=2` |
 
+Runtime and explicit stall/deadlock follow-up from #1389:
+
+| Algo | Scenario | Episodes | Total steps | Wall time mean (s) | Wall time total (s) | Aggregate steps/s | Explicit stall/deadlock |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `teb` | `classic_merging_low` | 2 | 495 | 15.298 | 30.596 | 16.179 | 0 |
+| `teb` | `classic_merging_medium` | 3 | 747 | 12.603 | 37.810 | 19.757 | 0 |
+| `orca` | `classic_merging_low` | 2 | 561 | 4.736 | 9.473 | 59.222 | 0 |
+| `orca` | `classic_merging_medium` | 3 | 921 | 1.760 | 5.280 | 174.430 | 0 |
+| `hybrid_rule_local_planner` | `classic_merging_low` | 2 | 854 | 31.616 | 63.231 | 13.506 | 0 |
+| `hybrid_rule_local_planner` | `classic_merging_medium` | 3 | 1463 | 31.621 | 94.864 | 15.422 | 0 |
+
+The explicit stall/deadlock count is zero for every row because all fresh #1389 episodes ended by
+`collision` or `success`; no episode reached `max_steps`, timeout, or low-progress termination.
+Wall time is local machine runtime from `wall_time_sec` in the fresh JSONL artifacts, so it is useful
+for relative overhead on this checkout, not a portable throughput benchmark. Aggregate steps/s is
+computed as total episode steps divided by total wall time for each row.
+
 Seed-level collision attribution:
 
 - TEB collisions are static obstacle collisions on all five selected seeds.
@@ -83,6 +100,11 @@ The useful #1318 outcome is therefore negative evidence plus a reusable scenario
 work should use this slice as a quick regression surface for corridor-commitment changes, but should
 not claim TEB improves the corridor-deadlock case without a new planner/config change and a rerun.
 
+The #1389 runtime/stall augmentation adds two practical details: TEB is slower than ORCA on this
+slice and still fails by early static collisions rather than explicit deadlock, while the
+hybrid-rule incumbent spends more wall time because its successful episodes run much longer before
+route completion.
+
 ## Validation
 
 Focused proof:
@@ -98,6 +120,10 @@ Benchmark evidence:
 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo teb --algo-config configs/algos/teb_commitment_camera_ready.yaml --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1318_teb_corridor_deadlock_teb.jsonl --workers 1 --no-resume --no-video --structured-output json
 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo orca --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1318_teb_corridor_deadlock_orca.jsonl --workers 1 --no-resume --no-video --structured-output json
 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo hybrid_rule_local_planner --algo-config configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1318_teb_corridor_deadlock_hybrid.jsonl --workers 1 --no-resume --no-video --structured-output json
+
+LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo teb --algo-config configs/algos/teb_commitment_camera_ready.yaml --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1389_teb_runtime_stall_teb.jsonl --workers 1 --no-resume --no-video --structured-output json
+LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo orca --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1389_teb_runtime_stall_orca.jsonl --workers 1 --no-resume --no-video --structured-output json
+LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo hybrid_rule_local_planner --algo-config configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1389_teb_runtime_stall_hybrid.jsonl --workers 1 --no-resume --no-video --structured-output json
 ```
 
 Artifact decision:

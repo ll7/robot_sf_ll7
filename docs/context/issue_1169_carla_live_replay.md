@@ -15,10 +15,11 @@ The command starts the pinned `carlasim/carla:0.9.16` server, waits for the host
 `carla==0.9.16` Python client to connect, selects one certified T0 export payload, and attempts to
 spawn/replay Robot-SF actors by oracle transforms before stopping the container.
 
-The live replay runner is deliberately fail-closed. It currently supports the first representable
-slice: one robot actor plus scripted pedestrian actors moved by oracle transforms. It rejects static
-geometry because the bridge does not yet create CARLA meshes, walls, props, or other obstacle actors
-from Robot-SF `static_geometry`.
+The live replay runner is deliberately fail-closed. The original #1169 slice supported one robot
+actor plus scripted pedestrian actors moved by oracle transforms and rejected all static geometry.
+The #1329 follow-up branch adds the first bounded static-geometry slice: axis-aligned rectangular
+polygon obstacles are spawned as CARLA static-prop proxy actors before the dynamic replay begins,
+while unsupported obstacle shapes still fail closed with explicit counts.
 
 ## Implemented Path
 
@@ -75,19 +76,30 @@ cleanup.returncode: 0
 This is live CARLA execution evidence and a concrete semantic boundary, not a Robot-SF/CARLA parity
 claim.
 
+## Issue #1329 Static-Geometry Update
+
+The #1329 implementation removes the blanket static-obstacle rejection for the rectangular polygon
+walls present in the #1111 `pr_promoted_planner_smoke` payload. The local proof is still CARLA-free:
+fake-CARLA tests verify that rectangular static obstacles are spawned before robot/pedestrian
+actors, unsupported static obstacle shapes fail closed before replay, and cleanup destroys static
+proxies together with dynamic actors.
+
+The required live host rerun has not been executed on this laptop. The next live proof must run the
+same Docker-backed command on a CARLA-capable Linux/NVIDIA host and confirm that the previous
+failure reason is no longer `T0 payload static obstacle replay is not implemented`.
+
 ## Boundary
 
 The live replay path does not yet provide:
 
-* static-geometry replay,
 * sensor/perception replay,
 * metric parity,
 * benchmark-strength CARLA transfer,
 * long-running campaign evidence.
 
-For now, fallback or unsupported static-geometry behavior must remain `failed`, not
-`oracle-replay`, because silently ignoring obstacles would weaken the certified T0 scenario
-contract. Follow-up #1329 tracks representing T0 static geometry in CARLA.
+Static geometry is currently limited to axis-aligned rectangular polygon proxies. Any unsupported
+or malformed static obstacle must remain `failed`, not `oracle-replay`, because silently ignoring
+obstacles would weaken the certified T0 scenario contract.
 
 ## Validation
 

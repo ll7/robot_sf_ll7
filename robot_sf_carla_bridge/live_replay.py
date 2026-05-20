@@ -64,8 +64,8 @@ def run_t1_oracle_live_replay_against_server(
 ) -> dict[str, Any]:
     """Replay one representable T0 payload against an already-running CARLA server.
 
-    The runner is deliberately conservative: it validates the T0 payload, rejects static geometry
-    that cannot yet be represented in CARLA, spawns only explicit robot/pedestrian actors, moves
+    The runner is deliberately conservative: it validates the T0 payload, replays only static
+    obstacle shapes that have a bounded CARLA proxy, spawns explicit robot/pedestrian actors, moves
     them by oracle transforms, and records that no metric parity claim is made.
 
     Returns:
@@ -117,10 +117,7 @@ def run_t1_oracle_live_replay_against_server(
                 "server_version": client.get_server_version(),
                 "map": getattr(carla_map, "name", None),
             },
-            "actors": {
-                "robot": 1,
-                "pedestrians": len(cast("list[dict[str, Any]]", payload["pedestrians"])),
-            },
+            "actors": _actor_counts(payload),
             "trajectory": trajectory,
             "boundary": _live_replay_boundary(),
         }
@@ -169,10 +166,15 @@ def _base_summary(
 def _unsupported_payload_reasons(payload: dict[str, Any]) -> dict[str, Any] | None:
     static_geometry = cast("dict[str, Any]", payload["static_geometry"])
     obstacles = cast("list[dict[str, Any]]", static_geometry.get("obstacles", []))
-    if obstacles:
+    unsupported = [
+        obstacle for obstacle in obstacles if _axis_aligned_rectangle_bounds(obstacle) is None
+    ]
+    if unsupported:
         return {
-            "reason": "T0 payload static obstacle replay is not implemented",
+            "reason": "T0 payload contains unsupported static obstacle geometry",
             "static_obstacle_count": len(obstacles),
+            "unsupported_static_obstacle_count": len(unsupported),
+            "supported_static_obstacle_count": len(obstacles) - len(unsupported),
             "boundary": _live_replay_boundary(),
         }
     return None
@@ -186,16 +188,20 @@ def _spawn_replay_actors(
     blueprints = world.get_blueprint_library()
     robot = cast("dict[str, Any]", payload["robot"])
     pedestrians = cast("list[dict[str, Any]]", payload["pedestrians"])
+    static_geometry = cast("dict[str, Any]", payload["static_geometry"])
+    obstacles = cast("list[dict[str, Any]]", static_geometry.get("obstacles", []))
 
-    robot_actor = _spawn_actor(
-        world,
-        _blueprint(blueprints, "vehicle.tesla.model3", "vehicle.*", role_name="robot_sf_robot"),
-        robot_sf_pose_to_carla_transform(carla_module, cast("dict[str, Any]", robot["start"])),
-        label="robot",
-    )
+    static_actors = _spawn_static_obstacle_actors(carla_module, world, blueprints, obstacles)
 
+    robot_actor: _Actor | None = None
     pedestrian_actors: list[_Actor] = []
     try:
+        robot_actor = _spawn_actor(
+            world,
+            _blueprint(blueprints, "vehicle.tesla.model3", "vehicle.*", role_name="robot_sf_robot"),
+            robot_sf_pose_to_carla_transform(carla_module, cast("dict[str, Any]", robot["start"])),
+            label="robot",
+        )
         for index, pedestrian in enumerate(pedestrians):
             pedestrian_actors.append(
                 _spawn_actor(
@@ -214,14 +220,95 @@ def _spawn_replay_actors(
                 )
             )
     except Exception:
-        _destroy_actors([robot_actor, *pedestrian_actors])
+        _destroy_actors([actor for actor in [robot_actor, *pedestrian_actors] if actor is not None])
+        _destroy_actors(static_actors)
         raise
 
+    if robot_actor is None:
+        raise RuntimeError("CARLA failed to initialize robot actor")
     return {
-        "_actors": [robot_actor, *pedestrian_actors],
+        "_actors": [*static_actors, robot_actor, *pedestrian_actors],
+        "static_obstacle_actors": static_actors,
         "robot_actor": robot_actor,
         "pedestrian_actors": pedestrian_actors,
     }
+
+
+def _actor_counts(payload: dict[str, Any]) -> dict[str, int]:
+    static_geometry = cast("dict[str, Any]", payload["static_geometry"])
+    obstacles = cast("list[dict[str, Any]]", static_geometry.get("obstacles", []))
+    pedestrians = cast("list[dict[str, Any]]", payload["pedestrians"])
+    return {
+        "static_obstacles": len(obstacles),
+        "robot": 1,
+        "pedestrians": len(pedestrians),
+    }
+
+
+def _spawn_static_obstacle_actors(
+    carla_module: Any,
+    world: Any,
+    blueprints: Any,
+    obstacles: list[dict[str, Any]],
+) -> list[_Actor]:
+    static_actors: list[_Actor] = []
+    try:
+        for index, obstacle in enumerate(obstacles):
+            bounds = _axis_aligned_rectangle_bounds(obstacle)
+            if bounds is None:
+                raise RuntimeError(f"Unsupported static obstacle geometry: {obstacle.get('id')}")
+            static_actors.append(
+                _spawn_actor(
+                    world,
+                    _blueprint(
+                        blueprints,
+                        "static.prop.box01",
+                        "static.prop.*",
+                        role_name=f"robot_sf_static_obstacle_{index}",
+                    ),
+                    _static_obstacle_transform(carla_module, bounds),
+                    label=f"static obstacle {obstacle.get('id', index)}",
+                )
+            )
+    except Exception:
+        _destroy_actors(static_actors)
+        raise
+    return static_actors
+
+
+def _static_obstacle_transform(carla_module: Any, bounds: dict[str, float]) -> Any:
+    center_x = (bounds["min_x"] + bounds["max_x"]) / 2.0
+    center_y = (bounds["min_y"] + bounds["max_y"]) / 2.0
+    return carla_module.Transform(
+        carla_module.Location(x=center_x, y=-center_y, z=_DEFAULT_ACTOR_Z),
+        carla_module.Rotation(yaw=0.0),
+    )
+
+
+def _axis_aligned_rectangle_bounds(obstacle: dict[str, Any]) -> dict[str, float] | None:
+    if obstacle.get("type") != "polygon":
+        return None
+    vertices = obstacle.get("vertices")
+    if not isinstance(vertices, list) or len(vertices) != 4:
+        return None
+    try:
+        points = [(float(vertex[0]), float(vertex[1])) for vertex in vertices]
+    except (TypeError, ValueError, IndexError, KeyError):
+        return None
+    xs = {point[0] for point in points}
+    ys = {point[1] for point in points}
+    if len(xs) != 2 or len(ys) != 2:
+        return None
+    expected = {(x, y) for x in xs for y in ys}
+    if set(points) != expected:
+        return None
+    min_x = min(xs)
+    max_x = max(xs)
+    min_y = min(ys)
+    max_y = max(ys)
+    if min_x == max_x or min_y == max_y:
+        return None
+    return {"min_x": min_x, "max_x": max_x, "min_y": min_y, "max_y": max_y}
 
 
 def _blueprint(
@@ -364,9 +451,12 @@ def _live_replay_boundary() -> dict[str, bool | str]:
     return {
         "oracle_transform_replay": True,
         "scripted_pedestrian_playback": True,
-        "static_geometry_replay": False,
+        "static_geometry_replay": True,
         "full_metrics_parity": False,
         "sensor_perception": False,
         "long_running_benchmark": False,
-        "note": "live CARLA actor replay attempt; no Robot-SF/CARLA parity claim",
+        "note": (
+            "live CARLA actor replay attempt with axis-aligned static obstacle proxies; "
+            "no Robot-SF/CARLA parity claim"
+        ),
     }

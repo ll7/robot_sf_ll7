@@ -132,6 +132,8 @@ knowledge, not every transient iteration detail.
   [issue_1322_socnavbench_device_placement_cleanup.md](issue_1322_socnavbench_device_placement_cleanup.md)
 * Issue #1319 task bundles:
   [issue_1319_task_bundles.md](issue_1319_task_bundles.md)
+* Issue #769/#1364 DRL-VO assessment and privileged-state audit:
+  [issue_769_drl_vo_assessment.md](issue_769_drl_vo_assessment.md)
 * Issue #1245 Benchmark Claim Artifact:
   [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
 * Issue #1169 CARLA Live T1 Oracle Replay:

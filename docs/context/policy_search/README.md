@@ -42,6 +42,8 @@ Use it for three things only:
   `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress`.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
+- `../issue_769_drl_vo_assessment.md`: DRL-VO metadata history plus issue #1364 privileged-state
+  audit verdict; current status is prototype-only/tracked-agent diagnostic, not main-table ready.
 
 ## Reproducible Entry Points
 

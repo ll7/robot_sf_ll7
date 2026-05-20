@@ -138,6 +138,8 @@ knowledge, not every transient iteration detail.
   [issue_1365_social_graph_observation_adapter.md](issue_1365_social_graph_observation_adapter.md)
 * Issue #1369 SAGE MPC-Transfer Planner Reproducibility:
   [issue_1369_sage_mpc_transfer_assessment.md](issue_1369_sage_mpc_transfer_assessment.md)
+* Issue #1361 Command-Lattice Corridor-Deadlock Assessment:
+  [issue_1361_motion_primitive_corridor_deadlock.md](issue_1361_motion_primitive_corridor_deadlock.md)
 * Issue #769/#1364 DRL-VO Assessment and Privileged-State Audit:
   [issue_769_drl_vo_assessment.md](issue_769_drl_vo_assessment.md)
 * Issue #1245 Benchmark Claim Artifact:

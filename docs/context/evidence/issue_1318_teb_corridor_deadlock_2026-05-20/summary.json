@@ -4,11 +4,7 @@
   "scenario_slice": "configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml",
   "horizon": 600,
   "benchmark_profile": "experimental",
-  "commands": {
-    "teb": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo teb --algo-config configs/algos/teb_commitment_camera_ready.yaml --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1318_teb_corridor_deadlock_teb.jsonl --workers 1 --no-resume --no-video --structured-output json",
-    "orca": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo orca --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1318_teb_corridor_deadlock_orca.jsonl --workers 1 --no-resume --no-video --structured-output json",
-    "hybrid_rule_local_planner": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench run --matrix configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml --algo hybrid_rule_local_planner --algo-config configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml --benchmark-profile experimental --horizon 600 --out output/benchmarks/issue_1318_teb_corridor_deadlock_hybrid.jsonl --workers 1 --no-resume --no-video --structured-output json"
-  },
+  "command_reference": "docs/context/issue_1318_teb_corridor_deadlock_eval.md#reproduction",
   "results": {
     "teb": {
       "classic_merging_low": {

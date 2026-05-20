@@ -4,7 +4,7 @@ Date: 2026-05-20
 
 Related issue:
 
-- #1318: <https://github.com/ll7/robot_sf_ll7/issues/1318>
+- Issue #1318: <https://github.com/ll7/robot_sf_ll7/issues/1318>
 
 Related context and configs:
 

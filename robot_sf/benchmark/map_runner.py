@@ -1779,6 +1779,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "ppo_safe": 0,
             "fallback_safe": 0,
             "prior_blend_safe": 0,
+            "prior_residual_safe": 0,
             "prior_safe": 0,
             "stop_safe": 0,
             "fallback_best_effort": 0,

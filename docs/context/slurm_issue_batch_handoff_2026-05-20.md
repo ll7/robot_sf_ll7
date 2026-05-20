@@ -143,3 +143,4 @@ tail -n 120 output/slurm/12571-camera-ready-benchmark.out
 - Do not treat nominal success as safety evidence.
 - For #1354, unsupported/degraded/fallback rows must remain caveats; the current submitted run is the existing bounded compatibility surface.
 - Generated artifacts under `output/` are local and ignored. Promote only compact summaries/manifests under `docs/context/evidence/` after interpreting the jobs.
+- Follow-up issue for the metric/integrity blocker: #1398, "benchmark: reconcile episode-integrity flags with collision and SNQI rollups".

@@ -224,6 +224,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1344 AMV Paired Primary Protocol](issue_1344_amv_paired_primary_protocol.md)
   records the paired nominal/stress primary-row configs and generic SLURM commands for the first
   AMV protocol run.
+* [SLURM Issue Batch Handoff 2026-05-20](slurm_issue_batch_handoff_2026-05-20.md)
+  records the #1344/#1354 job IDs, #1391/#1392 workflow edits, and #1167/#1358 gates from the
+  May 20 batch.
 * [Issue #1057 Semantic Blocker Audit](issue_1057_semantic_blocker_audit.md)
   classifies route handoff, invalid SVG repair, SNQI drift, metric sensitivity, fallback/degraded
   status, and live route-clearance warnings before planner-failure attribution.

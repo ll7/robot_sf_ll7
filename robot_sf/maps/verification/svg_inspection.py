@@ -94,6 +94,41 @@ class SvgInspectionFinding:
 
 
 @dataclass
+class ParserCapabilityMetadata:
+    """Parser-derived map capability facts for catalog and resolver consumers."""
+
+    schema_version: str
+    explicit_robot_spawn_zones: int
+    explicit_robot_goal_zones: int
+    explicit_ped_spawn_zones: int
+    explicit_ped_goal_zones: int
+    parsed_robot_spawn_zones: int
+    parsed_robot_goal_zones: int
+    parsed_ped_spawn_zones: int
+    parsed_ped_goal_zones: int
+    synthetic_robot_spawn_zones: int
+    synthetic_robot_goal_zones: int
+    synthetic_ped_spawn_zones: int
+    synthetic_ped_goal_zones: int
+    robot_routes: int
+    ped_routes: int
+    obstacle_count: int
+    bounds_count: int
+    ped_crowded_zones: int
+    single_ped_start_markers: int
+    single_ped_goal_markers: int
+    single_pedestrian_definitions: int
+    robot_route_only_mode: bool
+    ped_route_only_mode: bool
+    has_explicit_robot_runtime_zones: bool
+    has_explicit_pedestrian_runtime_zones: bool
+    has_robot_runtime_routes: bool
+    has_pedestrian_runtime_routes: bool
+    has_obstacles: bool
+    parser_limitation_codes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class SvgInspectionReport:
     """Inspection report for one SVG file.
 
@@ -109,6 +144,7 @@ class SvgInspectionReport:
         ped_goal_zones: Number of ped goal zones.
         ped_route_only_mode: True when ped routes exist but ped spawn/goal zones are both absent.
         robot_route_only_mode: True when robot routes exist but robot spawn/goal zones are both absent.
+        capability_metadata: Parser-derived capability metadata for catalog consumers.
         routes: Per-route summaries.
         findings: Collected findings for this SVG.
     """
@@ -124,6 +160,7 @@ class SvgInspectionReport:
     ped_goal_zones: int
     ped_route_only_mode: bool
     robot_route_only_mode: bool
+    capability_metadata: ParserCapabilityMetadata
     routes: list[RouteSummary] = field(default_factory=list)
     findings: list[SvgInspectionFinding] = field(default_factory=list)
 
@@ -179,6 +216,7 @@ def inspect_svg(svg_path: str | Path) -> SvgInspectionReport:
         robot_route_only_mode=bool(map_def.robot_routes)
         and not map_def.robot_spawn_zones
         and not map_def.robot_goal_zones,
+        capability_metadata=_build_capability_metadata(converter=converter, map_def=map_def),
     )
 
     _collect_route_summaries(
@@ -190,7 +228,139 @@ def inspect_svg(svg_path: str | Path) -> SvgInspectionReport:
     _add_zone_consistency_findings(report)
     _add_risky_command_findings(report, path_commands)
     _add_obstacle_crossing_findings(report)
+    report.capability_metadata.parser_limitation_codes = sorted(
+        {finding.code for finding in report.findings}
+    )
     return report
+
+
+def _build_capability_metadata(
+    *,
+    converter: SvgMapConverter,
+    map_def: MapDefinition,
+) -> ParserCapabilityMetadata:
+    """Build parser-derived capability metadata from raw SVG labels and parsed map output.
+
+    Returns:
+        ParserCapabilityMetadata: Structured map capability facts.
+    """
+
+    explicit_counts = _explicit_zone_counts(converter)
+    single_ped_start_markers = sum(
+        1
+        for circle in converter.circle_info
+        if circle.label.startswith("single_ped_") and circle.label.endswith("_start")
+    )
+    single_ped_goal_markers = sum(
+        1
+        for circle in converter.circle_info
+        if circle.label.startswith("single_ped_") and circle.label.endswith("_goal")
+    )
+    ped_route_only = bool(map_def.ped_routes) and not (
+        explicit_counts["ped_spawn_zone"] or explicit_counts["ped_goal_zone"]
+    )
+    robot_route_only = bool(map_def.robot_routes) and not (
+        explicit_counts["robot_spawn_zone"] or explicit_counts["robot_goal_zone"]
+    )
+    synthetic_counts = _synthetic_route_zone_counts(
+        map_def=map_def,
+        explicit_counts=explicit_counts,
+        robot_route_only=robot_route_only,
+        ped_route_only=ped_route_only,
+    )
+
+    return ParserCapabilityMetadata(
+        schema_version="parser-capability-metadata.v1",
+        explicit_robot_spawn_zones=explicit_counts["robot_spawn_zone"],
+        explicit_robot_goal_zones=explicit_counts["robot_goal_zone"],
+        explicit_ped_spawn_zones=explicit_counts["ped_spawn_zone"],
+        explicit_ped_goal_zones=explicit_counts["ped_goal_zone"],
+        parsed_robot_spawn_zones=len(map_def.robot_spawn_zones),
+        parsed_robot_goal_zones=len(map_def.robot_goal_zones),
+        parsed_ped_spawn_zones=len(map_def.ped_spawn_zones),
+        parsed_ped_goal_zones=len(map_def.ped_goal_zones),
+        synthetic_robot_spawn_zones=synthetic_counts["robot_spawn_zone"],
+        synthetic_robot_goal_zones=synthetic_counts["robot_goal_zone"],
+        synthetic_ped_spawn_zones=synthetic_counts["ped_spawn_zone"],
+        synthetic_ped_goal_zones=synthetic_counts["ped_goal_zone"],
+        robot_routes=len(map_def.robot_routes),
+        ped_routes=len(map_def.ped_routes),
+        obstacle_count=len(map_def.obstacles),
+        bounds_count=len(map_def.bounds),
+        ped_crowded_zones=len(map_def.ped_crowded_zones),
+        single_ped_start_markers=single_ped_start_markers,
+        single_ped_goal_markers=single_ped_goal_markers,
+        single_pedestrian_definitions=len(map_def.single_pedestrians),
+        robot_route_only_mode=robot_route_only,
+        ped_route_only_mode=ped_route_only,
+        has_explicit_robot_runtime_zones=bool(
+            explicit_counts["robot_spawn_zone"] and explicit_counts["robot_goal_zone"]
+        ),
+        has_explicit_pedestrian_runtime_zones=bool(
+            explicit_counts["ped_spawn_zone"] and explicit_counts["ped_goal_zone"]
+        ),
+        has_robot_runtime_routes=bool(map_def.robot_routes),
+        has_pedestrian_runtime_routes=bool(map_def.ped_routes),
+        has_obstacles=bool(map_def.obstacles),
+    )
+
+
+def _synthetic_route_zone_counts(
+    *,
+    map_def: MapDefinition,
+    explicit_counts: dict[str, int],
+    robot_route_only: bool,
+    ped_route_only: bool,
+) -> dict[str, int]:
+    """Count endpoint-derived and route-index fallback zones attached to parsed routes.
+
+    Returns:
+        dict[str, int]: Synthetic route-zone counts keyed by zone type.
+    """
+
+    counts = {
+        "robot_spawn_zone": 0,
+        "robot_goal_zone": 0,
+        "ped_spawn_zone": 0,
+        "ped_goal_zone": 0,
+    }
+    if robot_route_only:
+        counts["robot_spawn_zone"] += len(map_def.robot_routes)
+        counts["robot_goal_zone"] += len(map_def.robot_routes)
+    else:
+        for route in map_def.robot_routes:
+            counts["robot_spawn_zone"] += int(route.spawn_id >= explicit_counts["robot_spawn_zone"])
+            counts["robot_goal_zone"] += int(route.goal_id >= explicit_counts["robot_goal_zone"])
+
+    if ped_route_only:
+        counts["ped_spawn_zone"] += len(map_def.ped_routes)
+        counts["ped_goal_zone"] += len(map_def.ped_routes)
+    else:
+        for route in map_def.ped_routes:
+            counts["ped_spawn_zone"] += int(route.spawn_id >= explicit_counts["ped_spawn_zone"])
+            counts["ped_goal_zone"] += int(route.goal_id >= explicit_counts["ped_goal_zone"])
+
+    return counts
+
+
+def _explicit_zone_counts(converter: SvgMapConverter) -> dict[str, int]:
+    """Count author-provided zone rectangles before parser synthetic fallback.
+
+    Returns:
+        dict[str, int]: Explicit zone counts keyed by zone type.
+    """
+
+    counts = {
+        "robot_spawn_zone": 0,
+        "robot_goal_zone": 0,
+        "ped_spawn_zone": 0,
+        "ped_goal_zone": 0,
+    }
+    for rect in converter.rect_info:
+        zone_type, _zone_index = converter._parse_zone_index(rect.label, rect.id_)
+        if zone_type in counts:
+            counts[zone_type] += 1
+    return counts
 
 
 def inspect_svg_targets(target: str | Path, pattern: str = "*.svg") -> list[SvgInspectionReport]:

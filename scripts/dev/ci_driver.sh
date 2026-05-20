@@ -15,7 +15,7 @@ Run one or more canonical CI validation phases.
 
 Phases:
   lint             Ruff lint + format check
-  typecheck        Ty type check (advisory, matches CI)
+  typecheck        Ty type check (advisory; reports findings but exits zero)
   test             Main pytest suite
   smoke            Validation and benchmark smoke checks
   artifact-policy  Canonical artifact root policy guard
@@ -214,6 +214,7 @@ run_phase() {
       uv run ruff format --check .
       ;;
     typecheck)
+      echo "Running ty in advisory mode (--exit-zero); findings are reported but do not fail this phase."
       uvx ty check . --exit-zero
       ;;
     test)

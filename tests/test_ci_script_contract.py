@@ -31,6 +31,17 @@ def test_ci_driver_test_phase_uses_shared_parallel_test_wrapper() -> None:
     assert "uv run pytest -q -n auto --max-worker-restart=0" not in script_text
 
 
+def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:
+    """Typecheck phase should report findings without becoming a merge gate."""
+
+    script_text = CI_DRIVER.read_text(encoding="utf-8")
+
+    assert "Ty type check (advisory; reports findings but exits zero)" in script_text
+    assert "Running ty in advisory mode (--exit-zero)" in script_text
+    assert "findings are reported but do not fail this phase" in script_text
+    assert "uvx ty check . --exit-zero" in script_text
+
+
 def test_run_ci_local_loads_default_phases_from_ci_driver() -> None:
     """Avoid duplicating the canonical CI phase list in the local wrapper."""
 

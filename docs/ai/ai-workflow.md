@@ -200,6 +200,20 @@ When comments arrive, use `gh-pr-comment-fixer` or the equivalent local edit flo
 4. Push the fix.
 5. Resolve the review thread only after the fix is landed.
 
+GitHub treats a reply and a resolution as separate actions. A reply such as "fixed in
+`<commit>`" leaves the conversation unresolved until the review-thread id is passed to the
+GraphQL `resolveReviewThread` mutation. Resolve fixed threads with:
+
+```bash
+gh api graphql \
+  -F thread_id=<review_thread_id> \
+  -f query='mutation($thread_id:ID!){resolveReviewThread(input:{threadId:$thread_id}){thread{id isResolved}}}'
+```
+
+Then re-query the PR's `reviewThreads` and verify that addressed threads report
+`isResolved: true`. If GraphQL auth, rate limits, or permissions prevent resolution, say that the
+fix was pushed but the named thread ids remain unresolved.
+
 ### 9. Close the loop
 
 When work is deferred, create a follow-up issue rather than leaving the remainder hidden in chat or PR text.

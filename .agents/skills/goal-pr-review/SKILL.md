@@ -54,7 +54,8 @@ Apply `merge-ready` only when all are true:
 - tests, CI, or `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` provide adequate proof,
 - benchmark/planner changes have benchmark-safe evidence and do not count fallback/degraded
   execution as success,
-- unresolved review threads are handled, fixed, or converted into follow-up issues,
+- unresolved review threads are fixed and resolved on GitHub, converted into follow-up issues, or
+  left open with an explicit blocker that prevents safe resolution,
 - generated `output/` artifacts are classified and durable dependencies are represented,
 - deferred but important work has dedicated GitHub issues linked from the PR.
 
@@ -129,6 +130,11 @@ Do not duplicate those skills' detailed procedures here.
    - Remove stale `merge-ready` if a later review finds the proof bar no longer passes.
    - After any fix attempt, commit, push, and record the validation evidence before reassessing the
      label.
+   - Before applying `merge-ready`, re-query review threads and verify that every addressed thread
+     has `isResolved: true`. A PR reply or summary comment does not resolve a review thread by
+     itself; use `gh-pr-comment-fixer`'s `resolveReviewThread` GraphQL step for fixed threads.
+   - Do not apply `merge-ready` when a fixed review thread remains unresolved only because the
+     resolution mutation was skipped, blocked by GraphQL auth/rate limits, or not verified.
    - Leave a short PR comment summarizing the proof basis when applying the label.
    - Leave a "not merge-ready" comment only when attempted fixes are impossible, unsafe, blocked, or
      insufficient after validation.
@@ -141,7 +147,9 @@ Do not duplicate those skills' detailed procedures here.
 
 - Do not treat passing CI alone as enough for `merge-ready`.
 - Do not mark a PR merge-ready if linked issues remain semantically unresolved.
-- Do not ignore open review threads; resolve, answer, or convert them to follow-up issues.
+- Do not ignore open review threads; resolve fixed threads through GitHub's review-thread
+  resolution API, answer threads that need reviewer input, or convert out-of-scope work to
+  follow-up issues.
 - Do not make broad edits just to satisfy readiness; stay inside the issue/PR contract.
 - Do not rewrite contributor history or force-push unless the user explicitly authorizes it.
 - Do not merge PRs. This skill applies readiness signals only.

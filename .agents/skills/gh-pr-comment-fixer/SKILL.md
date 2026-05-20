@@ -17,7 +17,9 @@ the full test suite, and resolve the review threads after pushing.
 
 2. Retrieve review threads and comments.
    - Use GraphQL for review threads:
-     `gh api graphql -F owner=<owner> -F repo=<repo> -F number=<pr_number> -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:20){nodes{id body path line url}}}}}}}'`
+     `gh api graphql -F owner=<owner> -F repo=<repo> -F number=<pr_number> -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:100){nodes{id body path line url}}}}}}}'`
+   - Keep the review thread `id` with each requested change. GitHub resolves review threads by
+     thread id, not by the inline comment id or a reply id.
    - Use `gh pr view --json comments` for top-level discussion comments.
    - Summarize the requested changes and note any questions or ambiguities.
 
@@ -53,8 +55,31 @@ the full test suite, and resolve the review threads after pushing.
    - Mention which comments were addressed.
 
 8. Resolve review threads.
-   - Use `gh pr review --comment` for replies and `gh api` or `gh pr review` to resolve threads.
-   - Resolve only after the fix is pushed.
+   - Replying to a review thread is not the same as resolving it. After the fix is committed,
+     pushed, and validated, resolve each addressed review thread with GraphQL:
+
+     ```bash
+     gh api graphql \
+       -F thread_id=<review_thread_id> \
+       -f query='mutation($thread_id:ID!){resolveReviewThread(input:{threadId:$thread_id}){thread{id isResolved}}}'
+     ```
+
+   - Resolve only after the fix is pushed. Do not resolve threads that were merely acknowledged,
+     still need reviewer input, failed validation, or were converted into a follow-up issue without
+     satisfying the current PR.
+   - Re-query review threads after resolution and verify that each addressed thread reports
+     `isResolved: true` before saying the review comments are resolved:
+
+     ```bash
+     gh api graphql \
+       -F owner=<owner> \
+       -F repo=<repo> \
+       -F number=<pr_number> \
+       -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:100){nodes{id body path line url}}}}}}}'
+     ```
+
+   - If GraphQL auth, rate limits, or permissions block resolution, leave the PR comment or final
+     handoff explicit: fixes were pushed, but the named review thread ids remain unresolved.
 
 ## Notes
 

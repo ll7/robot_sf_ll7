@@ -42,6 +42,9 @@ Use it for three things only:
   `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress`.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
+- `../issue_1318_teb_corridor_deadlock_eval.md`: issue #1318 classic-merging corridor-deadlock
+  comparison showing current in-repo TEB collides on the selected #1022 seeds while the hybrid-rule
+  incumbent solves four of five.
 
 ## Reproducible Entry Points
 

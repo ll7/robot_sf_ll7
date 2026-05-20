@@ -45,5 +45,7 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   explicit variant/source rows and fail-closed upstream adapter availability.
 - `issue_1169_carla_live_replay_2026-05-18/`: compact Docker-backed CARLA live replay summaries
   proving client/server connectivity and the fail-closed static-geometry boundary.
+- `issue_1318_teb_corridor_deadlock_2026-05-20/`: compact TEB/ORCA/hybrid-rule
+  classic-merging corridor-deadlock comparison summary for issue #1318.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and
   reports from the May 4 run.

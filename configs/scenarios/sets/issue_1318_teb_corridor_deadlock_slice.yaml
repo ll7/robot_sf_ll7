@@ -1,0 +1,32 @@
+scenarios:
+  - name: classic_merging_low
+    map_file: ../../../maps/svg_maps/classic_merging.svg
+    simulation_config:
+      max_episode_steps: 600
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: merging
+      density: low
+      flow: converging
+      groups: 0.0
+      target_failure_mode: static_corridor_deadlock
+      purpose: Recheck documented #1022 low-density corridor-deadlock seeds for #1318.
+      predecessor_note: docs/context/issue_1022_route_corridor_design_research.md
+    seeds: [111, 113]
+
+  - name: classic_merging_medium
+    map_file: ../../../maps/svg_maps/classic_merging.svg
+    simulation_config:
+      max_episode_steps: 600
+      ped_density: 0.05
+    robot_config: {}
+    metadata:
+      archetype: merging
+      density: medium
+      flow: converging
+      groups: 0.0
+      target_failure_mode: static_corridor_deadlock
+      purpose: Recheck documented #1022 medium-density corridor-deadlock seeds for #1318.
+      predecessor_note: docs/context/issue_1022_route_corridor_design_research.md
+    seeds: [111, 112, 113]

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
+PYPROJECT = ROOT / "pyproject.toml"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 
 
@@ -23,11 +25,16 @@ def test_ci_driver_smoke_uses_runtime_schema_and_output_matrix_path() -> None:
 
 
 def test_ci_driver_test_phase_uses_shared_parallel_test_wrapper() -> None:
-    """Preserve the repo's platform-specific pytest wrapper in the CI driver."""
+    """Preserve the shared pytest wrapper and default testpaths in the CI driver."""
 
     script_text = CI_DRIVER.read_text(encoding="utf-8")
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    testpaths = pyproject["tool"]["pytest"]["ini_options"]["testpaths"]
 
-    assert '"$SCRIPT_DIR/run_tests_parallel.sh" tests' in script_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh"' in script_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" tests' not in script_text
+    assert "tests" in testpaths
+    assert "fast-pysf/tests" in testpaths
     assert "uv run pytest -q -n auto --max-worker-restart=0" not in script_text
 
 

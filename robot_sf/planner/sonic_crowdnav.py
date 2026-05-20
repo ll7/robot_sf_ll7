@@ -16,6 +16,8 @@ import numpy as np
 import torch
 from gymnasium import spaces
 
+from robot_sf.common.math_utils import wrap_angle_pi as _normalize_angle
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -63,15 +65,6 @@ def build_sonic_crowdnav_config(data: dict[str, Any] | None) -> SonicCrowdNavCon
         max_linear_speed=max_linear_speed,
         max_angular_speed=max_angular_speed,
     )
-
-
-def _normalize_angle(angle: float) -> float:
-    """Wrap an angle to ``[-pi, pi)``.
-
-    Returns:
-        Wrapped angle in radians.
-    """
-    return float((angle + math.pi) % (2.0 * math.pi) - math.pi)
 
 
 def _require_array(value: Any, *, size: int, field: str) -> np.ndarray:

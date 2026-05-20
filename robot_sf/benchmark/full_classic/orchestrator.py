@@ -38,6 +38,7 @@ from robot_sf.benchmark.termination_reason import (
     status_from_termination_reason,
 )
 from robot_sf.benchmark.thresholds import ensure_metric_parameters
+from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
@@ -528,7 +529,7 @@ def _simple_goal_policy(simulator) -> np.ndarray:
     if dist < 1e-9:
         return np.array([0.0, 0.0], dtype=float)
     desired_heading = math.atan2(vec[1], vec[0])
-    heading_err = (desired_heading - heading + math.pi) % (2 * math.pi) - math.pi
+    heading_err = wrap_angle_pi(desired_heading - heading)
     linear = min(1.0, dist)
     angular = max(min(heading_err, 1.0), -1.0)
     return np.array([linear, angular], dtype=float)

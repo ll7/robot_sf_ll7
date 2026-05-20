@@ -12,14 +12,7 @@ from typing import Any
 
 import numpy as np
 
-
-def _wrap_angle(angle: float) -> float:
-    """Wrap an angle to ``[-pi, pi]``.
-
-    Returns:
-        float: Wrapped angle.
-    """
-    return float((float(angle) + np.pi) % (2.0 * np.pi) - np.pi)
+from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 
 
 @dataclass

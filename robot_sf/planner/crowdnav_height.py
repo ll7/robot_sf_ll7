@@ -63,15 +63,6 @@ def build_crowdnav_height_config(data: dict[str, Any] | None) -> CrowdNavHeightC
     )
 
 
-def _normalize_angle(angle: float) -> float:
-    """Wrap angle to ``[-pi, pi)``.
-
-    Returns:
-        Wrapped angle in radians.
-    """
-    return float((angle + math.pi) % (2.0 * math.pi) - math.pi)
-
-
 def _require_array(value: Any, *, size: int, field: str) -> np.ndarray:
     """Return a required float array slice or raise a contract error."""
     arr = np.asarray([] if value is None else value, dtype=float).reshape(-1)

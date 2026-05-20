@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from robot_sf.common.math_utils import wrap_angle_pi as _normalize_angle
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -49,15 +51,6 @@ def build_social_navigation_pyenvs_orca_config(
         max_linear_speed=max_linear_speed,
         max_angular_speed=max_angular_speed,
     )
-
-
-def _normalize_angle(angle: float) -> float:
-    """Wrap angle to [-pi, pi).
-
-    Returns:
-        float: Wrapped heading angle in radians.
-    """
-    return float((angle + math.pi) % (2.0 * math.pi) - math.pi)
 
 
 def _as_array(value: Any, *, pad: int, fill: float = 0.0) -> np.ndarray:

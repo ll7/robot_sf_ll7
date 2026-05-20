@@ -42,6 +42,8 @@ Use it for three things only:
   `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress`.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
+- `2026-05-20_navdp_nomad_diffusion_assessment.md`: issue #1356 assessment of NavDP and NoMaD
+  diffusion-navigation source contracts, with monitor-only verdicts for Robot SF local-planner use.
 
 ## Reproducible Entry Points
 

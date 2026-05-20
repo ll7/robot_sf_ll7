@@ -130,6 +130,8 @@ knowledge, not every transient iteration detail.
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)
 * Issue #1322 SocNavBench device-placement cleanup:
   [issue_1322_socnavbench_device_placement_cleanup.md](issue_1322_socnavbench_device_placement_cleanup.md)
+* Issue #1323 SocNavBench personal-space velocity:
+  [issue_1323_socnavbench_personal_space_velocity.md](issue_1323_socnavbench_personal_space_velocity.md)
 * Issue #1319 task bundles:
   [issue_1319_task_bundles.md](issue_1319_task_bundles.md)
 * Issue #1245 Benchmark Claim Artifact:

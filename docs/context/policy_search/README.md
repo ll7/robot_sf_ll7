@@ -11,7 +11,10 @@ Use it for three things only:
 
 ## Layout
 
-- `candidate_registry.yaml`: canonical candidate list and config pointers.
+- `candidate_registry.yaml`: canonical candidate list and config pointers for implemented or
+  concrete runnable Robot SF candidates.
+- `reject_monitor_registry.md`: compact learned-policy reject, monitor-only, deferred, and
+  source-side-first trail. Check this before proposing a new learned-policy follow-up.
 - `experiment_ledger.md`: compact execution log for implemented candidates.
 - `contracts/`: project contract, gates, taxonomy, and runbook.
 - `reasoning/`: bounded planning and design notes.
@@ -24,6 +27,9 @@ Use it for three things only:
 - `portfolio_overview_2026-05-05.md`: current candidate portfolio overview generated from the
   policy-search registry and tracked reports; includes current leaders, success/collision/near-miss
   evidence, why the best candidates look promising, coverage gaps, and reproduction commands.
+- `reject_monitor_registry.md`: reusable negative/monitor trail for learned-policy families such as
+  CrowdNav descendants, Dreamer/world-model approaches, diffusion/visual navigation, SAC/TD3/PPO
+  variants, DRL-VO, and source-side-only candidates.
 - `reports/2026-05-05_full_matrix_all_candidates_analysis.md`: completed 29-candidate
   full-matrix sweep analysis, release-candidate decision, provenance caveat, and recommended next
   steps.

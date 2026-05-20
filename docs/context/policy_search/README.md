@@ -21,6 +21,9 @@ Use it for three things only:
 
 ## Current Diagnostic Notes
 
+- `../issue_1365_social_graph_observation_adapter.md`: shared SocNav-to-graph observation adapter
+  contract for graph/social-RL candidate screening; documents masks, caps, history, static-obstacle
+  tokens, and the deployment-only leakage boundary.
 - `portfolio_overview_2026-05-05.md`: current candidate portfolio overview generated from the
   policy-search registry and tracked reports; includes current leaders, success/collision/near-miss
   evidence, why the best candidates look promising, coverage gaps, and reproduction commands.

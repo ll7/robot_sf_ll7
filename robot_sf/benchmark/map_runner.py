@@ -2733,17 +2733,24 @@ def _floor_collision_metrics_from_flags(
         if typed_collision_seen and _collision_metric_value(metrics, key) <= 0.0:
             metrics[key] = 1.0
 
-    total_collision_count = sum(_collision_metric_value(metrics, key) for key in collision_keys)
-    if total_collision_count > 0.0:
-        metrics["total_collision_count"] = total_collision_count
-        metrics["collisions"] = total_collision_count
+    typed_collision_count = sum(_collision_metric_value(metrics, key) for key in collision_keys)
+    sampled_collision_count = max(
+        _collision_metric_value(metrics, "total_collision_count"),
+        _collision_metric_value(metrics, "collisions"),
+        _collision_metric_value(metrics, "wall_collisions"),
+    )
+    if typed_collision_count > 0.0:
+        aggregate_collision_count = max(sampled_collision_count, typed_collision_count)
+        metrics["total_collision_count"] = aggregate_collision_count
+        metrics["collisions"] = aggregate_collision_count
         if obstacle_collision_seen and _collision_metric_value(metrics, "wall_collisions") <= 0.0:
             metrics["wall_collisions"] = _collision_metric_value(
                 metrics, "obstacle_collision_count"
             )
-    elif collision_seen and _collision_metric_value(metrics, "collisions") <= 0.0:
-        metrics["total_collision_count"] = 1.0
-        metrics["collisions"] = 1.0
+    elif collision_seen:
+        aggregate_collision_count = max(sampled_collision_count, 1.0)
+        metrics["total_collision_count"] = aggregate_collision_count
+        metrics["collisions"] = aggregate_collision_count
 
 
 def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915

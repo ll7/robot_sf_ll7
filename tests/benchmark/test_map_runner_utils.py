@@ -2743,6 +2743,32 @@ def test_collision_metric_floor_preserves_untyped_collision_event() -> None:
     assert metrics["agent_collision_count"] == pytest.approx(0.0)
 
 
+def test_collision_metric_floor_preserves_larger_sampled_totals() -> None:
+    """Exact typed collision floors must not lower sampled aggregate totals."""
+    metrics = {
+        "success": 0.0,
+        "collisions": 2.0,
+        "ped_collision_count": 0.0,
+        "obstacle_collision_count": 0.0,
+        "agent_collision_count": 0.0,
+        "total_collision_count": 2.0,
+        "wall_collisions": 2.0,
+    }
+
+    _floor_collision_metrics_from_flags(
+        metrics,
+        collision_seen=True,
+        ped_collision_seen=False,
+        obstacle_collision_seen=True,
+        robot_collision_seen=False,
+    )
+
+    assert metrics["obstacle_collision_count"] == pytest.approx(1.0)
+    assert metrics["wall_collisions"] == pytest.approx(2.0)
+    assert metrics["collisions"] == pytest.approx(2.0)
+    assert metrics["total_collision_count"] == pytest.approx(2.0)
+
+
 def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Exercise serial batch execution and resume skipping."""
     scenario = {"name": "s1", "metadata": {"supported": True}}

@@ -340,7 +340,6 @@ def _blueprint(
     *,
     role_name: str,
 ) -> Any:
-    blueprint = None
     try:
         blueprint = library.find(preferred_id)
     except (AttributeError, KeyError, RuntimeError, ValueError):

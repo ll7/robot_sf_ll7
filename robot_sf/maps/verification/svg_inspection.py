@@ -246,16 +246,15 @@ def _build_capability_metadata(
     """
 
     explicit_counts = _explicit_zone_counts(converter)
-    single_ped_start_markers = sum(
-        1
-        for circle in converter.circle_info
-        if circle.label.startswith("single_ped_") and circle.label.endswith("_start")
-    )
-    single_ped_goal_markers = sum(
-        1
-        for circle in converter.circle_info
-        if circle.label.startswith("single_ped_") and circle.label.endswith("_goal")
-    )
+    single_ped_start_markers = 0
+    single_ped_goal_markers = 0
+    for circle in converter.circle_info:
+        if not circle.label.startswith("single_ped_"):
+            continue
+        if circle.label.endswith("_start"):
+            single_ped_start_markers += 1
+        elif circle.label.endswith("_goal"):
+            single_ped_goal_markers += 1
     ped_route_only = bool(map_def.ped_routes) and not (
         explicit_counts["ped_spawn_zone"] or explicit_counts["ped_goal_zone"]
     )
@@ -264,7 +263,6 @@ def _build_capability_metadata(
     )
     synthetic_counts = _synthetic_route_zone_counts(
         map_def=map_def,
-        explicit_counts=explicit_counts,
         robot_route_only=robot_route_only,
         ped_route_only=ped_route_only,
     )
@@ -308,7 +306,6 @@ def _build_capability_metadata(
 def _synthetic_route_zone_counts(
     *,
     map_def: MapDefinition,
-    explicit_counts: dict[str, int],
     robot_route_only: bool,
     ped_route_only: bool,
 ) -> dict[str, int]:
@@ -329,16 +326,16 @@ def _synthetic_route_zone_counts(
         counts["robot_goal_zone"] += len(map_def.robot_routes)
     else:
         for route in map_def.robot_routes:
-            counts["robot_spawn_zone"] += int(route.spawn_id >= explicit_counts["robot_spawn_zone"])
-            counts["robot_goal_zone"] += int(route.goal_id >= explicit_counts["robot_goal_zone"])
+            counts["robot_spawn_zone"] += int(route.spawn_id >= len(map_def.robot_spawn_zones))
+            counts["robot_goal_zone"] += int(route.goal_id >= len(map_def.robot_goal_zones))
 
     if ped_route_only:
         counts["ped_spawn_zone"] += len(map_def.ped_routes)
         counts["ped_goal_zone"] += len(map_def.ped_routes)
     else:
         for route in map_def.ped_routes:
-            counts["ped_spawn_zone"] += int(route.spawn_id >= explicit_counts["ped_spawn_zone"])
-            counts["ped_goal_zone"] += int(route.goal_id >= explicit_counts["ped_goal_zone"])
+            counts["ped_spawn_zone"] += int(route.spawn_id >= len(map_def.ped_spawn_zones))
+            counts["ped_goal_zone"] += int(route.goal_id >= len(map_def.ped_goal_zones))
 
     return counts
 

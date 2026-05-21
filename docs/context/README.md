@@ -148,6 +148,10 @@ knowledge, not every transient iteration detail.
   [issue_1365_social_graph_observation_adapter.md](issue_1365_social_graph_observation_adapter.md)
 * Issue #1369 SAGE MPC-Transfer Planner Reproducibility:
   [issue_1369_sage_mpc_transfer_assessment.md](issue_1369_sage_mpc_transfer_assessment.md)
+* Issue #1361 Command-Lattice Corridor-Deadlock Assessment (2026-05-20):
+  [issue_1361_motion_primitive_corridor_deadlock.md](issue_1361_motion_primitive_corridor_deadlock.md)
+* Issue #1360 External TEB Reference Assessment:
+  [issue_1360_external_teb_assessment.md](issue_1360_external_teb_assessment.md)
 * Issue #769/#1364 DRL-VO Assessment and Privileged-State Audit:
   [issue_769_drl_vo_assessment.md](issue_769_drl_vo_assessment.md)
 * Issue #1245 Benchmark Claim Artifact:
@@ -396,7 +400,9 @@ knowledge, not every transient iteration detail.
 * [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
 * [Issue #1368 NeuPAN Point-Obstacle Comparator Assessment (2026-05-20)](issue_1368_neupan_point_obstacle_assessment.md)
 * [Issue #1367 CrowdNav-Family Learned-Policy Verdict](./policy_search/issue_1367_crowdnav_family_verdict.md)
+* [Issue #1394 CrowdNav HEIGHT Source-Harness Proof](./policy_search/issue_1394_crowdnav_height_source_harness.md)
 * [Issue #1366 GenSafeNav / SoNIC Conformal Contract](./policy_search/issue_1366_gensafenav_sonic_conformal_contract.md)
+* [Issue #1393 GenSafeNav / SoNIC Source-Harness Reproduction (2026-05-20)](./policy_search/issue_1393_gensafenav_source_harness.md)
 * [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local
   evaluation funnel, SLURM handoff notes, and the current
   [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training

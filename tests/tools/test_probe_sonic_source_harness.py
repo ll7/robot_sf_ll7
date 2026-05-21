@@ -86,6 +86,25 @@ def test_run_probe_captures_missing_dependency_from_entrypoint(tmp_path: Path) -
     assert report.training_defaults["env_name"] == "CrowdSimPredRealGST-v0"
 
 
+def test_run_probe_records_requested_issue_number(tmp_path: Path) -> None:
+    """Probe reports should be reusable for follow-up issues beyond the original source probe."""
+    repo_root = tmp_path / "repo"
+    _write_fake_repo(repo_root)
+    _write(repo_root / "test.py", "print('ok')\n")
+
+    report = run_probe(
+        repo_root,
+        model_name="SoNIC_GST",
+        checkpoint="05207.pt",
+        timeout_seconds=5,
+        issue=1393,
+        repo_remote_url="https://github.com/tasl-lab/GenSafeNav",
+    )
+
+    assert report.issue == 1393
+    assert report.repo_remote_url == "https://github.com/tasl-lab/GenSafeNav"
+
+
 def test_run_probe_blocks_cleanly_when_checkpoint_dir_is_empty(tmp_path: Path) -> None:
     """An empty checkpoints dir should produce a blocked report, not a traceback."""
     repo_root = tmp_path / "repo"

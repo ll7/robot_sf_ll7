@@ -15,6 +15,7 @@ Related issues:
 * `#1363` learned local-policy eligibility checklist
 * `#1365` shared graph/social observation adapter
 * `#1366` GenSafeNav / SoNIC conformal-contract assessment
+* `#1394` CrowdNav HEIGHT source-harness proof
 
 ## Goal
 
@@ -47,6 +48,7 @@ Repository evidence:
 * `docs/context/issue_627_sonic_wrapper_followup.md`
 * [`760_model_shortcoming_hypothesis.md`](../760_model_shortcoming_hypothesis.md)
 * `docs/context/issue_770_igat_st2_attention_assessment.md`
+* `docs/context/policy_search/issue_1394_crowdnav_height_source_harness.md`
 * `docs/benchmark_planner_family_coverage.md`
 * `robot_sf/planner/crowdnav_height.py`
 * `robot_sf/planner/sonic_crowdnav.py`
@@ -120,6 +122,9 @@ HEIGHT remains the current ceiling representative in Robot SF because it is alre
 metadata-covered, but it is not benchmark-promoted. The known issues are still material: upstream
 training/domain mismatch, simplified Robot SF observation reconstruction, discrete action
 projection, and poor prior Robot SF performance.
+Issue #1394 adds a source-harness proof record for this boundary: the pinned HEIGHT source checkout
+still blocks on the missing legacy `gym` dependency before checkpoint loading, and the advertised
+`237400.pt` checkpoint is not bundled in the clone.
 
 SoNIC / GenSafeNav has the most runnable model-only asset path, but #1366 keeps its conformal and
 constrained-RL semantics at `source-side reproduction first`. The existing wrappers are useful

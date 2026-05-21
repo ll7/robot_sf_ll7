@@ -24,6 +24,8 @@ Primary external sources:
 * GenSafeNav paper: <https://arxiv.org/abs/2508.05634>
 * SoNIC repository: <https://github.com/tasl-lab/SoNIC-Social-Nav>
 * SoNIC paper: <https://arxiv.org/abs/2407.17460>
+* Issue #1393 source-harness rerun:
+  [issue_1393_gensafenav_source_harness.md](issue_1393_gensafenav_source_harness.md)
 
 Local source snapshot inspected in the ignored worktree output area:
 

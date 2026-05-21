@@ -136,6 +136,10 @@ def test_guarded_ppo_exposes_structured_shield_decision_for_fallback() -> None:
     assert "pedestrian_clearance" in decision.violated_constraints
     assert decision.prediction_source == "short_horizon_rollout"
     assert decision.fallback_controller_state["policy"] == "_FallbackAdapter"
+    adaptation = decision.fallback_controller_state["action_adaptation"]
+    assert adaptation["mode"] == "guard_selected_command"
+    assert adaptation["raw_policy_action"] == [0.6, 0.0]
+    assert adaptation["adapted_action"] == [0.0, 1.0]
     assert decision.hard_constraint_violation is False
 
 
@@ -181,6 +185,201 @@ def test_guarded_ppo_blends_safe_orca_prior_in_near_field() -> None:
 
     assert command == (0.4, 0.2)
     assert decision == "prior_blend_safe"
+
+
+def test_guarded_ppo_selects_bounded_residual_over_orca_prior() -> None:
+    """Residual mode should select ``ORCA + clip(PPO - ORCA)`` when it is safer."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "prior_residual_mode": True,
+                "prior_residual_max_linear_delta": 0.2,
+                "prior_residual_max_angular_delta": 0.3,
+                "prior_near_field_only": False,
+            }
+        ),
+        fallback_adapter=_FallbackAdapter((0.0, 0.0)),
+        prior_adapter=_PriorAdapter((0.5, -0.1)),
+    )
+    evaluations = iter(
+        [
+            {
+                "safe": False,
+                "progress": 0.5,
+                "min_ped_clear": 0.2,
+                "first_ped_clear": 0.2,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 0.4,
+            },
+            {
+                "safe": True,
+                "progress": 0.47,
+                "min_ped_clear": 0.65,
+                "first_ped_clear": 0.65,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 0.8,
+            },
+            {
+                "safe": True,
+                "progress": 0.48,
+                "min_ped_clear": 0.8,
+                "first_ped_clear": 0.8,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 1.2,
+            },
+        ]
+    )
+    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+
+    decision = guard.choose_command_decision(_obs(), (0.8, -0.5))
+
+    assert decision.decision_label == "prior_residual_safe"
+    assert decision.filtered_action == (0.7, -0.4)
+    assert decision.fallback_controller_state["policy"] == "prior_residual"
+    metadata = decision.fallback_controller_state["action_adaptation"]
+    assert metadata["mode"] == "prior_residual"
+    assert metadata["nominal_orca_action"] == [0.5, -0.1]
+    assert metadata["raw_policy_action"] == [0.8, -0.5]
+    assert metadata["raw_residual_action"] == [0.30000000000000004, -0.4]
+    assert metadata["bounded_residual_action"] == [0.2, -0.3]
+    assert metadata["adapted_action"] == [0.7, -0.4]
+    assert metadata["residual_bounds"] == {"linear": 0.2, "angular": 0.3}
+    assert metadata["residual_clipped"] is True
+    assert metadata["hard_guard_authoritative"] is True
+
+
+def test_guarded_ppo_residual_mode_keeps_safe_ppo_passthrough() -> None:
+    """Residual mode should not override PPO actions that already satisfy the guard."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {"prior_residual_mode": True, "prior_near_field_only": False}
+        ),
+        fallback_adapter=_FallbackAdapter((0.0, 0.0)),
+        prior_adapter=_PriorAdapter((0.2, 0.0)),
+    )
+
+    decision = guard.choose_command_decision(_obs(), (0.4, 0.0))
+
+    assert decision.decision_label == "ppo_clear"
+    assert decision.filtered_action == (0.4, 0.0)
+    metadata = decision.fallback_controller_state["action_adaptation"]
+    assert metadata["mode"] == "direct_policy_command"
+    assert metadata["adapted_action"] == [0.4, 0.0]
+
+
+def test_guarded_ppo_residual_mode_keeps_safer_orca_prior() -> None:
+    """Residual mode should not replace a safe ORCA prior with a less safe residual."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "prior_residual_mode": True,
+                "prior_residual_max_linear_delta": 0.2,
+                "prior_residual_max_angular_delta": 0.3,
+                "prior_near_field_only": False,
+            }
+        ),
+        fallback_adapter=_FallbackAdapter((0.0, 0.0)),
+        prior_adapter=_PriorAdapter((0.5, -0.1)),
+    )
+    evaluations = iter(
+        [
+            {
+                "safe": False,
+                "progress": 0.5,
+                "min_ped_clear": 0.2,
+                "first_ped_clear": 0.2,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 0.4,
+            },
+            {
+                "safe": True,
+                "progress": 0.48,
+                "min_ped_clear": 0.9,
+                "first_ped_clear": 0.9,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 1.4,
+            },
+            {
+                "safe": True,
+                "progress": 0.48,
+                "min_ped_clear": 0.75,
+                "first_ped_clear": 0.75,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 1.0,
+            },
+        ]
+    )
+    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+
+    decision = guard.choose_command_decision(_obs(), (0.8, -0.5))
+
+    assert decision.decision_label == "prior_safe"
+    assert decision.filtered_action == (0.5, -0.1)
+    adaptation = decision.fallback_controller_state["action_adaptation"]
+    assert adaptation["mode"] == "guard_selected_command"
+    assert adaptation["adapted_action"] == [0.5, -0.1]
+
+
+def test_guarded_ppo_residual_mode_falls_through_when_not_safe() -> None:
+    """Unsafe residual proposals should fall through to prior or fallback safety handling."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {"prior_residual_mode": True, "prior_near_field_only": False}
+        ),
+        fallback_adapter=_FallbackAdapter((0.0, 0.0)),
+        prior_adapter=_PriorAdapter((0.2, 0.0)),
+    )
+    evaluations = iter(
+        [
+            {
+                "safe": False,
+                "progress": 0.5,
+                "min_ped_clear": 0.2,
+                "first_ped_clear": 0.2,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 0.4,
+            },
+            {
+                "safe": True,
+                "progress": 0.2,
+                "min_ped_clear": 0.9,
+                "first_ped_clear": 0.9,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 1.0,
+            },
+            {
+                "safe": False,
+                "progress": 0.4,
+                "min_ped_clear": 0.3,
+                "first_ped_clear": 0.3,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 0.5,
+            },
+        ]
+    )
+    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+
+    command, label = guard.choose_command(_obs(), (0.8, 0.0))
+
+    assert command == (0.2, 0.0)
+    assert label == "prior_safe"
+
+
+def test_guarded_ppo_residual_config_defaults_disabled_and_parses_bounds() -> None:
+    """Residual mode should be opt-in and parse explicit residual bounds."""
+    default_cfg = build_guarded_ppo_config({})
+    residual_cfg = build_guarded_ppo_config(
+        {
+            "prior_residual_mode": True,
+            "prior_residual_max_linear_delta": 0.12,
+            "prior_residual_max_angular_delta": 0.34,
+        }
+    )
+
+    assert default_cfg.prior_residual_mode is False
+    assert residual_cfg.prior_residual_mode is True
+    assert residual_cfg.prior_residual_max_linear_delta == 0.12
+    assert residual_cfg.prior_residual_max_angular_delta == 0.34
 
 
 def test_guarded_ppo_prior_blend_requires_strict_safety_improvement() -> None:

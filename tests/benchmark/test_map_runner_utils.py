@@ -2715,6 +2715,7 @@ def test_run_map_episode_floors_exact_obstacle_collision_metrics(
     assert record["metrics"]["collisions"] == pytest.approx(1.0)
     assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
 
+
 def test_collision_metric_floor_preserves_untyped_collision_event() -> None:
     """Top-level collision events should still satisfy outcome/metric integrity."""
     metrics = {

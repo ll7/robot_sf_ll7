@@ -425,6 +425,106 @@ def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> N
     assert analysis["runtime_hotspots"]["slowest_planners"][0]["planner_key"] == "goal"
 
 
+def test_analyze_campaign_matches_rows_by_planner_and_kinematics(tmp_path: Path) -> None:
+    """Cross-kinematics rows should compare against their matching run only."""
+    campaign_root = tmp_path / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    diff_episodes_path = campaign_root / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    holo_episodes_path = campaign_root / "runs" / "goal__holonomic" / "episodes.jsonl"
+
+    base_episode = {
+        "status": "failure",
+        "termination_reason": "timeout",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        "integrity": {"contradictions": []},
+        "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
+    }
+    _write_jsonl(
+        diff_episodes_path,
+        [{**base_episode, "metrics": {"success": False, "collisions": 0, "snqi": -0.4}}],
+    )
+    _write_jsonl(
+        holo_episodes_path,
+        [{**base_episode, "metrics": {"success": False, "collisions": 0, "snqi": -0.1}}],
+    )
+    _write_json(
+        summary_path,
+        {
+            "campaign": {
+                "campaign_id": "cross_kinematics",
+                "runtime_sec": 2.0,
+                "episodes_per_second": 1.0,
+            },
+            "planner_rows": [
+                {
+                    "planner_key": "goal",
+                    "kinematics": "differential_drive",
+                    "planner_group": "core",
+                    "status": "ok",
+                    "preflight_status": "ok",
+                    "benchmark_success": "true",
+                    "success_mean": "0.0000",
+                    "collisions_mean": "0.0000",
+                    "snqi_mean": "-0.4000",
+                },
+                {
+                    "planner_key": "goal",
+                    "kinematics": "holonomic",
+                    "planner_group": "core",
+                    "status": "ok",
+                    "preflight_status": "ok",
+                    "benchmark_success": "true",
+                    "success_mean": "0.0000",
+                    "collisions_mean": "0.0000",
+                    "snqi_mean": "-0.1000",
+                },
+            ],
+            "runs": [
+                {
+                    "planner": {
+                        "key": " goal ",
+                        "algo": "goal",
+                        "kinematics": "differential_drive",
+                    },
+                    "runtime_sec": 1.0,
+                    "episodes_path": "runs/goal__differential_drive/episodes.jsonl",
+                    "summary": {
+                        "written": 1,
+                        "episodes_per_second": 1.0,
+                        "preflight": {"status": "ok"},
+                        "kinematics": "differential_drive",
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "disabled"}},
+                    },
+                },
+                {
+                    "planner": {"key": "goal", "algo": "goal", "kinematics": "holonomic"},
+                    "runtime_sec": 1.0,
+                    "episodes_path": "runs/goal__holonomic/episodes.jsonl",
+                    "summary": {
+                        "written": 1,
+                        "episodes_per_second": 1.0,
+                        "preflight": {"status": "ok"},
+                        "kinematics": "holonomic",
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "disabled"}},
+                    },
+                },
+            ],
+        },
+    )
+
+    analysis = analyze_campaign(campaign_root)
+
+    assert analysis["findings"] == []
+    assert {(item["planner_key"], item["kinematics"]) for item in analysis["planners"]} == {
+        ("goal", "differential_drive"),
+        ("goal", "holonomic"),
+    }
+
+
 def test_analyze_campaign_accepts_repo_relative_paths_from_campaign_checkout(
     tmp_path: Path,
 ) -> None:

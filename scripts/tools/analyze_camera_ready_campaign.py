@@ -28,6 +28,7 @@ class PlannerDiagnostics:
 
     planner_key: str
     algo: str
+    kinematics: str
     episodes_summary: int
     episodes_file: int
     success_mean_episodes: float
@@ -185,23 +186,53 @@ def _infer_campaign_repository_root(campaign_root: Path) -> Path:
     return resolved.parent.resolve()
 
 
-def _planner_row_index(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Index planner summary rows by planner key.
+def _planner_row_identity(planner_key: str, kinematics: str) -> tuple[str, str]:
+    """Return normalized planner row identity."""
+    return (planner_key.strip(), kinematics.strip())
+
+
+def _planner_row_index(payload: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index planner summary rows by planner key and kinematics.
 
     Returns:
-        Mapping from planner key to planner row payload.
+        Mapping from ``(planner_key, kinematics)`` to planner row payload.
     """
     rows = payload.get("planner_rows")
     if not isinstance(rows, list):
         return {}
-    out: dict[str, dict[str, Any]] = {}
+    out: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
         key = row.get("planner_key")
         if isinstance(key, str) and key:
-            out[key] = row
+            kinematics = str(row.get("kinematics", "") or "")
+            out[_planner_row_identity(key, kinematics)] = row
     return out
+
+
+def _lookup_planner_row(
+    row_map: dict[tuple[str, str], dict[str, Any]],
+    *,
+    planner_key: str,
+    kinematics: str,
+) -> dict[str, Any] | None:
+    """Find the summary row matching a run entry.
+
+    Legacy single-kinematics summaries may omit ``kinematics``. In that case, fall back only when
+    there is exactly one row for the planner key.
+    """
+    exact = row_map.get(_planner_row_identity(planner_key, kinematics))
+    if exact is not None:
+        return exact
+    legacy = row_map.get(_planner_row_identity(planner_key, ""))
+    if legacy is not None:
+        return legacy
+    normalized_planner_key = planner_key.strip()
+    matches = [row for (key, _), row in row_map.items() if key == normalized_planner_key]
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 def _resolve_safe_campaign_path(campaign_root: Path, raw_path: str, *, label: str) -> Path:
@@ -353,9 +384,10 @@ def _analyze_planner(  # noqa: C901, PLR0915
         Planner diagnostics with consistency findings and runtime hotspots.
     """
     planner = run_entry.get("planner", {}) if isinstance(run_entry, dict) else {}
-    planner_key = str(planner.get("key", "unknown"))
+    planner_key = str(planner.get("key", "unknown")).strip()
     algo = str(planner.get("algo", "unknown"))
     summary = run_entry.get("summary", {}) if isinstance(run_entry, dict) else {}
+    kinematics = str(planner.get("kinematics", summary.get("kinematics", "unknown")) or "unknown")
     summary_written = int(summary.get("written", 0))
     preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
     adapter_summary_status = (
@@ -473,6 +505,7 @@ def _analyze_planner(  # noqa: C901, PLR0915
     return PlannerDiagnostics(
         planner_key=planner_key,
         algo=algo,
+        kinematics=kinematics,
         episodes_summary=summary_written,
         episodes_file=episodes_n,
         success_mean_episodes=success_mean,
@@ -656,15 +689,16 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
         "## Planner Diagnostics",
         "",
         (
-            "| planner | algo | preflight | episodes | success(ep) | collision(ep) | snqi(ep) | "
-            "abs map paths | runtime(s) | eps/s |"
+            "| planner | algo | kinematics | preflight | episodes | success(ep) | collision(ep) | "
+            "snqi(ep) | abs map paths | runtime(s) | eps/s |"
         ),
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+        "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for planner in planners:
         lines.append(
             "| "
-            f"{planner.get('planner_key')} | {planner.get('algo')} | {planner.get('preflight_status')} | "
+            f"{planner.get('planner_key')} | {planner.get('algo')} | {planner.get('kinematics')} | "
+            f"{planner.get('preflight_status')} | "
             f"{planner.get('episodes_file')} | {planner.get('success_mean_episodes'):.4f} | "
             f"{planner.get('collision_mean_episodes'):.4f} | "
             f"{planner.get('snqi_mean_episodes') if planner.get('snqi_mean_episodes') is not None else 'nan'} | "
@@ -680,7 +714,8 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
         for item in slowest_planners:
             lines.append(
                 "| "
-                f"{item.get('planner_key')} | {float(item.get('runtime_sec', 0.0)):.4f} | "
+                f"{item.get('planner_key')} ({item.get('kinematics')}) | "
+                f"{float(item.get('runtime_sec', 0.0)):.4f} | "
                 f"{float(item.get('wall_time_mean_sec', 0.0)):.4f} | "
                 f"{float(item.get('wall_time_p95_sec', 0.0)):.4f} |"
             )
@@ -689,7 +724,9 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
             top_scenarios = item.get("top_scenarios", [])
             if not top_scenarios:
                 continue
-            lines.append(f"- `{item.get('planner_key')}` top slow scenarios:")
+            lines.append(
+                f"- `{item.get('planner_key')}` ({item.get('kinematics')}) top slow scenarios:"
+            )
             for scenario in top_scenarios:
                 lines.append(
                     "  - "
@@ -731,23 +768,31 @@ def analyze_campaign(
     for entry in run_entries:
         if not isinstance(entry, dict):
             continue
-        planner_key = str((entry.get("planner") or {}).get("key", "unknown"))
+        planner = entry.get("planner") or {}
+        summary = entry.get("summary") or {}
+        planner_key = str(planner.get("key", "unknown")).strip()
+        kinematics = str(
+            planner.get("kinematics", summary.get("kinematics", "unknown")) or "unknown"
+        )
         diag = _analyze_planner(
             entry,
-            row_map.get(planner_key),
+            _lookup_planner_row(row_map, planner_key=planner_key, kinematics=kinematics),
             campaign_root,
             tolerance=tolerance,
         )
         diagnostics.append(diag)
+        finding_prefix = f"{planner_key} ({kinematics})"
         for finding in diag.findings:
-            findings.append(f"{planner_key}: {finding}")
+            findings.append(f"{finding_prefix}: {finding}")
         if diag.preflight_status == "fallback":
             findings.append(
-                f"{planner_key}: preflight status is fallback (experimental degraded mode)",
+                f"{finding_prefix}: preflight status is fallback (experimental degraded mode)",
             )
 
     diagnostics_payload = [diag.__dict__ for diag in diagnostics]
-    diagnostics_payload.sort(key=lambda item: str(item.get("planner_key", "")))
+    diagnostics_payload.sort(
+        key=lambda item: (str(item.get("planner_key", "")), str(item.get("kinematics", "")))
+    )
     findings.sort()
     slowest_planners = []
     for item in sorted(
@@ -756,6 +801,7 @@ def analyze_campaign(
         slowest_planners.append(
             {
                 "planner_key": item.get("planner_key"),
+                "kinematics": item.get("kinematics"),
                 "runtime_sec": float(item.get("runtime_sec", 0.0)),
                 "wall_time_mean_sec": float(item.get("wall_time_mean_sec", 0.0)),
                 "wall_time_p95_sec": float(item.get("wall_time_p95_sec", 0.0)),

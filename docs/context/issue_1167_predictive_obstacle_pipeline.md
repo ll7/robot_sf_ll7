@@ -19,11 +19,17 @@ campaign can be submitted separately.
 - `scripts/training/run_predictive_training_pipeline.py` accepts `model_family` from the top-level
   config, collection config, or training config, then passes it to both collection stages and
   `train_predictive_planner.py`.
+- `scripts/training/run_predictive_training_pipeline.py` also accepts an optional committed
+  `base_collection.seed_manifest` and records the resolved base-seed manifest in the pipeline
+  summary so paired same-seed runs do not depend on regenerated output-local manifests.
 - `scripts/training/collect_predictive_hardcase_data.py` now supports
   `--model-family predictive_obstacle_features_v1`, emits `feature_schema_json`, and appends the
   same six map-derived obstacle features used by `collect_predictive_planner_data.py`.
 - `configs/training/predictive/predictive_obstacle_features_v1_issue_1167.yaml` records the
   canonical issue #1167 config-first command path.
+- Obstacle-feature pipeline runs now write `obstacle_feature_preflight.json` and fail before
+  training if either collected dataset contains only sentinel obstacle rows instead of any active
+  map-derived obstacle features.
 
 Canonical command:
 
@@ -81,9 +87,43 @@ uv run pytest -q tests/training/test_collect_predictive_hardcase_data.py \
 
 Observed targeted pytest result: `32 passed`.
 
+## Issue #1427 Same-Seed Handoff
+
+Issue #1427 needs runnable handoff surfaces for the actual bounded same-seed comparison, not a new
+pipeline design. The committed handoff set is:
+
+- shared base seed manifest:
+  `configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml`
+- baseline config:
+  `configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml`
+- obstacle-feature config:
+  `configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml`
+- compact evidence manifest:
+  `docs/context/evidence/issue_1427_predictive_same_seed_handoff_2026-05-21/manifest.json`
+
+Canonical command pair for external execution:
+
+```bash
+uv run python scripts/training/run_predictive_training_pipeline.py \
+  --config configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml
+
+uv run python scripts/training/run_predictive_training_pipeline.py \
+  --config configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml
+```
+
+Same-seed contract:
+
+- Both variants use the same committed base seed manifest and the same hard-seed manifest.
+- Training budget, scenario matrix, planner grid, and evaluation surface are identical between the
+  two configs.
+- The obstacle-feature run fails closed before training if the generated base or hardcase dataset
+  contains zero active non-sentinel obstacle rows. The preflight evidence is written to
+  `output/tmp/predictive_planner/pipeline/<run_id>/obstacle_feature_preflight.json`.
+
 ## Follow-Up Boundary
 
 Issue #1167 is not complete until the same-seed training/evaluation comparison reports ADE/FDE and
 downstream planner metrics. This patch removes the local pipeline blocker recorded during PR #1400
 triage and should be treated as the runnable setup for the campaign, not as benchmark-success
-evidence.
+evidence. Issue #1427 owns the actual SLURM submission, metric capture, and recommendation about
+whether obstacle features are worth further investment.

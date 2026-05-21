@@ -1,18 +1,18 @@
-# Issue #1361 Command-Lattice Corridor-Deadlock Assessment
+# Issue #1361 Command-Lattice Corridor-Deadlock Assessment (2026-05-20)
 
 Date: 2026-05-20
 
 Related issue:
 
-- `robot_sf_ll7#1361`: research: evaluate state-lattice baseline for corridor deadlocks
+- [robot_sf_ll7#1361](https://github.com/ll7/robot_sf_ll7/issues/1361): research: evaluate state-lattice baseline for corridor deadlocks
 
 Related context:
 
-- `docs/context/issue_1318_teb_corridor_deadlock_eval.md`
-- `docs/context/evidence/issue_1318_teb_corridor_deadlock_2026-05-20/summary.json`
-- `configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml`
-- `configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml`
-- `configs/algos/hybrid_rule_v3_teb_like_rollout.yaml`
+- [issue_1318_teb_corridor_deadlock_eval.md](issue_1318_teb_corridor_deadlock_eval.md)
+- [summary.json](evidence/issue_1318_teb_corridor_deadlock_2026-05-20/summary.json)
+- [issue_1318_teb_corridor_deadlock_slice.yaml](../../configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml)
+- [hybrid_rule_v3_fast_progress_static_escape.yaml](../../configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml)
+- [hybrid_rule_v3_teb_like_rollout.yaml](../../configs/algos/hybrid_rule_v3_teb_like_rollout.yaml)
 
 ## Goal
 

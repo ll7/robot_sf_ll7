@@ -41,11 +41,11 @@ class Frame:
 
 def _effective_predictive_feature_schema(
     *,
-    model_family: str,
+    model_family: str | None,
     ego_conditioning: bool,
 ) -> dict[str, object]:
     """Resolve the predictive feature schema emitted by the hardcase collector."""
-    normalized = str(model_family).strip() or PREDICTIVE_LEGACY_FEATURE_SCHEMA
+    normalized = str(model_family or "").strip() or PREDICTIVE_LEGACY_FEATURE_SCHEMA
     if normalized == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
         effective_family = PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
     elif normalized == PREDICTIVE_EGO_FEATURE_SCHEMA or bool(ego_conditioning):
@@ -222,6 +222,11 @@ def _frames_to_samples(
     targets: list[np.ndarray] = []
     masks: list[np.ndarray] = []
     target_masks: list[np.ndarray] = []
+    obstacle_feature_extractor = (
+        LocalObstacleFeatureExtractor()
+        if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+        else None
+    )
 
     for t in range(0, len(frames) - horizon_steps):
         frame_t = frames[t]
@@ -288,6 +293,7 @@ def _frames_to_samples(
                 state_base=state_base,
                 frame=frame_t,
                 count=c,
+                extractor=obstacle_feature_extractor,
                 obstacle_lines=obstacle_lines,
             )
         else:
@@ -305,14 +311,14 @@ def _append_obstacle_feature_rows(
     state_base: np.ndarray,
     frame: Frame,
     count: int,
+    extractor: LocalObstacleFeatureExtractor,
     obstacle_lines: list | tuple = (),
 ) -> np.ndarray:
     """Append deterministic map-derived obstacle feature rows to predictive state."""
-    extractor = LocalObstacleFeatureExtractor()
     obstacle_rows = np.zeros((state_base.shape[0], extractor.feature_dim), dtype=np.float32)
     if count > 0:
         obstacle_rows[:count] = extractor.extract_many(
-            [tuple(point) for point in frame.ped_positions_world[:count]],
+            frame.ped_positions_world[:count],
             obstacle_lines,
         )
     return append_obstacle_features(

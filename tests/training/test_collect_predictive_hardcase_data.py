@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from robot_sf.planner.obstacle_features import PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+)
 from scripts.training import collect_predictive_hardcase_data as collect
 
 
@@ -63,3 +66,13 @@ def test_hardcase_effective_schema_tracks_ego_obstacle_width() -> None:
     assert schema["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
     assert schema["base_feature_dim"] == 9
     assert schema["input_dim"] == 15
+
+
+def test_hardcase_effective_schema_treats_none_model_family_as_legacy() -> None:
+    """Missing model-family values should fall back to legacy predictive rows."""
+    schema = collect._effective_predictive_feature_schema(
+        model_family=None,
+        ego_conditioning=False,
+    )
+
+    assert schema["name"] == PREDICTIVE_LEGACY_FEATURE_SCHEMA

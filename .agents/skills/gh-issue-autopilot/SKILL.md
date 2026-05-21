@@ -29,6 +29,8 @@ Choose the next issue in order:
 Within the same status, prefer higher Project `Priority` (`Very High` to `Very Low`) before the
 remaining tie-breakers.
 Tie-breakers: no blocker labels, no linked PR, older open issue first, stronger evidence first.
+Within the same status, prefer higher Project #5 Priority (`Very High`, `High`, `Medium`, `Low`,
+then `Very Low`) before the remaining tie-breakers.
 
 ## Workflow
 

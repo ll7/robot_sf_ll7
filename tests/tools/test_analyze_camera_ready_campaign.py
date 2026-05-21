@@ -810,6 +810,70 @@ def test_analyze_campaign_derives_collision_mean_from_termination_reason(tmp_pat
     assert any("collision_mean mismatch" in finding for finding in analysis["findings"])
 
 
+def test_analyze_campaign_uses_canonical_snqi_episode_metric_value(tmp_path: Path) -> None:
+    """Analyzer SNQI rollups should match canonical episode metric extraction."""
+    campaign_root = tmp_path / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    episodes_path = campaign_root / "runs" / "goal" / "episodes.jsonl"
+
+    _write_jsonl(
+        episodes_path,
+        [
+            {
+                "status": "success",
+                "termination_reason": "success",
+                "snqi": "nan",
+                "metrics": {"success": True, "collisions": 0, "snqi": 0.4},
+                "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
+            },
+            {
+                "status": "failure",
+                "termination_reason": "collision",
+                "snqi": -0.2,
+                "metrics": {"success": False, "collisions": 1},
+                "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
+            },
+        ],
+    )
+    _write_json(
+        summary_path,
+        {
+            "campaign": {
+                "campaign_id": "test_campaign",
+                "runtime_sec": 1.0,
+                "episodes_per_second": 2.0,
+            },
+            "planner_rows": [
+                {
+                    "planner_key": "goal",
+                    "success_mean": "0.5000",
+                    "collisions_mean": "0.5000",
+                    "snqi_mean": "0.1000",
+                }
+            ],
+            "runs": [
+                {
+                    "planner": {"key": "goal", "algo": "goal"},
+                    "runtime_sec": 1.0,
+                    "episodes_path": "runs/goal/episodes.jsonl",
+                    "summary": {
+                        "written": 2,
+                        "episodes_per_second": 2.0,
+                        "preflight": {"status": "ok"},
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "disabled"}},
+                    },
+                }
+            ],
+        },
+    )
+
+    analysis = analyze_campaign(campaign_root)
+    planner = next(item for item in analysis["planners"] if item["planner_key"] == "goal")
+
+    assert planner["snqi_mean_episodes"] == pytest.approx(0.1)
+    assert not any("snqi_mean mismatch" in finding for finding in analysis["findings"])
+
+
 def test_analyze_campaign_includes_scenario_difficulty_outputs(tmp_path: Path) -> None:
     """Analyzer should merge scenario-difficulty diagnostics from campaign report artifacts because weak planner results need scenario-level context."""
     campaign_root = tmp_path / "campaign"

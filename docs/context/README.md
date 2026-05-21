@@ -90,14 +90,16 @@ knowledge, not every transient iteration detail.
   [open_issues_maintainer_input_triage.md](open_issues_maintainer_input_triage.md)
 * Open-issues PR split strategy:
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
+* Thursday development review 2026-05-21:
+  [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Issue #1240 scenario coverage entropy:
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
+* Issue #1167 predictive obstacle-feature pipeline:
+  [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
 * Issue #1348 capability-aware map catalog design:
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #1414 parser capability metadata:
   [issue_1414_parser_capability_metadata.md](issue_1414_parser_capability_metadata.md)
-* Issue #1348 Capability-Aware Map Catalog Design 2026-05-20:
-  [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #1246 graded observation levels:
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
 * Issue #1239 human-model transfer robustness:
@@ -126,6 +128,8 @@ knowledge, not every transient iteration detail.
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * Issue #1353 Broader AMV Baseline Preflight:
   [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
+* Issue #1398 metric rollup reconciliation:
+  [issue_1398_metric_rollup_reconciliation.md](issue_1398_metric_rollup_reconciliation.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Artifact evidence vocabulary:

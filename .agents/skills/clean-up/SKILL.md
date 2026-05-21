@@ -5,55 +5,39 @@ description: "Clean up the current branch in the Robot SF repo by following docs
 
 # Clean Up
 
-## Overview
+## Purpose
 
-Clean and validate the current branch for the Robot SF repo by applying the dev guide
-workflow, running Ruff format/fix, and running parallel tests.
+Run the repo-standard cleanup pipeline for the current branch: formatting, automated checks,
+parallel tests, and diff-based quality gates.
 
-## Cleanup Workflow
+## Workflow
 
-1. Confirm repo and guidance
-   - Verify the working directory looks like the Robot SF repo (e.g., `.git`,
-     `docs/dev_guide.md`, `.specify/memory/constitution.md`, and
-     `.github/copilot-instructions.md` exist).
-   - Read `docs/dev_guide.md`, `.specify/memory/constitution.md`, and
-     `.github/copilot-instructions.md` to align with required rules.
+1. Confirm context:
+   - Check for repo markers (`.git`, `docs/dev_guide.md`, `.specify/memory/constitution.md`).
+   - Read `docs/dev_guide.md`, `.specify/memory/constitution.md`, and `.github/copilot-instructions.md`.
+2. Prepare environment:
+   - If `.venv` is present, use it.
+   - If missing, run `uv sync --all-extras`, `source .venv/bin/activate`, and `uv run pre-commit install`.
+3. Format and lint:
+   - `scripts/dev/ruff_fix_format.sh`
+   - Re-run until the script is clean.
+4. Run tests:
+   - `scripts/dev/run_tests_parallel.sh`
+   - Optional: `--new-first` or `--no-fast-fail` as needed.
+5. Run diff quality gates:
+   - `BASE_REF=origin/main scripts/dev/check_changed_coverage.sh`
+   - `BASE_REF=origin/main scripts/dev/check_docstring_todos_diff.sh`
+6. Report:
+   - Summarize passed/failed commands and any residual risk blocks (flaky or deferred tests).
 
-2. Ensure environment
-   - If `VIRTUAL_ENV` is empty and `.venv/bin/activate` exists, run
-     `source .venv/bin/activate`.
-   - If `.venv/bin/activate` is missing, follow dev guide setup:
-     `uv sync --all-extras`, `source .venv/bin/activate`, and
-     `uv run pre-commit install`.
+## Guardrails
 
-3. Run formatting and fixes first
-   - Use the shared script:
-     `scripts/dev/ruff_fix_format.sh`
-   - If Ruff reports issues, fix them and rerun until clean.
+- Fix failures with intent; do not silence value-heavy tests without explicit direction.
+- If touched tests were added, verify those new tests locally.
+- For rendering or benchmark-affecting work, keep GUI/benchmarks in follow-up if required and noted.
 
-4. Run tests in parallel
-   - Use the shared script:
-     `scripts/dev/run_tests_parallel.sh`
-   - Default behavior is fail-fast + failed-first ordering:
-     `pytest -n auto -x --failed-first`
-   - Optional ordering toggle:
-     `scripts/dev/run_tests_parallel.sh --new-first`
-   - To disable fail-fast when you need a full failure set:
-     `scripts/dev/run_tests_parallel.sh --no-fast-fail`
-   - If tests fail, evaluate test value first (Constitution Principle XIII /
-     dev guide testing strategy). Classify failures and decide whether to fix,
-     defer, or ask for direction before removing or relaxing tests.
+## Output
 
-5. Run diff-based quality gates and fix them.
-   - Run changed-files coverage check:
-     `BASE_REF=origin/main scripts/dev/check_changed_coverage.sh`
-     - If you changed any test files, run these new tests locally.
-   - Run touched-definition TODO docstring check:
-     `BASE_REF=origin/main scripts/dev/check_docstring_todos_diff.sh`
-
-6. Report and follow-ups
-   - Summarize commands run and results.
-   - Note remaining failures, flaky tests, or follow-up tasks (for example,
-     GUI tests if rendering changes were made, or CHANGELOG updates for
-     user-facing changes).
-  - Suggest commit batches and messages for any uncommited changes.
+- Commands executed and pass/fail status.
+- List of remaining failures and the decision (fix, defer, investigate).
+- Remaining follow-up tasks before merge-ready handoff.

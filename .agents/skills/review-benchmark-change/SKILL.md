@@ -5,8 +5,10 @@ description: "Review benchmark-sensitive code or docs changes for semantic regre
 
 # Review Benchmark Change
 
-Use this skill when reviewing a PR, patch, or doc change that could alter benchmark outcomes or
-their interpretation.
+## When to use
+
+Use this skill when reviewing PRs, patches, or docs that can change benchmark semantics,
+interpretation, or reproducibility.
 
 ## Read First
 
@@ -14,6 +16,15 @@ their interpretation.
 - `docs/benchmark_spec.md`
 - `docs/dev/observation_contract.md`
 - `docs/benchmark_planner_family_coverage.md`
+- `docs/context/issue_691_benchmark_fallback_policy.md`
+
+## Workflow
+
+1. Confirm the claimed benchmark contract and changed contract surface.
+2. Validate observation/normalization contract compatibility.
+3. Check seed/scenario policy and artifact reproducibility entries.
+4. Verify provenance and readiness labels match implementation status.
+5. Assess whether changes are intentional or regressions and document severity.
 
 ## Review Checklist
 
@@ -23,12 +34,17 @@ their interpretation.
 - reproducibility path still exists,
 - upstream provenance and benchmark-readiness labels remain accurate.
 
-## Output Expectations
+## Proof and Guardrails
 
-Review findings should prioritize:
+- Apply fail-closed logic if any changed path lacks reproducible evidence.
+- Do not accept fallback-degraded execution as a benchmark success.
+- Keep any claim in sync with `benchmark` contract source files.
 
-1. incorrect benchmark semantics,
-2. broken learned-policy contract or normalization,
-3. provenance overclaim,
-4. missing reproducibility hooks,
-5. missing tests/docs for changed public behavior.
+## Output
+
+- findings should prioritize:
+  1. incorrect benchmark semantics,
+  2. broken learned-policy contract or normalization,
+  3. provenance overclaim,
+  4. missing reproducibility hooks,
+  5. missing tests/docs for changed public behavior.

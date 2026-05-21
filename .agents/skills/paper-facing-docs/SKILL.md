@@ -5,8 +5,10 @@ description: "Draft or review benchmark and manuscript-support docs conservative
 
 # Paper-Facing Docs
 
-Use this skill for docs that influence benchmark interpretation, manuscript support, or public
-artifact/provenance claims.
+## When to use
+
+Use this skill for any documentation that can affect benchmark interpretation, manuscript claims, or
+public-facing provenance statements.
 
 ## Read First
 
@@ -14,18 +16,26 @@ artifact/provenance claims.
 - `docs/benchmark_camera_ready.md`
 - `docs/benchmark_artifact_publication.md`
 - relevant issue execution notes under `docs/context/`
+- `docs/benchmark_spec.md`
 
-## Focus
+## Workflow
 
-- conservative wording,
-- provenance-preserving claims,
-- exact reproducible commands/configs,
-- explicit separation between observed evidence and future work.
+1. Validate the claim surface against existing benchmark definitions.
+2. Check reproducibility breadcrumbs (config, command, seed policy, artifact path).
+3. Mark caveats with plain-language risk language.
+4. Review wording for unsupported causality or overclaim.
+5. Add explicit provenance pointers before handoff.
 
-## Output Expectations
+## Proof and Guardrails
+
+- Preserve fail-closed semantics: do not present fallback/degraded runs as success.
+- Any claim must point to concrete reproducible artifacts.
+- Prefer tracked canonical documents and execution notes for evidence.
+
+## Output
 
 Paper-facing docs should:
 
-- cite the canonical benchmark/config surfaces,
+- cite canonical benchmark/config surfaces,
 - avoid overstating planner support,
 - name remaining caveats in plain language.

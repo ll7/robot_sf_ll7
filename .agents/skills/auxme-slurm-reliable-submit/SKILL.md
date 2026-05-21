@@ -5,62 +5,40 @@ description: "Submit issue-791 style Auxme SLURM jobs with explicit config, live
 
 # Auxme SLURM Reliable Submit
 
-Use this skill for Auxme cluster submissions where reliability matters more than raw speed.
+## Purpose
 
-## Read First
-
-- `SLURM/AGENTS.md`
-- `SLURM/Auxme/README.md`
-- `docs/dev/slurm_submission.md`
-
-## Goals
-
-- avoid accidental stage1 fallback caused by missing config overrides,
-- choose partition/QoS using live availability and per-user slot headroom,
-- keep wall-time aligned with current partition policy.
+Submit Auxme jobs for issue-791-style training reliably and reproducibly.
+Use this when reliability, provenance, and correct config routing matter more than raw queue speed.
 
 ## Workflow
 
-1. Confirm the target config and intent
-   - Validate the YAML path exists under `configs/training/...`.
-   - Ensure horizon intent matches request (`32k`, `128k`, `1m`, `10m`, etc.).
-
-2. Snapshot partition pressure
-   - Run `scripts/dev/auxme_partition_status.sh`.
-   - Use free GPUs, pending depth, and per-user running slots as the primary signals.
-
-3. Submit through the reliable helper
-   - Run `scripts/dev/sbatch_auxme_issue791.sh` with explicit `--config`.
-   - Let it auto-select partition/QoS unless there is a deliberate override.
-
-4. Verify startup provenance
-   - Check job stdout startup summary for the exact config path and policy ID.
-   - Fail fast if wrapper-default config appears.
-
-5. Handle transient infra failures
-   - If stdout shows `Unable to confirm allocation ... Zero Bytes were transmitted or received`,
-     classify as transient and resubmit once with identical config.
-
-## Commands
-
-Status and recommendation:
-
-```bash
-scripts/dev/auxme_partition_status.sh
-scripts/dev/auxme_partition_status.sh --recommend
-```
-
-Reliable submit:
-
-```bash
-scripts/dev/sbatch_auxme_issue791.sh \
-  --config configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml \
-  --job-name robot-sf-issue791-reward-curriculum \
-  SLURM/Auxme/issue_791_reward_curriculum.sl
-```
+1. Read cluster-specific preflight:
+   - `SLURM/AGENTS.md`
+   - `SLURM/Auxme/README.md`
+   - `docs/dev/slurm_submission.md`
+2. Confirm target intent:
+   - Validate the `--config` path exists under `configs/training/...`.
+   - Verify requested training horizon (`32k`, `128k`, `1m`, `10m`) matches the user request.
+3. Check live capacity before submit:
+   - `scripts/dev/auxme_partition_status.sh`
+   - `scripts/dev/auxme_partition_status.sh --recommend`
+   - Use free GPUs, pending depth, and per-user running slots only from the live output.
+4. Submit with explicit config:
+   - `scripts/dev/sbatch_auxme_issue791.sh --config <path> --job-name <name> SLURM/Auxme/<script>.sl`
+5. Verify startup:
+   - Inspect stdout for exact config path and policy ID.
+   - Fail fast if wrapper-default config is used.
+6. Transient failure handling:
+   - If allocation handshake shows `Zero Bytes were transmitted or received`, retry once with identical arguments.
 
 ## Guardrails
 
-- Do not submit issue-791 wrappers without explicit `ISSUE791_TRAIN_CONFIG`.
-- Do not assume partition health from stale snapshots; always refresh right before submit.
-- Do not classify allocation-handshake failures as model regressions.
+- Never submit an issue-791 wrapper without explicit `ISSUE791_TRAIN_CONFIG`/`--config`.
+- Do not use stale partition status for a submission decision.
+- Do not interpret infrastructure handshake failures as training quality regressions.
+
+## Output
+
+- Chosen config path, partition/QoS decision, submit command.
+- Startup provenance (stdout markers) and whether a retry was triggered.
+- Final outcome (`submitted` / `blocked` / `retry suggested`) with exact reason.

@@ -1,110 +1,178 @@
 ---
 name: goal-issue-implementation
-description: "Autonomous goal loop that sequentially implements eligible open issues, validates, pushes, and opens PRs."
+description: "Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements one scoped issue at a time, validates, pushes, and opens PRs."
 ---
 
 # Goal Issue Implementation
 
-## Overview
+Use this skill when the user asks for goal-driven implementation of open issues.
 
-Use this skill when the user wants open issues implemented as a goal-driven queue. The default
-execution model is sequential: select one eligible issue, create one branch, implement, validate,
-push, open one PR, then move to the next eligible issue.
+It is an orchestrator over:
 
-This is an orchestration layer over `gh-issue-sequencer`, `gh-issue-autopilot`,
-`implementation-verification`, `pr-ready-check`, `gh-pr-opener`, and `context-note-maintainer`.
+- `gh-issue-sequencer`
+- `gh-issue-autopilot`
+- `implementation-verification`
+- `pr-ready-check`
+- `gh-pr-opener`
+- `gh-issue-creator`
+- `context-note-maintainer`
+
+It does not define subordinate command details; it standardizes queue policy, evidence and proof
+requirements, and loop boundaries.
+
+## Trigger Boundary
+
+Use this skill when the user asks to implement open issues through branches, validation, and PRs.
+
+Do not use it for:
+- ambiguous issues that need clarification before coding,
+- discovering new work without implementation,
+- reviewing existing PRs,
+- merging PRs or rewriting contributor history.
 
 ## Read First
 
 - `AGENTS.md`
 - `docs/dev_guide.md`
+- `docs/code_review.md`
 - `docs/context/goal_driven_agent_loops_2026-05-13.md`
 - `docs/context/issue_713_batch_first_issue_workflow.md`
-- `.agents/skills/gh-issue-sequencer/SKILL.md`
-- `.agents/skills/gh-issue-autopilot/SKILL.md`
 - `.agents/skills/implementation-verification/SKILL.md`
 - `.agents/skills/pr-ready-check/SKILL.md`
+- `.agents/skills/gh-pr-opener/SKILL.md`
+- `.agents/skills/context-note-maintainer/SKILL.md`
+- `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
 
 ## Preflight
 
-At the start of each goal, state:
+Record at start:
+- Issue source: queue filter, explicit list, Project #5 lane, or open-issues sweep.
+- Write permissions: branch/commit/PR/project writes allowed by default.
+- Stop condition: queue exhausted, time budget reached, ambiguous issue contract, environment/auth blocker,
+  validation dead-end, user stop.
+- Exclusions: benchmarks blocked by environment, blocked/decision-required issues, external-only work.
 
-- queue source: Project #5, label/milestone filter, explicit issue list, or all open issues,
-- write mode: branch creation, issue/project updates, commits, pushes, PR creation, and follow-up
-  issues are allowed by default,
-- stop condition: eligible queue exhausted, optional time budget reached, unclear issue contract,
-  validation blocker, GitHub/auth failure, or user stop,
-- exclusions, such as benchmark runs, GPU-only work, blocked issues, or paper-facing claims.
+Do not ask for extra confirmation after this preflight.
 
-Do not ask for confirmation after this preflight unless the user requested a gated run.
+## State Machine
 
-## Eligibility Policy
+Each issue is in exactly one state during the loop:
+- `queued`
+- `ineligible`
+- `selected`
+- `implementing`
+- `validating`
+- `blocked`
+- `pr_opened`
+- `deferred_followup`
+- `skipped`
 
-An issue is eligible when:
+Allowed transitions:
+`queued -> selected -> implementing -> validating -> pr_opened` with terminal `blocked`, `deferred_followup`,
+or `skipped` exits.
 
-- it is open,
-- it is not labeled `blocked`, `decision-required`, `duplicate`, `wontfix`, or `invalid`,
-- it has no linked open PR that already covers the scope,
-- its problem, scope, acceptance criteria, and validation path are clear enough to implement,
-- its required execution environment is available or has a documented fallback that does not weaken
-  the issue contract.
+Do not revisit `blocked` or `skipped` issues in the same goal run unless one of these changed:
+- issue body/labels,
+- linked PR state,
+- required environment,
+- linked issue policy/baseline.
 
-If eligibility fails, route the issue through `issue-audit`, `gh-issue-clarifier`, or
-`gh-issue-template-auditor` instead of guessing.
+## Eligibility
 
-## Workflow
+Process only when all are true:
+- issue is open and not labeled blocked/invalid/duplicate/decision-required,
+- scope is clear and bounded,
+- acceptance criteria are inferable without changing intent,
+- proof path is available or has a documented fallback that preserves contract,
+- implementation can fit in one coherent PR.
 
-1. Sequence the queue
-   - Use `.agents/skills/gh-issue-sequencer/SKILL.md`.
-   - Prefer Project #5 `Ready`, then `Todo`, then `Tracked`, ordered by priority and uncertainty.
-   - Keep benchmark/paper-facing blockers ahead of speculative experiments when priorities tie.
+If not eligible:
+- send to `issue-audit` or `gh-issue-clarifier`,
+- or create follow-up issue via `gh-issue-creator`.
 
-2. Execute exactly one issue at a time
-   - Use `.agents/skills/gh-issue-autopilot/SKILL.md`.
-   - Sync with latest `origin/main` at the start of active work and before PR creation.
-   - Create an issue branch with `gh issue develop` when possible.
-   - Keep scope tied to the issue contract.
+## Queue Policy
 
-3. Implement and prove
-   - Add or update tests/docs with the implementation when needed.
-   - Run targeted proof first, then the repository readiness gate:
-     `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
-   - For benchmark or planner changes, require real executable evidence and treat fallback or
-     degraded execution as a caveat, not success.
+Default order:
+1. Project `#5 Ready`
+2. Project `#5 Todo`
+3. Project `#5 Tracked`
+4. explicitly requested
+5. other eligible open issues
 
-4. Handoff through PR
-   - Inspect generated `output/` artifacts and classify them as disposable, ignored cache,
-     tracked manifest/pointer, or durable-upload required.
-   - Commit in logical conventional commits.
-   - Push and open a PR with `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
-   - Create follow-up issues for deferred scope before closing the loop.
+Prioritize by:
+- clearer contract,
+- lower validation cost,
+- smaller diff,
+- less semantic risk,
+- older queue age.
 
-5. Continue the queue
-   - After a PR is open, return to step 1 for the next eligible issue.
-   - If the stop condition fires, write a concise handoff with current branch, issue, validation
-     state, blockers, and next command.
+## Process
 
-## Subagent Policy
+1. Select one issue (`gh-issue-sequencer` output or explicit user target).
+2. Create/checkout isolated implementation branch.
+3. Implement only in-scope behavior and required tests/docs.
+4. Validate using the narrowest meaningful level first, then expand.
+5. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
+6. Prepare proof and branch handoff via `gh-pr-opener`.
+7. Open PR, then report and move to next queue item.
 
-Use `gpt-5.3-codex-spark` subagents only for bounded side tasks such as file/API lookup, small test
-failure summaries, or narrow mechanical edits with clear file ownership. The main agent owns issue
-selection, final integration, validation, push, PR creation, and final judgment.
+Never run unrelated refactors or paper-facing claims in this loop.
 
-## Guardrails
+## Validation Tiers
 
-- Do not process multiple implementation branches in parallel by default.
-- Do not close issues before the PR/merge process resolves them unless the issue is explicitly
-  obsolete or duplicated and the GitHub update records why.
-- Do not let readiness checks from before the latest-main sync count for PR creation.
-- Do not depend on worktree-local `output/` contents without a durable source.
+Use the minimum required tier for changed surfaces:
 
-## Output Requirements
+- Tier 0: documentation-only and metadata-only changes, small mechanical code.
+- Tier 1: CLI/runtime changes, interfaces, shared utility wiring.
+- Tier 2: benchmark mode, metric, or planner-sensitive behavior.
+- Tier 3: campaign-level or statistical evidence changes.
 
-Report:
+Before PR creation, rerun freshness gate after latest `origin/main` sync.
+Do not use stale validation as proof.
 
-- selected issue and why it was eligible,
-- branch and PR URL,
-- validation commands and results,
-- artifact persistence decision,
-- follow-up issues created,
-- stop condition if the loop ended before queue exhaustion.
+## Proof and Artifact Rules
+
+- Do not count benchmark fallback/degraded execution as success unless task scope explicitly says so.
+- Classify all generated outputs before commit:
+  - `discard`, `ignored-cache`, `tracked-manifest`, `durable-required`.
+- Benchmark artifacts must include command, config, seeds, commit SHA, and provenance before PR handoff.
+- If a durable dependency cannot be guaranteed locally, stop with a blocker.
+
+## Confidence
+
+Use one confidence level for final reporting:
+- `High`: proof completed and current for branch head.
+- `Medium`: evidence exists but depends on external CI or temporary constraints.
+- `Low`: required proof/auth/benchmark path unavailable.
+
+Never close an issue with `Low` proof without explicitly marking follow-up work.
+
+## Anti-Loop and Retry
+
+- Do not rerun identical failed validations more than twice without meaningful code/env change.
+- If a candidate fails the same gate with no new signal, move to `blocked` and record:
+  - failing command,
+  - last error,
+  - next minimal action.
+
+## Race-Condition / Multi-Agent Safety
+
+- Operate one implementation branch at a time by default.
+- Before pushing, verify branch state is expected and avoid rewriting branch history.
+- If remote branch changed unexpectedly:
+  - stop,
+  - inspect divergence,
+  - avoid force-push,
+  - hand off with blocker details.
+
+## Required Output
+
+For each issue completed or stopped, report:
+- issue number and eligibility decision,
+- current and next state,
+- branch name + head SHA,
+- validation commands and pass/fail results,
+- artifact decision,
+- PR URL when opened,
+- follow-up issues,
+- blocker and next action.

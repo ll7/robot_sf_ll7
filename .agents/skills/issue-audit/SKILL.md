@@ -1,112 +1,42 @@
 ---
 name: issue-audit
-description: "User-in-the-loop open-issue audit that asks one readiness-blocking question at a time and updates GitHub issues as decisions are made."
+description: "User-in-the-loop open-issue audit that asks one readiness-blocking question at a time and updates issues as decisions are made."
 ---
 
 # Issue Audit
 
-## Overview
+## Purpose
 
-Use this skill when the user wants to refine open issues through a discussion loop. This is not a
-default `/goal` loop: it keeps the user in the loop, asks one question at a time, and updates issues
-as decisions crystallize.
-
-This skill combines a one-question-at-a-time interview pattern, document-grounded challenge and
-terminology checks, and the repository workflows in `gh-issue-template-auditor`,
-`gh-issue-clarifier`, `gh-issue-sequencer`, and `gh-issue-creator`. The interview pattern is
-described here directly so the skill does not depend on locally installed helper skills.
-
-## Read First
-
-- `AGENTS.md`
-- `docs/dev_guide.md`
-- `docs/context/goal_driven_agent_loops_2026-05-13.md`
-- `docs/context/issue_713_batch_first_issue_workflow.md`
-- `.agents/skills/gh-issue-template-auditor/SKILL.md`
-- `.agents/skills/gh-issue-clarifier/SKILL.md`
-- `.agents/skills/gh-issue-sequencer/SKILL.md`
-
-## Preflight
-
-At the start of the audit, state:
-
-- issue set, such as all open issues, a label, a milestone, a Project #5 slice, or a numbered list,
-- write mode: issue edits, comments, labels, project routing, issue splits, and consolidation are
-  allowed after each user decision,
-- ordering: `decision-required` blockers first; if none exist, continue through all open issues by
-  Project #5 priority and look for refinements,
-- stop condition: all selected issues are ready/tracked/blocked with a reason, the user stops, or
-  an optional time budget is reached.
-
-## Ordering Policy
-
-Prioritize the next question by readiness impact:
-
-1. `decision-required`, contradictory, or missing core problem statement.
-2. Missing acceptance criteria, validation path, or scope/non-goals.
-3. Duplicate, consolidation, split, or parent/child ambiguity.
-4. `blocked` issues whose unblock condition is unclear.
-5. Stale issues whose body conflicts with current repo state.
-6. Lower-risk template cleanup and metadata normalization.
-
-When no open issue has a `decision-required` label, do not stop the audit. Continue across all open
-issues, starting with the highest Project #5 priority and then the strongest issue-level priority
-signals, and look for refinements that would make the issue more executable, better scoped, less
-duplicative, or easier to validate. Do not spend user attention on already-actionable issues until
-readiness blockers are exhausted.
+Refine open issues through a guided loop: one blocking question at a time, immediate edits on confirmed
+decisions, and clear handoff state.
 
 ## Workflow
 
-1. Gather issue state
-   - Inspect open issues and Project #5 items.
-   - Prefer REST issue reads (`gh api repos/ll7/robot_sf_ll7/issues/...`) when GraphQL quota is
-     low; reserve GraphQL/`gh project` calls for Project #5 state.
-   - Cache Project #5 IDs once per session or use the local Project #5 cache
-     described in `docs/context/issue_713_batch_first_issue_workflow.md`.
-   - Check for `decision-required` issues first. If none exist, build a priority-ordered open-issue
-     queue and audit it for refinement opportunities instead of stopping.
-   - Run or use `scripts/tools/issue_template_audit.py` where issue body readiness is unclear.
-   - Inspect linked PRs, context notes, and relevant files before asking questions that repo
-     exploration can answer.
-
-2. Select one blocking question
-   - Ask exactly one question at a time.
-   - Include the recommended answer and why it is the safest default.
-   - The question must materially affect scope, acceptance criteria, sequencing, split/merge
-     decisions, blocked state, or validation.
-
-3. Apply the decision immediately
-   - Update the issue body, title, labels, comments, and Project #5 routing as needed.
-   - Remove `decision-required` once the decision is resolved.
-   - Create follow-up issues when the decision splits scope.
-   - Mark duplicates or superseded work clearly and link the canonical issue.
-
-4. Maintain batch discipline
-   - Do issue text, label, and comment cleanup first.
-   - Do Project #5 field routing second.
-   - Run derived score sync once at the end of a batch if score inputs changed.
-   - If GraphQL is exhausted, finish REST issue cleanup and report the exact pending Project #5
-     mutation instead of retry-looping.
-
-5. Continue or hand off
-   - Continue with the next readiness blocker.
-   - If stopped early, report the last completed issue, pending question, issues changed, project
-     writes still pending, and next recommended issue.
+1. Set scope and ordering:
+   - define issue set,
+   - start with `decision-required`/contradictory issues,
+   - if none, move by Project #5 priority.
+2. Gather readiness context:
+   - issue states, labels, linked PRs, templates/contracts, and related files.
+3. Ask exactly one question at a time focused on scope, acceptance, or priority tradeoff.
+4. Apply the decision immediately:
+   - edit issue body/labels as needed,
+   - remove `decision-required` when resolved,
+   - create follow-up issues for bounded splits.
+5. Keep batch discipline:
+   - issue/body cleanup first,
+   - routing/Project #5 updates second,
+   - one score-sync batch at the end if needed.
 
 ## Guardrails
 
-- Ask the user only about product, priority, scope, or tradeoff decisions that cannot be discovered
-  from the repository.
-- Do not ask multi-question bundles.
-- Do not preserve stale issue text if the decision makes it wrong; update or mark it superseded.
-- Do not create broad new issues when a bounded follow-up issue is enough.
+- Ask questions only for decisions not discoverable from repo artifacts.
+- Never ask bundled multi-part questions.
+- Do not preserve stale issue statements once a decision invalidates them.
 
-## Output Requirements
+## Output
 
-Report after each decision or audit batch:
-
-- issue number and readiness blocker,
-- question asked and selected answer,
-- issue/project changes made,
-- follow-up or consolidation issues created,
-- next readiness blocker.
+- Issue and blocker addressed.
+- Question asked and answer applied.
+- Changes made (body/labels/project state) and follow-up issues.
+- Next blocker and optional stop reason if interrupted.

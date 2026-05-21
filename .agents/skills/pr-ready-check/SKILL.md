@@ -1,53 +1,31 @@
 ---
 name: pr-ready-check
-description: "Run the repository PR readiness pipeline using shared scripts/dev entry points (ruff fix/format, parallel tests, changed-files coverage, and docstring TODO checks)."
+description: "Run the repository PR readiness pipeline using shared scripts/dev entry points (ruff fix/format, parallel tests, coverage, and docstring checks)."
 ---
 
 # PR Ready Check
 
-## Overview
+## Purpose
 
-Run the same PR validation pipeline used by local VS Code tasks, but via reusable
-`scripts/dev` commands that are stable for Agent automation.
+Run the canonical local readiness gates that mirror repo PR policy before handoff or review.
 
 ## Workflow
 
-1. Confirm repo + guidance
-   - Ensure you are in the Robot SF repo root.
-   - Review `docs/dev_guide.md`, `.specify/memory/constitution.md`, and
-     `.github/copilot-instructions.md` when context is needed.
+1. Confirm repo guidance (`docs/dev_guide.md`, `.specify/memory/constitution.md`) when uncertain.
+2. Ensure environment has `.venv` loaded or `source .venv/bin/activate` is available.
+3. Run: `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
+4. If needed, use overrides, e.g. `MIN_COVERAGE`, `GOAL_COVERAGE`.
+5. Fix failures and rerun the same command until stable green.
+6. If benchmark outputs or model artifacts are involved, check artifact persistence policy before handoff.
 
-2. Ensure environment
-   - Prefer running from repo root with `.venv` present.
-   - Scripts source `.venv/bin/activate` when available.
+## Guardrails
 
-3. Run PR readiness checks
-   - Default command:
-     `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
-   - Optional overrides:
-     `BASE_REF=<ref> MIN_COVERAGE=80 GOAL_COVERAGE=100 scripts/dev/pr_ready_check.sh`
+- This skill runs validation; it does not perform PR creation or issue edits on its own.
+- Do not stop at lint green: ensure parallel tests and diff gates are also clean.
+- Treat benchmark fallback execution as unresolved unless explicitly scoped.
 
-4. If checks fail
-   - Fix issues directly in code/tests/docs.
-   - Re-run the same command until green.
-   - Apply test-value evaluation (Constitution Principle XIII) for failing tests.
+## Output
 
-5. Report result
-   - Summarize which checks ran and whether each passed:
-     - Ruff fix/format/lint stats
-     - Parallel pytest (`-n auto -x --failed-first` by default via `scripts/dev/run_tests_parallel.sh`)
-     - Changed-files coverage gate
-     - Touched-definition docstring TODO gate
-
-6. Commit and PR
-   - Once all checks pass, commit your changes with a clear message.
-   - Verify the issue addressed is actually resolved by the changes.
-   - Before push/PR handoff, inspect ignored/generated artifacts:
-     - `git status --ignored --short -uall output`
-   - For any benchmark bundle, model checkpoint, W&B output, policy-analysis report, or
-     `output/model_cache` dependency, decide whether it is disposable, an ignored cache, covered by
-     a tracked manifest/registry pointer, or needs durable upload.
-   - Make required artifacts persistent before handoff, preferably through W&B artifact metadata,
-     `model/registry.yaml`, a tracked manifest, or another explicit durable source.
-   - Record the artifact persistence decision in the PR body or linked context note.
-   - Push to your branch and create/update the PR referencing related issues.
+- Readiness command and result summary.
+- Which checks failed/succeeded (ruff, parallel tests, changed coverage, docstring TODO diff gate).
+- Any residual risks and required artifact persistence actions.

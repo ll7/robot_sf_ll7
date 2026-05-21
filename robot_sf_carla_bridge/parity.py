@@ -23,7 +23,15 @@ DEFAULT_PARITY_METRICS = (
 """Trajectory-level metrics considered by the first CARLA parity adapter."""
 
 
-DEGRADED_MODES = {"fallback", "degraded", "not_available", "not-available", "failed"}
+DEGRADED_MODES = {
+    "fallback",
+    "degraded",
+    "not_available",
+    "not-available",
+    "failed",
+    "adapted",
+    "oracle-replay-adapted",
+}
 """Replay modes that must not be treated as parity evidence."""
 
 

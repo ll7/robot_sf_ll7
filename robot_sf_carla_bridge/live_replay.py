@@ -105,11 +105,18 @@ def run_t1_oracle_live_replay_against_server(
             payload=payload,
             max_steps=max_steps,
         )
+        adaptations = cast("list[dict[str, Any]]", actor_summary.get("adaptations", []))
+        mode = "oracle-replay-adapted" if adaptations else "oracle-replay"
+        reason = (
+            "Oracle transforms were replayed against a live CARLA world with explicit spawn adaptation"
+            if adaptations
+            else "Oracle transforms were replayed against a live CARLA world"
+        )
         return {
             **base,
             "status": "oracle-replay",
-            "mode": "oracle-replay",
-            "reason": "Oracle transforms were replayed against a live CARLA world",
+            "mode": mode,
+            "reason": reason,
             "carla": {
                 "dependency": "carla",
                 "host": host,
@@ -119,6 +126,8 @@ def run_t1_oracle_live_replay_against_server(
                 "map": getattr(carla_map, "name", None),
             },
             "actors": _actor_counts(payload),
+            "adaptations": adaptations,
+            "replay_metadata": _replay_metadata(adaptations),
             "trajectory": trajectory,
             "boundary": _live_replay_boundary(),
         }
@@ -197,15 +206,22 @@ def _spawn_replay_actors(
     robot_actor: _Actor | None = None
     pedestrian_actors: list[_Actor] = []
     try:
-        robot_actor = _spawn_actor(
+        robot_blueprint = _blueprint(
+            blueprints,
+            "vehicle.tesla.model3",
+            "vehicle.*",
+            role_name="robot_sf_robot",
+        )
+        robot_transform = robot_sf_pose_to_carla_transform(
+            carla_module,
+            cast("dict[str, Any]", robot["start"]),
+            z=_VEHICLE_ACTOR_Z,
+        )
+        robot_actor, adaptations = _spawn_robot_actor(
+            carla_module,
             world,
-            _blueprint(blueprints, "vehicle.tesla.model3", "vehicle.*", role_name="robot_sf_robot"),
-            robot_sf_pose_to_carla_transform(
-                carla_module,
-                cast("dict[str, Any]", robot["start"]),
-                z=_VEHICLE_ACTOR_Z,
-            ),
-            label="robot",
+            robot_blueprint,
+            robot_transform,
         )
         for index, pedestrian in enumerate(pedestrians):
             pedestrian_actors.append(
@@ -236,6 +252,7 @@ def _spawn_replay_actors(
         "static_obstacle_actors": static_actors,
         "robot_actor": robot_actor,
         "pedestrian_actors": pedestrian_actors,
+        "adaptations": adaptations,
     }
 
 
@@ -339,33 +356,203 @@ def _blueprint(
 
 
 def _spawn_actor(world: Any, blueprint: Any, transform: Any, *, label: str) -> _Actor:
+    actor = _try_spawn_actor(world, blueprint, transform)
+    if actor is None:
+        raise RuntimeError(_spawn_failure_message(world, blueprint, transform, label=label))
+    return actor
+
+
+def _spawn_robot_actor(
+    carla_module: Any,
+    world: Any,
+    blueprint: Any,
+    transform: Any,
+) -> tuple[_Actor, list[dict[str, Any]]]:
+    actor = _try_spawn_actor(world, blueprint, transform)
+    if actor is not None:
+        return actor, []
+
+    exact_failure = _spawn_failure_message(world, blueprint, transform, label="robot")
+    try:
+        projection = _project_vehicle_spawn_transform(carla_module, world, transform)
+    except RuntimeError as exc:
+        raise RuntimeError(f"{exact_failure}; {exc}") from None
+
+    projected_actor = _try_spawn_actor(world, blueprint, projection["transform"])
+    if projected_actor is None:
+        projected_summary = _transform_location_summary(
+            projection["transform"],
+            spawn_name=(
+                "try_spawn_actor"
+                if getattr(world, "try_spawn_actor", None) is not None
+                else "spawn_actor"
+            ),
+        )
+        raise RuntimeError(
+            f"{exact_failure}; CARLA map projection fallback via {projection['method']} "
+            f"also failed for robot with blueprint {getattr(blueprint, 'id', '<unknown>')}"
+            f"{projected_summary}"
+        )
+
+    return projected_actor, [
+        {
+            "actor": "robot",
+            "type": "carla-map-spawn-projection",
+            "reason": exact_failure,
+            "method": projection["method"],
+            "distance_m": projection["distance_m"],
+            "original_transform": _transform_summary(transform),
+            "projected_transform": _transform_summary(projection["transform"]),
+            "parity_caveat": (
+                "robot actor spawn was projected onto a CARLA map surface; "
+                "this replay is not native metric-parity evidence"
+            ),
+        }
+    ]
+
+
+def _try_spawn_actor(world: Any, blueprint: Any, transform: Any) -> _Actor | None:
     spawn = getattr(world, "try_spawn_actor", None)
-    spawn_name = "try_spawn_actor"
     if spawn is None:
         spawn = world.spawn_actor
-        spawn_name = "spawn_actor"
     actor = spawn(blueprint, transform)
-    if actor is None:
-        blueprint_id = getattr(blueprint, "id", "<unknown>")
-        location = getattr(transform, "location", None)
-        rotation = getattr(transform, "rotation", None)
-        if location is not None:
-            location_summary = (
-                f" via {spawn_name} at x={float(getattr(location, 'x', 0.0)):.3f}, "
-                f"y={float(getattr(location, 'y', 0.0)):.3f}, "
-                f"z={float(getattr(location, 'z', 0.0)):.3f}"
-            )
-        else:
-            location_summary = f" via {spawn_name}"
-        if rotation is not None:
-            rotation_summary = f", yaw={float(getattr(rotation, 'yaw', 0.0)):.3f}"
-        else:
-            rotation_summary = ""
-        raise RuntimeError(
-            f"CARLA failed to spawn {label} with blueprint {blueprint_id}"
-            f"{location_summary}{rotation_summary}"
+    return cast("_Actor | None", actor)
+
+
+def _spawn_failure_message(world: Any, blueprint: Any, transform: Any, *, label: str) -> str:
+    spawn_name = (
+        "try_spawn_actor" if getattr(world, "try_spawn_actor", None) is not None else "spawn_actor"
+    )
+    return (
+        f"CARLA failed to spawn {label} with blueprint {getattr(blueprint, 'id', '<unknown>')}"
+        f"{_transform_location_summary(transform, spawn_name=spawn_name)}"
+    )
+
+
+def _transform_location_summary(transform: Any, *, spawn_name: str) -> str:
+    location = getattr(transform, "location", None)
+    rotation = getattr(transform, "rotation", None)
+    if location is not None:
+        location_summary = (
+            f" via {spawn_name} at x={float(getattr(location, 'x', 0.0)):.3f}, "
+            f"y={float(getattr(location, 'y', 0.0)):.3f}, "
+            f"z={float(getattr(location, 'z', 0.0)):.3f}"
         )
-    return cast("_Actor", actor)
+    else:
+        location_summary = f" via {spawn_name}"
+    if rotation is not None:
+        rotation_summary = f", yaw={float(getattr(rotation, 'yaw', 0.0)):.3f}"
+    else:
+        rotation_summary = ""
+    return f"{location_summary}{rotation_summary}"
+
+
+def _project_vehicle_spawn_transform(
+    carla_module: Any,
+    world: Any,
+    transform: Any,
+) -> dict[str, Any]:
+    try:
+        carla_map = world.get_map()
+    except (AttributeError, RuntimeError):
+        raise RuntimeError(
+            "CARLA map projection fallback unavailable: world.get_map() API not available"
+        ) from None
+
+    original_location = getattr(transform, "location", None)
+    if original_location is None:
+        raise RuntimeError(
+            "CARLA map projection fallback unavailable: requested transform has no location"
+        )
+
+    get_waypoint = getattr(carla_map, "get_waypoint", None)
+    if get_waypoint is None:
+        raise RuntimeError(
+            "CARLA map projection fallback unavailable: map.get_waypoint API not available"
+        )
+    kwargs: dict[str, Any] = {"project_to_road": True}
+    lane_type = getattr(getattr(carla_module, "LaneType", None), "Driving", None)
+    if lane_type is not None:
+        kwargs["lane_type"] = lane_type
+    try:
+        waypoint = get_waypoint(original_location, **kwargs)
+    except TypeError:
+        waypoint = get_waypoint(original_location, project_to_road=True)
+    except RuntimeError as exc:
+        raise RuntimeError(f"CARLA map projection fallback failed: {exc}") from None
+
+    waypoint_transform = getattr(waypoint, "transform", None) if waypoint is not None else None
+    if waypoint_transform is None:
+        raise RuntimeError(
+            "CARLA map projection fallback unavailable: map.get_waypoint returned no waypoint transform"
+        )
+
+    spawn_transform = _vehicle_spawn_transform_from_map_transform(
+        carla_module,
+        waypoint_transform,
+        z_offset=_VEHICLE_ACTOR_Z,
+    )
+    return {
+        "method": "world.get_map().get_waypoint(project_to_road=True)",
+        "transform": spawn_transform,
+        "distance_m": _location_distance_m(original_location, spawn_transform.location),
+    }
+
+
+def _vehicle_spawn_transform_from_map_transform(
+    carla_module: Any,
+    transform: Any,
+    *,
+    z_offset: float,
+) -> Any:
+    location = transform.location
+    rotation = transform.rotation
+    return carla_module.Transform(
+        carla_module.Location(
+            x=float(getattr(location, "x", 0.0)),
+            y=float(getattr(location, "y", 0.0)),
+            z=float(getattr(location, "z", 0.0)) + z_offset,
+        ),
+        carla_module.Rotation(yaw=float(getattr(rotation, "yaw", 0.0))),
+    )
+
+
+def _location_distance_m(a: Any, b: Any) -> float:
+    dx = float(getattr(a, "x", 0.0)) - float(getattr(b, "x", 0.0))
+    dy = float(getattr(a, "y", 0.0)) - float(getattr(b, "y", 0.0))
+    dz = float(getattr(a, "z", 0.0)) - float(getattr(b, "z", 0.0))
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+
+def _transform_summary(transform: Any) -> dict[str, float]:
+    location = getattr(transform, "location", None)
+    rotation = getattr(transform, "rotation", None)
+    if location is None:
+        return {}
+    return {
+        "x": float(getattr(location, "x", 0.0)),
+        "y": float(getattr(location, "y", 0.0)),
+        "z": float(getattr(location, "z", 0.0)),
+        "yaw": float(getattr(rotation, "yaw", 0.0)) if rotation is not None else 0.0,
+    }
+
+
+def _replay_metadata(adaptations: list[dict[str, Any]]) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"robot_spawn": {"strategy": "exact", "adapted": False}}
+    robot_spawn = next(
+        (adaptation for adaptation in adaptations if adaptation.get("actor") == "robot"),
+        None,
+    )
+    if robot_spawn is not None:
+        metadata["robot_spawn"] = {
+            "strategy": "carla-map-projection",
+            "adapted": True,
+            "projection_source": robot_spawn["method"],
+            "requested_transform": robot_spawn["original_transform"],
+            "spawn_transform": robot_spawn["projected_transform"],
+            "parity_caveat": robot_spawn["parity_caveat"],
+        }
+    return metadata
 
 
 def _destroy_actors(actors: list[_Actor]) -> None:

@@ -31,6 +31,11 @@ class _FakeTransform:
         self.rotation = rotation
 
 
+class _FakeWaypoint:
+    def __init__(self, transform: _FakeTransform) -> None:
+        self.transform = transform
+
+
 class _FakeBlueprint:
     def __init__(self, blueprint_id: str) -> None:
         self.id = blueprint_id
@@ -74,7 +79,7 @@ class _FakeWorld:
         self.ticks = 0
 
     def get_map(self):
-        return SimpleNamespace(name="Town01")
+        return _MapWithoutProjectionApi()
 
     def get_blueprint_library(self) -> _FakeBlueprintLibrary:
         return _FakeBlueprintLibrary()
@@ -99,6 +104,64 @@ class _PedestrianSpawnFailureWorld(_FakeWorld):
 
 
 class _RobotSpawnFailureWorld(_FakeWorld):
+    def try_spawn_actor(
+        self, blueprint: _FakeBlueprint, transform: _FakeTransform
+    ) -> _FakeActor | None:
+        if blueprint.id.startswith("vehicle."):
+            return None
+        return super().try_spawn_actor(blueprint, transform)
+
+
+class _MapWithoutProjectionApi:
+    name = "Town01"
+
+
+class _ProjectionFallbackMap(_MapWithoutProjectionApi):
+    def __init__(self, waypoint_transform: _FakeTransform) -> None:
+        self.calls: list[dict[str, float | bool | None]] = []
+        self._waypoint = _FakeWaypoint(waypoint_transform)
+
+    def get_waypoint(
+        self,
+        location: _FakeLocation,
+        *,
+        project_to_road: bool = False,
+        lane_type=None,
+    ) -> _FakeWaypoint:
+        self.calls.append(
+            {
+                "x": location.x,
+                "y": location.y,
+                "z": location.z,
+                "project_to_road": project_to_road,
+                "lane_type": lane_type,
+            }
+        )
+        return self._waypoint
+
+
+class _RobotProjectionFallbackWorld(_FakeWorld):
+    def __init__(self, carla_map: _ProjectionFallbackMap) -> None:
+        super().__init__()
+        self._map = carla_map
+
+    def get_map(self) -> _ProjectionFallbackMap:
+        return self._map
+
+    def try_spawn_actor(
+        self, blueprint: _FakeBlueprint, transform: _FakeTransform
+    ) -> _FakeActor | None:
+        if (
+            blueprint.id.startswith("vehicle.")
+            and transform.location.x == pytest.approx(0.0)
+            and transform.location.y == pytest.approx(-0.0)
+            and transform.location.z == pytest.approx(0.6)
+        ):
+            return None
+        return super().try_spawn_actor(blueprint, transform)
+
+
+class _RobotProjectionRejectedWorld(_RobotProjectionFallbackWorld):
     def try_spawn_actor(
         self, blueprint: _FakeBlueprint, transform: _FakeTransform
     ) -> _FakeActor | None:
@@ -303,7 +366,7 @@ def test_live_replay_falls_back_when_robot_blueprint_find_returns_none(tmp_path:
 
 
 def test_live_replay_reports_robot_spawn_blueprint_and_location(tmp_path: Path) -> None:
-    """Robot spawn failures should include enough context for runtime diagnosis."""
+    """Robot spawn failures should fail closed when map projection fallback is unavailable."""
     from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
 
     world = _RobotSpawnFailureWorld()
@@ -321,7 +384,90 @@ def test_live_replay_reports_robot_spawn_blueprint_and_location(tmp_path: Path) 
     assert summary["status"] == "failed"
     assert summary["reason"] == (
         "CARLA failed to spawn robot with blueprint vehicle.tesla.model3 "
-        "via try_spawn_actor at x=0.000, y=-0.000, z=0.600, yaw=-0.000"
+        "via try_spawn_actor at x=0.000, y=-0.000, z=0.600, yaw=-0.000; "
+        "CARLA map projection fallback unavailable: map.get_waypoint API not available"
+    )
+    assert world.actors == []
+
+
+def test_live_replay_records_robot_spawn_projection_fallback_metadata(tmp_path: Path) -> None:
+    """Robot spawn should record explicit map-projection adaptation when exact CARLA placement fails."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    projected_transform = _FakeTransform(
+        _FakeLocation(x=0.25, y=-0.5, z=0.05),
+        _FakeRotation(yaw=-12.0),
+    )
+    carla_map = _ProjectionFallbackMap(projected_transform)
+    world = _RobotProjectionFallbackWorld(carla_map)
+    manifest_path = _write_manifest(
+        tmp_path,
+        [{"scenario_id": "unit_crossing", "payload": _minimal_t0_payload()}],
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=1,
+    )
+
+    assert summary["status"] == "oracle-replay"
+    assert summary["replay_metadata"]["robot_spawn"]["strategy"] == "carla-map-projection"
+    assert summary["replay_metadata"]["robot_spawn"]["adapted"] is True
+    assert summary["replay_metadata"]["robot_spawn"]["projection_source"] == (
+        "world.get_map().get_waypoint(project_to_road=True)"
+    )
+    assert summary["replay_metadata"]["robot_spawn"]["requested_transform"] == {
+        "x": 0.0,
+        "y": -0.0,
+        "z": 0.6,
+        "yaw": -0.0,
+    }
+    assert summary["replay_metadata"]["robot_spawn"]["spawn_transform"] == {
+        "x": 0.25,
+        "y": -0.5,
+        "z": 0.65,
+        "yaw": -12.0,
+    }
+    assert carla_map.calls == [
+        {"x": 0.0, "y": -0.0, "z": 0.6, "project_to_road": True, "lane_type": None}
+    ]
+    assert world.actors[0].transforms[0].location.x == pytest.approx(0.25)
+    assert world.actors[0].transforms[0].location.y == pytest.approx(-0.5)
+    assert world.actors[0].transforms[0].location.z == pytest.approx(0.65)
+    assert world.actors[0].transforms[1].location.x == pytest.approx(0.0)
+    assert world.actors[0].transforms[1].location.z == pytest.approx(0.6)
+
+
+def test_live_replay_fails_closed_when_projected_robot_spawn_is_rejected(tmp_path: Path) -> None:
+    """Projected robot spawn rejections should keep the adapter fail-closed with both attempts in diagnostics."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    carla_map = _ProjectionFallbackMap(
+        _FakeTransform(
+            _FakeLocation(x=0.25, y=-0.5, z=0.05),
+            _FakeRotation(yaw=-12.0),
+        )
+    )
+    world = _RobotProjectionRejectedWorld(carla_map)
+    manifest_path = _write_manifest(
+        tmp_path,
+        [{"scenario_id": "unit_crossing", "payload": _minimal_t0_payload()}],
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=1,
+    )
+
+    assert summary["status"] == "failed"
+    assert summary["reason"] == (
+        "CARLA failed to spawn robot with blueprint vehicle.tesla.model3 "
+        "via try_spawn_actor at x=0.000, y=-0.000, z=0.600, yaw=-0.000; "
+        "CARLA map projection fallback via world.get_map().get_waypoint(project_to_road=True) "
+        "also failed for robot with blueprint vehicle.tesla.model3 via try_spawn_actor "
+        "at x=0.250, y=-0.500, z=0.650, yaw=-12.000"
     )
     assert world.actors == []
 

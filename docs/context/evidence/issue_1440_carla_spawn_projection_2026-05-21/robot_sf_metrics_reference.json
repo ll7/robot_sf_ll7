@@ -1,0 +1,8 @@
+{
+  "schema_version": "robot-sf-reference-placeholder.v1",
+  "status": "reference-only",
+  "note": "Reference placeholder for #1440 parity gating. The CARLA replay reached oracle-replay only in adapted mode, so metric parity must remain unavailable.",
+  "metrics": {
+    "success": true
+  }
+}

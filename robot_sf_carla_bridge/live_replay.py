@@ -382,11 +382,7 @@ def _spawn_robot_actor(
     if projected_actor is None:
         projected_summary = _transform_location_summary(
             projection["transform"],
-            spawn_name=(
-                "try_spawn_actor"
-                if getattr(world, "try_spawn_actor", None) is not None
-                else "spawn_actor"
-            ),
+            spawn_name=_spawn_api_name(world),
         )
         raise RuntimeError(
             f"{exact_failure}; CARLA map projection fallback via {projection['method']} "
@@ -411,21 +407,25 @@ def _spawn_robot_actor(
     ]
 
 
+def _spawn_api_name(world: Any) -> str:
+    return "try_spawn_actor" if getattr(world, "try_spawn_actor", None) is not None else "spawn_actor"
+
+
 def _try_spawn_actor(world: Any, blueprint: Any, transform: Any) -> _Actor | None:
     spawn = getattr(world, "try_spawn_actor", None)
     if spawn is None:
         spawn = world.spawn_actor
-    actor = spawn(blueprint, transform)
+    try:
+        actor = spawn(blueprint, transform)
+    except Exception:  # noqa: BLE001 - CARLA spawn adapters raise simulator/runtime-specific errors.
+        return None
     return cast("_Actor | None", actor)
 
 
 def _spawn_failure_message(world: Any, blueprint: Any, transform: Any, *, label: str) -> str:
-    spawn_name = (
-        "try_spawn_actor" if getattr(world, "try_spawn_actor", None) is not None else "spawn_actor"
-    )
     return (
         f"CARLA failed to spawn {label} with blueprint {getattr(blueprint, 'id', '<unknown>')}"
-        f"{_transform_location_summary(transform, spawn_name=spawn_name)}"
+        f"{_transform_location_summary(transform, spawn_name=_spawn_api_name(world))}"
     )
 
 

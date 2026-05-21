@@ -170,6 +170,35 @@ class _RobotProjectionRejectedWorld(_RobotProjectionFallbackWorld):
         return super().try_spawn_actor(blueprint, transform)
 
 
+class _SpawnActorRaisesProjectionWorld:
+    def __init__(self, carla_map: _ProjectionFallbackMap) -> None:
+        self.actors: list[_FakeActor] = []
+        self.ticks = 0
+        self._map = carla_map
+
+    def get_map(self) -> _ProjectionFallbackMap:
+        return self._map
+
+    def get_blueprint_library(self) -> _FakeBlueprintLibrary:
+        return _FakeBlueprintLibrary()
+
+    def spawn_actor(self, blueprint: _FakeBlueprint, transform: _FakeTransform) -> _FakeActor:
+        if (
+            blueprint.id.startswith("vehicle.")
+            and transform.location.x == pytest.approx(0.0)
+            and transform.location.y == pytest.approx(-0.0)
+            and transform.location.z == pytest.approx(0.6)
+        ):
+            raise RuntimeError("spawn blocked")
+        actor = _FakeActor(blueprint, transform)
+        self.actors.append(actor)
+        return actor
+
+    def tick(self) -> int:
+        self.ticks += 1
+        return self.ticks
+
+
 class _RobotBlueprintFallbackWorld(_FakeWorld):
     def get_blueprint_library(self) -> _NoneReturningRobotBlueprintLibrary:
         return _NoneReturningRobotBlueprintLibrary()
@@ -258,6 +287,40 @@ def test_live_replay_fails_closed_for_unsupported_static_geometry(tmp_path: Path
     assert summary["unsupported"]["static_obstacle_count"] == 1
     assert summary["unsupported"]["unsupported_static_obstacle_count"] == 1
     assert world.actors == []
+
+
+def test_live_replay_projects_robot_when_spawn_actor_raises(tmp_path: Path) -> None:
+    """Fallback spawn exceptions should become a retryable miss so projection can continue."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    projected_transform = _FakeTransform(
+        _FakeLocation(x=4.0, y=1.5, z=0.0),
+        _FakeRotation(yaw=15.0),
+    )
+    carla_map = _ProjectionFallbackMap(projected_transform)
+    world = _SpawnActorRaisesProjectionWorld(carla_map)
+    manifest_path = _write_manifest(
+        tmp_path, [{"scenario_id": "unit_crossing", "payload": _minimal_t0_payload()}]
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=2,
+    )
+
+    assert summary["status"] == "oracle-replay"
+    assert summary["mode"] == "oracle-replay-adapted"
+    assert summary["replay_metadata"]["robot_spawn"]["strategy"] == "carla-map-projection"
+    assert summary["adaptations"][0]["reason"].startswith("CARLA failed to spawn robot")
+    assert summary["adaptations"][0]["projected_transform"] == {
+        "x": pytest.approx(4.0),
+        "y": pytest.approx(1.5),
+        "z": pytest.approx(0.6),
+        "yaw": pytest.approx(15.0),
+    }
+    assert len(carla_map.calls) == 1
+    assert all(actor.destroyed for actor in world.actors)
 
 
 def test_live_replay_fails_closed_for_malformed_static_geometry(tmp_path: Path) -> None:

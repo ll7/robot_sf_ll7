@@ -22,7 +22,7 @@ from robot_sf.planner.obstacle_features import (
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
     PREDICTIVE_OBSTACLE_FEATURE_DIM,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
-    infer_predictive_feature_schema,
+    PREDICTIVE_OBSTACLE_UNAVAILABLE_FEATURE_ROW,
 )
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -143,13 +143,13 @@ def _load_feature_schema_metadata(raw: Any) -> dict[str, Any]:
             payload = json.loads(raw_value)
             if isinstance(payload, dict):
                 return payload
-    return infer_predictive_feature_schema(int(np.asarray(raw["state"]).shape[2]))
+    raise ValueError("Missing or invalid feature_schema_json in dataset payload.")
 
 
 def _obstacle_feature_preflight(dataset_path: Path) -> dict[str, Any]:
     """Inspect one predictive dataset for active non-sentinel obstacle rows."""
     allowed_obstacle_sources = {"map_geometry"}
-    sentinel_row = np.asarray([50.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    sentinel_row = np.asarray(PREDICTIVE_OBSTACLE_UNAVAILABLE_FEATURE_ROW, dtype=np.float32)
     summary_path = dataset_path.with_suffix(".json")
     summary = _read_json(summary_path) if summary_path.exists() else {}
     with np.load(dataset_path) as raw:

@@ -16,6 +16,22 @@ from robot_sf.planner.obstacle_features import (
 from scripts.training import run_predictive_training_pipeline as pipeline
 
 
+def _obstacle_feature_schema_json(base_dim: int = 4) -> str:
+    """Return obstacle-feature schema metadata for predictive NPZ fixtures."""
+    return json.dumps(
+        {
+            "name": PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+            "base_schema": "predictive_legacy_v1",
+            "base_feature_dim": base_dim,
+            "obstacle_feature_schema": {
+                "name": PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+                "feature_dim": PREDICTIVE_OBSTACLE_FEATURE_DIM,
+            },
+            "input_dim": base_dim + PREDICTIVE_OBSTACLE_FEATURE_DIM,
+        }
+    )
+
+
 def test_paths_from_config_resolves_root_relative_to_output_base(tmp_path: Path) -> None:
     """Resolve output root relative to output base directory and run id."""
     cfg = {"output": {"root": "output/tmp/predictive_planner/pipeline"}}
@@ -316,6 +332,7 @@ def test_pipeline_passes_obstacle_model_family_to_collectors_and_training(
             target=np.zeros((2, 3, 5, 2), dtype=np.float32),
             mask=np.ones((2, 3), dtype=np.float32),
             target_mask=np.ones((2, 3, 5), dtype=np.float32),
+            feature_schema_json=np.asarray(_obstacle_feature_schema_json()),
         )
         path.with_suffix(".json").write_text(
             json.dumps(
@@ -407,6 +424,7 @@ def test_obstacle_feature_preflight_reports_active_non_sentinel_rows(tmp_path: P
         target=np.zeros((2, 2, 5, 2), dtype=np.float32),
         mask=np.ones((2, 2), dtype=np.float32),
         target_mask=np.ones((2, 2, 5), dtype=np.float32),
+        feature_schema_json=np.asarray(_obstacle_feature_schema_json()),
     )
     dataset_path.with_suffix(".json").write_text(
         json.dumps({"obstacle_feature_source": "map_geometry", "obstacle_line_count": 2}),
@@ -435,6 +453,7 @@ def test_obstacle_feature_preflight_fails_sentinel_only_rows(tmp_path: Path) -> 
         target=np.zeros((1, 3, 5, 2), dtype=np.float32),
         mask=np.ones((1, 3), dtype=np.float32),
         target_mask=np.ones((1, 3, 5), dtype=np.float32),
+        feature_schema_json=np.asarray(_obstacle_feature_schema_json()),
     )
     dataset_path.with_suffix(".json").write_text(
         json.dumps({"obstacle_feature_source": "map_geometry", "obstacle_line_count": 0}),
@@ -463,6 +482,7 @@ def test_obstacle_feature_preflight_rejects_non_map_source_with_valid_rows(tmp_p
         target=np.zeros((1, 2, 5, 2), dtype=np.float32),
         mask=np.ones((1, 2), dtype=np.float32),
         target_mask=np.ones((1, 2, 5), dtype=np.float32),
+        feature_schema_json=np.asarray(_obstacle_feature_schema_json()),
     )
     dataset_path.with_suffix(".json").write_text(
         json.dumps({"obstacle_feature_source": "not_available", "obstacle_line_count": 2}),

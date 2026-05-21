@@ -2,7 +2,7 @@
 
 Issue: [#872](https://github.com/ll7/robot_sf_ll7/issues/872)
 
-Status date: 2026-05-09
+Status date: 2026-05-21
 
 ## Scope Boundary
 
@@ -26,11 +26,15 @@ Completed CARLA-free T0 bridge pieces:
 - Missing-CARLA availability checks report explicit `not-available` metadata instead of importing
   optional CARLA dependencies at package import time.
 
-Next active smoke slice:
+Current live replay state:
 
-- [#1003](https://github.com/ll7/robot_sf_ll7/issues/1003) /
-  [PR #1100](https://github.com/ll7/robot_sf_ll7/pull/1100) carries the setup-only T1 smoke path.
-  Its purpose is dependency gating and fail-closed behavior, not live simulator replay proof.
+- Setup-only smoke, Docker runtime substrate, live replay command/server connectivity, and
+  static-geometry proxy support are implemented by the completed child issues.
+- [#1430](https://github.com/ll7/robot_sf_ll7/issues/1430) attempted the post-#1329 certified live
+  replay on the fallback host `imech156-u`. The pinned CARLA Docker runtime connected to CARLA
+  `0.9.16` on `Town10HD_Opt`, then failed closed with `CARLA failed to spawn robot`.
+- The #1110 parity adapter marks the #1430 report `unavailable` because CARLA status/mode is
+  `failed`.
 
 ## Claim Boundary
 
@@ -42,27 +46,29 @@ Specifically:
 - `not-available` missing-CARLA checks are expected setup results, not successful CARLA replay.
 - T0 neutral export validates data contracts, not coordinate or physics parity.
 - Setup-only T1 smoke coverage does not prove that a CARLA world can replay a certified scenario.
-- No current artifact compares CARLA oracle trajectories against Robot-SF trajectories.
+- The #1430 live replay reaches a CARLA server but fails before oracle-replay metrics exist, so it
+  is runtime evidence and a concrete blocker, not parity or transfer evidence.
 
 ## Remaining Parent Gaps
 
 The #872 definition of done still needs:
 
-- A positive live-CARLA T1 oracle replay smoke on a CARLA-capable host.
-- A conservative Robot-SF vs CARLA trajectory metric comparison adapter.
-- Evidence for the first replay target scenario and the exact environment used.
-- Documentation that separates setup, replay, degraded, and metric-parity claims.
+- A positive live-CARLA T1 oracle replay on a CARLA-capable host.
+- Metric-producing Robot-SF/CARLA comparison output from that replay.
+- Follow-up diagnosis for the #1430 robot actor-spawn failure in
+  [#1437](https://github.com/ll7/robot_sf_ll7/issues/1437).
+- Documentation that continues to separate setup, replay, degraded, failed, and metric-parity
+  claims.
 
 ## Follow-Up Issues
 
-- [#1111](https://github.com/ll7/robot_sf_ll7/issues/1111) runs the first live CARLA T1 oracle
-  replay smoke on a CARLA-capable host.
-- [#1110](https://github.com/ll7/robot_sf_ll7/issues/1110) adds the trajectory metric comparison
-  adapter and conservative unavailable-field reporting.
+- [#1430](https://github.com/ll7/robot_sf_ll7/issues/1430) records the post-#1329 live replay
+  attempt and unavailable parity report.
+- [#1437](https://github.com/ll7/robot_sf_ll7/issues/1437) should diagnose and fix or further
+  narrow the `CARLA failed to spawn robot` blocker.
 
 ## Validation
 
-This status note is documentation only. PR validation for the note should include normal docs
-format checks plus the CARLA bridge unit tests already used by the T0 stack. The live simulator
-validation remains deferred to [#1111](https://github.com/ll7/robot_sf_ll7/issues/1111) because
-this machine does not provide a CARLA runtime.
+This status note is documentation over the #1430 live evidence. PR validation should include the
+CARLA bridge tests and docs proof consistency. The parent remains open because #1430 did not reach
+`oracle-replay`.

@@ -65,13 +65,18 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
 - Current status: `prototype only`
 - Evidence grade: `observed`
 - Source-backed facts: HEIGHT has an upstream repository, MIT license signal, source entrypoints,
-  and published checkpoints. IGAT has a public upstream repository and checkpoints.
+  and published checkpoints. Issue #1394 cloned the HEIGHT source at
+  `65451bcdd1f3fbebaf6e96a0de73aaa56d74ca05`; the source entrypoint remained blocked on
+  `ModuleNotFoundError: No module named 'gym'`, and the advertised `237400.pt` checkpoint was not
+  bundled in the checkout. IGAT has a public upstream repository and checkpoints.
 - Robot SF synthesis: HEIGHT remains the current ceiling representative for this branch, but the
   wrapper path is adapter-heavy and experimental. IGAT is not a better first integration without a
   HEIGHT-vs-IGAT source-harness comparison.
 - Related Robot SF work: #760, #770, #1367,
+  Issue #1394,
   `docs/context/issue_742_awesome_robot_social_navigation_mining.md`,
   `docs/context/issue_770_igat_st2_attention_assessment.md`,
+  `docs/context/policy_search/issue_1394_crowdnav_height_source_harness.md`,
   `docs/benchmark_planner_family_coverage.md`.
 - Reopen if: a single attention successor demonstrates source-harness parity and materially better
   Robot SF fit than the existing HEIGHT prototype.
@@ -100,15 +105,18 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
 - Evidence grade: `observed`
 - Source-backed facts: SoNIC and GenSafeNav expose model/checkpoint assets that can be referenced by
   the Robot SF metadata layer. The source-harness probe found the upstream source environment
-  blocked in the current Robot SF environment, while model-only reuse is possible through explicit
+  blocked in the current Robot SF environment. Issue #1393 reran the GenSafeNav `Ours_GST`
+  checkpoint path at commit `01baf926a5c77c1a4ab28635658eb014ef4f1767` and reproduced
+  `ModuleNotFoundError: No module named 'gym'`; model-only reuse is possible through explicit
   compatibility shims.
 - Robot SF synthesis: Keep these as model-only prototypes or source-side-first safety/OOD
   candidates. Do not claim SoNIC/GenSafeNav benchmark parity or conformal-safety support until
   calibration, future-trajectory, and source-harness boundaries are proven.
-- Related Robot SF work: #601, #602, #626, #627, #1366,
+- Related Robot SF work: #601, #602, #626, #627, #1366, #1393,
   `docs/context/issue_626_sonic_source_harness_probe.md`,
   `docs/context/issue_627_sonic_wrapper_followup.md`,
-  `docs/context/issue_602_guarded_ppo_profile.md`.
+  `docs/context/issue_602_guarded_ppo_profile.md`,
+  `docs/context/policy_search/issue_1393_gensafenav_source_harness.md`.
 - Reopen if: the source harness becomes reproducible in a pinned environment and any uncertainty or
   calibration fields are classified as train-only, deployment-observable, oracle-only, or forbidden.
 

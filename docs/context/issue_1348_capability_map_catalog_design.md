@@ -1,4 +1,4 @@
-# Issue #1348 Capability-Aware Map Catalog Design
+# Issue #1348 Capability-Aware Map Catalog Design 2026-05-20
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1348>
 

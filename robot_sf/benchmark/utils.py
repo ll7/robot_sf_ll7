@@ -264,7 +264,9 @@ def episode_metric_value(record: dict[str, Any], metric: str) -> float | None:  
         parsed = _parse_optional_float(container.get(metric))
         if parsed is None:
             continue
-        return None if math.isnan(parsed) else parsed
+        if math.isnan(parsed):
+            continue
+        return parsed
     return None
 
 

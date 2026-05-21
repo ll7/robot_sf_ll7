@@ -11,6 +11,7 @@ from robot_sf.benchmark.utils import (
     compute_fast_mode_and_cap,
     determine_episode_outcome,
     episode_identity_hash,
+    episode_metric_value,
     format_episode_summary_table,
     format_overlay_text,
     index_existing,
@@ -87,6 +88,16 @@ class TestValidateEpisodeSuccessIntegrity:
             "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
         }
         assert validate_episode_success_integrity(record) == []
+
+
+class TestEpisodeMetricValue:
+    """Test normalized episode metric extraction."""
+
+    def test_falls_back_to_nested_metric_when_top_level_is_nan(self):
+        """A placeholder top-level NaN should not hide a valid nested metric value."""
+        record = {"snqi": "nan", "metrics": {"snqi": 0.4}}
+
+        assert episode_metric_value(record, "snqi") == 0.4
 
 
 class TestFormatOverlayText:

@@ -106,6 +106,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #1239 Human-Model Transfer Robustness](./context/issue_1239_human_model_transfer.md)** - Explicit human-model variant/source metadata and a conservative transfer-smoke benchmark config
 * **[Issue #1169 CARLA Live T1 Oracle Replay](./context/issue_1169_carla_live_replay.md)** - Docker-backed live replay command, real CARLA `0.9.16` client/server connection, and fail-closed static-geometry boundary
 * **[Issue #1344 Paired AMV Primary Protocol](./context/issue_1344_paired_amv_protocol_report.md)** - Rerunnable paired nominal/stress AMV primary-row protocol, compact evidence, and interpretation boundary before all-runnable expansion or paper-facing claims
+* **[Issue #1398 Metric Rollup Reconciliation](./context/issue_1398_metric_rollup_reconciliation.md)** - Analyzer SNQI row-vs-episode reconciliation and claim-scope boundary for #1344/#1354 follow-up evidence
 * **[Issue #1237 Adversarial Failure Archive](./context/issue_1237_adversarial_failure_archive.md)** - Compact `adversarial_failure_archive.v1` manifests for deterministic adversarial failure grouping and replay pointers without copying raw bundles
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
 * **[PR First-Pass Review Audit](./context/pr_first_pass_review_audit_2026-05-14.md)** - Recent merged-PR review findings and the pre-opening self-review checklist for reducing repeated reviewer fixes

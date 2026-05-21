@@ -1,4 +1,4 @@
-# Issue #1430 CARLA Live Replay Parity
+# Issue #1430 CARLA Live Replay Parity (2026-05-21)
 
 Issue: [#1430](https://github.com/ll7/robot_sf_ll7/issues/1430)
 Parent epic: [#872](https://github.com/ll7/robot_sf_ll7/issues/872)

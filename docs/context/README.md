@@ -172,7 +172,7 @@ knowledge, not every transient iteration detail.
   [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
 * Issue #1169 CARLA Live T1 Oracle Replay:
   [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
-* Issue #1430 CARLA Live Replay Parity:
+* Issue #1430 CARLA Live Replay Parity (2026-05-21):
   [issue_1430_carla_live_parity.md](issue_1430_carla_live_parity.md)
 * Issue #1363 Learned Local Policy Eligibility Checklist:
   [policy_search/contracts/learned_local_policy_eligibility.md](policy_search/contracts/learned_local_policy_eligibility.md)
@@ -536,7 +536,7 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #872 CARLA Oracle Replay Bridge Status](issue_872_carla_oracle_replay_bridge_status.md)
   summarizes the parent epic state, the completed CARLA-free T0 stack, the setup-only T1 boundary,
   and the live replay / metric-parity child issues that remain before #872 can close.
-* [Issue #1430 CARLA Live Replay Parity](issue_1430_carla_live_parity.md)
+* [Issue #1430 CARLA Live Replay Parity (2026-05-21)](issue_1430_carla_live_parity.md)
   records the post-#1329 live CARLA rerun on `imech156-u`, the fail-closed robot-spawn blocker,
   and the conservative unavailable parity report.
 * [Issue #934 CARLA T0 Export Builder API](issue_934_carla_t0_export_builder.md)

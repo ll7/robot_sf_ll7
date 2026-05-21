@@ -228,12 +228,30 @@ needed a new issue.
 | --- | --- | --- |
 | Close benchmark integrity before relying on new aggregate claims | Issue #1398 and PR #1401 | Existing owner. Treat as the first consolidation lane because collision, timeout, and SNQI rollup semantics affect every benchmark comparison. |
 | Finish the map capability contract before expanding benchmark surfaces | Issues #1413, #1415, #1416 and PR #1420 | Existing owner set. These cover schema/sync checking, runtime resolution, cache policy, and the active map-catalog implementation PR. |
-| Run one evidence campaign to completion instead of several in parallel | Primary recommendation: Issue #1358. Alternatives: Issues #1395, #1396, #1397, #1353, #1354, merged PR #1399, and PR #1418 | Existing owner set. Pick exactly one first campaign lane after benchmark integrity and map capability blockers are settled. |
+| Run one evidence campaign to completion instead of several in parallel | Primary recommendation: Issue #1358. Active alternatives: Issues #1395, #1396, #1397, #1353, and #1354. Completed context if retained: merged PR #1399 and merged PR #1418. | Existing owner set. Pick exactly one first campaign lane after benchmark integrity and map capability blockers are settled. |
 | Keep broad candidate intake frozen except already-open source/spike work | Issue #1387 and merged PR #1404 for Tentabot-style value scoring | Existing owner. GenSafeNav and CrowdNav HEIGHT source-harness checks are already recorded in closed Issues #1393 and #1394; reopen only if missing upstream assets become available. |
 | Make the consolidation-week sequencing decision explicit | Issue #1423 | New owner created from this review. This is a coordination issue, not a code implementation issue. |
 
 No new issue is needed for PR #1362. It is closed and should not be treated as part of the active
 map-catalog merge chain; the active chain is Issues #1413, #1415, #1416 and PR #1420.
+
+## Temporary Consolidation Sprint Policy - Issue #1423 - 2026-05-21
+
+For the next development cycle, treat the active backlog as four ordered lanes:
+
+1. Benchmark Integrity: Issue #1398 and PR #1401.
+2. Map Capability Contract: Issues #1413, #1415, #1416 and PR #1420.
+3. First Evidence Campaign: Issue #1358.
+4. Frozen Candidate Intake: Issue #1387 and PR #1404 only, unless a maintainer explicitly approves
+   another exception.
+
+Issue #1358 is the selected first campaign lane after the benchmark-integrity and map-capability
+blockers settle. Keep Issues #1395, #1396, #1397, #1353, and #1354 as alternatives rather than
+parallel campaign starts during this consolidation window.
+
+Completed AMV context note: merged PR #1399 and merged PR #1418 are retained only as already-done
+baseline/preflight context, not as active alternative campaign lanes for this consolidation
+window.
 
 ### Priority 1: Close Benchmark Integrity
 
@@ -276,7 +294,8 @@ Pick one campaign lane and drive it to a complete artifact:
 
 - strongest choice: Issue #1358 bounded ORCA-residual learned local policy,
 - alternative if training infrastructure is the bottleneck: Issue #1395 learned risk model v1,
-- alternative if benchmark breadth is the priority: Issue #1399/#1418 paired AMV baseline/preflight.
+- completed context, not an active lane: PR #1399 and PR #1418 already broadened AMV
+  baseline/preflight coverage.
 
 Reason: surface work for learned policies is now good enough to start falsifying. Another candidate
 assessment is less valuable than one completed evidence loop.

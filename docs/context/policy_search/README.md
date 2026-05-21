@@ -67,8 +67,13 @@ Use it for three things only:
   CrowdNav / SARL, RGL, DS-RNN, CrowdNav++ / IGAT, HEIGHT, and GenSafeNav / SoNIC; current verdict
   is no new first integration until the relevant graph/history, checklist, and source-reproduction
   gates for each candidate land.
+- `issue_1394_crowdnav_height_source_harness.md`: CrowdNav HEIGHT source-harness proof for the
+  current family representative; current verdict is blocked by missing legacy `gym` and local
+  checkpoint assets.
 - `issue_1366_gensafenav_sonic_conformal_contract.md`: GenSafeNav / SoNIC conformal uncertainty
   assessment; current verdict is source-side reproduction first before benchmark promotion.
+- `issue_1393_gensafenav_source_harness.md`: fresh GenSafeNav `Ours_GST` source-harness
+  reproduction record; current verdict remains blocked by the missing `gym` source dependency.
 - `../issue_769_drl_vo_assessment.md`: DRL-VO metadata history plus issue #1364 privileged-state
   audit verdict; current status is prototype-only/tracked-agent diagnostic, not main-table ready.
 - `2026-05-20_tentabot_motion_primitive_assessment.md`: issue #1357 assessment of Tentabot-style
@@ -76,6 +81,9 @@ Use it for three things only:
   reuse.
 - `contracts/learned_local_policy_eligibility.md`: learned-policy eligibility checklist for
   observation/action leakage, registry entry, and required raw/adapted/guarded action logging.
+- `reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md`: issue #1358 ORCA-residual guarded
+  PPO benchmark-surface smoke; validates the bounded residual action path for unsafe PPO proposals
+  before the deferred training campaign.
 
 ## Reproducible Entry Points
 
@@ -95,6 +103,16 @@ Before adding a learned local-navigation method to `candidate_registry.yaml`, ap
 concrete runnable Robot SF candidates with config pointers; source-only, monitor-only, or
 privileged-evaluation methods should stay in context notes until they have a runnable adapter
 contract.
+
+For repeatable checklist-input validation, record the candidate's learned-policy metadata as YAML or
+JSON and run:
+
+```bash
+uv run python scripts/validation/check_learned_policy_eligibility.py <candidate-spec.yaml>
+```
+
+This helper checks completeness and consistency of the eligibility inputs only. It does not turn a
+candidate into a benchmark-ready planner or replace adapter, smoke, or benchmark validation.
 
 ## Scope Boundary
 

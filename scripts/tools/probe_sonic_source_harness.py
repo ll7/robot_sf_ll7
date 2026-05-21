@@ -177,7 +177,13 @@ class ProbeReport:
 
 
 def run_probe(
-    repo_root: Path, model_name: str, checkpoint: str | None, timeout_seconds: int
+    repo_root: Path,
+    model_name: str,
+    checkpoint: str | None,
+    timeout_seconds: int,
+    *,
+    issue: int = 626,
+    repo_remote_url: str = "https://github.com/tasl-lab/SoNIC-Social-Nav",
 ) -> ProbeReport:
     """Run a fail-fast probe against the upstream SoNIC source test entrypoint."""
     test_path = repo_root / "test.py"
@@ -202,8 +208,8 @@ def run_probe(
     missing = [str(path) for path in required_paths if not path.exists()]
     if missing:
         return ProbeReport(
-            issue=626,
-            repo_remote_url="https://github.com/tasl-lab/SoNIC-Social-Nav",
+            issue=issue,
+            repo_remote_url=repo_remote_url,
             repo_root=str(repo_root),
             model_name=model_name,
             checkpoint=checkpoint or "",
@@ -226,8 +232,8 @@ def run_probe(
             resolved_checkpoint = _default_checkpoint(checkpoints_dir)
         except FileNotFoundError:
             return ProbeReport(
-                issue=626,
-                repo_remote_url="https://github.com/tasl-lab/SoNIC-Social-Nav",
+                issue=issue,
+                repo_remote_url=repo_remote_url,
                 repo_root=str(repo_root),
                 model_name=model_name,
                 checkpoint="",
@@ -253,8 +259,8 @@ def run_probe(
     checkpoint_path = checkpoints_dir / resolved_checkpoint
     if not checkpoint_path.exists():
         return ProbeReport(
-            issue=626,
-            repo_remote_url="https://github.com/tasl-lab/SoNIC-Social-Nav",
+            issue=issue,
+            repo_remote_url=repo_remote_url,
             repo_root=str(repo_root),
             model_name=model_name,
             checkpoint=resolved_checkpoint,
@@ -309,8 +315,8 @@ def run_probe(
         stderr_tail = (exc.stderr or "")[-4000:]
 
     return ProbeReport(
-        issue=626,
-        repo_remote_url="https://github.com/tasl-lab/SoNIC-Social-Nav",
+        issue=issue,
+        repo_remote_url=repo_remote_url,
         repo_root=str(repo_root),
         model_name=model_name,
         checkpoint=resolved_checkpoint,
@@ -412,6 +418,17 @@ def main() -> int:
         default=30,
         help="Timeout for the source entrypoint probe.",
     )
+    parser.add_argument(
+        "--issue",
+        type=int,
+        default=626,
+        help="Issue number to record in generated reports.",
+    )
+    parser.add_argument(
+        "--repo-remote-url",
+        default="https://github.com/tasl-lab/SoNIC-Social-Nav",
+        help="Source repository URL to record in generated reports.",
+    )
     parser.add_argument("--output-json", type=Path, default=None, help="Optional JSON report path.")
     parser.add_argument(
         "--output-md", type=Path, default=None, help="Optional Markdown report path."
@@ -423,6 +440,8 @@ def main() -> int:
         model_name=args.model_name,
         checkpoint=args.checkpoint,
         timeout_seconds=args.timeout_seconds,
+        issue=args.issue,
+        repo_remote_url=args.repo_remote_url,
     )
     payload = asdict(report)
 

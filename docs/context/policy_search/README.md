@@ -67,6 +67,9 @@ Use it for three things only:
   CrowdNav / SARL, RGL, DS-RNN, CrowdNav++ / IGAT, HEIGHT, and GenSafeNav / SoNIC; current verdict
   is no new first integration until the relevant graph/history, checklist, and source-reproduction
   gates for each candidate land.
+- `issue_1394_crowdnav_height_source_harness.md`: CrowdNav HEIGHT source-harness proof for the
+  current family representative; current verdict is blocked by missing legacy `gym` and local
+  checkpoint assets.
 - `issue_1366_gensafenav_sonic_conformal_contract.md`: GenSafeNav / SoNIC conformal uncertainty
   assessment; current verdict is source-side reproduction first before benchmark promotion.
 - `issue_1393_gensafenav_source_harness.md`: fresh GenSafeNav `Ours_GST` source-harness

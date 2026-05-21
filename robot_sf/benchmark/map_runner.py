@@ -2702,8 +2702,11 @@ def _normalize_pedestrian_impact_controls(
 
 def _collision_metric_value(metrics: dict[str, Any], key: str) -> float:
     """Return a finite collision metric value, treating missing/non-finite values as zero."""
+    value = metrics.get(key)
+    if value is None:
+        value = 0.0
     try:
-        value = float(metrics.get(key, 0.0) or 0.0)
+        value = float(value)
     except (TypeError, ValueError):
         return 0.0
     return value if math.isfinite(value) else 0.0

@@ -2002,7 +2002,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "moving_rejection_counts": dict(sorted((moving_rejection_counts or {}).items())),
             "rejection_counts_by_source": rejection_counts_by_source or {},
             "rejected_examples": rejected_examples or [],
-            "unavailable_counts": unavailable_counts,
+            "unavailable_counts": dict(sorted(unavailable_counts.items())),
             "unavailable_examples": unavailable_examples,
             "nearest_pedestrian_distance": _finite_or_none(nearest_ped),
             "nearest_static_obstacle_distance": _finite_or_none(nearest_static),
@@ -2031,7 +2031,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def _value_scorer_metadata(self) -> dict[str, Any] | None:
         """Return clean-room value-scorer metadata for experimental variants."""
-        if self.config.planner_variant != "tentabot_value_scorer_v0":
+        if not self.config.planner_variant.startswith("tentabot_value_scorer_"):
             return None
         return {
             "profile": str(self.config.value_scorer_profile),

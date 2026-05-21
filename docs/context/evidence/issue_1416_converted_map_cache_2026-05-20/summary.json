@@ -1,0 +1,38 @@
+{
+  "issue": 1416,
+  "date": "2026-05-20",
+  "decision": "Do not add generated converted-map disk cache support yet.",
+  "measurements": [
+    {
+      "schema_version": "1.0",
+      "suite": "sac-scenario-cache-profile-v1",
+      "scenario_config": "configs/scenarios/classic_interactions.yaml",
+      "total_scenarios": 23,
+      "unique_maps": 13,
+      "cache_maxsize": 256,
+      "cache_hits": 56,
+      "cache_misses": 13,
+      "cache_currsize": 13,
+      "evictions_estimated": 0,
+      "hit_rate": 0.8116,
+      "warm_avg_ms": 6.3292,
+      "first_pass_max_ms": 8.445
+    },
+    {
+      "schema_version": "1.0",
+      "suite": "sac-scenario-cache-profile-v1",
+      "scenario_config": "configs/scenarios/sets/ppo_all_available_training_v1.yaml",
+      "total_scenarios": 90,
+      "unique_maps": 44,
+      "cache_maxsize": 256,
+      "cache_hits": 136,
+      "cache_misses": 44,
+      "cache_currsize": 44,
+      "evictions_estimated": 0,
+      "hit_rate": 0.7556,
+      "warm_avg_ms": 6.5889,
+      "first_pass_max_ms": 8.337
+    }
+  ],
+  "artifact_policy": "Only this compact summary is tracked; raw profiler JSON/Markdown is disposable and reproducible."
+}

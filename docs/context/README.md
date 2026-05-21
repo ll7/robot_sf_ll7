@@ -120,6 +120,8 @@ knowledge, not every transient iteration detail.
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1342 GH-Act Runtime Requirements:
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
+* Issue #1387 Tentabot-style value scorer spike:
+  [issue_1387_tentabot_value_scorer_spike.md](issue_1387_tentabot_value_scorer_spike.md)
 * Issue #1344 paired AMV primary protocol report:
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * Issue #1294 seed-sensitivity perturbations:

@@ -4,7 +4,7 @@
   "scenario_slice": "configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml",
   "horizon": 600,
   "benchmark_profile": "experimental",
-  "command_reference": "docs/context/issue_1318_teb_corridor_deadlock_eval.md#reproduction",
+  "command_reference": "docs/context/issue_1318_teb_corridor_deadlock_eval.md#validation",
   "results": {
     "teb": {
       "classic_merging_low": {
@@ -70,6 +70,64 @@
         "avg_steps": 487.7,
         "total_collision_count": 1.0,
         "termination_reasons": {"collision": 1, "success": 2}
+      }
+    }
+  },
+  "runtime_and_stall_metrics": {
+    "source": "fresh #1389 rerun from the same tracked scenario slice and commands; raw JSONL artifacts are intentionally ignored and reproducible",
+    "stall_deadlock_definition": "explicit stall/deadlock count is the number of episodes ending by max_steps or timeout/low-progress rather than collision or success",
+    "teb": {
+      "classic_merging_low": {
+        "episodes": 2,
+        "total_steps": 495,
+        "wall_time_mean_sec": 15.298,
+        "wall_time_total_sec": 30.596,
+        "steps_per_second_aggregate": 16.179,
+        "explicit_stall_deadlock_count": 0
+      },
+      "classic_merging_medium": {
+        "episodes": 3,
+        "total_steps": 747,
+        "wall_time_mean_sec": 12.603,
+        "wall_time_total_sec": 37.81,
+        "steps_per_second_aggregate": 19.757,
+        "explicit_stall_deadlock_count": 0
+      }
+    },
+    "orca": {
+      "classic_merging_low": {
+        "episodes": 2,
+        "total_steps": 561,
+        "wall_time_mean_sec": 4.736,
+        "wall_time_total_sec": 9.473,
+        "steps_per_second_aggregate": 59.222,
+        "explicit_stall_deadlock_count": 0
+      },
+      "classic_merging_medium": {
+        "episodes": 3,
+        "total_steps": 921,
+        "wall_time_mean_sec": 1.76,
+        "wall_time_total_sec": 5.28,
+        "steps_per_second_aggregate": 174.43,
+        "explicit_stall_deadlock_count": 0
+      }
+    },
+    "hybrid_rule_local_planner": {
+      "classic_merging_low": {
+        "episodes": 2,
+        "total_steps": 854,
+        "wall_time_mean_sec": 31.616,
+        "wall_time_total_sec": 63.231,
+        "steps_per_second_aggregate": 13.506,
+        "explicit_stall_deadlock_count": 0
+      },
+      "classic_merging_medium": {
+        "episodes": 3,
+        "total_steps": 1463,
+        "wall_time_mean_sec": 31.621,
+        "wall_time_total_sec": 94.864,
+        "steps_per_second_aggregate": 15.422,
+        "explicit_stall_deadlock_count": 0
       }
     }
   },

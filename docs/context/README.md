@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_1369_sage_mpc_transfer_assessment.md](issue_1369_sage_mpc_transfer_assessment.md)
 * Issue #1361 Command-Lattice Corridor-Deadlock Assessment (2026-05-20):
   [issue_1361_motion_primitive_corridor_deadlock.md](issue_1361_motion_primitive_corridor_deadlock.md)
+* Issue #1360 External TEB Reference Assessment:
+  [issue_1360_external_teb_assessment.md](issue_1360_external_teb_assessment.md)
 * Issue #769/#1364 DRL-VO Assessment and Privileged-State Audit:
   [issue_769_drl_vo_assessment.md](issue_769_drl_vo_assessment.md)
 * Issue #1245 Benchmark Claim Artifact:

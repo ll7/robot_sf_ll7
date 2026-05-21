@@ -96,6 +96,16 @@ concrete runnable Robot SF candidates with config pointers; source-only, monitor
 privileged-evaluation methods should stay in context notes until they have a runnable adapter
 contract.
 
+For repeatable checklist-input validation, record the candidate's learned-policy metadata as YAML or
+JSON and run:
+
+```bash
+uv run python scripts/validation/check_learned_policy_eligibility.py <candidate-spec.yaml>
+```
+
+This helper checks completeness and consistency of the eligibility inputs only. It does not turn a
+candidate into a benchmark-ready planner or replace adapter, smoke, or benchmark validation.
+
 ## Scope Boundary
 
 Local work may run smoke and narrow validation stages.

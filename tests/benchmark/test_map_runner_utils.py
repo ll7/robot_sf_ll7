@@ -19,6 +19,7 @@ from robot_sf.benchmark.map_runner import (
     _default_robot_command_space,
     _extract_ppo_pedestrians,
     _finalize_feasibility_metadata,
+    _floor_collision_metrics_from_flags,
     _goal_policy,
     _normalize_xy_rows,
     _parse_algo_config,
@@ -2713,6 +2714,59 @@ def test_run_map_episode_floors_exact_obstacle_collision_metrics(
     assert record["metrics"]["total_collision_count"] == pytest.approx(1.0)
     assert record["metrics"]["collisions"] == pytest.approx(1.0)
     assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
+
+
+def test_collision_metric_floor_preserves_untyped_collision_event() -> None:
+    """Top-level collision events should still satisfy outcome/metric integrity."""
+    metrics = {
+        "success": 0.0,
+        "collisions": 0.0,
+        "ped_collision_count": 0.0,
+        "obstacle_collision_count": 0.0,
+        "agent_collision_count": 0.0,
+        "total_collision_count": 0.0,
+        "wall_collisions": 0.0,
+    }
+
+    _floor_collision_metrics_from_flags(
+        metrics,
+        collision_seen=True,
+        ped_collision_seen=False,
+        obstacle_collision_seen=False,
+        robot_collision_seen=False,
+    )
+
+    assert metrics["collisions"] == pytest.approx(1.0)
+    assert metrics["total_collision_count"] == pytest.approx(1.0)
+    assert metrics["ped_collision_count"] == pytest.approx(0.0)
+    assert metrics["obstacle_collision_count"] == pytest.approx(0.0)
+    assert metrics["agent_collision_count"] == pytest.approx(0.0)
+
+
+def test_collision_metric_floor_preserves_larger_sampled_totals() -> None:
+    """Exact typed collision floors must not lower sampled aggregate totals."""
+    metrics = {
+        "success": 0.0,
+        "collisions": 2.0,
+        "ped_collision_count": 0.0,
+        "obstacle_collision_count": 0.0,
+        "agent_collision_count": 0.0,
+        "total_collision_count": 2.0,
+        "wall_collisions": 2.0,
+    }
+
+    _floor_collision_metrics_from_flags(
+        metrics,
+        collision_seen=True,
+        ped_collision_seen=False,
+        obstacle_collision_seen=True,
+        robot_collision_seen=False,
+    )
+
+    assert metrics["obstacle_collision_count"] == pytest.approx(1.0)
+    assert metrics["wall_collisions"] == pytest.approx(2.0)
+    assert metrics["collisions"] == pytest.approx(2.0)
+    assert metrics["total_collision_count"] == pytest.approx(2.0)
 
 
 def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

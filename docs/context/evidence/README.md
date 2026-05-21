@@ -47,5 +47,7 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   proving client/server connectivity and the fail-closed static-geometry boundary.
 - `issue_1344_paired_amv_primary_2026-05-20/`: compact paired nominal/stress AMV primary-row
   campaign summaries and tables.
+- `issue_1318_teb_corridor_deadlock_2026-05-20/`: compact TEB/ORCA/hybrid-rule
+  classic-merging corridor-deadlock comparison summary for issue #1318.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and
   reports from the May 4 run.

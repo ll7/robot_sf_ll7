@@ -19,7 +19,7 @@ This pass handled the issues requested in the 2026-05-20 batch:
 
 ## Implemented Locally
 
-#1391:
+Issue #1391:
 
 - Canonicalized feature-extractor SLURM stdout/stderr to `output/slurm/`.
 - Canonicalized feature-extractor training artifacts to `output/feature_extractor_comparison/`.
@@ -28,7 +28,7 @@ This pass handled the issues requested in the 2026-05-20 batch:
   - `bash -n SLURM/feature_extractor_comparison/run_comparison.slurm SLURM/feature_extractor_comparison/run_array.slurm SLURM/feature_extractor_comparison/analyze_results.slurm SLURM/feature_extractor_comparison/submit_parallel.sh`
   - `ROBOT_SF_MULTI_EXTRACTOR_TEST_MODE=1 uv run python scripts/multi_extractor_training.py --config configs/scenarios/multi_extractor_default.yaml --run-id issue1391-smoke --output-root output/feature_extractor_comparison_smoke`
 
-#1392:
+Issue #1392:
 
 - Added `SLURM/Auxme/camera_ready_benchmark.sl`.
 - Supports `CAMERA_READY_BENCHMARK_MODE=preflight|run`, explicit config, label/campaign id, output root, and publication-bundle skip.
@@ -40,7 +40,7 @@ This pass handled the issues requested in the 2026-05-20 batch:
   - `bash -n SLURM/Auxme/camera_ready_benchmark.sl`
   - `CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/sanity_v1_smoke.yaml CAMERA_READY_BENCHMARK_MODE=preflight CAMERA_READY_BENCHMARK_LABEL=sanity-v1-preflight scripts/dev/sbatch_use_max_time.sh --dry-run SLURM/Auxme/camera_ready_benchmark.sl`
 
-#1344:
+Issue #1344:
 
 - Added paired primary-row configs:
   - `configs/benchmarks/amv_paired_nominal_primary_v1.yaml`
@@ -51,7 +51,7 @@ This pass handled the issues requested in the 2026-05-20 batch:
   - `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/amv_paired_nominal_primary_v1.yaml --mode preflight --output-root output/benchmarks/issue_1344_local_preflight --campaign-id nominal_preflight_check --log-level WARNING`
   - `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/amv_paired_stress_primary_v1.yaml --mode preflight --output-root output/benchmarks/issue_1344_local_preflight --campaign-id stress_preflight_check --log-level WARNING`
 
-#1354:
+Issue #1354:
 
 - Reused the existing bounded first-pass config `configs/benchmarks/cross_kinematics_v1.yaml`.
 - Local preflight passed:
@@ -154,7 +154,7 @@ tail -n 120 output/slurm/12571-camera-ready-benchmark.out
 
 ## Deliberately Not Submitted Yet
 
-#1167:
+Issue #1167:
 
 - Issue #1218 is closed and `docs/context/issue_1165_predictive_obstacle_lifecycle.md` records a real map-derived obstacle-feature collector smoke.
 - I did not submit the training/eval comparison because the current config-first pipeline is not yet a clean obstacle-feature comparison path:
@@ -162,7 +162,7 @@ tail -n 120 output/slurm/12571-camera-ready-benchmark.out
   - `scripts/training/collect_predictive_hardcase_data.py` still only supports legacy/ego state dimensions and does not append obstacle features.
 - A suitable next implementation is to add a tracked #1167 pipeline config plus schema-aware collection for both base and hardcase data, then submit the same-seed comparison.
 
-#1358:
+Issue #1358:
 
 - No training job was submitted because this is not currently a config-only run.
 - The issue needs implementation first: ORCA command/risk observation extension, bounded residual policy action adapter, hard guard diagnostics, tests for clipping/diagnostics, and a registered policy-search candidate.

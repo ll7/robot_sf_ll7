@@ -94,6 +94,25 @@ def test_inspect_svg_reports_explicit_runtime_capabilities(tmp_path: Path) -> No
     assert metadata.has_obstacles is True
 
 
+def test_synthetic_zone_counts_use_parsed_zone_lengths(tmp_path: Path) -> None:
+    """Duplicate explicit labels should not hide parser-derived synthetic zones."""
+    svg_path = _write_svg(
+        tmp_path / "duplicate_zone_label.svg",
+        """
+  <rect id="robot_spawn_zone_0_a" inkscape:label="robot_spawn_zone_0" x="1" y="1" width="1" height="1" />
+  <rect id="robot_spawn_zone_0_b" inkscape:label="robot_spawn_zone_0" x="2" y="1" width="1" height="1" />
+  <rect id="robot_goal_zone_0" inkscape:label="robot_goal_zone_0" x="10" y="10" width="1" height="1" />
+  <path id="robot_path" inkscape:label="robot_route_1_0" d="M 1 1 L 10 10" />
+""".strip(),
+    )
+
+    metadata = inspect_svg(svg_path).capability_metadata
+
+    assert metadata.explicit_robot_spawn_zones == 2
+    assert metadata.parsed_robot_spawn_zones == 1
+    assert metadata.synthetic_robot_spawn_zones == 1
+
+
 def test_inspect_svg_reports_obstacle_only_template_capabilities(tmp_path: Path) -> None:
     """Obstacle-only/template-style maps should not look runtime-runnable."""
     svg_path = _write_svg(

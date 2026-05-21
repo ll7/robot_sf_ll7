@@ -44,6 +44,9 @@ class GuardedPPOConfig:
     prior_blend_weight: float = 0.0
     prior_near_field_only: bool = True
     prior_progress_margin: float = 0.05
+    prior_residual_mode: bool = False
+    prior_residual_max_linear_delta: float = 0.25
+    prior_residual_max_angular_delta: float = 0.35
 
 
 class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
@@ -60,6 +63,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         self.config = config or GuardedPPOConfig()
         self.fallback_adapter = fallback_adapter or RiskDWAPlannerAdapter()
         self.prior_adapter = prior_adapter
+        self._last_action_adaptation: dict[str, Any] | None = None
 
     def _child_adapters(self) -> tuple[_CommandPlanner, ...]:
         """Return configured child planners that may own episode-local state."""
@@ -123,6 +127,46 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         except RuntimeError:
             return None
         return float(command[0]), float(command[1])
+
+    def _residual_prior_command(
+        self,
+        ppo_command: tuple[float, float],
+        prior_command: tuple[float, float],
+    ) -> tuple[float, float]:
+        """Return ORCA-prior command plus a bounded PPO residual.
+
+        The residual is computed as ``ppo - prior`` so existing PPO-style actions remain
+        interpretable while the prior stays the base command.
+        """
+        raw = (float(ppo_command[0]), float(ppo_command[1]))
+        prior = (float(prior_command[0]), float(prior_command[1]))
+        linear_bound = max(float(self.config.prior_residual_max_linear_delta), 0.0)
+        angular_bound = max(float(self.config.prior_residual_max_angular_delta), 0.0)
+        raw_residual = (raw[0] - prior[0], raw[1] - prior[1])
+        clipped = (
+            float(np.clip(raw_residual[0], -linear_bound, linear_bound)),
+            float(np.clip(raw_residual[1], -angular_bound, angular_bound)),
+        )
+        adapted = (float(prior[0]) + clipped[0], float(prior[1]) + clipped[1])
+        self._last_action_adaptation = {
+            "mode": "prior_residual",
+            "status": "adapted",
+            "nominal_orca_action": [float(prior[0]), float(prior[1])],
+            "raw_policy_action": [raw[0], raw[1]],
+            "raw_residual_action": [raw_residual[0], raw_residual[1]],
+            "bounded_residual_action": [clipped[0], clipped[1]],
+            "adapted_action": [adapted[0], adapted[1]],
+            "residual_bounds": {
+                "linear": linear_bound,
+                "angular": angular_bound,
+            },
+            "residual_clipped": bool(
+                not np.isclose(raw_residual[0], clipped[0])
+                or not np.isclose(raw_residual[1], clipped[1])
+            ),
+            "hard_guard_authoritative": True,
+        }
+        return adapted
 
     def _blend_is_preferred(
         self,
@@ -320,6 +364,12 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         Returns:
             ShieldDecision: Proposed action, selected action, and shield decision metadata.
         """
+        self._last_action_adaptation = {
+            "mode": "direct_policy_command",
+            "raw_policy_action": [float(ppo_command[0]), float(ppo_command[1])],
+            "adapted_action": [float(ppo_command[0]), float(ppo_command[1])],
+            "hard_guard_authoritative": True,
+        }
         robot_pos, _heading, goal, ped_pos, _ped_vel = self._extract_state(observation)
         if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
             return self._shield_decision(
@@ -343,6 +393,29 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         ppo_eval = self._evaluate_command(observation, ppo_command)
         prior_command = self._prior_command(observation) if prior_allowed_by_scene else None
         prior_eval: dict[str, float | bool] | None = None
+        if (
+            bool(self.config.prior_residual_mode)
+            and prior_command is not None
+            and not bool(ppo_eval["safe"])
+        ):
+            prior_eval = self._evaluate_command(observation, prior_command)
+            residual_command = self._residual_prior_command(ppo_command, prior_command)
+            residual_eval = self._evaluate_command(observation, residual_command)
+            residual_improves_ppo = self._blend_is_preferred(ppo_eval, residual_eval)
+            residual_improves_prior = not bool(prior_eval["safe"]) or self._blend_is_preferred(
+                prior_eval, residual_eval
+            )
+            if bool(residual_eval["safe"]) and residual_improves_ppo and residual_improves_prior:
+                return self._shield_decision(
+                    ppo_command=ppo_command,
+                    filtered_command=residual_command,
+                    label="prior_residual_safe",
+                    reason="bounded_prior_residual_improved_short_horizon_safety",
+                    ppo_eval=ppo_eval,
+                    selected_eval=residual_eval,
+                    fallback_policy="prior_residual",
+                )
+
         prior_weight = float(self.config.prior_blend_weight)
         use_prior_in_scene = prior_command is not None and prior_weight > 0.0
         if use_prior_in_scene and prior_command is not None:
@@ -381,7 +454,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             )
 
         if prior_command is not None:
-            prior_eval = self._evaluate_command(observation, prior_command)
+            if prior_eval is None:
+                prior_eval = self._evaluate_command(observation, prior_command)
             if bool(prior_eval["safe"]):
                 return self._shield_decision(
                     ppo_command=ppo_command,
@@ -472,6 +546,27 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             if hard_constraint_violation is None
             else bool(hard_constraint_violation)
         )
+        action_adaptation = self._last_action_adaptation or {
+            "mode": "unknown",
+            "hard_guard_authoritative": True,
+        }
+        selected_matches_ppo = np.isclose(float(ppo_command[0]), float(filtered_command[0])) and (
+            np.isclose(float(ppo_command[1]), float(filtered_command[1]))
+        )
+        adapted_action = action_adaptation.get("adapted_action")
+        selected_matches_adaptation = False
+        if isinstance(adapted_action, list | tuple) and len(adapted_action) >= 2:
+            selected_matches_adaptation = bool(
+                np.isclose(float(adapted_action[0]), float(filtered_command[0]))
+                and np.isclose(float(adapted_action[1]), float(filtered_command[1]))
+            )
+        if not selected_matches_ppo and not selected_matches_adaptation:
+            action_adaptation = {
+                "mode": "guard_selected_command",
+                "raw_policy_action": [float(ppo_command[0]), float(ppo_command[1])],
+                "adapted_action": [float(filtered_command[0]), float(filtered_command[1])],
+                "hard_guard_authoritative": True,
+            }
         return ShieldDecision(
             proposed_action=(float(ppo_command[0]), float(ppo_command[1])),
             filtered_action=(float(filtered_command[0]), float(filtered_command[1])),
@@ -486,6 +581,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             fallback_controller_state={
                 "policy": fallback_policy or type(self.fallback_adapter).__name__,
                 "prior_available": self.prior_adapter is not None,
+                "action_adaptation": action_adaptation,
             },
             proposed_evaluation=dict(ppo_eval),
             selected_evaluation=dict(selected_eval),
@@ -535,6 +631,21 @@ def build_guarded_ppo_config(cfg: dict[str, Any] | None) -> GuardedPPOConfig:
         prior_blend_weight=float(cfg.get("prior_blend_weight", 0.0)),
         prior_near_field_only=bool(cfg.get("prior_near_field_only", True)),
         prior_progress_margin=float(cfg.get("prior_progress_margin", 0.05)),
+        prior_residual_mode=bool(
+            cfg.get("prior_residual_mode", cfg.get("residual_enabled", False))
+        ),
+        prior_residual_max_linear_delta=float(
+            cfg.get(
+                "prior_residual_max_linear_delta",
+                cfg.get("residual_linear_bound", 0.25),
+            )
+        ),
+        prior_residual_max_angular_delta=float(
+            cfg.get(
+                "prior_residual_max_angular_delta",
+                cfg.get("residual_angular_bound", 0.35),
+            )
+        ),
     )
 
 

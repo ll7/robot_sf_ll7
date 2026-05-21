@@ -1,12 +1,17 @@
 {
   "issue": 1393,
-  "date": "2026-05-20",
   "repo_remote_url": "https://github.com/tasl-lab/GenSafeNav",
-  "repo_commit": "01baf926a5c77c1a4ab28635658eb014ef4f1767",
+  "repo_root": "<GenSafeNav checkout at commit 01baf926a5c77c1a4ab28635658eb014ef4f1767>",
   "model_name": "Ours_GST",
   "checkpoint": "05207.pt",
-  "checkpoint_path": "trained_models/Ours_GST/checkpoints/05207.pt",
-  "command": "uv run python scripts/tools/probe_sonic_source_harness.py --issue 1393 --repo-remote-url https://github.com/tasl-lab/GenSafeNav --repo-root <GenSafeNav checkout> --model-name Ours_GST --checkpoint 05207.pt --timeout-seconds 30",
+  "command": [
+    "<python>",
+    "test.py",
+    "--model_dir",
+    "trained_models/Ours_GST",
+    "--test_model",
+    "05207.pt"
+  ],
   "docker_base_image": "pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel",
   "source_contract": {
     "robot_policy": "selfAttn_merge_srnn",
@@ -17,10 +22,15 @@
     "env_use_wrapper": true,
     "env_name": "CrowdSimPredRealGST-v0"
   },
+  "training_defaults": {},
+  "requirements_files": {},
   "verdict": "source harness blocked",
   "failure_stage": "source_entrypoint",
   "failure_summary": "missing python dependency: gym",
   "returncode": 1,
+  "stdout_tail": "",
+  "stderr_tail": "Traceback (most recent call last):\n  File \"<GenSafeNav checkout>/test.py\", line 9, in <module>\n    from rl.networks.envs import make_vec_envs\n  File \"<GenSafeNav checkout>/rl/networks/envs.py\", line 3, in <module>\n    import gym\nModuleNotFoundError: No module named 'gym'",
   "timeout_seconds": 30,
-  "stderr_tail": "Traceback (most recent call last):\n  File \"<GenSafeNav checkout>/test.py\", line 9, in <module>\n    from rl.networks.envs import make_vec_envs\n  File \"<GenSafeNav checkout>/rl/networks/envs.py\", line 3, in <module>\n    import gym\nModuleNotFoundError: No module named 'gym'"
+  "source_commit": "01baf926a5c77c1a4ab28635658eb014ef4f1767",
+  "checkpoint_path": "trained_models/Ours_GST/checkpoints/05207.pt"
 }

@@ -151,6 +151,37 @@ def test_hybrid_rule_v0_returns_diagnostics_for_open_space() -> None:
     assert diagnostics["selected_source_counts"]
 
 
+def test_tentabot_value_scorer_v0_exposes_clean_room_diagnostics() -> None:
+    """The Tentabot-style spike should be guarded and explicit about provenance."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v0",
+            "value_scorer_profile": "hand_scored_linear_teacher_v0",
+            "value_scorer_training_source": "robot_sf_hybrid_rule_teacher_only",
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+
+    linear, angular = planner.plan(_obs())
+
+    assert 0.0 <= linear <= planner.config.max_linear_speed
+    assert abs(angular) <= planner.config.max_angular_speed
+    diagnostics = planner.diagnostics()
+    assert diagnostics["planner_variant"] == "tentabot_value_scorer_v0"
+    scorer = diagnostics["value_scorer"]
+    assert scorer["profile"] == "hand_scored_linear_teacher_v0"
+    assert scorer["training_source"] == "robot_sf_hybrid_rule_teacher_only"
+    assert scorer["upstream_code_used"] is False
+    assert scorer["source_parity_claim"] is False
+    assert diagnostics["last_decision"]["top_k"]
+    assert diagnostics["last_decision"]["rejected_examples"] is not None
+    assert diagnostics["unavailable_counts"] == {"corridor_subgoal": 1}
+    assert diagnostics["last_decision"]["unavailable_counts"] == {"corridor_subgoal": 1}
+    assert diagnostics["last_decision"]["unavailable_examples"] == [
+        {"source": "corridor_subgoal", "reason": "disabled"}
+    ]
+
+
 def test_hybrid_rule_last_decision_returns_copy() -> None:
     """Step-level diagnostics should not expose mutable planner internals."""
     planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())

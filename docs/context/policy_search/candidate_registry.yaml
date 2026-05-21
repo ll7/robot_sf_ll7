@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-05-06
+updated_at: 2026-05-20
 funnel_config: configs/policy_search/funnel.yaml
 promotion_gates: configs/policy_search/promotion_gates.yaml
 
@@ -163,6 +163,37 @@ candidates:
       - smoke
       - nominal_sanity
       - stress_slice
+
+  risk_dwa_camera_ready:
+    status: implemented
+    family: classical_baseline
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/risk_dwa_camera_ready.yaml
+    hypothesis: >
+      Risk-DWA is the canonical non-learning dynamic-window baseline for
+      same-seed policy-search comparisons against learned-style local planner
+      spikes.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  tentabot_value_scorer_v0:
+    status: experimental_spike
+    family: learned_style_value_scorer
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v0.yaml
+    hypothesis: >
+      A clean-room Tentabot-style primitive value scorer can reuse Robot SF's
+      hybrid-rule candidate lattice and auditable route, clearance, pedestrian
+      TTC, smoothness, and command-bound features without importing upstream
+      Tentabot code, ROS/Gazebo dependencies, source assets, or hidden future
+      state. The v0 scorer uses hand-scored teacher weights as a supervised
+      spike baseline before any learned model is considered.
+    required_stages:
+      - smoke
+      - nominal_sanity
 
   hybrid_rule_v3_static_margin0:
     status: implemented

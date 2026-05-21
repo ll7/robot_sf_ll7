@@ -26,6 +26,8 @@ Choose the next issue in order:
 3. Project status `Tracked`
 4. Explicit user-requested issue
 
+Within the same status, prefer higher Project `Priority` (`Very High` to `Very Low`) before the
+remaining tie-breakers.
 Tie-breakers: no blocker labels, no linked PR, older open issue first, stronger evidence first.
 
 ## Workflow

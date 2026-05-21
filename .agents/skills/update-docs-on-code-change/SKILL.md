@@ -7,8 +7,8 @@ description: "Keep docs aligned with code changes that affect workflows, contrac
 
 ## Purpose
 
-Keep repository docs accurate when code, commands, or contracts change. Focus on minimal, discoverable
-updates, not broad documentation rewrites.
+Keep repository docs accurate when code, commands, or contracts change so docs stale risks do not
+hide workflow docs drift. Focus on minimal, discoverable updates, not broad documentation rewrites.
 
 ## Workflow
 

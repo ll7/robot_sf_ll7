@@ -25,7 +25,7 @@ Use this on a writable PR branch when actionable review feedback exists.
 4. Apply minimal edits grouped by concern.
 5. Run appropriate validation (prefer targeted first; full suite only when needed by risk).
 6. Commit and push.
-7. Resolve only addressed threads using `resolveReviewThread` mutation inputs.
+7. Resolve only addressed threads using the `resolveReviewThread` mutation via `gh api graphql`.
 8. Re-check thread state; report any unresolved items with blocker reason (permissions, rate limits, or
    external dependency).
 

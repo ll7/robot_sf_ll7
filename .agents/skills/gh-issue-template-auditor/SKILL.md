@@ -12,8 +12,10 @@ agent-ready without changing intent.
 
 ## Workflow
 
-1. Read template contract files and `scripts/tools/issue_template_audit.py`.
-2. Load issue body and metadata with `gh issue view`.
+1. Read template contract files and run
+   `uv run python scripts/tools/issue_template_audit.py` for bulk or targeted audits.
+   - For batch routing, preserve `docs/context/issue_713_batch_first_issue_workflow.md`.
+2. Load issue body and metadata with GitHub MCP / GitHub app tools when available, or `gh issue view`.
 3. Compare required sections (problem statement, scope/non-goals, estimates, risks, acceptance, validation, metadata).
 4. If gaps are limited and obvious:
    - generate repaired body with missing sections,

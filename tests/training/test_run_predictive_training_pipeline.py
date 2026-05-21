@@ -437,7 +437,7 @@ def test_obstacle_feature_preflight_fails_sentinel_only_rows(tmp_path: Path) -> 
         target_mask=np.ones((1, 3, 5), dtype=np.float32),
     )
     dataset_path.with_suffix(".json").write_text(
-        json.dumps({"obstacle_feature_source": "not_available", "obstacle_line_count": 0}),
+        json.dumps({"obstacle_feature_source": "map_geometry", "obstacle_line_count": 0}),
         encoding="utf-8",
     )
 
@@ -447,6 +447,36 @@ def test_obstacle_feature_preflight_fails_sentinel_only_rows(tmp_path: Path) -> 
     assert report["active_valid_obstacle_rows"] == 0
     assert report["active_exact_sentinel_rows"] == 3
     assert report["failure_reason"] == "Dataset contains no active non-sentinel obstacle rows."
+
+
+def test_obstacle_feature_preflight_rejects_non_map_source_with_valid_rows(tmp_path: Path) -> None:
+    """Obstacle preflight should fail closed when the source is not explicitly map-derived."""
+    dataset_path = tmp_path / "predictive_rollouts_base.npz"
+    state = np.zeros((1, 2, 10), dtype=np.float32)
+    state[0, 0, 4 : 4 + PREDICTIVE_OBSTACLE_FEATURE_DIM] = np.asarray(
+        [2.5, 1.0, 0.0, 0.0, 1.0, 1.0],
+        dtype=np.float32,
+    )
+    np.savez(
+        dataset_path,
+        state=state,
+        target=np.zeros((1, 2, 5, 2), dtype=np.float32),
+        mask=np.ones((1, 2), dtype=np.float32),
+        target_mask=np.ones((1, 2, 5), dtype=np.float32),
+    )
+    dataset_path.with_suffix(".json").write_text(
+        json.dumps({"obstacle_feature_source": "not_available", "obstacle_line_count": 2}),
+        encoding="utf-8",
+    )
+
+    report = pipeline._obstacle_feature_preflight(dataset_path)
+
+    assert report["status"] == "failed"
+    assert report["obstacle_feature_source"] == "not_available"
+    assert report["failure_reason"] == (
+        "Dataset obstacle_feature_source must be an explicit map-derived source; got "
+        "'not_available'."
+    )
 
 
 def test_pipeline_rejects_mismatched_collection_model_families(
@@ -622,3 +652,131 @@ def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
     assert final_summary["promoted_model"]["model_id"] == "predictive_explicit_model"
     assert final_summary["stage_status"]["promotion_ok"] is False
     assert final_summary["final_gate_results"]["all_ok"] is False
+
+
+def test_pipeline_uses_committed_base_seed_manifest_without_generating(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Pipeline should reuse a configured base seed manifest and record it as pre-existing."""
+    config_path = tmp_path / "predictive_existing_manifest.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment": {"run_id": "predictive_existing_manifest"},
+                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "scenarios": {
+                    "scenario_matrix": "scenarios.yaml",
+                    "hard_seed_manifest": "hard.yaml",
+                    "planner_grid": "grid.yaml",
+                },
+                "base_collection": {"seed_manifest": "base_manifest.yaml"},
+                "hardcase_collection": {},
+                "mixing": {},
+                "training": {"model_id": "predictive_existing_manifest"},
+                "wandb": {"enabled": False},
+                "evaluation": {},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "scenarios.yaml").write_text("[]\n", encoding="utf-8")
+    (tmp_path / "hard.yaml").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "grid.yaml").write_text("{}\n", encoding="utf-8")
+    base_manifest = tmp_path / "base_manifest.yaml"
+    base_manifest.write_text("scenario: [7]\n", encoding="utf-8")
+
+    monkeypatch.setattr(pipeline, "_sha1_file", lambda _path: "cfghash")
+    monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
+
+    build_calls: list[dict[str, object]] = []
+
+    def _fake_build_seed_manifest(**kwargs) -> Path:
+        """Capture unexpected seed-manifest generation requests."""
+        build_calls.append(kwargs)
+        output_path = Path(kwargs["output_path"])
+        output_path.write_text("scenario: [1]\n", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(pipeline, "_build_random_seed_manifest", _fake_build_seed_manifest)
+
+    def _fake_dataset(path: Path) -> None:
+        """Write a default predictive dataset fixture."""
+        np.savez(
+            path,
+            state=np.zeros((2, 3, 4), dtype=np.float32),
+            target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+            mask=np.ones((2, 3), dtype=np.float32),
+            target_mask=np.ones((2, 3, 5), dtype=np.float32),
+        )
+        path.with_suffix(".json").write_text(json.dumps({"num_samples": 2}), encoding="utf-8")
+
+    def _fake_run(cmd: list[str], *, log_level: str) -> None:
+        """Simulate pipeline commands and materialize expected artifacts."""
+        if any("collect_predictive_hardcase_data.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _fake_dataset(output)
+            return
+        if any("build_predictive_mixed_dataset.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _fake_dataset(output)
+            return
+        if any("train_predictive_planner.py" in part for part in cmd):
+            out_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "training_summary.json").write_text(
+                json.dumps(
+                    {"selection": {"selected_epoch": 1}, "selected_checkpoint_reason": "proxy"}
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "predictive_model.pt").write_text("stub", encoding="utf-8")
+            return
+        if any("run_predictive_success_campaign.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "campaign_summary.json").write_text(
+                json.dumps({"run_id": "predictive_existing_manifest", "status": "success"}),
+                encoding="utf-8",
+            )
+            return
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(pipeline, "_run", _fake_run)
+    monkeypatch.setattr(
+        pipeline,
+        "_run_capture_json",
+        lambda _cmd, **_kwargs: {"status": "ok", "return_code": 0},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_parse_args",
+        lambda: pipeline.argparse.Namespace(
+            config=config_path,
+            run_id="predictive_existing_manifest",
+            log_level="INFO",
+        ),
+    )
+
+    resolved_paths = pipeline._paths_from_config(
+        yaml.safe_load(config_path.read_text(encoding="utf-8")),
+        run_id="predictive_existing_manifest",
+        base_dir=config_path.parent,
+        output_base_dir=pipeline._REPO_ROOT,
+    )
+
+    assert pipeline.main() == 0
+    assert build_calls == []
+
+    final_summary = json.loads(resolved_paths.final_summary.read_text(encoding="utf-8"))
+    assert final_summary["base_seed_manifest"] == str(base_manifest)
+    assert final_summary["base_seed_manifest_generated"] is False
+
+    base_dataset_manifest = json.loads(
+        Path(final_summary["dataset_manifests"]["base"]).read_text(encoding="utf-8")
+    )
+    assert base_dataset_manifest["extra"]["seed_manifest"] == str(base_manifest)
+    assert base_dataset_manifest["extra"]["seed_manifest_generated"] is False

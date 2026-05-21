@@ -148,6 +148,7 @@ def _load_feature_schema_metadata(raw: Any) -> dict[str, Any]:
 
 def _obstacle_feature_preflight(dataset_path: Path) -> dict[str, Any]:
     """Inspect one predictive dataset for active non-sentinel obstacle rows."""
+    allowed_obstacle_sources = {"map_geometry"}
     sentinel_row = np.asarray([50.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
     summary_path = dataset_path.with_suffix(".json")
     summary = _read_json(summary_path) if summary_path.exists() else {}
@@ -170,7 +171,16 @@ def _obstacle_feature_preflight(dataset_path: Path) -> dict[str, Any]:
     if obstacle_feature_source is None:
         report["status"] = "failed"
         report["failure_reason"] = (
-            "Dataset summary is missing obstacle_feature_source; cannot prove real obstacle rows."
+            "Dataset obstacle_feature_source must be an explicit map-derived source; got None."
+        )
+        return report
+    obstacle_feature_source = str(obstacle_feature_source).strip()
+    report["obstacle_feature_source"] = obstacle_feature_source
+    if obstacle_feature_source not in allowed_obstacle_sources:
+        report["status"] = "failed"
+        report["failure_reason"] = (
+            "Dataset obstacle_feature_source must be an explicit map-derived source; got "
+            f"{obstacle_feature_source!r}."
         )
         return report
 

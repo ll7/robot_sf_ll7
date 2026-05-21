@@ -102,9 +102,11 @@ cleanup() {
   if [[ -n "${RUN_OUTPUT_DIR}" && -d "${RUN_OUTPUT_DIR}" ]]; then
     mkdir -p "${RESULTS_ROOT}"
     if command -v rsync >/dev/null 2>&1; then
-      rsync -a --partial --prune-empty-dirs "${RUN_OUTPUT_DIR}/" "${RESULTS_ROOT}/" || true
+      rsync -a --partial --prune-empty-dirs "${RUN_OUTPUT_DIR}/" "${RESULTS_ROOT}/" \
+        || echo "[camera-ready-bench] Warning: rsync failed to sync artifacts to ${RESULTS_ROOT}" >&2
     else
-      cp -r "${RUN_OUTPUT_DIR}/." "${RESULTS_ROOT}/" || true
+      cp -r "${RUN_OUTPUT_DIR}/." "${RESULTS_ROOT}/" \
+        || echo "[camera-ready-bench] Warning: cp failed to sync artifacts to ${RESULTS_ROOT}" >&2
     fi
   fi
 }

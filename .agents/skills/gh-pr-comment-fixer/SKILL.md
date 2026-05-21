@@ -1,90 +1,49 @@
 ---
 name: gh-pr-comment-fixer
-description: "Fix GitHub PR review comments using the gh CLI: fetch review threads, implement requested changes, run the full test suite, commit and push fixes, then resolve the review threads. Use when asked to address PR comments or review feedback on the current branch."
+description: "Fix GitHub PR review comments with branch-safe edits, validation, and explicit thread resolution."
 ---
 
 # Gh Pr Comment Fixer
 
-## Overview
+Use this on a writable PR branch when actionable review feedback exists.
 
-Use the gh CLI to retrieve PR review comments for the current branch, apply fixes, verify with
-the full test suite, and resolve the review threads after pushing.
+## Scope
+
+- Fetch PR context for current branch.
+- Collect review threads and top-level PR comments.
+- Apply only fixable-now items that stay inside PR scope.
+- Run proof at the tightest practical level, then push and resolve threads.
 
 ## Workflow
 
-1. Identify the PR for the current branch.
-   - Prefer `gh pr view --json number,headRefName` and confirm it matches the branch.
+1. Confirm PR for current branch and branch match.
+2. Pull requested comments and review threads; keep thread IDs for actionable items.
+3. Classify requests:
+   - fixable now,
+   - needs clarification (ask before editing),
+   - out-of-scope (defer).
+4. Apply minimal edits grouped by concern.
+5. Run appropriate validation (prefer targeted first; full suite only when needed by risk).
+6. Commit and push.
+7. Resolve only addressed threads using the `resolveReviewThread` mutation via `gh api graphql`.
+8. Re-check thread state; report any unresolved items with blocker reason (permissions, rate limits, or
+   external dependency).
 
-2. Retrieve review threads and comments.
-   - Use GraphQL for review threads:
-     `gh api graphql -F owner=<owner> -F repo=<repo> -F number=<pr_number> -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:100){nodes{id body path line url}}}}}}}'`
-   - Keep the review thread `id` with each requested change. GitHub resolves review threads by
-     thread id, not by the inline comment id or a reply id.
-   - Use `gh pr view --json comments` for top-level discussion comments.
-   - Summarize the requested changes and note any questions or ambiguities.
+## Anti-Loop / Retry
 
-3. Evaluate each comment.
-   - Decide if it is reasonable, needs clarification, or should be declined.
-   - If clarification is needed, ask before changing code.
+- Do not rerun unchanged failing validation more than twice without code change or clarified input.
+- If a review request cannot be fixed safely, leave a precise blocker note and stop.
 
-4. Implement fixes.
-   - Make minimal, targeted edits.
-   - Add or update tests if the change warrants it.
-   - Keep commit scope aligned with a single comment or logical group.
+## Artifact and Race Rules
 
-5. Run the full test suite.
-   - Use the repo standard test command unless instructed otherwise.
-   - Report failures and decide whether to continue or request input.
+- Inspect `output/`-class artifacts before commit and document disposal/durability.
+- Verify PR head before applying fixes; avoid resolving threads not yet satisfied by code or commit.
+- Do not force-push or mutate thread state for unresolved/ambiguous feedback.
 
-6. Check local artifact persistence before committing or pushing.
-   - Inspect ignored/generated outputs:
-     - `git status --ignored --short -uall output`
-   - For likely durable artifacts, inspect size, timestamps, and hashes with `find output ...`,
-     `du -sh`, and `sha256sum`.
-   - Decide whether each relevant artifact is disposable, an ignored cache, represented by a
-     tracked manifest/registry entry, or must be uploaded to durable storage.
-   - Treat benchmark bundles, model checkpoints, W&B run outputs, policy-analysis reports, and
-     config dependencies under `output/model_cache` as durable-candidate artifacts.
-   - If the review fix introduces or discovers a dependency on an ignored local artifact, make it
-     persistent before pushing, preferably via `model/registry.yaml` with W&B artifact metadata or
-     another explicit durable reference.
-   - Mention the artifact persistence decision in the PR reply or follow-up comment.
+## Required Output
 
-7. Commit and push fixes.
-   - Use a conventional commit message.
-   - Mention which comments were addressed.
-
-8. Resolve review threads.
-   - Replying to a review thread is not the same as resolving it. After the fix is committed,
-     pushed, and validated, resolve each addressed review thread with GraphQL:
-
-     ```bash
-     gh api graphql \
-       -F thread_id=<review_thread_id> \
-       -f query='mutation($thread_id:ID!){resolveReviewThread(input:{threadId:$thread_id}){thread{id isResolved}}}'
-     ```
-
-   - Resolve only after the fix is pushed. Do not resolve threads that were merely acknowledged,
-     still need reviewer input, failed validation, or were converted into a follow-up issue without
-     satisfying the current PR.
-   - Re-query review threads after resolution and verify that each addressed thread reports
-     `isResolved: true` before saying the review comments are resolved:
-
-     ```bash
-     gh api graphql \
-       -F owner=<owner> \
-       -F repo=<repo> \
-       -F number=<pr_number> \
-       -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved comments(first:100){nodes{id body path line url}}}}}}}'
-     ```
-
-   - If GraphQL auth, rate limits, or permissions block resolution, leave the PR comment or final
-     handoff explicit: fixes were pushed, but the named review thread ids remain unresolved.
-
-## Notes
-
-- Prefer `gh pr view` and `gh pr diff` over manual web browsing.
-- If no PR exists for the current branch, ask the user to open one or provide a PR number.
-- Post multiline comments using a body file, not escaped `\n`:
-  - Preferred helper: `scripts/dev/gh_comment.sh pr --current <<'EOF' ... EOF`
-  - Alternative: `gh pr comment <num> --body-file <file>`
+- Which comments were fixed,
+- validation command and result,
+- commit SHA pushed,
+- resolved thread IDs,
+- remaining open threads/blockers.

@@ -1,19 +1,34 @@
 ---
 name: goal-issue-discovery
-description: "Autonomous goal loop that scans Robot SF for improvement opportunities and opens evidence-graded GitHub issues."
+description: "Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities and creates evidence-graded GitHub issues; not for implementation."
 ---
 
 # Goal Issue Discovery
 
-## Overview
+Use this skill when the user wants a bounded, low-noise issue discovery pass.
 
-Use this skill when the user wants an autonomous pass that finds possible bugs, performance gains,
-research ideas, feature opportunities, documentation gaps, or maintainability improvements and turns
-them into detailed GitHub issues.
+This skill orchestrates:
+- `gh-issue-creator`
+- `gh-issue-sequencer`
+- `gh-issue-priority-assessor`
+- `agentic-eval`
+- `auto-improvement`
+- `autoresearch`
+- `context-map`
 
-This is a goal-driven orchestration skill. It reuses `gh-issue-creator`, `gh-issue-sequencer`,
-`gh-issue-priority-assessor`, `context-map`, `agentic-eval`, `auto-improvement`, and
-`autoresearch` instead of replacing them.
+It does not implement issues. It defines scope, evidence quality, duplication control, and stop
+conditions.
+
+## Trigger Boundary
+
+Use this skill when the user asks to discover, scan, audit, or collect improvement opportunities and
+turn them into GitHub issues.
+
+Do not use it for:
+- implementing an existing issue,
+- reviewing or fixing a PR,
+- broad research synthesis without issue creation,
+- one-off issue drafting when `gh-issue-creator` is sufficient.
 
 ## Read First
 
@@ -24,87 +39,94 @@ This is a goal-driven orchestration skill. It reuses `gh-issue-creator`, `gh-iss
 - `.agents/skills/gh-issue-creator/SKILL.md`
 - `.agents/skills/gh-issue-sequencer/SKILL.md`
 - `.agents/skills/context-map/SKILL.md`
+- `scripts/dev/check_skills.py` (for local syntax/shape sanity)
 
-## Preflight
+## Preflight (required, once)
 
-At the start of each goal, state:
+State these items before discovery:
+- Scope: repo, benchmark, planner, docs, tests, performance, or explicit paths.
+- Lane policy: one bounded lane per pass unless user requests broad mode.
+- Write mode: issue creation + Project #5 updates allowed by default.
+- Stop condition set: time budget, blocker, API/auth failure, or user stop.
+- Exclusions: user-requested areas or explicit skip files.
 
-- discovery scope, such as whole repo, benchmark, planner, docs, tests, or performance,
-- write mode: autonomous GitHub issue creation and Project #5 routing are allowed by default,
-- stop condition: queue exhausted, explicit time budget reached, auth/API failure, or validation
-  blocker,
-- exclusions, if the user supplied any.
+Do not request additional confirmation for this preflight.
 
-Do not ask for confirmation after the preflight unless the user explicitly requests a gated run.
+## State Machine
 
-## Evidence Grades
+Each candidate is in exactly one state:
+- `candidate`
+- `duplicate`
+- `needs_more_evidence`
+- `issue_ready`
+- `issue_created`
+- `issue_updated`
+- `skipped`
 
-Every issue created by this loop must include one evidence grade in the issue body:
+Do not revisit `duplicate` or `skipped` in the same run unless new evidence appears.
 
-- `observed`: backed by a failing command, code path, stale doc, TODO, benchmark output, or other
-  directly inspected repo evidence.
-- `inferred`: supported by repository structure or repeated patterns, but not yet proven by an
-  executable failure.
-- `proposal`: a broad feature, research, or improvement idea that is useful enough to track even
-  without current failure evidence.
+## Evidence Grade (required)
 
-Do not present `proposal` issues as bugs or benchmark regressions.
+Choose one:
+- `observed`: backed by direct evidence (command output, failing tests, code path, benchmark output,
+  stale doc, TODO, trace).
+- `inferred`: likely pattern or gap from structure or repeated behavior.
+- `proposal`: valuable idea without immediate executable evidence.
+
+Use `proposal` for ideas only; do not frame as bugs/regressions.
+
+## Candidate Readiness
+
+Open or update only candidates with:
+- bounded scope and clear problem/opportunity statement,
+- affected area (files, docs, workflow, benchmark),
+- evidence grade,
+- falsification plan (how to prove it wrong),
+- explicit non-goals,
+- definition of done,
+- estimated value or risk.
+
+Split broad ideas before writing.
 
 ## Workflow
 
-1. Establish context
-   - Inspect `git status --short --branch`.
-   - Read local machine guidance if present before expensive checks.
-   - Pick one bounded discovery lane per pass unless the user explicitly asks for a broad scan.
+1. Establish lane and scan surface.
+2. Collect candidates from repo-native sources (TODOs, failed or disabled tests, context notes, issue
+   gaps, benchmark notes, docs staleness, API friction points).
+3. For each candidate:
+   - classify state,
+   - set evidence grade,
+   - record confidence (high if direct signal, medium if one-step derived, low if speculative).
+4. De-duplicate against open/closed issues before creation.
+5. Draft/update through `gh-issue-creator` only when state is `issue_ready`.
+6. Route Project #5 metadata in a single batch pass with score sync once at the end.
+7. Stop on no new candidates, budget/time expiry, or blocked writes.
 
-2. Search for candidates
-   - Prefer repo-native sources: open TODOs, failing or skipped tests, stale docs, complexity or
-     timing helpers, benchmark notes, issue-linked context notes, and recent PR/issue patterns.
-   - For benchmark or planner ideas, inspect the relevant context notes before making claims.
-   - Use Spark subagents only for bounded sidecar discovery, such as locating APIs or summarizing a
-     small directory. The main agent owns issue creation and final judgment.
+## Proof, Validation, and Artifact Rules
 
-3. De-duplicate before writing
-   - Search open and closed issues with REST-backed `gh api` calls when GraphQL quota is low; use
-     `gh issue list` and `gh issue search` only when available and affordable.
-   - If a related issue exists, update or comment on that issue instead of creating a duplicate.
-   - If the existing issue is too broad, create a child/follow-up issue and link both directions.
+- Do not use local `output/` contents as proof unless tracked or durably referenced.
+- Do not count fallback/degraded/fail-open benchmark runs as successful proof.
+- Benchmark/planner candidates must name scenario set, seeds/source evidence, and expected
+  reproduction command.
+- Any paper-facing statement from discovery evidence is forbidden.
 
-4. Draft issues through the repo template
-   - Use `.agents/skills/gh-issue-creator/SKILL.md`.
-   - Include: evidence grade, concise goal/problem, scope/non-goals, affected files, validation
-     path, risk, estimated value, and definition of done.
-   - Use existing labels only unless the discovery itself justifies a new label.
-   - Route Project #5 metadata in a separate batch pass.
+## Anti-Loop and Race Conditions
 
-5. Batch project metadata
-   - Follow `docs/context/issue_713_batch_first_issue_workflow.md`.
-   - Cache Project #5 IDs once per shell session or in the local Project #5 cache for
-     longer runs.
-   - Use REST/local `git` for non-project state; reserve GraphQL budget for Project #5 writes.
-   - Set status and priority conservatively, then run score sync once if score inputs changed.
+- Stop revisiting candidates already marked `issue_created`, `issue_updated`, `duplicate`, or `skipped`
+  unless new evidence arrives.
+- Before creating an issue, re-check open/closed state to avoid duplicate creation races.
+- Use a single lane by default.
 
-6. Stop and hand off
-   - Stop when no more credible candidates remain, the time budget is reached, or GitHub/project
-     writes fail.
-   - If stopped early, write a concise handoff note or issue comment listing scanned areas,
-     created/updated issues, skipped candidates, and the next recommended lane.
+If API/project writes fail repeatedly, emit a short handoff and stop.
 
-## Guardrails
-
-- Broad ideas are allowed, but issue bodies must make uncertainty explicit.
-- Do not rely on local `output/` artifacts as durable evidence unless they are promoted or linked
-  through an accepted artifact path.
-- Do not classify fallback or degraded benchmark execution as success evidence.
-- Do not create large umbrella issues when separate bounded issues would be more executable.
+For benchmark or planner issues, use `review-benchmark-change` semantics before claim-like wording.
+- Do not make paper-facing claims from discovery evidence alone.
 
 ## Output Requirements
 
-Report:
-
 - discovery scope and stop condition,
-- areas inspected,
-- issues created or updated, with evidence grade,
-- duplicates avoided,
-- Project #5 writes and score sync status,
-- remaining candidate areas or blockers.
+- candidates seen by state and confidence,
+- created/updated issues with grade + evidence,
+- duplicates intentionally avoided,
+- Project #5 writes + score-sync status,
+- deferred/blocked candidates and race failures.

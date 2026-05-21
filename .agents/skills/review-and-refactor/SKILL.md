@@ -5,46 +5,26 @@ description: "Surgical review-then-refactor workflow for small code or docs chan
 
 # Review And Refactor
 
-## Overview
+## Purpose
 
-Use this skill when you want to inspect a small change surface, identify the real issue, and make a
-targeted improvement without turning the task into a broad cleanup.
-
-This is a tighter workflow than a general refactor: review first, then change only what the review
-justified.
-
-## Read First
-
-- `AGENTS.md`
-- `docs/code_review.md`
-- `docs/dev_guide.md`
-- `.specify/memory/constitution.md`
+Avoid broad rewrites: review a small surface first, then surgically apply the smallest safe
+refactor needed to fix the identified issue.
 
 ## Workflow
 
-1. Inspect the local contract
-   - Read the relevant files and nearby tests.
-   - Identify the specific behavior or wording that needs adjustment.
-
-2. Review before editing
-   - Look for correctness risks, duplicated logic, naming drift, or docs mismatch.
-   - Prefer the smallest refactor that resolves the identified issue.
-
-3. Refactor surgically
-   - Keep behavior stable unless the task explicitly requires behavior change.
-   - Change one concern at a time.
-
-4. Verify the result
-   - Run the smallest meaningful validation first.
-   - Expand only if the change surface demands it.
-
-## Output
-
-Always report the reviewed surface, the specific issue found, the narrow change made, and the
-validation command/result.
+1. Read the local contract (AGENTS, docs, related tests) for the target surface.
+2. Review for concrete gap (correctness, drift, duplication, naming mismatch).
+3. Apply one focused change only.
+4. Validate immediately with targeted checks; expand only if needed.
 
 ## Guardrails
 
-- If the task is pure cleanup, use `clean-up`.
-- If the task is benchmark-sensitive, use `review-benchmark-change` or `benchmark-overview` first.
-- Do not replace one problem with a wider refactor.
+- Preserve behavior unless the task explicitly requests change.
+- Do not switch this into a general cleanup flow.
+- For benchmark-sensitive edits, route through benchmark-specific workflows first.
+
+## Output
+
+- Issue found, files touched, and exact narrow fix.
+- Validation command(s) and outcome.
+- Any risk introduced or deferred.

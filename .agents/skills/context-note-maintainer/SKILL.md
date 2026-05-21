@@ -5,13 +5,10 @@ description: "Create or refresh linked docs/context notes so reusable agent know
 
 # Context Note Maintainer
 
-## Overview
+## When to use
 
-Use this skill when work produces non-trivial reusable insights, decisions, reasoning, or
-validation context that should be preserved in Markdown, or when an existing `docs/context/` note
-has become stale, superseded, or hard to discover.
-
-This skill is for durable handoff knowledge, not transient scratch notes.
+Use this skill when reusable repo knowledge needs durable Markdown capture, or when `docs/context/` notes are
+stale, conflicting, or hard to discover.
 
 ## Read First
 
@@ -50,14 +47,21 @@ This skill is for durable handoff knowledge, not transient scratch notes.
    - Check that referenced paths and commands exist.
    - Run `uv run python scripts/dev/check_skills.py` if skill docs were changed.
 
+## Proof and Guardrails
+
+- Record what changed and why it is the canonical note.
+- Remove or clearly mark superseded claims.
+- Confirm links and commands resolve to existing files/entries.
+- For durable benchmark evidence, prefer a short manifest over raw logs in `output/`.
+- Run `uv run python scripts/dev/check_skills.py` only after finishing skill doc edits.
+
 ## Output
 
-Always report which note was updated or created, why that was the canonical surface, what stale
-content was cleaned up, and which entry points now link to it.
+Always report:
+- which note was created/updated,
+- why this surface is canonical,
+- stale content addressed,
+- updated discoverability links.
 
-## Guardrails
-
-- Do not create duplicate notes when an existing canonical note can be updated.
-- Do not leave touched stale content ambiguous.
-- Do not treat `docs/context/` as a scratchpad or dump of raw terminal output.
-- Do not rely on chat-only context for decisions that future agents will need to reuse.
+Also include:
+- confirmation that the note is durable handoff content, not a temporary scratchpad.

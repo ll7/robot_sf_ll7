@@ -5,13 +5,11 @@ description: "Generate a focused repository context map before multi-file change
 
 # Context Map
 
-## Overview
+## When to use
 
-Use this skill before a non-trivial change when the main problem is finding the right repository
-surface to inspect.
+Use this skill before non-trivial work when the main risk is choosing the wrong files or commands.
 
-The goal is not to do the task yet. The goal is to produce a compact map of the files, commands,
-and checks that matter most so the next step is low-risk and well-scoped.
+The objective is a compact map that reduces wrong-surface edits, not execution.
 
 ## Read First
 
@@ -56,3 +54,8 @@ execution path.
 - Do not edit files in this skill.
 - Do not broaden scope while mapping context.
 - If the task is already well-scoped, switch to the appropriate execution skill.
+
+## Proof and Guardrails
+
+- Output should include `Primary`, `Adjacent`, `Validation`, `Risks`, and `Open questions`.
+- Do not include speculative recommendations beyond scoped evidence.

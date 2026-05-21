@@ -5,80 +5,36 @@ description: "Review existing GitHub issues against the repo's issue-template co
 
 # GH Issue Template Auditor
 
-## Overview
+## Purpose
 
-Use this skill when an existing issue should be checked against the repo's template contract and
-rewritten if it is missing the sections needed for agent-ready execution.
-
-Prefer GitHub MCP / GitHub app tools for interactive issue inspection when available. Keep the
-`gh` commands below as the deterministic fallback for issue edits, labels, and related project
-metadata cleanup.
-
-## Read First
-
-- `.github/ISSUE_TEMPLATE/issue_default.md`
-- `.github/ISSUE_TEMPLATE/bug_report.md`
-- `.github/ISSUE_TEMPLATE/documentation.md`
-- `.github/ISSUE_TEMPLATE/enhancement.md`
-- `.github/ISSUE_TEMPLATE/refactor.md`
-- `.github/ISSUE_TEMPLATE/research.md`
-- `.github/ISSUE_TEMPLATE/planner_integration.md`
-- `.github/ISSUE_TEMPLATE/benchmark_experiment.md`
-- `scripts/tools/issue_template_audit.py`
-- `.agents/skills/gh-issue-clarifier/SKILL.md`
-- `docs/context/issue_713_batch_first_issue_workflow.md`
-
-## What to Check
-
-An issue is template-ready only if it includes, at minimum:
-
-- goal or problem statement,
-- scope and non-goals,
-- added value estimate,
-- effort estimate,
-- complexity estimate,
-- risk assessment,
-- affected files or components,
-- definition of done,
-- success metrics,
-- validation or testing,
-- estimate discussion,
-- project metadata.
+Check issue bodies against the template contract and perform minimal, safe repairs so issues become
+agent-ready without changing intent. Prefer GitHub MCP / GitHub app tools for interactive reads and
+writes when available.
 
 ## Workflow
 
-1. Inspect the issue
-   - `gh issue view <n> --json title,body,labels,milestone,url`
-   - Identify which template the issue should have used.
+1. Read template contract files and run
+   `uv run python scripts/tools/issue_template_audit.py` for bulk or targeted audits.
+   - For batch routing, preserve `docs/context/issue_713_batch_first_issue_workflow.md`.
+2. Load issue body and metadata with GitHub MCP / GitHub app tools when available, or `gh issue view`.
+3. Compare required sections (problem statement, scope/non-goals, estimates, risks, acceptance, validation, metadata).
+4. If gaps are limited and obvious:
+   - generate repaired body with missing sections,
+   - update with `gh issue edit --body-file`.
+5. If gaps are fundamental (unclear objective, wide ambiguity, contradictions):
+   - escalate with `decision-required`,
+   - keep issue in `Tracked`,
+   - add a short clarifying comment.
+6. Leave project field writes for the same issue to a separate batching pass.
 
-2. Audit the body
-   - Use `uv run python scripts/tools/issue_template_audit.py --body-file <body.md>` to identify missing
-     sections.
-   - If the issue is only missing headings or obvious placeholders, repair it.
+## Guardrails
 
-3. Repair when safe
-   - Rewrite the issue body with the missing sections filled in conservatively.
-   - Update the issue with:
-     - `gh issue edit <n> --body-file <repaired-body.md>`
-   - Keep the original substance intact.
+- Preserve original issue content and decisions; avoid speculative rewrite.
+- Use `decision-required` instead of guessing when scope or problem statement is missing.
+- Keep route/metadata cleanup separate from body repair.
 
-4. Escalate when not safe
-   - If the issue is too broad, contradictory, or missing the core problem statement, do not
-     guess.
-   - Add `decision-required` and move it to `Tracked` if project metadata is in use.
-   - Comment with the missing pieces and the narrowest recommended fix.
-   - Keep Project #5 updates in a separate pass after the body repair if the issue also needs
-     metadata cleanup.
+## Output
 
-5. Close the loop
-   - If the issue now fits the template contract, say which sections were added or corrected.
-   - If it could not be safely repaired, say why and what decision is needed.
-
-## Output Requirements
-
-- Report:
-  - issue number,
-  - template contract gaps,
-  - whether you repaired the body,
-  - whether `decision-required` was added,
-  - any follow-up recommendation.
+- Issue number and exact missing contract sections.
+- Whether repair was applied, skipped, or blocked.
+- Any required escalation and follow-up action.

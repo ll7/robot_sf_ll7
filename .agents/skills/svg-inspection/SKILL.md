@@ -1,43 +1,33 @@
 ---
 name: svg-inspection
-description: "Inspect and debug SVG maps for parser-facing issues (route-only mode, zone index mismatches, risky path commands, and obstacle-crossing routes) using reusable Robot SF helpers."
+description: "Inspect and debug SVG maps for parser-facing issues using reusable Robot SF helpers."
 ---
 
 # SVG Inspection
 
-## Overview
+## Purpose
 
-Use this skill when SVG maps behave unexpectedly at runtime or emit map parser
-warnings. The workflow combines fast text inspection, semantic checks via a
-dedicated CLI helper, and targeted follow-up tests.
+Diagnose map parse/runtime mismatches in `maps/svg_maps/` and produce a short, reproducible finding.
 
-## Procedure
+## Workflow
 
-1. Quick label scan
-   - Run:
+1. Inspect labels quickly:
    - `rg -n "ped_route|robot_route|spawn_zone|goal_zone|obstacle" maps/svg_maps/<map>.svg`
-
-2. Run semantic inspection helper
-   - Single map:
-   - `uv run python scripts/validation/svg_inspect.py maps/svg_maps/<map>.svg --show-routes`
-   - Batch:
-   - `uv run python scripts/validation/svg_inspect.py maps/svg_maps --pattern "classic_*.svg" --strict warning`
-
-3. Export machine-readable report when needed
+2. Run semantic inspection:
+   - `uv run python scripts/validation/svg_inspect.py <map>.svg --show-routes`
+   - batch mode: `uv run python scripts/validation/svg_inspect.py maps/svg_maps --pattern "classic_*.svg" --strict warning`
+3. Generate machine report if needed:
    - `uv run python scripts/validation/svg_inspect.py maps/svg_maps --json output/validation/svg_inspection.json`
+4. Cross-check with map verification helper if route/zone behavior is suspicious.
 
-4. Follow-up verification
-   - `uv run python scripts/validation/verify_maps.py --scope all --mode local`
+## Guardrails
 
-5. Fix and lock behavior
-   - Prefer explicit `*_spawn_zone*` and `*_goal_zone*` on canonical maps.
-   - If route-only mode is intentional, keep route labels consistent and add/update tests.
-   - Add tests in `tests/maps/` or `tests/test_svg_classic_maps_format.py`.
+- Canonical maps should prefer explicit `spawn_zone` and `goal_zone` labels; avoid route-only assumptions.
+- Preserve reproducibility: route-only mode only when intentional and documented.
+- Keep parser/runtime caveats explicit in the issue or follow-up.
 
-## Notes
+## Output
 
-- Reusable API lives in `robot_sf.maps.verification.svg_inspection`.
-- The parser is regex-based for path coordinates; commands like `H/V` and curves
-  can produce mismatches between editor rendering and runtime geometry.
-- Route-only mode is supported, but canonical benchmark maps should prefer
-  explicit zones for reproducibility.
+- Findings (warnings/errors), map(s) checked, helper output path.
+- Whether additional follow-up tests or label edits are required.
+- Recommendation for safe remediation.

@@ -5,8 +5,10 @@ description: "Fast benchmark-faithful orientation for scenario splits, baselines
 
 # Benchmark Overview
 
-Use this skill when a task needs a fast, benchmark-faithful understanding of how this repository
-defines scenarios, seeds, baselines, metrics, and output artifacts.
+## When to use
+
+Use this skill when you need a fast, benchmark-faithful read of scenario definitions, seeds, baselines,
+metrics, and artifact layout before changing code or producing claims.
 
 ## Read First
 
@@ -15,18 +17,22 @@ defines scenarios, seeds, baselines, metrics, and output artifacts.
 - `docs/benchmark_planner_family_coverage.md`
 - `docs/benchmark_camera_ready.md` when the task is publication-facing
 
-## Focus
+## Workflow
 
-- canonical scenario/config entrypoints,
-- baseline readiness and category boundaries,
-- metric caveats,
-- reproducibility requirements,
-- artifact locations under `output/`.
+1. Identify the active benchmark contract for the request.
+2. Check scenario/config entrypoints and baseline family boundaries.
+3. Map required reproducibility artifacts and seeds.
+4. Return allowed conclusions and known caveats.
 
-## Output Expectations
+## Proof and Guardrails
 
-Summaries should call out:
+- Verify artifact provenance and contract mapping before interpretation.
+- Preserve fail-closed policy where fallback/degraded behavior exists.
+- Avoid implying success from runs with incomplete seeds, mismatched episodes, or missing metrics.
+- Use issue/context notes to capture non-obvious assumptions.
 
-- what benchmark contract applies,
-- why it matters for the requested task,
-- what uncertainty or limitation remains.
+## Output
+
+- benchmark contract and why it applies,
+- what evidence supports the interpretation,
+- known caveats and non-covered cases.

@@ -5,13 +5,10 @@ description: "Autonomous iterative experimentation loop for measurable Robot SF 
 
 # Autoresearch
 
-## Overview
+## When to use
 
-Use this skill when the task has a measurable metric and the user wants an autonomous improvement
-loop rather than a single pass fix.
-
-This is the Agent-compatible version of the upstream `autoresearch` idea adapted to Robot SF's
-repo-local workflow, validation gates, and benchmark conservatism.
+Use this skill when the task has measurable goals and needs an iterative experiment loop (hypothesis,
+baseline, test, keep/discard decisions), not a single-pass edit.
 
 ## Read First
 
@@ -24,20 +21,18 @@ repo-local workflow, validation gates, and benchmark conservatism.
 ## Workflow
 
 1. Define the experiment contract
-   - Restate the goal, metric command, metric extraction method, scope, constraints, and stop
-     condition.
-   - If any of those are missing, ask for them or switch to a clarifying skill.
+   - Restate the goal, metric command, extraction method, scope, constraints, and stop condition.
+   - If any input is missing, ask for it or switch to a clarifying skill.
 
 2. Establish a baseline
    - Run the metric command on the current branch before changing code.
-   - Record the baseline in a short log under `output/ai/autoresearch/<slug>/results.tsv` or
-     another user-approved scratch location.
+   - Record baseline and metadata in `output/ai/autoresearch/<slug>/results.tsv` (or approved location).
 
 3. Iterate on one hypothesis at a time
    - Make the smallest useful edit.
-   - Commit the experiment before running it.
+   - Commit the experiment snapshot before running it.
    - Run the metric command and any repo-required validation gate.
-   - Keep the change only if it improves the metric without violating constraints.
+   - Keep only if metric improves and constraints are satisfied.
    - Revert the change if it regresses, stalls, or becomes too complex for the gain.
 
 4. Use repo-native validation
@@ -50,9 +45,19 @@ repo-local workflow, validation gates, and benchmark conservatism.
    - Summarize the baseline, best result, discarded attempts, and remaining risks.
    - Call out any assumption that stayed unresolved.
 
-## Guardrails
+## Proof and Guardrails
 
 - Do not add dependencies or change public contracts unless explicitly allowed.
 - Keep benchmark wording conservative.
 - Use one concept per experiment.
 - Stop when the user budget is reached or the metric stops improving.
+- If benchmark evidence is invalid or non-reproducible, stop and report that status as incomplete.
+
+## Output
+
+Summarize:
+
+- experiment contract,
+- baseline and best result,
+- discarded attempts and reasons,
+- unresolved assumptions and next risk.

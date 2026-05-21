@@ -5,8 +5,9 @@ description: "Find the canonical config-first training or evaluation path, artif
 
 # Experiment Context
 
-Use this skill when a task needs the current training/evaluation run context rather than generic
-benchmark theory.
+## When to use
+
+Use this skill when a specific training/evaluation task needs the canonical config-first command, artifact lineage, and validation gates before execution or interpretation.
 
 ## Read First
 
@@ -14,19 +15,27 @@ benchmark theory.
 - `docs/dev_guide.md`
 - relevant runbooks under `docs/training/`
 - relevant configs under `configs/training/` or `configs/benchmarks/`
+- `docs/context/issue_691_benchmark_fallback_policy.md` when benchmark runs are involved
 
-## Focus
+## Workflow
 
-- canonical command path,
-- config-first workflow,
-- artifact lineage,
-- host/runtime assumptions,
-- validation or promotion gates.
+1. Resolve the exact command or config entrypoint.
+2. Verify expected output roots and artifact layout.
+3. Capture host/runtime assumptions and dependencies.
+4. Identify required validation or promotion gates.
+5. Summarize the primary risk of deviating from canonical execution.
 
-## Output Expectations
+## Proof and Guardrails
+
+- Prefer tracked config and command paths over ad-hoc overrides.
+- If artifacts are missing or reproducibility assumptions are violated, classify the result as incomplete.
+- Keep benchmark conclusions conditional on provenance and fallback mode status.
+
+## Output
 
 Return:
 
-- the exact config or command path to use,
-- the artifact root that should contain outputs,
-- the main risk if the user deviates from the canonical path.
+- exact config/command path,
+- expected artifact root,
+- required checks,
+- the noncompliance risk if the canonical path is not used.

@@ -18,7 +18,7 @@ echo "Extractors: ${EXTRACTORS[*]}"
 echo "Array concurrency cap: ${ARRAY_CONCURRENCY}"
 echo "============================================"
 
-mkdir -p slurm_logs
+mkdir -p output/slurm
 
 array_end=$(( ${#EXTRACTORS[@]} - 1 ))
 job_output=$(sbatch --array="0-${array_end}%${ARRAY_CONCURRENCY}" "$SCRIPT_DIR/run_array.slurm")
@@ -37,4 +37,4 @@ echo "Analysis will run after the array completes"
 
 echo "============================================"
 echo "Monitor jobs with: squeue -u $USER"
-echo "Check logs in: slurm_logs/"
+echo "Check logs in: output/slurm/"

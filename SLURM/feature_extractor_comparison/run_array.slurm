@@ -7,8 +7,8 @@
 #SBATCH --mem=16G
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
-#SBATCH --output=slurm_logs/feature_extractor_array_%A_%a.out
-#SBATCH --error=slurm_logs/feature_extractor_array_%A_%a.err
+#SBATCH --output=output/slurm/%A_%a-feature-extractor-array.out
+#SBATCH --error=output/slurm/%A_%a-feature-extractor-array.err
 
 # SLURM script for feature-extractor comparison jobs submitted as an array.
 # Each array task trains exactly one extractor and writes to the same
@@ -51,11 +51,11 @@ export DISPLAY=""
 export MPLBACKEND="Agg"
 export SDL_VIDEODRIVER="dummy"
 
-mkdir -p slurm_logs
+mkdir -p output/slurm
 
 echo "Starting training with $EXTRACTOR_NAME extractor..."
 
-OUTPUT_ROOT="results/single_extractor_${EXTRACTOR_NAME}"
+OUTPUT_ROOT="output/training/feature_extractors/single_${EXTRACTOR_NAME}"
 CONFIG_PATH="$OUTPUT_ROOT/single_extractor_config.yaml"
 
 mkdir -p "$OUTPUT_ROOT"

@@ -455,7 +455,13 @@ def create_agent_params(
     )
 
     # Personal Space cost parameters
-    p.personal_space_objective = DotMap(power=1, psc_scale=10)
+    p.personal_space_objective = DotMap(
+        power=1,
+        psc_scale=10,
+        use_agent_velocity=False,
+        agent_velocity_scale=1.0,
+        min_agent_speed=1e-3,
+    )
 
     p.objective_fn_params = DotMap(obj_type=agent_p2.get("obj_type"))
     p.goal_margin = p.goal_distance_objective.goal_margin

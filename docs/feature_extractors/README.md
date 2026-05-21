@@ -93,17 +93,17 @@ Run systematic comparison across all extractors:
 uv run python scripts/multi_extractor_training.py \
   --config configs/scenarios/multi_extractor_default.yaml \
   --run-id doc-demo \
-  --output-root results/feature_extractor_comparison
+  --output-root output/training/feature_extractors/comparison
 
 # Run the GPU/vectorized comparison (skips gracefully when CUDA is absent)
 uv run python scripts/multi_extractor_training.py \
   --config configs/scenarios/multi_extractor_gpu.yaml \
   --run-id doc-gpu \
-  --output-root results/feature_extractor_comparison
+  --output-root output/training/feature_extractors/comparison
 
 # Analyze any `complete_results.json` or `summary.json`
 uv run python scripts/analyze_feature_extractors.py \
-  results/feature_extractor_comparison/complete_results.json
+  output/training/feature_extractors/comparison/complete_results.json
 ```
 
 Each run writes:
@@ -116,11 +116,15 @@ For large-scale experiments on HPC clusters:
 
 ```bash
 # Submit complete comparison job
-sbatch SLURM/feature_extractor_comparison/run_comparison.slurm
+scripts/dev/sbatch_use_max_time.sh SLURM/feature_extractor_comparison/run_comparison.slurm
 
 # Or submit the comparison as a throttled Slurm job array
 ./SLURM/feature_extractor_comparison/submit_parallel.sh
 ```
+
+SLURM logs are written under `output/slurm/`. Training and analysis artifacts are written under
+`output/training/feature_extractors/`, which is ignored by git unless a small manifest or durable
+artifact pointer is intentionally promoted.
 
 ## Files and Structure
 

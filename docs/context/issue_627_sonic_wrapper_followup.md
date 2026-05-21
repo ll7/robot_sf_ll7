@@ -70,6 +70,11 @@ re-evaluate whether the wrapper can be promoted from prototype to benchmark-spik
 
 Date: 2026-04-15
 
+> Status update, 2026-05-20: issue #1366 keeps GenSafeNav / SoNIC on a
+> source-side-reproduction-first path for conformal uncertainty claims. The model-only wrappers
+> remain experimental adapter evidence, not source-faithful ACI / constrained-RL benchmark evidence.
+> See `./policy_search/issue_1366_gensafenav_sonic_conformal_contract.md`.
+
 `GenSafeNav` is close enough to the SoNIC runtime/model stack that the existing model-only adapter
 can be reused for the learned checkpoints without another wrapper class.
 

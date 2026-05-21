@@ -1,17 +1,17 @@
-# Issue #1360 External TEB Reference Assessment
+# Issue #1360 External TEB Reference Assessment 2026-05-20
 
 Date: 2026-05-20
 
 Related issue:
 
-- `robot_sf_ll7#1360`: research: evaluate external reference TEB baseline for corridor deadlocks
+- [robot_sf_ll7#1360](https://github.com/ll7/robot_sf_ll7/issues/1360): research: evaluate external reference TEB baseline for corridor deadlocks
 
 Related context:
 
-- `docs/context/issue_1318_teb_corridor_deadlock_eval.md`
-- `docs/context/external_planner_reuse_checklist.md`
-- `configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml`
-- `robot_sf/planner/teb_commitment.py`
+- [issue_1318_teb_corridor_deadlock_eval.md](issue_1318_teb_corridor_deadlock_eval.md)
+- [external_planner_reuse_checklist.md](external_planner_reuse_checklist.md)
+- [issue_1318_teb_corridor_deadlock_slice.yaml](../../configs/scenarios/sets/issue_1318_teb_corridor_deadlock_slice.yaml)
+- [teb_commitment.py](../../robot_sf/planner/teb_commitment.py)
 
 ## Goal
 

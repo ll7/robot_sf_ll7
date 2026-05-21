@@ -1,13 +1,19 @@
 {
   "issue": 1394,
-  "date": "2026-05-20",
   "repo_remote_url": "https://github.com/Shuijing725/CrowdNav_HEIGHT",
-  "repo_commit": "65451bcdd1f3fbebaf6e96a0de73aaa56d74ca05",
+  "repo_root": "<CrowdNav_HEIGHT checkout at commit 65451bcdd1f3fbebaf6e96a0de73aaa56d74ca05>",
   "model_dir": "trained_models/HEIGHT",
   "checkpoint": "237400.pt",
   "checkpoint_status": "missing_local_checkpoint",
-  "checkpoint_provenance": "README points to a Google Drive model-checkpoint folder; no .pt checkpoint is bundled in the cloned repository.",
-  "command": "uv run python scripts/tools/probe_crowdnav_height_source_harness.py --issue 1394 --repo-root <CrowdNav_HEIGHT checkout> --model-dir trained_models/HEIGHT --checkpoint 237400.pt --timeout-seconds 30",
+  "command": [
+    "<python>",
+    "test.py",
+    "--model_dir",
+    "trained_models/HEIGHT",
+    "--test_model",
+    "237400.pt",
+    "--cpu"
+  ],
   "source_contract": {
     "env_name": "CrowdSim3DTbObs-v0",
     "scenario": "circle_crossing",
@@ -32,6 +38,11 @@
   "failure_stage": "source_entrypoint",
   "failure_summary": "missing python dependency: gym",
   "returncode": 1,
+  "stdout_tail": "",
+  "stderr_tail": "Traceback (most recent call last):\n  File \"<CrowdNav_HEIGHT checkout>/test.py\", line 10, in <module>\n    from training.networks.envs import make_vec_envs\n  File \"<CrowdNav_HEIGHT checkout>/training/networks/envs.py\", line 3, in <module>\n    import gym\nModuleNotFoundError: No module named 'gym'",
   "timeout_seconds": 30,
-  "stderr_tail": "Traceback (most recent call last):\n  File \"<CrowdNav_HEIGHT checkout>/test.py\", line 10, in <module>\n    from training.networks.envs import make_vec_envs\n  File \"<CrowdNav_HEIGHT checkout>/training/networks/envs.py\", line 3, in <module>\n    import gym\nModuleNotFoundError: No module named 'gym'"
+  "finished_at_utc": "2026-05-20T18:00:00+00:00",
+  "total_runtime_sec": 0.0,
+  "source_commit": "65451bcdd1f3fbebaf6e96a0de73aaa56d74ca05",
+  "checkpoint_provenance": "README points to a Google Drive model-checkpoint folder; no .pt checkpoint is bundled in the cloned repository."
 }

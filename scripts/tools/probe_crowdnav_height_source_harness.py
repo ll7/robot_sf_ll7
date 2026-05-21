@@ -7,10 +7,13 @@ import argparse
 import importlib.util
 import json
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -40,6 +43,11 @@ def _safe_metadata_extract(extractor: Any, *args: Any) -> Any:
         return None
 
 
+def _optional_attr(value: Any, name: str) -> Any:
+    """Return an optional attribute without failing when the parent is ``None``."""
+    return getattr(value, name, None) if value is not None else None
+
+
 def _read_requirements(requirements_path: Path) -> list[str]:
     """Read non-comment requirement lines."""
     if not requirements_path.exists():
@@ -59,16 +67,18 @@ def _extract_contract(config_path: Path) -> dict[str, Any]:
     if config_cls is None:
         return {}
     config = config_cls()
+    env_config = getattr(config, "env", None)
+    robot_config = getattr(config, "robot", None)
+    sim_config = getattr(config, "sim", None)
+    action_space_config = getattr(config, "action_space", None)
     return {
-        "env_name": getattr(getattr(config, "env", object()), "env_name", None),
-        "scenario": getattr(getattr(config, "env", object()), "scenario", None),
-        "mode": getattr(getattr(config, "env", object()), "mode", None),
-        "robot_policy": getattr(getattr(config, "robot", object()), "policy", None),
-        "human_num": getattr(getattr(config, "sim", object()), "human_num", None),
-        "static_obs": getattr(getattr(config, "sim", object()), "static_obs", None),
-        "action_space_kinematics": getattr(
-            getattr(config, "action_space", object()), "kinematics", None
-        ),
+        "env_name": _optional_attr(env_config, "env_name"),
+        "scenario": _optional_attr(env_config, "scenario"),
+        "mode": _optional_attr(env_config, "mode"),
+        "robot_policy": _optional_attr(robot_config, "policy"),
+        "human_num": _optional_attr(sim_config, "human_num"),
+        "static_obs": _optional_attr(sim_config, "static_obs"),
+        "action_space_kinematics": _optional_attr(action_space_config, "kinematics"),
     }
 
 
@@ -102,6 +112,8 @@ class ProbeReport:
     stdout_tail: str
     stderr_tail: str
     timeout_seconds: int
+    finished_at_utc: str
+    total_runtime_sec: float
 
 
 def run_probe(
@@ -114,6 +126,7 @@ def run_probe(
     repo_remote_url: str = "https://github.com/Shuijing725/CrowdNav_HEIGHT",
 ) -> ProbeReport:
     """Run a fail-fast probe against the upstream HEIGHT source test entrypoint."""
+    started_at = perf_counter()
     test_path = repo_root / "test.py"
     config_path = repo_root / "crowd_nav" / "configs" / "config.py"
     requirements_path = repo_root / "requirements.txt"
@@ -140,6 +153,8 @@ def run_probe(
             stdout_tail="",
             stderr_tail="",
             timeout_seconds=timeout_seconds,
+            finished_at_utc=datetime.now(UTC).isoformat(),
+            total_runtime_sec=perf_counter() - started_at,
         )
 
     checkpoint_status = "present" if checkpoint_path.exists() else "missing_local_checkpoint"
@@ -195,6 +210,8 @@ def run_probe(
         stdout_tail=stdout_tail,
         stderr_tail=stderr_tail,
         timeout_seconds=timeout_seconds,
+        finished_at_utc=datetime.now(UTC).isoformat(),
+        total_runtime_sec=perf_counter() - started_at,
     )
 
 
@@ -214,8 +231,8 @@ def _render_markdown(report: ProbeReport) -> str:
         "## Invocation",
         "",
         "```bash",
-        "cd " + report.repo_root,
-        " ".join(report.command) if report.command else "# no command executed",
+        f"cd {shlex.quote(report.repo_root)}",
+        shlex.join(report.command) if report.command else "# no command executed",
         "```",
         "",
         "## Source Contract",

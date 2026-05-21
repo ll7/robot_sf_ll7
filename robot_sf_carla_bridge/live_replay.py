@@ -408,7 +408,9 @@ def _spawn_robot_actor(
 
 
 def _spawn_api_name(world: Any) -> str:
-    return "try_spawn_actor" if getattr(world, "try_spawn_actor", None) is not None else "spawn_actor"
+    return (
+        "try_spawn_actor" if getattr(world, "try_spawn_actor", None) is not None else "spawn_actor"
+    )
 
 
 def _try_spawn_actor(world: Any, blueprint: Any, transform: Any) -> _Actor | None:

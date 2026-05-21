@@ -1,0 +1,4 @@
+name: risk_dwa_camera_ready
+algo: risk_dwa
+base_config_path: configs/algos/risk_dwa_camera_ready.yaml
+params: {}

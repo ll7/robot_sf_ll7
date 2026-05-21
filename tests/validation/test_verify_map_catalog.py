@@ -175,6 +175,30 @@ def test_validator_rejects_benchmark_profile_without_capability(tmp_path: Path) 
     )
 
 
+def test_validator_reports_non_mapping_capabilities_for_benchmark_profile(
+    tmp_path: Path,
+) -> None:
+    """Malformed capabilities should be reported instead of crashing validation."""
+    map_root = tmp_path / "maps" / "svg_maps"
+    registry_path = tmp_path / "maps" / "registry.yaml"
+    _write_svg(map_root / "demo.svg", _runtime_svg_body())
+    registry = generate_registry(map_root, registry_path)
+    registry["maps"][0]["role"] = "benchmark_candidate"
+    registry["maps"][0]["profile"] = "benchmark_candidate"
+    registry["maps"][0]["capabilities"] = []
+    _write_registry(registry_path, registry)
+
+    errors = validate_registry(registry_path, map_root)
+
+    assert any("capabilities must be a mapping" in error for error in errors)
+    assert any(
+        "role benchmark_candidate requires benchmark capability" in error for error in errors
+    )
+    assert any(
+        "profile benchmark_candidate requires benchmark capability" in error for error in errors
+    )
+
+
 def test_validator_rejects_absolute_catalog_paths(tmp_path: Path) -> None:
     """Catalog paths should remain portable relative paths."""
     map_root = tmp_path / "maps" / "svg_maps"

@@ -235,11 +235,13 @@ def _validate_row(
     fresh_metadata = asdict(inspect_svg(svg_path).capability_metadata)
     if row.get("parser_metadata") != fresh_metadata:
         errors.append(f"{row_name}: stale parser_metadata")
-    if row.get("role") == "benchmark_candidate" and not row.get("capabilities", {}).get(
+    capabilities = row.get("capabilities")
+    capability_values = capabilities if isinstance(capabilities, dict) else {}
+    if row.get("role") == "benchmark_candidate" and not capability_values.get(
         "benchmark_candidate",
     ):
         errors.append(f"{row_name}: role benchmark_candidate requires benchmark capability")
-    if row.get("profile") == "benchmark_candidate" and not row.get("capabilities", {}).get(
+    if row.get("profile") == "benchmark_candidate" and not capability_values.get(
         "benchmark_candidate",
     ):
         errors.append(f"{row_name}: profile benchmark_candidate requires benchmark capability")

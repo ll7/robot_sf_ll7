@@ -90,8 +90,12 @@ knowledge, not every transient iteration detail.
   [open_issues_maintainer_input_triage.md](open_issues_maintainer_input_triage.md)
 * Open-issues PR split strategy:
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
+* Thursday development review 2026-05-21:
+  [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Issue #1240 scenario coverage entropy:
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
+* Issue #1167 predictive obstacle-feature pipeline:
+  [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
 * Issue #1348 capability-aware map catalog design:
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #1414 parser capability metadata:
@@ -124,6 +128,10 @@ knowledge, not every transient iteration detail.
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1342 GH-Act Runtime Requirements:
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
+* Issue #1387 Tentabot-style value scorer spike:
+  [issue_1387_tentabot_value_scorer_spike.md](issue_1387_tentabot_value_scorer_spike.md)
+* Issue #1344 paired AMV primary protocol report:
+  [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Artifact evidence vocabulary:
@@ -182,6 +190,7 @@ knowledge, not every transient iteration detail.
   [Issue #1111 CARLA Setup-Only Smoke Evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
   [Issue #1239 Human-Model Transfer Evidence](evidence/issue_1239_human_model_transfer_2026-05-18/README.md),
   [Issue #1169 CARLA Live Replay Evidence](evidence/issue_1169_carla_live_replay_2026-05-18/README.md),
+  [Issue #1344 Paired AMV Primary Evidence](evidence/issue_1344_paired_amv_primary_2026-05-20/README.md),
   [Issue #1416 Converted-Map Cache Evidence](evidence/issue_1416_converted_map_cache_2026-05-20/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).

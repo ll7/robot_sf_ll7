@@ -42,8 +42,8 @@ The repository moved very quickly.
 
 | Window | Merged PRs | Touched issues | Current open PRs | Current open issues |
 | --- | ---: | ---: | ---: | ---: |
-| 2026-05-14 to 2026-05-21 | 116 | n/a | 8 | 18 |
-| 2026-05-07 to 2026-05-21 | 187 | 195 | 8 | 18 |
+| 2026-05-14 to 2026-05-21 | 116 | n/a | 6 | 18 |
+| 2026-05-07 to 2026-05-21 | 187 | 195 | 6 | 18 |
 
 Merged PR title prefixes in the last seven days:
 
@@ -61,14 +61,12 @@ Merged PR title prefixes in the last seven days:
 
 Current open PRs at review time:
 
+- PR #1425 `Refactor skills documentation for clarity and conciseness`
+- PR #1424 `docs: add Thursday development course review`
 - PR #1420 `feat: add capability-aware map catalog`
 - PR #1418 `benchmark: add broader AMV baseline preflight`
 - PR #1412 `feat: wire predictive obstacle pipeline`
-- PR #1404 `research: add Tentabot-style value scorer spike`
 - PR #1401 `fix: reconcile campaign SNQI rollups`
-- PR #1400 `workflow: add generic benchmark SLURM launcher`
-- PR #1399 `benchmark: run paired AMV primary protocol`
-- PR #1362 `fix: enforce map definition invariants (#1348)`
 
 ## Current Direction
 
@@ -155,7 +153,7 @@ The map system is moving toward capability-aware cataloging:
 - capability-aware map catalog design exists,
 - follow-up issues now separate schema/sync checking, runtime enforcement, and generated cache
   evaluation,
-- map-definition invariant work is still open in PR #1362,
+- map-definition invariant work was excluded after PR #1362 closed unmerged,
 - capability-aware catalog work is still open in PR #1420.
 
 This is the right direction. Map validity should be profile-specific, not one universal binary
@@ -221,8 +219,6 @@ The main correction should be:
 3. run one or two high-value benchmark/training campaigns third,
 4. only then resume candidate intake.
 
-## Recommended Next Sprint
-
 ## Recommendation To Issue Mapping
 
 The course recommendation maps to mostly existing work. Only the sequencing/governance decision
@@ -232,8 +228,8 @@ needed a new issue.
 | --- | --- | --- |
 | Close benchmark integrity before relying on new aggregate claims | Issue #1398 and PR #1401 | Existing owner. Treat as the first consolidation lane because collision, timeout, and SNQI rollup semantics affect every benchmark comparison. |
 | Finish the map capability contract before expanding benchmark surfaces | Issues #1413, #1415, #1416 and PR #1420 | Existing owner set. These cover schema/sync checking, runtime resolution, cache policy, and the active map-catalog implementation PR. |
-| Run one evidence campaign to completion instead of several in parallel | Primary recommendation: Issue #1358. Alternatives: Issues #1395, #1396, #1397, #1353, #1354, PR #1399, and PR #1418 | Existing owner set. Pick exactly one first campaign lane after benchmark integrity and map capability blockers are settled. |
-| Keep broad candidate intake frozen except already-open source/spike work | Issue #1387 and PR #1404 for Tentabot-style value scoring | Existing owner. GenSafeNav and CrowdNav HEIGHT source-harness checks are already recorded in closed Issues #1393 and #1394; reopen only if missing upstream assets become available. |
+| Run one evidence campaign to completion instead of several in parallel | Primary recommendation: Issue #1358. Alternatives: Issues #1395, #1396, #1397, #1353, #1354, merged PR #1399, and PR #1418 | Existing owner set. Pick exactly one first campaign lane after benchmark integrity and map capability blockers are settled. |
+| Keep broad candidate intake frozen except already-open source/spike work | Issue #1387 and merged PR #1404 for Tentabot-style value scoring | Existing owner. GenSafeNav and CrowdNav HEIGHT source-harness checks are already recorded in closed Issues #1393 and #1394; reopen only if missing upstream assets become available. |
 | Make the consolidation-week sequencing decision explicit | Issue #1423 | New owner created from this review. This is a coordination issue, not a code implementation issue. |
 
 No new issue is needed for PR #1362. It is closed and should not be treated as part of the active
@@ -261,7 +257,7 @@ Finish the map-catalog chain before more benchmark expansion:
 - Issue #1413 schema and sync checker,
 - Issue #1415 runtime/scenario resolver enforcement,
 - Issue #1416 cache policy decision,
-- PR #1420 and PR #1362 review/merge order.
+- PR #1420 review/merge order.
 
 Reason: planner evaluation quality depends heavily on whether a scenario map is actually valid for
 the required capability. Capability-aware maps are a strong idea, but incomplete enforcement could

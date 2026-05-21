@@ -105,6 +105,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #1111 CARLA Setup-Only Smoke](./context/issue_1111_carla_setup_smoke.md)** - Ephemeral `carla==0.9.16` setup-only T1 smoke proof and boundary before Issue #1169 live replay
 * **[Issue #1239 Human-Model Transfer Robustness](./context/issue_1239_human_model_transfer.md)** - Explicit human-model variant/source metadata and a conservative transfer-smoke benchmark config
 * **[Issue #1169 CARLA Live T1 Oracle Replay](./context/issue_1169_carla_live_replay.md)** - Docker-backed live replay command, real CARLA `0.9.16` client/server connection, and fail-closed static-geometry boundary
+* **[Issue #1344 Paired AMV Primary Protocol](./context/issue_1344_paired_amv_protocol_report.md)** - Rerunnable paired nominal/stress AMV primary-row protocol, compact evidence, and interpretation boundary before all-runnable expansion or paper-facing claims
 * **[Issue #1237 Adversarial Failure Archive](./context/issue_1237_adversarial_failure_archive.md)** - Compact `adversarial_failure_archive.v1` manifests for deterministic adversarial failure grouping and replay pointers without copying raw bundles
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
 * **[PR First-Pass Review Audit](./context/pr_first_pass_review_audit_2026-05-14.md)** - Recent merged-PR review findings and the pre-opening self-review checklist for reducing repeated reviewer fixes
@@ -183,6 +184,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #328 Real-World Map Parent Tracker](./context/issue_328_real_world_map_parent.md)** - Parent/child map-coverage split, child issue status, and shared validation contract for real-world benchmark maps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
+* **[Issue #1360 External TEB Reference Assessment](./context/issue_1360_external_teb_assessment.md)** - Source-reuse and adapter-boundary assessment for external TEB-style corridor-deadlock baselines
 * **[Issue #736 Station-Platform Candidate Pack](./context/issue_736_station_platform_candidate_pack.md)** - Exploratory station-platform variants, canonical commands, and conservative promotion boundary
 * **[Issue #735 Platform Semantics Boundary](./context/issue_735_platform_semantics.md)** - Scenario-side platform hazard and keep-clear metadata contract, with fail-closed behavior for unsupported consumers
 * **[Issue #717 Safety Barrier Spike](./context/issue_717_safety_barrier_spike.md)** - Clean-room native planner spike results showing the current heuristic runs but fails the verified-simple static slice

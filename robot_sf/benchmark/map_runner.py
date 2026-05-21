@@ -1779,6 +1779,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "ppo_safe": 0,
             "fallback_safe": 0,
             "prior_blend_safe": 0,
+            "prior_residual_safe": 0,
             "prior_safe": 0,
             "stop_safe": 0,
             "fallback_best_effort": 0,
@@ -2701,8 +2702,11 @@ def _normalize_pedestrian_impact_controls(
 
 def _collision_metric_value(metrics: dict[str, Any], key: str) -> float:
     """Return a finite collision metric value, treating missing/non-finite values as zero."""
+    value = metrics.get(key)
+    if value is None:
+        value = 0.0
     try:
-        value = float(metrics.get(key, 0.0) or 0.0)
+        value = float(value)
     except (TypeError, ValueError):
         return 0.0
     return value if math.isfinite(value) else 0.0

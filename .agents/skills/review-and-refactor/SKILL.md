@@ -7,8 +7,8 @@ description: "Surgical review-then-refactor workflow for small code or docs chan
 
 ## Purpose
 
-Avoid broad rewrites: review a small surface first, then apply the smallest safe refactor needed to fix the
-identified issue.
+Avoid broad rewrites: review a small surface first, then surgically apply the smallest safe refactor
+needed to fix the identified issue.
 
 ## Workflow
 

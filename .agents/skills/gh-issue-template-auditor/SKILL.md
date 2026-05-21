@@ -8,11 +8,12 @@ description: "Review existing GitHub issues against the repo's issue-template co
 ## Purpose
 
 Check issue bodies against the template contract and perform minimal, safe repairs so issues become
-agent-ready without changing intent.
+agent-ready without changing intent. Prefer GitHub MCP / GitHub app tools for interactive reads and
+writes when available.
 
 ## Workflow
 
-1. Read template contract files and `scripts/tools/issue_template_audit.py`.
+1. Read template contract files and `uv run python scripts/tools/issue_template_audit.py`.
 2. Load issue body and metadata with `gh issue view`.
 3. Compare required sections (problem statement, scope/non-goals, estimates, risks, acceptance, validation, metadata).
 4. If gaps are limited and obvious:

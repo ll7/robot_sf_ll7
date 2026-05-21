@@ -93,6 +93,7 @@ def test_inspect_svg_reports_explicit_runtime_capabilities(tmp_path: Path) -> No
     assert metadata.has_explicit_pedestrian_runtime_zones is True
     assert metadata.has_obstacles is True
 
+
 def test_synthetic_zone_counts_use_parsed_zone_lengths(tmp_path: Path) -> None:
     """Duplicate explicit labels should not hide parser-derived synthetic zones."""
     svg_path = _write_svg(

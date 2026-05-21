@@ -8,7 +8,8 @@ description: "LLM-backed review workflow for Project #5 priority inputs; assess 
 ## Purpose
 
 Assess Project #5 priority fields for plausibility using the canonical rubric, and propose
-(or apply, when asked) minimal, evidence-grounded updates.
+(or apply, when asked) minimal, evidence-grounded updates. Prefer GitHub MCP / GitHub app tools for
+interactive reads when available.
 
 ## Workflow
 
@@ -23,6 +24,7 @@ Assess Project #5 priority fields for plausibility using the canonical rubric, a
 3. For each field, state whether current values are plausible, and why.
 4. If writeback is requested:
    - apply only fields with enough evidence,
+   - use `gh project item-edit` for Project #5 field updates when using the CLI route,
    - batch updates for multiple issues,
    - use `gh project item-edit` when a CLI fallback is needed,
    - run score sync once after the batch.
@@ -40,5 +42,6 @@ Assess Project #5 priority fields for plausibility using the canonical rubric, a
 - Issue number and current vs proposed field values, including `Priority Score` and
   `Estimate Discussion` when present.
 - Field-by-field rationale and uncertainty.
-- Plausibility verdict and needed evidence to justify changes.
+- Plausibility verdict and needed evidence to justify changes, including `Estimate Discussion`
+  updates when relevant.
 - Whether writeback was applied.

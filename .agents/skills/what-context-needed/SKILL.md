@@ -17,8 +17,8 @@ Request only the missing inputs required to avoid speculative or unsafe work.
    - missing decisions,
    - missing validation path,
    - ambiguous scope.
-3. Ask up to three short questions for precise unblockers (file paths, issue IDs, expected command,
-   or decision).
+3. Ask up to three short questions for precise unblockers (file paths, issue IDs, expected
+   command, or decision).
 4. Move to execution workflow once missing context is provided.
 
 ## Guardrails

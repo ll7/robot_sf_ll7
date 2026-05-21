@@ -17,7 +17,8 @@ execution.
    - `docs/dev_guide.md`
    - `docs/context/issue_713_batch_first_issue_workflow.md` (for batch routing).
 2. Choose the narrowest matching template (`bug`, `enhancement`, `documentation`, `refactor`,
-   `research`, `planner_integration.md`, `benchmark_experiment.md`, fallback `issue_default.md`).
+   `research`, `planner_integration.md`, `benchmark_experiment.md`, fallback
+   `issue_default.md`).
 3. Normalize prompt into required fields:
    - goal, scope/non-scope, value/effort/complexity/risk, definition of done, success metrics,
      validation plan.
@@ -25,9 +26,11 @@ execution.
    - use GitHub MCP / GitHub app tools when available; use `gh` for deterministic fallback.
    - `gh issue create --title "<title>" --body-file <body.md> --template <template> --label "<labels>"`
    - prefer existing labels; avoid inventing taxonomy.
+   - prefer GitHub MCP / GitHub app tools for interactive issue creation when available; keep `gh`
+     for scripted or fallback paths.
 5. Project routing:
-   - `gh project item-add` to add the issue to Project #5 when MCP coverage is unavailable.
-   - `gh project item-edit` to set expected fields after resolving project/item/field IDs.
+   - use `gh project item-add` when the CLI route is the active Project #5 write path.
+   - use `gh project item-edit` for explicit field updates when the CLI route is active.
    - add issue to Project #5 and update only expected fields (`Priority`, `Expected Duration in Hours`,
      `Reviewed`) using existing field/schema IDs.
 6. Batch discipline:

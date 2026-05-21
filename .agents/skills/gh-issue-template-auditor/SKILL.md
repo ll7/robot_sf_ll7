@@ -8,7 +8,8 @@ description: "Review existing GitHub issues against the repo's issue-template co
 ## Purpose
 
 Check issue bodies against the template contract and perform minimal, safe repairs so issues become
-agent-ready without changing intent.
+agent-ready without changing intent. Prefer GitHub MCP / GitHub app tools for interactive reads and
+writes when available.
 
 ## Workflow
 

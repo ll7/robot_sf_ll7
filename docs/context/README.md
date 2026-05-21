@@ -172,6 +172,8 @@ knowledge, not every transient iteration detail.
   [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
 * Issue #1169 CARLA Live T1 Oracle Replay:
   [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
+* Issue #1437 CARLA Robot Actor Spawn Failure:
+  [issue_1437_carla_robot_spawn.md](issue_1437_carla_robot_spawn.md)
 * Issue #1430 CARLA Live Replay Parity 2026-05-21:
   [issue_1430_carla_live_parity.md](issue_1430_carla_live_parity.md)
 * Issue #1363 Learned Local Policy Eligibility Checklist:

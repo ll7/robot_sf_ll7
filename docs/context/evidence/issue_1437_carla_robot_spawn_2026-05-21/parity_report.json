@@ -1,0 +1,79 @@
+{
+  "comparison_schema": "carla_oracle_replay_parity_v1",
+  "metrics": [
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "success",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "collision",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "ttc_min_s",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "min_distance_m",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "comfort",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "jerk",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "curvature",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "intervention_rate",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "snqi",
+      "reason": "CARLA replay mode/status is not native/comparable: failed",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    }
+  ],
+  "reason": "CARLA replay mode/status is not native/comparable: failed",
+  "status": "unavailable"
+}

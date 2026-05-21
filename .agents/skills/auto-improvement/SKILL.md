@@ -5,13 +5,12 @@ description: "Focused measurement-aware refinement loop for Robot SF prompts, do
 
 # Auto Improvement
 
-## Overview
+## When to use
 
-Use this skill for small, iterative refinement work where the goal is to improve clarity, robustness,
-or validation coverage without starting a full experimentation campaign.
+Use this skill for small, iterative refinements that should improve clarity, robustness, or validation
+coverage without launching full experimentation campaigns.
 
-If the task has a strong measurable metric and needs repeated experiments, prefer `autoresearch`
-instead.
+If the task needs repeated measurable experiments, use `autoresearch` instead.
 
 ## Read First
 
@@ -23,19 +22,18 @@ instead.
 ## Workflow
 
 1. Identify the smallest measurable improvement target.
-2. Pick one validation signal.
+2. Pick one validation signal and one narrow change at a time.
 3. Limit scope to the named files.
-4. Make one improvement at a time.
-5. Keep the change if it improves the signal and stays simple.
-6. Revert the change if the gain is too small for the complexity cost.
-7. Repeat until the task is good enough or the user says stop.
+4. Apply one tweak; validate; keep or revert quickly.
+5. Stop when gain is too small for complexity or the user stops.
 
-## Repository Guardrails
+## Proof and Guardrails
 
-- Prefer repo-local scripts and docs as the source of truth.
-- Keep benchmark wording conservative.
-- Use `scripts/dev/` wrappers when validation is available there.
-- If the task is really a plain cleanup or formatting pass, use `clean-up`.
+- Keep changes small and reversible.
+- Keep benchmark/provenance wording conservative.
+- Prefer `scripts/dev/` wrappers for validation.
+- For tasks that are plain cleanup/formatting, use `clean-up`.
+- If validation shows no net gain, revert.
 
 ## Good Fits
 
@@ -45,7 +43,7 @@ instead.
 - adding a narrow regression test,
 - clarifying a workflow note.
 
-## Exit
+## Output
 
 Summarize:
 - what changed,

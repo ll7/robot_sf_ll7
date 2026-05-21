@@ -5,71 +5,44 @@ description: "Maintain a clear next-work queue in GitHub Project #5 by normalizi
 
 # GH Issue Sequencer
 
-Use this skill when the user asks to order, triage, or normalize a batch of GitHub issues for
-Project #5 execution.
+## Purpose
 
-Prefer GitHub MCP / GitHub app tools for interactive issue and project reads when available. Use
-`gh` for deterministic batch project writes, score sync, and auth/debugging.
-
-## Read First
-
-- `docs/project_prioritization.md`
-- `docs/context/issue_713_batch_first_issue_workflow.md`
-- `scripts/tools/project_priority_score.py`
-- `.agents/skills/gh-issue-priority-assessor/SKILL.md`
-- `.agents/skills/gh-issue-clarifier/SKILL.md`
-
-## Batch-First Rule
-
-Follow `docs/context/issue_713_batch_first_issue_workflow.md`:
-
-1. Do issue text, label, and clarification cleanup first.
-2. Do Project #5 field routing second.
-3. Run derived score sync once at the end of the batch.
-4. Cache project and field IDs once per shell session or in the local Project #5 cache for
-   long-running/multi-agent work.
-5. Use REST/local `git` for non-project state and reserve GraphQL for Project #5 writes.
-
-Do not interleave body rewrites, status changes, and score sync issue-by-issue unless there is only
-one issue in scope.
+Maintain a clean Project #5 execution queue by separating clarification cleanup, readiness routing, and
+one-pass sequencing metadata writes.
 
 ## Workflow
 
-1. Inspect the queue
-   - Check `gh api rate_limit` before large queue work.
-   - `gh project item-list 5 --owner ll7 --limit 400 --format json`
-   - `gh project field-list 5 --owner ll7 --format json`
-   - Use REST (`gh api repos/ll7/robot_sf_ll7/issues?...`) for issue bodies and labels when
-     GraphQL quota is low.
+1. Prepare:
+   - read `docs/project_prioritization.md` and `docs/context/issue_713_batch_first_issue_workflow.md`,
+   - resolve project/field IDs once for the session,
+   - check `gh api rate_limit` when batch size is large.
+2. Inspect queue:
+   - list Project #5 items and issue metadata,
+   - use REST for issue fields when GraphQL is constrained.
+3. Resolve blockers first:
+   - route ambiguous issues to `gh-issue-clarifier`,
+   - route implausible priorities to `gh-issue-priority-assessor`,
+   - keep `decision-required`, `blocked`, `duplicate`, `wontfix` out of execution-ready ordering.
+4. Normalize issue status:
+   - `In progress` for the active item,
+   - `Ready` for actionable and unblocked work,
+   - `Tracked` for valid but deferred work,
+   - `Done` for merged/closed issues.
+5. Order and apply:
+   - sort by higher priority, lower uncertainty, unlock value, then oldest issue number,
+   - apply status/priority/duration edits in one write pass,
+   - run score sync once at batch end if inputs changed.
+6. If writes fail (rate limits or auth), stop writes and capture exact pending mutation details.
 
-2. Identify blockers before sequencing
-   - Mark ambiguous issues for `gh-issue-clarifier`.
-   - Mark implausible priority inputs for `gh-issue-priority-assessor`.
-   - Keep `decision-required`, `blocked`, `duplicate`, and `wontfix` out of the ready queue.
+## Guardrails
 
-3. Normalize execution status
-   - `In progress`: exactly the issue currently being executed.
-   - `Ready`: actionable issues with clear scope and validation path.
-   - `Tracked`: valid but not ready because they need sequencing, dependencies, or decisions.
-   - `Done`: merged/closed work only, unless the team explicitly uses pre-merge done.
+- Use MCP/interactive tools when available; use `gh` for deterministic sequencing mutations.
+- Do not interleave issue-body edits, project routing, and score sync issue-by-issue for multi-issue batches.
+- Use follow-up handoffs rather than retry loops when quotas are temporarily exhausted.
 
-4. Order the queue
-   - Prefer higher Project #5 priority and lower uncertainty.
-   - Prefer issues that unlock downstream work.
-   - Keep benchmark/paper-facing blockers ahead of speculative experiments.
-   - When priority ties, prefer older issue number first.
+## Output
 
-5. Apply project writes in one pass
-   - Resolve Project #5 and field option IDs once.
-   - Use `gh project item-edit` for status/priority/duration writeback.
-   - Run `uv run python scripts/tools/project_priority_score.py sync` once after the batch if
-     score inputs changed.
-   - If GraphQL is exhausted, leave a precise handoff with project ID, item ID, field ID, option ID,
-     and the reset time from `gh api rate_limit`.
-
-## Output Requirements
-
-- Report the ordered issue queue with one-line rationale per issue.
-- Report any issues moved to `Ready`, `Tracked`, or `In progress`.
-- Report whether score sync was run.
-- Report unresolved blockers and the next recommended issue to execute.
+- Ordered issue queue with one-line rationale per item.
+- Status and priority changes applied.
+- Unresolved blockers and next candidate issue.
+- Whether final score sync completed.

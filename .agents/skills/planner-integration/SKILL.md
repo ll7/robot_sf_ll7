@@ -5,7 +5,10 @@ description: "Assess planner-family integration feasibility, adapter burden, pro
 
 # Planner Integration
 
-Use this skill when evaluating, wrapping, or documenting a planner family for benchmark use.
+## When to use
+
+Use this skill when assessing whether a planner family can be integrated safely for benchmark and
+documentation use.
 
 ## Read First
 
@@ -13,19 +16,26 @@ Use this skill when evaluating, wrapping, or documenting a planner family for be
 - `docs/context/issue_601_crowdnav_feasibility_note.md`
 - `docs/context/issue_629_planner_zoo_research_prompt.md`
 - `docs/benchmark_planner_quality_audit.md`
+- `docs/context/issue_691_benchmark_fallback_policy.md`
 
-## Focus
+## Workflow
 
-- observation contract and adapter burden,
-- action space and kinematics compatibility,
-- upstream provenance and license safety,
-- benchmark readiness vs experimental-only status,
-- what would break paper-facing faithfulness.
+1. Validate observation/action contract and compatibility assumptions.
+2. Assess adapter burden and failure modes.
+3. Check upstream provenance, licenses, and distribution constraints.
+4. Classify benchmark readiness vs research-only usage.
+5. Define required validation and deprecation conditions.
 
-## Output Expectations
+## Proof and Guardrails
+
+- Do not claim paper-ready support if benchmark mode is degraded or fallback-only.
+- Require a reproducible harness for any wrapper-friendly claim.
+- Preserve conservative wording until adapter contracts are validated.
+
+## Output
 
 State clearly:
 
 - whether the planner is wrapper-friendly, model-only, or research-only,
-- what source-harness validation is required first,
-- what claim the repository can safely make after integration.
+- required first-step validation and evidence,
+- safe claim boundary after integration.

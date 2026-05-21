@@ -5,13 +5,10 @@ description: "Evaluate and improve AI workflow outputs with small goldens, rubri
 
 # Agentic Eval
 
-## Overview
+## When to use
 
-Use this skill when the thing being improved is an AI workflow artifact rather than ordinary
-application code.
-
-Good targets include skills, instructions, prompt-like text, issue bodies, review rubrics, and
-other generated artifacts that benefit from a small evaluation loop.
+Use this skill when the target is an AI workflow artifact (skills, prompts, rubrics, issue text,
+review guidance, etc.) rather than core product code.
 
 ## Read First
 
@@ -22,32 +19,40 @@ other generated artifacts that benefit from a small evaluation loop.
 
 ## Workflow
 
-1. Define the artifact
-   - Specify what output is being evaluated and what success looks like.
-   - Keep the evaluation set small and representative.
+1. Define the artifact and objective
+   - State the artifact, expected behavior, and what a pass/fail result looks like.
+   - Set a small representative evaluation set.
 
 2. Build a rubric
-   - Use a few concrete criteria.
-   - Separate required failures from softer quality preferences.
+   - Use 3–6 concrete criteria.
+   - Mark critical failures separately from quality preferences.
 
 3. Create a baseline
-   - Capture the current output against the rubric before changing anything.
+   - Score the current artifact against the rubric before editing.
 
 4. Improve one dimension at a time
    - Make a targeted change.
    - Re-run the same evaluation.
-   - Keep or discard the change based on the rubric result.
+   - Keep the change only if improvement is clear and reproducible.
 
-5. Record the result
-   - Summarize what improved, what regressed, and what remained hard to judge.
+5. Capture proof
+   - Compare baseline vs post-change with the same rubric and commands.
+   - Keep the result compact: what improved, what regressed, what remains unknown.
+
+## Proof and Guardrails
+
+- Always preserve baseline and post-change results.
+- Reuse the same corpus for all iterations.
+- If changes drift from the target behavior, revert and document the false regression.
+- Prefer `autoresearch` when the task has repeated measurable benchmarks.
+- If benchmark evidence is required, treat failed/invalid runs as inconclusive, not proof.
 
 ## Output
 
-Always report the artifact evaluated, the rubric used, the baseline result, the kept/discarded
-change, and remaining uncertainty.
+Report:
 
-## Guardrails
-
-- If the task has a strong measurable metric and needs repeated experiments, prefer `autoresearch`.
-- Keep the evaluation set small enough to rerun quickly.
-- Do not overfit to one example at the expense of general usefulness.
+- artifact inspected,
+- rubric and dataset,
+- baseline and final score,
+- keep/discard decision with rationale,
+- open questions.

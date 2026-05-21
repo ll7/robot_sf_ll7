@@ -5,13 +5,17 @@ description: "Analyze a camera-ready benchmark campaign for consistency, runtime
 
 # Analyze Camera-Ready Benchmark
 
-## Overview
+## When to use
 
-Use this skill when reviewing benchmark outputs under:
+Use this skill when reviewing `*_policy_analysis*` or camera-ready campaign outputs and you need
+consistency, reproducibility, and fallback-mode visibility before claiming benchmark conclusions.
 
-- `output/benchmarks/camera_ready/<campaign_id>/`
+## Read First
 
-The skill runs the campaign analyzer, summarizes findings, and proposes next actions.
+- `docs/code_review.md`
+- `docs/benchmark_spec.md`
+- `docs/context/issue_691_benchmark_fallback_policy.md`
+- `docs/benchmark_camera_ready.md`
 
 ## Workflow
 
@@ -27,7 +31,7 @@ The skill runs the campaign analyzer, summarizes findings, and proposes next act
      - `reports/campaign_analysis.md`
 
 3. Validate core consistency
-   - Check for findings in `campaign_analysis.json`:
+   - Check `campaign_analysis.json` findings for:
      - episode count mismatches
      - summary-vs-episodes metric mismatches
      - adapter impact metadata mismatches
@@ -39,8 +43,8 @@ The skill runs the campaign analyzer, summarizes findings, and proposes next act
    - Note experimental planners running with fallback mode.
 
 5. Recommend actions
-   - If inconsistencies are found, provide concrete file-level follow-ups.
-   - If behavior is expected, document rationale and residual risk.
+   - If inconsistencies are found, propose concrete follow-ups in issue-facing wording.
+   - If behavior is expected, explicitly document rationale and residual risk.
 
 ## Typical Commands
 
@@ -57,3 +61,19 @@ uv run python scripts/tools/analyze_camera_ready_campaign.py \
   --output-json output/benchmarks/camera_ready/<campaign_id>/reports/custom_analysis.json \
   --output-md output/benchmarks/camera_ready/<campaign_id>/reports/custom_analysis.md
 ```
+
+## Proof and Guardrails
+
+- Classify each run mode as `native`, `adapter`, `fallback`, or `degraded`.
+- Fail-closed rule: do not treat fallback/degraded as successful benchmark evidence.
+- Require the produced JSON + markdown reports as proof artifacts before summarizing results.
+- Only report planner ranking where metrics and episode counts are internally consistent.
+
+## Output
+
+Provide a concise judgment with:
+- campaign id/path,
+- evidence list (`.json` + `.md`),
+- consistency status,
+- planner ranking by observed-mode,
+- concrete remediation steps or explicit pass conditions.

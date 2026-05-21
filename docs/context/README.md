@@ -176,6 +176,8 @@ knowledge, not every transient iteration detail.
   [issue_1437_carla_robot_spawn.md](issue_1437_carla_robot_spawn.md)
 * Issue #1440 CARLA Robot Spawn Projection:
   [issue_1440_carla_spawn_projection.md](issue_1440_carla_spawn_projection.md)
+* Issue #1430 CARLA Live Replay Parity 2026-05-21:
+  [issue_1430_carla_live_parity.md](issue_1430_carla_live_parity.md)
 * Issue #1363 Learned Local Policy Eligibility Checklist:
   [policy_search/contracts/learned_local_policy_eligibility.md](policy_search/contracts/learned_local_policy_eligibility.md)
 * Note-maintenance skill:
@@ -538,6 +540,9 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #872 CARLA Oracle Replay Bridge Status](issue_872_carla_oracle_replay_bridge_status.md)
   summarizes the parent epic state, the completed CARLA-free T0 stack, the setup-only T1 boundary,
   and the live replay / metric-parity child issues that remain before #872 can close.
+* [Issue #1430 CARLA Live Replay Parity 2026-05-21](issue_1430_carla_live_parity.md)
+  records the post-#1329 live CARLA rerun on `imech156-u`, the fail-closed robot-spawn blocker,
+  and the conservative unavailable parity report.
 * [Issue #934 CARLA T0 Export Builder API](issue_934_carla_t0_export_builder.md)
   adds typed, schema-validated builder objects for `carla-replay-export.v1` payload construction, 
   stacked on the issue #930 bridge package.

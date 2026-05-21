@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 PREDICTIVE_OBSTACLE_FEATURE_SCHEMA = "predictive_obstacle_features_v1"
 PREDICTIVE_OBSTACLE_FEATURE_DIM = 6
+PREDICTIVE_OBSTACLE_UNAVAILABLE_FEATURE_ROW = (50.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 PREDICTIVE_LEGACY_FEATURE_SCHEMA = "predictive_legacy_v1"
 PREDICTIVE_LEGACY_FEATURE_DIM = 4
 PREDICTIVE_EGO_FEATURE_SCHEMA = "predictive_ego_v1"
@@ -94,7 +95,7 @@ class LocalObstacleFeature:
 class LocalObstacleFeatureExtractor:
     """Extract deterministic nearest-line obstacle features."""
 
-    unavailable_distance: float = 50.0
+    unavailable_distance: float = PREDICTIVE_OBSTACLE_UNAVAILABLE_FEATURE_ROW[0]
 
     def __post_init__(self) -> None:
         """Validate unavailable-feature sentinel configuration."""

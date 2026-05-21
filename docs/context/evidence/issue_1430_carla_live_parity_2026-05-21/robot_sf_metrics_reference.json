@@ -1,0 +1,7 @@
+{
+    "metrics": {},
+    "mode": "native",
+    "reason": "No Robot-SF/CARLA metric comparison was attempted because the CARLA live replay failed before oracle-replay metrics were produced.",
+    "scenario_id": "pr_promoted_planner_smoke",
+    "status": "native"
+}

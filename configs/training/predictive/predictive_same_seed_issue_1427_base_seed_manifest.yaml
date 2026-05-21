@@ -1,0 +1,115 @@
+classic_bottleneck_low:
+  - 11000
+  - 11001
+  - 11002
+  - 11003
+classic_bottleneck_medium:
+  - 111000
+  - 111001
+  - 111002
+  - 111003
+classic_bottleneck_high:
+  - 211000
+  - 211001
+  - 211002
+  - 211003
+classic_realworld_double_bottleneck_high:
+  - 311000
+  - 311001
+  - 311002
+  - 311003
+classic_station_platform_medium:
+  - 411000
+  - 411001
+  - 411002
+  - 411003
+classic_cross_trap_low:
+  - 511000
+  - 511001
+  - 511002
+  - 511003
+classic_cross_trap_medium:
+  - 611000
+  - 611001
+  - 611002
+  - 611003
+classic_cross_trap_high:
+  - 711000
+  - 711001
+  - 711002
+  - 711003
+classic_doorway_low:
+  - 811000
+  - 811001
+  - 811002
+  - 811003
+classic_doorway_medium:
+  - 911000
+  - 911001
+  - 911002
+  - 911003
+classic_doorway_high:
+  - 1011000
+  - 1011001
+  - 1011002
+  - 1011003
+classic_group_crossing_low:
+  - 1111000
+  - 1111001
+  - 1111002
+  - 1111003
+classic_group_crossing_medium:
+  - 1211000
+  - 1211001
+  - 1211002
+  - 1211003
+classic_group_crossing_high:
+  - 1311000
+  - 1311001
+  - 1311002
+  - 1311003
+classic_head_on_corridor_low:
+  - 1411000
+  - 1411001
+  - 1411002
+  - 1411003
+classic_head_on_corridor_medium:
+  - 1511000
+  - 1511001
+  - 1511002
+  - 1511003
+classic_merging_low:
+  - 1611000
+  - 1611001
+  - 1611002
+  - 1611003
+classic_merging_medium:
+  - 1711000
+  - 1711001
+  - 1711002
+  - 1711003
+classic_overtaking_low:
+  - 1811000
+  - 1811001
+  - 1811002
+  - 1811003
+classic_overtaking_medium:
+  - 1911000
+  - 1911001
+  - 1911002
+  - 1911003
+classic_t_intersection_low:
+  - 2011000
+  - 2011001
+  - 2011002
+  - 2011003
+classic_t_intersection_medium:
+  - 2111000
+  - 2111001
+  - 2111002
+  - 2111003
+classic_urban_crossing_medium:
+  - 2211000
+  - 2211001
+  - 2211002
+  - 2211003

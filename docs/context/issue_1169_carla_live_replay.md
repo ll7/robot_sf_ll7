@@ -84,9 +84,12 @@ fake-CARLA tests verify that rectangular static obstacles are spawned before rob
 actors, unsupported static obstacle shapes fail closed before replay, and cleanup destroys static
 proxies together with dynamic actors.
 
-The required live host rerun has not been executed on this laptop. The next live proof must run the
-same Docker-backed command on a CARLA-capable Linux/NVIDIA host and confirm that the previous
-failure reason is no longer `T0 payload static obstacle replay is not implemented`.
+The required live host rerun was executed for #1430 on the documented fallback host `imech156-u`.
+The run connected to CARLA `0.9.16` on `Town10HD_Opt` and no longer failed with
+`T0 payload static obstacle replay is not implemented`. It failed closed later with
+`CARLA failed to spawn robot`, so metric parity remains unavailable. See
+[`issue_1430_carla_live_parity.md`](issue_1430_carla_live_parity.md) and the evidence bundle under
+[`docs/context/evidence/issue_1430_carla_live_parity_2026-05-21/`](evidence/issue_1430_carla_live_parity_2026-05-21/).
 
 ## Boundary
 

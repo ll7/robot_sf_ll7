@@ -18,7 +18,12 @@ import numpy as np
 import yaml
 from loguru import logger
 
-from robot_sf.planner.obstacle_features import PREDICTIVE_LEGACY_FEATURE_SCHEMA
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    PREDICTIVE_OBSTACLE_FEATURE_DIM,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    infer_predictive_feature_schema,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -39,6 +44,7 @@ class PipelinePaths:
     eval_dir: Path
     diagnostics_dir: Path
     campaign_dir: Path
+    obstacle_preflight_report: Path
     final_summary: Path
 
 
@@ -123,6 +129,130 @@ def _dataset_npz_diagnostics(path: Path) -> dict[str, Any]:
         "empty_agent_rows": int(np.count_nonzero(agent_rows <= 0.0)),
         "empty_target_rows": int(np.count_nonzero(target_rows <= 0.0)),
     }
+
+
+def _load_feature_schema_metadata(raw: Any) -> dict[str, Any]:
+    """Resolve predictive feature-schema metadata from dataset payloads."""
+    if "feature_schema_json" in raw:
+        raw_value = raw["feature_schema_json"]
+        if isinstance(raw_value, np.ndarray) and raw_value.shape == ():
+            raw_value = raw_value.item()
+        if isinstance(raw_value, bytes):
+            raw_value = raw_value.decode("utf-8")
+        if isinstance(raw_value, str):
+            payload = json.loads(raw_value)
+            if isinstance(payload, dict):
+                return payload
+    return infer_predictive_feature_schema(int(np.asarray(raw["state"]).shape[2]))
+
+
+def _obstacle_feature_preflight(dataset_path: Path) -> dict[str, Any]:
+    """Inspect one predictive dataset for active non-sentinel obstacle rows."""
+    sentinel_row = np.asarray([50.0, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    summary_path = dataset_path.with_suffix(".json")
+    summary = _read_json(summary_path) if summary_path.exists() else {}
+    with np.load(dataset_path) as raw:
+        state = np.asarray(raw["state"], dtype=np.float32)
+        mask = np.asarray(raw["mask"], dtype=np.float32)
+        feature_schema = _load_feature_schema_metadata(raw)
+    schema_name = str(feature_schema.get("name", "")).strip()
+    report: dict[str, Any] = {
+        "dataset_path": str(dataset_path),
+        "feature_schema": feature_schema,
+        "status": "not_applicable",
+    }
+    if schema_name != PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+        return report
+    obstacle_feature_source = summary.get("obstacle_feature_source")
+    report["summary_path"] = str(summary_path)
+    report["obstacle_feature_source"] = obstacle_feature_source
+    report["obstacle_line_count"] = summary.get("obstacle_line_count")
+    if obstacle_feature_source is None:
+        report["status"] = "failed"
+        report["failure_reason"] = (
+            "Dataset summary is missing obstacle_feature_source; cannot prove real obstacle rows."
+        )
+        return report
+
+    base_feature_dim = int(feature_schema.get("base_feature_dim", -1))
+    if base_feature_dim < 0:
+        raise ValueError(
+            f"Obstacle-feature dataset is missing base_feature_dim metadata: {dataset_path}"
+        )
+    obstacle_rows = state[
+        :,
+        :,
+        base_feature_dim : base_feature_dim + PREDICTIVE_OBSTACLE_FEATURE_DIM,
+    ]
+    if obstacle_rows.shape[2] != PREDICTIVE_OBSTACLE_FEATURE_DIM:
+        raise ValueError(
+            "Obstacle-feature dataset does not include the expected obstacle-feature width: "
+            f"{dataset_path} shape={obstacle_rows.shape}"
+        )
+
+    active_rows = mask > 0.0
+    valid_rows = active_rows & (obstacle_rows[:, :, -1] > 0.5)
+    exact_sentinel_rows = active_rows & np.all(
+        np.isclose(obstacle_rows, sentinel_row[None, None, :], atol=1e-6),
+        axis=2,
+    )
+    active_row_count = int(np.count_nonzero(active_rows))
+    valid_row_count = int(np.count_nonzero(valid_rows))
+    sentinel_row_count = int(np.count_nonzero(exact_sentinel_rows))
+    invalid_row_count = int(np.count_nonzero(active_rows & ~valid_rows))
+    report.update(
+        {
+            "status": "ok" if valid_row_count > 0 else "failed",
+            "active_agent_rows": active_row_count,
+            "active_valid_obstacle_rows": valid_row_count,
+            "active_invalid_obstacle_rows": invalid_row_count,
+            "active_exact_sentinel_rows": sentinel_row_count,
+            "valid_row_ratio": (
+                float(valid_row_count / active_row_count) if active_row_count > 0 else 0.0
+            ),
+            "failure_reason": (
+                None
+                if valid_row_count > 0
+                else "Dataset contains no active non-sentinel obstacle rows."
+            ),
+        }
+    )
+    return report
+
+
+def _write_obstacle_preflight_report(
+    *,
+    report_path: Path,
+    run_id: str,
+    config_path: Path,
+    config_hash: str,
+    git_commit: str,
+    model_family: str,
+    datasets: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Write compact obstacle-row preflight evidence for pipeline handoff."""
+    status = "ok"
+    failing_datasets = [
+        role for role, payload in datasets.items() if str(payload.get("status")) == "failed"
+    ]
+    if failing_datasets:
+        status = "failed"
+    payload = {
+        "artifact_role": "predictive_obstacle_preflight",
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "run_id": run_id,
+        "config_path": str(config_path),
+        "config_hash": config_hash,
+        "git_commit": git_commit,
+        "model_family": model_family,
+        "status": status,
+        "datasets": datasets,
+    }
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(report_path, payload)
+    return payload
 
 
 def _write_dataset_manifest(
@@ -272,6 +402,7 @@ def _paths_from_config(
         eval_dir=eval_dir,
         diagnostics_dir=diagnostics_dir,
         campaign_dir=campaign_dir,
+        obstacle_preflight_report=run_root / "obstacle_feature_preflight.json",
         final_summary=run_root / "final_performance_summary.json",
     )
 
@@ -368,13 +499,23 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             f"base_collection/model_family={model_family!r} "
             f"hardcase_collection.model_family={hardcase_model_family!r}"
         )
-    base_manifest = paths.root / "base_random_seed_manifest.yaml"
-    _build_random_seed_manifest(
-        scenario_matrix=scenario_matrix,
-        seeds_per_scenario=int(base_collection.get("seeds_per_scenario", 4)),
-        random_seed_base=int(base_collection.get("random_seed_base", 11_000)),
-        output_path=base_manifest,
-    )
+    base_manifest_cfg = base_collection.get("seed_manifest")
+    if base_manifest_cfg:
+        base_manifest = _resolve(base_manifest_cfg, base=base_dir)
+        if not base_manifest.exists():
+            raise FileNotFoundError(
+                f"Configured base_collection.seed_manifest was not found: {base_manifest}"
+            )
+        base_manifest_generated = False
+    else:
+        base_manifest = paths.root / "base_random_seed_manifest.yaml"
+        _build_random_seed_manifest(
+            scenario_matrix=scenario_matrix,
+            seeds_per_scenario=int(base_collection.get("seeds_per_scenario", 4)),
+            random_seed_base=int(base_collection.get("random_seed_base", 11_000)),
+            output_path=base_manifest,
+        )
+        base_manifest_generated = True
 
     # 1) Collect base dataset over all scenarios with randomized seed manifest.
     _run(
@@ -411,6 +552,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         git_commit=git_commit,
         extra={
             "seed_manifest": str(base_manifest),
+            "seed_manifest_generated": base_manifest_generated,
             "ego_conditioning": bool(base_collection.get("ego_conditioning", False)),
             "model_family": model_family,
         },
@@ -465,6 +607,32 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "model_family": hardcase_model_family,
         },
     )
+    obstacle_preflight_payload: dict[str, Any] | None = None
+    if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
+        obstacle_preflight_payload = _write_obstacle_preflight_report(
+            report_path=paths.obstacle_preflight_report,
+            run_id=run_id,
+            config_path=config_path,
+            config_hash=config_hash,
+            git_commit=git_commit,
+            model_family=model_family,
+            datasets={
+                "base": _obstacle_feature_preflight(paths.base_dataset),
+                "hardcase": _obstacle_feature_preflight(paths.hardcase_dataset),
+            },
+        )
+        failing_datasets = [
+            role
+            for role, payload in obstacle_preflight_payload["datasets"].items()
+            if str(payload.get("status")) == "failed"
+        ]
+        if failing_datasets:
+            raise RuntimeError(
+                "Obstacle-feature pipeline preflight failed before training because "
+                "one or more collected datasets contain only sentinel obstacle rows: "
+                + ", ".join(sorted(failing_datasets))
+                + f". See {paths.obstacle_preflight_report}."
+            )
 
     # 3) Build mixed dataset.
     mixing_cfg = cfg.get("mixing", {})
@@ -736,9 +904,14 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "config_hash": config_hash,
         "git_commit": git_commit,
         "scenario_matrix": str(scenario_matrix),
+        "base_seed_manifest": str(base_manifest),
+        "base_seed_manifest_generated": base_manifest_generated,
         "hard_seed_manifest": str(hard_seed_manifest),
         "planner_grid": str(planner_grid),
         "model_family": model_family,
+        "obstacle_feature_preflight_report": (
+            str(paths.obstacle_preflight_report) if obstacle_preflight_payload is not None else None
+        ),
         "dataset_manifests": {
             "base": str(base_dataset_manifest),
             "hardcase": str(hardcase_dataset_manifest),

@@ -9,7 +9,10 @@ import numpy as np
 import pytest
 import yaml
 
-from robot_sf.planner.obstacle_features import PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_OBSTACLE_FEATURE_DIM,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+)
 from scripts.training import run_predictive_training_pipeline as pipeline
 
 
@@ -305,14 +308,25 @@ def test_pipeline_passes_obstacle_model_family_to_collectors_and_training(
 
     def _fake_dataset(path: Path) -> None:
         """Write an obstacle-schema predictive dataset fixture."""
+        state = np.zeros((2, 3, 10), dtype=np.float32)
+        state[:, :, -1] = 1.0
         np.savez(
             path,
-            state=np.zeros((2, 3, 10), dtype=np.float32),
+            state=state,
             target=np.zeros((2, 3, 5, 2), dtype=np.float32),
             mask=np.ones((2, 3), dtype=np.float32),
             target_mask=np.ones((2, 3, 5), dtype=np.float32),
         )
-        path.with_suffix(".json").write_text(json.dumps({"num_samples": 2}), encoding="utf-8")
+        path.with_suffix(".json").write_text(
+            json.dumps(
+                {
+                    "num_samples": 2,
+                    "obstacle_feature_source": "map_geometry",
+                    "obstacle_line_count": 3,
+                }
+            ),
+            encoding="utf-8",
+        )
 
     def _fake_run(cmd: list[str], *, log_level: str) -> None:
         """Simulate pipeline commands and record schema-routing flags."""
@@ -377,6 +391,62 @@ def test_pipeline_passes_obstacle_model_family_to_collectors_and_training(
         for cmd in collector_cmds
     )
     assert train_cmd[train_cmd.index("--model-family") + 1] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+
+
+def test_obstacle_feature_preflight_reports_active_non_sentinel_rows(tmp_path: Path) -> None:
+    """Obstacle preflight should pass when active rows contain map-derived features."""
+    dataset_path = tmp_path / "predictive_rollouts_base.npz"
+    state = np.zeros((2, 2, 10), dtype=np.float32)
+    state[0, 0, 4 : 4 + PREDICTIVE_OBSTACLE_FEATURE_DIM] = np.asarray(
+        [2.5, 1.0, 0.0, 0.0, 1.0, 1.0],
+        dtype=np.float32,
+    )
+    np.savez(
+        dataset_path,
+        state=state,
+        target=np.zeros((2, 2, 5, 2), dtype=np.float32),
+        mask=np.ones((2, 2), dtype=np.float32),
+        target_mask=np.ones((2, 2, 5), dtype=np.float32),
+    )
+    dataset_path.with_suffix(".json").write_text(
+        json.dumps({"obstacle_feature_source": "map_geometry", "obstacle_line_count": 2}),
+        encoding="utf-8",
+    )
+
+    report = pipeline._obstacle_feature_preflight(dataset_path)
+
+    assert report["status"] == "ok"
+    assert report["active_agent_rows"] == 4
+    assert report["active_valid_obstacle_rows"] == 1
+    assert report["active_invalid_obstacle_rows"] == 3
+
+
+def test_obstacle_feature_preflight_fails_sentinel_only_rows(tmp_path: Path) -> None:
+    """Obstacle preflight should fail before training on sentinel-only obstacle rows."""
+    dataset_path = tmp_path / "predictive_rollouts_base.npz"
+    state = np.zeros((1, 3, 10), dtype=np.float32)
+    state[:, :, 4 : 4 + PREDICTIVE_OBSTACLE_FEATURE_DIM] = np.asarray(
+        [50.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        dtype=np.float32,
+    )
+    np.savez(
+        dataset_path,
+        state=state,
+        target=np.zeros((1, 3, 5, 2), dtype=np.float32),
+        mask=np.ones((1, 3), dtype=np.float32),
+        target_mask=np.ones((1, 3, 5), dtype=np.float32),
+    )
+    dataset_path.with_suffix(".json").write_text(
+        json.dumps({"obstacle_feature_source": "not_available", "obstacle_line_count": 0}),
+        encoding="utf-8",
+    )
+
+    report = pipeline._obstacle_feature_preflight(dataset_path)
+
+    assert report["status"] == "failed"
+    assert report["active_valid_obstacle_rows"] == 0
+    assert report["active_exact_sentinel_rows"] == 3
+    assert report["failure_reason"] == "Dataset contains no active non-sentinel obstacle rows."
 
 
 def test_pipeline_rejects_mismatched_collection_model_families(

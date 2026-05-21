@@ -100,15 +100,18 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
 - Evidence grade: `observed`
 - Source-backed facts: SoNIC and GenSafeNav expose model/checkpoint assets that can be referenced by
   the Robot SF metadata layer. The source-harness probe found the upstream source environment
-  blocked in the current Robot SF environment, while model-only reuse is possible through explicit
+  blocked in the current Robot SF environment. Issue #1393 reran the GenSafeNav `Ours_GST`
+  checkpoint path at commit `01baf926a5c77c1a4ab28635658eb014ef4f1767` and reproduced
+  `ModuleNotFoundError: No module named 'gym'`; model-only reuse is possible through explicit
   compatibility shims.
 - Robot SF synthesis: Keep these as model-only prototypes or source-side-first safety/OOD
   candidates. Do not claim SoNIC/GenSafeNav benchmark parity or conformal-safety support until
   calibration, future-trajectory, and source-harness boundaries are proven.
-- Related Robot SF work: #601, #602, #626, #627, #1366,
+- Related Robot SF work: #601, #602, #626, #627, #1366, #1393,
   `docs/context/issue_626_sonic_source_harness_probe.md`,
   `docs/context/issue_627_sonic_wrapper_followup.md`,
-  `docs/context/issue_602_guarded_ppo_profile.md`.
+  `docs/context/issue_602_guarded_ppo_profile.md`,
+  `docs/context/policy_search/issue_1393_gensafenav_source_harness.md`.
 - Reopen if: the source harness becomes reproducible in a pinned environment and any uncertainty or
   calibration fields are classified as train-only, deployment-observable, oracle-only, or forbidden.
 

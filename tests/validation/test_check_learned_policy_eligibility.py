@@ -177,3 +177,21 @@ def test_json_spec_loading(tmp_path: Path) -> None:
     path.write_text(json.dumps(_eligible_spec()), encoding="utf-8")
 
     assert load_candidate_spec(path)["action_contract"]["output_family"] == "velocity_command"
+
+
+def test_loader_errors_include_path_and_line(tmp_path: Path) -> None:
+    """Malformed specs should fail closed with actionable file context."""
+    path = tmp_path / "broken.json"
+    path.write_text('{\n  "verdict": "eligible_for_adapter",\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"{path}.*line 3"):
+        load_candidate_spec(path)
+
+
+def test_loader_rejects_non_mapping_specs(tmp_path: Path) -> None:
+    """Top-level sequences should not be accepted as candidate metadata."""
+    path = tmp_path / "list.yaml"
+    path.write_text("- not\n- a mapping\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"top-level mapping.*{path}"):
+        load_candidate_spec(path)

@@ -319,12 +319,21 @@ def validate_learned_policy_eligibility(payload: dict[str, Any]) -> list[Eligibi
 
 def load_candidate_spec(path: Path) -> dict[str, Any]:
     """Load one YAML or JSON learned-policy eligibility spec."""
-    if path.suffix.lower() == ".json":
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    else:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        if path.suffix.lower() == ".json":
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(f"Error loading {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Error parsing {path} at line {exc.lineno}: {exc.msg}") from exc
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        line_text = f" at line {mark.line + 1}" if mark is not None else ""
+        raise ValueError(f"Error parsing {path}{line_text}: {exc}") from exc
     if not isinstance(payload, dict):
-        raise TypeError(f"Expected top-level mapping in {path}")
+        raise ValueError(f"Expected top-level mapping in {path}")
     return payload
 
 

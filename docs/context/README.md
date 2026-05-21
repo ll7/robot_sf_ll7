@@ -92,6 +92,12 @@ knowledge, not every transient iteration detail.
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
 * Issue #1240 scenario coverage entropy:
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
+* Issue #1348 capability-aware map catalog design:
+  [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
+* Issue #1414 parser capability metadata:
+  [issue_1414_parser_capability_metadata.md](issue_1414_parser_capability_metadata.md)
+* Issue #1348 Capability-Aware Map Catalog Design 2026-05-20:
+  [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #1246 graded observation levels:
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
 * Issue #1239 human-model transfer robustness:
@@ -114,6 +120,8 @@ knowledge, not every transient iteration detail.
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1342 GH-Act Runtime Requirements:
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
+* Issue #1387 Tentabot-style value scorer spike:
+  [issue_1387_tentabot_value_scorer_spike.md](issue_1387_tentabot_value_scorer_spike.md)
 * Issue #1344 paired AMV primary protocol report:
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * Issue #1353 Broader AMV Baseline Preflight:
@@ -134,12 +142,26 @@ knowledge, not every transient iteration detail.
   [issue_1111_carla_setup_smoke.md](issue_1111_carla_setup_smoke.md)
 * Issue #1322 SocNavBench device-placement cleanup:
   [issue_1322_socnavbench_device_placement_cleanup.md](issue_1322_socnavbench_device_placement_cleanup.md)
+* Issue #1323 SocNavBench personal-space velocity:
+  [issue_1323_socnavbench_personal_space_velocity.md](issue_1323_socnavbench_personal_space_velocity.md)
 * Issue #1319 task bundles:
   [issue_1319_task_bundles.md](issue_1319_task_bundles.md)
+* Issue #1365 Social Graph Observation Adapter:
+  [issue_1365_social_graph_observation_adapter.md](issue_1365_social_graph_observation_adapter.md)
+* Issue #1369 SAGE MPC-Transfer Planner Reproducibility:
+  [issue_1369_sage_mpc_transfer_assessment.md](issue_1369_sage_mpc_transfer_assessment.md)
+* Issue #1361 Command-Lattice Corridor-Deadlock Assessment (2026-05-20):
+  [issue_1361_motion_primitive_corridor_deadlock.md](issue_1361_motion_primitive_corridor_deadlock.md)
+* Issue #1360 External TEB Reference Assessment:
+  [issue_1360_external_teb_assessment.md](issue_1360_external_teb_assessment.md)
+* Issue #769/#1364 DRL-VO Assessment and Privileged-State Audit:
+  [issue_769_drl_vo_assessment.md](issue_769_drl_vo_assessment.md)
 * Issue #1245 Benchmark Claim Artifact:
   [issue_1245_benchmark_claim.md](issue_1245_benchmark_claim.md)
 * Issue #1169 CARLA Live T1 Oracle Replay:
   [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
+* Issue #1363 Learned Local Policy Eligibility Checklist:
+  [policy_search/contracts/learned_local_policy_eligibility.md](policy_search/contracts/learned_local_policy_eligibility.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 
@@ -175,6 +197,9 @@ knowledge, not every transient iteration detail.
   records the runnable paper-facing scenario-horizon config, preflight evidence, local non-Slurm
   full campaign, candidate-augmented local full campaign, fixed-vs-scenario comparison, and
   promotion boundary.
+* [Issue #1318 TEB Corridor-Deadlock Evaluation](issue_1318_teb_corridor_deadlock_eval.md)
+  records the tracked classic-merging corridor-deadlock slice, exact-collision metric integrity
+  fix, TEB/ORCA/hybrid-rule comparison, and compact evidence bundle.
 * [Issue #1081 Observation Noise](issue_1081_observation_noise.md) records the opt-in benchmark
   observation-noise profile contract, provenance fields, resume identity behavior, and
   non-calibrated robustness interpretation limit.
@@ -375,10 +400,18 @@ knowledge, not every transient iteration detail.
   unjustified.
 * [Issue #626 SoNIC Source Harness Probe](./issue_626_sonic_source_harness_probe.md)
 * [Issue #627 SoNIC Wrapper Follow-up](./issue_627_sonic_wrapper_followup.md)
+* [Issue #1368 NeuPAN Point-Obstacle Comparator Assessment (2026-05-20)](issue_1368_neupan_point_obstacle_assessment.md)
+* [Issue #1367 CrowdNav-Family Learned-Policy Verdict](./policy_search/issue_1367_crowdnav_family_verdict.md)
+* [Issue #1394 CrowdNav HEIGHT Source-Harness Proof](./policy_search/issue_1394_crowdnav_height_source_harness.md)
+* [Issue #1366 GenSafeNav / SoNIC Conformal Contract](./policy_search/issue_1366_gensafenav_sonic_conformal_contract.md)
+* [Issue #1393 GenSafeNav / SoNIC Source-Harness Reproduction (2026-05-20)](./policy_search/issue_1393_gensafenav_source_harness.md)
 * [Policy Search Context](./policy_search/README.md) - file-based candidate registry, staged local
   evaluation funnel, SLURM handoff notes, and the current
   [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training
   policy-search workstream.
+* [Issue #1357 Tentabot-Style Motion-Primitive Assessment](./policy_search/2026-05-20_tentabot_motion_primitive_assessment.md)
+  records the source-backed verdict that Tentabot-style learned primitive-value scoring is a
+  Robot SF-native spike candidate, not an upstream adapter or benchmark-ready planner.
 * [Issue #926 Policy Stack V1 Contract](issue_926_policy_stack_v1_contract.md)
   defines the minimal `policy_stack_v1` portfolio-planner contract, diagnostics, and benchmark
   claim boundary before runtime implementation under #871.

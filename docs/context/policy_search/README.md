@@ -11,7 +11,11 @@ Use it for three things only:
 
 ## Layout
 
-- `candidate_registry.yaml`: canonical candidate list and config pointers.
+- `candidate_registry.yaml`: canonical candidate list and config pointers for implemented or
+  concrete runnable Robot SF candidates.
+- `reject_monitor_registry.md`: reusable negative/monitor trail for learned-policy families such as
+  CrowdNav descendants, Dreamer/world-model approaches, diffusion/visual navigation, SAC/TD3/PPO
+  variants, DRL-VO, and source-side-only candidates. Check this before proposing a new follow-up.
 - `experiment_ledger.md`: compact execution log for implemented candidates.
 - `contracts/`: project contract, gates, taxonomy, and runbook.
 - `reasoning/`: bounded planning and design notes.
@@ -21,6 +25,12 @@ Use it for three things only:
 
 ## Current Diagnostic Notes
 
+- `../issue_1365_social_graph_observation_adapter.md`: shared SocNav-to-graph observation adapter
+  contract for graph/social-RL candidate screening; documents masks, caps, history, static-obstacle
+  tokens, and the deployment-only leakage boundary.
+- `../issue_1369_sage_mpc_transfer_assessment.md`: SAGE / `TIB-K330/drl_planner`
+  reproducibility assessment; classifies the MPC-transfer graph-RL source as monitor-only because
+  dependency pins, checkpoints, offline MPC source buffer, and an inference command are absent.
 - `portfolio_overview_2026-05-05.md`: current candidate portfolio overview generated from the
   policy-search registry and tracked reports; includes current leaders, success/collision/near-miss
   evidence, why the best candidates look promising, coverage gaps, and reproduction commands.
@@ -42,6 +52,38 @@ Use it for three things only:
   `scenario_adaptive_hybrid_orca_v1` and `hybrid_rule_v3_fast_progress`.
 - `validation/2026-05-02_hybrid_rule_failure_diagnostics.md`: issue #874 diagnosis of the
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
+- `2026-05-20_navdp_nomad_diffusion_assessment.md`: Issue #1356 Assessment of NavDP and NoMaD
+  Diffusion-Navigation Source Contracts, with Monitor-Only Verdicts for Robot SF Local-Planner Use.
+- `../issue_1318_teb_corridor_deadlock_eval.md`: issue #1318 classic-merging corridor-deadlock
+  comparison showing current in-repo TEB collides on the selected #1022 seeds while the hybrid-rule
+  incumbent solves four of five.
+- `2026-05-20_learned_local_navigation_screen.md`: Issue #1355 Source-Backed Screening Matrix for
+  learning-based local-navigation candidates, with implement/source-first/monitor/reject verdicts
+  and links to existing Robot SF duplicate boundaries.
+- `../issue_1368_neupan_point_obstacle_assessment.md`: source-side NeuPAN assessment; current
+  verdict is monitor/source-side only because GPL-3.0, source-environment, runtime, and
+  point-obstacle/social-claim boundaries block a Robot SF adapter for now.
+- `issue_1367_crowdnav_family_verdict.md`: CrowdNav-family learned-policy consolidation for
+  CrowdNav / SARL, RGL, DS-RNN, CrowdNav++ / IGAT, HEIGHT, and GenSafeNav / SoNIC; current verdict
+  is no new first integration until the relevant graph/history, checklist, and source-reproduction
+  gates for each candidate land.
+- `issue_1394_crowdnav_height_source_harness.md`: CrowdNav HEIGHT source-harness proof for the
+  current family representative; current verdict is blocked by missing legacy `gym` and local
+  checkpoint assets.
+- `issue_1366_gensafenav_sonic_conformal_contract.md`: GenSafeNav / SoNIC conformal uncertainty
+  assessment; current verdict is source-side reproduction first before benchmark promotion.
+- `issue_1393_gensafenav_source_harness.md`: fresh GenSafeNav `Ours_GST` source-harness
+  reproduction record; current verdict remains blocked by the missing `gym` source dependency.
+- `../issue_769_drl_vo_assessment.md`: DRL-VO metadata history plus issue #1364 privileged-state
+  audit verdict; current status is prototype-only/tracked-agent diagnostic, not main-table ready.
+- `2026-05-20_tentabot_motion_primitive_assessment.md`: issue #1357 assessment of Tentabot-style
+  motion-primitive value policies, recommending a Robot SF-native scorer spike without source-code
+  reuse.
+- `contracts/learned_local_policy_eligibility.md`: learned-policy eligibility checklist for
+  observation/action leakage, registry entry, and required raw/adapted/guarded action logging.
+- `reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md`: issue #1358 ORCA-residual guarded
+  PPO benchmark-surface smoke; validates the bounded residual action path for unsafe PPO proposals
+  before the deferred training campaign.
 
 ## Reproducible Entry Points
 
@@ -53,6 +95,24 @@ Use it for three things only:
 - Pareto plot: `uv run python scripts/tools/plot_policy_search_pareto_front.py`
 - Promotion decision: `uv run python scripts/tools/promote_policy_search_candidate.py`
 - SLURM candidate sweep: `scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --all-implemented`
+
+## Learned-Policy Intake
+
+Before adding a learned local-navigation method to `candidate_registry.yaml`, apply
+`contracts/learned_local_policy_eligibility.md`. The registry is reserved for implemented or
+concrete runnable Robot SF candidates with config pointers; source-only, monitor-only, or
+privileged-evaluation methods should stay in context notes until they have a runnable adapter
+contract.
+
+For repeatable checklist-input validation, record the candidate's learned-policy metadata as YAML or
+JSON and run:
+
+```bash
+uv run python scripts/validation/check_learned_policy_eligibility.py <candidate-spec.yaml>
+```
+
+This helper checks completeness and consistency of the eligibility inputs only. It does not turn a
+candidate into a benchmark-ready planner or replace adapter, smoke, or benchmark validation.
 
 ## Scope Boundary
 

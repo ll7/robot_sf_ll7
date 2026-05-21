@@ -100,6 +100,12 @@ knowledge, not every transient iteration detail.
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #1414 parser capability metadata:
   [issue_1414_parser_capability_metadata.md](issue_1414_parser_capability_metadata.md)
+* Issue #1413 map catalog schema and sync checker:
+  [issue_1413_map_catalog_schema_sync.md](issue_1413_map_catalog_schema_sync.md)
+* Issue #1415 capability-aware map resolver:
+  [issue_1415_capability_map_resolver.md](issue_1415_capability_map_resolver.md)
+* Issue #1416 converted-map cache evaluation:
+  [issue_1416_converted_map_cache_evaluation.md](issue_1416_converted_map_cache_evaluation.md)
 * Issue #1246 graded observation levels:
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
 * Issue #1239 human-model transfer robustness:
@@ -187,6 +193,7 @@ knowledge, not every transient iteration detail.
   [Issue #1239 Human-Model Transfer Evidence](evidence/issue_1239_human_model_transfer_2026-05-18/README.md),
   [Issue #1169 CARLA Live Replay Evidence](evidence/issue_1169_carla_live_replay_2026-05-18/README.md),
   [Issue #1344 Paired AMV Primary Evidence](evidence/issue_1344_paired_amv_primary_2026-05-20/README.md),
+  [Issue #1416 Converted-Map Cache Evidence](evidence/issue_1416_converted_map_cache_2026-05-20/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 

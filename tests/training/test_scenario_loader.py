@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,11 @@ from robot_sf.training.scenario_loader import (
 def _write_yaml(path: Path, content: str) -> None:
     """Write a YAML fixture file."""
     path.write_text(content, encoding="utf-8")
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest for a fixture file."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_load_scenarios_with_includes(tmp_path: Path) -> None:
@@ -656,6 +662,219 @@ scenarios:
     scenarios = load_scenarios(manifest, base_dir=manifest)
     scenario_loader._load_map_registry.cache_clear()
     assert scenarios[0]["map_file"] == "../maps/demo.svg"
+
+
+def test_map_id_enforces_robot_runtime_capability(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scenario map_id resolution should fail closed on missing runtime capability."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    map_path = maps_dir / "demo.svg"
+    map_path.write_text("<svg></svg>", encoding="utf-8")
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry_path,
+        f"""
+version: 2
+schema: robot_sf.map_catalog.v2
+parser_version: parser-capability-metadata.v1
+maps:
+  - map_id: demo_map
+    path: maps/demo.svg
+    source_sha256: {_sha256_file(map_path)}
+    role: obstacle_only
+    profile: obstacle_only
+    capabilities:
+      robot_runtime: false
+      pedestrian_runtime: false
+      route_only: false
+      obstacle_source: true
+      benchmark_candidate: false
+    limitations:
+      - no_robot_routes
+    validation:
+      status: unchecked
+""",
+    )
+    manifest = tmp_path / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+scenarios:
+  - name: demo
+    map_id: demo_map
+""",
+    )
+
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(registry_path))
+    scenario_loader._load_map_registry.cache_clear()
+
+    with pytest.raises(ValueError, match="requested profile 'robot_runtime'.*no_robot_routes"):
+        load_scenarios(manifest, base_dir=manifest)
+    scenario_loader._load_map_registry.cache_clear()
+
+
+def test_map_id_allows_route_only_for_requested_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route-only maps should pass only when callers request route-only capability."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    map_path = maps_dir / "route_only.svg"
+    map_path.write_text("<svg></svg>", encoding="utf-8")
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry_path,
+        f"""
+version: 2
+schema: robot_sf.map_catalog.v2
+parser_version: parser-capability-metadata.v1
+maps:
+  - map_id: route_only
+    path: maps/route_only.svg
+    source_sha256: {_sha256_file(map_path)}
+    role: route_only
+    profile: route_only
+    capabilities:
+      robot_runtime: false
+      pedestrian_runtime: false
+      route_only: true
+      obstacle_source: false
+      benchmark_candidate: false
+    limitations:
+      - route_derived_zones
+    validation:
+      status: unchecked
+""",
+    )
+    manifest = tmp_path / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+scenarios:
+  - name: demo
+    map_id: route_only
+    required_map_profile: route_only
+""",
+    )
+
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(registry_path))
+    scenario_loader._load_map_registry.cache_clear()
+
+    scenarios = load_scenarios(manifest, base_dir=manifest)
+
+    scenario_loader._load_map_registry.cache_clear()
+    assert scenarios[0]["map_file"] == "maps/route_only.svg"
+
+
+def test_map_id_allows_benchmark_candidate_for_requested_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Benchmark callers should be able to request benchmark_candidate rows."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    map_path = maps_dir / "benchmark.svg"
+    map_path.write_text("<svg></svg>", encoding="utf-8")
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry_path,
+        f"""
+version: 2
+schema: robot_sf.map_catalog.v2
+parser_version: parser-capability-metadata.v1
+maps:
+  - map_id: benchmark_map
+    path: maps/benchmark.svg
+    source_sha256: {_sha256_file(map_path)}
+    role: benchmark_candidate
+    profile: benchmark_candidate
+    capabilities:
+      robot_runtime: true
+      pedestrian_runtime: true
+      route_only: false
+      obstacle_source: true
+      benchmark_candidate: true
+    limitations: []
+    validation:
+      status: reviewed
+""",
+    )
+    manifest = tmp_path / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+scenarios:
+  - name: benchmark
+    map_id: benchmark_map
+    required_map_profile: benchmark_candidate
+""",
+    )
+
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(registry_path))
+    scenario_loader._load_map_registry.cache_clear()
+
+    scenarios = load_scenarios(manifest, base_dir=manifest)
+
+    scenario_loader._load_map_registry.cache_clear()
+    assert scenarios[0]["map_file"] == "maps/benchmark.svg"
+
+
+def test_map_id_rejects_stale_source_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catalog source hashes should fail closed when SVG files drift."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    (maps_dir / "demo.svg").write_text("<svg></svg>", encoding="utf-8")
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry_path,
+        """
+version: 2
+schema: robot_sf.map_catalog.v2
+parser_version: parser-capability-metadata.v1
+maps:
+  - map_id: demo_map
+    path: maps/demo.svg
+    source_sha256: stale
+    role: robot_runtime
+    profile: robot_runtime
+    capabilities:
+      robot_runtime: true
+      pedestrian_runtime: false
+      route_only: false
+      obstacle_source: false
+      benchmark_candidate: false
+    limitations: []
+    validation:
+      status: unchecked
+""",
+    )
+    manifest = tmp_path / "manifest.yaml"
+    _write_yaml(
+        manifest,
+        """
+scenarios:
+  - name: demo
+    map_id: demo_map
+""",
+    )
+
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(registry_path))
+    scenario_loader._load_map_registry.cache_clear()
+
+    with pytest.raises(ValueError, match="source_sha256 is stale"):
+        load_scenarios(manifest, base_dir=manifest)
+    scenario_loader._load_map_registry.cache_clear()
 
 
 # ---------------------------------------------------------------------------

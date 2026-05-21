@@ -128,6 +128,8 @@ knowledge, not every transient iteration detail.
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * SLURM issue batch status 2026-05-21:
   [slurm_issue_batch_status_2026-05-21.md](slurm_issue_batch_status_2026-05-21.md)
+* Issue #1398 metric rollup reconciliation:
+  [issue_1398_metric_rollup_reconciliation.md](issue_1398_metric_rollup_reconciliation.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Artifact evidence vocabulary:

@@ -16,6 +16,7 @@ from typing import Any
 from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_analysis
 from robot_sf.benchmark.utils import (
     episode_collision_value,
+    episode_metric_value,
     episode_success_value,
     validate_episode_success_integrity,
 )
@@ -403,7 +404,7 @@ def _analyze_planner(  # noqa: C901, PLR0915
 
     metrics_success = [episode_success_value(entry) for entry in episodes]
     metrics_collisions = [episode_collision_value(entry) for entry in episodes]
-    snqi_values = [_safe_float((entry.get("metrics") or {}).get("snqi")) for entry in episodes]
+    snqi_values = [episode_metric_value(entry, "snqi") for entry in episodes]
     snqi_clean = [value for value in snqi_values if value is not None]
 
     status_counts = Counter(str(entry.get("status", "unknown")) for entry in episodes)

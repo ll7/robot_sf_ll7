@@ -149,7 +149,7 @@ if param_count < 100_000:  # Your budget
 uv run python scripts/multi_extractor_training.py \
   --config configs/scenarios/multi_extractor_default.yaml \
   --run-id study-default \
-  --output-root results/feature_extractor_comparison
+  --output-root output/training/feature_extractors/comparison
 ```
 
 This runs all extractors with the default hyperparameters and saves timestamped results for
@@ -208,7 +208,7 @@ config_path = Path("configs/scenarios/custom_multi_extractor.yaml")
 config_path.parent.mkdir(parents=True, exist_ok=True)
 config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
 
-output_root = Path("results/custom_multi_extractor")
+output_root = Path("output/training/feature_extractors/custom_multi_extractor")
 output_root.mkdir(parents=True, exist_ok=True)
 
 from scripts import multi_extractor_training
@@ -233,7 +233,7 @@ from pathlib import Path
 
 import yaml  # type: ignore
 
-study_root = Path("results/ablation_studies")
+study_root = Path("output/training/feature_extractors/ablation_studies")
 study_root.mkdir(parents=True, exist_ok=True)
 
 def run_ablation(run_label: str, extractor_names: list[str]) -> None:
@@ -363,7 +363,7 @@ finetune_model = PPO("MultiInputPolicy", env, policy_kwargs=finetune_config.get_
 
 ```bash
 # Submit complete comparison
-sbatch SLURM/feature_extractor_comparison/run_comparison.slurm
+scripts/dev/sbatch_use_max_time.sh SLURM/feature_extractor_comparison/run_comparison.slurm
 
 # Submit the extractor comparison as a Slurm job array
 ./SLURM/feature_extractor_comparison/submit_parallel.sh
@@ -372,7 +372,7 @@ sbatch SLURM/feature_extractor_comparison/run_comparison.slurm
 squeue -u $USER
 
 # Monitor logs
-tail -f slurm_logs/feature_comparison_*.out
+tail -f output/slurm/*-feature-extractor-comparison.out
 ```
 
 ### 2. Custom SLURM Jobs

@@ -1,0 +1,27 @@
+{
+  "issue": 1427,
+  "artifact_role": "predictive_same_seed_handoff",
+  "generated_at": "2026-05-21",
+  "summary": "Prepared paired same-seed predictive baseline and obstacle-feature configs plus fail-closed obstacle-row preflight for external SLURM submission.",
+  "configs": {
+    "baseline": "configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml",
+    "obstacle": "configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml",
+    "shared_base_seed_manifest": "configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml",
+    "scenario_matrix": "configs/scenarios/classic_interactions.yaml",
+    "hard_seed_manifest": "configs/benchmarks/predictive_hard_seeds_v1.yaml",
+    "planner_grid": "configs/benchmarks/predictive_sweep_planner_grid_v1.yaml"
+  },
+  "commands": {
+    "baseline": "uv run python scripts/training/run_predictive_training_pipeline.py --config configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml",
+    "obstacle": "uv run python scripts/training/run_predictive_training_pipeline.py --config configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml"
+  },
+  "fail_closed_contract": {
+    "obstacle_preflight_report_pattern": "output/tmp/predictive_planner/pipeline/<run_id>/obstacle_feature_preflight.json",
+    "failure_condition": "The obstacle-feature pipeline aborts before training if either collected dataset has zero active non-sentinel obstacle rows.",
+    "same_seed_contract": "Both variants consume the same committed base seed manifest and the same hard-seed manifest."
+  },
+  "validation": {
+    "status": "prepared-not-submitted",
+    "note": "No SLURM job was submitted from this worktree. External submission should record job IDs, commit SHA, artifact roots, and downstream report paths."
+  }
+}

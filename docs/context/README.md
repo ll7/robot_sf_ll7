@@ -138,6 +138,8 @@ knowledge, not every transient iteration detail.
   [issue_1365_social_graph_observation_adapter.md](issue_1365_social_graph_observation_adapter.md)
 * Issue #1369 SAGE MPC-Transfer Planner Reproducibility:
   [issue_1369_sage_mpc_transfer_assessment.md](issue_1369_sage_mpc_transfer_assessment.md)
+* Issue #1361 Command-Lattice Corridor-Deadlock Assessment (2026-05-20):
+  [issue_1361_motion_primitive_corridor_deadlock.md](issue_1361_motion_primitive_corridor_deadlock.md)
 * Issue #1360 External TEB Reference Assessment:
   [issue_1360_external_teb_assessment.md](issue_1360_external_teb_assessment.md)
 * Issue #769/#1364 DRL-VO Assessment and Privileged-State Audit:

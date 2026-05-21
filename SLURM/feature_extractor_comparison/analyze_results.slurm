@@ -46,10 +46,7 @@ combined_results = {
 }
 
 results_dir = Path('output/training/feature_extractors')
-individual_dirs = sorted({
-    *results_dir.glob('single_*'),
-    *results_dir.glob('single_extractor_*'),
-})
+individual_dirs = sorted(results_dir.glob('single_*'))
 
 print(f'Found {len(individual_dirs)} individual result directories')
 
@@ -99,7 +96,7 @@ if [ -f "$COMBINED_RESULTS" ]; then
     
     if [ $? -eq 0 ]; then
         echo "Analysis completed successfully!"
-        echo "Results available in: output/training/feature_extractors/combined_analysis/analysis/"
+        echo "Results available in: $(dirname "$COMBINED_RESULTS")/analysis/"
     else
         echo "Analysis failed!"
     fi

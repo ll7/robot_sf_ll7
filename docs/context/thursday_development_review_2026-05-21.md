@@ -235,13 +235,13 @@ needed a new issue.
 No new issue is needed for PR #1362. It is closed and should not be treated as part of the active
 map-catalog merge chain; the active chain is Issues #1413, #1415, #1416 and PR #1420.
 
-## Temporary Consolidation Sprint Policy for Issue #1423 (2026-05-21)
+## Temporary Consolidation Sprint Policy - Issue #1423 - 2026-05-21
 
 For the next development cycle, treat the active backlog as four ordered lanes:
 
-1. Benchmark Integrity: Issue #1398 and PR #1401,
-2. Map Capability Contract: Issues #1413, #1415, #1416 and PR #1420,
-3. First Evidence Campaign: Issue #1358,
+1. Benchmark Integrity: Issue #1398 and PR #1401.
+2. Map Capability Contract: Issues #1413, #1415, #1416 and PR #1420.
+3. First Evidence Campaign: Issue #1358.
 4. Frozen Candidate Intake: Issue #1387 and PR #1404 only, unless a maintainer explicitly approves
    another exception.
 

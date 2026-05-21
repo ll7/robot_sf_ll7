@@ -485,7 +485,11 @@ def test_analyze_campaign_matches_rows_by_planner_and_kinematics(tmp_path: Path)
             ],
             "runs": [
                 {
-                    "planner": {"key": "goal", "algo": "goal", "kinematics": "differential_drive"},
+                    "planner": {
+                        "key": " goal ",
+                        "algo": "goal",
+                        "kinematics": "differential_drive",
+                    },
                     "runtime_sec": 1.0,
                     "episodes_path": "runs/goal__differential_drive/episodes.jsonl",
                     "summary": {

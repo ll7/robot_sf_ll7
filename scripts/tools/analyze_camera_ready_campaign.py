@@ -227,7 +227,8 @@ def _lookup_planner_row(
     legacy = row_map.get(_planner_row_identity(planner_key, ""))
     if legacy is not None:
         return legacy
-    matches = [row for (key, _), row in row_map.items() if key == planner_key]
+    normalized_planner_key = planner_key.strip()
+    matches = [row for (key, _), row in row_map.items() if key == normalized_planner_key]
     if len(matches) == 1:
         return matches[0]
     return None
@@ -382,7 +383,7 @@ def _analyze_planner(  # noqa: C901, PLR0915
         Planner diagnostics with consistency findings and runtime hotspots.
     """
     planner = run_entry.get("planner", {}) if isinstance(run_entry, dict) else {}
-    planner_key = str(planner.get("key", "unknown"))
+    planner_key = str(planner.get("key", "unknown")).strip()
     algo = str(planner.get("algo", "unknown"))
     summary = run_entry.get("summary", {}) if isinstance(run_entry, dict) else {}
     kinematics = str(planner.get("kinematics", summary.get("kinematics", "unknown")) or "unknown")
@@ -768,7 +769,7 @@ def analyze_campaign(
             continue
         planner = entry.get("planner") or {}
         summary = entry.get("summary") or {}
-        planner_key = str(planner.get("key", "unknown"))
+        planner_key = str(planner.get("key", "unknown")).strip()
         kinematics = str(
             planner.get("kinematics", summary.get("kinematics", "unknown")) or "unknown"
         )

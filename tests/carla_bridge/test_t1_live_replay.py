@@ -48,6 +48,13 @@ class _FakeBlueprintLibrary:
         return [_FakeBlueprint(pattern.replace("*", "0001"))]
 
 
+class _NoneReturningRobotBlueprintLibrary(_FakeBlueprintLibrary):
+    def find(self, blueprint_id: str) -> _FakeBlueprint | None:
+        if blueprint_id == "vehicle.tesla.model3":
+            return None
+        return super().find(blueprint_id)
+
+
 class _FakeActor:
     def __init__(self, blueprint: _FakeBlueprint, transform: _FakeTransform) -> None:
         self.blueprint = blueprint
@@ -89,6 +96,20 @@ class _PedestrianSpawnFailureWorld(_FakeWorld):
         if blueprint.id.startswith("walker."):
             return None
         return super().try_spawn_actor(blueprint, transform)
+
+
+class _RobotSpawnFailureWorld(_FakeWorld):
+    def try_spawn_actor(
+        self, blueprint: _FakeBlueprint, transform: _FakeTransform
+    ) -> _FakeActor | None:
+        if blueprint.id.startswith("vehicle."):
+            return None
+        return super().try_spawn_actor(blueprint, transform)
+
+
+class _RobotBlueprintFallbackWorld(_FakeWorld):
+    def get_blueprint_library(self) -> _NoneReturningRobotBlueprintLibrary:
+        return _NoneReturningRobotBlueprintLibrary()
 
 
 def _fake_carla_module(world: _FakeWorld):
@@ -251,10 +272,58 @@ def test_live_replay_cleans_up_robot_when_pedestrian_spawn_fails(tmp_path: Path)
 
     assert summary["status"] == "failed"
     assert summary["mode"] == "failed"
-    assert summary["reason"] == "CARLA failed to spawn pedestrian ped_0"
+    assert summary["reason"] == (
+        "CARLA failed to spawn pedestrian ped_0 with blueprint walker.pedestrian.0001 "
+        "via try_spawn_actor at x=2.000, y=1.000, z=0.100, yaw=-89.954"
+    )
     assert len(world.actors) == 1
     assert world.actors[0].destroyed is True
     assert world.ticks == 0
+
+
+def test_live_replay_falls_back_when_robot_blueprint_find_returns_none(tmp_path: Path) -> None:
+    """CARLA blueprint libraries may return None instead of raising for missing preferred IDs."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    world = _RobotBlueprintFallbackWorld()
+    manifest_path = _write_manifest(
+        tmp_path,
+        [{"scenario_id": "unit_crossing", "payload": _minimal_t0_payload()}],
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=1,
+    )
+
+    assert summary["status"] == "oracle-replay"
+    assert world.actors[0].blueprint.id == "vehicle.0001"
+    assert world.actors[0].blueprint.attributes["role_name"] == "robot_sf_robot"
+
+
+def test_live_replay_reports_robot_spawn_blueprint_and_location(tmp_path: Path) -> None:
+    """Robot spawn failures should include enough context for runtime diagnosis."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    world = _RobotSpawnFailureWorld()
+    manifest_path = _write_manifest(
+        tmp_path,
+        [{"scenario_id": "unit_crossing", "payload": _minimal_t0_payload()}],
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=1,
+    )
+
+    assert summary["status"] == "failed"
+    assert summary["reason"] == (
+        "CARLA failed to spawn robot with blueprint vehicle.tesla.model3 "
+        "via try_spawn_actor at x=0.000, y=-0.000, z=0.600, yaw=-0.000"
+    )
+    assert world.actors == []
 
 
 def test_live_replay_uses_carla_coordinate_boundary() -> None:

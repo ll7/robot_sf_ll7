@@ -17,6 +17,7 @@ CARLA_DEFAULT_HOST = "127.0.0.1"
 CARLA_DEFAULT_RPC_PORT = 2000
 _DEFAULT_MAX_STEPS = 200
 _DEFAULT_ACTOR_Z = 0.1
+_VEHICLE_ACTOR_Z = 0.6
 
 
 class _Actor(Protocol):
@@ -199,7 +200,11 @@ def _spawn_replay_actors(
         robot_actor = _spawn_actor(
             world,
             _blueprint(blueprints, "vehicle.tesla.model3", "vehicle.*", role_name="robot_sf_robot"),
-            robot_sf_pose_to_carla_transform(carla_module, cast("dict[str, Any]", robot["start"])),
+            robot_sf_pose_to_carla_transform(
+                carla_module,
+                cast("dict[str, Any]", robot["start"]),
+                z=_VEHICLE_ACTOR_Z,
+            ),
             label="robot",
         )
         for index, pedestrian in enumerate(pedestrians):
@@ -318,9 +323,12 @@ def _blueprint(
     *,
     role_name: str,
 ) -> Any:
+    blueprint = None
     try:
         blueprint = library.find(preferred_id)
     except (AttributeError, KeyError, RuntimeError, ValueError):
+        blueprint = None
+    if blueprint is None:
         matches = list(library.filter(fallback_pattern))
         if not matches:
             raise RuntimeError(f"CARLA blueprint not found: {preferred_id}") from None
@@ -331,10 +339,32 @@ def _blueprint(
 
 
 def _spawn_actor(world: Any, blueprint: Any, transform: Any, *, label: str) -> _Actor:
-    spawn = getattr(world, "try_spawn_actor", None) or world.spawn_actor
+    spawn = getattr(world, "try_spawn_actor", None)
+    spawn_name = "try_spawn_actor"
+    if spawn is None:
+        spawn = world.spawn_actor
+        spawn_name = "spawn_actor"
     actor = spawn(blueprint, transform)
     if actor is None:
-        raise RuntimeError(f"CARLA failed to spawn {label}")
+        blueprint_id = getattr(blueprint, "id", "<unknown>")
+        location = getattr(transform, "location", None)
+        rotation = getattr(transform, "rotation", None)
+        if location is not None:
+            location_summary = (
+                f" via {spawn_name} at x={float(getattr(location, 'x', 0.0)):.3f}, "
+                f"y={float(getattr(location, 'y', 0.0)):.3f}, "
+                f"z={float(getattr(location, 'z', 0.0)):.3f}"
+            )
+        else:
+            location_summary = f" via {spawn_name}"
+        if rotation is not None:
+            rotation_summary = f", yaw={float(getattr(rotation, 'yaw', 0.0)):.3f}"
+        else:
+            rotation_summary = ""
+        raise RuntimeError(
+            f"CARLA failed to spawn {label} with blueprint {blueprint_id}"
+            f"{location_summary}{rotation_summary}"
+        )
     return cast("_Actor", actor)
 
 
@@ -376,6 +406,7 @@ def _replay_oracle_transforms(
                     cast("dict[str, Any]", robot["goal"]),
                     alpha,
                 ),
+                z=_VEHICLE_ACTOR_Z,
             )
         )
         for pedestrian_actor, pedestrian in zip(pedestrian_actors, pedestrians, strict=True):

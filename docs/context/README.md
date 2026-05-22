@@ -540,6 +540,9 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #872 CARLA Oracle Replay Bridge Status](issue_872_carla_oracle_replay_bridge_status.md)
   summarizes the parent epic state, the completed CARLA-free T0 stack, the setup-only T1 boundary,
   and the live replay / metric-parity child issues that remain before #872 can close.
+* [Issue #1444 CARLA Coordinate Alignment Contract](issue_1444_carla_coordinate_alignment_contract.md)
+  defines the conservative replay-mode taxonomy (`native`, `aligned`, `adapted`, `failed`,
+  `not-available`) and projection tolerances required before any Robot-SF/CARLA metric parity claim.
 * [Issue #1430 CARLA Live Replay Parity 2026-05-21](issue_1430_carla_live_parity.md)
   records the post-#1329 live CARLA rerun on `imech156-u`, the fail-closed robot-spawn blocker,
   and the conservative unavailable parity report.

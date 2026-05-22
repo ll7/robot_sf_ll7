@@ -58,7 +58,8 @@ The #872 definition of done still needs:
   Robot-SF.
 - Comparable Robot-SF vs CARLA trajectory metrics from that native/map-aligned replay.
 - Documentation that separates setup, failed, adapted replay, native replay, degraded, and
-  metric-parity claims.
+  metric-parity claims. The coordinate-alignment contract in
+  [#1444](./issue_1444_carla_coordinate_alignment_contract.md) now provides this taxonomy.
 
 ## Follow-Up Issues
 
@@ -68,6 +69,9 @@ The #872 definition of done still needs:
   CARLA blueprint, spawn API, and transform.
 - [#1440](https://github.com/ll7/robot_sf_ll7/issues/1440) adds explicit robot spawn projection and
   records adapted live replay evidence.
+- [#1444](./issue_1444_carla_coordinate_alignment_contract.md) defines the conservative replay-mode
+  taxonomy and projection tolerance required before any Robot-SF/CARLA metric parity claim.
+- [#1442](https://github.com/ll7/robot_sf_ll7/issues/1442) is the active parity gate.
 
 ## Validation
 

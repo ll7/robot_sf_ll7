@@ -1,4 +1,4 @@
-# Issue #1436 CI Reproducibility and Flaky Statistical Acceptance Policy
+# Issue #1436 CI Reproducibility and Flaky Statistical Acceptance Policy (2026-05-22)
 
 This note codifies how Robot SF treats reproducibility in CI and separates
 deterministic contract failures from stochastic or statistical acceptance
@@ -108,7 +108,7 @@ environment-class. Reruns are **not** permitted for:
   [Issue #691 Benchmark Fallback Policy](issue_691_benchmark_fallback_policy.md).
 - **Fallback or degraded execution** — any planner running in `fallback` or
   `degraded` mode; see the canonical fail-closed rule in
-  `docs/context/issue_691_benchmark_fallback_policy.md`.
+  [Issue #691 Benchmark Fallback Policy](issue_691_benchmark_fallback_policy.md).
 - **Unfavorable statistical outcomes** — a bootstrap CI that does not overlap
   with a prior claim, a seed draw that produces an outlier aggregate, low
   success rate, high collision rate, poor SNQI, or a cold/warm measurement that
@@ -120,7 +120,7 @@ standard CI hygiene.
 
 ## Relation to Existing Policies
 
-- **Benchmark fallback policy**: `docs/context/issue_691_benchmark_fallback_policy.md`
+- **Benchmark fallback policy**: [Issue #691 Benchmark Fallback Policy](issue_691_benchmark_fallback_policy.md)
   defines `fallback` and `degraded` as non-success. This note adds that reruns
   must not be used to convert a non-success into a success.
 - **Test significance verification**: `docs/dev_guide.md` already instructs

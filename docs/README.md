@@ -230,6 +230,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Camera-Ready All-Planners SLURM Check (2026-05-04)](./context/camera_ready_all_planners_slurm_2026-05-04.md)** - Failed `rsf-allbench` job, partial all-planners evidence, asset blocker, and rerun boundary
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
+* **[Issue #1434 Stress/Uncertainty Coverage Schema v1](./context/issue_1434_stress_uncertainty_coverage_schema.md)** - `stress_uncertainty_coverage.v1` field contract, statistical summary tiers, coverage axes, interpretation boundaries, and fail-closed consumer rules for benchmark reports
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow
 * **[Multi-AMV Benchmark First Slice](./multi_amv_benchmark.md)** - Minimal multi-robot scenario surface, validation smoke, and inter-robot metric block

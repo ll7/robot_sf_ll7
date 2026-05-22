@@ -209,6 +209,10 @@ knowledge, not every transient iteration detail.
 
 ## Benchmark Run Notes
 
+* [Issue #1434 Stress/Uncertainty Coverage Schema v1](issue_1434_stress_uncertainty_coverage_schema.md)
+  defines the `stress_uncertainty_coverage.v1` field contract, statistical summary tiers,
+  scenario-parameter and failure-mode coverage axes, interpretation boundaries, and fail-closed
+  consumer rules for benchmark reports. Implementation follow-up is issue #1445.
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.

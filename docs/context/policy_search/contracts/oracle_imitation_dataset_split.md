@@ -1,4 +1,4 @@
-# Oracle Imitation Dataset Split Policy
+# Issue #1443 Oracle Imitation Dataset Split Policy (2026-05-22)
 
 ## Scope
 
@@ -14,9 +14,9 @@ feeds the policy-search imitation pipeline.
 - For the first #1397 dataset contract:
   - `validation_seeds`: `configs/benchmarks/seed_sets_v1.yaml` key `dev` (`101`, `102`, `103`).
   - `evaluation_seeds`: `configs/benchmarks/seed_sets_v1.yaml` key `eval` (`111`, `112`, `113`).
-  - `train_seeds`: predeclared collection seeds that exclude every seed in `dev`, `eval`,
-    `paper_eval_s5`, `paper_eval_s10`, and `paper_eval_s20`.
-- The three split fields, `train_seeds`, `validation_seeds`, and `evaluation_seeds`, must be
+  - `train_seeds`: predeclared collection seeds that exclude every seed in `dev` and
+    `paper_eval_s20`.
+- The three keys in `seeds_by_split` (`train`, `validation`, and `evaluation`) must be
   disjoint. No seed may appear in more than one split. A `no-overlap` invariant is mandatory.
 - The split assignment must be recorded before collection starts and must not be changed afterward.
 
@@ -72,5 +72,5 @@ Before training starts, verify:
 
 This policy is a prerequisite for the oracle-imitation dataset campaign. Do not begin trajectory
 collection or hard-slice augmentation until this split contract is in place and the manifest schema
-is populated. See the campaign note `SLURM/003_imitation_oracle_dataset_campaign.md` for the gated
+is populated. See the campaign note [SLURM/003_imitation_oracle_dataset_campaign.md](../SLURM/003_imitation_oracle_dataset_campaign.md) for the gated
 handoff.

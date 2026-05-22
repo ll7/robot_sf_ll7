@@ -512,6 +512,10 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #1237 Adversarial Failure Archive](issue_1237_adversarial_failure_archive.md) -
   compact `adversarial_failure_archive.v1` manifests for deterministic failure grouping and
   replay pointers without copying raw bundles.
+* [Issue #1433 Adversarial Edge-Case Search Design](issue_1433_adversarial_edge_case_search_design.md) -
+  bounded v1 design for crossing/TTC adversarial search: parameter bounds, invalid-candidate
+  handling, scripted vs learned decisions, execution contract, failure classes, artifact policy,
+  and explicit dependency on Issue #1434 uncertainty/coverage reporting.
 * [Issue #1236 Optimizer Adversarial Sampler](issue_1236_optimizer_adversarial_sampler.md) -
   Optuna-backed feedback sampler pilot, synthetic comparison helper, and non-paper-facing evidence
   boundary.

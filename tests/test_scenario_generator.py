@@ -384,13 +384,19 @@ def test_metamorphic_seed_structural_stability():
         assert sc.metadata["density"] == "high"
         assert sc.metadata["goal_topology"] == "circulate"
 
-    # (b) Positions must differ for at least one pair of seeds
-    positions_differ = False
+    # (b) Every unique seed must produce agent positions distinct from
+    # every other seed.  With continuous sampling over the arena, the
+    # probability of a collision by chance is negligible, and a collision
+    # would indicate that the RNG is not properly reseeded.
     for i in range(len(scenarios)):
         for j in range(i + 1, len(scenarios)):
-            if not np.allclose(scenarios[i].state[:, :2], scenarios[j].state[:, :2]):
-                positions_differ = True
-                break
-        if positions_differ:
-            break
-    assert positions_differ, "all seeds produced identical positions -- seed not driving RNG"
+            if np.allclose(scenarios[i].state[:, :2], scenarios[j].state[:, :2]):
+                pytest.fail(
+                    f"seed {seeds[i]} and seed {seeds[j]} produced "
+                    f"identical agent positions -- RNG not properly reseeded"
+                )
+            if np.allclose(scenarios[i].state[:, 4:6], scenarios[j].state[:, 4:6]):
+                pytest.fail(
+                    f"seed {seeds[i]} and seed {seeds[j]} produced "
+                    f"identical agent goals -- RNG not properly reseeded"
+                )

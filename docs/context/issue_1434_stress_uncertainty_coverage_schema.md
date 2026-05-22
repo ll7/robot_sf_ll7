@@ -215,7 +215,9 @@ Safety boundary rule:
 | `comfort_exposure` | required | fraction | `force_exceed_events / (ped_count * effective_steps)`. Required for stress/uncertainty reports when force data is available. |
 | `jerk_mean` | optional | m/s^3 | Mean robot jerk; zero on straight lines. |
 | `curvature_mean` | optional | 1/m | Mean path curvature; excluded when `speed <= epsilon`. |
-| `per_ped_force_quantiles` | optional | N | Mean across pedestrians of per-pedestrian force quantiles (q50, q90, q95). NaN when K=0. |
+| `ped_force_q50` | optional | N | Median per-pedestrian force from the metrics suite. NaN when K=0. |
+| `ped_force_q90` | optional | N | 90th percentile per-pedestrian force from the metrics suite. NaN when K=0. |
+| `ped_force_q95` | optional | N | 95th percentile per-pedestrian force from the metrics suite. NaN when K=0. |
 
 Comfort boundary rule:
 

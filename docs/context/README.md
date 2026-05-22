@@ -178,6 +178,8 @@ knowledge, not every transient iteration detail.
   [issue_1440_carla_spawn_projection.md](issue_1440_carla_spawn_projection.md)
 * Issue #1430 CARLA Live Replay Parity 2026-05-21:
   [issue_1430_carla_live_parity.md](issue_1430_carla_live_parity.md)
+* Issue #1436 CI Reproducibility and Flaky Statistical Acceptance:
+  [issue_1436_reproducibility_flaky_acceptance.md](issue_1436_reproducibility_flaky_acceptance.md)
 * Issue #1363 Learned Local Policy Eligibility Checklist:
   [policy_search/contracts/learned_local_policy_eligibility.md](policy_search/contracts/learned_local_policy_eligibility.md)
 * Note-maintenance skill:

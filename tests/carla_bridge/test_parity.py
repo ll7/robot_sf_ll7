@@ -48,6 +48,19 @@ def test_compare_oracle_replay_metrics_rejects_degraded_carla_mode():
     assert report["metrics"][0]["status"] == "unavailable"
 
 
+def test_compare_oracle_replay_metrics_rejects_adapted_carla_mode():
+    """Projected/adapted CARLA replay should not count as native metric parity."""
+    report = compare_oracle_replay_metrics(
+        {"metrics": {"success": True}},
+        {"mode": "oracle-replay-adapted", "metrics": {"success": True}},
+        metric_names=("success",),
+    )
+
+    assert report["status"] == "unavailable"
+    assert "oracle-replay-adapted" in report["reason"]
+    assert report["metrics"][0]["status"] == "unavailable"
+
+
 def test_compare_oracle_replay_metrics_rejects_degraded_status_even_with_native_mode():
     """A degraded CARLA status should fail closed even when mode still says native."""
     report = compare_oracle_replay_metrics(

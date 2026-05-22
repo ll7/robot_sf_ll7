@@ -1,4 +1,4 @@
-# Issue #1444 CARLA Coordinate Alignment Contract
+# Issue #1444 CARLA Coordinate Alignment Contract (2026-05-22)
 
 Issue: [#1444](https://github.com/ll7/robot_sf_ll7/issues/1444)
 
@@ -62,7 +62,8 @@ include:
 - `robot_sf_commit`: Robot-SF Git commit SHA that generated the certified
   scenario.
 - `scenario_cert_id`: certified scenario identifier.
-- `timestamp_utc`: ISO-8601 UTC timestamp of the replay.
+- `start`: ISO-8601 UTC timestamp of the replay start.
+- `end`: ISO-8601 UTC timestamp of the replay end.
 - `bridge_version`: version of `robot_sf_carla_bridge` used.
 
 For `aligned` mode, additionally:

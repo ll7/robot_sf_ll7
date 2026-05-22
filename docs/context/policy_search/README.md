@@ -18,6 +18,7 @@ Use it for three things only:
   variants, DRL-VO, and source-side-only candidates. Check this before proposing a new follow-up.
 - `experiment_ledger.md`: compact execution log for implemented candidates.
 - `contracts/`: project contract, gates, taxonomy, and runbook.
+  - `oracle_imitation_dataset_split.md`: train/validation/evaluation seed-split policy, hard-slice assignment rules, relabeling boundaries, and manifest schema for oracle-imitation datasets (issue #1443).
 - `reasoning/`: bounded planning and design notes.
 - `reports/`: per-run markdown reports emitted by the policy-search runner.
 - `validation/`: local smoke or narrow validation notes.

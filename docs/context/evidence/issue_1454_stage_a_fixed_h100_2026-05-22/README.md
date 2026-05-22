@@ -38,7 +38,8 @@ The completed rows each wrote `480` episodes:
 The `socnav_bench` row failed closed with `0` episodes because local SocNavBench assets were
 missing. The run summary points to `docs/socnav_assets_setup.md` and
 `uv run python scripts/tools/prepare_socnav_assets.py`. This is the same dependency boundary tracked
-by issue #562 and `docs/context/issue_562_socnav_bench_reentry.md`.
+by issue #562 and `docs/context/issue_562_socnav_bench_reentry.md`; issue #1456 tracks the concrete
+asset blocker exposed by this Stage A gate.
 
 ## Included Files
 

@@ -5,6 +5,7 @@ Related:
 - GitHub issue: <https://github.com/ll7/robot_sf_ll7/issues/1454>
 - Draft PR: <https://github.com/ll7/robot_sf_ll7/pull/1455>
 - SocNavBench re-entry gate: [issue_562_socnav_bench_reentry.md](issue_562_socnav_bench_reentry.md)
+- Follow-up SocNavBench asset blocker: <https://github.com/ll7/robot_sf_ll7/issues/1456>
 - Stage A plan: [issue_1454_s10_robustness_plan.md](issue_1454_s10_robustness_plan.md)
 - Compact evidence:
   [issue_1454_stage_a_fixed_h100_2026-05-22](evidence/issue_1454_stage_a_fixed_h100_2026-05-22/README.md)
@@ -119,7 +120,7 @@ Do not execute Stage B or S20 from this state.
 The next benchmark-strengthening step is either:
 
 1. hydrate SocNavBench assets, satisfy the issue #562 re-entry probe, and rerun Stage A so all
-   broader-baseline rows have comparable S10 evidence; or
+   broader-baseline rows have comparable S10 evidence; issue #1456 tracks this concrete blocker; or
 2. make an explicit maintainer decision to scope issue #1454 to the seven runnable rows, then run a
    matched Stage B comparison under that narrowed row set.
 

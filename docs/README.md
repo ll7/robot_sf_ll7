@@ -185,6 +185,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #328 Real-World Map Parent Tracker](./context/issue_328_real_world_map_parent.md)** - Parent/child map-coverage split, child issue status, and shared validation contract for real-world benchmark maps
 * **[Issue #692 Scenario Difficulty Analysis](./context/issue_692_scenario_difficulty_analysis.md)** - Artifact-driven camera-ready workflow for consensus ranking, planner residuals, and verified-simple subset assessment
 * **[Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** - Canonical fail-closed rule for fallback, degraded, and not-available benchmark outcomes
+* **[Issue #1436 CI Reproducibility and Flaky Statistical Acceptance Policy (2026-05-22)](./context/issue_1436_reproducibility_flaky_acceptance.md)** - Canonical validation lanes, deterministic vs stochastic failure classification, and explicit CI rerun rules
 * **[Issue #1360 External TEB Reference Assessment](./context/issue_1360_external_teb_assessment.md)** - Source-reuse and adapter-boundary assessment for external TEB-style corridor-deadlock baselines
 * **[Issue #736 Station-Platform Candidate Pack](./context/issue_736_station_platform_candidate_pack.md)** - Exploratory station-platform variants, canonical commands, and conservative promotion boundary
 * **[Issue #735 Platform Semantics Boundary](./context/issue_735_platform_semantics.md)** - Scenario-side platform hazard and keep-clear metadata contract, with fail-closed behavior for unsupported consumers

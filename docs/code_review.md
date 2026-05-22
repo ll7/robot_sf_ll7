@@ -97,6 +97,10 @@ Apply Principle XIII from `.specify/memory/constitution.md`:
 - require proof that new tests or fixes meaningfully validate the intended contract,
 - keep validation commands in PR text explicit and reproducible.
 
+See `docs/context/issue_1436_reproducibility_flaky_acceptance.md` for the canonical
+classification of deterministic, environment-class, and stochastic failures, and the
+explicit rerun boundary.
+
 Recommended validation gate for broad changes:
 
 ```bash

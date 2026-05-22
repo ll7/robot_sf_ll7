@@ -315,12 +315,15 @@ Release-process references:
 
 ### Benchmark fallback policy
 
-Benchmark work is fail-closed by default. Use the canonical policy note:
+Benchmark work is fail-closed by default. Use the canonical policy notes:
 
 - `docs/context/issue_691_benchmark_fallback_policy.md`
+- `docs/context/issue_1436_reproducibility_flaky_acceptance.md`
 
 Fallback execution can still be useful for diagnostics and reproduction probes, but it must not be
-reported as a successful benchmark outcome.
+reported as a successful benchmark outcome. Reruns are allowed only for environment-class failures,
+not for benchmark contract failures, fallback/degraded execution, or unfavorable statistical
+outcomes.
 
 ### Environment factory pattern (CRITICAL)
 

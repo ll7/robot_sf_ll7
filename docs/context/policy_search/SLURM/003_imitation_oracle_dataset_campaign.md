@@ -6,6 +6,12 @@ Generate a planner-oracle dataset from the strongest non-training candidate
 family and train a faster imitation-style policy that preserves the same safety
 guard semantics.
 
+## Gated Dependency
+
+This campaign is blocked on `contracts/oracle_imitation_dataset_split.md`.
+Dataset generation, hard-slice augmentation, and relabeling must wait until the
+split policy is committed and the manifest schema is populated. See issue #1397.
+
 ## Suggested Phases
 
 1. Collect trajectories from the best current model-based candidate.

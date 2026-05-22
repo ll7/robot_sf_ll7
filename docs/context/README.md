@@ -428,6 +428,10 @@ knowledge, not every transient iteration detail.
   evaluation funnel, SLURM handoff notes, and the current
   [portfolio overview](./policy_search/portfolio_overview_2026-05-05.md) for the non-training
   policy-search workstream.
+* [Issue #1443 Oracle Imitation Dataset Split Policy](./policy_search/contracts/oracle_imitation_dataset_split.md)
+  defines the train/validation/evaluation seed-split contract, hard-slice assignment rules,
+  relabeling boundaries, and manifest schema required before any oracle-imitation dataset
+  generation begins.
 * [Issue #1357 Tentabot-Style Motion-Primitive Assessment](./policy_search/2026-05-20_tentabot_motion_primitive_assessment.md)
   records the source-backed verdict that Tentabot-style learned primitive-value scoring is a
   Robot SF-native spike candidate, not an upstream adapter or benchmark-ready planner.

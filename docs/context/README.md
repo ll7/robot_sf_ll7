@@ -217,6 +217,9 @@ knowledge, not every transient iteration detail.
   defines the `stress_uncertainty_coverage.v1` field contract, statistical summary tiers,
   scenario-parameter and failure-mode coverage axes, interpretation boundaries, and fail-closed
   consumer rules for benchmark reports. Implementation follow-up is issue #1445.
+* [Issue #1454 S10 Robustness Campaign Plan](issue_1454_s10_robustness_plan.md)
+  records the two-stage S10 fixed-h100 vs scenario-horizons-h500 robustness configs, contract
+  tests, Stage A gate, and sensitivity-only output classification.
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.

@@ -9,7 +9,12 @@ Focus areas:
  - Speed variance metadata selection.
  - Property-style structural invariants across parametrized inputs (no Hypothesis dep;
    uses pytest.mark.parametrize with deterministic generated cases).
- - Metamorphic tests with explicitly documented invariants.
+  - Metamorphic tests with explicitly documented invariants.
+
+Scope note: These tests cover valid parameter combinations only. Invalid
+parameter values (e.g., unknown density strings, negative group fractions)
+are outside the current test scope; the generator handles missing keys via
+defaults but does not perform input sanitization.
 
 Dependency decision (issue #1435): Hypothesis is not in pyproject.toml.
 We use pytest.mark.parametrize with deterministic generated parameter
@@ -199,8 +204,9 @@ def test_scenario_structural_invariants(density, flow, obstacle, speed_var, goal
       - Positions are within the arena bounding box [0.5, 9.5] x [0.5, 5.5].
       - Initial velocities (cols 2,3) are zero; tau (col 6) is 1.0.
       - Groups list length equals n_agents; elements are ints (-1 or >=0).
-      - Metadata contains all original param keys, plus derived fields with
-        correct values (n_agents, area=60.0, seed).
+      - Metadata contains selected original param keys (density, flow,
+        obstacle, speed_var, goal_topology) that influence generation,
+        plus derived fields (n_agents, area, seed, speed_std).
       - Obstacle count matches the expected layout for the obstacle kind.
       - Obstacle segments are within the arena [0, 10] x [0, 6].
     """

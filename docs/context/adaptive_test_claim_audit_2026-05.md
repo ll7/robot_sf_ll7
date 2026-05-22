@@ -1,4 +1,4 @@
-# Adaptive Test Strategy Claim Audit (2026-05)
+# Issue #1432 Adaptive Test Strategy Claim Audit (2026-05-22)
 
 > **Scope:** Docs-only claim hygiene for GitHub Issue #1432.  
 > **Date:** 2026-05-22  

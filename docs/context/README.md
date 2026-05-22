@@ -124,7 +124,7 @@ knowledge, not every transient iteration detail.
   [issue_1271_seed_sensitivity_explorer.md](issue_1271_seed_sensitivity_explorer.md)
 * Issue #1272 Safety-Oriented Validation And Falsification Strategy:
   [issue_1272_validation_falsification_strategy.md](issue_1272_validation_falsification_strategy.md)
-* Issue #1432 Adaptive Test Strategy Claim Audit (2026-05):
+* Issue #1432 Adaptive Test Strategy Claim Audit (2026-05-22):
   [adaptive_test_claim_audit_2026-05.md](adaptive_test_claim_audit_2026-05.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)

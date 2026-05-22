@@ -220,6 +220,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1454 S10 Robustness Campaign Plan](issue_1454_s10_robustness_plan.md)
   records the two-stage S10 fixed-h100 vs scenario-horizons-h500 robustness configs, contract
   tests, Stage A gate, and sensitivity-only output classification.
+* [Issue #1454 Stage A Fixed-H100 Gate](issue_1454_stage_a_gate_2026-05-22.md)
+  records the full S10 fixed-h100 campaign result, `socnav_bench` fail-closed blocker, analyzer
+  output, May 4 comparison, and Stage B no-go decision.
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.

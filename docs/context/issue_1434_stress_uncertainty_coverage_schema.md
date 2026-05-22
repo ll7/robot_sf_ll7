@@ -1,4 +1,4 @@
-# Issue #1434 Stress/Uncertainty Coverage Schema v1
+# Issue #1434 Stress/Uncertainty Coverage Schema v1 (2026-05-22)
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1434>  
 Implementation follow-up: <https://github.com/ll7/robot_sf_ll7/issues/1445>
@@ -134,18 +134,21 @@ contain:
 | `coverage_status` | required | `full`, `partial`, or `missing` |
 | `entropy` | optional | normalized Shannon entropy when the parameter supports tokenization per [issue #1240](./issue_1240_scenario_coverage_entropy.md) |
 
-Canonical parameter names (reuse existing repo concepts):
+Canonical parameter names reuse existing repo concepts and should be documented as
+`field_name: description` entries:
 
-- `scenario_family` (e.g., `classic_interactions`, `nominal_v1`, `station_platform`)
-- `density_label` (e.g., `low`, `medium`, `high`)
-- `ped_density_bucket` (coarse bucket per issue #1240)
-- `flow_type` (e.g., `bidirectional`, `crossing`, `merging`)
-- `map_name`
-- `kinematics_mode` (e.g., `differential_drive`, `holonomic`)
-- `horizon_steps` (e.g., `100`, `500`)
-- `observation_level` (e.g., `oracle_full_state`, `lidar_2d`)
-- `optional_stress_marker` (boolean per issue #1240)
-- `seed_count_bucket`
+- `archetype`: scenario family token such as `classic_interactions`, `nominal_v1`,
+  or `station_platform`.
+- `density_label`: density token such as `low`, `medium`, or `high`.
+- `ped_density_bucket`: coarse density bucket per [issue #1240](issue_1240_scenario_coverage_entropy.md).
+- `flow_type`: interaction token such as `bidirectional`, `crossing`, or `merging`.
+- `map_name`: scenario map identifier.
+- `kinematics_mode`: robot model token such as `differential_drive` or `holonomic`.
+- `horizon_steps`: episode horizon bucket such as `100` or `500`.
+- `observation_level`: observation contract token such as `oracle_full_state` or `lidar_2d`.
+- `optional_stress_marker`: boolean stress-marker token per
+  [issue #1240](issue_1240_scenario_coverage_entropy.md).
+- `seed_count_bucket`: seed-count bucket for campaign breadth.
 
 Interpretation boundary:
 

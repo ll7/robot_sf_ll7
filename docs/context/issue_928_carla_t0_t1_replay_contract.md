@@ -70,6 +70,10 @@ Future bridge commands should prefer explicit statuses over silent fallback:
   invalid/incomplete outputs.
 - `oracle-replay`: CARLA replay ran with ground-truth state and scripted agents; this is parity
   evidence only when paired with comparable Robot-SF trajectory metrics.
+- The `oracle-replay` label is further subdivided into `native`, `aligned`, and `adapted`
+  coordinate-alignment modes per
+  [#1444](./issue_1444_carla_coordinate_alignment_contract.md). Only `native` and
+  threshold-bounded `aligned` replays are eligible for metric-parity comparison.
 
 Any `not-available` or `failed` status is valid diagnostic output, but it must not be reported as a
 successful benchmark outcome.

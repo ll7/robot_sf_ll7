@@ -16,6 +16,20 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
 
 The campaign ran at git commit `4941ac48`.
 
+## Durable Raw Archive
+
+The full raw generated campaign tree is preserved as a non-package GitHub artifact release:
+
+- Release:
+  <https://github.com/ll7/robot_sf_ll7/releases/tag/artifact/issue1454-s10-h500-candidates-2026-05-23>
+- Archive:
+  `issue1454-s10-h500-candidates-2026-05-23.tar.zst`
+- SHA256:
+  `44ec1d4eb89d450eb204398a3807185ce9bdd4aae0eeb5e55af0704fd4a8b0fc`
+
+This is intentionally not a standard Robot SF package release; the tag is namespaced under
+`artifact/` so it reads as a durable benchmark payload rather than a versioned software release.
+
 ## Result
 
 - Campaign ID: `issue1454-s10-h500-candidates`
@@ -85,5 +99,4 @@ Top candidate outcome signals from `reports/campaign_table.md`:
 - `manifest.sha256`
 
 Raw episode JSONL files, full run logs, videos, and the full local `output/` tree are intentionally
-not mirrored here. The raw campaign remains at
-`output/benchmarks/camera_ready/issue1454-s10-h500-candidates/` until it is archived outside git.
+not mirrored here. The full raw campaign is available from the artifact release linked above.

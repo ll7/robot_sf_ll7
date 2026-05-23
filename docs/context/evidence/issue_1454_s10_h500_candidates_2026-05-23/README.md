@@ -29,6 +29,8 @@ The full raw generated campaign tree is preserved as a non-package GitHub artifa
 
 This is intentionally not a standard Robot SF package release; the tag is namespaced under
 `artifact/` so it reads as a durable benchmark payload rather than a versioned software release.
+The GitHub release is marked as a prerelease only to keep it out of the repository's Latest release
+slot.
 
 ## Result
 

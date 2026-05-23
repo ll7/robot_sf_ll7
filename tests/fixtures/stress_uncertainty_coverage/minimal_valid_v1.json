@@ -1,0 +1,54 @@
+{
+  "aggregate_mode": "mean",
+  "availability_status": "available",
+  "campaign_config_hash": "cfg-sha256",
+  "coverage_axes": {
+    "failure_modes": {
+      "collision": {
+        "classification_source": "episode_metrics",
+        "observed_episodes": 1,
+        "observed_fraction": 0.5,
+        "scenario_ids": ["scenario-a", "scenario-b"]
+      },
+      "near_miss": {
+        "classification_source": "episode_metrics",
+        "observed_episodes": 0,
+        "observed_fraction": 0.0,
+        "scenario_ids": ["scenario-a", "scenario-b"]
+      },
+      "timeout_without_progress": {
+        "classification_source": "episode_metrics",
+        "observed_episodes": 1,
+        "observed_fraction": 0.5,
+        "scenario_ids": ["scenario-a", "scenario-b"]
+      }
+    },
+    "scenario_parameters": {
+      "density_label": {
+        "coverage_status": "full",
+        "observed_values": ["low"],
+        "required_values": ["low"]
+      }
+    }
+  },
+  "generated_at_utc": "2026-05-22T00:00:00+00:00",
+  "metric_groups": {
+    "comfort": {
+      "comfort_exposure": 0.1
+    },
+    "efficiency": {
+      "success": 0.0,
+      "time_to_goal_norm": 1.0
+    },
+    "safety": {
+      "collision_rate": 0.5,
+      "collisions": 1,
+      "min_distance": 0.2,
+      "near_misses": 0
+    }
+  },
+  "report_id": "fixture-valid",
+  "scenario_matrix_hash": "matrix-sha256",
+  "schema_mode": "required",
+  "schema_version": "stress_uncertainty_coverage.v1"
+}

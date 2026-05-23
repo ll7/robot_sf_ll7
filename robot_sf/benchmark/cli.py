@@ -68,6 +68,11 @@ from robot_sf.benchmark.scenario_thumbnails import (
 from robot_sf.benchmark.seed_variance import (
     compute_seed_variance as _compute_seed_variance,
 )
+from robot_sf.benchmark.stress_uncertainty_coverage import (
+    build_stress_uncertainty_coverage_report_from_jsonl,
+    load_stress_uncertainty_coverage_payload,
+    write_stress_uncertainty_coverage_report,
+)
 from robot_sf.benchmark.summary import summarize_to_plots
 from robot_sf.common.seed import get_seed_state_sample as _seed_sample
 from robot_sf.common.seed import set_global_seed as _set_seed
@@ -524,6 +529,36 @@ def _handle_claim(args) -> int:
         return 2
     except Exception:  # pragma: no cover - error path
         logging.exception("Unexpected error during benchmark claim generation")
+        return 2
+
+
+def _handle_stress_coverage_report(args) -> int:
+    """Build or validate a stress/uncertainty coverage report.
+
+    Returns:
+        Exit code (0 success, 2 failure).
+    """
+    try:
+        if args.summary_json:
+            payload = load_stress_uncertainty_coverage_payload(args.summary_json)
+        else:
+            payload = build_stress_uncertainty_coverage_report_from_jsonl(
+                args.episodes_jsonl,
+                report_id=args.report_id,
+                campaign_config_hash=args.campaign_config_hash,
+                scenario_matrix_hash=args.scenario_matrix_hash,
+                schema_mode=args.schema_mode,
+                aggregate_mode=args.aggregate_mode,
+                availability_status=args.availability_status,
+                bootstrap_samples=args.bootstrap_samples,
+                bootstrap_confidence=args.bootstrap_confidence,
+                bootstrap_seed=args.bootstrap_seed,
+            )
+        out_path = write_stress_uncertainty_coverage_report(payload, args.out)
+        logging.info("Stress/uncertainty coverage report written to %s", out_path)
+        return 0
+    except Exception:
+        logging.exception("Stress/uncertainty coverage report failed")
         return 2
 
 
@@ -1586,6 +1621,49 @@ def _add_aggregate_subparser(
     p.set_defaults(cmd="aggregate")
 
 
+def _add_stress_coverage_report_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the stress-coverage-report subcommand parser."""
+    p = subparsers.add_parser(
+        "stress-coverage-report",
+        help="Build or validate a stress_uncertainty_coverage.v1 report.",
+    )
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--episodes-jsonl",
+        nargs="+",
+        help="Input episode JSONL path(s) used to build a v1 report.",
+    )
+    source.add_argument(
+        "--summary-json",
+        help="Existing v1 or legacy aggregate summary JSON to validate/normalize.",
+    )
+    p.add_argument("--out", required=True, help="Output report JSON path")
+    p.add_argument("--report-id", default="stress-coverage-report")
+    p.add_argument("--campaign-config-hash", default="unknown")
+    p.add_argument("--scenario-matrix-hash", default="unknown")
+    p.add_argument(
+        "--schema-mode",
+        choices=("required", "advisory", "diagnostic"),
+        default="required",
+    )
+    p.add_argument(
+        "--aggregate-mode",
+        choices=("mean", "median", "descriptive_only"),
+        default="mean",
+    )
+    p.add_argument(
+        "--availability-status",
+        choices=("available", "partial-failure", "failed", "not_available"),
+        default="available",
+    )
+    p.add_argument("--bootstrap-samples", type=int, default=0)
+    p.add_argument("--bootstrap-confidence", type=float, default=0.95)
+    p.add_argument("--bootstrap-seed", type=int, default=None)
+    p.set_defaults(cmd="stress-coverage-report")
+
+
 def _add_claim_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2023,6 +2101,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
     _add_aggregate_subparser(subparsers)
+    _add_stress_coverage_report_subparser(subparsers)
     _add_claim_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
@@ -2473,6 +2552,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "run": _handle_run,
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,
+        "stress-coverage-report": _handle_stress_coverage_report,
         "claim": _handle_claim,
         "export-parquet": _handle_export_parquet,
         "seed-variance": _handle_seed_variance,

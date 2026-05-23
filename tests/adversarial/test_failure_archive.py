@@ -116,6 +116,20 @@ def _manifest(tmp_path: Path) -> Path:
                     "details": {},
                 },
             },
+            {
+                "candidate": _candidate(1.0, seed=10),
+                "objective_value": 99.0,
+                "bundle_path": "output/adversarial/run/candidate_0005",
+                "scenario_yaml_path": "output/adversarial/run/candidate_0005/scenario.yaml",
+                "failure_attribution": {
+                    "status": "evaluation_failed",
+                    "primary_failure": "simulation_error",
+                    "reasons": ["spawn collision or unreachable goal"],
+                    "details": {
+                        "termination_reason": "simulation_error",
+                    },
+                },
+            },
         ],
     }
     path = tmp_path / "manifest.json"
@@ -134,7 +148,7 @@ def test_curate_failure_archive_groups_and_selects_representatives(tmp_path: Pat
     assert archive["schema_version"] == "adversarial_failure_archive.v1"
     assert archive["summary"] == {
         "source_manifest_count": 1,
-        "source_candidate_count": 5,
+        "source_candidate_count": 6,
         "archived_failure_count": 3,
         "cluster_count": 2,
     }
@@ -164,6 +178,40 @@ def test_curate_failure_archive_is_deterministic(tmp_path: Path) -> None:
     left.pop("created_at")
     right.pop("created_at")
     assert left == right
+
+
+def test_simulation_error_candidates_excluded_from_archive(tmp_path: Path) -> None:
+    """simulation_error must not enter archive entries, clusters, or representatives."""
+    manifest_path = _manifest(tmp_path)
+    output_path = tmp_path / "archive.json"
+
+    archive = curate_failure_archive([manifest_path], output_path=output_path)
+
+    primary_failures_in_entries = {
+        entry["failure_attribution"]["primary_failure"] for entry in archive["entries"]
+    }
+    cluster_mechanisms = {
+        cluster["mechanism"]["primary_failure"] for cluster in archive["clusters"]
+    }
+    representative_ids = {cluster["representative_archive_id"] for cluster in archive["clusters"]}
+    representative_failures = {
+        entry["failure_attribution"]["primary_failure"]
+        for entry in archive["entries"]
+        if entry["archive_id"] in representative_ids
+    }
+
+    assert "simulation_error" not in primary_failures_in_entries, (
+        "simulation_error candidate should not appear in archive entries"
+    )
+    assert "simulation_error" not in cluster_mechanisms, (
+        "simulation_error candidate should not appear in cluster mechanisms"
+    )
+    assert "simulation_error" not in representative_failures, (
+        "simulation_error candidate should not appear in cluster representatives"
+    )
+    assert archive["summary"]["source_candidate_count"] == 6, (
+        "source_candidate_count must still count simulation_error for budget auditing"
+    )
 
 
 def test_curate_failure_archive_cli_writes_summary(

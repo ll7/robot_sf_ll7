@@ -66,7 +66,7 @@ def curate_failure_archive(
             "source_manifests": [path.as_posix() for path in manifests],
             "selection": {
                 "failure_attribution.primary_failure": (
-                    "not null and not one of success, invalid_candidate"
+                    "not null and not one of success, invalid_candidate, simulation_error"
                 ),
             },
             "grouping": [
@@ -116,7 +116,12 @@ def _is_archivable_failure(candidate_payload: dict[str, Any]) -> bool:
         return False
     if str(attribution.get("status", "")).strip().lower() == "not_evaluated":
         return False
-    return str(primary).strip().lower() not in {"", "success", "invalid_candidate"}
+    return str(primary).strip().lower() not in {
+        "",
+        "success",
+        "invalid_candidate",
+        "simulation_error",
+    }
 
 
 def _archive_entry(

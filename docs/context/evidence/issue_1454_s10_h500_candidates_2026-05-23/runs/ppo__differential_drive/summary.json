@@ -1,0 +1,310 @@
+{
+  "total_jobs": 480,
+  "written": 480,
+  "successful_jobs": 480,
+  "failed_jobs": 0,
+  "skipped_jobs": 0,
+  "failures": [],
+  "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/ppo__differential_drive/episodes.jsonl",
+  "algorithm_readiness": {
+    "name": "ppo",
+    "tier": "experimental",
+    "profile": "experimental"
+  },
+  "algorithm_metadata_contract": {
+    "algorithm": "ppo",
+    "status": "ok",
+    "canonical_algorithm": "ppo",
+    "baseline_category": "learning",
+    "policy_semantics": "policy_network_inference",
+    "observation_spec": {
+      "default_mode": "sensor_fusion_state",
+      "supported_modes": [
+        "sensor_fusion_state"
+      ],
+      "inputs": [
+        "robot_state",
+        "goal",
+        "lidar_rays",
+        "history"
+      ],
+      "notes": "PPO checkpoint inference uses the configured sensor-fusion observation stack.",
+      "active_mode": "sensor_fusion_state",
+      "observation_level": "lidar_2d",
+      "override_applied": false
+    },
+    "observation_level": {
+      "key": "lidar_2d",
+      "display_name": "2D lidar projection",
+      "perception_assumption": "range_sensor_projection",
+      "active_observation_mode": "sensor_fusion_state",
+      "compatible_observation_modes": [
+        "sensor_fusion_state",
+        "lidar_human_state"
+      ],
+      "required_inputs": [
+        "robot_state",
+        "goal",
+        "lidar_rays"
+      ],
+      "noise_policy": "none",
+      "occlusion_policy": "none",
+      "interpretation": "benchmark_metadata_not_sensor_certification"
+    },
+    "planner_kinematics": {
+      "robot_kinematics": "differential_drive",
+      "planner_command_space": "unicycle_vw",
+      "supports_native_commands": true,
+      "supports_adapter_commands": true,
+      "execution_mode": "native",
+      "adapter_name": "ppo_action_to_unicycle",
+      "adapter_active": false,
+      "scenario_kinematics": [
+        "differential_drive"
+      ]
+    },
+    "planner_contract": {
+      "planner_id": "ppo",
+      "observation_contract": {
+        "mode": "sensor_fusion_state",
+        "active_mode": "sensor_fusion_state",
+        "observation_level": "lidar_2d",
+        "perception_assumption": "range_sensor_projection",
+        "supported_modes": [
+          "sensor_fusion_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "lidar_rays",
+          "history"
+        ],
+        "frame": "world",
+        "normalization": "normalized_by_space_high",
+        "pedestrian_ordering": "distance_ascending",
+        "missing_value": null,
+        "notes": "PPO checkpoint inference uses the configured sensor-fusion observation stack."
+      },
+      "action_contract": {
+        "command_space": "mixed_vw_or_vxy",
+        "output_keys": [
+          "v",
+          "omega",
+          "vx",
+          "vy"
+        ],
+        "frame": "robot",
+        "normalization": "raw",
+        "units": "mps_radps",
+        "scaling": "none",
+        "compatible_robot_kinematics": [
+          "differential_drive"
+        ],
+        "active_robot_kinematics": "differential_drive",
+        "bounds": {},
+        "notes": ""
+      },
+      "reset_contract": "seeded_reset",
+      "scenario_requirements": [],
+      "compatibility_scope": "metadata_only",
+      "notes": "Compatibility metadata only; not a benchmark quality claim."
+    },
+    "adapter_impact": {
+      "requested": true,
+      "native_steps": 62876,
+      "adapted_steps": 0,
+      "status": "complete",
+      "execution_mode": "native",
+      "adapter_fraction": 0.0
+    },
+    "kinematics_feasibility": {
+      "commands_evaluated": 62876,
+      "infeasible_native_count": 0,
+      "projected_count": 0,
+      "projection_rate": 0.0,
+      "infeasible_rate": 0.0,
+      "mean_abs_delta_linear": 0.0,
+      "mean_abs_delta_angular": 0.0,
+      "max_abs_delta_linear": 0.0,
+      "max_abs_delta_angular": 0.0
+    }
+  },
+  "preflight": {
+    "status": "ok",
+    "learned_policy_contract": {
+      "status": "pass",
+      "schema": {
+        "algorithm": "ppo",
+        "observation_modes": [
+          "dict",
+          "multi_input",
+          "native_dict",
+          "vector"
+        ],
+        "action_spaces": [
+          "unicycle",
+          "velocity"
+        ],
+        "strict_profiles": [
+          "baseline-safe",
+          "paper-baseline"
+        ]
+      },
+      "observed": {
+        "obs_mode": "dict",
+        "action_space": "unicycle",
+        "robot_kinematics": "differential_drive",
+        "benchmark_profile": "experimental"
+      },
+      "critical_mismatches": [],
+      "warnings": []
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "ppo",
+      "status": "ok",
+      "canonical_algorithm": "ppo",
+      "baseline_category": "learning",
+      "policy_semantics": "policy_network_inference",
+      "observation_spec": {
+        "default_mode": "sensor_fusion_state",
+        "supported_modes": [
+          "sensor_fusion_state"
+        ],
+        "inputs": [
+          "robot_state",
+          "goal",
+          "lidar_rays",
+          "history"
+        ],
+        "notes": "PPO checkpoint inference uses the configured sensor-fusion observation stack.",
+        "active_mode": "sensor_fusion_state",
+        "observation_level": "lidar_2d",
+        "override_applied": false
+      },
+      "observation_level": {
+        "key": "lidar_2d",
+        "display_name": "2D lidar projection",
+        "perception_assumption": "range_sensor_projection",
+        "active_observation_mode": "sensor_fusion_state",
+        "compatible_observation_modes": [
+          "sensor_fusion_state",
+          "lidar_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "lidar_rays"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "none",
+        "interpretation": "benchmark_metadata_not_sensor_certification"
+      },
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": true,
+        "supports_adapter_commands": true,
+        "execution_mode": "native",
+        "adapter_name": "ppo_action_to_unicycle",
+        "adapter_active": false,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "planner_contract": {
+        "planner_id": "ppo",
+        "observation_contract": {
+          "mode": "sensor_fusion_state",
+          "active_mode": "sensor_fusion_state",
+          "observation_level": "lidar_2d",
+          "perception_assumption": "range_sensor_projection",
+          "supported_modes": [
+            "sensor_fusion_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "lidar_rays",
+            "history"
+          ],
+          "frame": "world",
+          "normalization": "normalized_by_space_high",
+          "pedestrian_ordering": "distance_ascending",
+          "missing_value": null,
+          "notes": "PPO checkpoint inference uses the configured sensor-fusion observation stack."
+        },
+        "action_contract": {
+          "command_space": "mixed_vw_or_vxy",
+          "output_keys": [
+            "v",
+            "omega",
+            "vx",
+            "vy"
+          ],
+          "frame": "robot",
+          "normalization": "raw",
+          "units": "mps_radps",
+          "scaling": "none",
+          "compatible_robot_kinematics": [
+            "differential_drive"
+          ],
+          "active_robot_kinematics": "differential_drive",
+          "bounds": {},
+          "notes": ""
+        },
+        "reset_contract": "seeded_reset",
+        "scenario_requirements": [],
+        "compatibility_scope": "metadata_only",
+        "notes": "Compatibility metadata only; not a benchmark quality claim."
+      },
+      "adapter_impact": {
+        "requested": true,
+        "native_steps": 62876,
+        "adapted_steps": 0,
+        "status": "complete",
+        "execution_mode": "native",
+        "adapter_fraction": 0.0
+      },
+      "kinematics_feasibility": {
+        "commands_evaluated": 62876,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "projection_rate": 0.0,
+        "infeasible_rate": 0.0,
+        "mean_abs_delta_linear": 0.0,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0
+      }
+    }
+  },
+  "observation_noise": {
+    "enabled": false,
+    "profile": "none",
+    "seed": null,
+    "pose_noise_std_m": 0.0,
+    "heading_noise_std_rad": 0.0,
+    "lidar_dropout_prob": 0.0,
+    "lidar_dropout_value": 0.0,
+    "pedestrian_false_negative_prob": 0.0,
+    "pedestrian_false_positive_prob": 0.0,
+    "pedestrian_false_positive_radius_m": 4.0,
+    "pedestrian_false_positive_radius": 0.35,
+    "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+  },
+  "observation_noise_hash": "c71dd80adab5",
+  "observation_level": "lidar_2d",
+  "benchmark_availability": {
+    "execution_mode": "native",
+    "readiness_status": "native",
+    "availability_status": "available",
+    "benchmark_success": true,
+    "availability_reason": null
+  },
+  "status": "ok",
+  "started_at_utc": "2026-05-22T15:07:02.472562Z",
+  "finished_at_utc": "2026-05-22T15:14:16.132877Z",
+  "runtime_sec": 433.6603163408581,
+  "episodes_per_second": 1.1068570996999383,
+  "kinematics": "differential_drive"
+}

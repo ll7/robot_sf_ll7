@@ -13,8 +13,27 @@ ROOT = Path(__file__).resolve().parents[2]
 ISSUE_1353_STRESS = ROOT / "configs/benchmarks/issue_1353_paired_stress_broader_baselines.yaml"
 STAGE_A = ROOT / "configs/benchmarks/issue_1454_s10_fixed_h100_broader_baselines.yaml"
 STAGE_B = ROOT / "configs/benchmarks/issue_1454_s10_scenario_horizons_h500_broader_baselines.yaml"
+STAGE_B_CANDIDATES = (
+    ROOT / "configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml"
+)
 
 S10_SEEDS = [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+FUNCTIONING_STAGE_A_KEYS = [
+    "goal",
+    "social_force",
+    "orca",
+    "ppo",
+    "prediction_planner",
+    "socnav_sampling",
+    "sacadrl",
+]
+POLICY_SEARCH_CANDIDATE_KEYS = [
+    "hybrid_rule_v3_fast_progress",
+    "hybrid_rule_v3_fast_progress_static_escape",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous",
+    "scenario_adaptive_hybrid_orca_v1",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard",
+]
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -118,3 +137,30 @@ def test_issue_1454_stage_configs_keep_primary_comparison_matched() -> None:
     assert (
         stage_a.route_clearance_certifications_path == stage_b.route_clearance_certifications_path
     )
+
+
+def test_issue_1454_candidate_h500_config_keeps_exploratory_rows_separate() -> None:
+    """Candidate h500 config should combine runnable Stage A rows with challenger rows."""
+    cfg = load_campaign_config(STAGE_B_CANDIDATES)
+
+    assert cfg.paper_facing is False
+    assert cfg.paper_profile_version == "paper-matrix-v1"
+    assert cfg.horizon is None
+    assert (
+        cfg.scenario_horizons_path
+        == (ROOT / "configs/policy_search/scenario_horizons_h500.yaml").resolve()
+    )
+    assert cfg.seed_policy.mode == "seed-set"
+    assert cfg.seed_policy.seed_set == "paper_eval_s10"
+    assert cfg.stop_on_failure is False
+    assert cfg.export_publication_bundle is False
+    assert cfg.paper_interpretation_profile == "issue-1454-s10-scenario-horizons-h500-candidates"
+    assert _resolved_seed_inventory(STAGE_B_CANDIDATES) == S10_SEEDS
+
+    planner_keys = [planner.key for planner in cfg.planners]
+    assert planner_keys == FUNCTIONING_STAGE_A_KEYS + POLICY_SEARCH_CANDIDATE_KEYS
+    assert "socnav_bench" not in planner_keys
+
+    candidate_rows = cfg.planners[len(FUNCTIONING_STAGE_A_KEYS) :]
+    assert {planner.algo for planner in candidate_rows} == {"hybrid_rule_local_planner"}
+    assert all(planner.algo_config_path is not None for planner in candidate_rows)

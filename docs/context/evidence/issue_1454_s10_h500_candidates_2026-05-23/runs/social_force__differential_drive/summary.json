@@ -1,0 +1,275 @@
+{
+  "total_jobs": 480,
+  "written": 480,
+  "successful_jobs": 480,
+  "failed_jobs": 0,
+  "skipped_jobs": 0,
+  "failures": [],
+  "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/social_force__differential_drive/episodes.jsonl",
+  "algorithm_readiness": {
+    "name": "social_force",
+    "tier": "baseline-ready",
+    "profile": "baseline-safe"
+  },
+  "algorithm_metadata_contract": {
+    "algorithm": "social_force",
+    "status": "ok",
+    "canonical_algorithm": "social_force",
+    "baseline_category": "classical",
+    "policy_semantics": "social_force_adapter",
+    "observation_spec": {
+      "default_mode": "socnav_state",
+      "supported_modes": [
+        "socnav_state"
+      ],
+      "inputs": [
+        "robot_state",
+        "goal",
+        "pedestrians"
+      ],
+      "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present.",
+      "active_mode": "socnav_state",
+      "observation_level": "tracked_agents_no_noise",
+      "override_applied": false
+    },
+    "observation_level": {
+      "key": "tracked_agents_no_noise",
+      "display_name": "Perfect tracked agents",
+      "perception_assumption": "perfect_tracking_without_noise",
+      "active_observation_mode": "socnav_state",
+      "compatible_observation_modes": [
+        "socnav_state",
+        "headed_socnav_state",
+        "gst_human_state"
+      ],
+      "required_inputs": [
+        "robot_state",
+        "goal",
+        "tracked_agents"
+      ],
+      "noise_policy": "none",
+      "occlusion_policy": "none",
+      "interpretation": "benchmark_metadata_not_sensor_certification"
+    },
+    "planner_kinematics": {
+      "robot_kinematics": "differential_drive",
+      "planner_command_space": "unicycle_vw",
+      "supports_native_commands": false,
+      "supports_adapter_commands": true,
+      "execution_mode": "adapter",
+      "adapter_name": "SocialForcePlannerAdapter",
+      "adapter_active": true,
+      "scenario_kinematics": [
+        "differential_drive"
+      ]
+    },
+    "planner_contract": {
+      "planner_id": "social_force",
+      "observation_contract": {
+        "mode": "socnav_state",
+        "active_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "perception_assumption": "perfect_tracking_without_noise",
+        "supported_modes": [
+          "socnav_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "pedestrians"
+        ],
+        "frame": "world",
+        "normalization": "raw",
+        "pedestrian_ordering": "distance_ascending",
+        "missing_value": null,
+        "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present."
+      },
+      "action_contract": {
+        "command_space": "unicycle_vw",
+        "output_keys": [
+          "v",
+          "omega"
+        ],
+        "frame": "robot",
+        "normalization": "raw",
+        "units": "mps_radps",
+        "scaling": "none",
+        "compatible_robot_kinematics": [
+          "differential_drive"
+        ],
+        "active_robot_kinematics": "differential_drive",
+        "bounds": {},
+        "notes": ""
+      },
+      "reset_contract": "seeded_reset",
+      "scenario_requirements": [],
+      "compatibility_scope": "metadata_only",
+      "notes": "Compatibility metadata only; not a benchmark quality claim."
+    },
+    "adapter_impact": {
+      "requested": false,
+      "native_steps": 0,
+      "adapted_steps": 0,
+      "status": "disabled"
+    },
+    "kinematics_feasibility": {
+      "commands_evaluated": 104766,
+      "infeasible_native_count": 8010,
+      "projected_count": 8010,
+      "projection_rate": 0.07645610217055152,
+      "infeasible_rate": 0.07645610217055152,
+      "mean_abs_delta_linear": 0.03062517815136673,
+      "mean_abs_delta_angular": 0.0,
+      "max_abs_delta_linear": 0.9999997330245347,
+      "max_abs_delta_angular": 0.0
+    }
+  },
+  "preflight": {
+    "status": "ok",
+    "learned_policy_contract": {
+      "status": "not_applicable"
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "social_force",
+      "status": "ok",
+      "canonical_algorithm": "social_force",
+      "baseline_category": "classical",
+      "policy_semantics": "social_force_adapter",
+      "observation_spec": {
+        "default_mode": "socnav_state",
+        "supported_modes": [
+          "socnav_state"
+        ],
+        "inputs": [
+          "robot_state",
+          "goal",
+          "pedestrians"
+        ],
+        "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present.",
+        "active_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "override_applied": false
+      },
+      "observation_level": {
+        "key": "tracked_agents_no_noise",
+        "display_name": "Perfect tracked agents",
+        "perception_assumption": "perfect_tracking_without_noise",
+        "active_observation_mode": "socnav_state",
+        "compatible_observation_modes": [
+          "socnav_state",
+          "headed_socnav_state",
+          "gst_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "tracked_agents"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "none",
+        "interpretation": "benchmark_metadata_not_sensor_certification"
+      },
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": false,
+        "supports_adapter_commands": true,
+        "execution_mode": "adapter",
+        "adapter_name": "SocialForcePlannerAdapter",
+        "adapter_active": true,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "planner_contract": {
+        "planner_id": "social_force",
+        "observation_contract": {
+          "mode": "socnav_state",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "supported_modes": [
+            "socnav_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "pedestrians"
+          ],
+          "frame": "world",
+          "normalization": "raw",
+          "pedestrian_ordering": "distance_ascending",
+          "missing_value": null,
+          "notes": "Structured Robot SF social-navigation state: robot pose/velocity, route goal, and pedestrian state when present."
+        },
+        "action_contract": {
+          "command_space": "unicycle_vw",
+          "output_keys": [
+            "v",
+            "omega"
+          ],
+          "frame": "robot",
+          "normalization": "raw",
+          "units": "mps_radps",
+          "scaling": "none",
+          "compatible_robot_kinematics": [
+            "differential_drive"
+          ],
+          "active_robot_kinematics": "differential_drive",
+          "bounds": {},
+          "notes": ""
+        },
+        "reset_contract": "seeded_reset",
+        "scenario_requirements": [],
+        "compatibility_scope": "metadata_only",
+        "notes": "Compatibility metadata only; not a benchmark quality claim."
+      },
+      "adapter_impact": {
+        "requested": false,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "disabled"
+      },
+      "kinematics_feasibility": {
+        "commands_evaluated": 104766,
+        "infeasible_native_count": 8010,
+        "projected_count": 8010,
+        "projection_rate": 0.07645610217055152,
+        "infeasible_rate": 0.07645610217055152,
+        "mean_abs_delta_linear": 0.03062517815136673,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.9999997330245347,
+        "max_abs_delta_angular": 0.0
+      }
+    }
+  },
+  "observation_noise": {
+    "enabled": false,
+    "profile": "none",
+    "seed": null,
+    "pose_noise_std_m": 0.0,
+    "heading_noise_std_rad": 0.0,
+    "lidar_dropout_prob": 0.0,
+    "lidar_dropout_value": 0.0,
+    "pedestrian_false_negative_prob": 0.0,
+    "pedestrian_false_positive_prob": 0.0,
+    "pedestrian_false_positive_radius_m": 4.0,
+    "pedestrian_false_positive_radius": 0.35,
+    "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+  },
+  "observation_noise_hash": "c71dd80adab5",
+  "observation_level": "tracked_agents_no_noise",
+  "benchmark_availability": {
+    "execution_mode": "adapter",
+    "readiness_status": "adapter",
+    "availability_status": "available",
+    "benchmark_success": true,
+    "availability_reason": null
+  },
+  "status": "ok",
+  "started_at_utc": "2026-05-22T14:52:56.383575Z",
+  "finished_at_utc": "2026-05-22T15:00:04.917291Z",
+  "runtime_sec": 428.5337175440509,
+  "episodes_per_second": 1.120098560157425,
+  "kinematics": "differential_drive"
+}

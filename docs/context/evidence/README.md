@@ -51,6 +51,8 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and
   May 4 comparison evidence for the issue #1454 S10 fixed-h100 broader-baseline gate.
+- `issue_1454_s10_h500_candidates_2026-05-23/`: compact exploratory S10 scenario-horizon h500
+  evidence for the seven functioning Stage A rows plus local policy-search candidate rows.
 - `issue_1318_teb_corridor_deadlock_2026-05-20/`: compact TEB/ORCA/hybrid-rule
   classic-merging corridor-deadlock comparison summary for issue #1318.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and

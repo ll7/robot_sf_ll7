@@ -1,0 +1,10 @@
+planner_key,algo,human_model_variant,human_model_source,planner_group,kinematics,readiness_tier,status,episodes,success_mean,collisions_mean,ped_collision_count_mean,obstacle_collision_count_mean,total_collision_count_mean,snqi_mean
+hybrid_rule_v3_fast_progress,hybrid_rule_local_planner,,,experimental,differential_drive,experimental,ok,480,0.7875,0.0292,0.0250,0.0042,0.0292,'-0.1160
+hybrid_rule_v3_fast_progress_static_escape,hybrid_rule_local_planner,,,experimental,differential_drive,experimental,ok,480,0.8646,0.0354,0.0250,0.0104,0.0354,'-0.1069
+hybrid_rule_v3_fast_progress_static_escape_continuous,hybrid_rule_local_planner,,,experimental,differential_drive,experimental,ok,480,0.8771,0.0250,0.0208,0.0042,0.0250,'-0.0972
+ppo,ppo,,,experimental,differential_drive,experimental,ok,480,0.7854,0.1938,0.0417,0.1521,0.1938,'-0.2415
+prediction_planner,prediction_planner,,,experimental,differential_drive,experimental,ok,480,0.5312,0.4000,0.1458,0.2542,0.4000,'-0.1815
+sacadrl,sacadrl,,,experimental,differential_drive,experimental,ok,480,0.0688,0.6604,0.2062,0.4542,0.6604,'-0.3514
+scenario_adaptive_hybrid_orca_v1,hybrid_rule_local_planner,,,experimental,differential_drive,experimental,ok,480,0.8729,0.0333,0.0250,0.0083,0.0333,'-0.1037
+scenario_adaptive_hybrid_orca_v2_collision_guard,hybrid_rule_local_planner,,,experimental,differential_drive,experimental,ok,480,0.8729,0.0333,0.0250,0.0083,0.0333,'-0.1037
+socnav_sampling,socnav_sampling,,,experimental,differential_drive,experimental,ok,480,0.4000,0.6000,0.2562,0.3438,0.6000,'-0.1565

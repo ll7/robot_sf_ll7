@@ -223,6 +223,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1454 Stage A Fixed-H100 Gate](issue_1454_stage_a_gate_2026-05-22.md)
   records the full S10 fixed-h100 campaign result, `socnav_bench` fail-closed blocker, analyzer
   output, May 4 comparison, and Stage B no-go decision.
+* [Issue #1454 S10 H500 Candidate Comparison](issue_1454_s10_h500_candidate_comparison.md)
+  records the exploratory h500 candidate comparison against previous h500, fixed-h100, and
+  policy-search evidence, with the direct-metric claim boundary and SNQI caveat.
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.

@@ -1,0 +1,61 @@
+{
+  "schema": "robot_sf.issue_1457.adversarial_generation_smoke_summary.v1",
+  "issue": 1457,
+  "date": "2026-05-23",
+  "commit": "4196918c271f501ed89740a8661b2e52d422d831",
+  "command": "uv run python scripts/tools/generate_adversarial_routes.py --config configs/adversarial_routes/default.yaml",
+  "config": "configs/adversarial_routes/default.yaml",
+  "scenario_file": "configs/scenarios/classic_interactions.yaml",
+  "scenario_id": "classic_head_on_corridor_low",
+  "source_map": "maps/svg_maps/classic_head_on_corridor.svg",
+  "planner": {
+    "class": "ClassicGlobalPlanner",
+    "algorithm": "theta_star_v2",
+    "cells_per_meter": 2.0,
+    "inflate_radius_meters": 0.0,
+    "add_boundary_obstacles": true,
+    "execution_mode": "native"
+  },
+  "generator": {
+    "kind": "adversarial_route_generation",
+    "optimizer": "optuna_tpe",
+    "objective_mode": "composite",
+    "seed": 123,
+    "trial_count": 20,
+    "robot_route_count": 1,
+    "ped_route_count": 2,
+    "allow_inflation_fallback": false,
+    "feasibility_filter": true,
+    "top_k": 5,
+    "min_valid_trial_ratio": 0.1
+  },
+  "result": {
+    "best_score": 0.3474276984592932,
+    "valid_trial_count": 5,
+    "failed_trials": 15,
+    "feasibility_rejection_counts": {
+      "invalid_start_or_goal": 15
+    },
+    "top_k_scores": [
+      0.3474276984592932,
+      0.20522918955430125,
+      0.13510057562379724,
+      0.05253133660718006,
+      0.0384367067472282
+    ],
+    "objective_components": {
+      "failure_proxy": 0.22222222222222224,
+      "delay_proxy": 0.38971079383717305,
+      "path_inefficiency": 0.0,
+      "near_miss_stress": 1.0
+    }
+  },
+  "artifact_policy": {
+    "raw_output_location": "worktree-local ignored route-generation run directory",
+    "raw_output_git_status": "ignored",
+    "tracked_evidence_scope": "compact provenance and diagnostics only",
+    "promotion_status": "not_promoted",
+    "benchmark_evidence_status": "development_stress_test_only"
+  },
+  "interpretation": "The run proves a bounded seeded route/start-state search path executes on an existing durable map and records feasibility diagnostics. It does not certify a generated case or contribute nominal benchmark evidence."
+}

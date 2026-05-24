@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-05-24T07:40:16.821343+00:00",
+  "candidate": "orca_residual_guarded_ppo_v0",
+  "stage": "smoke",
+  "algo": "guarded_ppo",
+  "candidate_config_path": "configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml",
+  "scenario_matrix": "configs/scenarios/single/planner_sanity_simple.yaml",
+  "git_hash": "e14e2f8bc2058d9f0e071219629915dd5b5dd5a8",
+  "summary": {
+    "episodes": 1,
+    "success_rate": 1.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "termination_reason_counts": {
+      "success": 1
+    },
+    "scenario_exclusions": {
+      "count": 0
+    },
+    "evidence_adjusted": {
+      "episodes": 1,
+      "excluded_episodes": 0,
+      "success_rate": 1.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0
+    },
+    "scenario_family": {
+      "nominal": {
+        "episodes": 1,
+        "success_rate": 1.0,
+        "collision_rate": 0.0,
+        "near_miss_rate": 0.0
+      }
+    },
+    "mean_min_distance": null,
+    "mean_avg_speed": 1.996171405142837,
+    "runtime_sec": 16.299137342022732
+  },
+  "decision": "pass",
+  "claim_boundary": "Runtime smoke only; not learned-residual training evidence."
+}

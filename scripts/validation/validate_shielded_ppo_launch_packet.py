@@ -1,0 +1,51 @@
+"""Validate shielded-PPO repair launch packets before Slurm training."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from robot_sf.training.shielded_ppo_launch_packet import (
+    ShieldedPPOLaunchPacketError,
+    validate_launch_packet,
+)
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser."""
+    parser = argparse.ArgumentParser(
+        description="Validate a pre-Slurm shielded-PPO repair launch packet."
+    )
+    parser.add_argument("--config", required=True, type=Path, help="Launch-packet YAML path.")
+    parser.add_argument(
+        "--repo-root",
+        default=Path.cwd(),
+        type=Path,
+        help="Repository root used to resolve relative paths.",
+    )
+    parser.add_argument("--json", action="store_true", help="Emit a JSON validation report.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Validate a shielded-PPO launch packet and return a shell-friendly exit code."""
+    args = build_arg_parser().parse_args(argv)
+    try:
+        report = validate_launch_packet(args.config, repo_root=args.repo_root)
+    except ShieldedPPOLaunchPacketError as exc:
+        if args.json:
+            print(json.dumps({"status": "invalid", "error": str(exc)}, indent=2, sort_keys=True))
+        else:
+            print(str(exc))
+        return 2
+
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(f"shielded-PPO launch packet valid: {report['campaign_id']}")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI guard
+    raise SystemExit(main())

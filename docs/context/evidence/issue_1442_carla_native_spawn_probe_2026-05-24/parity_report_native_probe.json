@@ -1,0 +1,79 @@
+{
+  "comparison_schema": "carla_oracle_replay_parity_v1",
+  "metrics": [
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "success",
+      "reason": "missing CARLA metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "collision",
+      "reason": "missing Robot-SF metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "ttc_min_s",
+      "reason": "missing Robot-SF metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "min_distance_m",
+      "reason": "missing Robot-SF metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "comfort",
+      "reason": "missing Robot-SF metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "jerk",
+      "reason": "missing Robot-SF metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "curvature",
+      "reason": "missing Robot-SF metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "intervention_rate",
+      "reason": "missing Robot-SF metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    },
+    {
+      "carla_value": null,
+      "delta": null,
+      "metric": "snqi",
+      "reason": "missing Robot-SF metric",
+      "robot_sf_value": null,
+      "status": "unavailable"
+    }
+  ],
+  "reason": "no comparable metric fields were available",
+  "status": "unavailable"
+}

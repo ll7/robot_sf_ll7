@@ -1,0 +1,21 @@
+{
+  "schema": "orca_residual_bc_diagnostic_contract.v1",
+  "required_step_fields": [
+    "orca_command",
+    "raw_residual",
+    "bounded_residual",
+    "final_guarded_command",
+    "fallback_degraded_status"
+  ],
+  "required_aggregate_fields": [
+    "residual_clipping_rate",
+    "guard_veto_rate"
+  ],
+  "fallback_degraded_rows_count_as_success": false,
+  "notes": [
+    "ORCA command is the prior command before adding a learned residual.",
+    "Raw residual is policy_action - ORCA_action before clipping.",
+    "Bounded residual is clipped by the launch-packet residual bounds.",
+    "Final guarded command is the post-shield command actually evaluated."
+  ]
+}

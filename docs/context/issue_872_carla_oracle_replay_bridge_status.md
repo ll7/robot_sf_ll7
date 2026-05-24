@@ -39,6 +39,9 @@ Completed CARLA bridge pieces:
   robot-spawn projection, while a generated CARLA-aligned probe reaches native `oracle-replay`.
 - Issue #1467 / PR #1468 emits native live-replay metrics from CARLA oracle replay summaries and
   makes the parity comparator consume Docker runtime summaries shaped as `replay.metrics`.
+- Issue #1467 adds conservative T1 replay metric emission for native replay outputs and proves the
+  Docker-runtime JSON can produce comparable parity rows for a generated CARLA-aligned native
+  metric probe.
 
 ## Claim Boundary
 
@@ -61,6 +64,9 @@ Specifically:
 - Current comparable native replay metrics are limited to fields emitted by the live replay
   summary, such as success, collision, and intervention rate. They do not justify broader transfer
   claims.
+- The #1467 native metric probe is comparable smoke evidence, not a broad CARLA transfer claim.
+  It proves the metric-emission path, while broader claims still require a durable certified
+  native/aligned scenario fixture and richer metric coverage.
 
 ## Remaining Parent Gaps
 
@@ -75,6 +81,8 @@ The #872 definition of done still needs:
 - Documentation that separates setup, failed, adapted replay, native replay, degraded, and
   metric-parity claims. The coordinate-alignment contract in
   [#1444](./issue_1444_carla_coordinate_alignment_contract.md) now provides this taxonomy.
+- A durable certified native/aligned fixture that is not derived from an ignored exploratory output
+  path.
 
 ## Follow-Up Issues
 
@@ -92,6 +100,9 @@ The #872 definition of done still needs:
   emission and comparison support.
 - Any broader multi-scenario CARLA replay campaign should remain a separate follow-up child issue
   rather than extending this parent closure bar.
+- [#1442](https://github.com/ll7/robot_sf_ll7/issues/1442) is the active parity gate.
+- [#1467](https://github.com/ll7/robot_sf_ll7/issues/1467) records the native replay metric-emission
+  slice and comparable smoke proof.
 
 ## Validation
 
@@ -101,3 +112,5 @@ state is recorded in
 PR #1468. The parent should not be marked complete from non-CARLA checks, setup-only evidence,
 server-connectivity proof, static-geometry code support, adapted replay alone, or native probe
 metrics that do not satisfy the accepted closure fixture boundary.
+[`issue_1440_carla_spawn_projection.md`](issue_1440_carla_spawn_projection.md) and
+[`issue_1467_carla_replay_metrics.md`](issue_1467_carla_replay_metrics.md).

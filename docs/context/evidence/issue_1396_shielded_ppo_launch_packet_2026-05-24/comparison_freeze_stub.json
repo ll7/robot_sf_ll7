@@ -1,0 +1,26 @@
+{
+  "campaign_id": "issue_1396_shielded_ppo_repair_v1",
+  "fixture_role": "comparison-reference-freeze",
+  "references": {
+    "ppo_baseline": {
+      "candidate_id": "ppo_issue791_best_v1",
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    },
+    "risk_guarded_ppo_v1": {
+      "candidate_id": "risk_guarded_ppo_v1",
+      "seeds": [
+        111,
+        112,
+        113
+      ]
+    }
+  },
+  "notes": [
+    "Small tracked freeze fixture only; not a benchmark result.",
+    "Future Slurm training must publish durable artifacts before reporting outcomes."
+  ]
+}

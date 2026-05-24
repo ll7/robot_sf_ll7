@@ -85,6 +85,8 @@ Use it for three things only:
 - `reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md`: issue #1358 ORCA-residual guarded
   PPO benchmark-surface smoke; validates the bounded residual action path for unsafe PPO proposals
   before the deferred training campaign.
+- `SLURM/005_orca_residual_bc_lineage.md`: issue #1428 pre-SLURM handoff for behavior-cloning the
+  first bounded ORCA-residual policy with runtime-only observations and explicit diagnostics.
 
 ## Reproducible Entry Points
 

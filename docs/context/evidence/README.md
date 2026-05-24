@@ -54,6 +54,8 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_1454_s10_h500_candidates_2026-05-23/`: compact exploratory S10 scenario-horizon h500
   evidence for the seven functioning Stage A rows plus local policy-search candidate rows, with a
   pointer to the non-package GitHub artifact release for the raw campaign archive.
+- `issue_1428_orca_residual_lineage_2026-05-24/`: compact diagnostic-contract evidence for the
+  pre-SLURM ORCA-residual behavior-cloning lineage packet.
 - `issue_1318_teb_corridor_deadlock_2026-05-20/`: compact TEB/ORCA/hybrid-rule
   classic-merging corridor-deadlock comparison summary for issue #1318.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and

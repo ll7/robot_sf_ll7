@@ -178,6 +178,8 @@ knowledge, not every transient iteration detail.
   [issue_1169_carla_live_replay.md](issue_1169_carla_live_replay.md)
 * Issue #1437 CARLA Robot Actor Spawn Failure:
   [issue_1437_carla_robot_spawn.md](issue_1437_carla_robot_spawn.md)
+* Issue #1428 ORCA-residual training lineage:
+  [issue_1428_orca_residual_lineage.md](issue_1428_orca_residual_lineage.md)
 * Issue #1440 CARLA Robot Spawn Projection:
   [issue_1440_carla_spawn_projection.md](issue_1440_carla_spawn_projection.md)
 * Issue #1430 CARLA Live Replay Parity 2026-05-21:

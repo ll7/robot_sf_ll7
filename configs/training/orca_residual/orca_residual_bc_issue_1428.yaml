@@ -1,0 +1,104 @@
+schema_version: orca-residual-bc-lineage-packet.v1
+campaign_id: issue_1428_orca_residual_bc_v1
+generating_commit: e14e2f8bc2058d9f0e071219629915dd5b5dd5a8
+slurm_handoff: docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
+
+objective:
+  method: behavior_cloning_residual
+  target: bounded_policy_action_minus_orca_action
+  teacher_policy: ppo_leader
+  base_policy: orca
+  full_training_in_packet: false
+
+observation_contract:
+  source: runtime_socnav_struct
+  runtime_available_only: true
+  privileged_features_allowed: false
+  required_keys:
+    - robot_state
+    - goal_state
+    - pedestrian_state
+    - occupancy_grid
+  forbidden_feature_classes:
+    - scenario_future
+    - benchmark_label
+    - oracle_trajectory_future
+    - privileged_map_solution
+
+residual_bounds:
+  candidate_config: configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml
+  linear_delta: 0.25
+  angular_delta: 0.35
+  applied_before_guard: true
+  hard_guard_authoritative: true
+
+artifact_lineage:
+  missing_artifact_behavior: fail_closed
+  input_artifacts:
+    - role: teacher_policy_checkpoint
+      uri: artifact://models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417.zip
+    - role: candidate_surface
+      path: configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml
+  planned_output_artifacts:
+    - role: residual_dataset_manifest
+      uri: wandb-artifact://pending/issue-1428/orca-residual-bc-dataset-manifest:smoke
+    - role: residual_dataset_npz
+      uri: wandb-artifact://pending/issue-1428/orca-residual-bc-dataset:smoke
+    - role: residual_policy_checkpoint
+      uri: wandb-artifact://pending/issue-1428/orca-residual-bc-policy:smoke
+    - role: diagnostic_report
+      uri: wandb-artifact://pending/issue-1428/orca-residual-bc-diagnostics:smoke
+
+diagnostics:
+  aggregate_rates_required: true
+  fallback_degraded_rows_count_as_success: false
+  required_fields:
+    - orca_command
+    - raw_residual
+    - bounded_residual
+    - final_guarded_command
+    - residual_clipping_rate
+    - guard_veto_rate
+    - fallback_degraded_status
+
+comparison_references:
+  orca:
+    candidate_id: orca
+    source: docs/context/policy_search/reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md
+  ppo_leader:
+    candidate_id: ppo_issue791_best_v1
+    source: configs/policy_search/candidates/ppo_issue791_best_v1.yaml
+  orca_residual_guarded_ppo_v0:
+    candidate_id: orca_residual_guarded_ppo_v0
+    source: docs/context/policy_search/reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md
+
+expected_outputs:
+  residual_dataset_manifest: wandb-artifact://pending/issue-1428/orca-residual-bc-dataset-manifest:smoke
+  candidate_yaml: configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml
+  checkpoint_pointer: wandb-artifact://pending/issue-1428/orca-residual-bc-policy:smoke
+  diagnostic_report_path: wandb-artifact://pending/issue-1428/orca-residual-bc-diagnostics:smoke
+  residual_contribution_diagnostics: docs/context/evidence/issue_1428_orca_residual_lineage_2026-05-24/diagnostic_contract.json
+  guard_veto_fallback_status: docs/context/evidence/issue_1428_orca_residual_lineage_2026-05-24/diagnostic_contract.json
+
+execution_boundary:
+  submit_slurm_from_this_issue: false
+  bounded_slurm_followup_required: true
+  nominal_gate_before_stress: true
+  local_preflight_command: >-
+    uv run python scripts/validation/validate_orca_residual_lineage_packet.py
+    --config configs/training/orca_residual/orca_residual_bc_issue_1428.yaml --json
+  dataset_command_shape: >-
+    uv run python scripts/training/collect_expert_trajectories.py --policy-id
+    ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+    --dataset-id issue_1428_orca_residual_bc_dataset --episodes <bounded-smoke-episodes>
+    --training-config configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+  bc_training_command_shape: >-
+    uv run python scripts/training/pretrain_from_expert.py --config
+    configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+  smoke_candidate_command_shape: >-
+    LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 uv run python
+    scripts/validation/run_policy_search_candidate.py --candidate orca_residual_guarded_ppo_v0
+    --stage smoke --workers 1
+  slurm_command_shape: >-
+    scripts/dev/sbatch_policy_search_sweep.sh --candidate orca_residual_guarded_ppo_v0
+    --stage nominal_sanity --config configs/training/orca_residual/orca_residual_bc_issue_1428.yaml

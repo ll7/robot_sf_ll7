@@ -127,3 +127,96 @@ def test_review_selects_candidate_cells_and_marks_summary_only(
     assert "francis2023_narrow_doorway" in rows
     assert "orca" not in rows
     assert "not_resolved_summary_only_no_trace_or_video" in rows
+
+
+def test_review_skips_incomplete_episode_records(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Incomplete rows should not crash selection or leak None-like strings."""
+    raw_dir = tmp_path / "raw"
+    run_dir = raw_dir / "runs" / "hybrid_rule_v3_fast_progress__differential_drive"
+    run_dir.mkdir(parents=True)
+    (run_dir / "episodes.jsonl").write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [
+                {"scenario_id": "francis2023_robot_crowding", "metrics": {"near_misses": 99}},
+                {"seed": 112, "episode_id": "missing-scenario"},
+                _episode(
+                    scenario_id="francis2023_robot_crowding",
+                    seed=113,
+                    success=True,
+                    near_misses=40,
+                    termination_reason="success",
+                )
+                | {"status": None, "termination_reason": None},
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    archive = tmp_path / "archive.tar.zst"
+    archive.write_bytes(b"fixture archive")
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    output_dir = tmp_path / "out"
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "review_issue_1477_s10_h500_mechanisms.py",
+            "--raw-campaign-dir",
+            str(raw_dir),
+            "--archive",
+            str(archive),
+            "--expected-archive-sha256",
+            digest,
+            "--output-dir",
+            str(output_dir),
+            "--per-scenario",
+            "2",
+        ],
+    )
+
+    assert review_issue_1477_s10_h500_mechanisms.main() == 0
+
+    rows = (output_dir / "reviewed_cells.csv").read_text(encoding="utf-8")
+    assert "francis2023_robot_crowding" in rows
+    assert "None" not in rows
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["selected_cell_count"] == 1
+
+
+def test_review_fails_closed_when_raw_campaign_dir_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Missing raw campaign input should fail before writing misleading empty evidence."""
+    archive = tmp_path / "archive.tar.zst"
+    archive.write_bytes(b"fixture archive")
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "review_issue_1477_s10_h500_mechanisms.py",
+            "--raw-campaign-dir",
+            str(tmp_path / "missing"),
+            "--archive",
+            str(archive),
+            "--expected-archive-sha256",
+            digest,
+            "--output-dir",
+            str(tmp_path / "out"),
+        ],
+    )
+
+    try:
+        review_issue_1477_s10_h500_mechanisms.main()
+    except SystemExit as exc:
+        assert "raw campaign directory not found" in str(exc)
+    else:
+        raise AssertionError("missing raw campaign directory did not fail closed")

@@ -134,21 +134,28 @@ def _load_cells(raw_campaign_dir: Path) -> list[EpisodeCell]:
         with episode_file.open(encoding="utf-8") as f:
             for line in f:
                 record = json.loads(line)
-                scenario_id = record.get("scenario_id")
+                raw_scenario_id = record.get("scenario_id")
+                if raw_scenario_id is None:
+                    continue
+                scenario_id = str(raw_scenario_id)
                 if scenario_id not in TARGET_SCENARIOS:
+                    continue
+                seed = record.get("seed")
+                episode_id = record.get("episode_id")
+                if seed is None or episode_id is None:
                     continue
                 metrics = record.get("metrics", {})
                 if not isinstance(metrics, dict):
                     metrics = {}
                 cells.append(
                     EpisodeCell(
-                        review_reason=TARGET_SCENARIOS[str(scenario_id)],
-                        scenario_id=str(scenario_id),
+                        review_reason=TARGET_SCENARIOS[scenario_id],
+                        scenario_id=scenario_id,
                         planner_key=planner_key,
-                        seed=int(record["seed"]),
-                        episode_id=str(record["episode_id"]),
-                        status=str(record.get("status", "")),
-                        termination_reason=str(record.get("termination_reason", "")),
+                        seed=int(seed),
+                        episode_id=str(episode_id),
+                        status=str(record.get("status") or ""),
+                        termination_reason=str(record.get("termination_reason") or ""),
                         success=bool(metrics.get("success", False)),
                         collisions=int(metrics.get("collisions", 0) or 0),
                         near_misses=int(metrics.get("near_misses", 0) or 0),
@@ -234,6 +241,11 @@ def main() -> int:
     if archive_sha256 != args.expected_archive_sha256:
         raise SystemExit(
             f"archive SHA256 mismatch: expected {args.expected_archive_sha256}, got {archive_sha256}"
+        )
+
+    if not args.raw_campaign_dir.is_dir():
+        raise SystemExit(
+            f"raw campaign directory not found or is not a directory: {args.raw_campaign_dir}"
         )
 
     cells = _load_cells(args.raw_campaign_dir)

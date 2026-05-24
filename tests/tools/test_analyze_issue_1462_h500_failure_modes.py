@@ -44,6 +44,25 @@ def test_grouping_compares_only_local_h500_candidates_against_stage_a_rows() -> 
     assert groups["scenario_adaptive_hybrid_orca_v2_collision_guard"] == "candidate"
 
 
+def test_float_helper_defaults_non_numeric_optional_values() -> None:
+    """Optional CSV/JSON values should not crash the analysis helper."""
+    parse = analyze_issue_1462_h500_failure_modes._float
+
+    assert parse(None) == 0.0
+    assert parse("None") == 0.0
+    assert parse("null") == 0.0
+    assert parse("nan") == 0.0
+    assert parse("not-a-number") == 0.0
+    assert parse("1.25") == 1.25
+
+
+def test_std_helper_uses_population_standard_deviation() -> None:
+    """The variability table intentionally reports population standard deviation."""
+    assert analyze_issue_1462_h500_failure_modes._std([]) == 0.0
+    assert analyze_issue_1462_h500_failure_modes._std([1.0]) == 0.0
+    assert analyze_issue_1462_h500_failure_modes._std([0.0, 1.0]) == 0.5
+
+
 def test_analyzer_writes_tables_with_raw_termination_rollups(
     tmp_path: Path,
     monkeypatch,

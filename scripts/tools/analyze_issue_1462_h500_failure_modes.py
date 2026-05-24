@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import math
+import statistics
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -35,9 +36,12 @@ def _float(value: Any, default: float = 0.0) -> float:
     if isinstance(value, (int, float)):
         return default if math.isnan(float(value)) else float(value)
     text = str(value).strip().strip("'")
-    if not text or text.lower() == "nan":
+    if not text or text.lower() in {"nan", "none", "null"}:
         return default
-    return float(text)
+    try:
+        return float(text)
+    except ValueError:
+        return default
 
 
 def _round(value: float, digits: int = 6) -> float:
@@ -78,8 +82,7 @@ def _std(values: list[float]) -> float:
     """Return population standard deviation, or zero for empty/singleton lists."""
     if len(values) < 2:
         return 0.0
-    average = _mean(values)
-    return math.sqrt(sum((value - average) ** 2 for value in values) / len(values))
+    return statistics.pstdev(values)
 
 
 def _planner_groups(campaign_table: list[dict[str, str]]) -> dict[str, str]:

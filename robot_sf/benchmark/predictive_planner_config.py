@@ -79,8 +79,8 @@ def build_predictive_planner_algo_config(
     if checkpoint_path is not None:
         config["predictive_checkpoint_path"] = str(checkpoint_path)
         config.pop("predictive_model_id", None)
-        feature_schema_name = feature_schema_name or infer_predictive_checkpoint_feature_schema_name(
-            checkpoint_path
+        feature_schema_name = (
+            feature_schema_name or infer_predictive_checkpoint_feature_schema_name(checkpoint_path)
         )
     if feature_schema_name is not None:
         config["predictive_feature_schema_name"] = str(feature_schema_name)

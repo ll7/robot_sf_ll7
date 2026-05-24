@@ -736,4 +736,3 @@
 | goal | bottleneck | 12 | 40 | time_to_goal_norm_mean | 1.0000 | 1.0000 | 0.0000 |
 | goal | bottleneck | 12 | 40 | path_efficiency_mean | 1.0000 | 1.0000 | 0.0000 |
 | goal | bottleneck | 12 | 40 | comfort_exposure_mean | 0.0000 | 0.0000 | 0.0000 |
-

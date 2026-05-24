@@ -130,4 +130,3 @@ Use wording close to:
 > collisions over `480` episodes. This result is robust enough to treat as useful challenger
 > evidence, but it is not a full issue #1454 all-planner verdict because `socnav_bench` is excluded
 > and SNQI fails its contract on this slice.
-

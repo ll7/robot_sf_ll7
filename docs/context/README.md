@@ -202,6 +202,7 @@ knowledge, not every transient iteration detail.
   [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
+  [issue 1462 S10/h500 failure modes](evidence/issue_1462_s10_h500_failure_modes_2026-05-24/README.md),
   [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),
   [Issue #1111 CARLA Setup-Only Smoke Evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
   [Issue #1239 Human-Model Transfer Evidence](evidence/issue_1239_human_model_transfer_2026-05-18/README.md),
@@ -246,6 +247,9 @@ knowledge, not every transient iteration detail.
   classifies aggregate fixed-to-h500 timeout relief into clean budget relief, late completion,
   exposure-enabled completion, partial relief, and safety-regressed completion while marking
   wait-then-go explanations as trace-required.
+* [Issue #1462 S10 H500 Failure Modes](issue_1462_s10_h500_failure_modes.md)
+  derives scenario, candidate-vs-core, and seed-level failure-mode tables from the issue #1454
+  S10/h500 candidate evidence.
 * [Issue #1051 Camera-Ready Evidence Provenance Audit](issue_1051_camera_ready_evidence_provenance_audit.md)
   inventories PPO provenance, release inputs, SNQI assets, seed/bootstrap evidence, and durable
   artifact gaps before the paper evidence trail is treated as archive-complete.

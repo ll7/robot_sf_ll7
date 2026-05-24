@@ -374,10 +374,100 @@ def test_live_replay_spawns_replays_and_cleans_up_actors(tmp_path: Path) -> None
     assert summary["actors"] == {"static_obstacles": 0, "robot": 1, "pedestrians": 1}
     assert summary["trajectory"]["steps"] == 3
     assert summary["trajectory"]["truncated_by_max_steps"] is True
+    assert summary["metrics"] == summary["trajectory"]["metrics"]
+    assert summary["metrics"] == {
+        "collision": True,
+        "intervention_rate": 0.0,
+        "min_distance_m": pytest.approx(-0.3),
+        "success": False,
+    }
     assert world.ticks == 3
     assert len(world.actors) == 2
     assert all(actor.destroyed for actor in world.actors)
     assert len(world.actors[0].transforms) == 4
+
+
+def test_live_replay_metrics_are_parity_comparable(tmp_path: Path) -> None:
+    """Native live replay metrics should be consumable by the parity adapter."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+    from robot_sf_carla_bridge.parity import compare_oracle_replay_metrics
+
+    world = _FakeWorld()
+    payload = _minimal_t0_payload()
+    payload["pedestrians"] = []
+    payload["simulation"]["horizon_s"] = 0.2
+    manifest_path = _write_manifest(
+        tmp_path,
+        [{"scenario_id": "unit_crossing", "payload": payload}],
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=None,
+    )
+    report = compare_oracle_replay_metrics(
+        {"metrics": {"success": True, "collision": False}},
+        summary,
+        metric_names=("success", "collision"),
+    )
+
+    assert report["status"] == "comparable"
+    assert [row["status"] for row in report["metrics"]] == ["match", "match"]
+
+
+def test_live_replay_metrics_report_success_for_complete_oracle_replay(tmp_path: Path) -> None:
+    """Untruncated native oracle replay should emit comparable success metrics."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    world = _FakeWorld()
+    payload = _minimal_t0_payload()
+    payload["pedestrians"] = []
+    payload["simulation"]["horizon_s"] = 0.2
+    manifest_path = _write_manifest(
+        tmp_path,
+        [{"scenario_id": "unit_crossing", "payload": payload}],
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=None,
+    )
+
+    assert summary["mode"] == "oracle-replay"
+    assert summary["trajectory"]["truncated_by_max_steps"] is False
+    assert summary["metrics"] == {
+        "collision": False,
+        "intervention_rate": 0.0,
+        "success": True,
+    }
+
+
+def test_live_replay_metrics_detect_static_obstacle_collision(tmp_path: Path) -> None:
+    """Replay metrics should expose collisions against replayed static geometry."""
+    from robot_sf_carla_bridge.live_replay import run_t1_oracle_live_replay_against_server
+
+    world = _FakeWorld()
+    payload = _minimal_t0_payload()
+    payload["pedestrians"] = []
+    payload["robot"]["footprint"]["radius_m"] = 0.3
+    payload["static_geometry"]["obstacles"] = [
+        {"id": "start_overlap", "type": "polygon", "vertices": [[0, -1], [1, -1], [1, 1], [0, 1]]}
+    ]
+    manifest_path = _write_manifest(
+        tmp_path,
+        [{"scenario_id": "unit_crossing", "payload": payload}],
+    )
+
+    summary = run_t1_oracle_live_replay_against_server(
+        manifest_path,
+        carla_module=_fake_carla_module(world),
+        max_steps=1,
+    )
+
+    assert summary["metrics"]["collision"] is True
+    assert summary["metrics"]["min_distance_m"] == pytest.approx(-0.3)
 
 
 def test_live_replay_cleans_up_robot_when_pedestrian_spawn_fails(tmp_path: Path) -> None:

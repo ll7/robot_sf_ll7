@@ -45,6 +45,8 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   explicit variant/source rows and fail-closed upstream adapter availability.
 - `issue_1169_carla_live_replay_2026-05-18/`: compact Docker-backed CARLA live replay summaries
   proving client/server connectivity and the fail-closed static-geometry boundary.
+- `issue_1467_carla_replay_metrics_2026-05-24/`: compact native CARLA replay metric smoke
+  evidence showing the T1 live replay path can emit metrics and produce comparable parity rows.
 - `issue_1442_carla_native_spawn_probe_2026-05-24/`: compact CARLA runtime evidence showing the
   certified #1111 payload still adapts by projection while a generated CARLA-aligned native-spawn
   probe reaches `oracle-replay` without adaptation.

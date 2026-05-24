@@ -411,14 +411,18 @@ def _validate_artifact_pointer(
     repo_root: Path,
     errors: list[str],
 ) -> None:
-    if pointer.startswith("output/") or "/output/" in pointer:
-        errors.append(f"{label} must not depend on worktree-local output: {pointer}")
-        return
     if pointer.startswith(_DURABLE_URI_PREFIXES):
         return
     resolved = _resolve_path(pointer, repo_root)
-    if not resolved.exists():
-        errors.append(f"{label} path does not exist: {pointer}")
+    try:
+        resolved.relative_to(repo_root / "output")
+    except ValueError:
+        pass
+    else:
+        errors.append(f"{label} must not depend on worktree-local output: {pointer}")
+        return
+    if not resolved.is_file():
+        errors.append(f"{label} path does not exist or is a directory: {pointer}")
 
 
 def _sha256_matches(pointer: str, expected: str, repo_root: Path) -> bool:
@@ -427,7 +431,11 @@ def _sha256_matches(pointer: str, expected: str, repo_root: Path) -> bool:
     path = _resolve_path(pointer, repo_root)
     if not path.is_file():
         return False
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    digest_builder = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest_builder.update(chunk)
+    digest = digest_builder.hexdigest()
     return digest == expected
 
 

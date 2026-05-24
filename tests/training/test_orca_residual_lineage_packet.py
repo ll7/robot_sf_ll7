@@ -12,12 +12,13 @@ from robot_sf.training.orca_residual_lineage_packet import (
     validate_launch_packet,
 )
 
-CONFIG = Path("configs/training/orca_residual/orca_residual_bc_issue_1428.yaml")
+REPO_ROOT = Path(__file__).parents[2]
+CONFIG = REPO_ROOT / "configs/training/orca_residual/orca_residual_bc_issue_1428.yaml"
 
 
 def test_checked_in_packet_is_valid() -> None:
     """The versioned packet should satisfy the fail-closed local preflight."""
-    report = validate_launch_packet(CONFIG)
+    report = validate_launch_packet(CONFIG, repo_root=REPO_ROOT)
 
     assert report["status"] == "valid"
     assert report["objective"]["method"] == "behavior_cloning_residual"
@@ -33,7 +34,7 @@ def test_packet_rejects_privileged_observation_features(tmp_path: Path) -> None:
     bad_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
 
     with pytest.raises(OrcaResidualLineagePacketError, match="privileged_features_allowed"):
-        validate_launch_packet(bad_config)
+        validate_launch_packet(bad_config, repo_root=REPO_ROOT)
 
 
 def test_packet_requires_residual_bounds_to_match_candidate(tmp_path: Path) -> None:
@@ -44,7 +45,7 @@ def test_packet_requires_residual_bounds_to_match_candidate(tmp_path: Path) -> N
     bad_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
 
     with pytest.raises(OrcaResidualLineagePacketError, match="linear_delta"):
-        validate_launch_packet(bad_config)
+        validate_launch_packet(bad_config, repo_root=REPO_ROOT)
 
 
 def test_packet_rejects_worktree_local_output_artifact(tmp_path: Path) -> None:
@@ -55,7 +56,37 @@ def test_packet_rejects_worktree_local_output_artifact(tmp_path: Path) -> None:
     bad_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
 
     with pytest.raises(OrcaResidualLineagePacketError, match="worktree-local output"):
-        validate_launch_packet(bad_config)
+        validate_launch_packet(bad_config, repo_root=REPO_ROOT)
+
+
+def test_packet_allows_non_output_sibling_artifact_by_path(tmp_path: Path) -> None:
+    """Output checks must use path parents, not fragile substring matching."""
+    packet = _load_packet()
+    sibling = tmp_path / "not-output" / "checkpoint.zip"
+    sibling.parent.mkdir()
+    sibling.write_text("fixture", encoding="utf-8")
+    packet["expected_outputs"]["checkpoint_pointer"] = str(sibling)
+    bad_config = tmp_path / "bad_sibling.yaml"
+    bad_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
+
+    report = validate_launch_packet(bad_config, repo_root=REPO_ROOT)
+
+    assert report["status"] == "valid"
+
+
+def test_packet_rejects_directory_artifact_path(tmp_path: Path) -> None:
+    """Directory-valued artifact pointers should fail closed before hashing."""
+    packet = _load_packet()
+    directory_artifact = tmp_path / "checkpoint_dir"
+    directory_artifact.mkdir()
+    packet["expected_outputs"]["checkpoint_pointer"] = str(directory_artifact)
+    bad_config = tmp_path / "bad_directory.yaml"
+    bad_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
+
+    with pytest.raises(
+        OrcaResidualLineagePacketError, match="path does not exist or is a directory"
+    ):
+        validate_launch_packet(bad_config, repo_root=REPO_ROOT)
 
 
 def test_packet_requires_guard_and_residual_diagnostics(tmp_path: Path) -> None:
@@ -66,7 +97,7 @@ def test_packet_requires_guard_and_residual_diagnostics(tmp_path: Path) -> None:
     bad_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
 
     with pytest.raises(OrcaResidualLineagePacketError, match="guard_veto_rate"):
-        validate_launch_packet(bad_config)
+        validate_launch_packet(bad_config, repo_root=REPO_ROOT)
 
 
 def test_packet_keeps_slurm_execution_deferred(tmp_path: Path) -> None:
@@ -77,7 +108,7 @@ def test_packet_keeps_slurm_execution_deferred(tmp_path: Path) -> None:
     bad_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
 
     with pytest.raises(OrcaResidualLineagePacketError, match="submit_slurm_from_this_issue"):
-        validate_launch_packet(bad_config)
+        validate_launch_packet(bad_config, repo_root=REPO_ROOT)
 
 
 def _load_packet() -> dict:

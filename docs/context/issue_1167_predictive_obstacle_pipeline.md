@@ -146,6 +146,13 @@ exceptions for missing `training/proxy_eval/proxy_epoch_*.jsonl` files. The trai
 continued and passed the configured quality gates, but final interpretation should check whether
 missing proxy metrics should be a hard failure for this comparison.
 
+Later status: job `12612` exited `FAILED` with code `2:0` after
+`scripts/validation/run_predictive_success_campaign.py` could not read the expected
+`campaign/hard__baseline_like__predictive_model_00e46d73fe.jsonl` artifact. The pipeline wrote
+`final_performance_summary.json` and reported failing stage gates. Follow-up issue #1481 tracks
+whether missing predictive proxy/success-campaign JSONL should be fail-closed earlier or summarized
+as structured evidence caveats. Job `12611` was still running at the last handoff refresh.
+
 Verification commands for the launcher branch:
 
 ```bash

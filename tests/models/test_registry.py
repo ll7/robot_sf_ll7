@@ -229,6 +229,205 @@ def test_resolve_model_path_prefers_existing_local_path(tmp_path: Path) -> None:
     assert resolved == local_model
 
 
+def test_resolve_model_path_downloads_github_release_asset(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Public GitHub release assets should be preferred over W&B downloads."""
+    payload = b"checkpoint"
+    source = tmp_path / "source.zip"
+    source.write_bytes(payload)
+    expected_sha = registry._sha256(source)
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        f"""
+version: 1
+models:
+  - model_id: public_model
+    local_path: missing/model.zip
+    wandb_run_path: ll7/robot_sf/private
+    github_release:
+      repo: ll7/robot_sf_ll7
+      tag: artifact/models-test
+      asset_name: public_model-model.zip
+      sha256: {expected_sha}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class _Response:
+        """Context-manager response returning payload chunks."""
+
+        def __init__(self, data: bytes) -> None:
+            self._data = data
+            self._offset = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def read(self, size: int) -> bytes:
+            chunk = self._data[self._offset : self._offset + size]
+            self._offset += len(chunk)
+            return chunk
+
+    urls: list[str] = []
+
+    def _fake_urlopen(url: str, timeout: int):
+        """Capture the release URL and return the fake payload."""
+        assert timeout == 60
+        urls.append(url)
+        return _Response(payload)
+
+    def _fail_wandb_download(entry, *, cache_dir):
+        """Fail if GitHub release resolution falls back to W&B."""
+        raise AssertionError(entry)
+
+    monkeypatch.setattr(registry, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(registry, "_download_from_wandb", _fail_wandb_download)
+
+    resolved = registry.resolve_model_path(
+        "public_model",
+        registry_path=registry_path,
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert resolved == tmp_path / "cache" / "public_model" / "public_model-model.zip"
+    assert resolved.read_bytes() == payload
+    assert urls == [
+        "https://github.com/ll7/robot_sf_ll7/releases/download/"
+        "artifact/models-test/public_model-model.zip"
+    ]
+
+
+def test_resolve_model_path_rejects_bad_github_release_checksum(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Release downloads must match the registry checksum when one is recorded."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: public_model
+    local_path: missing/model.zip
+    github_release:
+      url: https://github.com/ll7/robot_sf_ll7/releases/download/tag/public_model-model.zip
+      asset_name: public_model-model.zip
+      sha256: 0000000000000000000000000000000000000000000000000000000000000000
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class _Response:
+        """Context-manager response returning one invalid payload."""
+
+        def __init__(self) -> None:
+            self._done = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def read(self, size: int) -> bytes:
+            if self._done:
+                return b""
+            self._done = True
+            return b"wrong"
+
+    monkeypatch.setattr(registry, "urlopen", lambda url, timeout: _Response())
+    with pytest.raises(ValueError, match="Checksum mismatch"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=tmp_path / "cache",
+        )
+
+
+def test_resolve_model_path_requires_github_release_checksum(tmp_path: Path) -> None:
+    """Release-backed registry rows must fail closed without an expected checksum."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: public_model
+    local_path: missing/model.zip
+    github_release:
+      url: https://github.com/ll7/robot_sf_ll7/releases/download/tag/public_model-model.zip
+      asset_name: public_model-model.zip
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="github_release.sha256 is required"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=tmp_path / "cache",
+        )
+
+
+def test_resolve_model_path_rejects_untrusted_github_release_url(tmp_path: Path) -> None:
+    """Release-backed downloads should only use trusted GitHub HTTPS URLs."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: public_model
+    local_path: missing/model.zip
+    github_release:
+      url: https://example.com/ll7/robot_sf_ll7/releases/download/tag/public_model-model.zip
+      asset_name: public_model-model.zip
+      sha256: 0000000000000000000000000000000000000000000000000000000000000000
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="https://github.com URL"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=tmp_path / "cache",
+        )
+
+
+def test_resolve_model_path_rejects_release_asset_path_traversal(tmp_path: Path) -> None:
+    """Release asset names should not be able to escape the model cache directory."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: public_model
+    local_path: missing/model.zip
+    github_release:
+      url: https://github.com/ll7/robot_sf_ll7/releases/download/tag/public_model-model.zip
+      asset_name: ../public_model-model.zip
+      sha256: 0000000000000000000000000000000000000000000000000000000000000000
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="asset_name must be a file name"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=tmp_path / "cache",
+        )
+
+
 def test_resolve_model_path_rejects_missing_local_path_when_download_disabled(
     tmp_path: Path,
 ) -> None:

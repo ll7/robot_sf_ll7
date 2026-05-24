@@ -33,7 +33,10 @@ def load_launch_packet(config_path: Path) -> dict[str, Any]:
     """
     if not config_path.is_file():
         raise LaunchPacketError(f"launch packet is not a file: {config_path}")
-    payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    try:
+        payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise LaunchPacketError(f"failed to load launch packet YAML: {config_path}") from exc
     if not isinstance(payload, dict):
         raise LaunchPacketError("launch packet must be a YAML mapping")
     return payload
@@ -184,18 +187,26 @@ def _validate_seed_refs(
         errors.append("seed_set_refs must be a mapping when provided")
         return
     seed_manifest = refs.get("manifest")
-    if isinstance(seed_manifest, str) and seed_manifest.strip():
-        manifest_path = _resolve_path(seed_manifest, repo_root)
-        if not manifest_path.is_file():
-            errors.append(f"seed_set_refs.manifest is not a regular file: {seed_manifest}")
-            return
+    if seed_manifest is None:
+        return
+    if not isinstance(seed_manifest, str) or not seed_manifest.strip():
+        errors.append("seed_set_refs.manifest must be a non-empty path string when provided")
+        return
+    manifest_path = _resolve_path(seed_manifest, repo_root)
+    if not manifest_path.is_file():
+        errors.append(f"seed_set_refs.manifest is not a regular file: {seed_manifest}")
+        return
+    try:
         seed_payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-        if not isinstance(seed_payload, dict):
-            errors.append("seed_set_refs.manifest must point to a mapping YAML file")
-            return
-        _validate_seed_ref("validation", refs.get("validation"), seed_payload, split_sets, errors)
-        _validate_seed_ref("evaluation", refs.get("evaluation"), seed_payload, split_sets, errors)
-        _validate_train_excludes(refs, seed_payload, split_sets, errors)
+    except (OSError, yaml.YAMLError) as exc:
+        errors.append(f"seed_set_refs.manifest could not be loaded: {exc}")
+        return
+    if not isinstance(seed_payload, dict):
+        errors.append("seed_set_refs.manifest must point to a mapping YAML file")
+        return
+    _validate_seed_ref("validation", refs.get("validation"), seed_payload, split_sets, errors)
+    _validate_seed_ref("evaluation", refs.get("evaluation"), seed_payload, split_sets, errors)
+    _validate_train_excludes(refs, seed_payload, split_sets, errors)
 
 
 def _validate_seed_ref(

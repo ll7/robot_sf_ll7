@@ -11,6 +11,7 @@ import yaml
 
 from robot_sf.training.oracle_imitation_launch_packet import (
     LaunchPacketError,
+    load_launch_packet,
     validate_launch_packet,
 )
 from scripts.validation.validate_oracle_imitation_launch_packet import main as validate_cli_main
@@ -151,6 +152,27 @@ def test_seed_manifest_directory_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(LaunchPacketError, match="not a regular file"):
         validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_seed_manifest_malformed_yaml_fails_closed(tmp_path: Path) -> None:
+    """A malformed seed manifest must become a validation error, not an escaped YAML error."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken_manifest = tmp_path / "bad_manifest.yaml"
+    broken_manifest.write_text("dev: [101, 102\n", encoding="utf-8")
+    broken["seed_set_refs"]["manifest"] = str(broken_manifest)
+
+    with pytest.raises(LaunchPacketError, match="manifest could not be loaded"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_load_launch_packet_malformed_yaml_raises_launch_packet_error(tmp_path: Path) -> None:
+    """Malformed launch-packet YAML should preserve the validator's public exception type."""
+    malformed = tmp_path / "packet.yaml"
+    malformed.write_text("schema_version: [broken\n", encoding="utf-8")
+
+    with pytest.raises(LaunchPacketError, match="failed to load launch packet YAML"):
+        load_launch_packet(malformed)
 
 
 def test_seed_ref_non_list_fails_closed(tmp_path: Path) -> None:

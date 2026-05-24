@@ -1,0 +1,12 @@
+| review_reason | scenario_id | planner_key | seed | success | collisions | near_misses | support_status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| weak_spot | francis2023_narrow_doorway | hybrid_rule_v3_fast_progress | 111 | false | 0 | 0 | not_resolved_summary_only_no_trace_or_video |
+| weak_spot | francis2023_narrow_doorway | hybrid_rule_v3_fast_progress_static_escape | 111 | false | 0 | 0 | not_resolved_summary_only_no_trace_or_video |
+| weak_spot | classic_station_platform_medium | hybrid_rule_v3_fast_progress | 114 | false | 0 | 158 | not_resolved_summary_only_no_trace_or_video |
+| weak_spot | classic_station_platform_medium | hybrid_rule_v3_fast_progress_static_escape | 114 | false | 0 | 158 | not_resolved_summary_only_no_trace_or_video |
+| near_miss_heavy_win | francis2023_robot_crowding | hybrid_rule_v3_fast_progress_static_escape_continuous | 117 | true | 0 | 281 | not_resolved_summary_only_no_trace_or_video |
+| near_miss_heavy_win | francis2023_robot_crowding | hybrid_rule_v3_fast_progress_static_escape_continuous | 120 | true | 0 | 265 | not_resolved_summary_only_no_trace_or_video |
+| near_miss_heavy_win | francis2023_narrow_hallway | hybrid_rule_v3_fast_progress_static_escape_continuous | 111 | true | 0 | 116 | not_resolved_summary_only_no_trace_or_video |
+| near_miss_heavy_win | francis2023_narrow_hallway | hybrid_rule_v3_fast_progress_static_escape_continuous | 118 | true | 0 | 116 | not_resolved_summary_only_no_trace_or_video |
+| optional_large_success_gain | classic_bottleneck_high | hybrid_rule_v3_fast_progress_static_escape_continuous | 114 | true | 0 | 121 | not_resolved_summary_only_no_trace_or_video |
+| optional_large_success_gain | classic_bottleneck_high | hybrid_rule_v3_fast_progress | 118 | true | 0 | 108 | not_resolved_summary_only_no_trace_or_video |

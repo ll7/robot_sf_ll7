@@ -180,6 +180,8 @@ knowledge, not every transient iteration detail.
   [issue_1440_carla_spawn_projection.md](issue_1440_carla_spawn_projection.md)
 * Issue #1430 CARLA Live Replay Parity 2026-05-21:
   [issue_1430_carla_live_parity.md](issue_1430_carla_live_parity.md)
+* Issue #1477 S10/H500 Mechanism Review (2026-05-24):
+  [issue_1477_s10_h500_mechanism_review.md](issue_1477_s10_h500_mechanism_review.md)
 * Issue #1436 CI Reproducibility and Flaky Statistical Acceptance Policy (2026-05-22):
   [issue_1436_reproducibility_flaky_acceptance.md](issue_1436_reproducibility_flaky_acceptance.md)
 * Issue #1363 Learned Local Policy Eligibility Checklist:
@@ -203,6 +205,7 @@ knowledge, not every transient iteration detail.
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
   [issue 1462 S10/h500 failure modes](evidence/issue_1462_s10_h500_failure_modes_2026-05-24/README.md),
+  [issue 1477 S10/h500 mechanism review](evidence/issue_1477_s10_h500_mechanism_review_2026-05-24/README.md),
   [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),
   [Issue #1111 CARLA Setup-Only Smoke Evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
   [Issue #1239 Human-Model Transfer Evidence](evidence/issue_1239_human_model_transfer_2026-05-18/README.md),

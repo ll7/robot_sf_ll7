@@ -180,7 +180,7 @@ knowledge, not every transient iteration detail.
   [issue_1437_carla_robot_spawn.md](issue_1437_carla_robot_spawn.md)
 * Issue #1440 CARLA Robot Spawn Projection:
   [issue_1440_carla_spawn_projection.md](issue_1440_carla_spawn_projection.md)
-* Issue #1442 CARLA Native Spawn Probe:
+* Issue #1442 CARLA Native Spawn Probe (2026-05-24):
   [issue_1442_carla_native_spawn_probe.md](issue_1442_carla_native_spawn_probe.md)
 * Issue #1430 CARLA Live Replay Parity 2026-05-21:
   [issue_1430_carla_live_parity.md](issue_1430_carla_live_parity.md)

@@ -1,4 +1,4 @@
-# Issue #1442 CARLA Native Spawn Probe Evidence
+# Issue #1442 CARLA Native Spawn Probe Evidence (2026-05-24)
 
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/1442>
 
@@ -41,7 +41,7 @@ uv run --with carla==0.9.16 robot-sf-carla-docker-runtime live-replay \
 
 ```bash
 uv run --with carla==0.9.16 robot-sf-carla-docker-runtime live-replay \
-  --manifest output/issue_1442_carla_parity_2026-05-24/native_probe/manifest.json \
+  --manifest docs/context/evidence/issue_1442_carla_native_spawn_probe_2026-05-24/native_probe/manifest.json \
   --max-steps 10 \
   --json
 ```

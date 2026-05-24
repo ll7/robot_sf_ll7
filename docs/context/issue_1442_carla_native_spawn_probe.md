@@ -1,4 +1,4 @@
-# Issue #1442 CARLA Native Spawn Probe
+# Issue #1442 CARLA Native Spawn Probe (2026-05-24)
 
 Issue: [#1442](https://github.com/ll7/robot_sf_ll7/issues/1442)
 

@@ -12,6 +12,14 @@ models:
     wandb_project: robot_sf
     wandb_file: model.zip
     wandb_artifact_path: ll7/robot_sf/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity-best-success:v9
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip
+      file_name: model.zip
+      sha256: 2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d
+      size_bytes: 93662266
+      metadata_asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-metadata.json
     tags:
       - ppo
       - issue-791
@@ -49,6 +57,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200-model.zip
+      file_name: model.zip
+      sha256: 8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09
+      size_bytes: 174820762
+      metadata_asset_name: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200-metadata.json
     tags:
       - ppo
       - br06
@@ -77,6 +93,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: ppo_expert_br06_v2_15m_all_maps_20260302T152332-model.zip
+      file_name: model.zip
+      sha256: e9bf737760efffa238296096bb63078e421b3bf6fcba749a7fce382cee9a989e
+      size_bytes: 174821385
+      metadata_asset_name: ppo_expert_br06_v2_15m_all_maps_20260302T152332-metadata.json
     tags:
       - ppo
       - br06
@@ -100,6 +124,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: ppo_expert_br06_v2_15m_all_maps_20260303T074433-model.zip
+      file_name: model.zip
+      sha256: 17d1c0467878bf828b45370bbb9dbfeebbdf6d078e77d11c9f7072bd6fffee9c
+      size_bytes: 174821327
+      metadata_asset_name: ppo_expert_br06_v2_15m_all_maps_20260303T074433-metadata.json
     tags:
       - ppo
       - br06
@@ -121,6 +153,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311-model.zip
+      file_name: model.zip
+      sha256: ba9e1ef5dbd559f0af29ea9d88a61e698ef4a748bf54dc6c2217ace679580fce
+      size_bytes: 165359988
+      metadata_asset_name: ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311-metadata.json
     tags:
       - ppo
       - br06
@@ -145,6 +185,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: ppo_expert_br06_v10_best_27dbe5xu_20260317-model.zip
+      file_name: model.zip
+      sha256: 341e6b464bceba6cf0360c06a282bc9c100b0efc5d4400f855b90ea83ae7e78f
+      size_bytes: 171119983
+      metadata_asset_name: ppo_expert_br06_v10_best_27dbe5xu_20260317-metadata.json
     tags:
       - ppo
       - br06
@@ -170,6 +218,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417-model.zip
+      file_name: model.zip
+      sha256: 723af98b8a7ca4e50cf12c18bcb2cbce15539514be6cb8e3bcd5189e3f4fed28
+      size_bytes: 51095030
+      metadata_asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417-metadata.json
     tags:
       - ppo
       - issue-791
@@ -194,6 +250,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417-model.zip
+      file_name: model.zip
+      sha256: 8e85553219d182930494a4876b4a3c16ab57f7b292e34fcb9b2e5b84570696a1
+      size_bytes: 51094878
+      metadata_asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417-metadata.json
     tags:
       - ppo
       - issue-791
@@ -312,6 +376,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: predictive_model.pt
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: predictive_proxy_selected_v1-predictive_model.pt
+      file_name: predictive_model.pt
+      sha256: 0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc
+      size_bytes: 5034129
+      metadata_asset_name: predictive_proxy_selected_v1-metadata.json
     tags:
       - predictive
       - rgl
@@ -353,6 +425,14 @@ models:
     wandb_file: predictive_model.pt
     local_only: false
     replacement_model_id: ""
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: predictive_proxy_selected_v2_full-predictive_model.pt
+      file_name: predictive_model.pt
+      sha256: a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1
+      size_bytes: 4958329
+      metadata_asset_name: predictive_proxy_selected_v2_full-metadata.json
     tags:
       - predictive
       - rgl
@@ -377,6 +457,14 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: predictive_model.pt
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: predictive_proxy_selected_v2_xl_ego-predictive_model.pt
+      file_name: predictive_model.pt
+      sha256: 49deeeca98d44bcadb0eb845d9a9a5fd36cc2911a8fed8c414f7f988ec0a3a69
+      size_bytes: 11176729
+      metadata_asset_name: predictive_proxy_selected_v2_xl_ego-metadata.json
     tags:
       - predictive
       - br07

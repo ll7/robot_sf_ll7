@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -206,6 +207,27 @@ models:
         registry.load_registry(registry_path)
 
 
+def test_canonical_registry_entry_has_public_release_pointer() -> None:
+    """The canonical PPO benchmark checkpoint should be publicly hydratable."""
+    entry = registry.get_registry_entry(
+        "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+    )
+    assert entry["github_release"] == {
+        "repository": "ll7/robot_sf_ll7",
+        "tag": "artifact/models-2026-05-registry-v1",
+        "asset_name": (
+            "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip"
+        ),
+        "file_name": "model.zip",
+        "sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
+        "size_bytes": 93662266,
+        "metadata_asset_name": (
+            "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+            "-metadata.json"
+        ),
+    }
+
+
 def test_get_registry_entry_raises_for_unknown_model(tmp_path: Path) -> None:
     """Unknown model ids should raise a clear KeyError."""
     registry_path = tmp_path / "registry.yaml"
@@ -266,6 +288,132 @@ def test_resolve_model_path_rejects_missing_local_only_entry_with_migration_guid
         registry.resolve_model_path(
             "predictive_proxy_selected_v2_full",
             registry_path=registry_path,
+        )
+
+
+def test_resolve_model_path_downloads_github_release_before_wandb(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Public GitHub release pointers should hydrate without requiring W&B credentials."""
+    payload = b"public checkpoint"
+    expected_sha256 = registry.hashlib.sha256(payload).hexdigest()
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        (
+            "version: 1\nmodels:\n"
+            "  - model_id: public_model\n"
+            "    local_path: missing/model.zip\n"
+            "    wandb_run_path: ll7/robot_sf/private\n"
+            "    wandb_file: model.zip\n"
+            "    github_release:\n"
+            "      repository: ll7/robot_sf_ll7\n"
+            "      tag: artifact/models-2026-05-registry-v1\n"
+            "      asset_name: public_model-model.zip\n"
+            "      file_name: model.zip\n"
+            f"      sha256: {expected_sha256}\n"
+        ),
+        encoding="utf-8",
+    )
+    opened_urls: list[str] = []
+
+    class _Response(io.BytesIO):
+        """Context-manager byte stream returned by fake urlopen."""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            self.close()
+
+    def _fake_urlopen(url: str):
+        opened_urls.append(url)
+        return _Response(payload)
+
+    monkeypatch.setattr(registry.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(registry, "wandb", None)
+
+    resolved = registry.resolve_model_path(
+        "public_model",
+        registry_path=registry_path,
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert resolved == tmp_path / "cache" / "public_model" / "model.zip"
+    assert resolved.read_bytes() == payload
+    assert opened_urls == [
+        "https://github.com/ll7/robot_sf_ll7/releases/download/"
+        "artifact/models-2026-05-registry-v1/public_model-model.zip"
+    ]
+
+
+def test_download_from_github_release_reuses_valid_cached_file(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A cached public artifact should be reused only when its checksum matches."""
+    registry._LOGGED_CACHED_MODEL_ARTIFACTS.clear()
+    cache_dir = tmp_path / "cache"
+    cached = cache_dir / "public_model" / "model.zip"
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"public checkpoint")
+
+    def _fail_urlopen(url: str):  # pragma: no cover - should not be reached
+        raise AssertionError(url)
+
+    monkeypatch.setattr(registry.urllib.request, "urlopen", _fail_urlopen)
+    resolved = registry._download_from_github_release(
+        {
+            "model_id": "public_model",
+            "github_release": {
+                "repository": "ll7/robot_sf_ll7",
+                "tag": "artifact/models-2026-05-registry-v1",
+                "asset_name": "public_model-model.zip",
+                "file_name": "model.zip",
+                "sha256": registry.hashlib.sha256(b"public checkpoint").hexdigest(),
+            },
+        },
+        cache_dir=cache_dir,
+    )
+
+    assert resolved == cached
+    registry._LOGGED_CACHED_MODEL_ARTIFACTS.clear()
+
+
+def test_download_from_github_release_rejects_checksum_mismatch(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Downloaded public artifacts should be immutable through SHA256 verification."""
+
+    class _Response(io.BytesIO):
+        """Context-manager byte stream returned by fake urlopen."""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            self.close()
+
+    monkeypatch.setattr(
+        registry.urllib.request,
+        "urlopen",
+        lambda url: _Response(b"tampered checkpoint"),
+    )
+
+    with pytest.raises(ValueError, match="expected 0000"):
+        registry._download_from_github_release(
+            {
+                "model_id": "public_model",
+                "github_release": {
+                    "repository": "ll7/robot_sf_ll7",
+                    "tag": "artifact/models-2026-05-registry-v1",
+                    "asset_name": "public_model-model.zip",
+                    "file_name": "model.zip",
+                    "sha256": "0000",
+                },
+            },
+            cache_dir=tmp_path / "cache",
         )
 
 

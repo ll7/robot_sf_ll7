@@ -19,6 +19,9 @@ notebooks to insert/update entries without manual YAML editing.
   otherwise use either `wandb_run_path` or `wandb_entity` + `wandb_project` +
   `wandb_run_id` so auto-download works.
 - `wandb_file`: file to download from the run (defaults to `model.zip`).
+- `github_release`: public GitHub release pointer used for credential-free
+  hydration. Include `repository`, `tag`, `asset_name`, `file_name`, `sha256`,
+  and `size_bytes`.
 - `local_only`: mark entries that are only valid when the recorded `local_path`
   exists on the current machine.
 - `replacement_model_id`: optional migration target surfaced in local-only
@@ -41,6 +44,13 @@ models:
     wandb_run_id: run_id
     wandb_file: model.zip
     wandb_artifact_path: entity/project/artifact_name:version
+    github_release:
+      repository: ll7/robot_sf_ll7
+      tag: artifact/models-2026-05-registry-v1
+      asset_name: my_model_id-model.zip
+      file_name: model.zip
+      sha256: abc123...
+      size_bytes: 123456
     local_only: false
     replacement_model_id: my_model_id_v2
     tags: ["ppo", "socnav"]
@@ -60,14 +70,17 @@ path = resolve_model_path(
 )
 ```
 
-If the model is not present locally and W&B metadata is configured in
-`model/registry.yaml`, the helper will download the artifact into
-`output/model_cache/<model_id>/`.
+If the model is not present locally and `github_release` metadata is configured
+in `model/registry.yaml`, the helper downloads the public release asset into
+`output/model_cache/<model_id>/` and verifies the recorded SHA256 before returning
+the path. Entries without a public pointer can still use W&B metadata as a
+private/backfill provenance path.
 
 ### Durable vs local cache fields
 
-Treat `wandb_artifact_path` as the preferred durable checkpoint pointer. Treat
-`local_path` under `output/model_cache/` as a cache location that may be absent in a fresh checkout.
+Treat `github_release` as the preferred public checkpoint pointer when it is
+present. Treat `wandb_artifact_path` as the preferred lineage/backfill pointer.
+Treat `local_path` under `output/model_cache/` as a cache location that may be absent in a fresh checkout.
 If a paper-facing registry entry still has `commit: null`, the W&B run or artifact pointer is the
 recoverable source, but the missing source commit should remain visible as a provenance caveat until
 it is repaired.

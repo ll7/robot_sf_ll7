@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import shutil
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -104,7 +110,7 @@ def resolve_model_path(
     allow_download: bool = True,
     cache_dir: str | Path | None = None,
 ) -> Path:
-    """Resolve a local model path, downloading from W&B if needed.
+    """Resolve a local model path, downloading from a public release or W&B if needed.
 
     Returns:
         Path: Local filesystem path to the model artifact.
@@ -128,7 +134,115 @@ def resolve_model_path(
     if not allow_download:
         raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
 
+    if entry.get("github_release"):
+        return _download_from_github_release(entry, cache_dir=cache_dir)
+
     return _download_from_wandb(entry, cache_dir=cache_dir)
+
+
+def _cache_root_for_entry(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
+    """Return the per-model artifact cache directory for a registry entry."""
+    model_id = str(entry.get("model_id", "unknown-model"))
+    cache_root = Path(cache_dir) if cache_dir is not None else Path("output/model_cache")
+    cache_root = cache_root / model_id
+    cache_root.mkdir(parents=True, exist_ok=True)
+    return cache_root
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the SHA256 digest for a file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _github_release_download_url(release_pointer: dict[str, Any]) -> str:
+    """Build the public GitHub release asset URL from a registry pointer.
+
+    Returns:
+        str: Public release-asset download URL.
+    """
+    repository = str(release_pointer.get("repository", "") or "").strip()
+    tag = str(release_pointer.get("tag", "") or "").strip()
+    asset_name = str(release_pointer.get("asset_name", "") or "").strip()
+    if not repository or not tag or not asset_name:
+        raise ValueError("github_release pointer must include repository, tag, and asset_name.")
+    quoted_tag = urllib.parse.quote(tag, safe="/")
+    quoted_asset = urllib.parse.quote(asset_name, safe="")
+    return f"https://github.com/{repository}/releases/download/{quoted_tag}/{quoted_asset}"
+
+
+def _download_from_github_release(
+    entry: dict[str, Any],
+    *,
+    cache_dir: str | Path | None,
+) -> Path:
+    """Download and verify a model artifact from a public GitHub release.
+
+    Returns:
+        Path: Local filesystem path to the verified artifact.
+    """
+    release_pointer = entry.get("github_release")
+    if not isinstance(release_pointer, dict):
+        raise ValueError("Registry entry github_release pointer must be a mapping.")
+
+    expected_sha256 = str(release_pointer.get("sha256", "") or "").strip().lower()
+    if not expected_sha256:
+        raise ValueError("github_release pointer must include sha256.")
+
+    file_name = str(
+        release_pointer.get("file_name")
+        or entry.get("wandb_file")
+        or release_pointer.get("asset_name")
+        or "model.zip"
+    )
+    model_id = str(entry.get("model_id", "unknown-model"))
+    cache_root = _cache_root_for_entry(entry, cache_dir=cache_dir)
+    cached_path = cache_root / file_name
+    if cached_path.exists():
+        actual_sha256 = _sha256_file(cached_path)
+        if actual_sha256 == expected_sha256:
+            resolved_cached_path = cached_path.resolve()
+            if resolved_cached_path not in _LOGGED_CACHED_MODEL_ARTIFACTS:
+                _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
+                logger.info("Using cached model artifact: {}", cached_path)
+            return cached_path
+        logger.warning(
+            "Cached model artifact {} has sha256 {}; expected {}; redownloading.",
+            cached_path,
+            actual_sha256,
+            expected_sha256,
+        )
+
+    url = str(release_pointer.get("url") or "").strip() or _github_release_download_url(
+        release_pointer
+    )
+    logger.info("Downloading model artifact {} from {}", file_name, url)
+    try:
+        with tempfile.NamedTemporaryFile(dir=cache_root, delete=False) as handle:
+            tmp_path = Path(handle.name)
+            with urllib.request.urlopen(url) as response:
+                shutil.copyfileobj(response, handle)
+    except urllib.error.URLError as exc:
+        raise FileNotFoundError(
+            f"Public GitHub release asset for model '{model_id}' is unavailable at {url}. "
+            "Publish the asset or mark the registry entry non-public/local-only."
+        ) from exc
+
+    try:
+        actual_sha256 = _sha256_file(tmp_path)
+        if actual_sha256 != expected_sha256:
+            raise ValueError(
+                f"Downloaded model '{model_id}' from {url} has sha256 {actual_sha256}; "
+                f"expected {expected_sha256}."
+            )
+        tmp_path.replace(cached_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+    return cached_path
 
 
 def resolve_latest_wandb_model(  # noqa: PLR0913
@@ -257,10 +371,7 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
         raise RuntimeError("W&B not available; cannot download model artifact.")
 
     file_name = entry.get("wandb_file", "model.zip")
-    model_id = entry.get("model_id", "unknown-model")
-    cache_root = Path(cache_dir) if cache_dir is not None else Path("output/model_cache")
-    cache_root = cache_root / model_id
-    cache_root.mkdir(parents=True, exist_ok=True)
+    cache_root = _cache_root_for_entry(entry, cache_dir=cache_dir)
 
     cached_path = cache_root / file_name
     if cached_path.exists():

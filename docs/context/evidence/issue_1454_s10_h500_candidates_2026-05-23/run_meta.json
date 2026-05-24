@@ -1,0 +1,70 @@
+{
+  "repo": {
+    "remote": "https://github.com/ll7/robot_sf_ll7.git",
+    "branch": "issue-1454-s10-robustness",
+    "commit": "4941ac48f1f4e65053bbfcbbc94a55a336fad9ea"
+  },
+  "matrix_path": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "scenario_matrix_hash": "8973cf0d26dd",
+  "seed_policy": {
+    "mode": "seed-set",
+    "seed_set": "paper_eval_s10",
+    "seeds": [],
+    "resolved_seeds": [
+      111,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120
+    ],
+    "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml"
+  },
+  "preflight_artifacts": {
+    "validate_config": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/preflight/validate_config.json",
+    "preview_scenarios": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/preflight/preview_scenarios.json",
+    "amv_coverage_json": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/amv_coverage_summary.json",
+    "amv_coverage_md": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/amv_coverage_summary.md",
+    "comparability_json": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/comparability_matrix.json",
+    "comparability_md": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/comparability_matrix.md",
+    "seed_variability_json": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/seed_variability_by_scenario.json",
+    "seed_variability_csv": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/statistical_sufficiency.json"
+  },
+  "snqi_artifacts": {
+    "diagnostics_json": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/snqi_diagnostics.json",
+    "diagnostics_md": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/snqi_diagnostics.md",
+    "sensitivity_csv": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/snqi_sensitivity.csv"
+  },
+  "seed_variability_artifacts": {
+    "json": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/seed_variability_by_scenario.json",
+    "csv": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/reports/statistical_sufficiency.json"
+  },
+  "seed_variability": {
+    "metrics": [
+      "success",
+      "collisions",
+      "near_misses",
+      "time_to_goal_norm",
+      "snqi"
+    ],
+    "row_count": 576,
+    "bootstrap_method": "bootstrap_mean_over_seed_means",
+    "bootstrap_level": 0.95,
+    "bootstrap_samples": 300,
+    "seed": 123
+  },
+  "campaign_id": "issue1454-s10-h500-candidates",
+  "started_at_utc": "2026-05-22T14:48:37.106517Z",
+  "finished_at_utc": "2026-05-23T00:23:44.799275Z",
+  "invoked_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates",
+  "runtime_sec": 34507.69299255498,
+  "episodes_per_second": 0.16691930119010615
+}

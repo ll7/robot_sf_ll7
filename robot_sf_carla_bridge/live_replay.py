@@ -700,22 +700,28 @@ def _oracle_replay_metrics(
         dict[str, bool | float]: Metric fields that the CARLA parity adapter can compare.
     """
     robot_radius = float(cast("dict[str, Any]", robot.get("footprint", {})).get("radius_m", 0.0))
+    pedestrian_radii = [
+        float(cast("dict[str, Any]", ped.get("footprint", {})).get("radius_m", 0.0))
+        for ped in pedestrians
+    ]
+    obstacle_bounds: list[dict[str, float]] = []
+    for obstacle in cast("list[dict[str, Any]]", static_geometry.get("obstacles", [])):
+        bounds = _axis_aligned_rectangle_bounds(obstacle)
+        if bounds is not None:
+            obstacle_bounds.append(bounds)
+
     min_clearance = math.inf
     collision = False
     for robot_pose, step_pedestrians in zip(robot_samples, pedestrian_samples, strict=True):
-        for pedestrian, pedestrian_pose in zip(pedestrians, step_pedestrians, strict=True):
-            pedestrian_radius = float(
-                cast("dict[str, Any]", pedestrian.get("footprint", {})).get("radius_m", 0.0)
-            )
+        for pedestrian_pose, pedestrian_radius in zip(
+            step_pedestrians, pedestrian_radii, strict=True
+        ):
             clearance = (
                 _planar_distance(robot_pose, pedestrian_pose) - robot_radius - pedestrian_radius
             )
             min_clearance = min(min_clearance, clearance)
             collision = collision or clearance <= 0.0
-        for obstacle in cast("list[dict[str, Any]]", static_geometry.get("obstacles", [])):
-            bounds = _axis_aligned_rectangle_bounds(obstacle)
-            if bounds is None:
-                continue
+        for bounds in obstacle_bounds:
             clearance = _point_rectangle_clearance(robot_pose, bounds) - robot_radius
             min_clearance = min(min_clearance, clearance)
             collision = collision or clearance <= 0.0

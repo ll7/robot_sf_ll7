@@ -30,7 +30,7 @@
     "remote": "https://github.com/ll7/robot_sf_ll7.git"
   },
   "config_hash": "b5a3a8b80493c728",
-  "invoked_command": "/home/luttkule/git/robot_sf_ll7/.venv/bin/python3 /home/luttkule/git/robot_sf_ll7/scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates",
+  "invoked_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates",
   "paper_facing": false,
   "paper_profile_version": "paper-matrix-v1",
   "amv_profile_name": "amv-paper-v1",

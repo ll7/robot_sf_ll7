@@ -116,7 +116,12 @@ def test_issue_1454_stage_b_scenario_horizon_s10_contract() -> None:
     ]
     assert len(horizon_meta) == 48
     assert sum(1 for row in horizon_meta if row["status"] == "planner_blocked") == 3
-    assert {scenario["simulation_config"]["max_episode_steps"] for scenario in scenarios} <= set(
+    max_episode_steps_values = [
+        scenario["simulation_config"]["max_episode_steps"] for scenario in scenarios
+    ]
+    assert min(max_episode_steps_values) == 102
+    assert max(max_episode_steps_values) == 600
+    assert set(max_episode_steps_values) <= set(
         range(1, 601)
     )
 
@@ -164,3 +169,6 @@ def test_issue_1454_candidate_h500_config_keeps_exploratory_rows_separate() -> N
     candidate_rows = cfg.planners[len(FUNCTIONING_STAGE_A_KEYS) :]
     assert {planner.algo for planner in candidate_rows} == {"hybrid_rule_local_planner"}
     assert all(planner.algo_config_path is not None for planner in candidate_rows)
+    for planner in candidate_rows:
+        config_file = ROOT / str(planner.algo_config_path)
+        assert config_file.is_file(), f"algo_config_path not found: {config_file}"

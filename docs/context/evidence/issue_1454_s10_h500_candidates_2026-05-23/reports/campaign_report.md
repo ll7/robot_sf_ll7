@@ -9,7 +9,7 @@
 - Runtime sec: `34507.69299255498`
 - Episodes/sec: `0.16691930119010615`
 - Interpretation profile: `issue-1454-s10-scenario-horizons-h500-candidates`
-- Command: `/home/luttkule/git/robot_sf_ll7/.venv/bin/python3 /home/luttkule/git/robot_sf_ll7/scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates`
+- Command: `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates`
 
 ## Planner Summary
 

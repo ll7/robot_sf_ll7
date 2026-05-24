@@ -5,7 +5,7 @@
   "failed_jobs": 0,
   "skipped_jobs": 0,
   "failures": [],
-  "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/socnav_sampling__differential_drive/episodes.jsonl",
+  "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/socnav_sampling__differential_drive/episodes.jsonl",
   "algorithm_readiness": {
     "name": "socnav_sampling",
     "tier": "experimental",

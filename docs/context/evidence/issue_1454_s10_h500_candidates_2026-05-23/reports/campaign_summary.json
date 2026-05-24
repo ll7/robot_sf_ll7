@@ -9,7 +9,7 @@
     "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
     "scenario_matrix_hash": "8973cf0d26dd",
     "git_hash": "4941ac48f1f4e65053bbfcbbc94a55a336fad9ea",
-    "invoked_command": "/home/luttkule/git/robot_sf_ll7/.venv/bin/python3 /home/luttkule/git/robot_sf_ll7/scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates",
+    "invoked_command": ".venv/bin/python3 scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates",
     "runtime_sec": 34507.69299255498,
     "episodes_per_second": 0.16691930119010615,
     "total_episodes": 5760,
@@ -708,7 +708,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/goal__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/goal__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "goal",
           "tier": "baseline-ready",
@@ -1688,7 +1688,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/social_force__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/social_force__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "social_force",
           "tier": "baseline-ready",
@@ -2666,7 +2666,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/orca__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/orca__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "orca",
           "tier": "baseline-ready",
@@ -3664,7 +3664,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/ppo__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/ppo__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "ppo",
           "tier": "experimental",
@@ -4677,7 +4677,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/prediction_planner__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/prediction_planner__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "prediction_planner",
           "tier": "experimental",
@@ -5669,7 +5669,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/socnav_sampling__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/socnav_sampling__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "socnav_sampling",
           "tier": "experimental",
@@ -6647,7 +6647,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/sacadrl__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/sacadrl__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "sacadrl",
           "tier": "experimental",
@@ -7625,7 +7625,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/hybrid_rule_v3_fast_progress__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/hybrid_rule_v3_fast_progress__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "hybrid_rule_local_planner",
           "tier": "experimental",
@@ -8603,7 +8603,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "hybrid_rule_local_planner",
           "tier": "experimental",
@@ -9581,7 +9581,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "hybrid_rule_local_planner",
           "tier": "experimental",
@@ -10559,7 +10559,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/scenario_adaptive_hybrid_orca_v1__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/scenario_adaptive_hybrid_orca_v1__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "hybrid_rule_local_planner",
           "tier": "experimental",
@@ -12205,7 +12205,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/camera_ready/issue1454-s10-h500-candidates/runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "hybrid_rule_local_planner",
           "tier": "experimental",

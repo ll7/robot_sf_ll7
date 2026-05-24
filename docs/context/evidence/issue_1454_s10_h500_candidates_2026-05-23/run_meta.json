@@ -64,7 +64,7 @@
   "campaign_id": "issue1454-s10-h500-candidates",
   "started_at_utc": "2026-05-22T14:48:37.106517Z",
   "finished_at_utc": "2026-05-23T00:23:44.799275Z",
-  "invoked_command": "/home/luttkule/git/robot_sf_ll7/.venv/bin/python3 /home/luttkule/git/robot_sf_ll7/scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates",
+  "invoked_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml --campaign-id issue1454-s10-h500-candidates",
   "runtime_sec": 34507.69299255498,
   "episodes_per_second": 0.16691930119010615
 }

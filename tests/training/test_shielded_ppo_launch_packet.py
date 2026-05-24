@@ -15,6 +15,8 @@ from robot_sf.training.shielded_ppo_launch_packet import (
 )
 from scripts.validation.validate_shielded_ppo_launch_packet import main as validate_cli_main
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _write_packet(tmp_path: Path, packet: dict[str, object]) -> Path:
     path = tmp_path / "packet.yaml"
@@ -110,7 +112,8 @@ def _reference(fixture: Path, digest: str, candidate_id: str) -> dict[str, objec
 def test_issue_1396_launch_packet_validates() -> None:
     """The checked-in #1396 launch packet should pass local preflight."""
     report = validate_launch_packet(
-        Path("configs/training/shielded_ppo_issue_1396_launch_packet.yaml")
+        _REPO_ROOT / "configs/training/shielded_ppo_issue_1396_launch_packet.yaml",
+        repo_root=_REPO_ROOT,
     )
 
     assert report["status"] == "valid"
@@ -155,7 +158,9 @@ def test_validate_launch_packet_cli_reports_json() -> None:
     exit_code = validate_cli_main(
         [
             "--config",
-            "configs/training/shielded_ppo_issue_1396_launch_packet.yaml",
+            str(_REPO_ROOT / "configs/training/shielded_ppo_issue_1396_launch_packet.yaml"),
+            "--repo-root",
+            str(_REPO_ROOT),
             "--json",
         ]
     )

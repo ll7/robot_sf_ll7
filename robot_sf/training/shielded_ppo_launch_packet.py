@@ -299,12 +299,14 @@ def _validate_artifact_list(
             errors.append(f"{key} entries must be non-empty strings")
             continue
         path_text = raw.strip()
-        if path_text.startswith("output/") or "/output/" in path_text:
-            errors.append(f"{key} must not depend on worktree-local output: {path_text}")
         if path_text.startswith(_DURABLE_URI_PREFIXES):
             durable_count += 1
             continue
-        _validate_checksum(path_text, _resolve_path(path_text, repo_root), checksums, errors)
+        local_path = _resolve_path(path_text, repo_root)
+        output_dir = (repo_root / "output").resolve()
+        if local_path.resolve() == output_dir or local_path.resolve().is_relative_to(output_dir):
+            errors.append(f"{key} must not depend on worktree-local output: {path_text}")
+        _validate_checksum(path_text, local_path, checksums, errors)
     if durable_count == 0:
         errors.append(f"{key} must include at least one durable artifact URI")
 
@@ -322,7 +324,11 @@ def _validate_checksum(
     if not isinstance(expected, str) or not expected.strip():
         errors.append(f"checksums missing SHA-256 entry for {path_text}")
         return
-    actual = hashlib.sha256(local_path.read_bytes()).hexdigest()
+    sha256 = hashlib.sha256()
+    with local_path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            sha256.update(chunk)
+    actual = sha256.hexdigest()
     if actual != expected.strip().lower():
         errors.append(f"checksum mismatch for {path_text}: expected {expected}, got {actual}")
 

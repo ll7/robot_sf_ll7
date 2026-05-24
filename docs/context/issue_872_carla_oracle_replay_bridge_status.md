@@ -34,14 +34,20 @@ Completed CARLA bridge pieces:
   to a robot vehicle spawn rejection.
 - Issue #1440 proves the certified payload can reach live `oracle-replay` after an explicit CARLA
   map spawn projection for the robot vehicle.
+- Issue #1442 / PR #1466 records fresh native/aligned replay evidence under the accepted #1444
+  contract. The existing certified #1111 payload still requires adapted replay with a large
+  robot-spawn projection, while a generated CARLA-aligned probe reaches native `oracle-replay`.
+- Issue #1467 / PR #1468 emits native live-replay metrics from CARLA oracle replay summaries and
+  makes the parity comparator consume Docker runtime summaries shaped as `replay.metrics`.
 - Issue #1467 adds conservative T1 replay metric emission for native replay outputs and proves the
   Docker-runtime JSON can produce comparable parity rows for a generated CARLA-aligned native
   metric probe.
 
 ## Claim Boundary
 
-The current stack now supports an adapted live CARLA replay for the certified payload. It is still
-not native simulator-transfer or metric-parity evidence.
+The current stack now supports adapted live CARLA replay for the certified payload, native
+CARLA-aligned replay probing, and limited native replay metric comparison. It is still not broad
+simulator-transfer evidence.
 
 Specifically:
 
@@ -52,6 +58,12 @@ Specifically:
   Robot-SF/CARLA metric parity.
 - The #1440 projection moved the robot spawn about `18.191 m`, so comparable trajectory metrics are
   intentionally unavailable.
+- The generated CARLA-aligned native probe from #1442 shows that native spawn can run, but it is
+  not the same as regenerating the durable certified #1111 fixture as native metric-bearing
+  evidence.
+- Current comparable native replay metrics are limited to fields emitted by the live replay
+  summary, such as success, collision, and intervention rate. They do not justify broader transfer
+  claims.
 - The #1467 native metric probe is comparable smoke evidence, not a broad CARLA transfer claim.
   It proves the metric-emission path, while broader claims still require a durable certified
   native/aligned scenario fixture and richer metric coverage.
@@ -63,6 +75,9 @@ The #872 definition of done still needs:
 - A native or explicitly map-aligned CARLA replay whose coordinate semantics are comparable to
   Robot-SF.
 - Comparable Robot-SF vs CARLA trajectory metrics from that native/map-aligned replay.
+- A regenerated native metric-bearing certified fixture, or an explicit maintainer decision that
+  the generated CARLA-aligned native probe plus #1467 metrics are sufficient for the parent closure
+  rule after the child PRs land.
 - Documentation that separates setup, failed, adapted replay, native replay, degraded, and
   metric-parity claims. The coordinate-alignment contract in
   [#1444](./issue_1444_carla_coordinate_alignment_contract.md) now provides this taxonomy.
@@ -79,6 +94,12 @@ The #872 definition of done still needs:
   records adapted live replay evidence.
 - [#1444](./issue_1444_carla_coordinate_alignment_contract.md) defines the conservative replay-mode
   taxonomy and projection tolerance required before any Robot-SF/CARLA metric parity claim.
+- [#1442](https://github.com/ll7/robot_sf_ll7/issues/1442) / PR #1466 owns the native/aligned replay
+  evidence gate.
+- [#1467](https://github.com/ll7/robot_sf_ll7/issues/1467) / PR #1468 owns native replay metric
+  emission and comparison support.
+- Any broader multi-scenario CARLA replay campaign should remain a separate follow-up child issue
+  rather than extending this parent closure bar.
 - [#1442](https://github.com/ll7/robot_sf_ll7/issues/1442) is the active parity gate.
 - [#1467](https://github.com/ll7/robot_sf_ll7/issues/1467) records the native replay metric-emission
   slice and comparable smoke proof.
@@ -87,5 +108,9 @@ The #872 definition of done still needs:
 
 This status note is documentation only. The supporting implementation evidence for the current
 state is recorded in
+[`issue_1440_carla_spawn_projection.md`](issue_1440_carla_spawn_projection.md), PR #1466, and
+PR #1468. The parent should not be marked complete from non-CARLA checks, setup-only evidence,
+server-connectivity proof, static-geometry code support, adapted replay alone, or native probe
+metrics that do not satisfy the accepted closure fixture boundary.
 [`issue_1440_carla_spawn_projection.md`](issue_1440_carla_spawn_projection.md) and
 [`issue_1467_carla_replay_metrics.md`](issue_1467_carla_replay_metrics.md).

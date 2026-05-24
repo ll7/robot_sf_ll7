@@ -121,9 +121,7 @@ def test_issue_1454_stage_b_scenario_horizon_s10_contract() -> None:
     ]
     assert min(max_episode_steps_values) == 102
     assert max(max_episode_steps_values) == 600
-    assert set(max_episode_steps_values) <= set(
-        range(1, 601)
-    )
+    assert set(max_episode_steps_values) <= set(range(1, 601))
 
 
 def test_issue_1454_stage_configs_keep_primary_comparison_matched() -> None:

@@ -1,0 +1,81 @@
+schema_version: oracle-imitation-launch-packet.v1
+dataset_id: issue_1397_oracle_imitation_v1
+source_candidate: hybrid_rule_v3_static_margin0_waypoint2
+source_candidate_config: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+source_report: docs/context/policy_search/reports/2026-04-30_best_non_learning_local_policy_report.md
+split_contract: docs/context/policy_search/contracts/oracle_imitation_dataset_split.md
+scenario_source: configs/policy_search/nominal_sanity_matrix.yaml
+scenario_ids:
+  - planner_sanity_simple
+  - classic_head_on_corridor_low
+  - classic_crossing_low
+  - classic_doorway_low
+  - classic_overtaking_low
+  - francis2023_following_human
+seed_set_refs:
+  manifest: configs/benchmarks/seed_sets_v1.yaml
+  validation: dev
+  evaluation: eval
+  train_excludes: paper_eval_s20
+seeds_by_split:
+  train: [201, 202, 203, 204, 205, 206]
+  validation: [101, 102, 103]
+  evaluation: [111, 112, 113]
+episode_ids_by_split:
+  train:
+    - train__planner_sanity_simple__seed201
+    - train__classic_head_on_corridor_low__seed202
+    - train__classic_crossing_low__seed203
+    - train__classic_doorway_low__seed204
+    - train__classic_overtaking_low__seed205
+    - train__francis2023_following_human__seed206
+  validation:
+    - validation__planner_sanity_simple__seed101
+    - validation__classic_crossing_low__seed102
+    - validation__classic_doorway_low__seed103
+  evaluation:
+    - evaluation__planner_sanity_simple__seed111
+    - evaluation__classic_crossing_low__seed112
+    - evaluation__classic_doorway_low__seed113
+hard_slice_assignment:
+  - slice_id: stress_slice
+    split: validation
+    predeclared_for_evaluation: false
+    reason: "Use stress-slice style failures for gate tuning, not final evaluation."
+  - slice_id: corridor_deadlock_recovery
+    split: train
+    predeclared_for_evaluation: false
+    reason: "Recovery relabeling examples belong to train unless a holdout slice is predeclared."
+relabeling_policy: null
+exclusion_rules:
+  - "Exclude every validation/evaluation seed from train, including paper_eval_s20."
+  - "Exclude hard-slice recovery examples from evaluation unless predeclared in this packet."
+provenance: >
+  Pre-Slurm launch packet for #1397. The selected oracle source is the best current
+  non-learning local policy from docs/context/policy_search/reports/
+  2026-04-30_best_non_learning_local_policy_report.md. This packet validates split,
+  artifact, checksum, and relabeling contracts only; it does not generate the full dataset.
+created_at: "2026-05-24T08:55:00+00:00"
+generating_commit: e14e2f8bc2058d9f0e071219629915dd5b5dd5a8
+artifact_paths:
+  dry_run_fixture: docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/dry_run_dataset_stub.json
+  future_dataset_manifest_uri: wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_manifest:pending
+  future_dataset_npz_uri: wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_npz:pending
+checksums:
+  docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/dry_run_dataset_stub.json: eb5ef938d15725ff29a013a196216d093dd549ae58ae805e642c98441777529f
+artifact_promotion_policy:
+  raw_outputs_are_durable: false
+  required_before_collection:
+    - "Replace :pending W&B artifact aliases with concrete aliases or run ids."
+    - "Record checksums for the generated dataset and manifest before imitation training starts."
+collection_command_shape: >
+  uv run python scripts/training/collect_expert_trajectories.py --dataset-id
+  issue_1397_oracle_imitation_v1 --policy-id hybrid_rule_v3_static_margin0_waypoint2
+  --scenario-config configs/policy_search/nominal_sanity_matrix.yaml --seeds 201 202 203
+  204 205 206
+local_preflight_command: >
+  uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config
+  configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml --json
+slurm_command_shape: >
+  Submit dataset collection only from a follow-up issue after local preflight passes and
+  concrete durable artifact aliases are assigned; do not submit Slurm from #1397.

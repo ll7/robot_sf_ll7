@@ -134,6 +134,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[SLURM Multi-Worktree Branch Workflow](./context/slurm_multi_worktree_branch_workflow.md)** - Submit jobs from multiple active branches on one login node without branch-switch ambiguity
 * **[SLURM Resource Audit](./dev/slurm_resource_audit.md)** - Inspect Slurm allocations, query W&B system metrics correctly, and decide whether CPU, memory, or GPU requests are oversized
 * **[Model Registry](../model/registry.md)** - Track trained policies and load them on-demand via `robot_sf.models`
+* **[Model Registry Publication Workflow](./model_registry_publication.md)** - Preserve promoted/paper-facing policies as public GitHub release assets with checksums and registry pointers
 * **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
 * **[SocNav structured observation example](../examples/advanced/18_socnav_structured_observation.py)** - Run RobotEnv with SocNavBench-style observations and a simple planner adapter.
 * **[SocNav structured observation how-to](./dev/issues/socnav_structured_observation.md)** - Enable `ObservationMode.SOCNAV_STRUCT` and use planner adapters (lightweight + SocNavBench wrapper).

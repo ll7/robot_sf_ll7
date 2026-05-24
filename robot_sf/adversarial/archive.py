@@ -22,6 +22,18 @@ _SCALAR_FIELDS = (
     ("pedestrian_delay_s", ("pedestrian_delay_s",)),
 )
 
+_EXCLUDED_PRIMARY_FAILURES = frozenset({"", "success", "invalid_candidate", "simulation_error"})
+
+
+def _build_selection_description() -> str:
+    """Return the selection metadata string derived from the filtering constants."""
+    excluded = _EXCLUDED_PRIMARY_FAILURES - {""}
+    excluded_list = ", ".join(sorted(excluded))
+    return (
+        "not null, not empty, status is not not_evaluated, "
+        f"and primary_failure is not one of {excluded_list}"
+    )
+
 
 def curate_failure_archive(
     manifest_paths: list[str | Path],
@@ -65,9 +77,7 @@ def curate_failure_archive(
         "config": {
             "source_manifests": [path.as_posix() for path in manifests],
             "selection": {
-                "failure_attribution.primary_failure": (
-                    "not null and not one of success, invalid_candidate, simulation_error"
-                ),
+                "failure_attribution.primary_failure": _build_selection_description(),
             },
             "grouping": [
                 "config.policy",
@@ -116,12 +126,7 @@ def _is_archivable_failure(candidate_payload: dict[str, Any]) -> bool:
         return False
     if str(attribution.get("status", "")).strip().lower() == "not_evaluated":
         return False
-    return str(primary).strip().lower() not in {
-        "",
-        "success",
-        "invalid_candidate",
-        "simulation_error",
-    }
+    return str(primary).strip().lower() not in _EXCLUDED_PRIMARY_FAILURES
 
 
 def _archive_entry(

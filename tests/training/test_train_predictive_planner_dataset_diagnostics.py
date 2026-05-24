@@ -123,6 +123,31 @@ def test_should_update_val_loss_best_skips_after_proxy_selection() -> None:
     )
 
 
+def test_proxy_eval_fails_when_jsonl_artifact_missing(monkeypatch, tmp_path: Path) -> None:
+    """Proxy evaluation should fail closed when the benchmark runner writes no JSONL."""
+
+    def _fake_run_map_batch(*_args, **_kwargs) -> None:
+        """Simulate a runner failure that returns without materializing the JSONL."""
+        return None
+
+    monkeypatch.setattr(trainer, "run_map_batch", _fake_run_map_batch)
+    args = trainer.argparse.Namespace(
+        output_dir=tmp_path,
+        proxy_scenario_matrix=tmp_path / "scenarios.yaml",
+        proxy_seed_manifest=None,
+        proxy_horizon=12,
+        proxy_dt=0.1,
+        proxy_workers=1,
+    )
+
+    with pytest.raises(RuntimeError, match="Proxy evaluation expected JSONL was not created"):
+        trainer._run_proxy_eval(
+            checkpoint_path=tmp_path / "predictive_model.pt",
+            args=args,
+            epoch=5,
+        )
+
+
 def test_source_dataset_ids_prefers_manifest_dataset_id(tmp_path: Path) -> None:
     """Training provenance should use the sibling dataset manifest id when present."""
     dataset = tmp_path / "predictive_rollouts_mixed.npz"

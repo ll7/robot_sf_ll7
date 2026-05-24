@@ -13,6 +13,7 @@ from robot_sf.benchmark.stress_uncertainty_coverage import (
     LEGACY_AGGREGATE_SCHEMA_VERSION,
     SCHEMA_VERSION,
     StressUncertaintyCoverageError,
+    _build_metric_groups,
     build_stress_uncertainty_coverage_report_from_jsonl,
     load_stress_uncertainty_coverage_payload,
 )
@@ -190,3 +191,58 @@ def test_stress_coverage_report_cli_writes_report(
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["schema_version"] == SCHEMA_VERSION
     assert payload["report_id"] == "cli-report"
+
+
+def test_missing_success_metric_counts_against_total_episodes(tmp_path: Path) -> None:
+    """Missing success metrics should count as 0.0, not disappear from the denominator."""
+    records = [
+        {
+            "episode_id": "has-success",
+            "scenario_id": "sc-a",
+            "scenario_params": {"density_label": "low"},
+            "outcome": {"route_complete": True, "collision_event": False},
+            "metrics": {
+                "collisions": 0,
+                "min_distance": 2.0,
+                "comfort_exposure": 0.1,
+                "success": 1,
+                "time_to_goal_norm": 0.5,
+            },
+        },
+        {
+            "episode_id": "missing-success",
+            "scenario_id": "sc-b",
+            "scenario_params": {"density_label": "low"},
+            "outcome": {"route_complete": True, "collision_event": False},
+            "metrics": {
+                "collisions": 0,
+                "min_distance": 1.5,
+                "comfort_exposure": 0.2,
+                "time_to_goal_norm": 0.7,
+            },
+        },
+    ]
+    jsonl_path = tmp_path / "mixed_success.jsonl"
+    jsonl_path.write_text(
+        "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+        encoding="utf-8",
+    )
+
+    report = build_stress_uncertainty_coverage_report_from_jsonl(
+        jsonl_path,
+        report_id="mixed-success",
+        campaign_config_hash="cfg-sha256",
+        scenario_matrix_hash="matrix-sha256",
+    )
+
+    assert report["metric_groups"]["efficiency"]["success"] == pytest.approx(0.5)
+
+
+class TestCollisionRateZeroTotalSafety:
+    """Prove collision_rate is safe when total=0."""
+
+    def test_collision_rate_zero_total_returns_zero(self) -> None:
+        """_build_metric_groups should return collision_rate=0.0 when total=0."""
+        result = _build_metric_groups([], [])
+        assert result["safety"]["collision_rate"] == 0.0
+        assert result["safety"]["collisions"] == 0

@@ -264,6 +264,19 @@ def _mean(values: list[float]) -> float | None:
     return float(sum(values) / len(values)) if values else None
 
 
+def _success_values_relative_to_total(records: list[dict[str, Any]]) -> list[float]:
+    """Build one success value per episode, treating missing values as failures.
+
+    Returns:
+        Per-record success values with missing or non-finite success set to ``0.0``.
+    """
+    values: list[float] = []
+    for record in records:
+        success_val = _number_or_none(_nested_value(record, "metrics", "success"))
+        values.append(success_val if success_val is not None else 0.0)
+    return values
+
+
 def _count_collisions(records: list[dict[str, Any]]) -> int:
     """Count collision episodes from metrics first, then outcome flags.
 
@@ -325,15 +338,7 @@ def _build_metric_groups(
     near_misses = _count_near_misses(records)
     min_distance = _mean(_metric_values(records, "min_distance", "min_distance_m"))
     comfort_exposure = _mean(_metric_values(records, "comfort_exposure"))
-    success_values = _metric_values(records, "success")
-    if not success_values:
-        success_values = [
-            1.0
-            if bool(_nested_value(record, "outcome", "route_complete"))
-            and not bool(_nested_value(record, "outcome", "collision_event"))
-            else 0.0
-            for record in records
-        ]
+    success_values = _success_values_relative_to_total(records)
     time_to_goal_norm = _mean(_metric_values(records, "time_to_goal_norm"))
 
     if min_distance is None:
@@ -346,7 +351,7 @@ def _build_metric_groups(
     return {
         "safety": {
             "collisions": collisions,
-            "collision_rate": collisions / total,
+            "collision_rate": collisions / total if total else 0.0,
             "near_misses": near_misses,
             "min_distance": min_distance,
         },
@@ -354,7 +359,7 @@ def _build_metric_groups(
             "comfort_exposure": comfort_exposure,
         },
         "efficiency": {
-            "success": _mean(success_values),
+            "success": sum(success_values) / total if total else 0.0,
             "time_to_goal_norm": time_to_goal_norm,
         },
     }

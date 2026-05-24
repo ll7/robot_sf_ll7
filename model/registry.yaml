@@ -1,393 +1,479 @@
 version: 1
 models:
-  - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
-    display_name: PPO issue-791 leader, eval-aligned large-capacity grid_socnav
-      (2026-04-17, promoted)
-    local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
-    config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
-    commit: null
-    wandb_run_id: ibo3aqus
-    wandb_run_path: ll7/robot_sf/ibo3aqus
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    wandb_artifact_path: ll7/robot_sf/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity-best-success:v9
-    tags:
-      - ppo
-      - issue-791
-      - eval-aligned
-      - large-capacity
-      - grid-socnav
-      - reward-curriculum
-      - predictive-foresight
-      - promoted
-      - canonical-baseline
-    notes:
-      - Promoted on 2026-04-28 as the canonical PPO benchmark baseline; replaces
-        BR-06 v3 as the default for configs/baselines/ppo_15m_grid_socnav.yaml.
-      - Best eval (70 episodes, ppo_full_maintained_eval_v1) success_rate=0.929,
-        collision_rate=0.071, SNQI=0.353 at step 9,961,472 / 10,000,000.
-      - Source SLURM job 11724 (auxme-imech093, l40s, 8h04m).
-      - Caveat policy is in-distribution on the eval superset; reported as
-        benchmark-set performance, not OOD generalization.
-      - Promotion verdict
-        docs/context/issue_791_best_policy_verdict_2026_04_21.md
-      - Narrow paper claim
-        memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md
-      - Durable checkpoint source is the W&B artifact path above. The local_path
-        and best_summary references are cache paths under output/ and may be
-        absent in a fresh checkout.
-      - Best summary
-        output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/best_summary.json.
-  - model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
-    display_name: PPO BR-06 v3 all-maps randomized (2026-03-04, issue-576 closeout)
-    local_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
-    config_path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
-    commit: 9fb131b6d7ff062887caab33ca8713ae05167ebe
-    wandb_run_id: b60iopxt
-    wandb_run_path: ll7/robot_sf/b60iopxt
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    tags:
-      - ppo
-      - br06
-      - v3-semantics
-      - issue-576-closeout
-      - all-maps
-      - randomized-seeds
-    notes:
-      - Issue-576 closeout artifact; remains the historical pin for
-        configs/baselines/ppo_issue_576_br06_v2_15m.yaml.
-      - Replaced as the canonical PPO benchmark baseline by
-        ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
-        on 2026-04-28.
-      - Full 15M run finished under route-complete success semantics.
-      - Full policy sweep
-        output/benchmarks/20260304_184717_policy_analysis_ppo/report.md
-      - Analysis
-        model/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/training_analysis.md
-  - model_id: ppo_expert_br06_v2_15m_all_maps_20260302T152332
-    display_name: PPO expert BR-06 v2 all-maps (2026-03-02)
-    local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260302T152332/model.zip
-    config_path: configs/training/ppo_imitation/expert_ppo.yaml
-    commit: null
-    wandb_run_id: asym0xo2
-    wandb_run_path: ll7/robot_sf/asym0xo2
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    tags:
-      - ppo
-      - br06
-      - v2-semantics
-      - deprecated
-      - all-maps
-      - diffdrive
-      - grid-obs
-    notes:
-      - Deprecated and replaced by
-        ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200.
-      - Run ended at ~7.1M steps (W&B state=killed), not full 15M budget.
-      - Training analysis: model/ppo_expert_br06_v2_15m_all_maps_20260302T152332/training_analysis.md
-  - model_id: ppo_expert_br06_v2_15m_all_maps_20260303T074433
-    display_name: PPO expert BR-06 v2 all-maps (2026-03-03 candidate)
-    local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260303T074433/model.zip
-    config_path: configs/training/ppo/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
-    commit: 436368d78f351b7a30fcbe873fd82b380f0b30a8
-    wandb_run_id: c4s6142g
-    wandb_run_path: ll7/robot_sf/c4s6142g
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    tags:
-      - ppo
-      - br06
-      - v2-semantics
-      - candidate
-      - all-maps
-    notes:
-      - Full 15M run finished.
-      - Not promoted: high collision on classic scenarios and one
-          integrity-contradiction error episode.
-      - Analysis: model/ppo_expert_br06_v2_15m_all_maps_20260303T074433/training_analysis.md
-  - model_id: ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311
-    display_name: PPO BR-06 v8 num_envs=8 benchmark best checkpoint (2026-03-11 candidate)
-    local_path: output/model_cache/ppo_num_envs_benchmark_candidates/08/model.zip
-    config_path: configs/training/ppo/benchmark_num_envs/expert_ppo_issue_576_br06_v8_num_envs_benchmark_08_1m.yaml
-    commit: 63853a635c521fc5f2d5c0995cfd8bd3d190b89d
-    wandb_run_id: mwmtrog8
-    wandb_run_path: ll7/robot_sf/mwmtrog8
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    tags:
-      - ppo
-      - br06
-      - v8-success-priority
-      - candidate
-      - benchmark-num-envs
-      - num-envs-8
-      - best-success
-    notes:
-      - Best intermediate checkpoint from the imech156-u num_envs benchmark run.
-      - W&B best-checkpoint summary: output/model_cache/ppo_num_envs_benchmark_candidates/08/best_checkpoint_summary.json
-      - Full policy sweep: output/benchmarks/20260311_policy_analysis_ppo_v8_numenv08_best/report.md
-      - Full 141-episode sweep slightly outperformed the promoted PPO v3
-        baseline on success and collision rate.
-  - model_id: ppo_expert_br06_v10_best_27dbe5xu_20260317
-    display_name: PPO BR-06 v10 best-success checkpoint (2026-03-17 carry-forward candidate)
-    local_path: output/model_cache/wandb_artifacts/27dbe5xu_best_success/model.zip
-    config_path: configs/training/ppo/expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml
-    commit: null
-    wandb_run_id: 27dbe5xu
-    wandb_run_path: ll7/robot_sf/27dbe5xu
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    tags:
-      - ppo
-      - br06
-      - v10-policy-analysis-select
-      - candidate
-      - best-success
-      - carry-forward
-    notes:
-      - Stronger benchmark-gate candidate than v11_best_j0m2cm0w on the
-        classic_interactions gate.
-      - Best-success artifact from W&B run 27dbe5xu.
-      - Benchmark gate with SNQI: output/benchmarks/20260317_benchmark_gate_compare_with_snqi/comparison.json
-      - Not promoted; full 141-episode benchmark is still too weak in absolute
-        terms because max_steps remains high.
-  - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417
-    display_name: PPO issue-791 Wave-5 runner-up (eval-aligned + reward curriculum +
-      n_steps=4096, 2026-04-17)
-    local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096_20260417/model.zip
-    config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml
-    commit: null
-    wandb_run_id: lnxfp2gr
-    wandb_run_path: ll7/robot_sf/lnxfp2gr
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    tags:
-      - ppo
-      - issue-791
-      - eval-aligned
-      - reward-curriculum
-      - n_steps-4096
-      - candidate
-      - wave-5
-    notes:
-      - SLURM job 11723 on l40s, 7h33m wall.
-      - Best eval (70 episodes) success_rate=0.9143, collision_rate=0.0857 at
-        step 7,340,032.
-      - Same caveat - trained on eval superset; not OOD-validated.
-  - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417
-    display_name: PPO issue-791 Wave-4 baseline (eval-aligned + reward curriculum,
-      default capacity, 2026-04-17)
-    local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_20260417/model.zip
-    config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml
-    commit: null
-    wandb_run_id: liisaa19
-    wandb_run_path: ll7/robot_sf/liisaa19
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: model.zip
-    tags:
-      - ppo
-      - issue-791
-      - eval-aligned
-      - reward-curriculum
-      - candidate
-      - wave-4
-    notes:
-      - SLURM job 11660 on a30, 15h10m wall.
-      - Best eval (70 episodes) success_rate=0.9000, collision_rate=0.1000 at
-        step 9,437,184.
-      - Default-capacity sibling of the Wave-5 leader; the +0.029 success delta
-        to 11724 isolates the capacity effect.
-  - model_id: ga3c_cadrl_iros18
-    display_name: GA3C-CADRL (IROS18) checkpoint
-    local_path: model/ga3c_cadrl/IROS18/network_01900000.meta
-    config_path: null
-    commit: null
-    wandb_run_id: null
-    wandb_run_path: null
-    wandb_entity: null
-    wandb_project: null
-    wandb_file: null
-    tags:
-      - sacadrl
-      - ga3c
-      - cadrl
-      - baseline
-    notes:
-      - "Checkpoint prefix: network_01900000 (see model/ga3c_cadrl/README.md)."
-      - "Source: gym-collision-avoidance (MIT ACL),
-        GA3C_CADRL/checkpoints/IROS18."
-  - model_id: predictive_rgl_v1
-    display_name: Predictive planner model (predictive_rgl_v1)
-    local_path: output/tmp/predictive_planner/training/predictive_rgl_v1_20260219/predictive_model.pt
-    config_path: null
-    commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-    wandb_run_id: null
-    wandb_run_path: null
-    wandb_entity: null
-    wandb_project: null
-    wandb_file: null
-    tags:
-      - predictive
-      - rgl
-      - planner
-      - trajectory
-    notes:
-      - "Dataset:
-        output/tmp/predictive_planner/datasets/predictive_rollouts_v1.npz"
-      - Generated by scripts/training/train_predictive_planner.py
-  - model_id: predictive_rgl_full_v1
-    display_name: Predictive planner model (predictive_rgl_full_v1)
-    local_path: output/tmp/predictive_planner/training/predictive_rgl_full_v1/predictive_model.pt
-    config_path: null
-    commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-    wandb_run_id: null
-    wandb_run_path: null
-    wandb_entity: null
-    wandb_project: null
-    wandb_file: null
-    tags:
-      - predictive
-      - rgl
-      - planner
-      - trajectory
-    notes:
-      - "Dataset:
-        output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
-      - Generated by scripts/training/train_predictive_planner.py
-  - model_id: predictive_rgl_sweep_h256_mp4_s42
-    display_name: Predictive planner model (predictive_rgl_sweep_h256_mp4_s42)
-    local_path: output/tmp/predictive_planner/training/sweep_h256_mp4_s42/predictive_model.pt
-    config_path: null
-    commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-    wandb_run_id: null
-    wandb_run_path: null
-    wandb_entity: null
-    wandb_project: null
-    wandb_file: null
-    tags:
-      - predictive
-      - rgl
-      - planner
-      - trajectory
-    notes:
-      - "Dataset:
-        output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
-      - Generated by scripts/training/train_predictive_planner.py
-  - model_id: predictive_rgl_sweep_h192_mp3_s7_wd5e5
-    display_name: Predictive planner model (predictive_rgl_sweep_h192_mp3_s7_wd5e5)
-    local_path: output/tmp/predictive_planner/training/sweep_h192_mp3_s7_wd5e5/predictive_model.pt
-    config_path: null
-    commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-    wandb_run_id: null
-    wandb_run_path: null
-    wandb_entity: null
-    wandb_project: null
-    wandb_file: null
-    tags:
-      - predictive
-      - rgl
-      - planner
-      - trajectory
-    notes:
-      - "Dataset:
-        output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz"
-      - Generated by scripts/training/train_predictive_planner.py
-  - model_id: predictive_proxy_selected_v1
-    display_name: Predictive planner model (predictive_proxy_selected_v1)
-    local_path: output/tmp/predictive_planner/training/predictive_proxy_selected_v1/predictive_model.pt
-    config_path: null
-    commit: dfc4aea84e25cc83f9888c620286457bab3e1596
-    wandb_run_id: geedo1po
-    wandb_run_path: ll7/robot_sf/geedo1po
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: predictive_model.pt
-    tags:
-      - predictive
-      - rgl
-      - planner
-      - trajectory
-    notes:
-      - "Dataset:
-        output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz"
-      - Generated by scripts/training/train_predictive_planner.py
-      - "W&B run URL: https://wandb.ai/ll7/robot_sf/runs/geedo1po"
-  - model_id: predictive_proxy_sanity_local
-    display_name: Predictive planner model (predictive_proxy_sanity_local)
-    local_path: output/tmp/predictive_planner/pipeline/predictive_sanity_local_20260305T122356Z/training/predictive_model.pt
-    config_path: ""
-    commit: cef93136b92ddca9b0c4436bc44049412461a2fd
-    wandb_run_id: ""
-    wandb_run_path: ""
-    wandb_entity: ""
-    wandb_project: ""
-    wandb_file: ""
-    tags:
-      - predictive
-      - rgl
-      - planner
-      - trajectory
-    notes:
-      - "Dataset:
-        output/tmp/predictive_planner/pipeline/predictive_sanity_local_20260305T122356Z/datasets/predictive_rollouts_mixed.npz"
-      - Generated by scripts/training/train_predictive_planner.py
-  - model_id: predictive_proxy_selected_v2_full
-    display_name: Predictive planner model (predictive_proxy_selected_v2_full)
-    local_path: output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_full_20260305T123116Z/training/predictive_model.pt
-    config_path: configs/training/predictive/predictive_br07_all_maps_randomized_full.yaml
-    commit: cef93136b92ddca9b0c4436bc44049412461a2fd
-    wandb_run_id: u40parjb
-    wandb_run_path: ll7/robot_sf/u40parjb
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: predictive_model.pt
-    local_only: false
-    replacement_model_id: ""
-    tags:
-      - predictive
-      - rgl
-      - planner
-      - trajectory
-    notes:
-      - "Dataset:
-        output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_full_20260305T123116Z/datasets/predictive_rollouts_mixed.npz"
-      - "Training summary:
-        output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomi\
-        zed_full_20260305T123116Z/training/training_summary.json"
-      - Portable W&B provenance repaired via model-file-upload run
-        ll7/robot_sf/u40parjb.
-      - Generated by scripts/training/train_predictive_planner.py
-  - model_id: predictive_proxy_selected_v2_xl_ego
-    display_name: Predictive planner model (predictive_proxy_selected_v2_xl_ego)
-    local_path: output/model_cache/predictive_proxy_selected_v2_xl_ego/predictive_model.pt
-    config_path: configs/training/predictive/predictive_br07_all_maps_randomized_xl_ego.yaml
-    commit: c2d07c6ed0e5e71738bf5729f54db1273a58ba38
-    wandb_run_id: i17pmely
-    wandb_run_path: ll7/robot_sf/i17pmely
-    wandb_entity: ll7
-    wandb_project: robot_sf
-    wandb_file: predictive_model.pt
-    tags:
-      - predictive
-      - br07
-      - all-maps
-      - randomized-seeds
-      - xl
-      - ego-conditioned
-      - promoted
-    notes:
-      - "Dataset:
-        output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomi\
-        zed_xl_ego_20260309T141432Z/datasets/predictive_rollouts_mixed.npz"
-      - "Training summary uploaded to W&B run file: training_summary.json"
-      - Generated by scripts/training/train_predictive_planner.py
+- model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+  display_name: PPO issue-791 leader, eval-aligned large-capacity grid_socnav (2026-04-17,
+    promoted)
+  local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
+  config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+  commit: null
+  wandb_run_id: ibo3aqus
+  wandb_run_path: ll7/robot_sf/ibo3aqus
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  wandb_artifact_path: ll7/robot_sf/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity-best-success:v9
+  tags:
+  - ppo
+  - issue-791
+  - eval-aligned
+  - large-capacity
+  - grid-socnav
+  - reward-curriculum
+  - predictive-foresight
+  - promoted
+  - canonical-baseline
+  notes:
+  - Promoted on 2026-04-28 as the canonical PPO benchmark baseline; replaces BR-06
+    v3 as the default for configs/baselines/ppo_15m_grid_socnav.yaml.
+  - Best eval (70 episodes, ppo_full_maintained_eval_v1) success_rate=0.929, collision_rate=0.071,
+    SNQI=0.353 at step 9,961,472 / 10,000,000.
+  - Source SLURM job 11724 (auxme-imech093, l40s, 8h04m).
+  - Caveat policy is in-distribution on the eval superset; reported as benchmark-set
+    performance, not OOD generalization.
+  - Promotion verdict docs/context/issue_791_best_policy_verdict_2026_04_21.md
+  - Narrow paper claim memory/decisions/2026-04-20_issue_791_narrow_benchmark_claim.md
+  - Durable checkpoint source is the W&B artifact path above. The local_path and best_summary
+    references are cache paths under output/ and may be absent in a fresh checkout.
+  - Best summary output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/best_summary.json.
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-model.zip
+    sha256: 2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d
+    size_bytes: 93662266
+    metadata_asset: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+  display_name: PPO BR-06 v3 all-maps randomized (2026-03-04, issue-576 closeout)
+  local_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
+  config_path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+  commit: 9fb131b6d7ff062887caab33ca8713ae05167ebe
+  wandb_run_id: b60iopxt
+  wandb_run_path: ll7/robot_sf/b60iopxt
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - br06
+  - v3-semantics
+  - issue-576-closeout
+  - all-maps
+  - randomized-seeds
+  notes:
+  - Issue-576 closeout artifact; remains the historical pin for configs/baselines/ppo_issue_576_br06_v2_15m.yaml.
+  - Replaced as the canonical PPO benchmark baseline by ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+    on 2026-04-28.
+  - Full 15M run finished under route-complete success semantics.
+  - Full policy sweep output/benchmarks/20260304_184717_policy_analysis_ppo/report.md
+  - Analysis model/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/training_analysis.md
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200-model.zip
+    sha256: 8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09
+    size_bytes: 174820762
+    metadata_asset: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: ppo_expert_br06_v2_15m_all_maps_20260302T152332
+  display_name: PPO expert BR-06 v2 all-maps (2026-03-02)
+  local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260302T152332/model.zip
+  config_path: configs/training/ppo_imitation/expert_ppo.yaml
+  commit: null
+  wandb_run_id: asym0xo2
+  wandb_run_path: ll7/robot_sf/asym0xo2
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - br06
+  - v2-semantics
+  - deprecated
+  - all-maps
+  - diffdrive
+  - grid-obs
+  notes:
+  - Deprecated and replaced by ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200.
+  - Run ended at ~7.1M steps (W&B state=killed), not full 15M budget.
+  - Training analysis: model/ppo_expert_br06_v2_15m_all_maps_20260302T152332/training_analysis.md
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: ppo_expert_br06_v2_15m_all_maps_20260302T152332-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_br06_v2_15m_all_maps_20260302T152332-model.zip
+    sha256: e9bf737760efffa238296096bb63078e421b3bf6fcba749a7fce382cee9a989e
+    size_bytes: 174821385
+    metadata_asset: ppo_expert_br06_v2_15m_all_maps_20260302T152332-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: ppo_expert_br06_v2_15m_all_maps_20260303T074433
+  display_name: PPO expert BR-06 v2 all-maps (2026-03-03 candidate)
+  local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260303T074433/model.zip
+  config_path: configs/training/ppo/expert_ppo_issue_576_br06_v2_15m_all_maps.yaml
+  commit: 436368d78f351b7a30fcbe873fd82b380f0b30a8
+  wandb_run_id: c4s6142g
+  wandb_run_path: ll7/robot_sf/c4s6142g
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - br06
+  - v2-semantics
+  - candidate
+  - all-maps
+  notes:
+  - Full 15M run finished.
+  - Not promoted: high collision on classic scenarios and one integrity-contradiction
+      error episode.
+  - Analysis: model/ppo_expert_br06_v2_15m_all_maps_20260303T074433/training_analysis.md
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: ppo_expert_br06_v2_15m_all_maps_20260303T074433-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_br06_v2_15m_all_maps_20260303T074433-model.zip
+    sha256: 17d1c0467878bf828b45370bbb9dbfeebbdf6d078e77d11c9f7072bd6fffee9c
+    size_bytes: 174821327
+    metadata_asset: ppo_expert_br06_v2_15m_all_maps_20260303T074433-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311
+  display_name: PPO BR-06 v8 num_envs=8 benchmark best checkpoint (2026-03-11 candidate)
+  local_path: output/model_cache/ppo_num_envs_benchmark_candidates/08/model.zip
+  config_path: configs/training/ppo/benchmark_num_envs/expert_ppo_issue_576_br06_v8_num_envs_benchmark_08_1m.yaml
+  commit: 63853a635c521fc5f2d5c0995cfd8bd3d190b89d
+  wandb_run_id: mwmtrog8
+  wandb_run_path: ll7/robot_sf/mwmtrog8
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - br06
+  - v8-success-priority
+  - candidate
+  - benchmark-num-envs
+  - num-envs-8
+  - best-success
+  notes:
+  - Best intermediate checkpoint from the imech156-u num_envs benchmark run.
+  - W&B best-checkpoint summary: output/model_cache/ppo_num_envs_benchmark_candidates/08/best_checkpoint_summary.json
+  - Full policy sweep: output/benchmarks/20260311_policy_analysis_ppo_v8_numenv08_best/report.md
+  - Full 141-episode sweep slightly outperformed the promoted PPO v3 baseline on success
+    and collision rate.
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311-model.zip
+    sha256: ba9e1ef5dbd559f0af29ea9d88a61e698ef4a748bf54dc6c2217ace679580fce
+    size_bytes: 165359988
+    metadata_asset: ppo_expert_br06_v8_num_envs_benchmark_08_1m_best_20260311-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: ppo_expert_br06_v10_best_27dbe5xu_20260317
+  display_name: PPO BR-06 v10 best-success checkpoint (2026-03-17 carry-forward candidate)
+  local_path: output/model_cache/wandb_artifacts/27dbe5xu_best_success/model.zip
+  config_path: configs/training/ppo/expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml
+  commit: null
+  wandb_run_id: 27dbe5xu
+  wandb_run_path: ll7/robot_sf/27dbe5xu
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - br06
+  - v10-policy-analysis-select
+  - candidate
+  - best-success
+  - carry-forward
+  notes:
+  - Stronger benchmark-gate candidate than v11_best_j0m2cm0w on the classic_interactions
+    gate.
+  - Best-success artifact from W&B run 27dbe5xu.
+  - Benchmark gate with SNQI: output/benchmarks/20260317_benchmark_gate_compare_with_snqi/comparison.json
+  - Not promoted; full 141-episode benchmark is still too weak in absolute terms because
+    max_steps remains high.
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: ppo_expert_br06_v10_best_27dbe5xu_20260317-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_br06_v10_best_27dbe5xu_20260317-model.zip
+    sha256: 341e6b464bceba6cf0360c06a282bc9c100b0efc5d4400f855b90ea83ae7e78f
+    size_bytes: 171119983
+    metadata_asset: ppo_expert_br06_v10_best_27dbe5xu_20260317-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417
+  display_name: PPO issue-791 Wave-5 runner-up (eval-aligned + reward curriculum +
+    n_steps=4096, 2026-04-17)
+  local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096_20260417/model.zip
+  config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml
+  commit: null
+  wandb_run_id: lnxfp2gr
+  wandb_run_path: ll7/robot_sf/lnxfp2gr
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - issue-791
+  - eval-aligned
+  - reward-curriculum
+  - n_steps-4096
+  - candidate
+  - wave-5
+  notes:
+  - SLURM job 11723 on l40s, 7h33m wall.
+  - Best eval (70 episodes) success_rate=0.9143, collision_rate=0.0857 at step 7,340,032.
+  - Same caveat - trained on eval superset; not OOD-validated.
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417-model.zip
+    sha256: 723af98b8a7ca4e50cf12c18bcb2cbce15539514be6cb8e3bcd5189e3f4fed28
+    size_bytes: 51095030
+    metadata_asset: ppo_expert_issue_791_reward_curriculum_eval_aligned_nsteps4096_20260417-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417
+  display_name: PPO issue-791 Wave-4 baseline (eval-aligned + reward curriculum, default
+    capacity, 2026-04-17)
+  local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_20260417/model.zip
+  config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml
+  commit: null
+  wandb_run_id: liisaa19
+  wandb_run_path: ll7/robot_sf/liisaa19
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  tags:
+  - ppo
+  - issue-791
+  - eval-aligned
+  - reward-curriculum
+  - candidate
+  - wave-4
+  notes:
+  - SLURM job 11660 on a30, 15h10m wall.
+  - Best eval (70 episodes) success_rate=0.9000, collision_rate=0.1000 at step 9,437,184.
+  - Default-capacity sibling of the Wave-5 leader; the +0.029 success delta to 11724
+    isolates the capacity effect.
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417-model.zip
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417-model.zip
+    sha256: 8e85553219d182930494a4876b4a3c16ab57f7b292e34fcb9b2e5b84570696a1
+    size_bytes: 51094878
+    metadata_asset: ppo_expert_issue_791_reward_curriculum_eval_aligned_20260417-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: ga3c_cadrl_iros18
+  display_name: GA3C-CADRL (IROS18) checkpoint
+  local_path: model/ga3c_cadrl/IROS18/network_01900000.meta
+  config_path: null
+  commit: null
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
+  tags:
+  - sacadrl
+  - ga3c
+  - cadrl
+  - baseline
+  notes:
+  - 'Checkpoint prefix: network_01900000 (see model/ga3c_cadrl/README.md).'
+  - 'Source: gym-collision-avoidance (MIT ACL), GA3C_CADRL/checkpoints/IROS18.'
+- model_id: predictive_rgl_v1
+  display_name: Predictive planner model (predictive_rgl_v1)
+  local_path: output/tmp/predictive_planner/training/predictive_rgl_v1_20260219/predictive_model.pt
+  config_path: null
+  commit: dfc4aea84e25cc83f9888c620286457bab3e1596
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
+  tags:
+  - predictive
+  - rgl
+  - planner
+  - trajectory
+  notes:
+  - 'Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_v1.npz'
+  - Generated by scripts/training/train_predictive_planner.py
+- model_id: predictive_rgl_full_v1
+  display_name: Predictive planner model (predictive_rgl_full_v1)
+  local_path: output/tmp/predictive_planner/training/predictive_rgl_full_v1/predictive_model.pt
+  config_path: null
+  commit: dfc4aea84e25cc83f9888c620286457bab3e1596
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
+  tags:
+  - predictive
+  - rgl
+  - planner
+  - trajectory
+  notes:
+  - 'Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz'
+  - Generated by scripts/training/train_predictive_planner.py
+- model_id: predictive_rgl_sweep_h256_mp4_s42
+  display_name: Predictive planner model (predictive_rgl_sweep_h256_mp4_s42)
+  local_path: output/tmp/predictive_planner/training/sweep_h256_mp4_s42/predictive_model.pt
+  config_path: null
+  commit: dfc4aea84e25cc83f9888c620286457bab3e1596
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
+  tags:
+  - predictive
+  - rgl
+  - planner
+  - trajectory
+  notes:
+  - 'Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz'
+  - Generated by scripts/training/train_predictive_planner.py
+- model_id: predictive_rgl_sweep_h192_mp3_s7_wd5e5
+  display_name: Predictive planner model (predictive_rgl_sweep_h192_mp3_s7_wd5e5)
+  local_path: output/tmp/predictive_planner/training/sweep_h192_mp3_s7_wd5e5/predictive_model.pt
+  config_path: null
+  commit: dfc4aea84e25cc83f9888c620286457bab3e1596
+  wandb_run_id: null
+  wandb_run_path: null
+  wandb_entity: null
+  wandb_project: null
+  wandb_file: null
+  tags:
+  - predictive
+  - rgl
+  - planner
+  - trajectory
+  notes:
+  - 'Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_full_v1.npz'
+  - Generated by scripts/training/train_predictive_planner.py
+- model_id: predictive_proxy_selected_v1
+  display_name: Predictive planner model (predictive_proxy_selected_v1)
+  local_path: output/tmp/predictive_planner/training/predictive_proxy_selected_v1/predictive_model.pt
+  config_path: null
+  commit: dfc4aea84e25cc83f9888c620286457bab3e1596
+  wandb_run_id: geedo1po
+  wandb_run_path: ll7/robot_sf/geedo1po
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: predictive_model.pt
+  tags:
+  - predictive
+  - rgl
+  - planner
+  - trajectory
+  notes:
+  - 'Dataset: output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz'
+  - Generated by scripts/training/train_predictive_planner.py
+  - 'W&B run URL: https://wandb.ai/ll7/robot_sf/runs/geedo1po'
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: predictive_proxy_selected_v1-predictive_model.pt
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v1-predictive_model.pt
+    sha256: 0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc
+    size_bytes: 5034129
+    metadata_asset: predictive_proxy_selected_v1-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: predictive_proxy_sanity_local
+  display_name: Predictive planner model (predictive_proxy_sanity_local)
+  local_path: output/tmp/predictive_planner/pipeline/predictive_sanity_local_20260305T122356Z/training/predictive_model.pt
+  config_path: ''
+  commit: cef93136b92ddca9b0c4436bc44049412461a2fd
+  wandb_run_id: ''
+  wandb_run_path: ''
+  wandb_entity: ''
+  wandb_project: ''
+  wandb_file: ''
+  tags:
+  - predictive
+  - rgl
+  - planner
+  - trajectory
+  notes:
+  - 'Dataset: output/tmp/predictive_planner/pipeline/predictive_sanity_local_20260305T122356Z/datasets/predictive_rollouts_mixed.npz'
+  - Generated by scripts/training/train_predictive_planner.py
+- model_id: predictive_proxy_selected_v2_full
+  display_name: Predictive planner model (predictive_proxy_selected_v2_full)
+  local_path: output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_full_20260305T123116Z/training/predictive_model.pt
+  config_path: configs/training/predictive/predictive_br07_all_maps_randomized_full.yaml
+  commit: cef93136b92ddca9b0c4436bc44049412461a2fd
+  wandb_run_id: u40parjb
+  wandb_run_path: ll7/robot_sf/u40parjb
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: predictive_model.pt
+  local_only: false
+  replacement_model_id: ''
+  tags:
+  - predictive
+  - rgl
+  - planner
+  - trajectory
+  notes:
+  - 'Dataset: output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_full_20260305T123116Z/datasets/predictive_rollouts_mixed.npz'
+  - 'Training summary: output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_full_20260305T123116Z/training/training_summary.json'
+  - Portable W&B provenance repaired via model-file-upload run ll7/robot_sf/u40parjb.
+  - Generated by scripts/training/train_predictive_planner.py
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: predictive_proxy_selected_v2_full-predictive_model.pt
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v2_full-predictive_model.pt
+    sha256: a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1
+    size_bytes: 4958329
+    metadata_asset: predictive_proxy_selected_v2_full-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release
+- model_id: predictive_proxy_selected_v2_xl_ego
+  display_name: Predictive planner model (predictive_proxy_selected_v2_xl_ego)
+  local_path: output/model_cache/predictive_proxy_selected_v2_xl_ego/predictive_model.pt
+  config_path: configs/training/predictive/predictive_br07_all_maps_randomized_xl_ego.yaml
+  commit: c2d07c6ed0e5e71738bf5729f54db1273a58ba38
+  wandb_run_id: i17pmely
+  wandb_run_path: ll7/robot_sf/i17pmely
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: predictive_model.pt
+  tags:
+  - predictive
+  - br07
+  - all-maps
+  - randomized-seeds
+  - xl
+  - ego-conditioned
+  - promoted
+  notes:
+  - 'Dataset: output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_xl_ego_20260309T141432Z/datasets/predictive_rollouts_mixed.npz'
+  - 'Training summary uploaded to W&B run file: training_summary.json'
+  - Generated by scripts/training/train_predictive_planner.py
+  github_release:
+    repo: ll7/robot_sf_ll7
+    tag: artifact/models-2026-05-registry-v1
+    asset_name: predictive_proxy_selected_v2_xl_ego-predictive_model.pt
+    url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models-2026-05-registry-v1/predictive_proxy_selected_v2_xl_ego-predictive_model.pt
+    sha256: 49deeeca98d44bcadb0eb845d9a9a5fd36cc2911a8fed8c414f7f988ec0a3a69
+    size_bytes: 11176729
+    metadata_asset: predictive_proxy_selected_v2_xl_ego-metadata.json
+    published_at_utc: '2026-05-24T05:32:03+00:00'
+  public_artifact_source: github_release

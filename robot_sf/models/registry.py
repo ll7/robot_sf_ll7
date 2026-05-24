@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 import yaml
 from loguru import logger
@@ -104,7 +108,7 @@ def resolve_model_path(
     allow_download: bool = True,
     cache_dir: str | Path | None = None,
 ) -> Path:
-    """Resolve a local model path, downloading from W&B if needed.
+    """Resolve a local model path, downloading from a public release or W&B if needed.
 
     Returns:
         Path: Local filesystem path to the model artifact.
@@ -128,7 +132,157 @@ def resolve_model_path(
     if not allow_download:
         raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
 
+    if entry.get("github_release"):
+        return _download_from_github_release(entry, cache_dir=cache_dir)
+
     return _download_from_wandb(entry, cache_dir=cache_dir)
+
+
+def _sha256(path: Path) -> str:
+    """Return the SHA256 digest for a local file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
+    """Download a model artifact from a GitHub release asset.
+
+    Returns:
+        Path: Local filesystem path to the downloaded artifact.
+    """
+    release = entry.get("github_release")
+    if not isinstance(release, dict):
+        raise ValueError("Registry entry github_release must be a mapping.")
+
+    model_id = str(entry.get("model_id", "unknown-model"))
+    asset_name = str(release.get("asset_name") or "").strip()
+    url = str(release.get("url") or "").strip()
+    expected_sha256 = _github_release_expected_sha256(release)
+    if not asset_name:
+        raise ValueError(f"Registry entry '{model_id}' github_release.asset_name is required.")
+    _validate_github_release_asset_name(asset_name, model_id=model_id)
+    if not expected_sha256:
+        raise ValueError(f"Registry entry '{model_id}' github_release.sha256 is required.")
+    if not url:
+        url = _github_release_url(release, model_id=model_id, asset_name=asset_name)
+    _validate_github_release_url(url, model_id=model_id)
+
+    cache_root = Path(cache_dir) if cache_dir is not None else Path("output/model_cache")
+    cache_root = cache_root / model_id
+    cache_root.mkdir(parents=True, exist_ok=True)
+    cached_path = cache_root / asset_name
+
+    if cached_path.exists() and _cached_release_path_is_valid(cached_path, expected_sha256):
+        return cached_path
+
+    logger.info("Downloading model artifact {} from GitHub release {}", asset_name, url)
+    try:
+        _stream_download_url(url, cached_path)
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(
+            f"Could not download model '{model_id}' from GitHub release asset: {url}"
+        ) from exc
+
+    _verify_download_checksum(
+        cached_path,
+        expected_sha256=expected_sha256,
+        model_id=model_id,
+        asset_name=asset_name,
+    )
+    return cached_path
+
+
+def _github_release_expected_sha256(release: dict[str, Any]) -> str:
+    """Return normalized expected SHA256 while preserving non-null YAML scalars."""
+    raw_sha256 = release.get("sha256")
+    return "" if raw_sha256 is None else str(raw_sha256).strip().lower()
+
+
+def _github_release_url(
+    release: dict[str, Any],
+    *,
+    model_id: str,
+    asset_name: str,
+) -> str:
+    """Build a GitHub release asset URL from repo/tag/asset fields.
+
+    Returns:
+        str: Public GitHub release asset URL.
+    """
+    repo = str(release.get("repo") or "").strip()
+    tag = str(release.get("tag") or "").strip()
+    if not repo or not tag:
+        raise ValueError(
+            f"Registry entry '{model_id}' needs github_release.url or repo/tag/asset_name."
+        )
+    return f"https://github.com/{repo}/releases/download/{tag}/{asset_name}"
+
+
+def _validate_github_release_asset_name(asset_name: str, *, model_id: str) -> None:
+    """Validate that a release asset name cannot escape the cache directory."""
+    if Path(asset_name).name != asset_name or asset_name in {".", ".."}:
+        raise ValueError(
+            f"Registry entry '{model_id}' github_release.asset_name must be a file name."
+        )
+
+
+def _validate_github_release_url(url: str, *, model_id: str) -> None:
+    """Validate that a release URL is an HTTPS GitHub URL."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.netloc != "github.com":
+        raise ValueError(
+            f"Registry entry '{model_id}' github_release.url must be an https://github.com URL."
+        )
+
+
+def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
+    """Return whether a cached release asset can be reused."""
+    if expected_sha256:
+        observed = _sha256(path)
+        if observed != expected_sha256:
+            logger.warning(
+                "Cached GitHub release model artifact checksum mismatch; redownloading: {}",
+                path,
+            )
+            path.unlink()
+            return False
+    resolved_cached_path = path.resolve()
+    if resolved_cached_path not in _LOGGED_CACHED_MODEL_ARTIFACTS:
+        _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
+        logger.info("Using cached model artifact: {}", path)
+    return True
+
+
+def _stream_download_url(url: str, target_path: Path) -> None:
+    """Stream a URL to a local target path."""
+    with urlopen(url, timeout=60) as response, target_path.open("wb") as handle:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            handle.write(chunk)
+
+
+def _verify_download_checksum(
+    path: Path,
+    *,
+    expected_sha256: str,
+    model_id: str,
+    asset_name: str,
+) -> None:
+    """Validate a downloaded artifact checksum."""
+    if not expected_sha256:
+        return
+    observed = _sha256(path)
+    if observed != expected_sha256:
+        path.unlink(missing_ok=True)
+        raise ValueError(
+            f"Checksum mismatch for model '{model_id}' from GitHub release asset "
+            f"{asset_name}: expected {expected_sha256}, observed {observed}."
+        )
 
 
 def resolve_latest_wandb_model(  # noqa: PLR0913

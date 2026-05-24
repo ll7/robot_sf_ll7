@@ -153,6 +153,26 @@ Later status: job `12612` exited `FAILED` with code `2:0` after
 whether missing predictive proxy/success-campaign JSONL should be fail-closed earlier or summarized
 as structured evidence caveats. Job `12611` was still running at the last handoff refresh.
 
+Update after #1481 hardening and schema propagation: commit `b0564463` teaches the predictive
+planner algo-config builder to read the checkpoint feature-schema metadata when a concrete
+checkpoint is supplied. This fixes the obstacle-feature rerun's earlier proxy-eval mismatch where
+`proxy_epoch_0005_algo.yaml` used `predictive_legacy_v1` for a
+`predictive_obstacle_features_v1` checkpoint.
+
+Fresh paired rerun from `b0564463`:
+
+- job `12617`, `pred1427-base4`, run id
+  `predictive_br07_same_seed_issue_1427_20260524T114637Z`
+- job `12618`, `pred1427-obs4`, run id
+  `predictive_obstacle_features_same_seed_issue_1427_20260524T114637Z`
+
+Both jobs started on `a30` node `auxme-imech172`. As of the 2026-05-24 14:20 CEST refresh, both
+were still `RUNNING`. Training completed for both, final eval summaries existed for both, and both
+jobs had entered `scripts/validation/run_predictive_success_campaign.py`. The obstacle-feature job
+proved the schema fix by writing nonempty proxy JSONL artifacts through epoch 40; its generated
+`training/proxy_eval/proxy_epoch_0005_algo.yaml` now contains
+`predictive_feature_schema_name: predictive_obstacle_features_v1`.
+
 Verification commands for the launcher branch:
 
 ```bash

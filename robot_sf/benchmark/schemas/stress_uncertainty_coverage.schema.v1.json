@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/stress_uncertainty_coverage.schema.v1.json",
+  "title": "RobotSF Stress/Uncertainty Coverage Report (v1)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "schema_mode",
+    "report_id",
+    "generated_at_utc",
+    "campaign_config_hash",
+    "scenario_matrix_hash",
+    "coverage_axes",
+    "metric_groups",
+    "aggregate_mode",
+    "availability_status"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "const": "stress_uncertainty_coverage.v1"
+    },
+    "schema_mode": {
+      "enum": ["required", "advisory", "diagnostic"]
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "campaign_config_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario_matrix_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "aggregate_mode": {
+      "enum": ["mean", "median", "descriptive_only"]
+    },
+    "availability_status": {
+      "enum": ["available", "partial-failure", "failed", "not_available"]
+    },
+    "missing_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "coverage_axes": {
+      "type": "object",
+      "required": ["scenario_parameters", "failure_modes"],
+      "additionalProperties": true,
+      "properties": {
+        "scenario_parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["observed_values", "required_values", "coverage_status"],
+            "additionalProperties": true,
+            "properties": {
+              "observed_values": {
+                "type": "array"
+              },
+              "required_values": {
+                "type": "array"
+              },
+              "coverage_status": {
+                "enum": ["full", "partial", "missing"]
+              },
+              "entropy": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "failure_modes": {
+          "type": "object",
+          "required": ["collision", "near_miss", "timeout_without_progress"],
+          "additionalProperties": {
+            "type": "object",
+            "required": ["observed_episodes", "observed_fraction", "classification_source"],
+            "additionalProperties": true,
+            "properties": {
+              "observed_episodes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "observed_fraction": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "scenario_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "classification_source": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "metric_groups": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "bootstrap_ci": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "properties": {
+        "samples": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "seed": {
+          "type": ["integer", "null"]
+        },
+        "lower": {
+          "type": ["number", "null"]
+        },
+        "upper": {
+          "type": ["number", "null"]
+        }
+      }
+    }
+  }
+}

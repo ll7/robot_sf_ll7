@@ -1,0 +1,21 @@
+{
+  "aggregate_mode": "mean",
+  "availability_status": "available",
+  "campaign_config_hash": "cfg-sha256",
+  "coverage_axes": {
+    "scenario_parameters": {}
+  },
+  "generated_at_utc": "2026-05-22T00:00:00+00:00",
+  "metric_groups": {
+    "safety": {
+      "collision_rate": 0.0,
+      "collisions": 0,
+      "min_distance": 1.0,
+      "near_misses": 0
+    }
+  },
+  "report_id": "fixture-malformed",
+  "scenario_matrix_hash": "matrix-sha256",
+  "schema_mode": "required",
+  "schema_version": "stress_uncertainty_coverage.v1"
+}

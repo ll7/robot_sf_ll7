@@ -1,0 +1,14 @@
+{
+  "groups": {
+    "planner-a": {
+      "metrics": {
+        "collisions": {
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0
+        }
+      }
+    }
+  },
+  "version": "v1"
+}

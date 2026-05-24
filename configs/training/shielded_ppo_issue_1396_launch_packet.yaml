@@ -1,0 +1,92 @@
+schema_version: shielded-ppo-repair-launch-packet.v1
+campaign_id: issue_1396_shielded_ppo_repair_v1
+generating_commit: e14e2f8bc2058d9f0e071219629915dd5b5dd5a8
+slurm_handoff: docs/context/policy_search/SLURM/002_shielded_ppo_repair_campaign.md
+repair_hypothesis:
+  id: collision_penalty_only_v1
+  statement: >
+    The smallest interpretable shielded-PPO repair is to keep the BR-06 v3 PPO
+    architecture and runtime guard unchanged while increasing only the route-completion
+    collision penalty during fine-tuning, testing whether the policy proposes fewer unsafe
+    actions without losing its existing progress signal.
+  enabled_deltas:
+    - type: reward_weight
+      parameter: env_factory_kwargs.reward_kwargs.weights.collision
+      value: -20.0
+      baseline_value: -15.0
+  disabled_design_freedom:
+    - architecture_sweep
+    - guard_disablement
+    - multiple_reward_hypotheses
+training_starting_points:
+  base_ppo_training_config: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+  guarded_candidate_config: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+  guarded_algo_config: configs/algos/guarded_ppo_relaxed_v2.yaml
+  resume_policy_id: ppo_expert_br06_v3_15m_all_maps_randomized
+  checksums:
+    configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml: a374a624eb38402e5e4e2612f92440c0f80ff1eb0554a34f33dd36c16920a426
+    configs/policy_search/candidates/risk_guarded_ppo_v1.yaml: 69030a865be80be5e3ba98db447551c3707f966de8ac5f216e66044d9ea50735
+runtime_guard:
+  active_in_all_evaluations: true
+  evaluation_candidate_config: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+  required_diagnostics:
+    - guard_veto_count
+    - guard_fallback_count
+    - raw_ppo_action
+    - guarded_action
+    - fallback_action_source
+    - fallback_risk_dwa_score
+comparison_references:
+  ppo_baseline:
+    candidate_id: ppo_issue791_best_v1
+    config: configs/policy_search/candidates/ppo_issue791_best_v1.yaml
+    scenario_slice: nominal_sanity
+    seeds: [111, 112, 113]
+    source_report: docs/context/policy_search/reports/2026-05-05_ppo_issue791_best_v1_nominal_sanity.md
+    summary_artifacts:
+      - docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json
+      - wandb-artifact://robot-sf/policy-search/ppo_issue791_best_v1_baseline:pending
+    checksums:
+      docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json: 2eabbf7d6fbc5a22071a2aef2c8ebdbb1113a8d58090709dc46c45761876871f
+  risk_guarded_ppo_v1:
+    candidate_id: risk_guarded_ppo_v1
+    config: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+    scenario_slice: nominal_sanity
+    seeds: [111, 112, 113]
+    source_report: docs/context/policy_search/reports/2026-04-29_risk_guarded_ppo_v1_nominal_sanity.md
+    summary_artifacts:
+      - docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json
+      - wandb-artifact://robot-sf/policy-search/risk_guarded_ppo_v1_baseline:pending
+    checksums:
+      docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json: 2eabbf7d6fbc5a22071a2aef2c8ebdbb1113a8d58090709dc46c45761876871f
+stop_gates:
+  smoke:
+    stage: smoke
+    min_success_rate: 1.0
+    max_collision_rate: 0.0
+    max_guard_fallback_rate: 0.60
+    allows_nominal_escalation: true
+  nominal_sanity:
+    stage: nominal_sanity
+    min_success_rate: 0.2778
+    max_collision_rate: 0.0556
+    max_guard_fallback_rate: 0.50
+    allows_stress_escalation: true
+execution_boundary:
+  full_training_in_this_issue: false
+  submit_slurm_from_this_issue: false
+  local_preflight_command: >
+    uv run python scripts/validation/validate_shielded_ppo_launch_packet.py --config
+    configs/training/shielded_ppo_issue_1396_launch_packet.yaml --json
+  slurm_command_shape: >
+    Submit a dedicated follow-up issue after this packet lands. The future command must use
+    configs/training/shielded_ppo_issue_1396_launch_packet.yaml, keep the runtime guard active,
+    and report guard_veto_count, guard_fallback_count, raw_ppo_action, guarded_action, and
+    fallback_action_source before any stress/full-matrix escalation.
+artifact_policy:
+  checkpoints_in_git: false
+  raw_logs_in_git: false
+  required_before_training:
+    - "Replace :pending W&B artifact aliases with concrete run ids or durable artifact URIs."
+    - "Record the exact base checkpoint and training commit before submission."
+    - "Keep runtime guard active in all evaluation configs."

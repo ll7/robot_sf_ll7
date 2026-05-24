@@ -1,0 +1,19 @@
+{
+  "artifact_role": "baseline-freeze-stub",
+  "candidate_id": "hybrid_rule_v3_static_margin0_waypoint2",
+  "candidate_config": "configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml",
+  "scenario_slices": [
+    "stress_slice",
+    "full_matrix"
+  ],
+  "seeds": [
+    111,
+    112,
+    113
+  ],
+  "source_report": "docs/context/policy_search/reports/2026-04-30_best_non_learning_local_policy_report.md",
+  "notes": [
+    "Small tracked freeze record only; use durable run artifacts before Slurm training.",
+    "The learned risk model may only contribute an auxiliary cost term alongside hard guards."
+  ]
+}

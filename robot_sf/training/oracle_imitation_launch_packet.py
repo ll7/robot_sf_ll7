@@ -186,18 +186,16 @@ def _validate_seed_refs(
     seed_manifest = refs.get("manifest")
     if isinstance(seed_manifest, str) and seed_manifest.strip():
         manifest_path = _resolve_path(seed_manifest, repo_root)
+        if not manifest_path.is_file():
+            errors.append(f"seed_set_refs.manifest is not a regular file: {seed_manifest}")
+            return
         seed_payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(seed_payload, dict):
             errors.append("seed_set_refs.manifest must point to a mapping YAML file")
             return
         _validate_seed_ref("validation", refs.get("validation"), seed_payload, split_sets, errors)
         _validate_seed_ref("evaluation", refs.get("evaluation"), seed_payload, split_sets, errors)
-        excluded_ref = refs.get("train_excludes")
-        if isinstance(excluded_ref, str):
-            excluded = {int(seed) for seed in seed_payload.get(excluded_ref, [])}
-            overlap = sorted(split_sets.get("train", set()) & excluded)
-            if overlap:
-                errors.append(f"train seeds overlap excluded seed set {excluded_ref}: {overlap}")
+        _validate_train_excludes(refs, seed_payload, split_sets, errors)
 
 
 def _validate_seed_ref(
@@ -209,10 +207,52 @@ def _validate_seed_ref(
 ) -> None:
     if not isinstance(ref_name, str) or not ref_name.strip():
         return
-    expected = {int(seed) for seed in seed_payload.get(ref_name, [])}
+    ref_value = seed_payload.get(ref_name)
+    if not isinstance(ref_value, list):
+        errors.append(
+            f"seed_set_refs manifest key {ref_name!r} must be a list, got {type(ref_value).__name__}"
+        )
+        return
+    expected: set[int] = set()
+    for seed in ref_value:
+        if not isinstance(seed, int):
+            errors.append(
+                f"seed_set_refs manifest key {ref_name!r} contains non-integer entry: {seed!r}"
+            )
+            return
+        expected.add(seed)
     actual = split_sets.get(split, set())
     if expected != actual:
         errors.append(f"seeds_by_split.{split} must match seed set {ref_name}: {sorted(expected)}")
+
+
+def _validate_train_excludes(
+    refs: dict[str, Any],
+    seed_payload: dict[str, Any],
+    split_sets: dict[str, set[int]],
+    errors: list[str],
+) -> None:
+    excluded_ref = refs.get("train_excludes")
+    if not isinstance(excluded_ref, str):
+        return
+    excluded_value = seed_payload.get(excluded_ref)
+    if not isinstance(excluded_value, list):
+        errors.append(
+            f"seed_set_refs manifest key {excluded_ref!r} must be a list, "
+            f"got {type(excluded_value).__name__}"
+        )
+        return
+    excluded: set[int] = set()
+    for seed in excluded_value:
+        if not isinstance(seed, int):
+            errors.append(
+                f"seed_set_refs manifest key {excluded_ref!r} contains non-integer entry: {seed!r}"
+            )
+            return
+        excluded.add(seed)
+    overlap = sorted(split_sets.get("train", set()) & excluded)
+    if overlap:
+        errors.append(f"train seeds overlap excluded seed set {excluded_ref}: {overlap}")
 
 
 def _validate_episodes(packet: dict[str, Any], errors: list[str]) -> None:
@@ -315,7 +355,8 @@ def _artifact_path_text(name: str, raw_path: Any, errors: list[str]) -> str | No
         errors.append(f"artifact_paths.{name} must be a non-empty string")
         return None
     path_text = raw_path.strip()
-    if path_text.startswith("output/") or "/output/" in path_text:
+    _path_parts = Path(path_text).parts
+    if "output" in _path_parts:
         errors.append(
             f"artifact_paths.{name} must not depend on worktree-local output: {path_text}"
         )
@@ -341,9 +382,17 @@ def _validate_local_artifact(
     if not isinstance(expected, str) or not expected.strip():
         errors.append(f"checksums missing SHA-256 entry for {path_text}")
         return
-    actual = hashlib.sha256(local_path.read_bytes()).hexdigest()
+    actual = _sha256_hex_digest(local_path)
     if actual != expected.strip().lower():
         errors.append(f"checksum mismatch for {path_text}: expected {expected}, got {actual}")
+
+
+def _sha256_hex_digest(path: Path, chunk_size: int = 65536) -> str:
+    sha = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(chunk_size):
+            sha.update(chunk)
+    return sha.hexdigest()
 
 
 __all__ = ["LaunchPacketError", "load_launch_packet", "validate_launch_packet"]

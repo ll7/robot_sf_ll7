@@ -131,3 +131,89 @@ def test_validate_launch_packet_cli_reports_json() -> None:
     )
 
     assert exit_code == 0
+
+
+def test_seed_manifest_missing_file_fails_closed(tmp_path: Path) -> None:
+    """A seed manifest that does not exist must fail closed."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken["seed_set_refs"]["manifest"] = "nonexistent/manifest.yaml"
+
+    with pytest.raises(LaunchPacketError, match="not a regular file"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_seed_manifest_directory_fails_closed(tmp_path: Path) -> None:
+    """A seed manifest that is a directory must fail closed."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken["seed_set_refs"]["manifest"] = str(tmp_path)
+
+    with pytest.raises(LaunchPacketError, match="not a regular file"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_seed_ref_non_list_fails_closed(tmp_path: Path) -> None:
+    """A seed set in the manifest that is not a list must fail closed."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken_manifest = tmp_path / "bad_manifest.yaml"
+    broken_manifest.write_text(
+        yaml.safe_dump({"dev": 42, "eval": [111, 112, 113]}), encoding="utf-8"
+    )
+    broken["seed_set_refs"]["manifest"] = str(broken_manifest)
+
+    with pytest.raises(LaunchPacketError, match="must be a list"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_seed_ref_non_integer_entry_fails_closed(tmp_path: Path) -> None:
+    """A seed set containing a non-integer entry must fail closed."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken_manifest = tmp_path / "bad_manifest.yaml"
+    broken_manifest.write_text(
+        yaml.safe_dump({"dev": [101, "bad", 103], "eval": [111, 112, 113]}),
+        encoding="utf-8",
+    )
+    broken["seed_set_refs"]["manifest"] = str(broken_manifest)
+
+    with pytest.raises(LaunchPacketError, match="non-integer entry"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_train_excludes_non_list_fails_closed(tmp_path: Path) -> None:
+    """A train_excludes set that is not a list must fail closed."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken_manifest = tmp_path / "bad_manifest.yaml"
+    broken_manifest.write_text(
+        yaml.safe_dump({"dev": [101, 102, 103], "eval": [111, 112, 113], "paper_eval_s20": "bad"}),
+        encoding="utf-8",
+    )
+    broken["seed_set_refs"]["manifest"] = str(broken_manifest)
+
+    with pytest.raises(LaunchPacketError, match="must be a list"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_output_component_in_path_rejected(tmp_path: Path) -> None:
+    """A path with 'output' as a directory component must be rejected."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken["artifact_paths"]["dry_run_fixture"] = "output/subdir/local-only.json"
+    broken["checksums"] = {"output/subdir/local-only.json": "0" * 64}
+
+    with pytest.raises(LaunchPacketError, match="worktree-local output"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_output_substring_not_in_component_allowed(tmp_path: Path) -> None:
+    """A path containing 'output' only as a substring of another name is NOT rejected."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken["artifact_paths"]["dry_run_fixture"] = "docs/my_output_config/stub.json"
+    broken["checksums"] = {"docs/my_output_config/stub.json": "0" * 64}
+
+    with pytest.raises(LaunchPacketError, match="local artifact is missing"):
+        validate_launch_packet(_write_packet(tmp_path, broken))

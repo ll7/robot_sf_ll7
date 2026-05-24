@@ -43,6 +43,16 @@ die() {
   exit 1
 }
 
+run_in_allocation() {
+  if command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]] && srun --version >/dev/null 2>&1; then
+    log "Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
+    srun --cpu_bind=cores "$@"
+  else
+    echo "[predictive-pipeline] srun unavailable, broken, or not in a Slurm allocation; running directly." >&2
+    "$@"
+  fi
+}
+
 cleanup() {
   if [[ -n "${RUN_OUTPUT_DIR}" && -d "${RUN_OUTPUT_DIR}" ]]; then
     mkdir -p "${RESULTS_ROOT}"
@@ -89,26 +99,22 @@ mkdir -p "${ROBOT_SF_ARTIFACT_ROOT}"
 
 cd "${PROJECT_ROOT}"
 
-RUN_ID_ARG=()
-if [[ -n "${PIPELINE_RUN_ID}" ]]; then
-  RUN_ID_ARG=(--run-id "${PIPELINE_RUN_ID}")
-  RUN_OUTPUT_DIR=${PROJECT_ROOT}/output/tmp/predictive_planner/pipeline/${PIPELINE_RUN_ID}
+if [[ -z "${PIPELINE_RUN_ID}" ]]; then
+  PIPELINE_RUN_ID="predictive_pipeline_${SLURM_JOB_ID:-local_${BASHPID}}_$(date -u +%Y%m%dT%H%M%SZ)"
 fi
+RUN_ID_ARG=(--run-id "${PIPELINE_RUN_ID}")
+RUN_OUTPUT_DIR=${PROJECT_ROOT}/output/tmp/predictive_planner/pipeline/${PIPELINE_RUN_ID}
 
 log "Starting predictive pipeline"
 log "Config: ${PIPELINE_CONFIG_PATH}"
-log "Run id: ${PIPELINE_RUN_ID:-<config timestamp default>}"
+log "Run id: ${PIPELINE_RUN_ID}"
+log "Run output dir: ${RUN_OUTPUT_DIR}"
 log "Results sync dir: ${RESULTS_ROOT}"
 log "Node: ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}"
 
-"${PYTHON_BIN}" scripts/training/run_predictive_training_pipeline.py \
+run_in_allocation "${PYTHON_BIN}" scripts/training/run_predictive_training_pipeline.py \
   --config "${PIPELINE_CONFIG_PATH}" \
   --log-level "${PIPELINE_LOG_LEVEL}" \
   "${RUN_ID_ARG[@]}"
-
-if [[ -z "${RUN_OUTPUT_DIR}" ]]; then
-  RUN_OUTPUT_DIR=$(find "${PROJECT_ROOT}/output/tmp/predictive_planner/pipeline" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
-    | sort -nr | awk 'NR==1 {print $2}')
-fi
 
 log "Predictive pipeline completed. Artifacts will be synced to ${RESULTS_ROOT}"

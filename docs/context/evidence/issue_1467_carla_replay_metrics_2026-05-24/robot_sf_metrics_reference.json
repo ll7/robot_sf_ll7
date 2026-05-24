@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "collision": false,
+    "intervention_rate": 0.0,
+    "success": true
+  },
+  "note": "Reference metrics for the issue #1467 native CARLA metric probe. The generated native probe has no pedestrians or obstacles and a 0.2 s oracle replay horizon, so the expected Robot-SF-side smoke metrics are success=true, collision=false, intervention_rate=0.0.",
+  "schema_version": "robot-sf-reference-placeholder.v1",
+  "status": "reference-only"
+}

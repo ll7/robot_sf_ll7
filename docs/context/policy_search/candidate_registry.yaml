@@ -575,6 +575,7 @@ candidates:
     training_required: true
     promotion_gate: tier_b
     slurm_handoff: docs/context/policy_search/SLURM/001_learned_risk_model_v1.md
+    launch_packet_config_path: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
     hypothesis: >
       A lightweight learned risk estimator should improve candidate ranking only
       when attached to a hard safety guard.

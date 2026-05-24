@@ -15,9 +15,11 @@ notebooks to insert/update entries without manual YAML editing.
 - `local_path`: local checkout path to the model file (if available).
 - `config_path`: training config used to produce the model.
 - `commit`: git commit hash for reproducibility.
-- W&B metadata (optional): prefer `wandb_artifact_path` for durable model artifacts;
-  otherwise use either `wandb_run_path` or `wandb_entity` + `wandb_project` +
-  `wandb_run_id` so auto-download works.
+- `github_release` metadata (optional): preferred public retrieval pointer for promoted or
+  preserved artifacts. Include `repo`, `tag`, `asset_name`, `url`, `sha256`, and `size_bytes`.
+- W&B metadata (optional): lineage and private/backfill provenance. Prefer `wandb_artifact_path`
+  when preserving W&B provenance; otherwise use either `wandb_run_path` or `wandb_entity` +
+  `wandb_project` + `wandb_run_id`.
 - `wandb_file`: file to download from the run (defaults to `model.zip`).
 - `local_only`: mark entries that are only valid when the recorded `local_path`
   exists on the current machine.
@@ -41,6 +43,13 @@ models:
     wandb_run_id: run_id
     wandb_file: model.zip
     wandb_artifact_path: entity/project/artifact_name:version
+    github_release:
+      repo: owner/repo
+      tag: artifact/models-YYYY-MM-registry-v1
+      asset_name: my_model_id-model.zip
+      url: https://github.com/owner/repo/releases/download/artifact/models-YYYY-MM-registry-v1/my_model_id-model.zip
+      sha256: ...
+      size_bytes: 123
     local_only: false
     replacement_model_id: my_model_id_v2
     tags: ["ppo", "socnav"]
@@ -60,17 +69,35 @@ path = resolve_model_path(
 )
 ```
 
-If the model is not present locally and W&B metadata is configured in
-`model/registry.yaml`, the helper will download the artifact into
-`output/model_cache/<model_id>/`.
+If the model is not present locally and `github_release` metadata is configured in
+`model/registry.yaml`, the helper downloads and verifies the public release asset into
+`output/model_cache/<model_id>/`. If no GitHub release pointer is available, W&B metadata remains a
+private/provenance fallback.
 
-### Durable vs local cache fields
+### Public artifacts vs provenance fields
 
-Treat `wandb_artifact_path` as the preferred durable checkpoint pointer. Treat
+Treat `github_release` as the preferred public checkpoint pointer for preserved/canonical models.
+Treat W&B fields as experiment-lineage provenance unless the entry is intentionally private. Treat
 `local_path` under `output/model_cache/` as a cache location that may be absent in a fresh checkout.
-If a paper-facing registry entry still has `commit: null`, the W&B run or artifact pointer is the
-recoverable source, but the missing source commit should remain visible as a provenance caveat until
-it is repaired.
+If a paper-facing registry entry still has `commit: null`, keep the missing source commit visible as
+a provenance caveat until it is repaired.
+
+### Publishing preserved models
+
+Use `scripts/tools/publish_model_registry_release.py` to migrate W&B-backed model entries to GitHub
+release assets:
+
+```bash
+uv run python scripts/tools/publish_model_registry_release.py \
+  --tag artifact/models-YYYY-MM-registry-v1 \
+  --download-missing \
+  --execute-upload \
+  --create-release \
+  --update-registry
+```
+
+The script stages model files, per-model metadata JSON, `manifest.json`, and `SHA256SUMS`; uploads
+them to the release; and writes `github_release` pointers back into `model/registry.yaml`.
 
 ## Notes
 

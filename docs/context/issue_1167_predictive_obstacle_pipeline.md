@@ -120,6 +120,42 @@ Same-seed contract:
   contains zero active non-sentinel obstacle rows. The preflight evidence is written to
   `output/tmp/predictive_planner/pipeline/<run_id>/obstacle_feature_preflight.json`.
 
+## Issue #1427 SLURM Launch Update, 2026-05-24
+
+PR #1480 added `SLURM/Auxme/predictive_training_pipeline.sl` as the Auxme launcher for the
+same-seed pair and hardened `SLURM/Auxme/camera_ready_benchmark.sl` against the broken `srun`
+symbol-error path observed in earlier campaign submissions.
+
+Submitted jobs from branch `issue-1427-predictive-slurm-runs`:
+
+- job `12611`, `pred1427-base`, config
+  `configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml`, run id
+  `predictive_br07_same_seed_issue_1427_20260524T110529Z`
+- job `12612`, `pred1427-obs`, config
+  `configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml`, run id
+  `predictive_obstacle_features_same_seed_issue_1427_20260524T110529Z`
+
+Both jobs started on `a30` node `auxme-imech172`. Early logs showed repeated node-side NVML
+`Driver/library version mismatch` warnings, but both jobs continued past startup. At the time of
+this handoff, both jobs had produced base, hardcase, and mixed rollout datasets plus
+`training/predictive_model.pt`. The obstacle-feature run also wrote `training/training_summary.json`,
+passed its ADE/FDE quality gates, and entered final `scripts/validation/evaluate_predictive_planner.py`.
+
+Observed caveat: proxy evaluation at training checkpoints logged non-fatal `FileNotFoundError`
+exceptions for missing `training/proxy_eval/proxy_epoch_*.jsonl` files. The training command
+continued and passed the configured quality gates, but final interpretation should check whether
+missing proxy metrics should be a hard failure for this comparison.
+
+Verification commands for the launcher branch:
+
+```bash
+bash -n SLURM/Auxme/predictive_training_pipeline.sl \
+  && bash -n SLURM/Auxme/camera_ready_benchmark.sl
+scripts/dev/sbatch_use_max_time.sh --time 12:00:00 --dry-run \
+  SLURM/Auxme/predictive_training_pipeline.sl
+git diff --check
+```
+
 ## Follow-Up Boundary
 
 Issue #1167 is not complete until the same-seed training/evaluation comparison reports ADE/FDE and

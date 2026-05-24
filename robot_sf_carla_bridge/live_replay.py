@@ -129,6 +129,7 @@ def run_t1_oracle_live_replay_against_server(
             "adaptations": adaptations,
             "replay_metadata": _replay_metadata(adaptations),
             "trajectory": trajectory,
+            "metrics": trajectory["metrics"],
             "boundary": _live_replay_boundary(),
         }
     except Exception as exc:  # noqa: BLE001 - CARLA raises simulator-specific exceptions.
@@ -581,41 +582,59 @@ def _replay_oracle_transforms(
 
     robot = cast("dict[str, Any]", payload["robot"])
     pedestrians = cast("list[dict[str, Any]]", payload["pedestrians"])
+    static_geometry = cast("dict[str, Any]", payload["static_geometry"])
     robot_actor = cast("_Actor", actor_summary["robot_actor"])
     pedestrian_actors = cast("list[_Actor]", actor_summary["pedestrian_actors"])
+    robot_samples: list[dict[str, float]] = []
+    pedestrian_samples: list[list[dict[str, float]]] = []
 
     for step in range(step_count):
         alpha = 0.0 if step_count == 1 else step / (step_count - 1)
+        robot_pose = _interpolate_pose(
+            cast("dict[str, Any]", robot["start"]),
+            cast("dict[str, Any]", robot["goal"]),
+            alpha,
+        )
+        robot_samples.append(robot_pose)
+        step_pedestrians: list[dict[str, float]] = []
         robot_actor.set_transform(
             robot_sf_pose_to_carla_transform(
                 carla_module,
-                _interpolate_pose(
-                    cast("dict[str, Any]", robot["start"]),
-                    cast("dict[str, Any]", robot["goal"]),
-                    alpha,
-                ),
+                robot_pose,
                 z=_VEHICLE_ACTOR_Z,
             )
         )
         for pedestrian_actor, pedestrian in zip(pedestrian_actors, pedestrians, strict=True):
+            pedestrian_pose = _path_pose(
+                cast("dict[str, Any]", pedestrian["start"]),
+                cast("list[dict[str, Any]]", pedestrian["route"]),
+                alpha,
+            )
+            step_pedestrians.append(pedestrian_pose)
             pedestrian_actor.set_transform(
                 robot_sf_pose_to_carla_transform(
                     carla_module,
-                    _path_pose(
-                        cast("dict[str, Any]", pedestrian["start"]),
-                        cast("list[dict[str, Any]]", pedestrian["route"]),
-                        alpha,
-                    ),
+                    pedestrian_pose,
                 )
             )
+        pedestrian_samples.append(step_pedestrians)
         _tick_world(world)
 
+    metrics = _oracle_replay_metrics(
+        robot=robot,
+        pedestrians=pedestrians,
+        static_geometry=static_geometry,
+        robot_samples=robot_samples,
+        pedestrian_samples=pedestrian_samples,
+        truncated=step_count < requested_steps,
+    )
     return {
         "steps": step_count,
         "requested_steps": requested_steps,
         "dt_s": dt_s,
         "horizon_s": horizon_s,
         "truncated_by_max_steps": step_count < requested_steps,
+        "metrics": metrics,
         "robot": {
             "start": robot["start"],
             "goal": robot["goal"],
@@ -664,6 +683,73 @@ def _tick_world(world: Any) -> None:
         world.tick()
     elif hasattr(world, "wait_for_tick"):
         world.wait_for_tick()
+
+
+def _oracle_replay_metrics(
+    *,
+    robot: dict[str, Any],
+    pedestrians: list[dict[str, Any]],
+    static_geometry: dict[str, Any],
+    robot_samples: list[dict[str, float]],
+    pedestrian_samples: list[list[dict[str, float]]],
+    truncated: bool,
+) -> dict[str, bool | float]:
+    """Compute conservative metrics from the scripted oracle replay trajectory.
+
+    Returns:
+        dict[str, bool | float]: Metric fields that the CARLA parity adapter can compare.
+    """
+    robot_radius = float(cast("dict[str, Any]", robot.get("footprint", {})).get("radius_m", 0.0))
+    min_clearance = math.inf
+    collision = False
+    for robot_pose, step_pedestrians in zip(robot_samples, pedestrian_samples, strict=True):
+        for pedestrian, pedestrian_pose in zip(pedestrians, step_pedestrians, strict=True):
+            pedestrian_radius = float(
+                cast("dict[str, Any]", pedestrian.get("footprint", {})).get("radius_m", 0.0)
+            )
+            clearance = (
+                _planar_distance(robot_pose, pedestrian_pose) - robot_radius - pedestrian_radius
+            )
+            min_clearance = min(min_clearance, clearance)
+            collision = collision or clearance <= 0.0
+        for obstacle in cast("list[dict[str, Any]]", static_geometry.get("obstacles", [])):
+            bounds = _axis_aligned_rectangle_bounds(obstacle)
+            if bounds is None:
+                continue
+            clearance = _point_rectangle_clearance(robot_pose, bounds) - robot_radius
+            min_clearance = min(min_clearance, clearance)
+            collision = collision or clearance <= 0.0
+
+    final_goal_distance = _planar_distance(robot_samples[-1], cast("dict[str, Any]", robot["goal"]))
+    metrics: dict[str, bool | float] = {
+        "success": (not truncated) and final_goal_distance <= max(robot_radius, 1e-6),
+        "collision": collision,
+        "intervention_rate": 0.0,
+    }
+    if math.isfinite(min_clearance):
+        metrics["min_distance_m"] = min_clearance
+    return metrics
+
+
+def _planar_distance(a: dict[str, Any], b: dict[str, Any]) -> float:
+    dx = float(a["x"]) - float(b["x"])
+    dy = float(a["y"]) - float(b["y"])
+    return math.hypot(dx, dy)
+
+
+def _point_rectangle_clearance(point: dict[str, Any], bounds: dict[str, float]) -> float:
+    x = float(point["x"])
+    y = float(point["y"])
+    dx = max(bounds["min_x"] - x, 0.0, x - bounds["max_x"])
+    dy = max(bounds["min_y"] - y, 0.0, y - bounds["max_y"])
+    if dx > 0.0 or dy > 0.0:
+        return math.hypot(dx, dy)
+    return -min(
+        x - bounds["min_x"],
+        bounds["max_x"] - x,
+        y - bounds["min_y"],
+        bounds["max_y"] - y,
+    )
 
 
 def _live_replay_boundary() -> dict[str, bool | str]:

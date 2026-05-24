@@ -120,6 +120,13 @@ def _metrics(record: dict[str, Any]) -> dict[str, Any]:
         Metric dictionary from the nested ``metrics`` key, or the record itself.
     """
     metrics = record.get("metrics", record)
+    if not isinstance(metrics, dict):
+        return {}
+    nested_replay = record.get("replay")
+    if "metrics" not in record and isinstance(nested_replay, dict):
+        nested_metrics = nested_replay.get("metrics")
+        if isinstance(nested_metrics, dict):
+            return nested_metrics
     return metrics if isinstance(metrics, dict) else {}
 
 

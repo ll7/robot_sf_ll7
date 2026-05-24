@@ -45,6 +45,8 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   explicit variant/source rows and fail-closed upstream adapter availability.
 - `issue_1169_carla_live_replay_2026-05-18/`: compact Docker-backed CARLA live replay summaries
   proving client/server connectivity and the fail-closed static-geometry boundary.
+- `issue_1467_carla_replay_metrics_2026-05-24/`: compact native CARLA replay metric smoke
+  evidence showing the T1 live replay path can emit metrics and produce comparable parity rows.
 - `issue_1344_paired_amv_primary_2026-05-20/`: compact paired nominal/stress AMV primary-row
   campaign summaries and tables.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100

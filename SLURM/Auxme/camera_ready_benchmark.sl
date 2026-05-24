@@ -135,11 +135,11 @@ ensure_module_command() {
 }
 
 run_in_allocation() {
-  if command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  if command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]] && srun --version >/dev/null 2>&1; then
     log "Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
     srun --cpu_bind=cores "$@"
   else
-    echo "[camera-ready-bench] srun unavailable or not in a Slurm allocation; running directly." >&2
+    echo "[camera-ready-bench] srun unavailable, broken, or not in a Slurm allocation; running directly." >&2
     "$@"
   fi
 }

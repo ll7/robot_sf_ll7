@@ -79,3 +79,10 @@ largest near-miss-heavy wins. Prioritize `francis2023_narrow_doorway`,
 `classic_station_platform_medium`, `francis2023_robot_crowding`, and
 `francis2023_narrow_hallway` if causal mechanism claims are needed.
 
+Update from issue #1477:
+[`issue_1477_s10_h500_mechanism_review.md`](issue_1477_s10_h500_mechanism_review.md) selected
+exact candidate planner/scenario/seed cells from the verified issue #1454 archive. The archive
+contains per-episode summaries but no step traces, videos, trajectory JSONL, or frame artifacts, so
+the mechanism boundary remains unchanged: the selected rows support summary-level outcome and
+near-miss language only, not causal claims about waiting, yielding, hesitation, squeezing, or
+intentional risk-taking.

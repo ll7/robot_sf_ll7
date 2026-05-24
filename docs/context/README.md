@@ -144,6 +144,8 @@ knowledge, not every transient iteration detail.
   [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
 * Issue #1398 metric rollup reconciliation:
   [issue_1398_metric_rollup_reconciliation.md](issue_1398_metric_rollup_reconciliation.md)
+* Issue #1396 Shielded PPO Repair Launch Packet:
+  [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
 * Issue #1294 seed-sensitivity perturbations:
@@ -212,6 +214,7 @@ knowledge, not every transient iteration detail.
   [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
+  [issue 1396 shielded PPO launch packet](evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/README.md),
   [issue 1395 learned-risk launch packet](evidence/issue_1395_learned_risk_launch_packet_2026-05-24/README.md),
   [issue 1397 oracle imitation launch packet](evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/README.md),
   [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),

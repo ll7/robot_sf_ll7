@@ -59,6 +59,8 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_1454_s10_h500_candidates_2026-05-23/`: compact exploratory S10 scenario-horizon h500
   evidence for the seven functioning Stage A rows plus local policy-search candidate rows, with a
   pointer to the non-package GitHub artifact release for the raw campaign archive.
+- `issue_1396_shielded_ppo_launch_packet_2026-05-24/`: comparison-freeze fixture for the
+  shielded-PPO repair pre-SLURM launch-packet validator.
 - `issue_1395_learned_risk_launch_packet_2026-05-24/`: trace-contract and baseline-freeze
   fixtures for the learned-risk-model pre-SLURM launch-packet validator.
 - `issue_1397_oracle_imitation_launch_packet_2026-05-24/`: dry-run fixture and checksum evidence

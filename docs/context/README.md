@@ -180,6 +180,8 @@ knowledge, not every transient iteration detail.
   [issue_1437_carla_robot_spawn.md](issue_1437_carla_robot_spawn.md)
 * Issue #1440 CARLA Robot Spawn Projection:
   [issue_1440_carla_spawn_projection.md](issue_1440_carla_spawn_projection.md)
+* Issue #1442 CARLA Native Spawn Probe:
+  [issue_1442_carla_native_spawn_probe.md](issue_1442_carla_native_spawn_probe.md)
 * Issue #1430 CARLA Live Replay Parity 2026-05-21:
   [issue_1430_carla_live_parity.md](issue_1430_carla_live_parity.md)
 * Issue #1436 CI Reproducibility and Flaky Statistical Acceptance Policy (2026-05-22):
@@ -208,6 +210,7 @@ knowledge, not every transient iteration detail.
   [Issue #1111 CARLA Setup-Only Smoke Evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
   [Issue #1239 Human-Model Transfer Evidence](evidence/issue_1239_human_model_transfer_2026-05-18/README.md),
   [Issue #1169 CARLA Live Replay Evidence](evidence/issue_1169_carla_live_replay_2026-05-18/README.md),
+  [Issue #1442 CARLA Native Spawn Probe Evidence](evidence/issue_1442_carla_native_spawn_probe_2026-05-24/README.md),
   [Issue #1344 Paired AMV Primary Evidence](evidence/issue_1344_paired_amv_primary_2026-05-20/README.md),
   [Issue #1416 Converted-Map Cache Evidence](evidence/issue_1416_converted_map_cache_2026-05-20/README.md),
   and the

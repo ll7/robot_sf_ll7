@@ -109,6 +109,7 @@ def test_publish_model_registry_release_updates_registry_output(
             "--staging-dir",
             str(tmp_path / "staging"),
             "--update-registry",
+            "--allow-registry-update-without-upload",
             "--registry-output",
             str(output_path),
         ]
@@ -153,3 +154,34 @@ def test_publish_model_registry_release_reports_missing_local_without_download(
             "reason": "missing local_path; rerun with --download-missing to hydrate from registry",
         }
     ]
+
+
+def test_publish_model_registry_release_requires_upload_before_registry_update(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Registry updates should not write unpublished release pointers by default."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(model_path))
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    try:
+        publish_model_registry_release.main(
+            [
+                "--registry-path",
+                str(registry_path),
+                "--tag",
+                "artifact/models-test",
+                "--staging-dir",
+                str(tmp_path / "staging"),
+                "--update-registry",
+                "--registry-output",
+                str(tmp_path / "updated_registry.yaml"),
+            ]
+        )
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("--update-registry without upload did not fail closed")

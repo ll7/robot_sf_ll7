@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 import yaml
@@ -162,8 +163,12 @@ def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Pat
     expected_sha256 = _github_release_expected_sha256(release)
     if not asset_name:
         raise ValueError(f"Registry entry '{model_id}' github_release.asset_name is required.")
+    _validate_github_release_asset_name(asset_name, model_id=model_id)
+    if not expected_sha256:
+        raise ValueError(f"Registry entry '{model_id}' github_release.sha256 is required.")
     if not url:
         url = _github_release_url(release, model_id=model_id, asset_name=asset_name)
+    _validate_github_release_url(url, model_id=model_id)
 
     cache_root = Path(cache_dir) if cache_dir is not None else Path("output/model_cache")
     cache_root = cache_root / model_id
@@ -214,6 +219,23 @@ def _github_release_url(
             f"Registry entry '{model_id}' needs github_release.url or repo/tag/asset_name."
         )
     return f"https://github.com/{repo}/releases/download/{tag}/{asset_name}"
+
+
+def _validate_github_release_asset_name(asset_name: str, *, model_id: str) -> None:
+    """Validate that a release asset name cannot escape the cache directory."""
+    if Path(asset_name).name != asset_name or asset_name in {".", ".."}:
+        raise ValueError(
+            f"Registry entry '{model_id}' github_release.asset_name must be a file name."
+        )
+
+
+def _validate_github_release_url(url: str, *, model_id: str) -> None:
+    """Validate that a release URL is an HTTPS GitHub URL."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.netloc != "github.com":
+        raise ValueError(
+            f"Registry entry '{model_id}' github_release.url must be an https://github.com URL."
+        )
 
 
 def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:

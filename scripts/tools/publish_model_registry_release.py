@@ -70,6 +70,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Write github_release pointers into the registry after staging/upload planning.",
     )
     parser.add_argument(
+        "--allow-registry-update-without-upload",
+        action="store_true",
+        help=(
+            "Allow --update-registry without --execute-upload for offline fixture generation. "
+            "Default is fail-closed so unpublished release pointers are not written."
+        ),
+    )
+    parser.add_argument(
         "--registry-output",
         type=Path,
         default=None,
@@ -367,6 +375,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the model registry publication workflow."""
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+    if (
+        args.update_registry
+        and not args.execute_upload
+        and not args.allow_registry_update_without_upload
+    ):
+        parser.error("--update-registry requires --execute-upload or explicit offline override.")
     args.registry_path = args.registry_path.resolve()
     args.cache_dir = args.cache_dir.resolve()
     registry_data = _load_registry_data(args.registry_path)

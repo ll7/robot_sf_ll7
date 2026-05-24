@@ -351,6 +351,83 @@ models:
         )
 
 
+def test_resolve_model_path_requires_github_release_checksum(tmp_path: Path) -> None:
+    """Release-backed registry rows must fail closed without an expected checksum."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: public_model
+    local_path: missing/model.zip
+    github_release:
+      url: https://github.com/ll7/robot_sf_ll7/releases/download/tag/public_model-model.zip
+      asset_name: public_model-model.zip
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="github_release.sha256 is required"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=tmp_path / "cache",
+        )
+
+
+def test_resolve_model_path_rejects_untrusted_github_release_url(tmp_path: Path) -> None:
+    """Release-backed downloads should only use trusted GitHub HTTPS URLs."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: public_model
+    local_path: missing/model.zip
+    github_release:
+      url: https://example.com/ll7/robot_sf_ll7/releases/download/tag/public_model-model.zip
+      asset_name: public_model-model.zip
+      sha256: 0000000000000000000000000000000000000000000000000000000000000000
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="https://github.com URL"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=tmp_path / "cache",
+        )
+
+
+def test_resolve_model_path_rejects_release_asset_path_traversal(tmp_path: Path) -> None:
+    """Release asset names should not be able to escape the model cache directory."""
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: public_model
+    local_path: missing/model.zip
+    github_release:
+      url: https://github.com/ll7/robot_sf_ll7/releases/download/tag/public_model-model.zip
+      asset_name: ../public_model-model.zip
+      sha256: 0000000000000000000000000000000000000000000000000000000000000000
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="asset_name must be a file name"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=tmp_path / "cache",
+        )
+
+
 def test_resolve_model_path_rejects_missing_local_path_when_download_disabled(
     tmp_path: Path,
 ) -> None:

@@ -74,6 +74,22 @@ def test_compare_oracle_replay_metrics_rejects_degraded_status_even_with_native_
     assert report["metrics"][0]["reason"] == report["reason"]
 
 
+def test_compare_oracle_replay_metrics_reads_nested_runtime_replay_metrics():
+    """Docker runtime summaries should expose metrics from their nested replay result."""
+    report = compare_oracle_replay_metrics(
+        {"metrics": {"success": True, "collision": False}},
+        {
+            "status": "oracle-replay",
+            "mode": "oracle-replay",
+            "replay": {"metrics": {"success": True, "collision": False}},
+        },
+        metric_names=("success", "collision"),
+    )
+
+    assert report["status"] == "comparable"
+    assert [row["status"] for row in report["metrics"]] == ["match", "match"]
+
+
 def test_compare_oracle_replay_metrics_marks_non_finite_numbers_unavailable():
     """NaN and infinity should stay unavailable instead of becoming JSON deltas."""
     report = compare_oracle_replay_metrics(

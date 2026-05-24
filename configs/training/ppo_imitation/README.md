@@ -14,6 +14,9 @@ This directory hosts configuration files used by the expert-policy, trajectory c
   `ppo_finetune_issue_749_v10_warm_start.yaml` – Issue #749 BC warm-start PPO challenger launch
   packet; see `docs/context/issue_749_bc_preinit_ppo_launch_packet.md` for the dataset collection,
   artifact-persistence, and evaluation boundary.
+* `oracle_dataset_issue_1397_launch_packet.yaml` – pre-Slurm oracle-imitation dataset launch
+  packet. Validate with
+  `uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml --json`.
 * Additional files describe scenario coverage manifests referenced by trajectory collection commands.
 
 ## Usage Notes

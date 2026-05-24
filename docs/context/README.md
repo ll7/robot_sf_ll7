@@ -138,6 +138,8 @@ knowledge, not every transient iteration detail.
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * SLURM issue batch status 2026-05-21:
   [slurm_issue_batch_status_2026-05-21.md](slurm_issue_batch_status_2026-05-21.md)
+* Issue #1397 Oracle Imitation Launch Packet:
+  [issue_1397_oracle_imitation_launch_packet.md](issue_1397_oracle_imitation_launch_packet.md)
 * Issue #1353 Broader AMV Baseline Preflight:
   [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
 * Issue #1398 metric rollup reconciliation:
@@ -182,6 +184,10 @@ knowledge, not every transient iteration detail.
   [issue_1437_carla_robot_spawn.md](issue_1437_carla_robot_spawn.md)
 * Issue #1440 CARLA Robot Spawn Projection:
   [issue_1440_carla_spawn_projection.md](issue_1440_carla_spawn_projection.md)
+* Issue #1467 CARLA Replay Metrics:
+  [issue_1467_carla_replay_metrics.md](issue_1467_carla_replay_metrics.md)
+* Issue #1442 CARLA Native Spawn Probe (2026-05-24):
+  [issue_1442_carla_native_spawn_probe.md](issue_1442_carla_native_spawn_probe.md)
 * Issue #1430 CARLA Live Replay Parity 2026-05-21:
   [issue_1430_carla_live_parity.md](issue_1430_carla_live_parity.md)
 * Issue #1436 CI Reproducibility and Flaky Statistical Acceptance Policy (2026-05-22):
@@ -207,10 +213,13 @@ knowledge, not every transient iteration detail.
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
   [issue 1395 learned-risk launch packet](evidence/issue_1395_learned_risk_launch_packet_2026-05-24/README.md),
+  [issue 1397 oracle imitation launch packet](evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/README.md),
   [issue 1113 continuous h500 promotion evidence](evidence/issue_1113_continuous_h500_2026-05-10/README.md),
   [Issue #1111 CARLA Setup-Only Smoke Evidence](evidence/issue_1111_carla_setup_smoke_2026-05-18/README.md),
   [Issue #1239 Human-Model Transfer Evidence](evidence/issue_1239_human_model_transfer_2026-05-18/README.md),
   [Issue #1169 CARLA Live Replay Evidence](evidence/issue_1169_carla_live_replay_2026-05-18/README.md),
+  [Issue #1467 CARLA Replay Metrics Evidence](evidence/issue_1467_carla_replay_metrics_2026-05-24/README.md),
+  [Issue #1442 CARLA Native Spawn Probe Evidence](evidence/issue_1442_carla_native_spawn_probe_2026-05-24/README.md),
   [Issue #1344 Paired AMV Primary Evidence](evidence/issue_1344_paired_amv_primary_2026-05-20/README.md),
   [Issue #1416 Converted-Map Cache Evidence](evidence/issue_1416_converted_map_cache_2026-05-20/README.md),
   and the

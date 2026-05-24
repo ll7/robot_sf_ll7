@@ -1,0 +1,8 @@
+{
+  "metrics": {
+    "success": true
+  },
+  "note": "Reference placeholder for #1442 native-spawn probe. The live CARLA replay reached oracle-replay without spawn adaptation, but the current T1 replay output does not emit trajectory-level parity metrics.",
+  "schema_version": "robot-sf-reference-placeholder.v1",
+  "status": "reference-only"
+}

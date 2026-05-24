@@ -1,0 +1,29 @@
+{
+  "dataset_id": "issue_1397_oracle_imitation_v1",
+  "fixture_role": "pre_slurm_manifest_preflight",
+  "source_candidate": "hybrid_rule_v3_static_margin0_waypoint2",
+  "episodes": [
+    {
+      "episode_id": "train__classic_doorway_low__seed201",
+      "scenario_id": "classic_doorway_low",
+      "seed": 201,
+      "split": "train"
+    },
+    {
+      "episode_id": "validation__classic_crossing_low__seed101",
+      "scenario_id": "classic_crossing_low",
+      "seed": 101,
+      "split": "validation"
+    },
+    {
+      "episode_id": "evaluation__planner_sanity_simple__seed111",
+      "scenario_id": "planner_sanity_simple",
+      "seed": 111,
+      "split": "evaluation"
+    }
+  ],
+  "notes": [
+    "Small tracked fixture only; it is not an oracle trajectory dataset.",
+    "Full collection remains a later Slurm follow-up after this launch packet is merged."
+  ]
+}

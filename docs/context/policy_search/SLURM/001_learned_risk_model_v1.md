@@ -21,7 +21,15 @@ its own; it is only allowed as an auxiliary cost term alongside a hard guard.
 
 ## Suggested Command Shape
 
-Use a future config-first entrypoint. Do not improvise shell-only training commands.
+Use the pre-SLURM launch packet from issue #1395:
+
+- `configs/training/learned_risk_model_issue_1395_launch_packet.yaml`
+- `scripts/validation/validate_learned_risk_launch_packet.py`
+- `docs/context/issue_1395_learned_risk_launch_packet.md`
+
+Do not improvise shell-only training commands. A follow-up SLURM issue should first validate the
+packet, replace pending durable artifact aliases with concrete trace/baseline/checkpoint artifact
+URIs, and record stop gates before training starts.
 
 ## Validation Requirement
 

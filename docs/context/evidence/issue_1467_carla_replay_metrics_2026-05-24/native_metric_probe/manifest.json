@@ -1,0 +1,9 @@
+{
+  "exports": [
+    {
+      "path": "issue_1467_native_metric_probe.json",
+      "scenario_id": "issue_1467_native_metric_probe"
+    }
+  ],
+  "schema_version": "carla-replay-export-manifest.v1"
+}

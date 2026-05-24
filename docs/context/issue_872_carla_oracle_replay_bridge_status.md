@@ -2,7 +2,7 @@
 
 Issue: [#872](https://github.com/ll7/robot_sf_ll7/issues/872)
 
-Status date: 2026-05-21
+Status date: 2026-05-24
 
 ## Scope Boundary
 
@@ -34,6 +34,9 @@ Completed CARLA bridge pieces:
   to a robot vehicle spawn rejection.
 - Issue #1440 proves the certified payload can reach live `oracle-replay` after an explicit CARLA
   map spawn projection for the robot vehicle.
+- Issue #1467 adds conservative T1 replay metric emission for native replay outputs and proves the
+  Docker-runtime JSON can produce comparable parity rows for a generated CARLA-aligned native
+  metric probe.
 
 ## Claim Boundary
 
@@ -49,6 +52,9 @@ Specifically:
   Robot-SF/CARLA metric parity.
 - The #1440 projection moved the robot spawn about `18.191 m`, so comparable trajectory metrics are
   intentionally unavailable.
+- The #1467 native metric probe is comparable smoke evidence, not a broad CARLA transfer claim.
+  It proves the metric-emission path, while broader claims still require a durable certified
+  native/aligned scenario fixture and richer metric coverage.
 
 ## Remaining Parent Gaps
 
@@ -60,6 +66,8 @@ The #872 definition of done still needs:
 - Documentation that separates setup, failed, adapted replay, native replay, degraded, and
   metric-parity claims. The coordinate-alignment contract in
   [#1444](./issue_1444_carla_coordinate_alignment_contract.md) now provides this taxonomy.
+- A durable certified native/aligned fixture that is not derived from an ignored exploratory output
+  path.
 
 ## Follow-Up Issues
 
@@ -72,9 +80,12 @@ The #872 definition of done still needs:
 - [#1444](./issue_1444_carla_coordinate_alignment_contract.md) defines the conservative replay-mode
   taxonomy and projection tolerance required before any Robot-SF/CARLA metric parity claim.
 - [#1442](https://github.com/ll7/robot_sf_ll7/issues/1442) is the active parity gate.
+- [#1467](https://github.com/ll7/robot_sf_ll7/issues/1467) records the native replay metric-emission
+  slice and comparable smoke proof.
 
 ## Validation
 
 This status note is documentation only. The supporting implementation evidence for the current
 state is recorded in
-[`issue_1440_carla_spawn_projection.md`](issue_1440_carla_spawn_projection.md).
+[`issue_1440_carla_spawn_projection.md`](issue_1440_carla_spawn_projection.md) and
+[`issue_1467_carla_replay_metrics.md`](issue_1467_carla_replay_metrics.md).

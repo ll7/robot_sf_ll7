@@ -256,7 +256,7 @@ def _validate_artifacts(
             errors.append(f"{key} entries must be non-empty strings")
             continue
         path_text = raw.strip()
-        if path_text.startswith("output/") or "/output/" in path_text:
+        if "output" in Path(path_text).parts:
             errors.append(f"{key} must not depend on worktree-local output: {path_text}")
         if path_text.startswith(_DURABLE_URI_PREFIXES):
             durable_count += 1
@@ -282,7 +282,11 @@ def _validate_checksum(
     if not isinstance(expected, str) or not expected.strip():
         errors.append(f"checksums missing SHA-256 entry for {path_text}")
         return
-    actual = hashlib.sha256(local_path.read_bytes()).hexdigest()
+    sha256 = hashlib.sha256()
+    with open(local_path, "rb") as f:
+        while chunk := f.read(8192):
+            sha256.update(chunk)
+    actual = sha256.hexdigest()
     if actual != expected.strip().lower():
         errors.append(f"checksum mismatch for {path_text}: expected {expected}, got {actual}")
 
@@ -294,22 +298,23 @@ def _validate_trace_fixtures(
 ) -> None:
     required = [str(field) for field in required_fields]
     for fixture_path in fixture_paths:
-        for line_number, line in enumerate(
-            fixture_path.read_text(encoding="utf-8").splitlines(), 1
-        ):
-            if not line.strip():
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError as exc:
-                errors.append(f"{fixture_path}:{line_number} is not valid JSON: {exc.msg}")
-                continue
-            if not isinstance(record, dict):
-                errors.append(f"{fixture_path}:{line_number} must be a JSON object")
-                continue
-            missing = [field for field in required if field not in record]
-            if missing:
-                errors.append(f"{fixture_path}:{line_number} missing required fields: {missing}")
+        with open(fixture_path, encoding="utf-8") as f:
+            for line_number, line in enumerate(f, 1):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    record = json.loads(stripped)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"{fixture_path}:{line_number}: invalid JSON: {exc.msg}")
+                if not isinstance(record, dict):
+                    errors.append(f"{fixture_path}:{line_number} must be a JSON object")
+                    continue
+                missing = [field for field in required if field not in record]
+                if missing:
+                    errors.append(
+                        f"{fixture_path}:{line_number} missing required fields: {missing}"
+                    )
 
 
 __all__ = [

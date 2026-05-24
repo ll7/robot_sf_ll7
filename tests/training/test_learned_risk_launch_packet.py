@@ -15,6 +15,8 @@ from robot_sf.training.learned_risk_launch_packet import (
 )
 from scripts.validation.validate_learned_risk_launch_packet import main as validate_cli_main
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _write_packet(tmp_path: Path, packet: dict[str, object]) -> Path:
     path = tmp_path / "packet.yaml"
@@ -89,7 +91,7 @@ def _valid_packet(tmp_path: Path) -> dict[str, object]:
 def test_issue_1395_launch_packet_validates() -> None:
     """The checked-in #1395 launch packet should pass the local preflight."""
     report = validate_launch_packet(
-        Path("configs/training/learned_risk_model_issue_1395_launch_packet.yaml")
+        _REPO_ROOT / "configs/training/learned_risk_model_issue_1395_launch_packet.yaml"
     )
 
     assert report["status"] == "valid"
@@ -135,12 +137,31 @@ def test_validate_launch_packet_rejects_output_artifacts(tmp_path: Path) -> None
         validate_launch_packet(_write_packet(tmp_path, broken))
 
 
+def test_validate_launch_packet_rejects_invalid_trace_json(tmp_path: Path) -> None:
+    """Invalid JSON in trace fixtures raises ValueError with file path and line number."""
+    packet = _valid_packet(tmp_path)
+    trace = tmp_path / "bad_trace.jsonl"
+    trace.write_text(
+        '{"scenario_id":"ok","seed":1,"termination_reason":"ok","metrics":{},"trajectory_features":{},"labels":{"collision":false,"near_miss":false,"low_progress":false}}\n'
+        "{invalid json here}\n",
+        encoding="utf-8",
+    )
+    broken = copy.deepcopy(packet)
+    broken["trace_input_contract"]["trace_fixture_paths"] = [str(trace)]
+    broken["trace_input_contract"]["checksums"] = {
+        str(trace): hashlib.sha256(trace.read_bytes()).hexdigest()
+    }
+
+    with pytest.raises(ValueError, match="bad_trace.jsonl:2: invalid JSON"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
 def test_validate_launch_packet_cli_reports_json() -> None:
     """The CLI should expose a machine-readable valid report."""
     exit_code = validate_cli_main(
         [
             "--config",
-            "configs/training/learned_risk_model_issue_1395_launch_packet.yaml",
+            str(_REPO_ROOT / "configs/training/learned_risk_model_issue_1395_launch_packet.yaml"),
             "--json",
         ]
     )

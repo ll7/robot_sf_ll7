@@ -173,6 +173,36 @@ proved the schema fix by writing nonempty proxy JSONL artifacts through epoch 40
 `training/proxy_eval/proxy_epoch_0005_algo.yaml` now contains
 `predictive_feature_schema_name: predictive_obstacle_features_v1`.
 
+Final #1427 rerun result, refreshed 2026-05-25:
+
+- job `12617`, `pred1427-base4`, exited `FAILED` with code `2:0` after 1:23:32.
+- job `12618`, `pred1427-obs4`, exited `FAILED` with code `2:0` after 1:22:49.
+- Both jobs produced complete final-eval and success-campaign artifacts, including
+  `final_eval_summary.json`, `campaign/campaign_summary.json`, and
+  `final_performance_summary.json`.
+- Both failures were benchmark stage-gate failures, not missing-artifact failures:
+  `evaluation_ok: false`, `campaign_ok: true`, `hard_seed_diagnostics_ok: true`.
+
+Final eval metrics:
+
+| Variant | Success rate | Mean min distance | Final gate |
+| --- | ---: | ---: | --- |
+| Baseline predictive | 0.1304 | 2.1931 | failed success gate (`min_success_rate: 0.3`) |
+| Obstacle-feature predictive | 0.1014 | 2.2105 | failed success gate (`min_success_rate: 0.3`) |
+
+Campaign best variants:
+
+| Variant | Best planner grid row | Hard success | Global success | Global mean min distance |
+| --- | --- | ---: | ---: | ---: |
+| Baseline predictive | `risk_aware_adaptive` | 0.0000 | 0.1304 | 2.1931 |
+| Obstacle-feature predictive | `baseline_like` | 0.0000 | 0.1014 | 2.2081 |
+
+Interpretation: the obstacle-feature model improved validation forecast loss/clearance signals but did not
+improve downstream navigation on this same-seed run. Its global success rate was lower than the
+baseline, and hard-seed success remained zero. Treat this as evidence against promoting
+`predictive_obstacle_features_v1` as-is; future work should revise the planner/policy coupling or
+the training objective before spending on larger obstacle-feature campaigns.
+
 Verification commands for the launcher branch:
 
 ```bash
@@ -185,8 +215,6 @@ git diff --check
 
 ## Follow-Up Boundary
 
-Issue #1167 is not complete until the same-seed training/evaluation comparison reports ADE/FDE and
-downstream planner metrics. This patch removes the local pipeline blocker recorded during PR #1400
-triage and should be treated as the runnable setup for the campaign, not as benchmark-success
-evidence. Issue #1427 owns the actual SLURM submission, metric capture, and recommendation about
-whether obstacle features are worth further investment.
+Issue #1167's runnable same-seed surface has now produced a complete #1427 comparison. PR #1480
+should be treated as workflow/artifact-contract progress plus negative same-seed evidence for
+obstacle-feature promotion, not as a successful benchmark promotion.

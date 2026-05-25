@@ -2,8 +2,6 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19563812.svg)](https://doi.org/10.5281/zenodo.19563812)
 
-> 2025-09-16 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
-
 <!-- This document is the first touchpoint for users and developers of the robot-sf project. Keep it very concise and focused on essential information. -->
 
 ## About

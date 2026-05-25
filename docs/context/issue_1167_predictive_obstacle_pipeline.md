@@ -120,10 +120,101 @@ Same-seed contract:
   contains zero active non-sentinel obstacle rows. The preflight evidence is written to
   `output/tmp/predictive_planner/pipeline/<run_id>/obstacle_feature_preflight.json`.
 
+## Issue #1427 SLURM Launch Update, 2026-05-24
+
+PR #1480 added `SLURM/Auxme/predictive_training_pipeline.sl` as the Auxme launcher for the
+same-seed pair and hardened `SLURM/Auxme/camera_ready_benchmark.sl` against the broken `srun`
+symbol-error path observed in earlier campaign submissions.
+
+Submitted jobs from branch `issue-1427-predictive-slurm-runs`:
+
+- job `12611`, `pred1427-base`, config
+  `configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml`, run id
+  `predictive_br07_same_seed_issue_1427_20260524T110529Z`
+- job `12612`, `pred1427-obs`, config
+  `configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml`, run id
+  `predictive_obstacle_features_same_seed_issue_1427_20260524T110529Z`
+
+Both jobs started on `a30` node `auxme-imech172`. Early logs showed repeated node-side NVML
+`Driver/library version mismatch` warnings, but both jobs continued past startup. At the time of
+this handoff, both jobs had produced base, hardcase, and mixed rollout datasets plus
+`training/predictive_model.pt`. The obstacle-feature run also wrote `training/training_summary.json`,
+passed its ADE/FDE quality gates, and entered final `scripts/validation/evaluate_predictive_planner.py`.
+
+Observed caveat: proxy evaluation at training checkpoints logged non-fatal `FileNotFoundError`
+exceptions for missing `training/proxy_eval/proxy_epoch_*.jsonl` files. The training command
+continued and passed the configured quality gates, but final interpretation should check whether
+missing proxy metrics should be a hard failure for this comparison.
+
+Later status: job `12612` exited `FAILED` with code `2:0` after
+`scripts/validation/run_predictive_success_campaign.py` could not read the expected
+`campaign/hard__baseline_like__predictive_model_00e46d73fe.jsonl` artifact. The pipeline wrote
+`final_performance_summary.json` and reported failing stage gates. Follow-up issue #1481 tracks
+whether missing predictive proxy/success-campaign JSONL should be fail-closed earlier or summarized
+as structured evidence caveats. Job `12611` was still running at the last handoff refresh.
+
+Update after #1481 hardening and schema propagation: commit `b0564463` teaches the predictive
+planner algo-config builder to read the checkpoint feature-schema metadata when a concrete
+checkpoint is supplied. This fixes the obstacle-feature rerun's earlier proxy-eval mismatch where
+`proxy_epoch_0005_algo.yaml` used `predictive_legacy_v1` for a
+`predictive_obstacle_features_v1` checkpoint.
+
+Fresh paired rerun from `b0564463`:
+
+- job `12617`, `pred1427-base4`, run id
+  `predictive_br07_same_seed_issue_1427_20260524T114637Z`
+- job `12618`, `pred1427-obs4`, run id
+  `predictive_obstacle_features_same_seed_issue_1427_20260524T114637Z`
+
+Both jobs started on `a30` node `auxme-imech172`. As of the 2026-05-24 14:20 CEST refresh, both
+were still `RUNNING`. Training completed for both, final eval summaries existed for both, and both
+jobs had entered `scripts/validation/run_predictive_success_campaign.py`. The obstacle-feature job
+proved the schema fix by writing nonempty proxy JSONL artifacts through epoch 40; its generated
+`training/proxy_eval/proxy_epoch_0005_algo.yaml` now contains
+`predictive_feature_schema_name: predictive_obstacle_features_v1`.
+
+Final #1427 rerun result, refreshed 2026-05-25:
+
+- job `12617`, `pred1427-base4`, exited `FAILED` with code `2:0` after 1:23:32.
+- job `12618`, `pred1427-obs4`, exited `FAILED` with code `2:0` after 1:22:49.
+- Both jobs produced complete final-eval and success-campaign artifacts, including
+  `final_eval_summary.json`, `campaign/campaign_summary.json`, and
+  `final_performance_summary.json`.
+- Both failures were benchmark stage-gate failures, not missing-artifact failures:
+  `evaluation_ok: false`, `campaign_ok: true`, `hard_seed_diagnostics_ok: true`.
+
+Final eval metrics:
+
+| Variant | Success rate | Mean min distance | Final gate |
+| --- | ---: | ---: | --- |
+| Baseline predictive | 0.1304 | 2.1931 | failed success gate (`min_success_rate: 0.3`) |
+| Obstacle-feature predictive | 0.1014 | 2.2105 | failed success gate (`min_success_rate: 0.3`) |
+
+Campaign best variants:
+
+| Variant | Best planner grid row | Hard success | Global success | Global mean min distance |
+| --- | --- | ---: | ---: | ---: |
+| Baseline predictive | `risk_aware_adaptive` | 0.0000 | 0.1304 | 2.1931 |
+| Obstacle-feature predictive | `baseline_like` | 0.0000 | 0.1014 | 2.2081 |
+
+Interpretation: the obstacle-feature model improved validation forecast loss/clearance signals but did not
+improve downstream navigation on this same-seed run. Its global success rate was lower than the
+baseline, and hard-seed success remained zero. Treat this as evidence against promoting
+`predictive_obstacle_features_v1` as-is; future work should revise the planner/policy coupling or
+the training objective before spending on larger obstacle-feature campaigns.
+
+Verification commands for the launcher branch:
+
+```bash
+bash -n SLURM/Auxme/predictive_training_pipeline.sl \
+  && bash -n SLURM/Auxme/camera_ready_benchmark.sl
+scripts/dev/sbatch_use_max_time.sh --time 12:00:00 --dry-run \
+  SLURM/Auxme/predictive_training_pipeline.sl
+git diff --check
+```
+
 ## Follow-Up Boundary
 
-Issue #1167 is not complete until the same-seed training/evaluation comparison reports ADE/FDE and
-downstream planner metrics. This patch removes the local pipeline blocker recorded during PR #1400
-triage and should be treated as the runnable setup for the campaign, not as benchmark-success
-evidence. Issue #1427 owns the actual SLURM submission, metric capture, and recommendation about
-whether obstacle features are worth further investment.
+Issue #1167's runnable same-seed surface has now produced a complete #1427 comparison. PR #1480
+should be treated as workflow/artifact-contract progress plus negative same-seed evidence for
+obstacle-feature promotion, not as a successful benchmark promotion.

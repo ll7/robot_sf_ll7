@@ -276,13 +276,15 @@ def _run_proxy_eval(
         resume=False,
         benchmark_profile="experimental",
     )
+    if not jsonl_path.exists():
+        raise RuntimeError(f"Proxy evaluation expected JSONL was not created: {jsonl_path}")
     rows = [
         json.loads(line)
         for line in jsonl_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     if not rows:
-        raise RuntimeError("Proxy evaluation produced no episode rows.")
+        raise RuntimeError(f"Proxy evaluation produced no episode rows: {jsonl_path}")
     success_vals = [1.0 if _episode_success(row) else 0.0 for row in rows]
     min_dist_vals = [
         float(row.get("metrics", {}).get("min_distance"))
@@ -945,12 +947,17 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             )
             try:
                 proxy_metrics = _run_proxy_eval(checkpoint_path=epoch_ckpt, args=args, epoch=epoch)
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "Proxy evaluation failed at epoch={} checkpoint={}",
                     epoch,
                     epoch_ckpt,
                 )
+                if bool(args.select_by_proxy):
+                    raise RuntimeError(
+                        "Proxy evaluation is required when --select-by-proxy is enabled; "
+                        f"failed at epoch={epoch} checkpoint={epoch_ckpt}: {exc}"
+                    ) from exc
                 continue
             proxy_metrics["val_loss"] = float(val_loss)
             proxy_metrics["val_ade"] = float(val_ade)

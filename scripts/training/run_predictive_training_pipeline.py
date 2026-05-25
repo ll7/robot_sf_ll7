@@ -842,6 +842,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     campaign_summary = {}
     if campaign_summary_path.exists():
         loaded_summary = json.loads(campaign_summary_path.read_text(encoding="utf-8"))
+        campaign_status["summary_path"] = str(campaign_summary_path)
+        if int(campaign_status.get("return_code", 1)) != 0:
+            campaign_status["summary_status"] = str(loaded_summary.get("status", ""))
+            if isinstance(loaded_summary.get("failure"), dict):
+                campaign_status["failure"] = loaded_summary["failure"]
         if (
             int(campaign_status.get("return_code", 1)) == 0
             and loaded_summary.get("run_id") == run_id

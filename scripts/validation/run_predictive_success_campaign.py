@@ -38,6 +38,43 @@ class EvalResult:
     jsonl_path: str
 
 
+class MissingCampaignArtifactError(RuntimeError):
+    """Raised when a campaign stage does not produce its required JSONL artifact."""
+
+    def __init__(
+        self,
+        *,
+        jsonl_path: Path,
+        suite_name: str,
+        checkpoint: str,
+        variant_name: str,
+        reason: str,
+    ) -> None:
+        """Initialize the missing-artifact error with structured context."""
+        self.jsonl_path = jsonl_path
+        self.suite_name = suite_name
+        self.checkpoint = checkpoint
+        self.variant_name = variant_name
+        self.reason = reason
+        super().__init__(
+            "Predictive success campaign expected JSONL artifact was not usable: "
+            f"path={jsonl_path} suite={suite_name} variant={variant_name} "
+            f"checkpoint={checkpoint} reason={reason}"
+        )
+
+    def to_failure_payload(self) -> dict[str, str]:
+        """Return structured failure details for campaign summaries."""
+        return {
+            "type": type(self).__name__,
+            "message": str(self),
+            "jsonl_path": str(self.jsonl_path),
+            "suite": str(self.suite_name),
+            "checkpoint": str(self.checkpoint),
+            "variant": str(self.variant_name),
+            "reason": str(self.reason),
+        }
+
+
 def parse_args() -> argparse.Namespace:
     """Parse campaign CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -156,6 +193,14 @@ def _run_eval(
         resume=False,
         benchmark_profile="experimental",
     )
+    if not jsonl_path.exists():
+        raise MissingCampaignArtifactError(
+            jsonl_path=jsonl_path,
+            suite_name=suite_name,
+            checkpoint=checkpoint,
+            variant_name=variant_name,
+            reason="missing_jsonl",
+        )
 
     rows: list[dict] = []
     for line_number, line in enumerate(
@@ -171,6 +216,14 @@ def _run_eval(
             ) from exc
         if isinstance(payload, dict):
             rows.append(payload)
+    if not rows:
+        raise MissingCampaignArtifactError(
+            jsonl_path=jsonl_path,
+            suite_name=suite_name,
+            checkpoint=checkpoint,
+            variant_name=variant_name,
+            reason="empty_jsonl",
+        )
     success_vals = np.asarray([1.0 if _episode_success(row) else 0.0 for row in rows], dtype=float)
     min_dist_vals = np.asarray(
         [
@@ -257,41 +310,87 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     results: list[dict] = []
 
-    for checkpoint in args.checkpoints:
-        if not Path(checkpoint).exists():
-            raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
-        for variant in variants:
-            name = str(variant["name"])
-            cfg = _base_algo_cfg(checkpoint)
-            cfg.update(dict(variant.get("params", {})))
-            hard_res = _run_eval(
-                scenarios_or_path=hard_scenarios,
-                suite_name="hard",
-                checkpoint=checkpoint,
-                variant_name=name,
-                algo_cfg=cfg,
-                args=args,
-                output_dir=args.output_dir,
+    try:
+        for checkpoint in args.checkpoints:
+            if not Path(checkpoint).exists():
+                raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
+            for variant in variants:
+                name = str(variant["name"])
+                cfg = _base_algo_cfg(checkpoint)
+                cfg.update(dict(variant.get("params", {})))
+                hard_res = _run_eval(
+                    scenarios_or_path=hard_scenarios,
+                    suite_name="hard",
+                    checkpoint=checkpoint,
+                    variant_name=name,
+                    algo_cfg=cfg,
+                    args=args,
+                    output_dir=args.output_dir,
+                )
+                global_res = _run_eval(
+                    scenarios_or_path=args.scenario_matrix,
+                    suite_name="global",
+                    checkpoint=checkpoint,
+                    variant_name=name,
+                    algo_cfg=cfg,
+                    args=args,
+                    output_dir=args.output_dir,
+                )
+                results.append(
+                    {
+                        "checkpoint": checkpoint,
+                        "variant": name,
+                        "config": cfg,
+                        "hard": hard_res.__dict__,
+                        "global": global_res.__dict__,
+                        "ranking_key": list(_rank_key(hard_res, global_res)),
+                    }
+                )
+    except (Exception, SystemExit) as exc:
+        if isinstance(exc, MissingCampaignArtifactError):
+            failure = exc.to_failure_payload()
+        else:
+            message = str(exc)
+            if isinstance(exc, SystemExit) and not message:
+                message = str(getattr(exc, "code", ""))
+            failure = {"type": type(exc).__name__, "message": message}
+        failure_summary = {
+            "contract_version": _CONTRACT_VERSION,
+            "training_family": _TRAINING_FAMILY,
+            "artifact_role": "predictive_success_campaign",
+            "status": "failed",
+            "generated_at": datetime.now(UTC).isoformat(),
+            "scenario_matrix": str(args.scenario_matrix),
+            "hard_seed_manifest": str(args.hard_seed_manifest),
+            "planner_grid": str(args.planner_grid),
+            "horizon": int(args.horizon),
+            "dt": float(args.dt),
+            "workers": int(args.workers),
+            "partial_results": results,
+            "failure": failure,
+        }
+        json_path = args.output_dir / "campaign_summary.json"
+        json_path.write_text(
+            json.dumps(_nan_to_none(failure_summary), indent=2),
+            encoding="utf-8",
+        )
+        md_path = args.output_dir / "campaign_report.md"
+        md_path.write_text(
+            "\n".join(
+                [
+                    "# Predictive Success Campaign",
+                    "",
+                    "- Status: `failed`",
+                    f"- Failure type: `{failure['type']}`",
+                    f"- Failure: `{failure['message']}`",
+                    f"- JSON summary: `{json_path}`",
+                ]
             )
-            global_res = _run_eval(
-                scenarios_or_path=args.scenario_matrix,
-                suite_name="global",
-                checkpoint=checkpoint,
-                variant_name=name,
-                algo_cfg=cfg,
-                args=args,
-                output_dir=args.output_dir,
-            )
-            results.append(
-                {
-                    "checkpoint": checkpoint,
-                    "variant": name,
-                    "config": cfg,
-                    "hard": hard_res.__dict__,
-                    "global": global_res.__dict__,
-                    "ranking_key": list(_rank_key(hard_res, global_res)),
-                }
-            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print(json.dumps({"summary": str(json_path), "report": str(md_path)}, indent=2))
+        return 2
 
     ranked = sorted(
         results,

@@ -16,6 +16,15 @@ from robot_sf.benchmark.predictive_planner_config import (
     build_predictive_planner_algo_config,
     load_predictive_planner_algo_config,
 )
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    predictive_feature_schema_metadata,
+)
+from robot_sf.planner.predictive_model import (
+    PredictiveModelConfig,
+    PredictiveTrajectoryModel,
+    save_predictive_checkpoint,
+)
 
 
 def test_prediction_planner_readiness_is_experimental_and_checkpoint_dependent() -> None:
@@ -122,3 +131,30 @@ def test_build_predictive_planner_algo_config_prefers_explicit_checkpoint_overri
     assert config["predictive_device"] == "cpu"
     assert config["predictive_feature_schema_name"] == "predictive_legacy_v1"
     assert "predictive_model_id" not in config
+
+
+def test_build_predictive_planner_algo_config_uses_checkpoint_schema(tmp_path: Path) -> None:
+    """Runtime checkpoint overrides should carry the checkpoint's feature-schema contract."""
+    feature_schema = predictive_feature_schema_metadata(
+        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        ego_conditioning=False,
+    )
+    model = PredictiveTrajectoryModel(
+        PredictiveModelConfig(
+            input_dim=int(feature_schema["input_dim"]),
+            feature_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        )
+    )
+    checkpoint = tmp_path / "obstacle_predictive_model.pt"
+    save_predictive_checkpoint(
+        checkpoint,
+        model=model,
+        optimizer=None,
+        epoch=1,
+        feature_schema_metadata=feature_schema,
+    )
+
+    config = build_predictive_planner_algo_config(checkpoint_path=checkpoint, device="cpu")
+
+    assert config["predictive_checkpoint_path"] == str(checkpoint)
+    assert config["predictive_feature_schema_name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA

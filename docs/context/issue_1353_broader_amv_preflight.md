@@ -138,6 +138,19 @@ labels to:
 - `output/slurm/12619-camera-ready-benchmark.out`
 - `output/slurm/12620-camera-ready-benchmark.out`
 
+Job `12619` finished `FAILED 2:0` after producing a complete nominal campaign bundle. The failure
+is the current workflow's nonzero exit for `benchmark_success=false`, triggered by the accepted
+`socnav_bench` `not_available` row:
+
+- Campaign root:
+  `output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-rowcontract_20260525_060323`
+- Summary: `total_runs=8`, `successful_runs=7`, `total_episodes=84`, `benchmark_success=false`
+- Warning: `socnav_bench` `not_available` because SocNavBench control-pipeline assets are missing.
+
+This is not a config-path or missing-output failure, but it does make the SLURM job state ambiguous.
+Follow-up issue #1487 tracks separating accepted unavailable/excluded rows from unexpected failed
+campaign exits.
+
 Follow-up checks:
 
 ```bash

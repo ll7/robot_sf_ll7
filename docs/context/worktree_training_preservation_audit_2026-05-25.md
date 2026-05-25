@@ -26,7 +26,7 @@ Follow-up check after artifact preservation:
 Job `12620` is the issue #1353 stress benchmark follow-up, not a training run. It produced a
 campaign summary at
 `../robot_sf_ll7.worktrees/1353-broader-amv-row-contract/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-rowcontract_20260525_060323/reports/campaign_summary.json`.
-The SLURM exit is failed because `socnav_bench` was recorded as `not_available` due missing
+The SLURM exit is failed because `socnav_bench` was recorded as `not_available` due to missing
 SocNavBench `wayptnav_data`, matching the nominal job's row-contract failure mode.
 
 ## Preserve Or Publish Candidates

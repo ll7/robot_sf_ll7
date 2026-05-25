@@ -2282,7 +2282,108 @@ def test_run_campaign_success_ignores_not_available_experimental_when_core_ok(
     assert summary_payload["campaign"]["core_total_runs"] == 1
     assert summary_payload["campaign"]["benchmark_success_basis"] == "core"
     assert summary_payload["campaign"]["benchmark_success"] is True
+    assert "core_with_optional_experimental" in result["campaign_id"]
+    assert result["benchmark_success_basis"] == "core"
+    assert result["core_successful_runs"] == 1
+    assert result["core_total_runs"] == 1
     assert result["benchmark_success"] is True
+
+
+def test_run_campaign_fails_if_core_run_is_unattempted_after_stop_on_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Stop-on-failure should not mask unfinished core groups as successful."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_core_stop.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: core_stop_unattempted",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "stop_on_failure: true",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+                "  - key: socnav_bench",
+                "    algo: socnav_bench",
+                "    planner_group: experimental",
+                "  - key: social_force",
+                "    algo: social_force",
+                "    planner_group: core",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    call_order: list[str] = []
+
+    def _fake_run_batch(*args, **kwargs):
+        """Stop execution on experimental planner before all core planners run."""
+        del args
+        algo = kwargs["algo"]
+        call_order.append(algo)
+        if algo == "goal":
+            return {
+                "total_jobs": 1,
+                "written": 1,
+                "failed_jobs": 0,
+                "failures": [],
+                "preflight": {
+                    "status": "ok",
+                    "learned_policy_contract": {"status": "not_applicable"},
+                },
+                "algorithm_readiness": {
+                    "name": "goal",
+                    "tier": "baseline-ready",
+                    "profile": "baseline-safe",
+                },
+            }
+        if algo == "socnav_bench":
+            return {
+                "total_jobs": 0,
+                "written": 0,
+                "failed_jobs": 0,
+                "failures": [],
+                "preflight": {
+                    "status": "fallback",
+                    "learned_policy_contract": {"critical_mismatches": ["missing"]},
+                },
+                "algorithm_readiness": {
+                    "name": "socnav_bench",
+                    "tier": "experimental",
+                    "profile": "experimental",
+                },
+            }
+        pytest.fail("run_batch must not execute remaining planners after stop_on_failure")
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="core_stop")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+
+    assert call_order == ["goal", "socnav_bench"]
+    assert summary_payload["campaign"]["total_runs"] == 2
+    assert summary_payload["campaign"]["successful_runs"] == 1
+    assert summary_payload["campaign"]["core_successful_runs"] == 1
+    assert summary_payload["campaign"]["core_total_runs"] == 1
+    assert summary_payload["campaign"]["benchmark_success_basis"] == "core"
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    assert result["core_total_runs"] == 1
+    assert result["core_successful_runs"] == 1
+    assert result["benchmark_success"] is False
+    assert result["benchmark_success_basis"] == "core"
 
 
 def test_run_campaign_marks_empty_run_set_as_non_success(tmp_path: Path, monkeypatch) -> None:

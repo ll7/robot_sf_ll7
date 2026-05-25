@@ -119,19 +119,33 @@ _ROUTE_CLEARANCE_CERTIFICATION_STATUSES = {
 }
 
 
-def _campaign_success_counters(run_entries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def _campaign_success_counters(
+    run_entries: Sequence[Mapping[str, Any]], *, expected_core_runs: int | None = None
+) -> dict[str, Any]:
     """Return campaign success counters, anchoring success on core planners when present."""
-    total_runs = len(run_entries)
-    successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
-    core_entries = [
-        entry
-        for entry in run_entries
-        if str((entry.get("planner") or {}).get("planner_group", "")).strip().lower() == "core"
-    ]
-    core_successful_runs = sum(1 for entry in core_entries if str(entry.get("status", "")) == "ok")
-    if core_entries:
+    total_runs = 0
+    successful_runs = 0
+    core_total_runs = 0
+    core_successful_runs = 0
+
+    for entry in run_entries:
+        total_runs += 1
+        is_ok = str(entry.get("status", "")) == "ok"
+        if is_ok:
+            successful_runs += 1
+
+        planner_group = str((entry.get("planner") or {}).get("planner_group", "")).strip().lower()
+        if planner_group == "core":
+            core_total_runs += 1
+            if is_ok:
+                core_successful_runs += 1
+
+    if expected_core_runs is None:
+        expected_core_runs = core_total_runs
+
+    if core_total_runs:
         success_basis = "core"
-        benchmark_success = core_successful_runs == len(core_entries)
+        benchmark_success = core_successful_runs == core_total_runs == expected_core_runs
     else:
         success_basis = "all"
         benchmark_success = total_runs > 0 and successful_runs == total_runs
@@ -141,7 +155,7 @@ def _campaign_success_counters(run_entries: Sequence[Mapping[str, Any]]) -> dict
         "successful_runs": successful_runs,
         "total_runs": total_runs,
         "core_successful_runs": core_successful_runs,
-        "core_total_runs": len(core_entries),
+        "core_total_runs": core_total_runs,
     }
 
 
@@ -3608,7 +3622,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         )
         for entry in run_entries
     )
-    success_counters = _campaign_success_counters(run_entries)
+    expected_core_runs = sum(
+        1 for planner in cfg.planners if planner.enabled and planner.planner_group == "core"
+    )
+    success_counters = _campaign_success_counters(
+        run_entries, expected_core_runs=expected_core_runs * len(kinematics_matrix)
+    )
     successful_runs = int(success_counters["successful_runs"])
     benchmark_success = bool(success_counters["benchmark_success"])
     confidence_settings = {

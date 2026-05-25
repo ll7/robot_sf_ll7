@@ -582,8 +582,11 @@ why a change was made rather than a full issue execution transcript.
   records the import-safe `robot_sf_carla_bridge` package, `carla-replay-export.v1` schema, and
   missing-CARLA `not-available` guard for future oracle replay work.
 * [Issue #872 CARLA Oracle Replay Bridge Status](issue_872_carla_oracle_replay_bridge_status.md)
-  summarizes the parent epic state, the completed CARLA-free T0 stack, the setup-only T1 boundary,
-  and the live replay / metric-parity child issues that remain before #872 can close.
+  records why the bounded CARLA replay/parity parent could close on 2026-05-25 while keeping setup,
+  adapted, native/aligned, metric-parity, and transfer claims distinct.
+* [Issue #1485 CARLA Transfer-Boundary Follow-Up](issue_1485_carla_transfer_boundary_follow_up.md)
+  preserves the post-closure transfer-boundary taxonomy and defers any broader multi-scenario CARLA
+  replay campaign to a separate benchmark issue.
 * [Issue #1444 CARLA Coordinate Alignment Contract (2026-05-22)](issue_1444_carla_coordinate_alignment_contract.md)
   defines the conservative replay-mode taxonomy (`native`, `aligned`, `adapted`, `failed`,
   `not-available`) and projection tolerances required before any Robot-SF/CARLA metric parity claim.

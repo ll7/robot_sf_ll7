@@ -18,7 +18,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
 
 import yaml
@@ -75,6 +75,9 @@ from robot_sf.common.artifact_paths import (
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.training.scenario_loader import load_scenarios
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 DEFAULT_SEED_SETS_PATH = Path("configs/benchmarks/seed_sets_v1.yaml")
@@ -114,6 +117,32 @@ _ROUTE_CLEARANCE_CERTIFICATION_STATUSES = {
     "excluded_from_planner_attribution",
     "repaired_geometry",
 }
+
+
+def _campaign_success_counters(run_entries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Return campaign success counters, anchoring success on core planners when present."""
+    total_runs = len(run_entries)
+    successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
+    core_entries = [
+        entry
+        for entry in run_entries
+        if str((entry.get("planner") or {}).get("planner_group", "")).strip().lower() == "core"
+    ]
+    core_successful_runs = sum(1 for entry in core_entries if str(entry.get("status", "")) == "ok")
+    if core_entries:
+        success_basis = "core"
+        benchmark_success = core_successful_runs == len(core_entries)
+    else:
+        success_basis = "all"
+        benchmark_success = total_runs > 0 and successful_runs == total_runs
+    return {
+        "benchmark_success": benchmark_success,
+        "benchmark_success_basis": success_basis,
+        "successful_runs": successful_runs,
+        "total_runs": total_runs,
+        "core_successful_runs": core_successful_runs,
+        "core_total_runs": len(core_entries),
+    }
 
 
 def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
@@ -3579,8 +3608,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         )
         for entry in run_entries
     )
-    successful_runs = sum(1 for entry in run_entries if str(entry.get("status", "")) == "ok")
-    benchmark_success = len(run_entries) > 0 and successful_runs == len(run_entries)
+    success_counters = _campaign_success_counters(run_entries)
+    successful_runs = int(success_counters["successful_runs"])
+    benchmark_success = bool(success_counters["benchmark_success"])
     confidence_settings = {
         "method": "bootstrap_mean_over_seed_means",
         "confidence": float(cfg.bootstrap_confidence),
@@ -3797,6 +3827,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
             "benchmark_success": benchmark_success,
+            "benchmark_success_basis": success_counters["benchmark_success_basis"],
+            "core_successful_runs": success_counters["core_successful_runs"],
+            "core_total_runs": success_counters["core_total_runs"],
             "paper_interpretation_profile": cfg.paper_interpretation_profile,
             "kinematics_matrix": list(kinematics_matrix),
             "holonomic_command_mode": cfg.holonomic_command_mode,
@@ -4064,6 +4097,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "total_runs": len(run_entries),
         "successful_runs": successful_runs,
         "benchmark_success": benchmark_success,
+        "benchmark_success_basis": success_counters["benchmark_success_basis"],
+        "core_successful_runs": success_counters["core_successful_runs"],
+        "core_total_runs": success_counters["core_total_runs"],
         "total_episodes": total_episodes,
         "runtime_sec": runtime_sec,
         "publication_bundle": publication_payload,

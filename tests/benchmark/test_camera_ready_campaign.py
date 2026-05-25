@@ -2182,6 +2182,109 @@ def test_run_campaign_marks_skipped_preflight_as_not_available(tmp_path: Path, m
     assert result["benchmark_success"] is False
 
 
+def test_run_campaign_success_ignores_not_available_experimental_when_core_ok(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Optional experimental planners should not make a core-successful campaign fail."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_core_with_optional_experimental.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: core_with_optional_experimental",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+                "    benchmark_profile: baseline-safe",
+                "  - key: socnav_bench",
+                "    algo: socnav_bench",
+                "    planner_group: experimental",
+                "    benchmark_profile: experimental",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        """Return one successful core run and one missing optional dependency."""
+        algo = kwargs["algo"]
+        out_path = kwargs["out_path"]
+        if algo == "goal":
+            Path(out_path).write_text(
+                json.dumps(
+                    {
+                        "episode_id": "e-goal-0",
+                        "scenario_id": "mock",
+                        "seed": 111,
+                        "scenario_params": {
+                            "algo": "goal",
+                            "metadata": {"archetype": "crossing"},
+                        },
+                        "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
+                        "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            return {
+                "total_jobs": 1,
+                "written": 1,
+                "failed_jobs": 0,
+                "failures": [],
+                "algorithm_readiness": {
+                    "name": "goal",
+                    "tier": "baseline-ready",
+                    "profile": "baseline-safe",
+                },
+            }
+        return {
+            "total_jobs": 0,
+            "written": 0,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {
+                "status": "skipped",
+                "compatibility_reason": "SocNavBench assets are not installed",
+            },
+            "algorithm_readiness": {
+                "name": "socnav_bench",
+                "tier": "experimental",
+                "profile": "experimental",
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="core_optional")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    rows = {row["planner_key"]: row for row in summary_payload["planner_rows"]}
+
+    assert rows["goal"]["status"] == "ok"
+    assert rows["socnav_bench"]["status"] == "not_available"
+    assert rows["socnav_bench"]["planner_group"] == "experimental"
+    assert summary_payload["campaign"]["successful_runs"] == 1
+    assert summary_payload["campaign"]["total_runs"] == 2
+    assert summary_payload["campaign"]["core_successful_runs"] == 1
+    assert summary_payload["campaign"]["core_total_runs"] == 1
+    assert summary_payload["campaign"]["benchmark_success_basis"] == "core"
+    assert summary_payload["campaign"]["benchmark_success"] is True
+    assert result["benchmark_success"] is True
+
+
 def test_run_campaign_marks_empty_run_set_as_non_success(tmp_path: Path, monkeypatch) -> None:
     """Campaigns with zero run entries must fail closed at campaign level."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")

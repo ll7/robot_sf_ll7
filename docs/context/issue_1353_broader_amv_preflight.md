@@ -91,7 +91,7 @@ uv run pytest tests/benchmark/test_issue_1353_broader_amv_configs.py \
 BASE_REF=origin/issue-1344-paired-amv-report scripts/dev/check_docs_proof_consistency_diff.sh
 ```
 
-## 2026-05-25 Row-Contract Update And Slurm Submission
+## Issue #1353: 2026-05-25 Row-Contract Update and Slurm Submission
 
 Issue #1353 accepted a row-contract revision on 2026-05-25: SocNavBench-family rows should be
 reported as unavailable/excluded while #1456 remains blocked, not kept as fail-fast participants.

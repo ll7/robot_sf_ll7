@@ -94,7 +94,7 @@ planners:
     algo: socnav_sampling
     planner_group: experimental
     benchmark_profile: experimental
-    socnav_missing_prereq_policy: fail-fast
+    socnav_missing_prereq_policy: skip-with-warning
 
   - key: sacadrl
     algo: sacadrl
@@ -106,4 +106,4 @@ planners:
     algo: socnav_bench
     planner_group: experimental
     benchmark_profile: experimental
-    socnav_missing_prereq_policy: fail-fast
+    socnav_missing_prereq_policy: skip-with-warning

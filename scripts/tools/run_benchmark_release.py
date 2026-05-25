@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Run a benchmark release workflow on top of the camera-ready campaign stack."""
+"""Run a benchmark release workflow on top of the camera-ready campaign stack.
+
+Exit codes follow the wrapped campaign semantics for non-success benchmark outcomes:
+- 0: benchmark-success release
+- 2: unexpected failure or missing required release artifacts
+- 3: accepted-unavailable-only campaign outcome (non-success, fail-closed)
+"""
 
 from __future__ import annotations
 
@@ -18,7 +24,6 @@ from robot_sf.benchmark.camera_ready_campaign import (
     run_campaign,
     write_campaign_report,
 )
-from robot_sf.benchmark.fallback_policy import campaign_exit_code
 from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
     build_resolved_release_manifest,
@@ -204,9 +209,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     release_dir = campaign_root / "release"
     _write_json(release_dir / "release_manifest.resolved.json", resolved_manifest)
 
-    benchmark_success = bool(run_payload.get("benchmark_success")) and not missing
-    result["benchmark_success"] = benchmark_success
-    if benchmark_success:
+    release_benchmark_success = bool(run_payload.get("benchmark_success")) and not missing
+    result["release_benchmark_success"] = release_benchmark_success
+    if release_benchmark_success:
         publication_payload = _build_publication_payload(
             campaign_root=campaign_root,
             release_tag=manifest.release_tag,
@@ -223,15 +228,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         result["publication_bundle"] = None
 
-    if missing:
-        result["status"] = "missing_required_artifacts"
-    release_status = result.get("status")
-    if not isinstance(release_status, str) or not release_status:
-        result["status"] = "ok" if benchmark_success else "benchmark_failed"
+    result["release_status"] = (
+        "missing_required_artifacts"
+        if missing
+        else (
+            "ok"
+            if release_benchmark_success
+            else str(run_payload.get("status", "benchmark_failed"))
+        )
+    )
+    result["release_status_reason"] = (
+        "release artifacts validated and benchmark campaign was benchmark-success"
+        if release_benchmark_success
+        else (
+            "release is missing required benchmark artifacts"
+            if missing
+            else str(run_payload.get("status_reason", "benchmark release did not succeed"))
+        )
+    )
+    result["release_exit_code"] = (
+        0 if release_benchmark_success else (2 if missing else int(run_payload.get("exit_code", 2)))
+    )
     _write_json(release_dir / "release_result.json", result)
 
     print(json.dumps(result, indent=2))
-    return campaign_exit_code(result)
+    return int(result["release_exit_code"])
 
 
 if __name__ == "__main__":

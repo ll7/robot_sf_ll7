@@ -1143,8 +1143,18 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert preview_payload["preview_limit"] == 0
     assert preview_payload["scenarios"] == []
     report_text = (campaign_root / "reports" / "campaign_report.md").read_text(encoding="utf-8")
+    assert "Campaign status: `accepted_unavailable_only`" in report_text
     assert "Readiness & Degraded/Fallback Status" in report_text
     assert "SocNav Strict-vs-Fallback Disclosure" in report_text
+    assert "## Accepted Unavailable/Excluded Planners" in report_text
+    assert "## Unexpected Failed/Partial Planners" in report_text
+    assert "No unexpected failed/partial planners." in report_text
+    assert report_text.index("## Accepted Unavailable/Excluded Planners") < report_text.index(
+        "## Campaign Warnings"
+    )
+    assert report_text.index("## Unexpected Failed/Partial Planners") < report_text.index(
+        "## Campaign Warnings"
+    )
     assert "fallback" in report_text
     assert "learned contract" in report_text
     table_md = (campaign_root / "reports" / "campaign_table.md").read_text(encoding="utf-8")
@@ -1165,7 +1175,20 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     summary_payload = json.loads(
         (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
     )
+    assert result["status"] == "accepted_unavailable_only"
+    assert result["status_reason"] == (
+        "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
+    )
+    assert result["exit_code"] == 3
     assert summary_payload["campaign"]["benchmark_success"] is False
+    assert summary_payload["campaign"]["status"] == "accepted_unavailable_only"
+    assert summary_payload["campaign"]["status_reason"] == (
+        "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
+    )
+    assert summary_payload["campaign"]["accepted_unavailable_runs"] == 1
+    assert summary_payload["campaign"]["unexpected_failed_runs"] == 0
+    assert summary_payload["campaign"]["non_success_runs"] == 1
+    assert summary_payload["campaign"]["exit_code"] == 3
     ppo_row = next(row for row in summary_payload["planner_rows"] if row["algo"] == "ppo")
     assert ppo_row["status"] == "not_available"
     assert ppo_row["availability_status"] == "not_available"
@@ -1448,8 +1471,10 @@ def test_run_campaign_stops_on_partial_failure_when_configured(tmp_path: Path, m
     assert planner_rows[0]["status"] == "partial-failure"
 
 
-def test_run_campaign_stops_on_not_available_when_configured(tmp_path: Path, monkeypatch) -> None:
-    """Campaign should stop after the first not-available planner when stop_on_failure is enabled."""
+def test_run_campaign_continues_after_not_available_when_stop_enabled(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Accepted unavailable rows should not halt later planners even with stop_on_failure enabled."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
     scenario_abs = (tmp_path / scenario_rel).resolve()
     scenario_abs.parent.mkdir(parents=True, exist_ok=True)
@@ -1507,7 +1532,16 @@ def test_run_campaign_stops_on_not_available_when_configured(tmp_path: Path, mon
                     },
                 },
             }
-        raise AssertionError("run_batch must not be called for planners after not_available")
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {
+                "status": "ok",
+                "learned_policy_contract": {"status": "not_applicable"},
+            },
+        }
 
     monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
 
@@ -1515,11 +1549,16 @@ def test_run_campaign_stops_on_not_available_when_configured(tmp_path: Path, mon
     summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
     planner_rows = summary_payload["planner_rows"]
 
-    assert call_order == ["ppo"]
-    assert len(planner_rows) == 1
-    assert planner_rows[0]["planner_key"] == "ppo"
-    assert planner_rows[0]["status"] == "not_available"
+    assert call_order == ["ppo", "goal"]
+    assert len(planner_rows) == 2
+    assert planner_rows[0]["planner_key"] == "goal"
+    assert planner_rows[1]["planner_key"] == "ppo"
+    ppo_row = next(row for row in planner_rows if row["planner_key"] == "ppo")
+    goal_row = next(row for row in planner_rows if row["planner_key"] == "goal")
+    assert ppo_row["status"] == "not_available"
+    assert goal_row["status"] == "ok"
     assert any("obs_mode=image mismatch" in warning for warning in summary_payload["warnings"])
+    assert not any("Campaign halted early" in warning for warning in summary_payload["warnings"])
 
 
 def test_run_campaign_continues_after_failure_when_stop_disabled(
@@ -1604,6 +1643,11 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
     failed_row = next(row for row in planner_rows if row["planner_key"] == "prediction_planner")
     assert failed_row["status"] == "partial-failure"
     assert failed_row["most_likely_failure_reason"] == "worker crash"
+    assert result["status"] == "unexpected_failure"
+    assert result["exit_code"] == 2
+    assert summary_payload["campaign"]["status"] == "unexpected_failure"
+    assert summary_payload["campaign"]["accepted_unavailable_runs"] == 0
+    assert summary_payload["campaign"]["unexpected_failed_runs"] == 1
     assert any(
         "most_likely_reason='worker crash'" in warning for warning in summary_payload["warnings"]
     )
@@ -1729,8 +1773,53 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     assert "holonomic\\|vx_vy" in report_text
     assert "direct_holonomic_world_velocity" in report_text
     assert "world_velocity_passthrough" in report_text
-    assert "## Failed Planners And Likely Reasons" in report_text
-    assert "No failed/partial/not-available planners." in report_text
+    assert "## Accepted Unavailable/Excluded Planners" in report_text
+    assert "## Unexpected Failed/Partial Planners" in report_text
+    assert "No accepted unavailable/excluded planners." in report_text
+    assert "No unexpected failed/partial planners." in report_text
+
+
+@pytest.mark.parametrize("unexpected_status", ["failed", "partial-failure"])
+def test_write_campaign_report_routes_non_success_rows_to_expected_sections(
+    tmp_path: Path, unexpected_status: str
+) -> None:
+    """Report sections should separate accepted-unavailable rows from unexpected failures."""
+    report_path = tmp_path / "campaign_report.md"
+    payload = {
+        "campaign": {"campaign_id": "c1"},
+        "warnings": [],
+        "planner_rows": [
+            {
+                "planner_key": "accepted_row",
+                "algo": "goal",
+                "kinematics": "differential_drive",
+                "status": "not_available",
+                "availability_reason": "missing optional dependency",
+            },
+            {
+                "planner_key": "unexpected_row",
+                "algo": "goal",
+                "kinematics": "differential_drive",
+                "status": unexpected_status,
+                "most_likely_failure_reason": "worker crash",
+            },
+        ],
+    }
+
+    write_campaign_report(report_path, payload)
+    report_text = report_path.read_text(encoding="utf-8")
+
+    accepted_section = report_text.split("## Accepted Unavailable/Excluded Planners", 1)[1].split(
+        "## Unexpected Failed/Partial Planners", 1
+    )[0]
+    unexpected_section = report_text.split("## Unexpected Failed/Partial Planners", 1)[1].split(
+        "## Campaign Warnings", 1
+    )[0]
+
+    assert "| accepted_row | not_available | missing optional dependency |" in accepted_section
+    assert "unexpected_row" not in accepted_section
+    assert f"| unexpected_row | {unexpected_status} | worker crash |" in unexpected_section
+    assert "accepted_row" not in unexpected_section
 
 
 def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> None:

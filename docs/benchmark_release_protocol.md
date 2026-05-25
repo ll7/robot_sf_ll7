@@ -128,6 +128,13 @@ The release entrypoint:
 The entrypoint is intentionally a release wrapper, not a second benchmark
 execution engine.
 
+`release/release_result.json` preserves the wrapped campaign semantics in the
+top-level `status`, `status_reason`, `benchmark_success`, and `exit_code`
+fields. Release-wrapper state is recorded separately under
+`release_status`, `release_status_reason`, `release_benchmark_success`, and
+`release_exit_code`. Exit code `3` means the campaign finished as
+`accepted_unavailable_only`: still non-success and still fail-closed.
+
 ## Release Outputs
 
 Each successful release writes:

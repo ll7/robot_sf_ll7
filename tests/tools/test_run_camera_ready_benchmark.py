@@ -141,6 +141,13 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
             "campaign_id": "cid",
             "campaign_root": str(tmp_path / "out" / "cid"),
             "benchmark_success": True,
+            "status": "benchmark_success",
+            "status_reason": "all planner rows were benchmark-success",
+            "successful_runs": 1,
+            "accepted_unavailable_runs": 0,
+            "unexpected_failed_runs": 0,
+            "non_success_runs": 0,
+            "total_runs": 1,
         }
 
     monkeypatch.setattr(
@@ -202,4 +209,57 @@ def test_main_run_mode_returns_non_zero_for_non_success_campaign(
     exit_code = run_camera_ready_benchmark.main(["--config", str(config_path)])
     assert exit_code == 2
     payload = json.loads(capsys.readouterr().out)
+    assert payload["benchmark_success"] is False
+
+
+def test_main_run_mode_returns_exit_code_3_for_accepted_unavailable_only_campaign(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Accepted-unavailable-only campaigns should stay non-success with exit code 3."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    sentinel_cfg = object()
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "load_campaign_config",
+        lambda path: sentinel_cfg if path == config_path else None,
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("prepare_campaign_preflight should not be called in run mode")
+        ),
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "run_campaign",
+        lambda cfg, **kwargs: (
+            {
+                "campaign_id": "cid",
+                "campaign_root": str(tmp_path / "out" / "cid"),
+                "benchmark_success": False,
+                "status": "accepted_unavailable_only",
+                "status_reason": (
+                    "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
+                ),
+                "successful_runs": 1,
+                "accepted_unavailable_runs": 1,
+                "unexpected_failed_runs": 0,
+                "non_success_runs": 1,
+                "total_runs": 2,
+            }
+            if cfg is sentinel_cfg and isinstance(kwargs.get("invoked_command"), str)
+            else {}
+        ),
+    )
+
+    exit_code = run_camera_ready_benchmark.main(["--config", str(config_path)])
+
+    assert exit_code == 3
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "accepted_unavailable_only"
     assert payload["benchmark_success"] is False

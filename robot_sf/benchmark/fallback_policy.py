@@ -17,6 +17,241 @@ class BenchmarkAvailability:
     availability_reason: str | None = None
 
 
+@dataclass(frozen=True)
+class CampaignOutcome:
+    """Normalized camera-ready campaign outcome and exit semantics."""
+
+    status: str
+    benchmark_success: bool
+    status_reason: str
+    successful_runs: int
+    accepted_unavailable_runs: int
+    unexpected_failed_runs: int
+    non_success_runs: int
+    total_runs: int
+    exit_code: int
+
+
+_ACCEPTED_UNAVAILABLE_STATUSES = {"not_available", "excluded"}
+_UNEXPECTED_FAILURE_STATUSES = {"failed", "partial-failure"}
+_SUCCESS_CAMPAIGN_STATUSES = {"benchmark_success", "ok"}
+_ACCEPTED_UNAVAILABLE_CAMPAIGN_STATUSES = {"accepted_unavailable_only"}
+_UNEXPECTED_FAILURE_CAMPAIGN_STATUSES = {"unexpected_failure"}
+
+
+def _int_field(result: dict[str, Any], key: str) -> int:
+    """Read one integer-like explicit campaign field with a fail-closed default.
+
+    Returns:
+        Parsed integer value, or zero when the field is missing or malformed.
+    """
+    value = result.get(key, 0)
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _run_statuses_from_result(result: dict[str, Any]) -> list[str]:
+    """Extract normalized planner/run statuses from a campaign payload.
+
+    Returns:
+        Ordered planner/run status labels when available.
+    """
+    run_statuses: list[str] = []
+    planner_rows = result.get("planner_rows")
+    if isinstance(planner_rows, list):
+        for row in planner_rows:
+            if isinstance(row, dict):
+                status = str(row.get("status", "")).strip().lower()
+                if status:
+                    run_statuses.append(status)
+    if run_statuses:
+        return run_statuses
+
+    runs = result.get("runs")
+    if isinstance(runs, list):
+        for entry in runs:
+            if isinstance(entry, dict):
+                status = str(entry.get("status", "")).strip().lower()
+                if status:
+                    run_statuses.append(status)
+    return run_statuses
+
+
+def _campaign_outcome_from_explicit_fields(result: dict[str, Any]) -> CampaignOutcome:
+    """Resolve campaign outcome from explicit top-level fields when row statuses are absent.
+
+    Returns:
+        Campaign outcome derived from top-level status metadata.
+    """
+    explicit_status = (
+        str(result.get("status") or result.get("campaign_status") or "").strip().lower()
+    )
+    explicit_reason = str(result.get("status_reason", "")).strip()
+    benchmark_success = result.get("benchmark_success") is True
+    successful_runs = _int_field(result, "successful_runs")
+    accepted_unavailable_runs = _int_field(result, "accepted_unavailable_runs")
+    unexpected_failed_runs = _int_field(result, "unexpected_failed_runs")
+    non_success_runs = _int_field(result, "non_success_runs")
+    total_runs = _int_field(result, "total_runs")
+
+    if total_runs <= 0:
+        total_runs = successful_runs + accepted_unavailable_runs + unexpected_failed_runs
+    if non_success_runs <= 0 and total_runs > 0:
+        non_success_runs = max(
+            total_runs - successful_runs,
+            accepted_unavailable_runs + unexpected_failed_runs,
+        )
+
+    if unexpected_failed_runs > 0 or explicit_status in _UNEXPECTED_FAILURE_CAMPAIGN_STATUSES:
+        resolved_unexpected_failed_runs = unexpected_failed_runs
+        if resolved_unexpected_failed_runs <= 0:
+            resolved_unexpected_failed_runs = max(
+                non_success_runs - accepted_unavailable_runs,
+                total_runs - successful_runs - accepted_unavailable_runs,
+                0,
+            )
+        return CampaignOutcome(
+            status="unexpected_failure",
+            benchmark_success=False,
+            status_reason=explicit_reason
+            or "campaign contains unexpected failed or partially failed rows",
+            successful_runs=successful_runs,
+            accepted_unavailable_runs=accepted_unavailable_runs,
+            unexpected_failed_runs=resolved_unexpected_failed_runs,
+            non_success_runs=max(non_success_runs, resolved_unexpected_failed_runs),
+            total_runs=total_runs,
+            exit_code=2,
+        )
+    if (
+        total_runs > 0
+        and non_success_runs == 0
+        and (not explicit_status or explicit_status in _SUCCESS_CAMPAIGN_STATUSES)
+        and (
+            benchmark_success
+            or explicit_status in _SUCCESS_CAMPAIGN_STATUSES
+            or successful_runs >= total_runs
+        )
+    ):
+        return CampaignOutcome(
+            status="benchmark_success",
+            benchmark_success=True,
+            status_reason=explicit_reason or "all planner rows were benchmark-success",
+            successful_runs=total_runs or successful_runs,
+            accepted_unavailable_runs=0,
+            unexpected_failed_runs=0,
+            non_success_runs=0,
+            total_runs=total_runs,
+            exit_code=0,
+        )
+    if accepted_unavailable_runs > 0 or explicit_status in _ACCEPTED_UNAVAILABLE_CAMPAIGN_STATUSES:
+        resolved_non_success_runs = max(
+            non_success_runs,
+            accepted_unavailable_runs,
+            total_runs - successful_runs,
+            0,
+        )
+        resolved_total_runs = max(total_runs, successful_runs + resolved_non_success_runs)
+        resolved_accepted_runs = max(
+            accepted_unavailable_runs,
+            resolved_non_success_runs - unexpected_failed_runs,
+        )
+        return CampaignOutcome(
+            status="accepted_unavailable_only",
+            benchmark_success=False,
+            status_reason=explicit_reason
+            or "campaign contains accepted unavailable/excluded rows and no unexpected failed rows",
+            successful_runs=successful_runs,
+            accepted_unavailable_runs=resolved_accepted_runs,
+            unexpected_failed_runs=0,
+            non_success_runs=resolved_non_success_runs,
+            total_runs=resolved_total_runs,
+            exit_code=3,
+        )
+    return CampaignOutcome(
+        status="malformed",
+        benchmark_success=False,
+        status_reason=(
+            explicit_reason
+            or (
+                f"campaign result payload has unknown explicit status '{explicit_status}'"
+                if explicit_status
+                else "campaign result payload is missing planner row status information"
+            )
+        ),
+        successful_runs=successful_runs,
+        accepted_unavailable_runs=accepted_unavailable_runs,
+        unexpected_failed_runs=unexpected_failed_runs,
+        non_success_runs=non_success_runs,
+        total_runs=total_runs,
+        exit_code=2,
+    )
+
+
+def _campaign_outcome_from_run_statuses(run_statuses: list[str]) -> CampaignOutcome:
+    """Resolve campaign outcome from normalized planner/run statuses.
+
+    Returns:
+        Campaign outcome derived from planner/run status labels.
+    """
+    successful_runs = sum(1 for status in run_statuses if status == "ok")
+    accepted_unavailable_runs = sum(
+        1 for status in run_statuses if status in _ACCEPTED_UNAVAILABLE_STATUSES
+    )
+    unexpected_failed_runs = sum(
+        1 for status in run_statuses if status in _UNEXPECTED_FAILURE_STATUSES
+    )
+    unexpected_failed_runs += sum(
+        1
+        for status in run_statuses
+        if status not in {"ok"} | _ACCEPTED_UNAVAILABLE_STATUSES | _UNEXPECTED_FAILURE_STATUSES
+    )
+    total_runs = len(run_statuses)
+    non_success_runs = total_runs - successful_runs
+    if total_runs > 0 and non_success_runs == 0:
+        return CampaignOutcome(
+            status="benchmark_success",
+            benchmark_success=True,
+            status_reason="all planner rows were benchmark-success",
+            successful_runs=successful_runs,
+            accepted_unavailable_runs=0,
+            unexpected_failed_runs=0,
+            non_success_runs=0,
+            total_runs=total_runs,
+            exit_code=0,
+        )
+    if total_runs > 0 and accepted_unavailable_runs > 0 and unexpected_failed_runs == 0:
+        return CampaignOutcome(
+            status="accepted_unavailable_only",
+            benchmark_success=False,
+            status_reason=(
+                "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
+            ),
+            successful_runs=successful_runs,
+            accepted_unavailable_runs=accepted_unavailable_runs,
+            unexpected_failed_runs=0,
+            non_success_runs=non_success_runs,
+            total_runs=total_runs,
+            exit_code=3,
+        )
+    return CampaignOutcome(
+        status="unexpected_failure",
+        benchmark_success=False,
+        status_reason=(
+            "campaign contains unexpected failed or partially failed rows"
+            if total_runs > 0
+            else "campaign produced no planner runs"
+        ),
+        successful_runs=successful_runs,
+        accepted_unavailable_runs=accepted_unavailable_runs,
+        unexpected_failed_runs=unexpected_failed_runs,
+        non_success_runs=non_success_runs,
+        total_runs=total_runs,
+        exit_code=2,
+    )
+
+
 def resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
     """Resolve execution mode from algorithm metadata payload with legacy fallbacks.
 
@@ -181,19 +416,43 @@ def benchmark_run_exit_code(summary: dict[str, Any] | None) -> int:
     return 0 if availability.benchmark_success else 2
 
 
+def summarize_campaign_outcome(result: dict[str, Any] | None) -> CampaignOutcome:
+    """Return canonical campaign status for camera-ready benchmark results."""
+    if not isinstance(result, dict):
+        return CampaignOutcome(
+            status="malformed",
+            benchmark_success=False,
+            status_reason="campaign result payload is missing or not a mapping",
+            successful_runs=0,
+            accepted_unavailable_runs=0,
+            unexpected_failed_runs=0,
+            non_success_runs=0,
+            total_runs=0,
+            exit_code=2,
+        )
+
+    run_statuses = _run_statuses_from_result(result)
+    if not run_statuses:
+        return _campaign_outcome_from_explicit_fields(result)
+    return _campaign_outcome_from_run_statuses(run_statuses)
+
+
 def campaign_exit_code(result: dict[str, Any] | None) -> int:
     """Return camera-ready campaign CLI exit code for a result payload."""
-    if not isinstance(result, dict):
-        return 2
-    benchmark_success = result.get("benchmark_success")
-    return 0 if benchmark_success is True else 2
+    if isinstance(result, dict):
+        explicit_exit_code = result.get("exit_code")
+        if isinstance(explicit_exit_code, int) and explicit_exit_code >= 0:
+            return explicit_exit_code
+    return summarize_campaign_outcome(result).exit_code
 
 
 __all__ = [
     "BenchmarkAvailability",
+    "CampaignOutcome",
     "availability_payload",
     "benchmark_run_exit_code",
     "campaign_exit_code",
     "resolve_execution_mode",
     "summarize_benchmark_availability",
+    "summarize_campaign_outcome",
 ]

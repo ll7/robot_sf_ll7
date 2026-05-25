@@ -346,11 +346,14 @@ def main() -> int:
                         "ranking_key": list(_rank_key(hard_res, global_res)),
                     }
                 )
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         if isinstance(exc, MissingCampaignArtifactError):
             failure = exc.to_failure_payload()
         else:
-            failure = {"type": type(exc).__name__, "message": str(exc)}
+            message = str(exc)
+            if isinstance(exc, SystemExit) and not message:
+                message = str(getattr(exc, "code", ""))
+            failure = {"type": type(exc).__name__, "message": message}
         failure_summary = {
             "contract_version": _CONTRACT_VERSION,
             "training_family": _TRAINING_FAMILY,

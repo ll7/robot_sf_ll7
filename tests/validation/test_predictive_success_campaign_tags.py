@@ -154,3 +154,53 @@ def test_main_writes_failure_summary_for_missing_jsonl(
     assert summary["status"] == "failed"
     assert summary["failure"]["type"] == "MissingCampaignArtifactError"
     assert summary["failure"]["reason"] == "missing_jsonl"
+
+
+def test_main_writes_failure_summary_for_malformed_jsonl(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Malformed runner JSONL should still leave a structured failure summary."""
+
+    checkpoint = tmp_path / "predictive_model.pt"
+    checkpoint.write_text("stub", encoding="utf-8")
+    output_dir = tmp_path / "campaign"
+
+    def _fake_run_map_batch(_scenarios_or_path, jsonl_path: Path, **_kwargs) -> None:
+        """Simulate a runner that leaves malformed JSONL before failing downstream."""
+        jsonl_path.write_text("{not-json}\n", encoding="utf-8")
+
+    monkeypatch.setattr(campaign, "run_map_batch", _fake_run_map_batch)
+    monkeypatch.setattr(
+        campaign,
+        "_load_planner_variants",
+        lambda _path: [{"name": "baseline_like", "params": {}}],
+    )
+    monkeypatch.setattr(campaign, "load_seed_manifest", lambda _path: {"scenario": [1]})
+    monkeypatch.setattr(
+        campaign,
+        "make_subset_scenarios",
+        lambda _matrix, _manifest: [{"name": "scenario"}],
+    )
+    monkeypatch.setattr(
+        campaign,
+        "parse_args",
+        lambda: campaign.argparse.Namespace(
+            checkpoints=[str(checkpoint)],
+            scenario_matrix=tmp_path / "scenarios.yaml",
+            hard_seed_manifest=tmp_path / "hard.yaml",
+            planner_grid=tmp_path / "grid.yaml",
+            horizon=12,
+            dt=0.1,
+            workers=1,
+            bootstrap_samples=10,
+            bootstrap_seed=1,
+            output_dir=output_dir,
+        ),
+    )
+
+    assert campaign.main() == 2
+    summary = json.loads((output_dir / "campaign_summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "failed"
+    assert summary["failure"]["type"] == "SystemExit"
+    assert "Malformed JSON" in summary["failure"]["message"]

@@ -566,6 +566,9 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #1237 Adversarial Failure Archive](issue_1237_adversarial_failure_archive.md) -
   compact `adversarial_failure_archive.v1` manifests for deterministic failure grouping and
   replay pointers without copying raw bundles.
+* [Issue #1488 Bounded Adversarial Search Methodology](issue_1488_adversarial_search_methodology.md) -
+  fail-closed status accounting, attempted-candidate budget normalization, replayable unique
+  failure evidence, and claim boundaries for the bounded adversarial search campaign.
 * [Issue #1433 Adversarial Edge-Case Search Design (2026-05-22)](issue_1433_adversarial_edge_case_search_design.md) -
   bounded v1 design for crossing/TTC adversarial search: parameter bounds, invalid-candidate
   handling, scripted vs learned decisions, execution contract, failure classes, artifact policy,

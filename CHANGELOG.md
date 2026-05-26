@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the README Zenodo DOI header by replacing the fragile badge image with a plain-text DOI
+  link while preserving the canonical `https://doi.org/10.5281/zenodo.19563812` target.
 * Fixed the crowd-only Gymnasium environment contract so `CrowdSimEnv` keeps a stable
   observation-space shape across resets, `make_crowd_sim_env()` preserves preconfigured
   config values unless callers override them explicitly, reset-time map selection no longer

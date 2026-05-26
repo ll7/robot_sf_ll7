@@ -35,6 +35,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     run_campaign,
     write_campaign_report,
 )
+from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from robot_sf.common.artifact_paths import get_repository_root
 
 
@@ -2158,7 +2159,7 @@ def test_prepare_campaign_preflight_validates_campaign_config(tmp_path: Path) ->
 def test_prepare_campaign_preflight_checks_orca_rvo2_before_loading_scenarios(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Direct preflight calls fail before scenario loading when enabled ORCA rows lack rvo2."""
+    """Direct preflight calls raise a typed error before scenario loading when ORCA lacks rvo2."""
     scenario_path = tmp_path / "scenarios.yaml"
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
     cfg = CampaignConfig(
@@ -2179,14 +2180,14 @@ def test_prepare_campaign_preflight_checks_orca_rvo2_before_loading_scenarios(
         fail_if_scenarios_load,
     )
 
-    with pytest.raises(SystemExit, match="rvo2"):
+    with pytest.raises(OrcaRvo2PreflightError, match="rvo2"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="orca")
 
 
 def test_run_campaign_checks_orca_rvo2_before_loading_optional_artifacts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Direct campaign runs fail before optional JSON loading when ORCA rows lack rvo2."""
+    """Direct campaign runs raise a typed error before optional JSON loading when ORCA lacks rvo2."""
     scenario_path = tmp_path / "scenarios.yaml"
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
     cfg = CampaignConfig(
@@ -2207,7 +2208,7 @@ def test_run_campaign_checks_orca_rvo2_before_loading_optional_artifacts(
         fail_if_optional_json_loads,
     )
 
-    with pytest.raises(SystemExit, match="rvo2"):
+    with pytest.raises(OrcaRvo2PreflightError, match="rvo2"):
         run_campaign(cfg, output_root=tmp_path / "out", label="orca")
 
 

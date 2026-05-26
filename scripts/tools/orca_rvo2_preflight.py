@@ -17,7 +17,10 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight_from_config
+from robot_sf.benchmark.orca_preflight import (
+    OrcaRvo2PreflightError,
+    check_orca_rvo2_preflight_from_config,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -47,8 +50,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         check_orca_rvo2_preflight_from_config(args.config.resolve())
-    except SystemExit as exc:
-        return exc.code if isinstance(exc.code, int) else 1
+    except OrcaRvo2PreflightError:
+        return 1
     except Exception as exc:
         logger.error(f"Failed to load or validate campaign config: {exc}")
         return 1

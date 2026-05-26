@@ -18,6 +18,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     run_campaign,
 )
 from robot_sf.benchmark.fallback_policy import campaign_exit_code
+from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -85,6 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.add(sys.stderr, level=args.log_level)
 
     cfg = load_campaign_config(args.config)
+    check_orca_rvo2_preflight(cfg)
     invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
     if args.mode == "preflight":
         prepared = prepare_campaign_preflight(

@@ -188,6 +188,11 @@ if [[ "${SKIP_PUBLICATION_BUNDLE}" == "true" ]]; then
   PUBLICATION_ARG=(--skip-publication-bundle)
 fi
 
+log "Running ORCA-rvo2 preflight guard on config: ${BENCHMARK_CONFIG_PATH}"
+if ! "${PYTHON_BIN}" scripts/tools/orca_rvo2_preflight.py --config "${BENCHMARK_CONFIG_PATH}" 2>&1; then
+  die "ORCA-rvo2 preflight failed; see the preflight error above."
+fi
+
 log "Starting camera-ready campaign"
 log "Config: ${BENCHMARK_CONFIG_PATH}"
 log "Mode: ${BENCHMARK_MODE}"

@@ -1,0 +1,208 @@
+{
+  "schema_version": "benchmark-scenario-difficulty-analysis.v1",
+  "status": "ok",
+  "primary_proxy": {
+    "name": "consensus_outcome_rank_v1",
+    "description": "Weighted consensus score across core benchmark-success planners using success, collisions, near-misses, and normalized time-to-goal.",
+    "eligible_planner_selection": "core benchmark-success planners",
+    "eligible_planner_count": 3,
+    "metric_weights": {
+      "success_mean": 0.4,
+      "collisions_mean": 0.25,
+      "near_misses_mean": 0.15,
+      "time_to_goal_norm_mean": 0.2
+    },
+    "supporting_metric": "snqi_mean"
+  },
+  "scenario_rows": [
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "scenario_family": "cross_trap",
+      "eligible_planner_count": 3,
+      "total_planner_count": 3,
+      "consensus_success_mean": 0.0,
+      "consensus_collisions_mean": 0.0,
+      "consensus_near_misses_mean": 10.222233333333334,
+      "consensus_time_to_goal_norm_mean": 1.0,
+      "consensus_snqi_mean": null,
+      "planner_success_range": 0.0,
+      "planner_collision_range": 0.0,
+      "planner_near_miss_range": 11.333300000000001,
+      "planner_time_to_goal_range": 0.0,
+      "seed_success_ci_half_width_mean": 0.0,
+      "seed_success_cv_mean": null,
+      "seed_time_to_goal_ci_half_width_mean": 0.0,
+      "seed_time_to_goal_cv_mean": null,
+      "seed_snqi_ci_half_width_mean": 0.0,
+      "seed_snqi_cv_mean": null,
+      "archetype": "cross_trap",
+      "flow": "bi",
+      "behavior": null,
+      "primary_capability": null,
+      "target_failure_mode": null,
+      "determinism": null,
+      "ped_density": 0.02,
+      "route_clearance_warning": true,
+      "route_clearance_scope": "scenario",
+      "min_clearance_margin_m": 0.013277,
+      "difficulty_score": 0.0,
+      "difficulty_components": {
+        "success_mean": 0.0,
+        "collisions_mean": 0.0,
+        "near_misses_mean": 0.0,
+        "time_to_goal_norm_mean": 0.0
+      },
+      "supporting_snqi_rank": null,
+      "difficulty_rank": 1,
+      "verified_simple_candidate": false
+    }
+  ],
+  "family_rows": [
+    {
+      "scenario_family": "cross_trap",
+      "scenario_count": 1,
+      "difficulty_score_mean": 0.0,
+      "consensus_success_mean": 0.0,
+      "consensus_collisions_mean": 0.0,
+      "consensus_near_misses_mean": 10.222233333333334,
+      "consensus_time_to_goal_norm_mean": 1.0,
+      "seed_success_ci_half_width_mean": 0.0,
+      "seed_time_to_goal_ci_half_width_mean": 0.0,
+      "hardest_scenarios": [
+        "classic_cross_trap_low"
+      ]
+    }
+  ],
+  "planner_family_rows": [
+    {
+      "planner_key": "goal",
+      "algo": "goal",
+      "planner_group": "core",
+      "scenario_family": "cross_trap",
+      "scenario_count": 1,
+      "mean_residual_score": 0.14950999855881927,
+      "easy_scenario_underperformance_count": 1,
+      "family_difficulty_score_mean": 0.0
+    },
+    {
+      "planner_key": "orca",
+      "algo": "orca",
+      "planner_group": "core",
+      "scenario_family": "cross_trap",
+      "scenario_count": 1,
+      "mean_residual_score": -0.10049000144118071,
+      "easy_scenario_underperformance_count": 0,
+      "family_difficulty_score_mean": 0.0
+    },
+    {
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "planner_group": "core",
+      "scenario_family": "cross_trap",
+      "scenario_count": 1,
+      "mean_residual_score": -0.04901999711763858,
+      "easy_scenario_underperformance_count": 0,
+      "family_difficulty_score_mean": 0.0
+    }
+  ],
+  "planner_residual_rows": [
+    {
+      "planner_key": "goal",
+      "algo": "goal",
+      "planner_group": "core",
+      "scenario_id": "classic_cross_trap_low",
+      "scenario_family": "cross_trap",
+      "difficulty_score": 0.0,
+      "difficulty_rank": 1,
+      "success_residual": 0.0,
+      "collisions_residual": 0.0,
+      "near_misses_residual": 6.7777666666666665,
+      "time_to_goal_norm_residual": 0.0,
+      "snqi_residual": null,
+      "residual_score": 0.14950999855881927,
+      "easy_scenario_underperformance": true
+    },
+    {
+      "planner_key": "orca",
+      "algo": "orca",
+      "planner_group": "core",
+      "scenario_id": "classic_cross_trap_low",
+      "scenario_family": "cross_trap",
+      "difficulty_score": 0.0,
+      "difficulty_rank": 1,
+      "success_residual": 0.0,
+      "collisions_residual": 0.0,
+      "near_misses_residual": -4.555533333333334,
+      "time_to_goal_norm_residual": 0.0,
+      "snqi_residual": null,
+      "residual_score": -0.10049000144118071,
+      "easy_scenario_underperformance": false
+    },
+    {
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "planner_group": "core",
+      "scenario_id": "classic_cross_trap_low",
+      "scenario_family": "cross_trap",
+      "difficulty_score": 0.0,
+      "difficulty_rank": 1,
+      "success_residual": 0.0,
+      "collisions_residual": 0.0,
+      "near_misses_residual": -2.2222333333333335,
+      "time_to_goal_norm_residual": 0.0,
+      "snqi_residual": null,
+      "residual_score": -0.04901999711763858,
+      "easy_scenario_underperformance": false
+    }
+  ],
+  "planner_summary_rows": [
+    {
+      "planner_key": "goal",
+      "algo": "goal",
+      "planner_group": "core",
+      "scenario_count": 1,
+      "mean_residual_score": 0.14950999855881927,
+      "max_residual_score": 0.14950999855881927,
+      "easy_scenario_underperformance_count": 1,
+      "worst_scenarios": [
+        "classic_cross_trap_low"
+      ]
+    },
+    {
+      "planner_key": "orca",
+      "algo": "orca",
+      "planner_group": "core",
+      "scenario_count": 1,
+      "mean_residual_score": -0.10049000144118071,
+      "max_residual_score": -0.10049000144118071,
+      "easy_scenario_underperformance_count": 0,
+      "worst_scenarios": [
+        "classic_cross_trap_low"
+      ]
+    },
+    {
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "planner_group": "core",
+      "scenario_count": 1,
+      "mean_residual_score": -0.04901999711763858,
+      "max_residual_score": -0.04901999711763858,
+      "easy_scenario_underperformance_count": 0,
+      "worst_scenarios": [
+        "classic_cross_trap_low"
+      ]
+    }
+  ],
+  "verified_simple_assessment": {
+    "status": "rerun_required",
+    "manifest_path": "configs/scenarios/sets/verified_simple_subset_v1.yaml",
+    "subset_size": 10,
+    "matched_scenario_count": 0,
+    "matched_scenarios": [],
+    "comparison_planner_selection": null,
+    "rank_correlation": null,
+    "worth_adding": null,
+    "recommendation": "The current camera-ready campaign does not include the verified-simple candidate scenarios. Keep the subset as a debugging or promotion gate for now and run one bounded pilot before treating it as a calibration set."
+  },
+  "findings": []
+}

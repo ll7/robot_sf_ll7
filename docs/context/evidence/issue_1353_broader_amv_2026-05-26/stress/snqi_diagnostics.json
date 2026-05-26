@@ -1,0 +1,305 @@
+{
+  "schema_version": "benchmark-snqi-diagnostics.v1",
+  "campaign_id": "issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603",
+  "generated_at_utc": "2026-05-26T04:46:31.739195Z",
+  "contract_enabled": true,
+  "contract_enforcement": "warn",
+  "contract_status": "fail",
+  "rank_alignment_spearman": 0.2857142857142857,
+  "outcome_separation": 0.20014469473499016,
+  "objective_score": 0.3357504593980332,
+  "dominant_component": "time_penalty",
+  "dominant_component_mean_abs": 0.09291202276289619,
+  "thresholds": {
+    "rank_alignment_warn": 0.5,
+    "rank_alignment_fail": 0.3,
+    "outcome_separation_warn": 0.05,
+    "outcome_separation_fail": 0.0,
+    "max_component_dominance_warn": 0.24,
+    "max_component_dominance_fail": 0.27
+  },
+  "weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+  "weights_version": "snqi_weights_camera_ready_v3",
+  "weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
+  "baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+  "baseline_version": "snqi_baseline_camera_ready_v3",
+  "baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+  "baseline_source": "config_file",
+  "baseline_adjustments": 0,
+  "baseline_for_eval": {
+    "time_to_goal_norm": {
+      "med": 1.0,
+      "p95": 1.05
+    },
+    "collisions": {
+      "med": 0.0,
+      "p95": 1.0
+    },
+    "near_misses": {
+      "med": 0.0,
+      "p95": 21.0
+    },
+    "force_exceed_events": {
+      "med": 1.0,
+      "p95": 50.0
+    },
+    "jerk_mean": {
+      "med": 0.07293007251387372,
+      "p95": 0.8018190086690077
+    }
+  },
+  "configured_weights": {
+    "w_success": 0.19045845847432735,
+    "w_time": 0.09491099136070058,
+    "w_collisions": 0.10483542508043969,
+    "w_near": 0.30825830332144416,
+    "w_comfort": 0.17983060763794978,
+    "w_force_exceed": 0.0692114485473155,
+    "w_jerk": 0.05249476557782281
+  },
+  "calibrated_weights": {
+    "w_success": 0.05026554486651876,
+    "w_time": 0.09543101970878534,
+    "w_collisions": 0.05372801002428706,
+    "w_near": 0.3151255450881526,
+    "w_comfort": 0.13784082148560167,
+    "w_force_exceed": 0.28928866010248516,
+    "w_jerk": 0.058320398724169296
+  },
+  "calibration": {
+    "weights": {
+      "w_success": 0.05026554486651876,
+      "w_time": 0.09543101970878534,
+      "w_collisions": 0.05372801002428706,
+      "w_near": 0.3151255450881526,
+      "w_comfort": 0.13784082148560167,
+      "w_force_exceed": 0.28928866010248516,
+      "w_jerk": 0.058320398724169296
+    },
+    "metrics": {
+      "rank_alignment_spearman": 0.8928571428571429,
+      "outcome_separation": 0.04738321843518056,
+      "objective_score": 0.904702947465938
+    },
+    "seed": 123,
+    "trials": 3000,
+    "min_weight": 0.05,
+    "max_weight": 0.35
+  },
+  "component_dominance": {
+    "success_reward": 0.017194166390043415,
+    "time_penalty": 0.09291202276289619,
+    "collisions_penalty": 0.027664903840671398,
+    "near_penalty": 0.042420466627710145,
+    "comfort_penalty": 0.007086911453508021,
+    "force_exceed_penalty": 0.009064805244828857,
+    "jerk_penalty": 0.009216803834279285
+  },
+  "component_correlations": {
+    "success": {
+      "weight_name": "w_success",
+      "direction": "positive",
+      "spearman": 0.35589185468953477,
+      "variable": true,
+      "aligned_with_expected_direction": true
+    },
+    "time_to_goal_norm": {
+      "weight_name": "w_time",
+      "direction": "negative",
+      "spearman": -0.35469917524742006,
+      "variable": true,
+      "aligned_with_expected_direction": true
+    },
+    "collisions": {
+      "weight_name": "w_collisions",
+      "direction": "negative",
+      "spearman": -0.6418084579658124,
+      "variable": true,
+      "aligned_with_expected_direction": true
+    },
+    "near_misses": {
+      "weight_name": "w_near",
+      "direction": "negative",
+      "spearman": -0.6402449042400374,
+      "variable": true,
+      "aligned_with_expected_direction": true
+    },
+    "comfort_exposure": {
+      "weight_name": "w_comfort",
+      "direction": "negative",
+      "spearman": -0.5052404048039796,
+      "variable": true,
+      "aligned_with_expected_direction": true
+    },
+    "force_exceed_events": {
+      "weight_name": "w_force_exceed",
+      "direction": "negative",
+      "spearman": -0.44979561035588855,
+      "variable": true,
+      "aligned_with_expected_direction": true
+    },
+    "jerk_mean": {
+      "weight_name": "w_jerk",
+      "direction": "negative",
+      "spearman": -0.24867454700602148,
+      "variable": true,
+      "aligned_with_expected_direction": true
+    }
+  },
+  "planner_ordering": [
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "episode_count": 144,
+      "mean_snqi": -0.1508589149376306,
+      "rank": 1
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "episode_count": 144,
+      "mean_snqi": -0.15345599607070015,
+      "rank": 2
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "episode_count": 144,
+      "mean_snqi": -0.15375960999762392,
+      "rank": 3
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "episode_count": 144,
+      "mean_snqi": -0.16559580034961938,
+      "rank": 4
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "episode_count": 144,
+      "mean_snqi": -0.17370125807275205,
+      "rank": 5
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "episode_count": 144,
+      "mean_snqi": -0.19467907798551137,
+      "rank": 6
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "episode_count": 144,
+      "mean_snqi": -0.20615157420311003,
+      "rank": 7
+    }
+  ],
+  "weight_sensitivity": [
+    {
+      "weight_name": "w_success",
+      "metric_name": "success",
+      "direction": "positive",
+      "configured_weight": 0.19045845847432735,
+      "configured_weight_share": 0.19045845847432738,
+      "mean_abs_contribution": 0.017194166390043415,
+      "mean_abs_score_delta_if_ablated": 0.017194166390043442,
+      "episode_rank_correlation_if_ablated": 0.9354718671734802,
+      "planner_rank_correlation_if_ablated": 0.39285714285714285,
+      "planner_order_changed_if_ablated": true,
+      "sensitivity_rank": 1
+    },
+    {
+      "weight_name": "w_collisions",
+      "metric_name": "collisions",
+      "direction": "negative",
+      "configured_weight": 0.10483542508043969,
+      "configured_weight_share": 0.1048354250804397,
+      "mean_abs_contribution": 0.027664903840671398,
+      "mean_abs_score_delta_if_ablated": 0.027664903840671586,
+      "episode_rank_correlation_if_ablated": 0.9143313206858613,
+      "planner_rank_correlation_if_ablated": 0.6071428571428571,
+      "planner_order_changed_if_ablated": true,
+      "sensitivity_rank": 2
+    },
+    {
+      "weight_name": "w_near",
+      "metric_name": "near_misses",
+      "direction": "negative",
+      "configured_weight": 0.30825830332144416,
+      "configured_weight_share": 0.3082583033214442,
+      "mean_abs_contribution": 0.042420466627710145,
+      "mean_abs_score_delta_if_ablated": 0.042420466627710075,
+      "episode_rank_correlation_if_ablated": 0.8564040524214223,
+      "planner_rank_correlation_if_ablated": 0.6428571428571429,
+      "planner_order_changed_if_ablated": true,
+      "sensitivity_rank": 3
+    },
+    {
+      "weight_name": "w_jerk",
+      "metric_name": "jerk_mean",
+      "direction": "negative",
+      "configured_weight": 0.05249476557782281,
+      "configured_weight_share": 0.052494765577822816,
+      "mean_abs_contribution": 0.009216803834279285,
+      "mean_abs_score_delta_if_ablated": 0.009216803834279285,
+      "episode_rank_correlation_if_ablated": 0.9406166070081157,
+      "planner_rank_correlation_if_ablated": 0.8571428571428571,
+      "planner_order_changed_if_ablated": true,
+      "sensitivity_rank": 4
+    },
+    {
+      "weight_name": "w_force_exceed",
+      "metric_name": "force_exceed_events",
+      "direction": "negative",
+      "configured_weight": 0.0692114485473155,
+      "configured_weight_share": 0.06921144854731551,
+      "mean_abs_contribution": 0.009064805244828857,
+      "mean_abs_score_delta_if_ablated": 0.009064805244828795,
+      "episode_rank_correlation_if_ablated": 0.9873640953262822,
+      "planner_rank_correlation_if_ablated": 0.9642857142857143,
+      "planner_order_changed_if_ablated": true,
+      "sensitivity_rank": 5
+    },
+    {
+      "weight_name": "w_comfort",
+      "metric_name": "comfort_exposure",
+      "direction": "negative",
+      "configured_weight": 0.17983060763794978,
+      "configured_weight_share": 0.1798306076379498,
+      "mean_abs_contribution": 0.007086911453508021,
+      "mean_abs_score_delta_if_ablated": 0.007086911453508031,
+      "episode_rank_correlation_if_ablated": 0.9926734659312234,
+      "planner_rank_correlation_if_ablated": 1.0,
+      "planner_order_changed_if_ablated": false,
+      "sensitivity_rank": 6
+    },
+    {
+      "weight_name": "w_time",
+      "metric_name": "time_to_goal_norm",
+      "direction": "negative",
+      "configured_weight": 0.09491099136070058,
+      "configured_weight_share": 0.0949109913607006,
+      "mean_abs_contribution": 0.09291202276289619,
+      "mean_abs_score_delta_if_ablated": 0.09291202276289535,
+      "episode_rank_correlation_if_ablated": 0.9969084081063027,
+      "planner_rank_correlation_if_ablated": 1.0,
+      "planner_order_changed_if_ablated": false,
+      "sensitivity_rank": 7
+    }
+  ],
+  "positioning": {
+    "recommendation": "strengthen_as_operational_multi_objective_aggregation",
+    "claim_scope": "benchmark aggregate, not a universal ground-truth utility",
+    "aligned_metric_count": 7,
+    "variable_metric_count": 7,
+    "degenerate_metrics": [],
+    "planner_ordering_informative": true,
+    "ablation_order_change_count": 5,
+    "caveats": [
+      "Planner ordering changed under 5 one-at-a-time weight ablation(s) on this slice."
+    ]
+  }
+}

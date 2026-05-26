@@ -1,0 +1,557 @@
+{
+  "campaign": {
+    "campaign_id": "paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604",
+    "campaign_root": "output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604",
+    "runtime_sec": 22.543566548265517,
+    "episodes_per_second": 0.39922698037735527,
+    "summary_json": "output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604/reports/campaign_summary.json"
+  },
+  "planners": [
+    {
+      "planner_key": "goal",
+      "algo": "goal",
+      "kinematics": "bicycle_drive",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.429660865607279,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.5959434453397989,
+      "episodes_per_second": 1.678011576131714,
+      "wall_time_mean_sec": 0.5207328796386719,
+      "wall_time_p95_sec": 0.5207328796386719,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 0.5207328796386719,
+          "p95_wall_time_sec": 0.5207328796386719
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "goal",
+      "algo": "goal",
+      "kinematics": "differential_drive",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.4126535486592599,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 12.553736886009574,
+      "episodes_per_second": 0.07965755607913395,
+      "wall_time_mean_sec": 12.469993114471436,
+      "wall_time_p95_sec": 12.469993114471436,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 12.469993114471436,
+          "p95_wall_time_sec": 12.469993114471436
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "goal",
+      "algo": "goal",
+      "kinematics": "holonomic",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.10834588948566656,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.6157178673893213,
+      "episodes_per_second": 1.6241204827140339,
+      "wall_time_mean_sec": 0.5423705577850342,
+      "wall_time_p95_sec": 0.5423705577850342,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 0.5423705577850342,
+          "p95_wall_time_sec": 0.5423705577850342
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "orca",
+      "algo": "orca",
+      "kinematics": "bicycle_drive",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.11486736792187859,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.9226621417328715,
+      "episodes_per_second": 1.0838203441639847,
+      "wall_time_mean_sec": 0.8422503471374512,
+      "wall_time_p95_sec": 0.8422503471374512,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 0.8422503471374512,
+          "p95_wall_time_sec": 0.8422503471374512
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "orca",
+      "algo": "orca",
+      "kinematics": "differential_drive",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.17537249117335946,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.9226880744099617,
+      "episodes_per_second": 1.083789882772114,
+      "wall_time_mean_sec": 0.8481135368347168,
+      "wall_time_p95_sec": 0.8481135368347168,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 0.8481135368347168,
+          "p95_wall_time_sec": 0.8481135368347168
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "orca",
+      "algo": "orca",
+      "kinematics": "holonomic",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.5054352687555362,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.7427316457033157,
+      "episodes_per_second": 1.3463813017594919,
+      "wall_time_mean_sec": 0.6594357490539551,
+      "wall_time_p95_sec": 0.6594357490539551,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 0.6594357490539551,
+          "p95_wall_time_sec": 0.6594357490539551
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "kinematics": "bicycle_drive",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.12896830062809556,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.6431452594697475,
+      "episodes_per_second": 1.5548586968120819,
+      "wall_time_mean_sec": 0.5683887004852295,
+      "wall_time_p95_sec": 0.5683887004852295,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 0.5683887004852295,
+          "p95_wall_time_sec": 0.5683887004852295
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "kinematics": "differential_drive",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.2663483342611581,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.9395674355328083,
+      "episodes_per_second": 1.0643195604506255,
+      "wall_time_mean_sec": 0.8651425838470459,
+      "wall_time_p95_sec": 0.8651425838470459,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 0.8651425838470459,
+          "p95_wall_time_sec": 0.8651425838470459
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "kinematics": "holonomic",
+      "episodes_summary": 1,
+      "episodes_file": 1,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -0.41206322959262204,
+      "status_counts": {
+        "failure": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 1
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.6225102432072163,
+      "episodes_per_second": 1.606399269589413,
+      "wall_time_mean_sec": 0.55013108253479,
+      "wall_time_p95_sec": 0.55013108253479,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_cross_trap_low",
+          "episodes": 1,
+          "mean_wall_time_sec": 0.55013108253479,
+          "p95_wall_time_sec": 0.55013108253479
+        }
+      ],
+      "findings": []
+    }
+  ],
+  "runtime_hotspots": {
+    "slowest_planners": [
+      {
+        "planner_key": "goal",
+        "kinematics": "differential_drive",
+        "runtime_sec": 12.553736886009574,
+        "wall_time_mean_sec": 12.469993114471436,
+        "wall_time_p95_sec": 12.469993114471436,
+        "top_scenarios": [
+          {
+            "scenario_id": "classic_cross_trap_low",
+            "episodes": 1,
+            "mean_wall_time_sec": 12.469993114471436,
+            "p95_wall_time_sec": 12.469993114471436
+          }
+        ]
+      },
+      {
+        "planner_key": "social_force",
+        "kinematics": "differential_drive",
+        "runtime_sec": 0.9395674355328083,
+        "wall_time_mean_sec": 0.8651425838470459,
+        "wall_time_p95_sec": 0.8651425838470459,
+        "top_scenarios": [
+          {
+            "scenario_id": "classic_cross_trap_low",
+            "episodes": 1,
+            "mean_wall_time_sec": 0.8651425838470459,
+            "p95_wall_time_sec": 0.8651425838470459
+          }
+        ]
+      },
+      {
+        "planner_key": "orca",
+        "kinematics": "differential_drive",
+        "runtime_sec": 0.9226880744099617,
+        "wall_time_mean_sec": 0.8481135368347168,
+        "wall_time_p95_sec": 0.8481135368347168,
+        "top_scenarios": [
+          {
+            "scenario_id": "classic_cross_trap_low",
+            "episodes": 1,
+            "mean_wall_time_sec": 0.8481135368347168,
+            "p95_wall_time_sec": 0.8481135368347168
+          }
+        ]
+      }
+    ]
+  },
+  "scenario_difficulty": {
+    "schema_version": "benchmark-scenario-difficulty-analysis.v1",
+    "status": "ok",
+    "primary_proxy": {
+      "name": "consensus_outcome_rank_v1",
+      "description": "Weighted consensus score across core benchmark-success planners using success, collisions, near-misses, and normalized time-to-goal.",
+      "eligible_planner_selection": "core benchmark-success planners",
+      "eligible_planner_count": 3,
+      "metric_weights": {
+        "success_mean": 0.4,
+        "collisions_mean": 0.25,
+        "near_misses_mean": 0.15,
+        "time_to_goal_norm_mean": 0.2
+      },
+      "supporting_metric": "snqi_mean"
+    },
+    "scenario_rows": [
+      {
+        "scenario_id": "classic_cross_trap_low",
+        "scenario_family": "cross_trap",
+        "eligible_planner_count": 3,
+        "total_planner_count": 3,
+        "consensus_success_mean": 0.0,
+        "consensus_collisions_mean": 0.0,
+        "consensus_near_misses_mean": 10.222233333333334,
+        "consensus_time_to_goal_norm_mean": 1.0,
+        "consensus_snqi_mean": null,
+        "planner_success_range": 0.0,
+        "planner_collision_range": 0.0,
+        "planner_near_miss_range": 11.333300000000001,
+        "planner_time_to_goal_range": 0.0,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_success_cv_mean": null,
+        "seed_time_to_goal_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_cv_mean": null,
+        "seed_snqi_ci_half_width_mean": 0.0,
+        "seed_snqi_cv_mean": null,
+        "archetype": "cross_trap",
+        "flow": "bi",
+        "behavior": null,
+        "primary_capability": null,
+        "target_failure_mode": null,
+        "determinism": null,
+        "ped_density": 0.02,
+        "route_clearance_warning": true,
+        "route_clearance_scope": "scenario",
+        "min_clearance_margin_m": 0.013277,
+        "difficulty_score": 0.0,
+        "difficulty_components": {
+          "success_mean": 0.0,
+          "collisions_mean": 0.0,
+          "near_misses_mean": 0.0,
+          "time_to_goal_norm_mean": 0.0
+        },
+        "supporting_snqi_rank": null,
+        "difficulty_rank": 1,
+        "verified_simple_candidate": false
+      }
+    ],
+    "family_rows": [
+      {
+        "scenario_family": "cross_trap",
+        "scenario_count": 1,
+        "difficulty_score_mean": 0.0,
+        "consensus_success_mean": 0.0,
+        "consensus_collisions_mean": 0.0,
+        "consensus_near_misses_mean": 10.222233333333334,
+        "consensus_time_to_goal_norm_mean": 1.0,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_ci_half_width_mean": 0.0,
+        "hardest_scenarios": [
+          "classic_cross_trap_low"
+        ]
+      }
+    ],
+    "planner_family_rows": [
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_family": "cross_trap",
+        "scenario_count": 1,
+        "mean_residual_score": 0.14950999855881927,
+        "easy_scenario_underperformance_count": 1,
+        "family_difficulty_score_mean": 0.0
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_family": "cross_trap",
+        "scenario_count": 1,
+        "mean_residual_score": -0.10049000144118071,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.0
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_family": "cross_trap",
+        "scenario_count": 1,
+        "mean_residual_score": -0.04901999711763858,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.0
+      }
+    ],
+    "planner_residual_rows": [
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_id": "classic_cross_trap_low",
+        "scenario_family": "cross_trap",
+        "difficulty_score": 0.0,
+        "difficulty_rank": 1,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 6.7777666666666665,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.14950999855881927,
+        "easy_scenario_underperformance": true
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_id": "classic_cross_trap_low",
+        "scenario_family": "cross_trap",
+        "difficulty_score": 0.0,
+        "difficulty_rank": 1,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": -4.555533333333334,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": -0.10049000144118071,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_id": "classic_cross_trap_low",
+        "scenario_family": "cross_trap",
+        "difficulty_score": 0.0,
+        "difficulty_rank": 1,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": -2.2222333333333335,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": -0.04901999711763858,
+        "easy_scenario_underperformance": false
+      }
+    ],
+    "planner_summary_rows": [
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_count": 1,
+        "mean_residual_score": 0.14950999855881927,
+        "max_residual_score": 0.14950999855881927,
+        "easy_scenario_underperformance_count": 1,
+        "worst_scenarios": [
+          "classic_cross_trap_low"
+        ]
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_count": 1,
+        "mean_residual_score": -0.10049000144118071,
+        "max_residual_score": -0.10049000144118071,
+        "easy_scenario_underperformance_count": 0,
+        "worst_scenarios": [
+          "classic_cross_trap_low"
+        ]
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_count": 1,
+        "mean_residual_score": -0.04901999711763858,
+        "max_residual_score": -0.04901999711763858,
+        "easy_scenario_underperformance_count": 0,
+        "worst_scenarios": [
+          "classic_cross_trap_low"
+        ]
+      }
+    ],
+    "verified_simple_assessment": {
+      "status": "rerun_required",
+      "manifest_path": "configs/scenarios/sets/verified_simple_subset_v1.yaml",
+      "subset_size": 10,
+      "matched_scenario_count": 0,
+      "matched_scenarios": [],
+      "comparison_planner_selection": null,
+      "rank_correlation": null,
+      "worth_adding": null,
+      "recommendation": "The current camera-ready campaign does not include the verified-simple candidate scenarios. Keep the subset as a debugging or promotion gate for now and run one bounded pilot before treating it as a calibration set."
+    },
+    "findings": []
+  },
+  "findings": []
+}

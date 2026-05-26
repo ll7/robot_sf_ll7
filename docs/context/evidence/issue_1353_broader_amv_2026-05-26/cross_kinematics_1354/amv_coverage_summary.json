@@ -1,0 +1,35 @@
+{
+  "schema_version": "benchmark-amv-coverage-summary.v1",
+  "campaign_id": "paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604",
+  "generated_at_utc": "2026-05-26T04:26:04.690370Z",
+  "profile_name": "amv-paper-v1",
+  "contract_version": "1",
+  "coverage_enforcement": "warn",
+  "status": "pass",
+  "required_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "observed_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "missing_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "scenario_count": 1,
+  "scenario_rows": [
+    {
+      "name": "classic_cross_trap_low",
+      "scenario_family": "cross_trap",
+      "amv": {}
+    }
+  ]
+}

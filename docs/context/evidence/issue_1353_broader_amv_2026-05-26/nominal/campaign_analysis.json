@@ -1,0 +1,1581 @@
+{
+  "campaign": {
+    "campaign_id": "issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603",
+    "campaign_root": "output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603",
+    "runtime_sec": 165.5303267678246,
+    "episodes_per_second": 0.507459881462203,
+    "summary_json": "output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603/reports/campaign_summary.json"
+  },
+  "planners": [
+    {
+      "planner_key": "goal",
+      "algo": "goal",
+      "kinematics": "differential_drive",
+      "episodes_summary": 12,
+      "episodes_file": 12,
+      "success_mean_episodes": 0.25,
+      "collision_mean_episodes": 0.3333333333333333,
+      "snqi_mean_episodes": -0.09674198266936922,
+      "status_counts": {
+        "success": 3,
+        "failure": 5,
+        "collision": 4
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 12
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 22.1499953167513,
+      "episodes_per_second": 0.5417608368939384,
+      "wall_time_mean_sec": 1.7719972332318623,
+      "wall_time_p95_sec": 2.8938004970550537,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "empty_map_8_directions_east",
+          "episodes": 3,
+          "mean_wall_time_sec": 4.398506085077922,
+          "p95_wall_time_sec": 12.55043649673462
+        },
+        {
+          "scenario_id": "classic_doorway_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.1321428616841633,
+          "p95_wall_time_sec": 2.8938004970550537
+        },
+        {
+          "scenario_id": "single_ped_crossing_orthogonal",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.9354523022969564,
+          "p95_wall_time_sec": 1.0767908096313477
+        },
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.6218876838684082,
+          "p95_wall_time_sec": 0.8039472103118896
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "orca",
+      "algo": "orca",
+      "kinematics": "differential_drive",
+      "episodes_summary": 12,
+      "episodes_file": 12,
+      "success_mean_episodes": 0.25,
+      "collision_mean_episodes": 0.08333333333333333,
+      "snqi_mean_episodes": -0.2999373776212828,
+      "status_counts": {
+        "success": 3,
+        "failure": 8,
+        "collision": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 12
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 12.624983523972332,
+      "episodes_per_second": 0.9504962899329245,
+      "wall_time_mean_sec": 0.976694921652476,
+      "wall_time_p95_sec": 1.3322052955627441,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "single_ped_crossing_orthogonal",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.3317951361338298,
+          "p95_wall_time_sec": 1.3328502178192139
+        },
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.2593294779459636,
+          "p95_wall_time_sec": 1.2674758434295654
+        },
+        {
+          "scenario_id": "classic_doorway_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.8968411286671957,
+          "p95_wall_time_sec": 1.1817374229431152
+        },
+        {
+          "scenario_id": "empty_map_8_directions_east",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.41881394386291504,
+          "p95_wall_time_sec": 0.4258599281311035
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "ppo",
+      "algo": "ppo",
+      "kinematics": "differential_drive",
+      "episodes_summary": 12,
+      "episodes_file": 12,
+      "success_mean_episodes": 0.3333333333333333,
+      "collision_mean_episodes": 0.08333333333333333,
+      "snqi_mean_episodes": -0.4518696193725835,
+      "status_counts": {
+        "success": 4,
+        "failure": 7,
+        "collision": 1
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "complete",
+      "adapter_episode_statuses": {
+        "complete": 12
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 27.077615740709007,
+      "episodes_per_second": 0.4431704812901592,
+      "wall_time_mean_sec": 1.638333757718404,
+      "wall_time_p95_sec": 1.8348181247711182,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "single_ped_crossing_orthogonal",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.7403098742167156,
+          "p95_wall_time_sec": 1.7446315288543701
+        },
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.7026409308115642,
+          "p95_wall_time_sec": 1.8348181247711182
+        },
+        {
+          "scenario_id": "empty_map_8_directions_east",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.5921657880147297,
+          "p95_wall_time_sec": 2.703295946121216
+        },
+        {
+          "scenario_id": "classic_doorway_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.5182184378306072,
+          "p95_wall_time_sec": 1.6121995449066162
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "prediction_planner",
+      "algo": "prediction_planner",
+      "kinematics": "differential_drive",
+      "episodes_summary": 12,
+      "episodes_file": 12,
+      "success_mean_episodes": 0.3333333333333333,
+      "collision_mean_episodes": 0.25,
+      "snqi_mean_episodes": -0.12461610754903583,
+      "status_counts": {
+        "success": 4,
+        "failure": 5,
+        "collision": 3
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 12
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 59.1144184069708,
+      "episodes_per_second": 0.202996161061528,
+      "wall_time_mean_sec": 4.8505010803540545,
+      "wall_time_p95_sec": 7.572607517242432,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "single_ped_crossing_orthogonal",
+          "episodes": 3,
+          "mean_wall_time_sec": 7.629627545674642,
+          "p95_wall_time_sec": 7.757450103759766
+        },
+        {
+          "scenario_id": "classic_doorway_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 4.839800278345744,
+          "p95_wall_time_sec": 6.038763761520386
+        },
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 4.385441223780314,
+          "p95_wall_time_sec": 6.352909803390503
+        },
+        {
+          "scenario_id": "empty_map_8_directions_east",
+          "episodes": 3,
+          "mean_wall_time_sec": 2.547135273615519,
+          "p95_wall_time_sec": 2.759431838989258
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "sacadrl",
+      "algo": "sacadrl",
+      "kinematics": "differential_drive",
+      "episodes_summary": 12,
+      "episodes_file": 12,
+      "success_mean_episodes": 0.25,
+      "collision_mean_episodes": 0.25,
+      "snqi_mean_episodes": -0.0993124229230289,
+      "status_counts": {
+        "success": 3,
+        "failure": 6,
+        "collision": 3
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 12
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 16.230027560144663,
+      "episodes_per_second": 0.7393702786720986,
+      "wall_time_mean_sec": 1.268045465151469,
+      "wall_time_p95_sec": 1.6887211799621582,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.7516874472300212,
+          "p95_wall_time_sec": 2.28821063041687
+        },
+        {
+          "scenario_id": "single_ped_crossing_orthogonal",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.615221897761027,
+          "p95_wall_time_sec": 1.6887211799621582
+        },
+        {
+          "scenario_id": "empty_map_8_directions_east",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.0099172592163086,
+          "p95_wall_time_sec": 1.1085577011108398
+        },
+        {
+          "scenario_id": "classic_doorway_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.6953552563985189,
+          "p95_wall_time_sec": 0.7620053291320801
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "kinematics": "differential_drive",
+      "episodes_summary": 12,
+      "episodes_file": 12,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": -1.0432326550481905,
+      "status_counts": {
+        "failure": 12
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 12
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 11.449184454977512,
+      "episodes_per_second": 1.0481095878216042,
+      "wall_time_mean_sec": 0.8799698948860168,
+      "wall_time_p95_sec": 1.087026834487915,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "single_ped_crossing_orthogonal",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.0862786769866943,
+          "p95_wall_time_sec": 1.0929222106933594
+        },
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.0805598100026448,
+          "p95_wall_time_sec": 1.087026834487915
+        },
+        {
+          "scenario_id": "classic_doorway_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.7535791397094727,
+          "p95_wall_time_sec": 0.7614855766296387
+        },
+        {
+          "scenario_id": "empty_map_8_directions_east",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.5994619528452555,
+          "p95_wall_time_sec": 0.7414863109588623
+        }
+      ],
+      "findings": []
+    },
+    {
+      "planner_key": "socnav_bench",
+      "algo": "socnav_bench",
+      "kinematics": "differential_drive",
+      "episodes_summary": 0,
+      "episodes_file": 0,
+      "success_mean_episodes": 0.0,
+      "collision_mean_episodes": 0.0,
+      "snqi_mean_episodes": null,
+      "status_counts": {},
+      "preflight_status": "skipped",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {},
+      "absolute_map_path_count": 0,
+      "runtime_sec": 0.18706900998950005,
+      "episodes_per_second": 0.0,
+      "wall_time_mean_sec": 0.0,
+      "wall_time_p95_sec": 0.0,
+      "slowest_scenarios": [],
+      "findings": []
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "algo": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "episodes_summary": 12,
+      "episodes_file": 12,
+      "success_mean_episodes": 0.25,
+      "collision_mean_episodes": 0.3333333333333333,
+      "snqi_mean_episodes": -0.08140486488876582,
+      "status_counts": {
+        "success": 3,
+        "failure": 5,
+        "collision": 4
+      },
+      "preflight_status": "ok",
+      "adapter_summary_status": "disabled",
+      "adapter_episode_statuses": {
+        "unknown": 12
+      },
+      "absolute_map_path_count": 0,
+      "runtime_sec": 7.95290938206017,
+      "episodes_per_second": 1.5088817718794938,
+      "wall_time_mean_sec": 0.5895848870277405,
+      "wall_time_p95_sec": 1.1083400249481201,
+      "slowest_scenarios": [
+        {
+          "scenario_id": "single_ped_crossing_orthogonal",
+          "episodes": 3,
+          "mean_wall_time_sec": 1.1077312628428142,
+          "p95_wall_time_sec": 1.1099131107330322
+        },
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.7627354462941488,
+          "p95_wall_time_sec": 1.038111925125122
+        },
+        {
+          "scenario_id": "empty_map_8_directions_east",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.2573702335357666,
+          "p95_wall_time_sec": 0.260148286819458
+        },
+        {
+          "scenario_id": "classic_doorway_low",
+          "episodes": 3,
+          "mean_wall_time_sec": 0.23050260543823242,
+          "p95_wall_time_sec": 0.26206207275390625
+        }
+      ],
+      "findings": []
+    }
+  ],
+  "runtime_hotspots": {
+    "slowest_planners": [
+      {
+        "planner_key": "prediction_planner",
+        "kinematics": "differential_drive",
+        "runtime_sec": 59.1144184069708,
+        "wall_time_mean_sec": 4.8505010803540545,
+        "wall_time_p95_sec": 7.572607517242432,
+        "top_scenarios": [
+          {
+            "scenario_id": "single_ped_crossing_orthogonal",
+            "episodes": 3,
+            "mean_wall_time_sec": 7.629627545674642,
+            "p95_wall_time_sec": 7.757450103759766
+          },
+          {
+            "scenario_id": "classic_doorway_low",
+            "episodes": 3,
+            "mean_wall_time_sec": 4.839800278345744,
+            "p95_wall_time_sec": 6.038763761520386
+          },
+          {
+            "scenario_id": "classic_bottleneck_low",
+            "episodes": 3,
+            "mean_wall_time_sec": 4.385441223780314,
+            "p95_wall_time_sec": 6.352909803390503
+          }
+        ]
+      },
+      {
+        "planner_key": "ppo",
+        "kinematics": "differential_drive",
+        "runtime_sec": 27.077615740709007,
+        "wall_time_mean_sec": 1.638333757718404,
+        "wall_time_p95_sec": 1.8348181247711182,
+        "top_scenarios": [
+          {
+            "scenario_id": "single_ped_crossing_orthogonal",
+            "episodes": 3,
+            "mean_wall_time_sec": 1.7403098742167156,
+            "p95_wall_time_sec": 1.7446315288543701
+          },
+          {
+            "scenario_id": "classic_bottleneck_low",
+            "episodes": 3,
+            "mean_wall_time_sec": 1.7026409308115642,
+            "p95_wall_time_sec": 1.8348181247711182
+          },
+          {
+            "scenario_id": "empty_map_8_directions_east",
+            "episodes": 3,
+            "mean_wall_time_sec": 1.5921657880147297,
+            "p95_wall_time_sec": 2.703295946121216
+          }
+        ]
+      },
+      {
+        "planner_key": "goal",
+        "kinematics": "differential_drive",
+        "runtime_sec": 22.1499953167513,
+        "wall_time_mean_sec": 1.7719972332318623,
+        "wall_time_p95_sec": 2.8938004970550537,
+        "top_scenarios": [
+          {
+            "scenario_id": "empty_map_8_directions_east",
+            "episodes": 3,
+            "mean_wall_time_sec": 4.398506085077922,
+            "p95_wall_time_sec": 12.55043649673462
+          },
+          {
+            "scenario_id": "classic_doorway_low",
+            "episodes": 3,
+            "mean_wall_time_sec": 1.1321428616841633,
+            "p95_wall_time_sec": 2.8938004970550537
+          },
+          {
+            "scenario_id": "single_ped_crossing_orthogonal",
+            "episodes": 3,
+            "mean_wall_time_sec": 0.9354523022969564,
+            "p95_wall_time_sec": 1.0767908096313477
+          }
+        ]
+      }
+    ]
+  },
+  "scenario_difficulty": {
+    "schema_version": "benchmark-scenario-difficulty-analysis.v1",
+    "status": "ok",
+    "primary_proxy": {
+      "name": "consensus_outcome_rank_v1",
+      "description": "Weighted consensus score across core benchmark-success planners using success, collisions, near-misses, and normalized time-to-goal.",
+      "eligible_planner_selection": "core benchmark-success planners",
+      "eligible_planner_count": 3,
+      "metric_weights": {
+        "success_mean": 0.4,
+        "collisions_mean": 0.25,
+        "near_misses_mean": 0.15,
+        "time_to_goal_norm_mean": 0.2
+      },
+      "supporting_metric": "snqi_mean"
+    },
+    "scenario_rows": [
+      {
+        "scenario_id": "classic_doorway_low",
+        "scenario_family": "doorway",
+        "eligible_planner_count": 3,
+        "total_planner_count": 7,
+        "consensus_success_mean": 0.0,
+        "consensus_collisions_mean": 0.4444333333333333,
+        "consensus_near_misses_mean": 9.333333333333334,
+        "consensus_time_to_goal_norm_mean": 1.0,
+        "consensus_snqi_mean": null,
+        "planner_success_range": 0.0,
+        "planner_collision_range": 1.0,
+        "planner_near_miss_range": 18.6667,
+        "planner_time_to_goal_range": 0.0,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_success_cv_mean": null,
+        "seed_time_to_goal_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_cv_mean": 0.0,
+        "seed_snqi_ci_half_width_mean": 0.2239175571959409,
+        "seed_snqi_cv_mean": -0.1671173505965363,
+        "archetype": "doorway",
+        "flow": "bi",
+        "behavior": null,
+        "primary_capability": null,
+        "target_failure_mode": null,
+        "determinism": null,
+        "ped_density": 0.02,
+        "route_clearance_warning": true,
+        "route_clearance_scope": "scenario",
+        "min_clearance_margin_m": 0.012233,
+        "difficulty_score": 0.7999999999999999,
+        "difficulty_components": {
+          "success_mean": 0.6666666666666666,
+          "collisions_mean": 1.0,
+          "near_misses_mean": 1.0,
+          "time_to_goal_norm_mean": 0.6666666666666666
+        },
+        "supporting_snqi_rank": null,
+        "difficulty_rank": 1,
+        "verified_simple_candidate": false
+      },
+      {
+        "scenario_id": "classic_bottleneck_low",
+        "scenario_family": "bottleneck",
+        "eligible_planner_count": 3,
+        "total_planner_count": 7,
+        "consensus_success_mean": 0.0,
+        "consensus_collisions_mean": 0.11109999999999999,
+        "consensus_near_misses_mean": 0.0,
+        "consensus_time_to_goal_norm_mean": 1.0,
+        "consensus_snqi_mean": null,
+        "planner_success_range": 0.0,
+        "planner_collision_range": 0.3333,
+        "planner_near_miss_range": 0.0,
+        "planner_time_to_goal_range": 0.0,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_success_cv_mean": null,
+        "seed_time_to_goal_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_cv_mean": 0.0,
+        "seed_snqi_ci_half_width_mean": 0.020795658283332057,
+        "seed_snqi_cv_mean": -0.15542602206668524,
+        "archetype": "bottleneck",
+        "flow": "bi",
+        "behavior": null,
+        "primary_capability": null,
+        "target_failure_mode": null,
+        "determinism": null,
+        "ped_density": 0.0,
+        "route_clearance_warning": false,
+        "route_clearance_scope": null,
+        "min_clearance_margin_m": null,
+        "difficulty_score": 0.6166666666666667,
+        "difficulty_components": {
+          "success_mean": 0.6666666666666666,
+          "collisions_mean": 0.6666666666666666,
+          "near_misses_mean": 0.3333333333333333,
+          "time_to_goal_norm_mean": 0.6666666666666666
+        },
+        "supporting_snqi_rank": null,
+        "difficulty_rank": 2,
+        "verified_simple_candidate": false
+      },
+      {
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "eligible_planner_count": 3,
+        "total_planner_count": 7,
+        "consensus_success_mean": 0.0,
+        "consensus_collisions_mean": 0.0,
+        "consensus_near_misses_mean": 0.0,
+        "consensus_time_to_goal_norm_mean": 1.0,
+        "consensus_snqi_mean": null,
+        "planner_success_range": 0.0,
+        "planner_collision_range": 0.0,
+        "planner_near_miss_range": 0.0,
+        "planner_time_to_goal_range": 0.0,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_success_cv_mean": null,
+        "seed_time_to_goal_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_cv_mean": 0.0,
+        "seed_snqi_ci_half_width_mean": 0.03681271601958569,
+        "seed_snqi_cv_mean": -0.026240077054536456,
+        "archetype": "single_ped_crossing_orthogonal",
+        "flow": "perpendicular",
+        "behavior": "single_ped",
+        "primary_capability": "dynamic_interaction",
+        "target_failure_mode": "social_collision",
+        "determinism": "deterministic",
+        "ped_density": 0.0,
+        "route_clearance_warning": false,
+        "route_clearance_scope": null,
+        "min_clearance_margin_m": null,
+        "difficulty_score": 0.4916666666666667,
+        "difficulty_components": {
+          "success_mean": 0.6666666666666666,
+          "collisions_mean": 0.16666666666666666,
+          "near_misses_mean": 0.3333333333333333,
+          "time_to_goal_norm_mean": 0.6666666666666666
+        },
+        "supporting_snqi_rank": null,
+        "difficulty_rank": 3,
+        "verified_simple_candidate": true
+      },
+      {
+        "scenario_id": "empty_map_8_directions_east",
+        "scenario_family": "empty_map_8_directions",
+        "eligible_planner_count": 3,
+        "total_planner_count": 7,
+        "consensus_success_mean": 0.6666666666666666,
+        "consensus_collisions_mean": 0.0,
+        "consensus_near_misses_mean": 0.0,
+        "consensus_time_to_goal_norm_mean": 0.7089,
+        "consensus_snqi_mean": 0.12275,
+        "planner_success_range": 1.0,
+        "planner_collision_range": 0.0,
+        "planner_near_miss_range": 0.0,
+        "planner_time_to_goal_range": 0.53,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_success_cv_mean": 0.0,
+        "seed_time_to_goal_ci_half_width_mean": 0.005555555555555573,
+        "seed_time_to_goal_cv_mean": 0.008183672242297485,
+        "seed_snqi_ci_half_width_mean": 0.002344212308930329,
+        "seed_snqi_cv_mean": 0.010715469025136337,
+        "archetype": "empty_map_8_directions",
+        "flow": "none",
+        "behavior": "none",
+        "primary_capability": "frame_consistency",
+        "target_failure_mode": "coordinate_transform",
+        "determinism": "deterministic",
+        "ped_density": 0.0,
+        "route_clearance_warning": true,
+        "route_clearance_scope": "map",
+        "min_clearance_margin_m": 0.333333,
+        "difficulty_score": 0.09166666666666666,
+        "difficulty_components": {
+          "success_mean": 0.0,
+          "collisions_mean": 0.16666666666666666,
+          "near_misses_mean": 0.3333333333333333,
+          "time_to_goal_norm_mean": 0.0
+        },
+        "supporting_snqi_rank": 0.0,
+        "difficulty_rank": 4,
+        "verified_simple_candidate": true
+      }
+    ],
+    "family_rows": [
+      {
+        "scenario_family": "bottleneck",
+        "scenario_count": 1,
+        "difficulty_score_mean": 0.6166666666666667,
+        "consensus_success_mean": 0.0,
+        "consensus_collisions_mean": 0.11109999999999999,
+        "consensus_near_misses_mean": 0.0,
+        "consensus_time_to_goal_norm_mean": 1.0,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_ci_half_width_mean": 0.0,
+        "hardest_scenarios": [
+          "classic_bottleneck_low"
+        ]
+      },
+      {
+        "scenario_family": "doorway",
+        "scenario_count": 1,
+        "difficulty_score_mean": 0.7999999999999999,
+        "consensus_success_mean": 0.0,
+        "consensus_collisions_mean": 0.4444333333333333,
+        "consensus_near_misses_mean": 9.333333333333334,
+        "consensus_time_to_goal_norm_mean": 1.0,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_ci_half_width_mean": 0.0,
+        "hardest_scenarios": [
+          "classic_doorway_low"
+        ]
+      },
+      {
+        "scenario_family": "empty_map_8_directions",
+        "scenario_count": 1,
+        "difficulty_score_mean": 0.09166666666666666,
+        "consensus_success_mean": 0.6666666666666666,
+        "consensus_collisions_mean": 0.0,
+        "consensus_near_misses_mean": 0.0,
+        "consensus_time_to_goal_norm_mean": 0.7089,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_ci_half_width_mean": 0.005555555555555573,
+        "hardest_scenarios": [
+          "empty_map_8_directions_east"
+        ]
+      },
+      {
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "scenario_count": 1,
+        "difficulty_score_mean": 0.4916666666666667,
+        "consensus_success_mean": 0.0,
+        "consensus_collisions_mean": 0.0,
+        "consensus_near_misses_mean": 0.0,
+        "consensus_time_to_goal_norm_mean": 1.0,
+        "seed_success_ci_half_width_mean": 0.0,
+        "seed_time_to_goal_ci_half_width_mean": 0.0,
+        "hardest_scenarios": [
+          "single_ped_crossing_orthogonal"
+        ]
+      }
+    ],
+    "planner_family_rows": [
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_family": "bottleneck",
+        "scenario_count": 1,
+        "mean_residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance_count": 1,
+        "family_difficulty_score_mean": 0.6166666666666667
+      },
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_family": "doorway",
+        "scenario_count": 1,
+        "mean_residual_score": 0.07639222470138446,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.7999999999999999
+      },
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_family": "empty_map_8_directions",
+        "scenario_count": 1,
+        "mean_residual_score": -0.10795597484276731,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.09166666666666666
+      },
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "scenario_count": 1,
+        "mean_residual_score": 0.0,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.4916666666666667
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_family": "bottleneck",
+        "scenario_count": 1,
+        "mean_residual_score": -0.08333333333333333,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.6166666666666667
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_family": "doorway",
+        "scenario_count": 1,
+        "mean_residual_score": 0.1284663876493078,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.7999999999999999
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_family": "empty_map_8_directions",
+        "scenario_count": 1,
+        "mean_residual_score": -0.19602201257861634,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.09166666666666666
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "scenario_count": 1,
+        "mean_residual_score": 0.0,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.4916666666666667
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_family": "bottleneck",
+        "scenario_count": 1,
+        "mean_residual_score": -0.08333333333333333,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.6166666666666667
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_family": "doorway",
+        "scenario_count": 1,
+        "mean_residual_score": -120000.00099811332,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.7999999999999999
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_family": "empty_map_8_directions",
+        "scenario_count": 1,
+        "mean_residual_score": -0.26361635220125784,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.09166666666666666
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "scenario_count": 1,
+        "mean_residual_score": 0.0,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.4916666666666667
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_family": "bottleneck",
+        "scenario_count": 1,
+        "mean_residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance_count": 1,
+        "family_difficulty_score_mean": 0.6166666666666667
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_family": "doorway",
+        "scenario_count": 1,
+        "mean_residual_score": -104149.7167556149,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.7999999999999999
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_family": "empty_map_8_directions",
+        "scenario_count": 1,
+        "mean_residual_score": -0.22588050314465408,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.09166666666666666
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "scenario_count": 1,
+        "mean_residual_score": 0.0,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.4916666666666667
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_family": "bottleneck",
+        "scenario_count": 1,
+        "mean_residual_score": -0.08333333333333333,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.6166666666666667
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_family": "doorway",
+        "scenario_count": 1,
+        "mean_residual_score": 0.08531988733055836,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.7999999999999999
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_family": "empty_map_8_directions",
+        "scenario_count": 1,
+        "mean_residual_score": -0.10955974842767295,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.09166666666666666
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "scenario_count": 1,
+        "mean_residual_score": 0.0,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.4916666666666667
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_family": "bottleneck",
+        "scenario_count": 1,
+        "mean_residual_score": -0.08333333333333333,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.6166666666666667
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_family": "doorway",
+        "scenario_count": 1,
+        "mean_residual_score": -0.20485861235069225,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.7999999999999999
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_family": "empty_map_8_directions",
+        "scenario_count": 1,
+        "mean_residual_score": 0.30397798742138366,
+        "easy_scenario_underperformance_count": 1,
+        "family_difficulty_score_mean": 0.09166666666666666
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "scenario_count": 1,
+        "mean_residual_score": 0.0,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.4916666666666667
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_family": "bottleneck",
+        "scenario_count": 1,
+        "mean_residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance_count": 1,
+        "family_difficulty_score_mean": 0.6166666666666667
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_family": "doorway",
+        "scenario_count": 1,
+        "mean_residual_score": 0.04067755633472084,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.7999999999999999
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_family": "empty_map_8_directions",
+        "scenario_count": 1,
+        "mean_residual_score": -0.26361635220125784,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.09166666666666666
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "scenario_count": 1,
+        "mean_residual_score": 0.0,
+        "easy_scenario_underperformance_count": 0,
+        "family_difficulty_score_mean": 0.4916666666666667
+      }
+    ],
+    "planner_residual_rows": [
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_id": "classic_bottleneck_low",
+        "scenario_family": "bottleneck",
+        "difficulty_score": 0.6166666666666667,
+        "difficulty_rank": 2,
+        "success_residual": 0.0,
+        "collisions_residual": 0.2222,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance": true
+      },
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_id": "classic_doorway_low",
+        "scenario_family": "doorway",
+        "difficulty_score": 0.7999999999999999,
+        "difficulty_rank": 1,
+        "success_residual": 0.0,
+        "collisions_residual": 0.5555666666666668,
+        "near_misses_residual": -4.666633333333334,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.07639222470138446,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_id": "empty_map_8_directions_east",
+        "scenario_family": "empty_map_8_directions",
+        "difficulty_score": 0.09166666666666666,
+        "difficulty_rank": 4,
+        "success_residual": 0.33333333333333337,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": -0.052200000000000024,
+        "snqi_residual": 0.005349999999999994,
+        "residual_score": -0.10795597484276731,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "difficulty_score": 0.4916666666666667,
+        "difficulty_rank": 3,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.0,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_id": "classic_bottleneck_low",
+        "scenario_family": "bottleneck",
+        "difficulty_score": 0.6166666666666667,
+        "difficulty_rank": 2,
+        "success_residual": 0.0,
+        "collisions_residual": -0.11109999999999999,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": -0.08333333333333333,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_id": "classic_doorway_low",
+        "scenario_family": "doorway",
+        "difficulty_score": 0.7999999999999999,
+        "difficulty_rank": 1,
+        "success_residual": 0.0,
+        "collisions_residual": -0.1111333333333333,
+        "near_misses_residual": 11.666666666666666,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.1284663876493078,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_id": "empty_map_8_directions_east",
+        "scenario_family": "empty_map_8_directions",
+        "difficulty_score": 0.09166666666666666,
+        "difficulty_rank": 4,
+        "success_residual": 0.33333333333333337,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": -0.2389,
+        "snqi_residual": -0.005349999999999994,
+        "residual_score": -0.19602201257861634,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "difficulty_score": 0.4916666666666667,
+        "difficulty_rank": 3,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.0,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_id": "classic_bottleneck_low",
+        "scenario_family": "bottleneck",
+        "difficulty_score": 0.6166666666666667,
+        "difficulty_rank": 2,
+        "success_residual": 0.0,
+        "collisions_residual": -0.11109999999999999,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": -0.08333333333333333,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_id": "classic_doorway_low",
+        "scenario_family": "doorway",
+        "difficulty_score": 0.7999999999999999,
+        "difficulty_rank": 1,
+        "success_residual": 0.3333,
+        "collisions_residual": -0.1111333333333333,
+        "near_misses_residual": 1.9999666666666656,
+        "time_to_goal_norm_residual": -0.14670000000000005,
+        "snqi_residual": null,
+        "residual_score": -120000.00099811332,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_id": "empty_map_8_directions_east",
+        "scenario_family": "empty_map_8_directions",
+        "difficulty_score": 0.09166666666666666,
+        "difficulty_rank": 4,
+        "success_residual": 0.33333333333333337,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": -0.3822,
+        "snqi_residual": null,
+        "residual_score": -0.26361635220125784,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "difficulty_score": 0.4916666666666667,
+        "difficulty_rank": 3,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.0,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_id": "classic_bottleneck_low",
+        "scenario_family": "bottleneck",
+        "difficulty_score": 0.6166666666666667,
+        "difficulty_rank": 2,
+        "success_residual": 0.0,
+        "collisions_residual": 0.2222,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance": true
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_id": "classic_doorway_low",
+        "scenario_family": "doorway",
+        "difficulty_score": 0.7999999999999999,
+        "difficulty_rank": 1,
+        "success_residual": 0.3333,
+        "collisions_residual": 0.22226666666666667,
+        "near_misses_residual": 16.999966666666666,
+        "time_to_goal_norm_residual": -0.08330000000000004,
+        "snqi_residual": null,
+        "residual_score": -104149.7167556149,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_id": "empty_map_8_directions_east",
+        "scenario_family": "empty_map_8_directions",
+        "difficulty_score": 0.09166666666666666,
+        "difficulty_rank": 4,
+        "success_residual": 0.33333333333333337,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": -0.30219999999999997,
+        "snqi_residual": 0.02915000000000001,
+        "residual_score": -0.22588050314465408,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "difficulty_score": 0.4916666666666667,
+        "difficulty_rank": 3,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.0,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_id": "classic_bottleneck_low",
+        "scenario_family": "bottleneck",
+        "difficulty_score": 0.6166666666666667,
+        "difficulty_rank": 2,
+        "success_residual": 0.0,
+        "collisions_residual": -0.11109999999999999,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": -0.08333333333333333,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_id": "classic_doorway_low",
+        "scenario_family": "doorway",
+        "difficulty_score": 0.7999999999999999,
+        "difficulty_rank": 1,
+        "success_residual": 0.0,
+        "collisions_residual": 0.5555666666666668,
+        "near_misses_residual": -4.0000333333333336,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.08531988733055836,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_id": "empty_map_8_directions_east",
+        "scenario_family": "empty_map_8_directions",
+        "difficulty_score": 0.09166666666666666,
+        "difficulty_rank": 4,
+        "success_residual": 0.33333333333333337,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": -0.05559999999999998,
+        "snqi_residual": 0.0038499999999999923,
+        "residual_score": -0.10955974842767295,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "difficulty_score": 0.4916666666666667,
+        "difficulty_rank": 3,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.0,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_id": "classic_bottleneck_low",
+        "scenario_family": "bottleneck",
+        "difficulty_score": 0.6166666666666667,
+        "difficulty_rank": 2,
+        "success_residual": 0.0,
+        "collisions_residual": -0.11109999999999999,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": -0.08333333333333333,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_id": "classic_doorway_low",
+        "scenario_family": "doorway",
+        "difficulty_score": 0.7999999999999999,
+        "difficulty_rank": 1,
+        "success_residual": 0.0,
+        "collisions_residual": -0.4444333333333333,
+        "near_misses_residual": -7.000033333333334,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": -0.20485861235069225,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_id": "empty_map_8_directions_east",
+        "scenario_family": "empty_map_8_directions",
+        "difficulty_score": 0.09166666666666666,
+        "difficulty_rank": 4,
+        "success_residual": -0.6666666666666666,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.2911,
+        "snqi_residual": null,
+        "residual_score": 0.30397798742138366,
+        "easy_scenario_underperformance": true
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "difficulty_score": 0.4916666666666667,
+        "difficulty_rank": 3,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.0,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_id": "classic_bottleneck_low",
+        "scenario_family": "bottleneck",
+        "difficulty_score": 0.6166666666666667,
+        "difficulty_rank": 2,
+        "success_residual": 0.0,
+        "collisions_residual": 0.2222,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance": true
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_id": "classic_doorway_low",
+        "scenario_family": "doorway",
+        "difficulty_score": 0.7999999999999999,
+        "difficulty_rank": 1,
+        "success_residual": 0.0,
+        "collisions_residual": 0.5555666666666668,
+        "near_misses_residual": -7.333333333333334,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.04067755633472084,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_id": "empty_map_8_directions_east",
+        "scenario_family": "empty_map_8_directions",
+        "difficulty_score": 0.09166666666666666,
+        "difficulty_rank": 4,
+        "success_residual": 0.33333333333333337,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": -0.3822,
+        "snqi_residual": 0.036750000000000005,
+        "residual_score": -0.26361635220125784,
+        "easy_scenario_underperformance": false
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "scenario_family": "single_ped_crossing_orthogonal",
+        "difficulty_score": 0.4916666666666667,
+        "difficulty_rank": 3,
+        "success_residual": 0.0,
+        "collisions_residual": 0.0,
+        "near_misses_residual": 0.0,
+        "time_to_goal_norm_residual": 0.0,
+        "snqi_residual": null,
+        "residual_score": 0.0,
+        "easy_scenario_underperformance": false
+      }
+    ],
+    "planner_summary_rows": [
+      {
+        "planner_key": "goal",
+        "algo": "goal",
+        "planner_group": "core",
+        "scenario_count": 4,
+        "mean_residual_score": 0.03377572913132096,
+        "max_residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance_count": 1,
+        "worst_scenarios": [
+          "classic_bottleneck_low",
+          "classic_doorway_low",
+          "single_ped_crossing_orthogonal"
+        ]
+      },
+      {
+        "planner_key": "orca",
+        "algo": "orca",
+        "planner_group": "core",
+        "scenario_count": 4,
+        "mean_residual_score": -0.03772223956566047,
+        "max_residual_score": 0.1284663876493078,
+        "easy_scenario_underperformance_count": 0,
+        "worst_scenarios": [
+          "classic_doorway_low",
+          "single_ped_crossing_orthogonal",
+          "classic_bottleneck_low"
+        ]
+      },
+      {
+        "planner_key": "ppo",
+        "algo": "ppo",
+        "planner_group": "experimental",
+        "scenario_count": 4,
+        "mean_residual_score": -30000.086986949715,
+        "max_residual_score": 0.0,
+        "easy_scenario_underperformance_count": 0,
+        "worst_scenarios": [
+          "single_ped_crossing_orthogonal",
+          "classic_bottleneck_low",
+          "empty_map_8_directions_east"
+        ]
+      },
+      {
+        "planner_key": "prediction_planner",
+        "algo": "prediction_planner",
+        "planner_group": "experimental",
+        "scenario_count": 4,
+        "mean_residual_score": -26037.443992362845,
+        "max_residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance_count": 1,
+        "worst_scenarios": [
+          "classic_bottleneck_low",
+          "single_ped_crossing_orthogonal",
+          "empty_map_8_directions_east"
+        ]
+      },
+      {
+        "planner_key": "sacadrl",
+        "algo": "sacadrl",
+        "planner_group": "experimental",
+        "scenario_count": 4,
+        "mean_residual_score": -0.02689329860761198,
+        "max_residual_score": 0.08531988733055836,
+        "easy_scenario_underperformance_count": 0,
+        "worst_scenarios": [
+          "classic_doorway_low",
+          "single_ped_crossing_orthogonal",
+          "classic_bottleneck_low"
+        ]
+      },
+      {
+        "planner_key": "social_force",
+        "algo": "social_force",
+        "planner_group": "core",
+        "scenario_count": 4,
+        "mean_residual_score": 0.0039465104343395195,
+        "max_residual_score": 0.30397798742138366,
+        "easy_scenario_underperformance_count": 1,
+        "worst_scenarios": [
+          "empty_map_8_directions_east",
+          "single_ped_crossing_orthogonal",
+          "classic_bottleneck_low"
+        ]
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "algo": "socnav_sampling",
+        "planner_group": "experimental",
+        "scenario_count": 4,
+        "mean_residual_score": -0.01406803229996758,
+        "max_residual_score": 0.16666666666666669,
+        "easy_scenario_underperformance_count": 1,
+        "worst_scenarios": [
+          "classic_bottleneck_low",
+          "classic_doorway_low",
+          "single_ped_crossing_orthogonal"
+        ]
+      }
+    ],
+    "verified_simple_assessment": {
+      "status": "candidate_supported",
+      "manifest_path": "configs/scenarios/sets/verified_simple_subset_v1.yaml",
+      "subset_size": 10,
+      "matched_scenario_count": 2,
+      "matched_scenarios": [
+        "empty_map_8_directions_east",
+        "single_ped_crossing_orthogonal"
+      ],
+      "comparison_planner_selection": "core benchmark-success planners",
+      "rank_correlation": 1.0,
+      "worth_adding": true,
+      "mean_absolute_success_shift": 0.16666666666666666,
+      "full_seed_success_ci_half_width_mean": 0.0,
+      "subset_seed_success_ci_half_width_mean": 0.0,
+      "full_planner_order": [
+        "orca",
+        "goal",
+        "social_force"
+      ],
+      "subset_planner_order": [
+        "orca",
+        "goal",
+        "social_force"
+      ],
+      "recommendation": "The verified-simple subset broadly preserves planner ordering while keeping seed noise comparable to the full campaign. Use it as a calibration aid, not as a replacement benchmark."
+    },
+    "findings": []
+  },
+  "findings": []
+}

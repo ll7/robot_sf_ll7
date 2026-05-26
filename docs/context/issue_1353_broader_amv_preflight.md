@@ -50,6 +50,13 @@ families from the all-planners camera-ready matrix:
 | `sacadrl` | broader row | `experimental` | Fallback SocNav prerequisite policy. |
 | `socnav_bench` | broader row | `experimental` | `skip-with-warning` SocNav prerequisite policy; missing assets are recorded as unavailable rather than blocking the campaign. |
 
+2026-05-25 implementation update: campaign-level `benchmark_success` is now anchored on `core`
+planner rows whenever a campaign has explicit core rows. Experimental rows such as `socnav_bench`
+still report `not_available` when their external prerequisites are absent, and they remain visible
+in warnings/tables, but they no longer make an otherwise core-successful campaign exit as failed.
+Campaign summaries expose `benchmark_success_basis`, `core_successful_runs`, and `core_total_runs`
+so downstream reports can distinguish core success from all-row availability.
+
 ## Caveats
 
 - These configs lock the row list and preflight contract, but they do not prove planner execution.

@@ -49,6 +49,12 @@ from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.synthetic_actuation import (
+    SyntheticActuationController,
+    SyntheticActuationProfile,
+    not_available_saturation_metrics,
+    validate_synthetic_actuation_profile,
+)
 from robot_sf.benchmark.termination_reason import (
     build_outcome_payload,
     collision_event,
@@ -232,6 +238,30 @@ _init_feasibility_metadata = planner_commands.init_feasibility_metadata
 _planner_kinematics_compatibility = planner_commands.planner_kinematics_compatibility
 _project_with_feasibility = planner_commands.project_with_feasibility
 _validate_planner_contract = planner_commands.validate_planner_contract
+
+
+def _load_synthetic_actuation_profile(payload: Any) -> SyntheticActuationProfile | None:
+    """Normalize optional synthetic-actuation payloads into the typed profile contract."""
+    if payload is None:
+        return None
+    if isinstance(payload, SyntheticActuationProfile):
+        validate_synthetic_actuation_profile(payload)
+        return payload
+    if not isinstance(payload, dict):
+        raise TypeError("synthetic_actuation_profile must be a mapping when provided")
+    profile = SyntheticActuationProfile(
+        name=str(payload.get("name", "")),
+        profile_version=str(payload.get("profile_version", "v0")),
+        claim_scope=str(payload.get("claim_scope", "synthetic-only")),
+        max_linear_accel_m_s2=float(payload.get("max_linear_accel_m_s2")),
+        max_linear_decel_m_s2=float(payload.get("max_linear_decel_m_s2")),
+        max_yaw_rate_rad_s=float(payload.get("max_yaw_rate_rad_s")),
+        max_angular_accel_rad_s2=float(payload.get("max_angular_accel_rad_s2")),
+        latency_mode=str(payload.get("latency_mode", "")),
+        update_mode=str(payload.get("update_mode", "")),
+    )
+    validate_synthetic_actuation_profile(profile)
+    return profile
 
 
 def _holonomic_world_velocity_command(vx: float, vy: float) -> dict[str, float | str]:
@@ -2406,6 +2436,7 @@ def _scenario_identity_payload(  # noqa: PLR0913
     observation_mode: str | None = None,
     observation_level: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    synthetic_actuation_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
 
@@ -2431,6 +2462,8 @@ def _scenario_identity_payload(  # noqa: PLR0913
     if bool(noise_spec["enabled"]):
         payload["observation_noise_profile"] = str(noise_spec["profile"])
         payload["observation_noise_hash"] = observation_noise_hash(noise_spec)
+    if synthetic_actuation_profile is not None:
+        payload["synthetic_actuation_profile"] = dict(synthetic_actuation_profile)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
     if dt is not None and float(dt) > 0.0:
@@ -2812,6 +2845,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     observation_mode: str | None = None,
     observation_level: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    synthetic_actuation_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -2841,6 +2875,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         config.sim_config.time_per_step_in_secs = float(dt)
 
     robot_kinematics = _robot_kinematics_label(config)
+    actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
+    if actuation_profile is not None and robot_kinematics != _DEFAULT_KINEMATICS:
+        raise ValueError(
+            "synthetic_actuation_profile requires differential_drive scenarios; "
+            f"got {robot_kinematics!r} for scenario {scenario_id!r}"
+        )
     robot_command_mode = (
         str(getattr(getattr(config, "robot_config", None), "command_mode", "vx_vy")).strip().lower()
     )
@@ -2887,6 +2927,13 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_native_action = getattr(policy_fn, "_planner_native_env_action", False)
 
     planner_runtime_snapshot: dict[str, Any] | None = None
+    actuation_controller = (
+        SyntheticActuationController(profile=actuation_profile, dt=config.sim_config.time_per_step_in_secs)
+        if actuation_profile is not None
+        else None
+    )
+    current_command = (0.0, 0.0)
+    actuation_summary: dict[str, Any] = not_available_saturation_metrics()
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
@@ -2916,6 +2963,23 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             # Use per-step flag when available (e.g. SAC with fallback); fall back to the
             # static cached value for planners that set _planner_native_env_action once.
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
+            if actuation_controller is not None and step_is_native:
+                raise ValueError(
+                    "synthetic_actuation_profile requires absolute differential-drive commands; "
+                    "native env actions cannot be wrapped safely"
+                )
+            if actuation_controller is not None:
+                if not isinstance(policy_command, (tuple, list, np.ndarray)) or len(policy_command) < 2:
+                    raise TypeError(
+                        "synthetic_actuation_profile expects planner commands shaped like "
+                        "(linear_velocity, angular_velocity)"
+                    )
+                actuation_step = actuation_controller.apply(
+                    current_command=current_command,
+                    requested_command=(float(policy_command[0]), float(policy_command[1])),
+                )
+                policy_command = actuation_step.applied_command
+                current_command = actuation_step.applied_command
             if step_is_native:
                 # Policy already outputs native env actions (e.g. delta velocities);
                 # skip the absolute→delta conversion done by _policy_command_to_env_action.
@@ -3075,6 +3139,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     _finalize_feasibility_metadata(algo_meta)
     if isinstance(planner_runtime_snapshot, dict):
         algo_meta["planner_runtime"] = planner_runtime_snapshot
+    if actuation_controller is not None:
+        actuation_summary = actuation_controller.summary()
+        algo_meta["synthetic_actuation"] = {
+            "profile": actuation_profile.to_metadata(),
+            "summary": dict(actuation_summary),
+        }
     visibility_settings = getattr(config, "observation_visibility", None)
     if visibility_settings is not None and hasattr(visibility_settings, "to_metadata"):
         algo_meta["observation_visibility"] = visibility_settings.to_metadata()
@@ -3086,6 +3156,10 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
     )
+    for metric_name, metric_value in actuation_summary.items():
+        if metric_name in {"schema_version", "status", "step_count", "command_clip_steps", "yaw_rate_saturation_steps"}:
+            continue
+        metrics[metric_name] = metric_value
 
     ts_end = datetime.now(UTC).isoformat()
     scenario_params = _scenario_identity_payload(
@@ -3098,6 +3172,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         observation_mode=active_observation_mode,
         observation_level=active_observation_level,
         observation_noise=noise_spec,
+        synthetic_actuation_profile=(
+            actuation_profile.to_metadata() if actuation_profile is not None else None
+        ),
     )
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - start_time))
@@ -3206,6 +3283,7 @@ def _run_map_job_worker(
         observation_mode=params.get("observation_mode"),
         observation_level=params.get("observation_level"),
         observation_noise=params.get("observation_noise"),
+        synthetic_actuation_profile=params.get("synthetic_actuation_profile"),
     )
 
 
@@ -3343,6 +3421,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     observation_mode: str | None = None,
     observation_level: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    synthetic_actuation_profile: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -3372,6 +3451,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     suite_key = _suite_key(scenario_path)
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
+    actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
 
     filtered: list[dict[str, Any]] = []
     for scenario in scenarios:
@@ -3513,6 +3593,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         preflight["status"] = "skipped"
         preflight["compatibility_status"] = "incompatible"
         preflight["compatibility_reason"] = incompatible_reason
+    if actuation_profile is not None:
+        if kinematics_tag != _DEFAULT_KINEMATICS:
+            preflight["status"] = "skipped"
+            preflight["compatibility_status"] = "incompatible"
+            preflight["compatibility_reason"] = (
+                "synthetic_actuation_profile requires differential_drive-only scenarios"
+            )
+        preflight["synthetic_actuation_profile"] = actuation_profile.to_metadata()
     preflight["algorithm_metadata_contract"] = algo_contract
     if preflight.get("status") == "skipped":
         summary = {
@@ -3569,6 +3657,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     observation_mode=identity_observation_mode,
                     observation_level=identity_observation_level,
                     observation_noise=noise_spec,
+                    synthetic_actuation_profile=(
+                        actuation_profile.to_metadata() if actuation_profile is not None else None
+                    ),
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
                     filtered_jobs.append((sc, seed))
@@ -3591,6 +3682,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "observation_noise": noise_spec,
         "observation_mode": batch_observation_mode,
         "observation_level": observation_level,
+        "synthetic_actuation_profile": (
+            actuation_profile.to_metadata() if actuation_profile is not None else None
+        ),
     }
 
     total_jobs = len(jobs)
@@ -3770,6 +3864,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "observation_noise": noise_spec,
         "observation_noise_hash": noise_hash,
         "observation_level": active_observation_level,
+        "synthetic_actuation_profile": (
+            actuation_profile.to_metadata() if actuation_profile is not None else None
+        ),
     }
     summary["benchmark_availability"] = availability_payload(summary)
     return summary

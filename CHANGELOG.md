@@ -59,6 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1556 synthetic AMV actuation stress slice: the new
+  `configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml` config stays
+  non-paper-facing and differential-drive-only, camera-ready campaign manifests/reports now carry
+  synthetic actuation provenance plus a diagnostic `actuation_envelope_summary.{json,md}` artifact,
+  and the map runner reports auditable saturation metrics or fails closed when the synthetic
+  profile cannot be applied.
 * Added the issue-1550 predictive same-seed row-summary validation surface:
   `robot_sf/benchmark/predictive_same_seed_row_summary.py` plus
   `scripts/validation/validate_predictive_same_seed_row_summary.py` now validate small durable

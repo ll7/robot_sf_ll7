@@ -2094,6 +2094,116 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "infeasible_rate" in feasibility
 
 
+def test_run_map_episode_records_synthetic_actuation_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Synthetic actuation profiles should annotate episodes with auditable saturation metrics."""
+
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self._steps = 0
+
+        def reset(self, seed: int | None = None):
+            del seed
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            return obs, {}
+
+        def step(self, action):
+            del action
+            self._steps += 1
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }
+            terminated = self._steps >= 4
+            return obs, 0.0, terminated, False, {"success": terminated}
+
+        def close(self) -> None:
+            return None
+
+    def _policy(_obs: dict[str, object]) -> tuple[float, float]:
+        return (3.0, 2.0)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_policy",
+        lambda *args, **kwargs: (_policy, {"algorithm": "goal", "status": "ok"}),
+    )
+    map_def = _minimal_map_def()
+    dummy_config = SimpleNamespace(
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+        robot_config=DifferentialDriveSettings(max_linear_speed=1.0),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(map_def),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._policy_command_to_env_action",
+        lambda env, config, command: np.asarray(command, dtype=np.float32),
+    )
+
+    record = _run_map_episode(
+        {"name": "s1", "simulation_config": {"max_episode_steps": 4}},
+        seed=1,
+        horizon=None,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+        synthetic_actuation_profile={
+            "name": "amv-actuation-stress-v0",
+            "profile_version": "v0",
+            "claim_scope": "synthetic-only",
+            "max_linear_accel_m_s2": 2.0,
+            "max_linear_decel_m_s2": 2.5,
+            "max_yaw_rate_rad_s": 1.2,
+            "max_angular_accel_rad_s2": 4.0,
+            "latency_mode": "one-step-delay",
+            "update_mode": "5hz-hold",
+        },
+    )
+
+    synthetic_meta = record["algorithm_metadata"]["synthetic_actuation"]
+    assert synthetic_meta["profile"]["name"] == "amv-actuation-stress-v0"
+    assert synthetic_meta["summary"]["status"] == "ok"
+    assert float(record["metrics"]["command_clip_fraction"]) > 0.0
+    assert float(record["metrics"]["yaw_rate_saturation_fraction"]) > 0.0
+    assert record["metrics"]["signed_braking_peak_m_s2"] == pytest.approx(0.0)
+    assert record["scenario_params"]["synthetic_actuation_profile"]["update_mode"] == "5hz-hold"
+
+
 def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatch) -> None:
     """Episode start should reset stateful planner adapters before stepping."""
 
@@ -2903,6 +3013,46 @@ def test_run_map_batch_rejects_unsupported_observation_override(
             resume=False,
         )
     assert not out_path.exists()
+
+
+def test_run_map_batch_fail_closed_when_synthetic_actuation_profile_is_not_diff_drive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Synthetic actuation slices should skip closed when scenarios are not differential-drive."""
+    scenario = {
+        "name": "holonomic_only",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic"},
+    }
+    out_path = tmp_path / "episodes.jsonl"
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+
+    result = run_map_batch(
+        [scenario],
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        synthetic_actuation_profile={
+            "name": "amv-actuation-stress-v0",
+            "profile_version": "v0",
+            "claim_scope": "synthetic-only",
+            "max_linear_accel_m_s2": 2.0,
+            "max_linear_decel_m_s2": 2.5,
+            "max_yaw_rate_rad_s": 1.2,
+            "max_angular_accel_rad_s2": 4.0,
+            "latency_mode": "one-step-delay",
+            "update_mode": "5hz-hold",
+        },
+        resume=False,
+    )
+
+    assert result["written"] == 0
+    assert result["preflight"]["status"] == "skipped"
+    assert result["preflight"]["compatibility_status"] == "incompatible"
+    assert "differential_drive-only" in result["preflight"]["compatibility_reason"]
+    assert result["preflight"]["synthetic_actuation_profile"]["name"] == "amv-actuation-stress-v0"
 
 
 def test_run_map_batch_parallel_writes_results_in_job_order(

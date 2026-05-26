@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
 from scripts.tools import run_benchmark_release
 
 
@@ -358,3 +362,39 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     assert release_result["exit_code"] == 3
     assert release_result["release_status"] == "accepted_unavailable_only"
     assert release_result["release_exit_code"] == 3
+
+
+def test_release_preflight_fails_closed_when_orca_rvo2_missing(tmp_path: Path, monkeypatch) -> None:
+    """Preflight mode exits before execution when enabled ORCA planners lack rvo2."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    cfg = CampaignConfig(
+        name="orca_release_guard",
+        scenario_matrix_path=scenario_path,
+        planners=(PlannerSpec(key="orca", algo="orca"),),
+        seed_policy=SeedPolicy(),
+    )
+    manifest = SimpleNamespace(
+        canonical_campaign_config_path=Path("configs/benchmarks/paper_experiment_matrix_v1.yaml")
+    )
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda manifest, campaign_config=None: {
+            "status": "valid",
+            "problem_count": 0,
+            "problems": [],
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_resolved_release_manifest",
+        lambda manifest, campaign_config=None: {"release_id": "rid"},
+    )
+    monkeypatch.setitem(sys.modules, "rvo2", None)
+
+    with pytest.raises(SystemExit, match="rvo2"):
+        run_benchmark_release.main(["--manifest", "manifest.yaml", "--mode", "preflight"])

@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fail closed on missing or mismatched producer metadata before mixing/training, and successful
   mixed NPZ outputs preserve `feature_schema_json` producer provenance instead of silently dropping
   it.
+* Updated the issue-template audit flow for issue-1513 so `scripts/tools/issue_template_audit.py`
+  now parses the `## Archetype Metadata` YAML block, flags invalid canonical `archetype` and
+  `evidence_tier` values plus malformed metadata, reports those findings alongside the existing
+  section audit, and aligns the issue-audit skill docs with the bounded metadata triage behavior.
 * Implemented the issue-1187 render-helper slice: `capture_frames()` now samples real RGB frame
   buffers or one direct render result, `generate_video_contact_sheet.py` writes deterministic PNG
   contact sheets from episode frame metadata, and the helper catalog documents the supported
@@ -36,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the issue-1527 ORCA benchmark preflight gap by moving the `rvo2` fail-fast check into the
+  shared camera-ready campaign layer, so direct `prepare_campaign_preflight(...)`,
+  `run_campaign(...)`, and wrapper entrypoints such as `scripts/tools/run_benchmark_release.py`
+  cannot bypass the actionable `uv sync --extra orca` / `uv sync --all-extras` guidance for
+  enabled ORCA-dependent rows.
 * Fixed the README Zenodo DOI header by replacing the fragile badge image with a plain-text DOI
   link while preserving the canonical `https://doi.org/10.5281/zenodo.19563812` target.
 * Fixed the crowd-only Gymnasium environment contract so `CrowdSimEnv` keeps a stable
@@ -46,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1515 hybrid-evidence matrix validation surface: `robot_sf/benchmark/hybrid_evidence_matrix.py`
+  and `scripts/validation/validate_hybrid_evidence_matrix.py` now validate the #1499 row contract
+  for enums, nullability, repository-relative provenance, fail-closed fallback/degraded semantics,
+  and synthesis-candidate guard-veto consistency, with checked-in fixtures and targeted regression
+  coverage under `tests/benchmark/test_hybrid_evidence_matrix.py`.
 * Added the issue-1214 docs/proof consistency checker surface: `scripts/validation/check_docs_proof_consistency.py`
   now scans changed docs/evidence files for high-confidence PR handoff drift, the
   `scripts/dev/check_docs_proof_consistency_diff.sh` wrapper exposes the branch-diff command, and

@@ -32,11 +32,6 @@ def _rvo2_missing() -> Generator[None, None, None]:
             sys.modules["rvo2"] = saved
 
 
-def _nop_preflight(cfg: object) -> None:
-    """No-op replacement for check_orca_rvo2_preflight."""
-    del cfg
-
-
 def _write_config(path: Path, *, algo: str, key: str | None = None) -> None:
     """Write a minimal campaign config with a resolvable scenario matrix path."""
     (path.parent / "scenarios.yaml").write_text("scenarios: []\n", encoding="utf-8")
@@ -117,7 +112,6 @@ def test_main_preflight_mode_emits_preflight_payload(
     monkeypatch.setattr(
         run_camera_ready_benchmark, "load_campaign_config", _fake_load_campaign_config
     )
-    monkeypatch.setattr(run_camera_ready_benchmark, "check_orca_rvo2_preflight", _nop_preflight)
     monkeypatch.setattr(
         run_camera_ready_benchmark,
         "prepare_campaign_preflight",
@@ -201,7 +195,6 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
     monkeypatch.setattr(
         run_camera_ready_benchmark, "load_campaign_config", _fake_load_campaign_config
     )
-    monkeypatch.setattr(run_camera_ready_benchmark, "check_orca_rvo2_preflight", _nop_preflight)
     monkeypatch.setattr(
         run_camera_ready_benchmark,
         "prepare_campaign_preflight",
@@ -236,7 +229,6 @@ def test_main_run_mode_returns_non_zero_for_non_success_campaign(
         "load_campaign_config",
         lambda path: sentinel_cfg if path == config_path else None,
     )
-    monkeypatch.setattr(run_camera_ready_benchmark, "check_orca_rvo2_preflight", _nop_preflight)
     monkeypatch.setattr(
         run_camera_ready_benchmark,
         "prepare_campaign_preflight",
@@ -289,7 +281,6 @@ def test_main_run_mode_returns_exit_code_3_for_accepted_unavailable_only_campaig
         "load_campaign_config",
         lambda path: sentinel_cfg if path == config_path else None,
     )
-    monkeypatch.setattr(run_camera_ready_benchmark, "check_orca_rvo2_preflight", _nop_preflight)
     monkeypatch.setattr(
         run_camera_ready_benchmark,
         "prepare_campaign_preflight",
@@ -341,29 +332,15 @@ def test_main_run_mode_returns_exit_code_3_for_accepted_unavailable_only_campaig
 class TestRunModeOrcaPreflightIntegration:
     """Integration tests that the CLI runner calls the ORCA-rvo2 preflight guard."""
 
-    def test_run_mode_aborts_when_orca_config_rvo2_missing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_run_mode_aborts_when_orca_config_rvo2_missing(self, tmp_path: Path) -> None:
         """Run mode aborts before run_campaign when ORCA config has rvo2 missing."""
         config_path = tmp_path / "config.yaml"
         _write_config(config_path, algo="orca")
-        run_called = False
-
-        def _fake_run_campaign(*args, **kwargs):
-            del args, kwargs
-            nonlocal run_called
-            run_called = True
-
-        monkeypatch.setattr(run_camera_ready_benchmark, "run_campaign", _fake_run_campaign)
-        monkeypatch.setattr(
-            run_camera_ready_benchmark, "prepare_campaign_preflight", _fake_run_campaign
-        )
 
         with _rvo2_missing():
             with pytest.raises(SystemExit) as exc_info:
                 run_camera_ready_benchmark.main(["--config", str(config_path)])
             assert "rvo2" in str(exc_info.value).lower()
-        assert not run_called
 
     def test_run_mode_passes_when_no_orca_in_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

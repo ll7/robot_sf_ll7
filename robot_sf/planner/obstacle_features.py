@@ -578,10 +578,19 @@ def predictive_ego_motion_channel_producer_key(metadata: dict[str, object]) -> s
 
 def _validate_predictive_ego_motion_channel_producer(metadata: dict[str, object]) -> None:
     """Validate optional ego-motion producer metadata without requiring it on legacy artifacts."""
+    if "ego_motion_channel_producer" not in metadata:
+        return
+    producer_meta = metadata.get("ego_motion_channel_producer")
+    if producer_meta is None:
+        return
+    if not isinstance(producer_meta, dict):
+        raise ObstacleFeatureSchemaError("ego_motion_channel_producer must be a mapping")
     producer_key = predictive_ego_motion_channel_producer_key(metadata)
     if producer_key is None:
-        return
-    base_schema = str(metadata.get("base_schema", "")).strip()
+        raise ObstacleFeatureSchemaError(
+            "ego_motion_channel_producer.producer_key must be a non-empty string when provided"
+        )
+    base_schema = str(metadata.get("base_schema") or "").strip()
     if base_schema != PREDICTIVE_EGO_FEATURE_SCHEMA:
         raise ObstacleFeatureSchemaError(
             "Predictive ego motion producer metadata is only valid for "

@@ -608,6 +608,50 @@ def test_producer_metadata_preflight_rejects_mismatched_ego_producers(tmp_path: 
     assert json.loads(report_path.read_text(encoding="utf-8"))["status"] == "failed"
 
 
+def test_producer_metadata_preflight_rejects_schema_presence_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Producer preflight must fail when only one dataset has parsed schema metadata."""
+    base_path = tmp_path / "predictive_rollouts_base.npz"
+    hardcase_path = tmp_path / "predictive_rollouts_hardcase.npz"
+    np.savez(
+        base_path,
+        state=np.zeros((2, 3, 4), dtype=np.float32),
+        target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+        mask=np.ones((2, 3), dtype=np.float32),
+        target_mask=np.ones((2, 3, 5), dtype=np.float32),
+        feature_schema_json=np.asarray(
+            _predictive_feature_schema_json(model_family="predictive_legacy_v1")
+        ),
+    )
+    np.savez(
+        hardcase_path,
+        state=np.zeros((2, 3, 4), dtype=np.float32),
+        target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+        mask=np.ones((2, 3), dtype=np.float32),
+        target_mask=np.ones((2, 3, 5), dtype=np.float32),
+    )
+
+    payload = pipeline._write_producer_metadata_preflight_report(
+        report_path=tmp_path / "producer_metadata_preflight.json",
+        run_id="predictive_schema_presence_mismatch",
+        config_path=tmp_path / "config.yaml",
+        config_hash="cfghash",
+        git_commit="deadbeef",
+        model_family="predictive_legacy_v1",
+        datasets={
+            "base": pipeline._predictive_feature_dataset_report(base_path),
+            "hardcase": pipeline._predictive_feature_dataset_report(hardcase_path),
+        },
+    )
+
+    assert payload["status"] == "failed"
+    assert payload["failure_reason"] == (
+        "Predictive feature schema presence mismatch between datasets "
+        "(one dataset has parsed feature_schema while the other does not)."
+    )
+
+
 def test_predictive_feature_dataset_report_rejects_missing_ego_producer(tmp_path: Path) -> None:
     """Ego-conditioned datasets without producer metadata must fail preflight."""
     dataset_path = tmp_path / "predictive_rollouts_base.npz"

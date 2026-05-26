@@ -186,3 +186,38 @@ def test_predictive_schema_metadata_records_ego_motion_producers() -> None:
     assert ego_obstacle_schema["ego_motion_channel_producer"]["producer_key"] == (
         PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME
     )
+
+    malformed_missing_key = predictive_feature_schema_metadata(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    )
+    del malformed_missing_key["ego_motion_channel_producer"]["producer_key"]
+    try:
+        validate_predictive_feature_schema_metadata(
+            malformed_missing_key,
+            input_dim=9,
+            expected_schema_name=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        )
+    except ObstacleFeatureSchemaError as exc:
+        assert "producer_key" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ObstacleFeatureSchemaError")
+
+    non_ego_with_ego_producer = predictive_feature_schema_metadata(
+        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        ego_conditioning=False,
+    )
+    non_ego_with_ego_producer["ego_motion_channel_producer"] = {
+        "producer_key": PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+        "slot_range": [4, 5],
+    }
+    try:
+        validate_predictive_feature_schema_metadata(
+            non_ego_with_ego_producer,
+            input_dim=10,
+            expected_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        )
+    except ObstacleFeatureSchemaError as exc:
+        assert "only valid for" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ObstacleFeatureSchemaError")

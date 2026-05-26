@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_optional_feature_schema_metadata(raw: Any) -> dict[str, Any] | None:
+def _load_optional_feature_schema_metadata(raw: Any, *, path: Path) -> dict[str, Any] | None:
     """Return optional predictive feature-schema metadata embedded in an NPZ payload."""
     if "feature_schema_json" not in raw:
         return None
@@ -42,11 +42,14 @@ def _load_optional_feature_schema_metadata(raw: Any) -> dict[str, Any] | None:
         raw_value = raw_value.item()
     if isinstance(raw_value, bytes):
         raw_value = raw_value.decode("utf-8")
-    if isinstance(raw_value, str):
-        payload = json.loads(raw_value)
-        if isinstance(payload, dict):
-            return payload
-    raise ValueError("Missing or invalid feature_schema_json in dataset payload.")
+    try:
+        if isinstance(raw_value, str):
+            payload = json.loads(raw_value)
+            if isinstance(payload, dict):
+                return payload
+        raise ValueError("Missing or invalid feature_schema_json in dataset payload.")
+    except (TypeError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"Invalid feature_schema_json in dataset {path}: {exc}") from exc
 
 
 def _is_ego_conditioned_schema(
@@ -77,6 +80,29 @@ def _feature_schema_contract(feature_schema: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_schema_width(
+    *,
+    role: str,
+    path: Path,
+    feature_schema: dict[str, Any],
+    input_dim: int,
+) -> None:
+    """Fail when embedded schema metadata disagrees with the actual feature width."""
+    try:
+        declared_dim = int(feature_schema.get("input_dim", -1))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Predictive feature schema for {role}={path} has invalid input_dim "
+            f"{feature_schema.get('input_dim')!r}."
+        ) from exc
+    if declared_dim != int(input_dim):
+        raise ValueError(
+            "Predictive feature schema input_dim mismatch for "
+            f"{role}={path}: metadata input_dim={declared_dim}, "
+            f"array width={int(input_dim)}"
+        )
+
+
 def _resolve_mixed_feature_schema(
     *,
     base_path: Path,
@@ -101,6 +127,19 @@ def _resolve_mixed_feature_schema(
                 "inputs; missing metadata for " + ", ".join(missing)
             )
         return None, None
+
+    _validate_schema_width(
+        role="base",
+        path=base_path,
+        feature_schema=base_schema,
+        input_dim=base_input_dim,
+    )
+    _validate_schema_width(
+        role="hardcase",
+        path=hardcase_path,
+        feature_schema=hardcase_schema,
+        input_dim=hardcase_input_dim,
+    )
 
     if _feature_schema_contract(base_schema) != _feature_schema_contract(hardcase_schema):
         raise ValueError(
@@ -142,7 +181,7 @@ def _load_npz(
             if "target_mask" in raw
             else np.repeat(mask[:, :, None], target.shape[2], axis=2).astype(np.float32)
         )
-        feature_schema = _load_optional_feature_schema_metadata(raw)
+        feature_schema = _load_optional_feature_schema_metadata(raw, path=path)
     return state, target, mask, target_mask, feature_schema
 
 

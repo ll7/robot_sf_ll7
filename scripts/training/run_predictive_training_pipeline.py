@@ -244,7 +244,15 @@ def _write_producer_metadata_preflight_report(
     else:
         base_schema = datasets["base"].get("feature_schema")
         hardcase_schema = datasets["hardcase"].get("feature_schema")
-        if isinstance(base_schema, dict) and isinstance(hardcase_schema, dict):
+        base_has_schema = isinstance(base_schema, dict)
+        hardcase_has_schema = isinstance(hardcase_schema, dict)
+        if base_has_schema != hardcase_has_schema:
+            status = "failed"
+            failure_reason = (
+                "Predictive feature schema presence mismatch between datasets "
+                "(one dataset has parsed feature_schema while the other does not)."
+            )
+        elif base_has_schema and hardcase_has_schema:
             if _feature_schema_contract(base_schema) != _feature_schema_contract(hardcase_schema):
                 status = "failed"
                 failure_reason = "Predictive feature schemas do not match between datasets."

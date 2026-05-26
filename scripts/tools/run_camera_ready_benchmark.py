@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Run a config-driven camera-ready benchmark campaign."""
+"""Run a config-driven camera-ready benchmark campaign.
+
+Exit codes preserve fail-closed campaign semantics for non-success outcomes:
+- 0: benchmark-success campaign
+- 2: unexpected failure, malformed result, or mixed failed/partial-failure outcome
+- 3: accepted-unavailable-only campaign outcome (non-success, fail-closed)
+"""
 
 from __future__ import annotations
 

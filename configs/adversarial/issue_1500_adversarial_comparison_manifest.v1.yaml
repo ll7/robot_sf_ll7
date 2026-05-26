@@ -1,0 +1,346 @@
+manifest_version: adversarial-campaign-manifest.v1
+schema_status: prose_contract_pending_executable_validator
+parent_issue: 1488
+child_issues: [1500, 1501, 1502, 1503]
+stage: manifest_freeze
+frozen_on: "2026-05-26"
+evidence_tier: proposal
+claim_scope: manifest_spec_only
+benchmark_evidence: false
+
+scenario_families:
+  - family_id: crossing_ttc
+    scenario_template: configs/scenarios/templates/crossing_ttc.yaml
+    search_space_config: configs/adversarial/crossing_ttc_space.yaml
+    map_id: classic_cross_trap
+    archetype: adversarial_crossing_ttc
+    behavior: generated_stress_test
+    evidence_class: development_stress_test
+    engines: [random, optuna_tpe]
+    engine_availability:
+      random: available
+      optuna_tpe: available
+      guided_route_search: not_available
+    not_available_reason:
+      guided_route_search: >
+        Guided route search uses route-level graph optimization via
+        generate_adversarial_routes.py, not parametric CandidateSpec sampling.
+        Design exclusion; no adapter exists for this family.
+
+  - family_id: classic_head_on_corridor
+    scenario_file: configs/scenarios/classic_interactions.yaml
+    scenario_id: classic_head_on_corridor_low
+    map_id: classic_head_on_corridor
+    map_file: maps/svg_maps/classic_head_on_corridor.svg
+    archetype: head_on_corridor
+    behavior: generated_stress_test
+    evidence_class: development_stress_test
+    engines: [guided_route_search]
+    engine_availability:
+      random: not_available
+      optuna_tpe: not_available
+      guided_route_search: available
+    not_available_reason:
+      random: >
+        No CandidateSpec-compatible search space or template defined for this
+        family. Design exclusion; parametric sampling is not applicable to
+        multi-route graph search.
+      optuna_tpe: >
+        Same as random. Parametric CandidateSpec search is not applicable to
+        route-level graph optimization for this family.
+
+search_engines:
+  - engine_id: random
+    class: RandomCandidateSampler
+    module: robot_sf.adversarial.samplers
+    objective: worst_case_snqi
+    global_seed: 42
+    budget:
+      local: 32
+      slurm: 256
+    replay_constraint: >
+      Deterministic: fixed global_seed produces identical candidate sequences.
+      Per-candidate scenario_seed from search-space range [100, 999].
+    applicable_families: [crossing_ttc]
+    comparison_axis: >
+      Planned within-family baseline: simple cost-free random sampling. Higher
+      budget yields more coverage but no learning from prior evaluations. This
+      manifest freezes the comparison axis only; it does not claim results.
+
+  - engine_id: optuna_tpe
+    class: OptunaCandidateSampler
+    module: robot_sf.adversarial.samplers
+    objective: worst_case_snqi
+    global_seed: 42
+    budget:
+      local: 32
+      slurm: 256
+    dependency: optuna
+    replay_constraint: >
+      Deterministic: fixed global_seed and TPE sampler seed produce identical
+      study trajectories. Per-candidate scenario_seed from search-space range
+      [100, 999].
+    applicable_families: [crossing_ttc]
+    comparison_axis: >
+      Planned within-family TPE-guided Bayesian optimization. Uses prior
+      evaluations to propose candidates in high-scoring regions. This manifest
+      freezes the intended comparison axis only; it does not claim performance
+      relative to random search.
+
+  - engine_id: guided_route_search
+    entrypoint: scripts/tools/generate_adversarial_routes.py
+    function: robot_sf.nav.adversarial_route_generation.optimize_route_set
+    script: scripts/tools/generate_adversarial_routes.py
+    config: configs/adversarial_routes/default.yaml
+    objective: composite
+    objective_mode: composite
+    global_seed: 123
+    budget:
+      local: 20
+      slurm: 100
+    replay_constraint: >
+      Deterministic: fixed seed=123 and config produce identical trial sequences.
+      Each trial evaluates robot/pedestrian route overrides on a navigable graph.
+      Feasibility filter: true. Inflation fallback: false.
+    applicable_families: [classic_head_on_corridor]
+    comparison_axis: >
+      Planned route-level graph search with composite objective
+      (failure_proxy, delay_proxy, path_inefficiency, near_miss_stress).
+      Different search paradigm from parametric CandidateSpec; budget
+      normalized by trial_count. This remains a development stress-test setup,
+      not benchmark evidence.
+
+planner_rows:
+  - planner_id: classic_global_theta_star
+    policy: ClassicGlobalPlanner
+    algo_config_path: null
+    algorithm: theta_star_v2
+    benchmark_profile: baseline-safe
+    readiness_status: native
+    execution_mode: native
+
+  - planner_id: orca
+    policy: ORCA
+    algo_config_path: null
+    benchmark_profile: baseline-safe
+    readiness_status: adapter
+    execution_mode: adapter
+
+row_classification:
+  valid_behavioral_failure:
+    description: >
+      Candidate evaluated successfully; episode outcome is collision, near_miss,
+      timeout, or comfort_violation.
+    primary_failure_values: [collision, near_miss, timeout, comfort_violation]
+    archive_eligible: true
+    evidence_class: development_stress_test
+    benchmark_evidence: false
+    comparison_treatment: development_stress_test_only
+
+  success:
+    description: Candidate evaluated and episode completed without failure.
+    primary_failure_values: [success]
+    archive_eligible: false
+    evidence_class: budget_audit_only
+    benchmark_evidence: false
+    comparison_treatment: budget_audit_only
+
+  invalid_candidate:
+    description: >
+      Search-space bounds violation or constraint failure (e.g.,
+      min_start_goal_distance_m). Candidate never reached simulation.
+      Counted in budget_audit; excluded from archive and stress-coverage.
+    primary_failure_values: [invalid_candidate]
+    archive_eligible: false
+    evidence_class: budget_audit_only
+    failure_mode: not_an_episode_failure
+    benchmark_evidence: false
+    comparison_treatment: budget_audit_only
+
+  simulation_error:
+    description: >
+      Simulator exception during reset or step (spawn collision, unreachable
+      goal, runtime exception). Candidate reached simulation but failed.
+      Counted in budget_audit; excluded from archive and stress-coverage.
+    primary_failure_values: [simulation_error, evaluation_error]
+    archive_eligible: false
+    evidence_class: budget_audit_only
+    failure_mode: not_an_episode_failure
+    readiness_status: failed
+    availability_status: failed
+    benchmark_evidence: false
+    comparison_treatment: explicit_exclusion
+
+  fallback:
+    description: >
+      Planner execution entered fallback mode. Per issue #691, fallback is not
+      benchmark evidence. Counted separately; excluded from stress-coverage.
+    readiness_status: fallback
+    availability_status: not_available
+    evidence_class: not_benchmark_evidence
+    benchmark_evidence: false
+    comparison_treatment: explicit_caveat
+
+  degraded:
+    description: >
+      Planner execution was skipped, failed, or did not satisfy the runtime
+      contract cleanly. Per issue #691, degraded is not benchmark evidence.
+      Counted separately; excluded from stress-coverage.
+    readiness_status: degraded
+    availability_status: not_available
+    evidence_class: not_benchmark_evidence
+    benchmark_evidence: false
+    comparison_treatment: explicit_caveat
+
+  not_available:
+    description: >
+      Search engine x family combination cannot be evaluated (design exclusion).
+      Example: random/TPE search on classic_head_on_corridor.
+      Reported explicitly; must not be counted as success.
+    availability_status: not_available
+    evidence_class: exclusion
+    benchmark_evidence: false
+    comparison_treatment: explicit_exclusion
+
+replay_determinism:
+  - check_id: manifest_materialization
+    description: >
+      Load N candidates from the adversarial-search-manifest.v1, re-materialize
+      scenario YAML and route overrides, and verify byte-identical output.
+    expected: Byte-identical re-materialized YAML.
+
+  - check_id: seed_determinism
+    description: >
+      For K randomly-selected archived failure candidates, re-evaluate with
+      identical config and seeds. Compare: objective value (within +/- 1e-6),
+      collision flag (bit-identical), timeout flag (bit-identical).
+    expected: Identical objective and outcome flags.
+
+  - check_id: search_trajectory
+    description: >
+      Re-run the search engine from the frozen global_seed and verify the first
+      M candidate proposals match the recorded manifest exactly (coordinate and
+      scalar equality within +/- 1e-9).
+    expected: Identical candidate proposal sequence.
+
+artifact_layout:
+  root: output/adversarial/campaign
+
+  search_outputs:
+    crossing_ttc:
+      random: output/adversarial/campaign/crossing_ttc/random/
+      optuna_tpe: output/adversarial/campaign/crossing_ttc/optuna_tpe/
+    classic_head_on_corridor:
+      guided_route_search: output/adversarial/campaign/classic_head_on_corridor/guided_route_search/
+
+  per_search_contents:
+    - manifest.json
+    - candidate_NNNN/scenario.yaml
+    - candidate_NNNN/route_overrides.yaml
+    - candidate_NNNN/episode_records.jsonl
+    - candidate_NNNN/failure_attribution.json
+    - candidate_NNNN/trajectory.csv
+
+  archive_outputs:
+    crossing_ttc: output/adversarial/campaign/crossing_ttc/archive.json
+    classic_head_on_corridor: output/adversarial/campaign/classic_head_on_corridor/archive.json
+    schema: adversarial_failure_archive.v1
+
+  report_outputs:
+    crossing_ttc: output/adversarial/campaign/reports/crossing_ttc_stress_coverage.json
+    classic_head_on_corridor: output/adversarial/campaign/reports/classic_head_on_corridor_stress_coverage.json
+    schema: stress_uncertainty_coverage.v1
+
+  tracked_evidence:
+    location: docs/context/evidence/issue_1500_adversarial_manifest/
+    contents:
+      - config_checksums.md
+      - row_classification_report.md
+
+budget_audit_fields:
+  - total_candidates_proposed
+  - valid_candidate_count
+  - invalid_candidate_count
+  - simulation_error_count
+  - success_count
+  - fallback_count
+  - degraded_count
+  - not_available_count
+  - archived_failure_count
+  - failure_mode_counts
+  - best_objective_value
+  - search_objective
+  - wall_time_s
+
+search_objectives:
+  - objective_id: worst_case_snqi
+    description: >
+      Maximizes (collision*10 + timeout*3 + near_miss - success). When SNQI is
+      present in the episode record, uses -snqi instead. Designed for parametric
+      CandidateSpec-based search engines (random, optuna_tpe).
+    applicable_engines: [random, optuna_tpe]
+    engine_family_scopes: [crossing_ttc]
+
+  - objective_id: composite
+    description: >
+      Weighted composite of failure_proxy (0.45), delay_proxy (0.25),
+      path_inefficiency (0.15), near_miss_stress (0.15). Designed for
+      route-level graph search (guided_route_search).
+    applicable_engines: [guided_route_search]
+    engine_family_scopes: [classic_head_on_corridor]
+
+comparison_caveats:
+  - >
+    Crossing/TTC and head-on corridor use different search paradigms (parametric
+    CandidateSpec vs. route-level graph optimization). Direct cross-family
+    comparison of absolute failure counts is not valid.
+  - >
+    Search-engine comparison (random vs. TPE) is planned only within the
+    crossing/TTC family because both engines share the same search space,
+    objective, budget, and planner rows. This manifest does not claim any
+    observed superiority.
+  - >
+    Guided route search on head-on corridor is a single-engine baseline for the
+    route-search paradigm. Cross-engine comparison with random/TPE requires
+    future work to add a parametric search space for this family.
+  - >
+    All rows are development_stress_test only. Generated adversarial cases are
+    explicitly not benchmark evidence per the template-generated marker
+    generated_cases_are_benchmark_evidence: false.
+  - >
+    Fallback, degraded, unavailable, and simulation_error rows remain explicit
+    caveat/exclusion classes. They are reported in budget audits but excluded
+    from archive and benchmark-style interpretation.
+  - >
+    Coverage and uncertainty metrics require stress_uncertainty_coverage.v1
+    reporting (issue #1434, #1445) which is not yet required at this stage.
+    Stress-coverage validation is deferred to issue #1503.
+
+frozen_dependencies:
+  - dependency: configs/adversarial/crossing_ttc_space.yaml
+    role: search_space
+    families: [crossing_ttc]
+
+  - dependency: configs/scenarios/templates/crossing_ttc.yaml
+    role: scenario_template
+    families: [crossing_ttc]
+
+  - dependency: configs/adversarial_routes/default.yaml
+    role: search_config
+    families: [classic_head_on_corridor]
+
+  - dependency: configs/scenarios/classic_interactions.yaml
+    role: scenario_source
+    families: [classic_head_on_corridor]
+
+  - dependency: maps/svg_maps/classic_head_on_corridor.svg
+    role: map_source
+    families: [classic_head_on_corridor]
+
+  - dependency: maps/svg_maps/classic_crossing.svg
+    role: map_source
+    note: >
+      The map_id classic_cross_trap resolves to classic_crossing.svg via the
+      map registry (maps/registry.yaml). This is the canonical SVG file for
+      the cross trap/crossing scenario.
+    families: [crossing_ttc]

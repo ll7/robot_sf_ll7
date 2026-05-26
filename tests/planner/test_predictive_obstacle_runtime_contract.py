@@ -93,6 +93,44 @@ def test_prediction_planner_adapter_places_legacy_obstacle_rows_after_legacy_bas
     assert state[0, 9] == np.float32(0.0)
 
 
+def test_prediction_planner_adapter_places_obstacle_rows_after_ego_base() -> None:
+    """The combined ego+obstacle runtime contract should produce the expected 15D layout."""
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(
+            predictive_feature_schema_name=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+            predictive_ego_conditioning=True,
+            predictive_max_agents=2,
+        )
+    )
+    adapter._ensure_model = lambda: SimpleNamespace(config=SimpleNamespace(input_dim=15))  # type: ignore[method-assign]
+
+    state, mask, _robot_pos, _robot_heading = adapter._build_model_input(
+        {
+            "robot": {
+                "position": np.array([0.0, 0.0], dtype=np.float32),
+                "heading": np.array([0.0], dtype=np.float32),
+                "speed": np.array([0.5, -0.1], dtype=np.float32),
+            },
+            "goal": {"current": np.array([3.0, 4.0], dtype=np.float32)},
+            "pedestrians": {
+                "positions": np.array([[1.0, 1.0]], dtype=np.float32),
+                "velocities": np.array([[0.1, 0.2]], dtype=np.float32),
+                "count": np.array([1.0], dtype=np.float32),
+            },
+            "map": {
+                "obstacle_lines": np.array([[[0.0, 0.0], [2.0, 0.0]]], dtype=np.float32),
+            },
+        }
+    )
+
+    assert mask[0] == 1.0
+    np.testing.assert_allclose(
+        state[0, 0:9],
+        [1.0, 1.0, 0.1, 0.2, 0.5, -0.1, 0.6, 0.8, 5.0],
+    )
+    np.testing.assert_allclose(state[0, 9:15], [1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
+
+
 def test_prediction_planner_adapter_uses_bound_map_obstacle_rows() -> None:
     """Runtime obstacle-feature inputs should use bound map geometry when available."""
     adapter = PredictionPlannerAdapter(

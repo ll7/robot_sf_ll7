@@ -1,0 +1,292 @@
+# Ego-Conditioned Predictive Feature Contract v1
+#
+# Issue #1504 predictive-v2 ego-conditioned feature contract
+# Parent issue #1490 predictive-v2 umbrella
+# Prerequisite issue #1427 obstacle-feature same-seed comparison
+#
+# This contract defines the predictive_ego_v1 feature schema and its composition
+# with obstacle features (predictive_obstacle_features_v1). It is the canonical
+# source of truth for feature indices, normalization, missing-value behavior,
+# and row/version identifiers before any training or benchmark execution.
+
+contract: predictive_ego_features_v1
+contract_version: 1
+schema_version: 1
+issue: "#1504"
+parent_issue: "#1490"
+prerequisite_issue: "#1427"
+
+schemas:
+  predictive_legacy_v1:
+    name: "predictive_legacy_v1"
+    input_dim: 4
+    description: "Baseline predictive features without ego or obstacle conditioning."
+    base_schema: "predictive_legacy_v1"
+    base_feature_dim: 4
+    obstacle_schema: null
+
+  predictive_ego_v1:
+    name: "predictive_ego_v1"
+    input_dim: 9
+    description: "Legacy pedestrian features augmented with ego robot state and goal conditioning."
+    base_schema: "predictive_ego_v1"
+    base_feature_dim: 9
+    obstacle_schema: null
+
+  predictive_obstacle_features_v1:
+    name: "predictive_obstacle_features_v1"
+    description: "Obstacle-conditioned features composed atop either legacy or ego base features."
+    obstacle_schema:
+      name: "predictive_obstacle_features_v1"
+      feature_dim: 6
+    composed_variants:
+      - base_schema: "predictive_legacy_v1"
+        base_feature_dim: 4
+        input_dim: 10
+      - base_schema: "predictive_ego_v1"
+        base_feature_dim: 9
+        input_dim: 15
+
+features:
+  predictive_ego_v1:
+    row_description: "Per-agent feature vector for predictive GNN input."
+    max_agents: 24
+    dtype: "float32"
+    frame: "robot_ego_frame"
+    normalization: "none"
+    normalization_notes: >
+      Features are used raw by the PredictiveTrajectoryModel GNN.
+      No min/max normalization is applied during collection or inference.
+      The GNN operates on world-scale coordinates and velocities directly.
+      This differs from gym observation normalization (see docs/dev/observation_contract.md).
+    indices:
+      - slot: [0, 1]
+        name: "pedestrian_position_ego"
+        labels: ["x_rel", "y_rel"]
+        units: "meters"
+        description: "Pedestrian position relative to robot in ego (robot-heading-aligned) frame."
+        valid_range: "unbounded (world-scale)"
+        missing_behavior: >
+          Set to (0.0, 0.0) for inactive agent slots. Active agents always have
+          valid positions from the simulator.
+
+      - slot: [2, 3]
+        name: "pedestrian_velocity_ego"
+        labels: ["vx_rel", "vy_rel"]
+        units: "meters/second"
+        description: >
+          Pedestrian translational velocity rotated into robot ego frame.
+          NOT relative velocity (pedestrian velocity minus robot velocity);
+          only the frame rotation is applied.
+        valid_range: "unbounded"
+        missing_behavior: >
+          Set to (0.0, 0.0) for inactive agent slots.
+
+      - slot: [4, 5]
+        name: "robot_motion_channels"
+        labels: ["motion_0", "motion_1"]
+        units: "producer-dependent (see description)"
+        description: >
+          The issue #1504 same-seed pipeline and runtime currently populate
+          these channels from observation `robot.speed`, which follows the
+          benchmark-wide `(linear_speed, angular_speed)` contract. The
+          standalone collector (`collect_predictive_planner_data.py`) instead
+          uses `robot.velocity_xy` when present and otherwise falls back to
+          `robot.speed`. This contract records the shared 9D width and channel
+          order while preserving the current producer behavior instead of
+          renaming these slots as world-frame velocity everywhere.
+        valid_range: >
+          Producer-dependent. Same-seed/runtime paths typically use
+          `linear_speed ~= [0, 1.2] m/s` and `angular_speed ~= [-1, 1] rad/s`;
+          the standalone collector may carry world-frame translational velocity
+          per axis when `robot.velocity_xy` is available.
+        missing_behavior: >
+          Set missing elements to 0.0. The standalone collector falls back from
+          `robot.velocity_xy` to `robot.speed` before zero-filling. The
+          same-seed pipeline and runtime use `robot.speed` directly.
+
+      - slot: [6, 7]
+        name: "goal_direction_ego"
+        labels: ["goal_dir_x", "goal_dir_y"]
+        units: "unit vector (dimensionless)"
+        description: >
+          Unit vector pointing from robot position toward current goal,
+          expressed in robot ego frame. Computed as
+          goal_rel / max(goal_dist, 1e-6).
+        valid_range: "[-1, 1] per component, L2 norm = 1"
+        missing_behavior: >
+          When goal distance is zero (goal_dist < 1e-6), division
+          by max(goal_dist, 1e-6) produces (0, 0) or a degenerate
+          direction. The robot is considered at-goal in this case.
+
+      - slot: [8]
+        name: "goal_distance_ego"
+        labels: ["goal_dist"]
+        units: "meters"
+        description: >
+          Euclidean distance from robot position to current goal
+          in world frame (L2 norm of goal_rel_world).
+          No upper bound; can be large for long-range goals.
+        valid_range: "[0, ~50] (typical maps; can be larger)"
+        missing_behavior: >
+          Computed directly from robot.position and goal.current;
+          always available when both are present in observation.
+
+obstacle_features:
+  schema_name: "predictive_obstacle_features_v1"
+  feature_dim: 6
+  append_rule: >
+    Obstacle features are appended after the base feature vector
+    (legacy or ego). For legacy base (4 features): appends at indices [4:10].
+    For ego base (9 features): appends at indices [9:15].
+  indices:
+    - slot: [0]
+      name: "obstacle_distance"
+      units: "meters"
+      description: "Distance to nearest obstacle line segment."
+      missing_value: 50.0
+    - slot: [1, 2]
+      name: "obstacle_normal"
+      units: "unit vector"
+      description: "Normal direction from obstacle to query point."
+      missing_value: [0.0, 0.0]
+    - slot: [3, 4]
+      name: "obstacle_tangent"
+      units: "unit vector"
+      description: "Tangent direction along the nearest obstacle segment."
+      missing_value: [0.0, 0.0]
+    - slot: [5]
+      name: "obstacle_valid_mask"
+      units: "binary"
+      description: "1.0 when at least one valid obstacle line exists; 0.0 otherwise."
+      missing_value: 0.0
+  unavailable_sentinel: [50.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  source: "map-derived obstacle lines from MapDefinition obstacles and bounds."
+  reference: "robot_sf/planner/obstacle_features.py"
+
+composed_schemas:
+  ego_obstacle_combined:
+    description: "Combined ego-conditioned features with obstacle features."
+    base_schema: "predictive_ego_v1"
+    base_feature_dim: 9
+    obstacle_schema: "predictive_obstacle_features_v1"
+    obstacle_feature_dim: 6
+    input_dim: 15
+    schema_metadata:
+      name: "predictive_obstacle_features_v1"
+      base_schema: "predictive_ego_v1"
+      base_feature_dim: 9
+      obstacle_feature_schema:
+        name: "predictive_obstacle_features_v1"
+        feature_dim: 6
+      input_dim: 15
+
+row_identifiers:
+  baseline:
+    schema_name: "predictive_legacy_v1"
+    input_dim: 4
+    config: "configs/training/predictive/predictive_br07_same_seed_issue_1427.yaml"
+  obstacle_only:
+    schema_name: "predictive_obstacle_features_v1"
+    input_dim: 10
+    base_schema: "predictive_legacy_v1"
+    config: "configs/training/predictive/predictive_obstacle_features_same_seed_issue_1427.yaml"
+  ego_only:
+    schema_name: "predictive_ego_v1"
+    input_dim: 9
+    config: "configs/training/predictive/predictive_ego_features_same_seed_issue_1504.yaml"
+  ego_obstacle_combined:
+    schema_name: "predictive_obstacle_features_v1"
+    input_dim: 15
+    base_schema: "predictive_ego_v1"
+    config: "configs/training/predictive/predictive_ego_obstacle_features_same_seed_issue_1504.yaml"
+
+same_seed_comparability:
+  seed_manifest: "configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml"
+  hard_seed_manifest: "configs/benchmarks/predictive_hard_seeds_v1.yaml"
+  scenario_matrix: "configs/scenarios/classic_interactions.yaml"
+  planner_grid: "configs/benchmarks/predictive_sweep_planner_grid_v1.yaml"
+  horizon_steps: 8
+  max_steps_base: 200
+  max_steps_hardcase: 220
+  max_agents: 24
+  max_speed: 1.2
+  epochs: 40
+  batch_size: 128
+  lr: 0.0003
+  weight_decay: 0.00001
+  val_split: 0.2
+  seed: 42
+  hidden_dim: 128
+  message_passing_steps: 3
+  hardcase_repeat: 2
+  shuffle_seed: 42
+  quality_gates:
+    max_val_ade: 1.2
+    max_val_fde: 2.0
+  proxy_evaluation:
+    every_epochs: 5
+    horizon: 120
+    dt: 0.1
+    workers: 1
+  final_evaluation:
+    workers: 1
+    campaign_workers: 2
+    horizon: 120
+    dt: 0.1
+  contract: >
+    All four variants use the same committed base seed manifest,
+    hard seed manifest, scenario matrix, planner grid, training
+    budget, and evaluation surface. ADE/FDE forecast metrics are
+    kept separate from closed-loop navigation metrics (success,
+    collisions, near misses, min distance, runtime). Promotion
+    requires closed-loop improvement, not ADE/FDE alone.
+
+metric_separation:
+  forecast_metrics:
+    - "ADE (average displacement error)"
+    - "FDE (final displacement error)"
+    - "val_loss"
+  navigation_metrics:
+    - "success_rate"
+    - "collision_rate"
+    - "near_miss_rate"
+    - "mean_min_distance"
+    - "low_progress_timeout_rate"
+    - "runtime"
+  promotion_requirement: >
+    Closed-loop navigation improvement is required for promotion.
+    ADE/FDE improvement alone is insufficient. Forecast metrics
+    are diagnostic signals for model quality, not navigation claims.
+
+non_benchmark_evidence:
+  - "dry-runs"
+  - "local-only output/ files"
+  - "fallback execution (readiness_status=fallback)"
+  - "degraded execution (readiness_status=degraded)"
+  - "partial-failure rows (availability_status=partial-failure)"
+  - "not_available rows (availability_status=not_available)"
+  - "sentinel-only obstacle rows (all valid_mask=0.0)"
+  - "launch packets"
+
+benchmark_caveat: >
+  This contract and the same-seed configs are reproducibility surfaces, not
+  benchmark-promotion evidence. Per docs/context/issue_691_benchmark_fallback_policy.md,
+  fallback, degraded, partial-failure, and not_available outcomes stay
+  diagnostic-only and must not be reported as benchmark success.
+
+source_files:
+  - "robot_sf/planner/obstacle_features.py"
+  - "robot_sf/planner/socnav.py"
+  - "robot_sf/planner/predictive_model.py"
+  - "robot_sf/planner/predictive_foresight.py"
+  - "scripts/training/collect_predictive_planner_data.py"
+  - "scripts/training/collect_predictive_hardcase_data.py"
+  - "scripts/training/run_predictive_training_pipeline.py"
+  - "scripts/training/train_predictive_planner.py"
+
+reference_docs:
+  - "docs/dev/observation_contract.md"
+  - "docs/training/predictive_planner_complete_tutorial.md"
+  - "docs/context/issue_1167_predictive_obstacle_pipeline.md"
+  - "docs/context/issue_691_benchmark_fallback_policy.md"

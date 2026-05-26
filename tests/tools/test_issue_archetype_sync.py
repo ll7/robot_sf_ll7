@@ -1,4 +1,4 @@
-"""Tests for the issue archetype sync dry-run reporter."""
+"""Tests for the issue archetype sync dry-run reporter and apply mode."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from scripts.tools.issue_archetype_sync import (
+    apply_labels,
     build_sync_report,
+    check_rate_limit,
     main,
 )
 
@@ -199,3 +201,236 @@ def test_cli_report_accepts_offline_body_file(tmp_path: Path, capsys) -> None:
 
     assert exit_code == 0
     assert payload["proposed_label_additions"] == ["type:training"]
+
+
+# -- apply-mode tests ---------------------------------------------------------
+
+
+def _apply_body_file_args(
+    tmp_path: Path,
+    issue_number: int = 1588,
+    archetype: str = "workflow",
+    evidence_tier: str = "idea",
+    existing: list[str] | None = None,
+    confirm: bool = True,
+) -> tuple[list[str], str]:
+    """Write body + labels files in tmp_path and return apply CLI argv."""
+    if existing is None:
+        existing = []
+    body_path = tmp_path / "issue.md"
+    labels_path = tmp_path / "labels.json"
+    body_path.write_text(_body(archetype, evidence_tier=evidence_tier), encoding="utf-8")
+    labels_path.write_text(json.dumps(existing), encoding="utf-8")
+    argv = [
+        "apply",
+        "--issue-number",
+        str(issue_number),
+        "--body-file",
+        str(body_path),
+        "--labels-json",
+        str(labels_path),
+    ]
+    if confirm:
+        argv.append("--confirm-apply-labels")
+    return argv, str(body_path)
+
+
+def _apply_github_args(issue_number: int = 1588, confirm: bool = True) -> list[str]:
+    """Return apply CLI argv for the live GitHub metadata path."""
+    argv = ["apply", "--issue-number", str(issue_number)]
+    if confirm:
+        argv.append("--confirm-apply-labels")
+    return argv
+
+
+def _report(
+    *,
+    issue_number: int = 1588,
+    archetype: str = "workflow",
+    evidence_tier: str = "idea",
+    existing_labels: list[str] | None = None,
+) -> object:
+    """Build an in-memory report for mocked apply-mode tests."""
+    return build_sync_report(
+        issue_number=issue_number,
+        issue_body=_body(archetype, evidence_tier=evidence_tier),
+        existing_labels=existing_labels or [],
+        available_labels={"type:workflow", "type:analysis", "evidence:smoke"},
+    )
+
+
+@patch("scripts.tools.issue_archetype_sync.apply_labels")
+@patch("scripts.tools.issue_archetype_sync.check_rate_limit")
+@patch("scripts.tools.issue_archetype_sync.build_report_from_github")
+def test_apply_without_confirm_refuses_mutation(
+    mock_build_report_from_github,
+    mock_check_rate_limit,
+    mock_apply_labels,
+    capsys,
+) -> None:
+    """apply without --confirm-apply-labels prints report but never mutates."""
+    mock_build_report_from_github.return_value = _report()
+
+    exit_code = main(_apply_github_args(confirm=False))
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Re-run with --confirm-apply-labels" in captured.out
+    mock_check_rate_limit.assert_not_called()
+    mock_apply_labels.assert_not_called()
+
+
+@patch("scripts.tools.issue_archetype_sync.apply_labels")
+@patch("scripts.tools.issue_archetype_sync.check_rate_limit")
+@patch("scripts.tools.issue_archetype_sync.build_report_from_github")
+def test_confirmed_apply_calls_mutation_with_proposed_labels(
+    mock_build_report_from_github,
+    mock_check_rate_limit,
+    mock_apply_labels,
+    capsys,
+) -> None:
+    """Confirmed apply should call check_rate_limit then apply_labels with the proposed label."""
+    mock_build_report_from_github.return_value = _report()
+
+    exit_code = main(_apply_github_args(confirm=True))
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    mock_check_rate_limit.assert_called_once_with()
+    mock_apply_labels.assert_called_once_with("ll7/robot_sf_ll7", 1588, ["type:workflow"])
+    payload_text = captured.out[: captured.out.index("\nApplied labels")]
+    payload = json.loads(payload_text)
+    assert payload["dry_run"] is False
+    assert "label writes" in payload["rate_limit_guidance"]
+    assert payload["mutation_plan"] == [
+        {
+            "api": "POST repos/ll7/robot_sf_ll7/issues/1588/labels",
+            "issue_number": 1588,
+            "labels": ["type:workflow"],
+            "operation": "add_labels",
+            "repo": "ll7/robot_sf_ll7",
+        }
+    ]
+    assert "Applied labels to issue" in captured.out
+
+
+@patch("scripts.tools.issue_archetype_sync.apply_labels")
+@patch("scripts.tools.issue_archetype_sync.check_rate_limit")
+@patch("scripts.tools.issue_archetype_sync.build_report_from_github")
+def test_apply_noop_with_no_proposed_labels_skips_mutation(
+    mock_build_report_from_github,
+    mock_check_rate_limit,
+    mock_apply_labels,
+    capsys,
+) -> None:
+    """When proposed_label_additions is empty even after confirm, skip mutation."""
+    mock_build_report_from_github.return_value = _report(existing_labels=["type:workflow"])
+
+    exit_code = main(_apply_github_args(confirm=True))
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "No proposed label additions" in captured.out
+    payload_text = captured.out[: captured.out.index("\nNo proposed label additions")]
+    payload = json.loads(payload_text)
+    assert payload["dry_run"] is False
+    assert payload["mutation_plan"] == []
+    mock_check_rate_limit.assert_not_called()
+    mock_apply_labels.assert_not_called()
+
+
+@patch("scripts.tools.issue_archetype_sync.apply_labels")
+@patch("scripts.tools.issue_archetype_sync.check_rate_limit")
+@patch("scripts.tools.issue_archetype_sync.build_report_from_github")
+def test_apply_with_evidence_tier_never_includes_tier_label(
+    mock_build_report_from_github,
+    mock_check_rate_limit,
+    mock_apply_labels,
+) -> None:
+    """Evidence tier is always skipped; confirmed apply must never propose or apply it."""
+    mock_build_report_from_github.return_value = _report(evidence_tier="smoke")
+
+    exit_code = main(_apply_github_args(confirm=True))
+
+    assert exit_code == 0
+    mock_apply_labels.assert_called_once()
+    called_labels = mock_apply_labels.call_args[0][2]
+    assert "type:workflow" in called_labels
+    for label in called_labels:
+        assert "evidence" not in label.lower()
+
+
+@patch("scripts.tools.issue_archetype_sync.apply_labels")
+@patch("scripts.tools.issue_archetype_sync.check_rate_limit")
+@patch("scripts.tools.issue_archetype_sync.build_report_from_github")
+def test_low_rate_limit_fails_closed(
+    mock_build_report_from_github,
+    mock_check_rate_limit,
+    mock_apply_labels,
+) -> None:
+    """When core rate-limit remaining is too low, mutation should fail with RuntimeError."""
+    mock_build_report_from_github.return_value = _report()
+    mock_check_rate_limit.side_effect = RuntimeError("core remaining too low")
+
+    with pytest.raises(RuntimeError, match="core remaining too low"):
+        main(_apply_github_args(confirm=True))
+
+    mock_apply_labels.assert_not_called()
+
+
+def test_apply_rejects_offline_body_file_arguments(tmp_path: Path) -> None:
+    """Apply mode should not accept local-only issue metadata arguments."""
+    argv, _ = _apply_body_file_args(tmp_path, confirm=True)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(argv)
+    assert exc_info.value.code == 2
+
+
+def test_report_subcommand_does_not_mutate(tmp_path, capsys) -> None:
+    """The report subcommand must never trigger mutation even in apply-like scenarios."""
+    body_path = tmp_path / "issue.md"
+    labels_path = tmp_path / "labels.json"
+    body_path.write_text(_body("workflow"), encoding="utf-8")
+    labels_path.write_text(json.dumps([]), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "report",
+            "--issue-number",
+            "1",
+            "--body-file",
+            str(body_path),
+            "--labels-json",
+            str(labels_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload["proposed_label_additions"] == ["type:workflow"]
+    assert payload["mutation_plan"] == []
+    assert payload["project_sync_mode"] == "report-only"
+    assert "Re-run with --confirm-apply-labels" not in captured.out
+
+
+def test_check_rate_limit_fails_on_low_remaining() -> None:
+    """check_rate_limit should raise when core.remaining is below the floor."""
+    stub_payload = {"resources": {"core": {"limit": 5000, "remaining": 2, "reset": 9999999999}}}
+    with patch("scripts.tools.issue_archetype_sync._run_gh_json", return_value=stub_payload):
+        with pytest.raises(RuntimeError, match="below the safe floor"):
+            check_rate_limit()
+
+
+def test_apply_labels_constructs_correct_rest_post() -> None:
+    """apply_labels must POST the expected labels JSON to the issue labels endpoint."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.stdout = json.dumps([{"name": "type:docs"}])
+        apply_labels("ll7/robot_sf_ll7", 1, ["type:docs"])
+
+    mock_run.assert_called_once()
+    call_args, call_kwargs = mock_run.call_args
+    assert "POST" in call_args[0]
+    assert "repos/ll7/robot_sf_ll7/issues/1/labels" in call_args[0][4]
+    assert call_kwargs["input"] == json.dumps({"labels": ["type:docs"]})

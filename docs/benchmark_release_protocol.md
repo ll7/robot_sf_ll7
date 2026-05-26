@@ -129,11 +129,32 @@ The entrypoint is intentionally a release wrapper, not a second benchmark
 execution engine.
 
 `release/release_result.json` preserves the wrapped campaign semantics in the
-top-level `status`, `status_reason`, `benchmark_success`, and `exit_code`
+top-level `status`, `status_reason`, `benchmark_success`, `exit_code`,
+`campaign_execution_status`, `evidence_status`, and `row_status_summary`
 fields. Release-wrapper state is recorded separately under
 `release_status`, `release_status_reason`, `release_benchmark_success`, and
 `release_exit_code`. Exit code `3` means the campaign finished as
 `accepted_unavailable_only`: still non-success and still fail-closed.
+
+`benchmark_success` now means the campaign produced fully valid benchmark
+evidence, not merely that the core planner subset completed. Accepted
+unavailable/excluded rows therefore keep `benchmark_success=false` even when
+the campaign execution finished cleanly. Distinguish the axes as follows:
+
+- `campaign_execution_status`
+  - `completed`: the campaign finished without unexpected row failures
+  - `failed`: malformed payloads or unexpected failed rows
+  - `interrupted`: unexpected failure with fewer executed rows than expected
+- `evidence_status`
+  - `valid`: every executed row produced benchmark-valid evidence
+  - `partial`: at least one successful evidence row plus accepted unavailable rows
+  - `blocked`: only accepted unavailable/excluded rows were produced
+  - `invalid`: unexpected failures or malformed payloads
+- `row_status_summary`
+  - `successful_evidence_rows`
+  - `accepted_unavailable_rows`
+  - `unexpected_failed_rows`
+  - `fallback_or_degraded_rows`
 
 ## Release Outputs
 

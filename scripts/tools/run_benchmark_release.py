@@ -181,6 +181,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if validation["status"] != "valid":
         result["benchmark_success"] = False
         result["status"] = "invalid_manifest"
+        result["campaign_execution_status"] = "failed"
+        result["evidence_status"] = "invalid"
+        result["row_status_summary"] = {
+            "successful_evidence_rows": 0,
+            "accepted_unavailable_rows": 0,
+            "unexpected_failed_rows": 0,
+            "fallback_or_degraded_rows": 0,
+        }
         print(json.dumps(result, indent=2))
         return 2
 

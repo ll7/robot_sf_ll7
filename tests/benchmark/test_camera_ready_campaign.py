@@ -1144,6 +1144,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert preview_payload["scenarios"] == []
     report_text = (campaign_root / "reports" / "campaign_report.md").read_text(encoding="utf-8")
     assert "Campaign status: `accepted_unavailable_only`" in report_text
+    assert "Campaign execution status: `completed`" in report_text
+    assert "Evidence status: `partial`" in report_text
     assert "Readiness & Degraded/Fallback Status" in report_text
     assert "SocNav Strict-vs-Fallback Disclosure" in report_text
     assert "## Accepted Unavailable/Excluded Planners" in report_text
@@ -1180,8 +1182,24 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
     )
     assert result["exit_code"] == 3
+    assert result["campaign_execution_status"] == "completed"
+    assert result["evidence_status"] == "partial"
+    assert result["row_status_summary"] == {
+        "successful_evidence_rows": 1,
+        "accepted_unavailable_rows": 1,
+        "unexpected_failed_rows": 0,
+        "fallback_or_degraded_rows": 1,
+    }
     assert summary_payload["campaign"]["benchmark_success"] is False
     assert summary_payload["campaign"]["status"] == "accepted_unavailable_only"
+    assert summary_payload["campaign"]["campaign_execution_status"] == "completed"
+    assert summary_payload["campaign"]["evidence_status"] == "partial"
+    assert summary_payload["campaign"]["row_status_summary"] == {
+        "successful_evidence_rows": 1,
+        "accepted_unavailable_rows": 1,
+        "unexpected_failed_rows": 0,
+        "fallback_or_degraded_rows": 1,
+    }
     assert summary_payload["campaign"]["status_reason"] == (
         "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
     )
@@ -2370,12 +2388,23 @@ def test_run_campaign_success_ignores_not_available_experimental_when_core_ok(
     assert summary_payload["campaign"]["core_successful_runs"] == 1
     assert summary_payload["campaign"]["core_total_runs"] == 1
     assert summary_payload["campaign"]["benchmark_success_basis"] == "core"
-    assert summary_payload["campaign"]["benchmark_success"] is True
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    assert summary_payload["campaign"]["campaign_execution_status"] == "completed"
+    assert summary_payload["campaign"]["evidence_status"] == "partial"
+    assert summary_payload["campaign"]["row_status_summary"] == {
+        "successful_evidence_rows": 1,
+        "accepted_unavailable_rows": 1,
+        "unexpected_failed_rows": 0,
+        "fallback_or_degraded_rows": 1,
+    }
     assert "core_with_optional_experimental" in result["campaign_id"]
     assert result["benchmark_success_basis"] == "core"
     assert result["core_successful_runs"] == 1
     assert result["core_total_runs"] == 1
-    assert result["benchmark_success"] is True
+    assert result["benchmark_success"] is False
+    assert result["status"] == "accepted_unavailable_only"
+    assert result["campaign_execution_status"] == "completed"
+    assert result["evidence_status"] == "partial"
 
 
 def test_run_campaign_fails_if_core_run_is_unattempted_after_stop_on_failure(

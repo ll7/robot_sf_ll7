@@ -142,6 +142,14 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
             "campaign_root": str(tmp_path / "out" / "cid"),
             "benchmark_success": True,
             "status": "benchmark_success",
+            "campaign_execution_status": "completed",
+            "evidence_status": "valid",
+            "row_status_summary": {
+                "successful_evidence_rows": 1,
+                "accepted_unavailable_rows": 0,
+                "unexpected_failed_rows": 0,
+                "fallback_or_degraded_rows": 0,
+            },
             "status_reason": "all planner rows were benchmark-success",
             "successful_runs": 1,
             "accepted_unavailable_runs": 0,
@@ -168,6 +176,8 @@ def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) ->
     assert called["preflight"] is False
     payload = json.loads(capsys.readouterr().out)
     assert payload["campaign_id"] == "cid"
+    assert payload["campaign_execution_status"] == "completed"
+    assert payload["evidence_status"] == "valid"
 
 
 def test_main_run_mode_returns_non_zero_for_non_success_campaign(
@@ -200,6 +210,14 @@ def test_main_run_mode_returns_non_zero_for_non_success_campaign(
                 "campaign_id": "cid",
                 "campaign_root": str(tmp_path / "out" / "cid"),
                 "benchmark_success": False,
+                "campaign_execution_status": "failed",
+                "evidence_status": "invalid",
+                "row_status_summary": {
+                    "successful_evidence_rows": 0,
+                    "accepted_unavailable_rows": 0,
+                    "unexpected_failed_rows": 1,
+                    "fallback_or_degraded_rows": 0,
+                },
             }
             if cfg is sentinel_cfg and isinstance(kwargs.get("invoked_command"), str)
             else {}
@@ -210,6 +228,8 @@ def test_main_run_mode_returns_non_zero_for_non_success_campaign(
     assert exit_code == 2
     payload = json.loads(capsys.readouterr().out)
     assert payload["benchmark_success"] is False
+    assert payload["campaign_execution_status"] == "failed"
+    assert payload["evidence_status"] == "invalid"
 
 
 def test_main_run_mode_returns_exit_code_3_for_accepted_unavailable_only_campaign(
@@ -243,6 +263,14 @@ def test_main_run_mode_returns_exit_code_3_for_accepted_unavailable_only_campaig
                 "campaign_root": str(tmp_path / "out" / "cid"),
                 "benchmark_success": False,
                 "status": "accepted_unavailable_only",
+                "campaign_execution_status": "completed",
+                "evidence_status": "partial",
+                "row_status_summary": {
+                    "successful_evidence_rows": 1,
+                    "accepted_unavailable_rows": 1,
+                    "unexpected_failed_rows": 0,
+                    "fallback_or_degraded_rows": 1,
+                },
                 "status_reason": (
                     "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
                 ),
@@ -263,3 +291,5 @@ def test_main_run_mode_returns_exit_code_3_for_accepted_unavailable_only_campaig
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "accepted_unavailable_only"
     assert payload["benchmark_success"] is False
+    assert payload["campaign_execution_status"] == "completed"
+    assert payload["evidence_status"] == "partial"

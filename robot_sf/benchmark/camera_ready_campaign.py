@@ -32,6 +32,7 @@ from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
     summarize_benchmark_availability,
     summarize_campaign_outcome,
+    summarize_campaign_status_axes,
 )
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
@@ -2892,11 +2893,14 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         f"- Runtime sec: `{campaign.get('runtime_sec', 0.0)}`",
         f"- Episodes/sec: `{campaign.get('episodes_per_second', 0.0)}`",
         f"- Campaign status: `{campaign.get('status', 'unknown')}`",
+        f"- Campaign execution status: `{campaign.get('campaign_execution_status', 'unknown')}`",
+        f"- Evidence status: `{campaign.get('evidence_status', 'unknown')}`",
         f"- Status reason: `{campaign.get('status_reason', 'unknown')}`",
         f"- Benchmark success: `{campaign.get('benchmark_success', False)}`",
         f"- Successful rows: `{campaign.get('successful_runs', 0)}` / `{campaign.get('total_runs', 0)}`",
         f"- Accepted unavailable/excluded rows: `{campaign.get('accepted_unavailable_runs', 0)}`",
         f"- Unexpected failed rows: `{campaign.get('unexpected_failed_runs', 0)}`",
+        (f"- Row status summary: `{campaign.get('row_status_summary', {})}`"),
         f"- Interpretation profile: `{campaign.get('paper_interpretation_profile', 'unknown')}`",
         f"- Command: `{campaign.get('invoked_command', 'unknown')}`",
         "",
@@ -3646,13 +3650,23 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         {"runs": run_entries, "planner_rows": planner_rows}
     )
     successful_runs = campaign_outcome.successful_runs
+    expected_total_runs = len([planner for planner in cfg.planners if planner.enabled]) * len(
+        kinematics_matrix
+    )
     expected_core_runs = sum(
         1 for planner in cfg.planners if planner.enabled and planner.planner_group == "core"
     )
+    campaign_status_axes = summarize_campaign_status_axes(
+        {"runs": run_entries, "planner_rows": planner_rows},
+        expected_total_runs=expected_total_runs,
+    )
+    row_status_summary = asdict(campaign_status_axes.row_status_summary)
     success_counters = _campaign_success_counters(
         run_entries, expected_core_runs=expected_core_runs * len(kinematics_matrix)
     )
-    benchmark_success = bool(success_counters["benchmark_success"])
+    benchmark_success = bool(
+        success_counters["benchmark_success"] and campaign_status_axes.evidence_status == "valid"
+    )
     confidence_settings = {
         "method": "bootstrap_mean_over_seed_means",
         "confidence": float(cfg.bootstrap_confidence),
@@ -3871,6 +3885,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "non_success_runs": campaign_outcome.non_success_runs,
             "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
             "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,
+            "campaign_execution_status": campaign_status_axes.campaign_execution_status,
+            "evidence_status": campaign_status_axes.evidence_status,
+            "row_status_summary": row_status_summary,
             "benchmark_success": benchmark_success,
             "status": campaign_outcome.status,
             "status_reason": campaign_outcome.status_reason,
@@ -4147,6 +4164,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "non_success_runs": campaign_outcome.non_success_runs,
         "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
         "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,
+        "campaign_execution_status": campaign_status_axes.campaign_execution_status,
+        "evidence_status": campaign_status_axes.evidence_status,
+        "row_status_summary": row_status_summary,
         "benchmark_success": benchmark_success,
         "status": campaign_outcome.status,
         "status_reason": campaign_outcome.status_reason,

@@ -6,8 +6,10 @@ from robot_sf.benchmark.fallback_policy import (
     availability_payload,
     benchmark_run_exit_code,
     campaign_exit_code,
+    campaign_status_axes_payload,
     summarize_benchmark_availability,
     summarize_campaign_outcome,
+    summarize_campaign_status_axes,
 )
 
 
@@ -108,6 +110,20 @@ def test_campaign_outcome_ignores_partial_planner_rows_and_falls_back_to_runs() 
     assert outcome.exit_code == 2
 
 
+def test_campaign_outcome_ignores_malformed_planner_rows_and_falls_back_to_runs() -> None:
+    """Planner-row status summaries are ignored when any row is malformed."""
+    outcome = summarize_campaign_outcome(
+        {
+            "planner_rows": [{"status": "ok"}, None],
+            "runs": [{"status": "partial-failure"}],
+        }
+    )
+
+    assert outcome.status == "unexpected_failure"
+    assert outcome.unexpected_failed_runs == 1
+    assert outcome.exit_code == 2
+
+
 def test_campaign_exit_code_rejects_noncanonical_explicit_values() -> None:
     """Only canonical integer, non-bool campaign exit codes should bypass summarization."""
     success_payload = {"exit_code": True, "planner_rows": [{"status": "ok"}]}
@@ -164,6 +180,58 @@ def test_campaign_outcome_accepts_accepted_unavailable_explicit_fields_without_r
     assert outcome.accepted_unavailable_runs == 1
     assert outcome.unexpected_failed_runs == 0
     assert outcome.exit_code == 3
+
+
+def test_campaign_status_axes_distinguish_partial_evidence_from_execution_completion() -> None:
+    """Accepted unavailable rows should keep completed execution but partial evidence."""
+    status_axes = summarize_campaign_status_axes(
+        {
+            "planner_rows": [
+                {"status": "ok", "readiness_status": "native"},
+                {"status": "not_available", "readiness_status": "fallback"},
+            ]
+        },
+        expected_total_runs=2,
+    )
+
+    assert status_axes.campaign_execution_status == "completed"
+    assert status_axes.evidence_status == "partial"
+    assert status_axes.row_status_summary.successful_evidence_rows == 1
+    assert status_axes.row_status_summary.accepted_unavailable_rows == 1
+    assert status_axes.row_status_summary.unexpected_failed_rows == 0
+    assert status_axes.row_status_summary.fallback_or_degraded_rows == 1
+    assert campaign_status_axes_payload(
+        {
+            "planner_rows": [
+                {"status": "ok", "readiness_status": "native"},
+                {"status": "not_available", "readiness_status": "fallback"},
+            ]
+        },
+        expected_total_runs=2,
+    ) == {
+        "campaign_execution_status": "completed",
+        "evidence_status": "partial",
+        "row_status_summary": {
+            "successful_evidence_rows": 1,
+            "accepted_unavailable_rows": 1,
+            "unexpected_failed_rows": 0,
+            "fallback_or_degraded_rows": 1,
+        },
+    }
+
+
+def test_campaign_status_axes_mark_interrupted_unexpected_failure() -> None:
+    """Unexpected failures with missing expected rows should surface interruption explicitly."""
+    status_axes = summarize_campaign_status_axes(
+        {"planner_rows": [{"status": "ok"}, {"status": "partial-failure"}]},
+        expected_total_runs=3,
+    )
+
+    assert status_axes.campaign_execution_status == "interrupted"
+    assert status_axes.evidence_status == "invalid"
+    assert status_axes.row_status_summary.successful_evidence_rows == 1
+    assert status_axes.row_status_summary.accepted_unavailable_rows == 0
+    assert status_axes.row_status_summary.unexpected_failed_rows == 1
 
 
 def test_campaign_outcome_explicit_counts_prefer_unexpected_failure_over_accepted_unavailable() -> (

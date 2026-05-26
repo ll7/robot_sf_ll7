@@ -153,6 +153,14 @@ def test_release_run_fails_closed_on_invalid_manifest(monkeypatch, capsys) -> No
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "invalid_manifest"
     assert payload["benchmark_success"] is False
+    assert payload["campaign_execution_status"] == "failed"
+    assert payload["evidence_status"] == "invalid"
+    assert payload["row_status_summary"] == {
+        "successful_evidence_rows": 0,
+        "accepted_unavailable_rows": 0,
+        "unexpected_failed_rows": 0,
+        "fallback_or_degraded_rows": 0,
+    }
 
 
 def test_release_run_exports_publication_only_after_benchmark_success(
@@ -189,6 +197,14 @@ def test_release_run_exports_publication_only_after_benchmark_success(
             "campaign_root": str(campaign_root),
             "benchmark_success": True,
             "status": "benchmark_success",
+            "campaign_execution_status": "completed",
+            "evidence_status": "valid",
+            "row_status_summary": {
+                "successful_evidence_rows": 1,
+                "accepted_unavailable_rows": 0,
+                "unexpected_failed_rows": 0,
+                "fallback_or_degraded_rows": 0,
+            },
             "status_reason": "all planner rows were benchmark-success",
             "exit_code": 0,
         },
@@ -224,6 +240,8 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "benchmark_success"
     assert payload["benchmark_success"] is True
+    assert payload["campaign_execution_status"] == "completed"
+    assert payload["evidence_status"] == "valid"
     assert payload["exit_code"] == 0
     assert payload["release_status"] == "ok"
     assert payload["release_benchmark_success"] is True
@@ -272,6 +290,14 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
             "campaign_root": str(campaign_root),
             "benchmark_success": False,
             "status": "accepted_unavailable_only",
+            "campaign_execution_status": "completed",
+            "evidence_status": "partial",
+            "row_status_summary": {
+                "successful_evidence_rows": 1,
+                "accepted_unavailable_rows": 1,
+                "unexpected_failed_rows": 0,
+                "fallback_or_degraded_rows": 1,
+            },
             "status_reason": (
                 "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
             ),
@@ -319,6 +345,8 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
         "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"
     )
     assert payload["benchmark_success"] is False
+    assert payload["campaign_execution_status"] == "completed"
+    assert payload["evidence_status"] == "partial"
     assert payload["exit_code"] == 3
     assert payload["release_status"] == "accepted_unavailable_only"
     assert payload["release_status_reason"] == (

@@ -25,9 +25,25 @@ python3 scripts/tools/analyze_issue_1462_h500_failure_modes.py \
   --raw-campaign-dir output/issue_1462_raw/extracted/issue1454-s10-h500-candidates
 ```
 
-Before running that command locally, the raw archive was downloaded from the release and verified
-against SHA256 `44ec1d4eb89d450eb204398a3807185ce9bdd4aae0eeb5e55af0704fd4a8b0fc`. The raw archive
-was used only to count termination/status outcomes; committed evidence remains compact.
+Before running that command locally, hydrate and verify the raw archive:
+
+```bash
+mkdir -p output/issue_1462_raw
+gh release download artifact/issue1454-s10-h500-candidates-2026-05-23 \
+  --repo ll7/robot_sf_ll7 \
+  --pattern 'issue1454-s10-h500-candidates-2026-05-23.tar.zst*' \
+  --dir output/issue_1462_raw
+cd output/issue_1462_raw
+sha256sum -c issue1454-s10-h500-candidates-2026-05-23.tar.zst.sha256
+mkdir -p extracted
+tar --use-compress-program=unzstd \
+  -xf issue1454-s10-h500-candidates-2026-05-23.tar.zst \
+  -C extracted
+```
+
+The verified archive SHA256 is
+`44ec1d4eb89d450eb204398a3807185ce9bdd4aae0eeb5e55af0704fd4a8b0fc`. The raw archive was used
+only to count termination/status outcomes; committed evidence remains compact.
 
 Derived evidence is in
 [`evidence/issue_1462_s10_h500_failure_modes_2026-05-24/README.md`](evidence/issue_1462_s10_h500_failure_modes_2026-05-24/README.md):

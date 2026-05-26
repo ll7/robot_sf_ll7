@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from scripts.tools import analyze_issue_1462_h500_failure_modes
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -115,7 +112,10 @@ def test_analyzer_requires_raw_campaign_dir(monkeypatch) -> None:
         [
             "analyze_issue_1462_h500_failure_modes.py",
             "--evidence-dir",
-            "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23",
+            str(
+                Path(__file__).parents[2]
+                / "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23"
+            ),
         ],
     )
 

@@ -14,7 +14,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from robot_sf.benchmark.camera_ready_campaign import CampaignConfig
+    from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec
 
 _SYNC_COMMAND_EXTRA = "uv sync --extra orca"
 _SYNC_COMMAND_ALL = "uv sync --all-extras"
@@ -49,7 +49,7 @@ def _has_orca_algo(algo: str) -> bool:
     return "orca" in str(algo).lower()
 
 
-def _is_orca_dependent_planner(planner_spec: object) -> bool:
+def _is_orca_dependent_planner(planner_spec: PlannerSpec) -> bool:
     """Return True when a planner spec represents an ORCA-dependent planner.
 
     A planner is ORCA-dependent when its algo field contains ``orca``
@@ -61,8 +61,8 @@ def _is_orca_dependent_planner(planner_spec: object) -> bool:
     Returns:
         bool: True when the planner is enabled and ORCA-dependent.
     """
-    algo: str = getattr(planner_spec, "algo", "")
-    enabled: bool = bool(getattr(planner_spec, "enabled", True))
+    algo = planner_spec.algo
+    enabled = planner_spec.enabled
     return enabled and _has_orca_algo(algo)
 
 

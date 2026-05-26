@@ -41,14 +41,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(raw_argv)
 
-    if not args.config.exists():
-        logger.error(f"Config file not found: {args.config}")
+    if not args.config.is_file():
+        logger.error(f"Config file not found or not a regular file: {args.config}")
         return 1
 
     try:
         check_orca_rvo2_preflight_from_config(args.config.resolve())
     except SystemExit as exc:
         return exc.code if isinstance(exc.code, int) else 1
+    except Exception as exc:
+        logger.error(f"Failed to load or validate campaign config: {exc}")
+        return 1
 
     logger.info("ORCA-rvo2 preflight passed; config is safe to submit.")
     return 0

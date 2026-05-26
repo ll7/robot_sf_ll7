@@ -331,3 +331,28 @@ class TestOrcaRvo2PreflightCli:
         config_path = tmp_path / "nonexistent.yaml"
         exit_code = orca_preflight_cli.main(["--config", str(config_path)])
         assert exit_code == 1
+
+    def test_cli_errors_for_directory_config_path(self, tmp_path: Path) -> None:
+        """CLI returns exit code 1 when config path is a directory."""
+        exit_code = orca_preflight_cli.main(["--config", str(tmp_path)])
+        assert exit_code == 1
+
+    def test_cli_logs_clean_error_for_invalid_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CLI returns exit code 1 instead of a traceback for expected load failures."""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("invalid: true\n", encoding="utf-8")
+
+        def _raise_value_error(config_path: Path) -> None:
+            raise ValueError(f"invalid config: {config_path}")
+
+        monkeypatch.setattr(
+            orca_preflight_cli,
+            "check_orca_rvo2_preflight_from_config",
+            _raise_value_error,
+        )
+
+        exit_code = orca_preflight_cli.main(["--config", str(config_path)])
+
+        assert exit_code == 1

@@ -701,3 +701,10 @@ why a change was made rather than a full issue execution transcript.
   Algorithm/RLModule restore, not a clean Robot SF world-model import contract.
 * [Issue 789: DreamerV3 multimodal encoder stop note](issue_789_dreamer_multimodal_encoder.md)
   Fail-closed investigation result for mixed observation spaces on Ray 2.53.0 DreamerV3.
+
+## Hybrid-Learning Program Notes
+
+* [Issue #1499 Hard-Guarded Hybrid-Learning Evidence Matrix Schema](issue_1499_hybrid_evidence_matrix_schema.md)
+  defines the canonical evidence matrix schema that the synthesis consumer (#1489) will reference
+  when component campaigns complete. Includes field contracts, evidence-tier vocabulary,
+  non-evidence/failure-mode enumeration, guard-authority constraints, and consumer rules.

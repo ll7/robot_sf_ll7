@@ -218,3 +218,8 @@ git diff --check
 Issue #1167's runnable same-seed surface has now produced a complete #1427 comparison. PR #1480
 should be treated as workflow/artifact-contract progress plus negative same-seed evidence for
 obstacle-feature promotion, not as a successful benchmark promotion.
+
+Issue #1550 adds a forward-looking tracked row-summary schema for future same-seed comparisons:
+`docs/context/issue_1550_predictive_same_seed_row_summary_schema.md`. That schema exists to preserve
+future durable per-row outcomes only. It must not be used to reconstruct or invent missing #1427 row
+values that were never preserved in a durable source.

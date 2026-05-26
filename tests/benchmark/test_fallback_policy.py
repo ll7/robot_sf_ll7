@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from robot_sf.benchmark.fallback_policy import (
+    availability_payload,
     benchmark_run_exit_code,
     campaign_exit_code,
+    campaign_status_axes_payload,
     summarize_benchmark_availability,
+    summarize_campaign_outcome,
+    summarize_campaign_status_axes,
 )
 
 
@@ -29,6 +33,14 @@ def test_summarize_benchmark_availability_marks_fallback_as_not_available() -> N
     assert availability.availability_reason == "missing optional dep"
     assert benchmark_run_exit_code(summary) == 2
 
+    assert availability_payload(summary) == {
+        "execution_mode": "adapter",
+        "readiness_status": "fallback",
+        "availability_status": "not_available",
+        "benchmark_success": False,
+        "availability_reason": "missing optional dep",
+    }
+
 
 def test_summarize_benchmark_availability_marks_partial_failure() -> None:
     """Planner runs with failed jobs must be non-success even if some episodes were written."""
@@ -50,12 +62,220 @@ def test_summarize_benchmark_availability_marks_partial_failure() -> None:
     assert availability.availability_reason == "worker crash"
 
 
-def test_campaign_exit_code_uses_benchmark_success_flag() -> None:
-    """Campaign CLI should exit non-zero for non-success benchmark results."""
-    assert campaign_exit_code({"benchmark_success": True}) == 0
-    assert campaign_exit_code({"benchmark_success": False}) == 2
+def test_campaign_outcome_and_exit_code_distinguish_non_success_campaign_classes() -> None:
+    """Campaign exit semantics should separate accepted unavailable rows from true failures."""
+    success = summarize_campaign_outcome({"planner_rows": [{"status": "ok"}]})
+    accepted_unavailable = summarize_campaign_outcome(
+        {"planner_rows": [{"status": "ok"}, {"status": "not_available"}]}
+    )
+    unexpected_failure = summarize_campaign_outcome(
+        {"planner_rows": [{"status": "ok"}, {"status": "partial-failure"}]}
+    )
+
+    assert success.status == "benchmark_success"
+    assert success.exit_code == 0
+    assert campaign_exit_code({"planner_rows": [{"status": "ok"}]}) == 0
+
+    assert accepted_unavailable.status == "accepted_unavailable_only"
+    assert accepted_unavailable.accepted_unavailable_runs == 1
+    assert accepted_unavailable.unexpected_failed_runs == 0
+    assert accepted_unavailable.exit_code == 3
+    assert (
+        campaign_exit_code({"planner_rows": [{"status": "ok"}, {"status": "not_available"}]}) == 3
+    )
+
+    assert unexpected_failure.status == "unexpected_failure"
+    assert unexpected_failure.accepted_unavailable_runs == 0
+    assert unexpected_failure.unexpected_failed_runs == 1
+    assert unexpected_failure.exit_code == 2
+    assert (
+        campaign_exit_code({"planner_rows": [{"status": "ok"}, {"status": "partial-failure"}]}) == 2
+    )
+
     assert campaign_exit_code({}) == 2
     assert campaign_exit_code(None) == 2
+
+
+def test_campaign_outcome_ignores_partial_planner_rows_and_falls_back_to_runs() -> None:
+    """Planner-row status summaries are trusted only when every row supplies a status."""
+    outcome = summarize_campaign_outcome(
+        {
+            "planner_rows": [{"status": "ok"}, {}],
+            "runs": [{"status": "partial-failure"}],
+        }
+    )
+
+    assert outcome.status == "unexpected_failure"
+    assert outcome.unexpected_failed_runs == 1
+    assert outcome.exit_code == 2
+
+
+def test_campaign_outcome_ignores_malformed_planner_rows_and_falls_back_to_runs() -> None:
+    """Planner-row status summaries are ignored when any row is malformed."""
+    outcome = summarize_campaign_outcome(
+        {
+            "planner_rows": [{"status": "ok"}, None],
+            "runs": [{"status": "partial-failure"}],
+        }
+    )
+
+    assert outcome.status == "unexpected_failure"
+    assert outcome.unexpected_failed_runs == 1
+    assert outcome.exit_code == 2
+
+
+def test_campaign_exit_code_rejects_noncanonical_explicit_values() -> None:
+    """Only canonical integer, non-bool campaign exit codes should bypass summarization."""
+    success_payload = {"exit_code": True, "planner_rows": [{"status": "ok"}]}
+    accepted_unavailable_payload = {
+        "exit_code": 7,
+        "planner_rows": [{"status": "ok"}, {"status": "not_available"}],
+    }
+
+    assert (
+        campaign_exit_code({"exit_code": 0, "planner_rows": [{"status": "partial-failure"}]}) == 0
+    )
+    assert campaign_exit_code(success_payload) == 0
+    assert campaign_exit_code(accepted_unavailable_payload) == 3
+
+
+def test_campaign_outcome_accepts_all_ok_explicit_fields_without_rows() -> None:
+    """Explicit campaign-success fields should preserve the benchmark-success class."""
+    outcome = summarize_campaign_outcome(
+        {
+            "status": "benchmark_success",
+            "benchmark_success": True,
+            "status_reason": "all planner rows were benchmark-success",
+            "successful_runs": 2,
+            "accepted_unavailable_runs": 0,
+            "unexpected_failed_runs": 0,
+            "non_success_runs": 0,
+            "total_runs": 2,
+        }
+    )
+
+    assert outcome.status == "benchmark_success"
+    assert outcome.benchmark_success is True
+    assert outcome.successful_runs == 2
+    assert outcome.exit_code == 0
+
+
+def test_campaign_outcome_accepts_accepted_unavailable_explicit_fields_without_rows() -> None:
+    """Explicit accepted-unavailable fields should keep the distinct nonzero code."""
+    outcome = summarize_campaign_outcome(
+        {
+            "status": "accepted_unavailable_only",
+            "benchmark_success": False,
+            "status_reason": "campaign contains accepted unavailable/excluded rows and no unexpected failed rows",
+            "successful_runs": 1,
+            "accepted_unavailable_runs": 1,
+            "unexpected_failed_runs": 0,
+            "non_success_runs": 1,
+            "total_runs": 2,
+        }
+    )
+
+    assert outcome.status == "accepted_unavailable_only"
+    assert outcome.benchmark_success is False
+    assert outcome.accepted_unavailable_runs == 1
+    assert outcome.unexpected_failed_runs == 0
+    assert outcome.exit_code == 3
+
+
+def test_campaign_status_axes_distinguish_partial_evidence_from_execution_completion() -> None:
+    """Accepted unavailable rows should keep completed execution but partial evidence."""
+    status_axes = summarize_campaign_status_axes(
+        {
+            "planner_rows": [
+                {"status": "ok", "readiness_status": "native"},
+                {"status": "not_available", "readiness_status": "fallback"},
+            ]
+        },
+        expected_total_runs=2,
+    )
+
+    assert status_axes.campaign_execution_status == "completed"
+    assert status_axes.evidence_status == "partial"
+    assert status_axes.row_status_summary.successful_evidence_rows == 1
+    assert status_axes.row_status_summary.accepted_unavailable_rows == 1
+    assert status_axes.row_status_summary.unexpected_failed_rows == 0
+    assert status_axes.row_status_summary.fallback_or_degraded_rows == 1
+    assert campaign_status_axes_payload(
+        {
+            "planner_rows": [
+                {"status": "ok", "readiness_status": "native"},
+                {"status": "not_available", "readiness_status": "fallback"},
+            ]
+        },
+        expected_total_runs=2,
+    ) == {
+        "campaign_execution_status": "completed",
+        "evidence_status": "partial",
+        "row_status_summary": {
+            "successful_evidence_rows": 1,
+            "accepted_unavailable_rows": 1,
+            "unexpected_failed_rows": 0,
+            "fallback_or_degraded_rows": 1,
+        },
+    }
+
+
+def test_campaign_status_axes_mark_interrupted_unexpected_failure() -> None:
+    """Unexpected failures with missing expected rows should surface interruption explicitly."""
+    status_axes = summarize_campaign_status_axes(
+        {"planner_rows": [{"status": "ok"}, {"status": "partial-failure"}]},
+        expected_total_runs=3,
+    )
+
+    assert status_axes.campaign_execution_status == "interrupted"
+    assert status_axes.evidence_status == "invalid"
+    assert status_axes.row_status_summary.successful_evidence_rows == 1
+    assert status_axes.row_status_summary.accepted_unavailable_rows == 0
+    assert status_axes.row_status_summary.unexpected_failed_rows == 1
+
+
+def test_campaign_outcome_explicit_counts_prefer_unexpected_failure_over_accepted_unavailable() -> (
+    None
+):
+    """Unexpected failed rows must dominate mixed explicit non-success counters."""
+    outcome = summarize_campaign_outcome(
+        {
+            "status": "accepted_unavailable_only",
+            "benchmark_success": False,
+            "successful_runs": 1,
+            "accepted_unavailable_runs": 1,
+            "unexpected_failed_runs": 1,
+            "non_success_runs": 2,
+            "total_runs": 3,
+        }
+    )
+
+    assert outcome.status == "unexpected_failure"
+    assert outcome.accepted_unavailable_runs == 1
+    assert outcome.unexpected_failed_runs == 1
+    assert outcome.non_success_runs == 2
+    assert outcome.exit_code == 2
+
+
+def test_campaign_outcome_unknown_explicit_status_fails_closed() -> None:
+    """Unknown campaign status labels must not silently degrade into success."""
+    outcome = summarize_campaign_outcome(
+        {
+            "status": "mystery_status",
+            "benchmark_success": True,
+            "successful_runs": 2,
+            "non_success_runs": 0,
+            "total_runs": 2,
+        }
+    )
+
+    assert outcome.status == "malformed"
+    assert outcome.benchmark_success is False
+    assert (
+        outcome.status_reason
+        == "campaign result payload has unknown explicit status 'mystery_status'"
+    )
+    assert outcome.exit_code == 2
 
 
 def test_summarize_benchmark_availability_fails_closed_for_malformed_payload() -> None:

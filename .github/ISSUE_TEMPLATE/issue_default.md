@@ -11,6 +11,15 @@ assignees: []
 **Task type**
 - bugfix / feature / refactor / experiment / docs / other
 
+## Archetype Metadata
+
+<!-- Allowed values: docs/context/issue_1512_issue_archetypes.md -->
+```yaml
+archetype:
+evidence_tier:
+linked_policy:
+```
+
 **Context**
 <!-- What should change and why -->
 

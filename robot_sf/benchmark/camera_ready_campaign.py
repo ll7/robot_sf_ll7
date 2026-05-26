@@ -29,7 +29,10 @@ from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
 from robot_sf.benchmark.fallback_policy import (
     availability_payload,
+    classify_planner_row_status,
     summarize_benchmark_availability,
+    summarize_campaign_outcome,
+    summarize_campaign_status_axes,
 )
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
@@ -2867,6 +2870,16 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     campaign = payload.get("campaign", {})
     rows = payload.get("planner_rows", [])
     warnings = payload.get("warnings", [])
+    accepted_unavailable_rows = [
+        row
+        for row in rows
+        if classify_planner_row_status(str(row.get("status", ""))) == "accepted_unavailable"
+    ]
+    unexpected_failed_rows = [
+        row
+        for row in rows
+        if classify_planner_row_status(str(row.get("status", ""))) == "unexpected_failure"
+    ]
 
     lines = [
         "# Camera-Ready Benchmark Campaign Report",
@@ -2879,6 +2892,15 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         f"- Git commit: `{campaign.get('git_hash', 'unknown')}`",
         f"- Runtime sec: `{campaign.get('runtime_sec', 0.0)}`",
         f"- Episodes/sec: `{campaign.get('episodes_per_second', 0.0)}`",
+        f"- Campaign status: `{campaign.get('status', 'unknown')}`",
+        f"- Campaign execution status: `{campaign.get('campaign_execution_status', 'unknown')}`",
+        f"- Evidence status: `{campaign.get('evidence_status', 'unknown')}`",
+        f"- Status reason: `{campaign.get('status_reason', 'unknown')}`",
+        f"- Benchmark success: `{campaign.get('benchmark_success', False)}`",
+        f"- Successful rows: `{campaign.get('successful_runs', 0)}` / `{campaign.get('total_runs', 0)}`",
+        f"- Accepted unavailable/excluded rows: `{campaign.get('accepted_unavailable_runs', 0)}`",
+        f"- Unexpected failed rows: `{campaign.get('unexpected_failed_runs', 0)}`",
+        (f"- Row status summary: `{campaign.get('row_status_summary', {})}`"),
         f"- Interpretation profile: `{campaign.get('paper_interpretation_profile', 'unknown')}`",
         f"- Command: `{campaign.get('invoked_command', 'unknown')}`",
         "",
@@ -3041,23 +3063,25 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         if isinstance(snqi_sensitivity, str):
             lines.append(f"- Sensitivity CSV: `{snqi_sensitivity}`")
 
-    lines.extend(["", "## Campaign Warnings", ""])
-    if warnings:
-        for warning in warnings:
-            lines.append(f"- {warning}")
+    lines.extend(["", "## Accepted Unavailable/Excluded Planners", ""])
+    if accepted_unavailable_rows:
+        lines.append("| planner | status | availability reason |")
+        lines.append("|---|---|---|")
+        for row in accepted_unavailable_rows:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} | "
+                f"{_escape_markdown_cell(row.get('availability_reason') or row.get('most_likely_failure_reason') or 'unspecified')} |"
+            )
     else:
-        lines.append("- No campaign-level warnings.")
+        lines.append("- No accepted unavailable/excluded planners.")
 
-    failing_rows = [
-        row
-        for row in rows
-        if str(row.get("status", "")).lower() in {"failed", "partial-failure", "not_available"}
-    ]
-    lines.extend(["", "## Failed Planners And Likely Reasons", ""])
-    if failing_rows:
+    lines.extend(["", "## Unexpected Failed/Partial Planners", ""])
+    if unexpected_failed_rows:
         lines.append("| planner | status | most likely reason |")
         lines.append("|---|---|---|")
-        for row in failing_rows:
+        for row in unexpected_failed_rows:
             lines.append(
                 "| "
                 f"{_escape_markdown_cell(row.get('planner_key'))} | "
@@ -3065,7 +3089,14 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
                 f"{_escape_markdown_cell(row.get('most_likely_failure_reason') or row.get('availability_reason') or 'unspecified')} |"
             )
     else:
-        lines.append("- No failed/partial/not-available planners.")
+        lines.append("- No unexpected failed/partial planners.")
+
+    lines.extend(["", "## Campaign Warnings", ""])
+    if warnings:
+        for warning in warnings:
+            lines.append(f"- {warning}")
+    else:
+        lines.append("- No campaign-level warnings.")
 
     publication = payload.get("publication_bundle")
     if isinstance(publication, dict):
@@ -3293,12 +3324,19 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             )
             planner_rows.append(row)
 
-            if status in {"failed", "partial-failure", "not_available"}:
+            if status in {"failed", "partial-failure"}:
                 reason = str(row.get("most_likely_failure_reason", "")).strip() or "unspecified"
                 warnings.append(
                     "Planner failure recorded: "
                     f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
                     f"most_likely_reason='{reason}'"
+                )
+            elif classify_planner_row_status(status) == "accepted_unavailable":
+                reason = str(row.get("availability_reason", "")).strip() or "unspecified"
+                warnings.append(
+                    "Accepted unavailable planner row recorded: "
+                    f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
+                    f"availability_reason='{reason}'"
                 )
 
             run_entries.append(
@@ -3334,7 +3372,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 },
             )
 
-            if status in {"failed", "partial-failure", "not_available"} and cfg.stop_on_failure:
+            if classify_planner_row_status(status) == "unexpected_failure" and cfg.stop_on_failure:
                 logger.warning(
                     "Campaign stop_on_failure triggered: planner key={} kinematics={} status={} (halting remaining planners).",
                     planner.key,
@@ -3348,20 +3386,6 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                             f"'{planner.key}' ({kinematics}) had partial failures "
                             f"({int(summary.get('failed_jobs', 0))} failed jobs); "
                             "stop_on_failure=true"
-                        ),
-                    )
-                elif status == "not_available":
-                    availability_reason = (
-                        (summary.get("benchmark_availability") or {}).get("availability_reason")
-                        if isinstance(summary.get("benchmark_availability"), dict)
-                        else None
-                    )
-                    warnings.append(
-                        (
-                            "Campaign halted early: planner "
-                            f"'{planner.key}' ({kinematics}) was not available"
-                            + (f" ({availability_reason})" if availability_reason else "")
-                            + "; stop_on_failure=true"
                         ),
                     )
                 stop_requested = True
@@ -3622,14 +3646,27 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         )
         for entry in run_entries
     )
+    campaign_outcome = summarize_campaign_outcome(
+        {"runs": run_entries, "planner_rows": planner_rows}
+    )
+    successful_runs = campaign_outcome.successful_runs
+    expected_total_runs = len([planner for planner in cfg.planners if planner.enabled]) * len(
+        kinematics_matrix
+    )
     expected_core_runs = sum(
         1 for planner in cfg.planners if planner.enabled and planner.planner_group == "core"
     )
+    campaign_status_axes = summarize_campaign_status_axes(
+        {"runs": run_entries, "planner_rows": planner_rows},
+        expected_total_runs=expected_total_runs,
+    )
+    row_status_summary = asdict(campaign_status_axes.row_status_summary)
     success_counters = _campaign_success_counters(
         run_entries, expected_core_runs=expected_core_runs * len(kinematics_matrix)
     )
-    successful_runs = int(success_counters["successful_runs"])
-    benchmark_success = bool(success_counters["benchmark_success"])
+    benchmark_success = bool(
+        success_counters["benchmark_success"] and campaign_status_axes.evidence_status == "valid"
+    )
     confidence_settings = {
         "method": "bootstrap_mean_over_seed_means",
         "confidence": float(cfg.bootstrap_confidence),
@@ -3845,7 +3882,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "total_episodes": total_episodes,
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
+            "non_success_runs": campaign_outcome.non_success_runs,
+            "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
+            "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,
+            "campaign_execution_status": campaign_status_axes.campaign_execution_status,
+            "evidence_status": campaign_status_axes.evidence_status,
+            "row_status_summary": row_status_summary,
             "benchmark_success": benchmark_success,
+            "status": campaign_outcome.status,
+            "status_reason": campaign_outcome.status_reason,
+            "exit_code": campaign_outcome.exit_code,
             "benchmark_success_basis": success_counters["benchmark_success_basis"],
             "core_successful_runs": success_counters["core_successful_runs"],
             "core_total_runs": success_counters["core_total_runs"],
@@ -4115,7 +4161,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "statistical_sufficiency_json": str(statistical_sufficiency_json_path),
         "total_runs": len(run_entries),
         "successful_runs": successful_runs,
+        "non_success_runs": campaign_outcome.non_success_runs,
+        "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
+        "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,
+        "campaign_execution_status": campaign_status_axes.campaign_execution_status,
+        "evidence_status": campaign_status_axes.evidence_status,
+        "row_status_summary": row_status_summary,
         "benchmark_success": benchmark_success,
+        "status": campaign_outcome.status,
+        "status_reason": campaign_outcome.status_reason,
+        "exit_code": campaign_outcome.exit_code,
         "benchmark_success_basis": success_counters["benchmark_success_basis"],
         "core_successful_runs": success_counters["core_successful_runs"],
         "core_total_runs": success_counters["core_total_runs"],

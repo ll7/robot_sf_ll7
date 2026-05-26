@@ -1,9 +1,13 @@
-"""Report safe issue-body archetype metadata mirror candidates.
+"""Report and apply safe issue-body archetype metadata mirror candidates.
 
-The issue body remains authoritative. This helper is intentionally read-only:
+The issue body remains authoritative. The ``report`` subcommand is read-only:
 it fetches issue metadata with ``gh api``, parses the existing
-``## Archetype Metadata`` block, and prints a dry-run JSON report. It never
-adds labels, creates labels, or writes Project fields.
+``## Archetype Metadata`` block, and prints a dry-run JSON report.
+
+The ``apply`` subcommand builds the same pre-apply JSON report, checks the
+GitHub API rate limit, and applies only the proposed typed labels when
+``--confirm-apply-labels`` is passed. It never creates labels, never mirrors
+``evidence_tier``, and never writes Project fields.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +31,13 @@ SAFE_ARCHETYPE_LABEL_MAP: dict[str, str] = {
 }
 
 TYPED_LABEL_PREFIX = "type:"
+RATE_LIMIT_FLOOR = 10
 DEFAULT_REPO = "ll7/robot_sf_ll7"
+APPLY_RATE_LIMIT_GUIDANCE = (
+    "Uses REST for issue label writes after a core rate-limit preflight; Project v2 writes "
+    "remain out of scope and should be batched separately per "
+    "docs/context/issue_713_batch_first_issue_workflow.md."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +79,81 @@ def _run_gh_json(args: list[str]) -> Any:
     """
     completed = subprocess.run(args, check=True, capture_output=True, text=True)
     return json.loads(completed.stdout)
+
+
+def check_rate_limit() -> dict[str, Any]:
+    """Fetch the current GitHub API rate-limit status.
+
+    Returns:
+        Decoded rate-limit payload.
+
+    Raises:
+        RuntimeError: When core remaining is below ``RATE_LIMIT_FLOOR``.
+    """
+    payload = _run_gh_json(["gh", "api", "rate_limit"])
+    if not isinstance(payload, dict):
+        raise RuntimeError("Rate-limit payload did not decode to an object")
+    resources = payload.get("resources")
+    if not isinstance(resources, dict):
+        raise RuntimeError("Rate-limit resources block is missing or invalid")
+    core = resources.get("core")
+    if not isinstance(core, dict):
+        raise RuntimeError("Rate-limit core block is missing or invalid")
+    remaining = core.get("remaining")
+    if not isinstance(remaining, int):
+        raise RuntimeError("Rate-limit core.remaining is missing or not an int")
+    if remaining < RATE_LIMIT_FLOOR:
+        raise RuntimeError(
+            f"Core rate-limit remaining ({remaining}) is below the safe floor "
+            f"({RATE_LIMIT_FLOOR}); refusing to mutate."
+        )
+    return payload
+
+
+def apply_labels(repo: str, issue_number: int, labels: list[str]) -> list[dict[str, Any]]:
+    """Apply a list of typed labels to a GitHub issue via REST POST.
+
+    This must only be called after the rate-limit check passes.
+
+    Note:
+        Calls ``gh api -X POST repos/{repo}/issues/{issue_number}/labels``
+        with a JSON body of ``{"labels": [...]}``.  Existing labels are
+        preserved --- the endpoint adds labels rather than replacing them.
+    """
+    completed = subprocess.run(
+        [
+            "gh",
+            "api",
+            "-X",
+            "POST",
+            f"repos/{repo}/issues/{issue_number}/labels",
+            "--input",
+            "-",
+        ],
+        input=json.dumps({"labels": labels}),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(completed.stdout)
+    if not isinstance(payload, list):
+        raise RuntimeError("GitHub label mutation payload did not decode to a list")
+    return payload
+
+
+def _apply_mutation_plan(report: ArchetypeSyncReport, repo: str) -> list[dict[str, Any]]:
+    """Return the ordered label mutation plan for an apply report."""
+    if not report.proposed_label_additions:
+        return []
+    return [
+        {
+            "operation": "add_labels",
+            "repo": repo,
+            "issue_number": report.issue_number,
+            "labels": list(report.proposed_label_additions),
+            "api": f"POST repos/{repo}/issues/{report.issue_number}/labels",
+        }
+    ]
 
 
 def fetch_issue_payload(repo: str, issue_number: int) -> dict[str, Any]:
@@ -270,6 +355,7 @@ def _build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+
     report = subparsers.add_parser("report", help="Print a read-only sync report.")
     report.add_argument("--issue-number", type=int, required=True)
     report.add_argument("--repo", default=DEFAULT_REPO)
@@ -289,16 +375,29 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional JSON list of existing issue labels for --body-file mode.",
     )
+
+    apply_parser = subparsers.add_parser(
+        "apply", help="Build a report then apply proposed typed labels when confirmed."
+    )
+    apply_parser.add_argument("--issue-number", type=int, required=True)
+    apply_parser.add_argument("--repo", default=DEFAULT_REPO)
+    apply_parser.add_argument(
+        "--confirm-apply-labels",
+        action="store_true",
+        default=False,
+        help="Required gate before any label mutation.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _build_parser().parse_args(argv)
-    if args.command != "report":
+
+    if args.command not in ("report", "apply"):
         raise AssertionError(f"Unhandled command: {args.command}")
 
-    if args.body_file is not None:
+    if getattr(args, "body_file", None) is not None:
         body = args.body_file.read_text(encoding="utf-8")
         labels: list[str] = []
         if args.labels_json is not None:
@@ -313,11 +412,39 @@ def main(argv: list[str] | None = None) -> int:
             issue_body=body,
             existing_labels=labels,
             available_labels=set(SAFE_ARCHETYPE_LABEL_MAP.values()),
-            dry_run=bool(args.dry_run),
+            dry_run=True,
         )
     else:
-        report = build_report_from_github(args.repo, args.issue_number, dry_run=bool(args.dry_run))
+        report = build_report_from_github(args.repo, args.issue_number, dry_run=True)
+
+    if args.command != "apply":
+        print(_report_to_json(report), end="")
+        return 0
+
+    if not args.confirm_apply_labels:
+        print(_report_to_json(report), end="")
+        print(
+            "Re-run with --confirm-apply-labels to apply the proposed typed labels.",
+            flush=True,
+        )
+        return 0
+
+    report = replace(
+        report,
+        dry_run=False,
+        mutation_plan=_apply_mutation_plan(report, args.repo),
+        rate_limit_guidance=APPLY_RATE_LIMIT_GUIDANCE,
+    )
     print(_report_to_json(report), end="")
+
+    proposed = report.proposed_label_additions
+    if not proposed:
+        print("No proposed label additions; nothing to apply.")
+        return 0
+
+    check_rate_limit()
+    apply_labels(args.repo, args.issue_number, proposed)
+    print(f"Applied labels to issue #{args.issue_number}: {proposed}")
     return 0
 
 

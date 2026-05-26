@@ -13,6 +13,7 @@ import pytest
 
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
 from robot_sf.benchmark.orca_preflight import (
+    OrcaRvo2PreflightError,
     _has_orca_algo,
     _is_orca_dependent_planner,
     check_orca_rvo2_preflight,
@@ -147,9 +148,9 @@ class TestCheckRvo2Importable:
             check_rvo2_importable()
 
     def test_raises_when_rvo2_missing(self) -> None:
-        """Function raises SystemExit when rvo2 is not importable."""
+        """Function raises a typed preflight error when rvo2 is not importable."""
         with _rvo2_missing():
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_rvo2_importable()
             assert "rvo2" in str(exc_info.value).lower()
             assert "uv sync --extra orca" in str(exc_info.value)
@@ -158,7 +159,7 @@ class TestCheckRvo2Importable:
     def test_raises_when_native_extension_import_fails(self) -> None:
         """Native-extension import failures are reported with actionable sync commands."""
         with _rvo2_import_raises(OSError("libRVO.so: cannot open shared object file")):
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_rvo2_importable()
         message = str(exc_info.value)
         assert "rvo2" in message.lower()
@@ -182,10 +183,10 @@ class TestCheckOrcaRvo2Preflight:
             check_orca_rvo2_preflight(cfg)
 
     def test_orca_planner_with_rvo2_missing_fails(self) -> None:
-        """Preflight raises SystemExit when ORCA planners exist and rvo2 is missing."""
+        """Preflight raises a typed error when ORCA planners exist and rvo2 is missing."""
         cfg = _make_cfg(planners=(_planner("orca", "orca"),))
         with _rvo2_missing():
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_orca_rvo2_preflight(cfg)
             assert "rvo2" in str(exc_info.value).lower()
 
@@ -204,7 +205,7 @@ class TestCheckOrcaRvo2Preflight:
             )
         )
         with _rvo2_missing():
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_orca_rvo2_preflight(cfg)
             assert "rvo2" in str(exc_info.value).lower()
 
@@ -212,7 +213,7 @@ class TestCheckOrcaRvo2Preflight:
         """Preflight fails for social_navigation_pyenvs_orca when rvo2 is missing."""
         cfg = _make_cfg(planners=(_planner("social_nav_orca", "social_navigation_pyenvs_orca"),))
         with _rvo2_missing():
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_orca_rvo2_preflight(cfg)
             message = str(exc_info.value)
             assert "social_nav_orca" in message
@@ -227,7 +228,7 @@ class TestCheckOrcaRvo2Preflight:
             )
         )
         with _rvo2_missing():
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_orca_rvo2_preflight(cfg)
         message = str(exc_info.value)
         assert "orca" in message
@@ -240,14 +241,14 @@ class TestCheckOrcaRvo2Preflight:
         """hybrid_orca_sampler is detected as ORCA-dependent."""
         cfg = _make_cfg(planners=(_planner("hybrid_orca", "hybrid_orca_sampler"),))
         with _rvo2_missing():
-            with pytest.raises(SystemExit):
+            with pytest.raises(OrcaRvo2PreflightError):
                 check_orca_rvo2_preflight(cfg)
 
     def test_orca_native_extension_import_failure_names_sync_commands(self) -> None:
         """Campaign preflight treats native rvo2 load errors as actionable dependency failures."""
         cfg = _make_cfg(planners=(_planner("orca", "orca"),))
         with _rvo2_import_raises(OSError("libRVO.so: cannot open shared object file")):
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_orca_rvo2_preflight(cfg)
         message = str(exc_info.value)
         assert "orca" in message
@@ -260,11 +261,11 @@ class TestCheckOrcaRvo2PreflightFromConfig:
     """Tests for the config-path-based entry point."""
 
     def test_loads_config_and_checks(self, tmp_path: Path) -> None:
-        """Config with ORCA planner triggers preflight failure when rvo2 is missing."""
+        """Config with ORCA planner triggers a typed preflight failure when rvo2 is missing."""
         config_path = tmp_path / "config.yaml"
         _write_config(config_path, algo="orca")
         with _rvo2_missing():
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_orca_rvo2_preflight_from_config(config_path)
             assert "rvo2" in str(exc_info.value).lower()
 

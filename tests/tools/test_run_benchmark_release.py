@@ -7,9 +7,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
+from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from scripts.tools import run_benchmark_release
 
 
@@ -189,7 +188,7 @@ def test_release_run_reports_orca_preflight_failure_as_structured_json(
 
     def _raise_orca_preflight(_cfg) -> None:
         """Simulate the real missing-rvo2 preflight path."""
-        raise SystemExit("The required optional dependency 'rvo2' is not importable.")
+        raise OrcaRvo2PreflightError("The required optional dependency 'rvo2' is not importable.")
 
     monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
     monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: sentinel_cfg)
@@ -434,8 +433,10 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     assert release_result["release_exit_code"] == 3
 
 
-def test_release_preflight_fails_closed_when_orca_rvo2_missing(tmp_path: Path, monkeypatch) -> None:
-    """Preflight mode exits before execution when enabled ORCA planners lack rvo2."""
+def test_release_preflight_fails_closed_when_orca_rvo2_missing(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Preflight mode should emit fail-closed JSON when enabled ORCA planners lack rvo2."""
     scenario_path = tmp_path / "scenarios.yaml"
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
     cfg = CampaignConfig(
@@ -466,5 +467,17 @@ def test_release_preflight_fails_closed_when_orca_rvo2_missing(tmp_path: Path, m
     )
     monkeypatch.setitem(sys.modules, "rvo2", None)
 
-    with pytest.raises(SystemExit, match="rvo2"):
-        run_benchmark_release.main(["--manifest", "manifest.yaml", "--mode", "preflight"])
+    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml", "--mode", "preflight"])
+
+    assert exit_code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "preflight"
+    assert payload["status"] == "orca_preflight_failed"
+    assert payload["status_reason"] == payload["release_status_reason"]
+    assert payload["benchmark_success"] is False
+    assert payload["campaign_execution_status"] == "failed"
+    assert payload["evidence_status"] == "blocked"
+    assert payload["exit_code"] == 2
+    assert payload["release_status"] == "orca_preflight_failed"
+    assert payload["release_exit_code"] == 2
+    assert "uv sync --extra orca" in payload["release_status_reason"]

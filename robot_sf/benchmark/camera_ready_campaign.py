@@ -2244,7 +2244,8 @@ def prepare_campaign_preflight(
         Paths and metadata required by preflight-only workflows and full runs.
 
     Raises:
-        SystemExit: When enabled ORCA-dependent planners require ``rvo2`` but it is not importable.
+        OrcaRvo2PreflightError: When enabled ORCA-dependent planners require ``rvo2`` but it is
+            not importable.
     """
     _validate_campaign_config(cfg)
     check_orca_rvo2_preflight(cfg)
@@ -3135,7 +3136,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         Campaign execution summary with output paths and high-level counters.
 
     Raises:
-        SystemExit: When enabled ORCA-dependent planners require ``rvo2`` but it is not importable.
+        OrcaRvo2PreflightError: When enabled ORCA-dependent planners require ``rvo2`` but it is
+            not importable.
     """
     start = time.perf_counter()
     prepared = prepare_campaign_preflight(

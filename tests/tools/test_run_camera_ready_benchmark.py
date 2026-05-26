@@ -332,15 +332,47 @@ def test_main_run_mode_returns_exit_code_3_for_accepted_unavailable_only_campaig
 class TestRunModeOrcaPreflightIntegration:
     """Integration tests that the CLI runner calls the ORCA-rvo2 preflight guard."""
 
-    def test_run_mode_aborts_when_orca_config_rvo2_missing(self, tmp_path: Path) -> None:
-        """Run mode aborts before run_campaign when ORCA config has rvo2 missing."""
+    def test_run_mode_emits_fail_closed_payload_when_orca_config_rvo2_missing(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """Run mode should translate typed ORCA preflight failures into structured JSON."""
         config_path = tmp_path / "config.yaml"
         _write_config(config_path, algo="orca")
 
         with _rvo2_missing():
-            with pytest.raises(SystemExit) as exc_info:
-                run_camera_ready_benchmark.main(["--config", str(config_path)])
-            assert "rvo2" in str(exc_info.value).lower()
+            exit_code = run_camera_ready_benchmark.main(["--config", str(config_path)])
+
+        assert exit_code == 2
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["mode"] == "run"
+        assert payload["status"] == "orca_preflight_failed"
+        assert payload["benchmark_success"] is False
+        assert payload["campaign_execution_status"] == "failed"
+        assert payload["evidence_status"] == "blocked"
+        assert payload["exit_code"] == 2
+        assert "rvo2" in payload["status_reason"].lower()
+
+    def test_preflight_mode_emits_fail_closed_payload_when_orca_config_rvo2_missing(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """Preflight mode should also stay fail-closed with actionable ORCA guidance."""
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, algo="orca")
+
+        with _rvo2_missing():
+            exit_code = run_camera_ready_benchmark.main(
+                ["--config", str(config_path), "--mode", "preflight"]
+            )
+
+        assert exit_code == 2
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["mode"] == "preflight"
+        assert payload["status"] == "orca_preflight_failed"
+        assert payload["benchmark_success"] is False
+        assert payload["campaign_execution_status"] == "failed"
+        assert payload["evidence_status"] == "blocked"
+        assert payload["exit_code"] == 2
+        assert "uv sync --extra orca" in payload["status_reason"]
 
     def test_run_mode_passes_when_no_orca_in_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

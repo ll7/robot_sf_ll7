@@ -50,6 +50,19 @@ def test_invalid_rows_report_actionable_field_errors() -> None:
         assert expected_field in fields
 
 
+def test_reference_validation_allows_non_root_output_directory_names() -> None:
+    """Only the repository-root output directory should be rejected as worktree-local."""
+    _input_format, rows = load_hybrid_evidence_input(FIXTURE_ROOT / "valid_rows.yaml")
+    mutated_rows = copy.deepcopy(rows[:1])
+    mutated_rows[0]["commit_artifact"] = (
+        f"deadbee, {FIXTURE_ROOT / 'nested_output_name' / 'summary.json'}"
+    )
+
+    report = validate_hybrid_evidence_rows(mutated_rows)
+
+    assert report["status"] == "valid"
+
+
 def test_validator_warns_when_guard_never_exercises_an_active_component() -> None:
     """Zero guard veto with active learned changes should stay valid but surface a caveat."""
     _input_format, rows = load_hybrid_evidence_input(FIXTURE_ROOT / "valid_rows.yaml")

@@ -632,10 +632,11 @@ def _validate_reference_token(
     if ".." in path.parts:
         _append_problem(errors, field, f"must not escape the repository root: {token!r}")
         return
-    if "output" in path.parts:
+    resolved = (repo_root / path).resolve()
+    output_dir = (repo_root / "output").resolve()
+    if resolved == output_dir or output_dir in resolved.parents:
         _append_problem(errors, field, f"must not depend on worktree-local output paths: {token!r}")
         return
-    resolved = (repo_root / path).resolve()
     try:
         resolved.relative_to(repo_root.resolve())
     except ValueError:

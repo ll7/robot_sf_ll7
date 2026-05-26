@@ -171,3 +171,68 @@ After completion, analyze the campaign roots under `output/benchmarks/issue_1353
 summaries under `docs/context/evidence/`, and write the #1353 delta report against the closed #1344
 primary paired AMV result. Fallback, degraded, and unavailable SocNav rows must stay caveated and
 must not be counted as successful benchmark evidence.
+
+## Issue #1353: 2026-05-26 Current-Main Result
+
+After PR #1492 merged, current `main` (`469d40c9`) includes core-anchored campaign success
+semantics. The 2026-05-26 SLURM sweep also exposed that the shared virtualenv was missing the ORCA
+`rvo2` extra; `uv sync --all-extras` restored the dependency and
+`.venv/bin/python -c 'import rvo2'` passed before the final submissions. Follow-up issue #1517
+tracks making this optional-extra check fail fast before future camera-ready SLURM campaigns.
+
+Fresh current-main jobs:
+
+- `12626`, nominal, `COMPLETED 0:0`, `a30`, runtime `00:03:16`
+- `12625`, stress, `COMPLETED 0:0`, `l40s`, runtime `00:21:10`
+- Related compact cross-kinematics closure for #1354: `12624`, `COMPLETED 0:0`, `a30`
+
+Campaign roots:
+
+- nominal:
+  `output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603`
+- stress:
+  `output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603`
+- #1354 compact cross-kinematics:
+  `output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604`
+
+Results summary:
+
+| Surface | Total runs | Successful rows | Core rows | Episodes | Campaign success | AMV coverage | SNQI contract |
+| --- | ---: | ---: | ---: | ---: | --- | --- | --- |
+| #1353 nominal | 8 | 7 | 3/3 | 84 | true, `basis=core` | warn | warn |
+| #1353 stress | 8 | 7 | 3/3 | 1008 | true, `basis=core` | warn | fail |
+| #1354 compact cross-kinematics | 9 | 9 | 9/9 | 9 | true, `basis=core` | pass | warn |
+
+The analyzer found no consistency findings for all three fresh campaign roots. Compact evidence is
+preserved in `docs/context/evidence/issue_1353_broader_amv_2026-05-26/`.
+
+Planner-level interpretation boundaries:
+
+- `socnav_bench` remains `not_available` in both #1353 surfaces because SocNavBench
+  control-pipeline assets are missing. This is an accepted unavailable row, not successful evidence.
+- #1353 nominal adds runnable rows beyond #1344, but success remains low: `ppo` and
+  `prediction_planner` reach `0.3333` success; `goal`, `orca`, `sacadrl`, and `socnav_sampling`
+  are at `0.2500`; `social_force` remains `0.0000`.
+- #1353 stress also adds runnable rows, but the strongest stress success is still modest:
+  `ppo=0.2222`, `orca=0.1667`, `socnav_sampling=0.1528`, `prediction_planner=0.0694`,
+  `sacadrl=0.0208`, and `goal/social_force=0.0000`.
+- `prediction_planner` is the main runtime hotspot: `59.1s` nominal and `613.4s` stress.
+- The stress `snqi_contract_status=fail` preserves the #1344 caution: these results are useful
+  benchmark evidence, but SNQI should not be promoted into paper-facing claims without an explicit
+  claim-scope decision.
+
+Validation commands:
+
+```bash
+sacct -j 12624,12625,12626 \
+  --format=JobID,JobName%35,Partition,State,ExitCode,Elapsed,Timelimit,NodeList%30
+
+uv run python scripts/tools/analyze_camera_ready_campaign.py \
+  --campaign-root output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603
+
+uv run python scripts/tools/analyze_camera_ready_campaign.py \
+  --campaign-root output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603
+
+uv run python scripts/tools/analyze_camera_ready_campaign.py \
+  --campaign-root output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604
+```

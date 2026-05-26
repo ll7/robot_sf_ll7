@@ -1,0 +1,76 @@
+{
+  "schema_version": "benchmark-amv-coverage-summary.v1",
+  "campaign_id": "issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603",
+  "generated_at_utc": "2026-05-26T04:26:03.475491Z",
+  "profile_name": "amv-paper-v1",
+  "contract_version": "1",
+  "coverage_enforcement": "warn",
+  "status": "warn",
+  "required_dimensions": {
+    "use_case": [
+      "delivery_robot",
+      "shared_space_micromobility"
+    ],
+    "context": [
+      "shared_space",
+      "sidewalk"
+    ],
+    "speed_regime": [
+      "scooter_speed",
+      "walking_speed"
+    ],
+    "maneuver_type": [
+      "bottleneck",
+      "crossing",
+      "overtake"
+    ]
+  },
+  "observed_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "missing_dimensions": {
+    "use_case": [
+      "delivery_robot",
+      "shared_space_micromobility"
+    ],
+    "context": [
+      "shared_space",
+      "sidewalk"
+    ],
+    "speed_regime": [
+      "scooter_speed",
+      "walking_speed"
+    ],
+    "maneuver_type": [
+      "bottleneck",
+      "crossing",
+      "overtake"
+    ]
+  },
+  "scenario_count": 4,
+  "scenario_rows": [
+    {
+      "name": "empty_map_8_directions_east",
+      "scenario_family": "empty_map_8_directions",
+      "amv": {}
+    },
+    {
+      "name": "single_ped_crossing_orthogonal",
+      "scenario_family": "single_ped_crossing_orthogonal",
+      "amv": {}
+    },
+    {
+      "name": "classic_doorway_low",
+      "scenario_family": "doorway",
+      "amv": {}
+    },
+    {
+      "name": "classic_bottleneck_low",
+      "scenario_family": "bottleneck",
+      "amv": {}
+    }
+  ]
+}

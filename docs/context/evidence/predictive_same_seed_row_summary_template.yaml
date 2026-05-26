@@ -1,0 +1,41 @@
+rows:
+  - source_issue: "#1550"
+    campaign: "replace_with_campaign_id"
+    comparison_group: "replace_with_same_seed_pair_label"
+    variant: "replace_with_baseline_variant_name"
+    scenario: "replace_with_scenario_id"
+    seed: 0
+    planner_grid_row: "replace_with_grid_row_name"
+    planner_grid_key: "replace_with_grid_row_key"
+    status: "ok"
+    success: false
+    collision_event: false
+    near_miss: false
+    low_progress: true
+    timeout: false
+    min_distance: 0.42
+    artifact_pointer: "docs/context/evidence/predictive_same_seed_row_summary_template.yaml"
+    commit_artifact: "deadbeef, docs/context/issue_1550_predictive_same_seed_row_summary_schema.md"
+    scenario_matrix: "configs/scenarios/classic_interactions.yaml"
+    seed_manifest: "configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml"
+    source_note: "docs/context/issue_1550_predictive_same_seed_row_summary_schema.md"
+  - source_issue: "#1550"
+    campaign: "replace_with_campaign_id"
+    comparison_group: "replace_with_same_seed_pair_label"
+    variant: "replace_with_unavailable_variant_name"
+    scenario: "replace_with_scenario_id"
+    seed: 0
+    planner_grid_row: "replace_with_grid_row_name"
+    planner_grid_key: "replace_with_grid_row_key"
+    status: "unavailable"
+    success: null
+    collision_event: null
+    near_miss: null
+    low_progress: null
+    timeout: null
+    min_distance: null
+    artifact_pointer: "docs/context/evidence/predictive_same_seed_row_summary_template.yaml"
+    commit_artifact: "deadbeef, docs/context/issue_1550_predictive_same_seed_row_summary_schema.md"
+    scenario_matrix: "configs/scenarios/classic_interactions.yaml"
+    seed_manifest: "configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml"
+    source_note: "docs/context/issue_1550_predictive_same_seed_row_summary_schema.md"

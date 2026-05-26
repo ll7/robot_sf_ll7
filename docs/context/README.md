@@ -98,6 +98,8 @@ knowledge, not every transient iteration detail.
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1167 predictive obstacle-feature pipeline:
   [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
+* Issue #1550 predictive same-seed row summary schema:
+  [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
 * Issue #1504 ego-conditioned feature contract:
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)
 * Issue #1543 predictive v2 negative audit:

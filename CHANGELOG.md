@@ -59,6 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1550 predictive same-seed row-summary validation surface:
+  `robot_sf/benchmark/predictive_same_seed_row_summary.py` plus
+  `scripts/validation/validate_predictive_same_seed_row_summary.py` now validate small durable
+  predictive comparison rows for variant/scenario/seed/planner-grid outcomes, provenance pointers,
+  and explicit `unavailable`/`unknown` handling, with a checked-in template and focused regression
+  coverage under `tests/benchmark/test_predictive_same_seed_row_summary.py`.
 * Added the issue-1515 hybrid-evidence matrix validation surface: `robot_sf/benchmark/hybrid_evidence_matrix.py`
   and `scripts/validation/validate_hybrid_evidence_matrix.py` now validate the #1499 row contract
   for enums, nullability, repository-relative provenance, fail-closed fallback/degraded semantics,

@@ -1,4 +1,4 @@
-# Issue #1353 Broader AMV Evidence 2026-05-26
+# Issue #1353 Benchmark Evidence 2026-05-26
 
 Related issues:
 
@@ -8,9 +8,9 @@ Related issues:
 
 ## Scope
 
-This directory preserves compact, reviewable evidence from the 2026-05-26 SLURM sweep after the
-current `main` checkout included core-anchored campaign success semantics and the local virtualenv
-was restored with the ORCA `rvo2` extra.
+This directory preserves compact, reviewable benchmark evidence from the 2026-05-26 SLURM sweep
+after the current `main` checkout included core-anchored campaign success semantics and the local
+virtualenv was restored with the ORCA `rvo2` extra.
 
 Raw campaign outputs remain under ignored `output/benchmarks/...`. This directory intentionally
 keeps only summaries, tables, analysis reports, and checksums.
@@ -33,6 +33,8 @@ keeps only summaries, tables, analysis reports, and checksums.
 - #1353 stress completed with `benchmark_success=true` on core rows:
   `total_runs=8`, `successful_runs=7`, `total_episodes=1008`, `core_successful_runs=3`,
   `core_total_runs=3`.
+- #1353 nominal and stress remain AMV-coverage gap evidence, not clean AMV-coverage success:
+  both `amv_coverage_summary.*` files report `status=warn` with missing required AMV dimensions.
 - `socnav_bench` is explicitly `not_available` in both #1353 surfaces because SocNavBench
   control-pipeline assets are missing. It is caveated evidence, not a successful planner row.
 - Analyzer findings were empty for all three fresh campaign roots.

@@ -9,7 +9,7 @@
     "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
     "scenario_matrix_hash": "8ac8ab9387f4",
     "git_hash": "469d40c9c6771498611fbaf58fcce60ea474e4ab",
-    "invoked_command": "/home/luttkule/git/robot_sf_ll7/.venv/bin/python /home/luttkule/git/robot_sf_ll7/scripts/tools/run_camera_ready_benchmark.py --config /home/luttkule/git/robot_sf_ll7/configs/benchmarks/issue_1353_paired_stress_broader_baselines.yaml --output-root output/benchmarks/issue_1353 --mode run --log-level INFO --label issue1353-stress-main-rvo2-20260526 --skip-publication-bundle",
+    "invoked_command": ".venv/bin/python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1353_paired_stress_broader_baselines.yaml --output-root output/benchmarks/issue_1353 --mode run --log-level INFO --label issue1353-stress-main-rvo2-20260526 --skip-publication-bundle",
     "runtime_sec": 1228.392698256299,
     "episodes_per_second": 0.8205844934041484,
     "total_episodes": 1008,
@@ -507,7 +507,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/goal__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/goal__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "goal",
           "tier": "baseline-ready",
@@ -1453,7 +1453,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/social_force__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/social_force__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "social_force",
           "tier": "baseline-ready",
@@ -2397,7 +2397,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/orca__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/orca__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "orca",
           "tier": "baseline-ready",
@@ -3395,7 +3395,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/ppo__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/ppo__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "ppo",
           "tier": "experimental",
@@ -4408,7 +4408,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/prediction_planner__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/prediction_planner__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "prediction_planner",
           "tier": "experimental",
@@ -5400,7 +5400,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/socnav_sampling__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/socnav_sampling__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "socnav_sampling",
           "tier": "experimental",
@@ -6378,7 +6378,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 0,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/sacadrl__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/sacadrl__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "sacadrl",
           "tier": "experimental",
@@ -7356,7 +7356,7 @@
         "failed_jobs": 0,
         "skipped_jobs": 144,
         "failures": [],
-        "out_path": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/socnav_bench__differential_drive/episodes.jsonl",
+        "out_path": "output/benchmarks/issue_1353/issue_1353_paired_stress_broader_baselines_issue1353-stress-main-rvo2-20260526_20260526_062603/runs/socnav_bench__differential_drive/episodes.jsonl",
         "algorithm_readiness": {
           "name": "socnav_bench",
           "tier": "experimental",

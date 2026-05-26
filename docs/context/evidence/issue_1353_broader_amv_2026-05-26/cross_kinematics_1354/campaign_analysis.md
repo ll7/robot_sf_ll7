@@ -1,7 +1,7 @@
 # Camera-Ready Campaign Analysis
 
 - Campaign ID: `paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604`
-- Campaign root: `/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604`
+- Campaign root: `output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604`
 - Runtime sec: `22.543566548265517`
 - Episodes/sec: `0.39922698037735527`
 

@@ -10420,7 +10420,7 @@
   ],
   "verified_simple_assessment": {
     "status": "rerun_required",
-    "manifest_path": "/home/luttkule/git/robot_sf_ll7/configs/scenarios/sets/verified_simple_subset_v1.yaml",
+    "manifest_path": "configs/scenarios/sets/verified_simple_subset_v1.yaml",
     "subset_size": 10,
     "matched_scenario_count": 0,
     "matched_scenarios": [],

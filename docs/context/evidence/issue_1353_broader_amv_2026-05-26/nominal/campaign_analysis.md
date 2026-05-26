@@ -1,7 +1,7 @@
 # Camera-Ready Campaign Analysis
 
 - Campaign ID: `issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603`
-- Campaign root: `/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603`
+- Campaign root: `output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603`
 - Runtime sec: `165.5303267678246`
 - Episodes/sec: `0.507459881462203`
 

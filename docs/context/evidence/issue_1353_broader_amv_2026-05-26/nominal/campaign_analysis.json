@@ -1,10 +1,10 @@
 {
   "campaign": {
     "campaign_id": "issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603",
-    "campaign_root": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603",
+    "campaign_root": "output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603",
     "runtime_sec": 165.5303267678246,
     "episodes_per_second": 0.507459881462203,
-    "summary_json": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603/reports/campaign_summary.json"
+    "summary_json": "output/benchmarks/issue_1353/issue_1353_paired_nominal_v1_broader_baselines_issue1353-nominal-main-rvo2-20260526_20260526_062603/reports/campaign_summary.json"
   },
   "planners": [
     {
@@ -1550,7 +1550,7 @@
     ],
     "verified_simple_assessment": {
       "status": "candidate_supported",
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/configs/scenarios/sets/verified_simple_subset_v1.yaml",
+      "manifest_path": "configs/scenarios/sets/verified_simple_subset_v1.yaml",
       "subset_size": 10,
       "matched_scenario_count": 2,
       "matched_scenarios": [

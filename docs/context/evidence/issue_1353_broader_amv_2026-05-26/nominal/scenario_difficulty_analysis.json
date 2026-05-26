@@ -1072,7 +1072,7 @@
   ],
   "verified_simple_assessment": {
     "status": "candidate_supported",
-    "manifest_path": "/home/luttkule/git/robot_sf_ll7/configs/scenarios/sets/verified_simple_subset_v1.yaml",
+    "manifest_path": "configs/scenarios/sets/verified_simple_subset_v1.yaml",
     "subset_size": 10,
     "matched_scenario_count": 2,
     "matched_scenarios": [

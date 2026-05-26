@@ -1,10 +1,10 @@
 {
   "campaign": {
     "campaign_id": "paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604",
-    "campaign_root": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604",
+    "campaign_root": "output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604",
     "runtime_sec": 22.543566548265517,
     "episodes_per_second": 0.39922698037735527,
-    "summary_json": "/home/luttkule/git/robot_sf_ll7/output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604/reports/campaign_summary.json"
+    "summary_json": "output/benchmarks/issue_1354_20260526/paper_cross_kinematics_v1_issue1354-paper-compact-main-rvo2-20260526_20260526_062604/reports/campaign_summary.json"
   },
   "planners": [
     {
@@ -542,7 +542,7 @@
     ],
     "verified_simple_assessment": {
       "status": "rerun_required",
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/configs/scenarios/sets/verified_simple_subset_v1.yaml",
+      "manifest_path": "configs/scenarios/sets/verified_simple_subset_v1.yaml",
       "subset_size": 10,
       "matched_scenario_count": 0,
       "matched_scenarios": [],

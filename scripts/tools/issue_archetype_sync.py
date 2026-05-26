@@ -1,13 +1,18 @@
 """Report and apply safe issue-body archetype metadata mirror candidates.
 
-The issue body remains authoritative. The ``report`` subcommand is read-only:
-it fetches issue metadata with ``gh api``, parses the existing
-``## Archetype Metadata`` block, and prints a dry-run JSON report.
+The issue body remains authoritative as a full metadata block. The ``report``
+subcommand is read-only: it fetches issue metadata with ``gh api``, parses the
+existing ``## Archetype Metadata`` block, and prints a dry-run JSON report.
+
+Any archetype-metadata audit finding fails closed for label mirroring. If the
+body block is malformed, missing required keys, or otherwise incomplete, this
+tool does not propose typed-label mirrors from that block even when individual
+fields like ``archetype`` look valid.
 
 The ``apply`` subcommand builds the same pre-apply JSON report, checks the
 GitHub API rate limit, and applies only the proposed typed labels when
-``--confirm-apply-labels`` is passed. It never creates labels, never mirrors
-``evidence_tier``, and never writes Project fields.
+``--confirm-apply-labels`` is passed. It never creates labels, keeps
+``evidence_tier`` body-only by default, and never writes Project fields.
 """
 
 from __future__ import annotations
@@ -201,6 +206,43 @@ def _issue_label_names(issue_payload: dict[str, Any]) -> list[str]:
     return sorted(names)
 
 
+def _failed_metadata_skips(metadata: Any) -> list[LabelCandidate]:
+    """Return skipped candidates for incomplete or malformed metadata blocks."""
+    parsed = metadata.parsed_metadata
+    archetype_value = ""
+    target_label = ""
+    evidence_tier_value = ""
+    if isinstance(parsed, dict):
+        archetype = parsed.get("archetype")
+        if isinstance(archetype, str):
+            archetype_value = archetype
+            target_label = SAFE_ARCHETYPE_LABEL_MAP.get(archetype, "")
+        evidence_tier = parsed.get("evidence_tier")
+        if evidence_tier is not None:
+            evidence_tier_value = str(evidence_tier)
+
+    skipped = [
+        LabelCandidate(
+            source_field="archetype",
+            source_value=archetype_value,
+            label=target_label,
+            status="skipped",
+            reason="schema_missing" if metadata.parse_error is None else "malformed",
+        )
+    ]
+    if evidence_tier_value:
+        skipped.append(
+            LabelCandidate(
+                source_field="evidence_tier",
+                source_value=evidence_tier_value,
+                label="",
+                status="skipped",
+                reason="not_low_risk",
+            )
+        )
+    return skipped
+
+
 def build_sync_report(
     *,
     issue_number: int,
@@ -210,6 +252,10 @@ def build_sync_report(
     dry_run: bool = True,
 ) -> ArchetypeSyncReport:
     """Build a no-mutation issue archetype sync report.
+
+    The issue-body metadata block is authoritative as a whole. If the metadata
+    audit reports any finding, the report fails closed and proposes no typed
+    label mirrors from that block, even when a single field parses cleanly.
 
     Returns:
         Structured dry-run report.
@@ -221,15 +267,7 @@ def build_sync_report(
     skipped: list[LabelCandidate] = []
 
     if parsed is None or findings:
-        skipped.append(
-            LabelCandidate(
-                source_field="archetype",
-                source_value="",
-                label="",
-                status="skipped",
-                reason="schema_missing" if metadata.parse_error is None else "malformed",
-            )
-        )
+        skipped.extend(_failed_metadata_skips(metadata))
     else:
         archetype = parsed.get("archetype")
         if not isinstance(archetype, str):

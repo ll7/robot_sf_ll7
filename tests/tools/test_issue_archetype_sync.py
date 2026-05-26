@@ -82,6 +82,79 @@ def test_report_keeps_evidence_tier_body_only_by_default() -> None:
     assert "evidence:smoke" not in report.proposed_label_additions
 
 
+def test_report_fails_closed_on_incomplete_metadata_block() -> None:
+    """Incomplete metadata blocks should block all typed-label mirrors.
+
+    This matters because the full issue-body metadata block is authoritative,
+    so a missing required key must prevent archetype label mirroring even when
+    the parsed archetype and evidence tier look individually valid.
+    """
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: workflow
+evidence_tier: smoke
+```
+"""
+    report = build_sync_report(
+        issue_number=1564,
+        issue_body=body,
+        existing_labels=[],
+        available_labels={"type:workflow", "evidence:smoke"},
+    )
+
+    assert report.metadata_findings == ["Missing archetype metadata keys: linked_policy"]
+    assert report.proposed_label_additions == []
+    assert any(
+        candidate.source_field == "archetype" and candidate.reason == "schema_missing"
+        for candidate in report.skipped_label_candidates
+    )
+    evidence_skips = [
+        candidate
+        for candidate in report.skipped_label_candidates
+        if candidate.source_field == "evidence_tier"
+    ]
+    assert len(evidence_skips) == 1
+    assert evidence_skips[0].reason == "not_low_risk"
+    assert "evidence:smoke" not in report.proposed_label_additions
+
+
+def test_report_fails_closed_on_invalid_metadata_values() -> None:
+    """Parsed blocks with invalid canonical values should not propose labels."""
+    body = """## Archetype Metadata
+
+```yaml
+archetype: workflow-ish
+evidence_tier: maybe
+linked_policy:
+  - docs/context/issue_1512_issue_archetypes.md
+```
+"""
+    report = build_sync_report(
+        issue_number=1564,
+        issue_body=body,
+        existing_labels=[],
+        available_labels={"type:workflow", "evidence:proposal"},
+    )
+
+    assert any("Invalid 'archetype' value" in finding for finding in report.metadata_findings)
+    assert any("Invalid 'evidence_tier' value" in finding for finding in report.metadata_findings)
+    assert report.proposed_label_additions == []
+    assert any(
+        candidate.source_field == "archetype" and candidate.reason == "schema_missing"
+        for candidate in report.skipped_label_candidates
+    )
+    assert any(
+        candidate.source_field == "evidence_tier" and candidate.reason == "not_low_risk"
+        for candidate in report.skipped_label_candidates
+    )
+
+
 def test_report_skips_unmapped_archetype_as_not_low_risk() -> None:
     """Archetypes without exact typed-label mirrors should be skipped."""
     report = build_sync_report(
@@ -334,6 +407,44 @@ def test_apply_noop_with_no_proposed_labels_skips_mutation(
     payload_text = captured.out[: captured.out.index("\nNo proposed label additions")]
     payload = json.loads(payload_text)
     assert payload["dry_run"] is False
+    assert payload["mutation_plan"] == []
+    mock_check_rate_limit.assert_not_called()
+    mock_apply_labels.assert_not_called()
+
+
+@patch("scripts.tools.issue_archetype_sync.apply_labels")
+@patch("scripts.tools.issue_archetype_sync.check_rate_limit")
+@patch("scripts.tools.issue_archetype_sync.build_report_from_github")
+def test_confirmed_apply_noops_for_incomplete_metadata(
+    mock_build_report_from_github,
+    mock_check_rate_limit,
+    mock_apply_labels,
+    capsys,
+) -> None:
+    """Confirmed apply should not mutate when metadata findings fail closed."""
+    body = """## Archetype Metadata
+
+```yaml
+archetype: workflow
+evidence_tier: smoke
+```
+"""
+    mock_build_report_from_github.return_value = build_sync_report(
+        issue_number=1564,
+        issue_body=body,
+        existing_labels=[],
+        available_labels={"type:workflow"},
+    )
+
+    exit_code = main(_apply_github_args(issue_number=1564, confirm=True))
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "No proposed label additions" in captured.out
+    payload_text = captured.out[: captured.out.index("\nNo proposed label additions")]
+    payload = json.loads(payload_text)
+    assert payload["metadata_findings"] == ["Missing archetype metadata keys: linked_policy"]
+    assert payload["proposed_label_additions"] == []
     assert payload["mutation_plan"] == []
     mock_check_rate_limit.assert_not_called()
     mock_apply_labels.assert_not_called()

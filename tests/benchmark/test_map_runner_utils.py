@@ -1855,6 +1855,49 @@ def test_preflight_policy_passes_robot_kinematics_to_build_policy(
     assert captured["robot_kinematics"] == "bicycle_drive"
 
 
+def test_preflight_policy_skips_non_socnav_planner_when_metadata_reports_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Benchmark preflight must fail closed when learned planners only boot in fallback mode."""
+
+    def _fake_build_policy(
+        algo,
+        cfg,
+        *,
+        robot_kinematics=None,
+        robot_command_mode=None,
+        adapter_impact_eval=False,
+    ):
+        """Return fallback metadata without needing the real learned-planner runtime."""
+        del cfg, robot_kinematics, robot_command_mode, adapter_impact_eval
+
+        def _policy(_obs):
+            """Return a dummy action for the metadata-only preflight test."""
+            return (0.0, 0.0)
+
+        return _policy, {
+            "algorithm": algo,
+            "status": "fallback",
+            "fallback_reason": "model_missing",
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+
+    cfg, preflight = _preflight_policy(
+        algo="ppo",
+        algo_config={"fallback_to_goal": True},
+        benchmark_profile="experimental",
+        missing_prereq_policy="fail-fast",
+        robot_kinematics="differential_drive",
+    )
+
+    assert cfg["fallback_to_goal"] is True
+    assert preflight["status"] == "skipped"
+    assert preflight["planner_metadata_status"] == "fallback"
+    assert preflight["planner_metadata_fallback_reason"] == "model_missing"
+    assert "fallback mode" in str(preflight["error"])
+
+
 def test_preflight_policy_treats_social_navigation_pyenvs_orca_as_socnav(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

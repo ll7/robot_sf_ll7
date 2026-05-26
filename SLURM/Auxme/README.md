@@ -136,6 +136,11 @@ Useful options:
 - `CAMERA_READY_RESULTS_DIR=<path>` overrides the final sync root; by default, job artifacts sync
   under `output/slurm/camera-ready-benchmark-job-<jobid>/`.
 
+The launcher runs an ORCA/rvo2 preflight before campaign execution. If the selected config contains
+enabled ORCA-dependent rows, `rvo2` must import in the job interpreter. Fix a failing preflight with
+`uv sync --extra orca` or `uv sync --all-extras`; do not treat fallback/degraded ORCA execution as
+camera-ready benchmark evidence.
+
 The launcher fails closed unless a config and either a label or campaign id are set. Keep generated
 campaign outputs under `output/benchmarks/...` and promote only compact manifests, summaries, or
 durable artifact pointers into git.

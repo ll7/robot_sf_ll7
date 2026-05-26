@@ -68,9 +68,16 @@ def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_
         canonical_campaign_config_path=Path("configs/benchmarks/paper_experiment_matrix_v1.yaml")
     )
     sentinel_cfg = object()
+    called = {"orca_preflight": False}
+
+    def _fake_orca_preflight(cfg) -> None:
+        """Record that release preflight applies the ORCA runtime guard."""
+        assert cfg is sentinel_cfg
+        called["orca_preflight"] = True
 
     monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
     monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: sentinel_cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", _fake_orca_preflight)
     monkeypatch.setattr(
         run_benchmark_release,
         "validate_release_manifest",
@@ -111,6 +118,7 @@ def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_
     )
 
     assert exit_code == 0
+    assert called["orca_preflight"] is True
     payload = json.loads(capsys.readouterr().out)
     assert payload["manifest_validation"]["status"] == "valid"
     assert payload["campaign_id"] == "cid"
@@ -126,6 +134,7 @@ def test_release_run_fails_closed_on_invalid_manifest(monkeypatch, capsys) -> No
 
     monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
     monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: sentinel_cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
     monkeypatch.setattr(
         run_benchmark_release,
         "validate_release_manifest",
@@ -163,6 +172,58 @@ def test_release_run_fails_closed_on_invalid_manifest(monkeypatch, capsys) -> No
     }
 
 
+def test_release_run_reports_orca_preflight_failure_as_structured_json(
+    monkeypatch,
+    capsys,
+) -> None:
+    """ORCA runtime failures should keep the release CLI's structured exit contract."""
+    manifest = SimpleNamespace(
+        canonical_campaign_config_path=Path("configs/benchmarks/paper_experiment_matrix_v1.yaml")
+    )
+    sentinel_cfg = object()
+    called = {"validate": False, "run": False}
+
+    def _raise_orca_preflight(_cfg) -> None:
+        """Simulate the real missing-rvo2 preflight path."""
+        raise SystemExit("The required optional dependency 'rvo2' is not importable.")
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: sentinel_cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", _raise_orca_preflight)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: called.__setitem__("validate", True),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: called.__setitem__("run", True),
+    )
+
+    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
+
+    assert exit_code == 2
+    assert called == {"validate": False, "run": False}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "run"
+    assert payload["status"] == "orca_preflight_failed"
+    assert payload["status_reason"] == payload["release_status_reason"]
+    assert payload["benchmark_success"] is False
+    assert payload["exit_code"] == 2
+    assert payload["campaign_execution_status"] == "failed"
+    assert payload["evidence_status"] == "blocked"
+    assert payload["row_status_summary"] == {
+        "successful_evidence_rows": 0,
+        "accepted_unavailable_rows": 0,
+        "unexpected_failed_rows": 0,
+        "fallback_or_degraded_rows": 0,
+    }
+    assert payload["release_status"] == "orca_preflight_failed"
+    assert payload["release_exit_code"] == 2
+    assert "rvo2" in payload["release_status_reason"]
+
+
 def test_release_run_exports_publication_only_after_benchmark_success(
     monkeypatch,
     capsys,
@@ -172,9 +233,16 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     campaign_root = _make_campaign_tree(tmp_path)
     manifest = _manifest_fixture()
     sentinel_cfg = object()
+    called = {"orca_preflight": False}
+
+    def _fake_orca_preflight(cfg) -> None:
+        """Release runs should fail fast before campaign execution when ORCA is unavailable."""
+        assert cfg is sentinel_cfg
+        called["orca_preflight"] = True
 
     monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
     monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: sentinel_cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", _fake_orca_preflight)
     monkeypatch.setattr(
         run_benchmark_release,
         "validate_release_manifest",
@@ -237,6 +305,7 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
 
     assert exit_code == 0
+    assert called["orca_preflight"] is True
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "benchmark_success"
     assert payload["benchmark_success"] is True
@@ -268,6 +337,7 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
 
     monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
     monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: sentinel_cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
     monkeypatch.setattr(
         run_benchmark_release,
         "validate_release_manifest",

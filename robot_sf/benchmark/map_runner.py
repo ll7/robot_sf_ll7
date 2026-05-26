@@ -791,8 +791,12 @@ def _preflight_policy(  # noqa: C901, PLR0915
             f"'{missing_prereq_policy}'. Expected fail-fast|skip-with-warning|fallback.",
         )
 
-    def _build_and_close(cfg: dict[str, Any]) -> None:
-        """Instantiate then close a SocNav planner for dependency preflight."""
+    def _build_and_close(cfg: dict[str, Any]) -> dict[str, Any]:
+        """Instantiate then close one planner, returning any emitted benchmark metadata.
+
+        Returns:
+            dict[str, Any]: Planner metadata emitted during construction-time preflight.
+        """
         effective_kinematics = robot_kinematics
         if effective_kinematics is None:
             effective_kinematics = str(
@@ -832,6 +836,27 @@ def _preflight_policy(  # noqa: C901, PLR0915
         planner_close = getattr(policy_fn, "_planner_close", None)
         if callable(planner_close):
             planner_close()
+        return _meta if isinstance(_meta, dict) else {}
+
+    def _preflight_metadata_issue(meta: dict[str, Any]) -> str | None:
+        """Surface benchmark-blocking fallback metadata before any expensive episode work.
+
+        Returns:
+            str | None: Fail-closed reason when the planner initialized in fallback mode.
+        """
+        status = str(meta.get("status", "")).strip().lower()
+        if status != "fallback":
+            return None
+        fallback_reason = str(meta.get("fallback_reason", "")).strip()
+        algorithm_label = str(meta.get("algorithm") or algo).strip() or algo
+        if fallback_reason:
+            return (
+                f"Planner '{algorithm_label}' initialized in fallback mode during benchmark "
+                f"preflight ({fallback_reason})."
+            )
+        return (
+            f"Planner '{algorithm_label}' initialized in fallback mode during benchmark preflight."
+        )
 
     learned_contract = _evaluate_learned_policy_contract(
         algo=algo,
@@ -862,7 +887,17 @@ def _preflight_policy(  # noqa: C901, PLR0915
         )
 
     try:
-        _build_and_close(algo_config)
+        planner_meta = _build_and_close(algo_config)
+        metadata_issue = _preflight_metadata_issue(planner_meta)
+        if metadata_issue is not None:
+            logger.warning("{}", metadata_issue)
+            return dict(algo_config), {
+                "status": "skipped",
+                "error": metadata_issue,
+                "planner_metadata_status": str(planner_meta.get("status", "")),
+                "planner_metadata_fallback_reason": planner_meta.get("fallback_reason"),
+                "learned_policy_contract": learned_contract,
+            }
         return dict(algo_config), {
             "status": "ok",
             "learned_policy_contract": learned_contract,

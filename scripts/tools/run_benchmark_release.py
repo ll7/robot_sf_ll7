@@ -24,6 +24,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     run_campaign,
     write_campaign_report,
 )
+from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
 from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
     build_resolved_release_manifest,
@@ -149,6 +150,31 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     manifest = load_release_manifest(args.manifest)
     cfg = load_campaign_config(manifest.canonical_campaign_config_path)
+    try:
+        check_orca_rvo2_preflight(cfg)
+    except SystemExit as exc:
+        reason = str(exc)
+        result = {
+            "mode": args.mode,
+            "status": "orca_preflight_failed",
+            "status_reason": reason,
+            "benchmark_success": False,
+            "exit_code": 2,
+            "campaign_execution_status": "failed",
+            "evidence_status": "blocked",
+            "row_status_summary": {
+                "successful_evidence_rows": 0,
+                "accepted_unavailable_rows": 0,
+                "unexpected_failed_rows": 0,
+                "fallback_or_degraded_rows": 0,
+            },
+            "release_status": "orca_preflight_failed",
+            "release_status_reason": reason,
+            "release_benchmark_success": False,
+            "release_exit_code": 2,
+        }
+        print(json.dumps(result, indent=2))
+        return 2
     validation = validate_release_manifest(manifest, campaign_config=cfg)
 
     resolved_manifest = build_resolved_release_manifest(manifest, campaign_config=cfg)

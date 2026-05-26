@@ -100,6 +100,8 @@ knowledge, not every transient iteration detail.
   [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
 * Issue #1504 ego-conditioned feature contract:
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)
+* Issue #1530 optional planner preflight audit:
+  [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #1414 parser capability metadata:

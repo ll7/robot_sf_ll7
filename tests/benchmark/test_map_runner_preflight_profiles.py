@@ -199,6 +199,54 @@ def test_socnav_fallback_policy_forces_allow_fallback(tmp_path: Path, monkeypatc
     assert summary["benchmark_availability"]["benchmark_success"] is False
 
 
+def test_learned_planner_fallback_metadata_skips_batch_fail_closed(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Learned planners that only boot in fallback mode must skip before episode execution."""
+    _patch_lightweight_batch(monkeypatch)
+
+    def _fake_build_policy(
+        _algo,
+        _cfg,
+        *,
+        robot_kinematics=None,
+        robot_command_mode=None,
+        adapter_impact_eval=False,
+    ):
+        """Return fallback metadata without constructing the real planner."""
+        del robot_kinematics, robot_command_mode, adapter_impact_eval
+
+        def _policy(_obs):
+            """Return a dummy command that should never be used once preflight skips."""
+            return (0.0, 0.0)
+
+        return _policy, {
+            "algorithm": "ppo",
+            "status": "fallback",
+            "fallback_reason": "sb3_missing",
+        }
+
+    monkeypatch.setattr(map_runner, "_build_policy", _fake_build_policy)
+
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        tmp_path / "episodes.jsonl",
+        schema_path=SCHEMA_PATH,
+        algo="ppo",
+        benchmark_profile="experimental",
+        resume=False,
+    )
+
+    assert summary["written"] == 0
+    assert summary["total_jobs"] == 0
+    assert summary["preflight"]["status"] == "skipped"
+    assert summary["preflight"]["planner_metadata_status"] == "fallback"
+    assert summary["preflight"]["planner_metadata_fallback_reason"] == "sb3_missing"
+    assert summary["benchmark_availability"]["availability_status"] == "not_available"
+    assert summary["benchmark_availability"]["benchmark_success"] is False
+
+
 def test_testing_only_planner_requires_explicit_opt_in(tmp_path: Path, monkeypatch) -> None:
     """Experimental testing-only planners must fail closed unless explicitly enabled."""
     _patch_lightweight_batch(monkeypatch)

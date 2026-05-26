@@ -1,0 +1,5 @@
+row_status: successful_evidence | accepted_unavailable | unexpected_failure | fallback | degraded | blocked
+counts_as_success_evidence: false
+reason: string
+linked_blocker: '#optional'
+contract_source: path-or-note

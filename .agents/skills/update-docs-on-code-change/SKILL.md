@@ -1,6 +1,14 @@
 ---
 name: update-docs-on-code-change
-description: "Keep docs aligned with code changes that affect workflows, contracts, or user-facing behavior."
+description: Keep docs aligned with code changes that affect workflows, contracts, or user-facing behavior.
+category: context-docs
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Update Docs On Code Change
@@ -30,3 +38,6 @@ documentation rewrites.
 - Updated docs list and specific sections changed.
 - Reference validation result.
 - Remaining documentation risks not yet covered.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

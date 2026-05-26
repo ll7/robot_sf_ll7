@@ -1,0 +1,1055 @@
+version: 1
+skills:
+  adversarial-search-campaign:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Analyze adversarial route/search campaigns with canonical commands, expected artifacts,
+      status boundaries, and claim limits.
+    category: campaign-analysis
+    kind: analysis
+    phase: analysis
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - benchmark-row-status
+    - artifact-provenance
+    - evidence-synthesis
+    output_schema: benchmark_analysis_summary.v1
+    aliases: []
+    requires_slurm: false
+  agentic-eval:
+    description: Evaluate and improve AI workflow outputs with small goldens, rubrics, and repeatable
+      checks; use when tuning skills, prompts, instructions, or agent behavior.
+    category: research-iteration
+    kind: atomic
+    phase: analysis
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  analyze-camera-ready-benchmark:
+    description: Analyze a camera-ready benchmark campaign for consistency, runtime hotspots, fallback/degraded
+      planners, and reproducibility metadata.
+    category: benchmark-evidence
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: true
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  analyze-latest-policy-sweep:
+    description: Analyze latest policy analysis sweep runs (*_policy_analysis_*) by comparing episodes/summary
+      metrics, diagnostics, and video artifacts; generate a concise markdown report and optional frame
+      snapshots.
+    category: benchmark-evidence
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: true
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  artifact-provenance:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Classify, promote, or document generated artifacts so durable evidence is separated from
+      local output caches.
+    category: benchmark-evidence
+    kind: atomic
+    phase: verification
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: artifact_provenance_summary.v1
+    aliases: []
+    requires_slurm: false
+  auto-improvement:
+    description: Focused measurement-aware refinement loop for Robot SF prompts, docs, and small code
+      changes; use when a task benefits from trying a few simple improvements.
+    category: research-iteration
+    kind: atomic
+    phase: analysis
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  autoresearch:
+    description: Autonomous iterative experimentation loop for measurable Robot SF tasks; use when the
+      user wants an improvement loop with baseline, experiments, and keep/discard decisions.
+    category: research-iteration
+    kind: atomic
+    phase: analysis
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  auxme-issue791-submit:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Submit issue-791-specific Auxme training jobs with explicit config provenance and wrapper-safety
+      checks.
+    category: slurm
+    kind: atomic
+    phase: implementation
+    requires_write: true
+    requires_slurm: true
+    requires:
+    - git
+    - slurm
+    - uv
+    delegates_to:
+    - slurm-campaign-submit
+    output_schema: campaign_submission.v1
+    aliases: []
+    requires_benchmark_artifacts: false
+  auxme-slurm-reliable-submit:
+    description: Submit issue-791 style Auxme SLURM jobs with explicit config, live partition pressure
+      checks, and max-time-safe wrapper routing.
+    category: slurm
+    kind: atomic
+    phase: implementation
+    requires_write: true
+    requires_slurm: true
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    - slurm
+    - uv
+    delegates_to:
+    - auxme-issue791-submit
+    output_schema: skill_run_summary.v1
+    aliases:
+    - auxme-issue791-reliable-submit
+  benchmark-overview:
+    description: Fast benchmark-faithful orientation for scenario splits, baselines, metrics, artifacts,
+      and reproducibility constraints in robot_sf_ll7.
+    category: benchmark-evidence
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: true
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  benchmark-row-status:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    description: Classify benchmark campaign rows under the fail-closed policy so fallback or degraded
+      execution never counts as successful evidence.
+    category: benchmark-evidence
+    kind: policy
+    phase: analysis
+    requires_write: false
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    delegates_to: []
+    output_schema: benchmark_row_status.v1
+    aliases: []
+    requires_slurm: false
+  carla-replay-parity:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Review CARLA replay parity evidence with scenario, replay, metric, and limitation tracking.
+    category: campaign-analysis
+    kind: analysis
+    phase: analysis
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - benchmark-row-status
+    - artifact-provenance
+    - evidence-synthesis
+    output_schema: benchmark_analysis_summary.v1
+    aliases: []
+    requires_slurm: false
+  clean-up:
+    description: Clean up the current branch in the Robot SF repo by following docs/dev_guide.md and reusable
+      scripts/dev commands; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest
+      before sharing changes.
+    category: validation
+    kind: atomic
+    phase: verification
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  context-map:
+    description: Generate a focused repository context map before multi-file changes; use when you need
+      to identify the relevant files, docs, commands, and risks.
+    category: context-docs
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  context-note-maintainer:
+    description: Create or refresh linked docs/context notes so reusable agent knowledge stays discoverable,
+      current, and easy to hand off.
+    category: context-docs
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  data-staging-provenance:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Stage external datasets and assets with checksum, license, raw-file, derived-file, and
+      benchmark-readiness provenance.
+    category: benchmark-evidence
+    kind: atomic
+    phase: planning
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - artifact-provenance
+    output_schema: data_staging_summary.v1
+    aliases: []
+    requires_slurm: false
+  evidence-synthesis:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Synthesize multiple issues, configs, seeds, metrics, and artifacts into conservative
+      mechanism-level conclusions with caveats.
+    category: benchmark-evidence
+    kind: analysis
+    phase: analysis
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - artifact-provenance
+    - benchmark-row-status
+    - paper-facing-docs
+    output_schema: evidence_synthesis_summary.v1
+    aliases: []
+    requires_slurm: false
+  experiment-context:
+    description: Find the canonical config-first training or evaluation path, artifact lineage, and validation
+      gates for a concrete experiment task in robot_sf_ll7.
+    category: context-docs
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  gh-issue-autopilot:
+    description: Autonomous issue-to-PR workflow from next eligible issue to draft PR with consistent
+      metadata handling.
+    category: github-issue
+    kind: orchestrator
+    phase: implementation
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: true
+      github_project: true
+      github_pr: true
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to:
+    - gh-issue-sequencer
+    - implementation-verification
+    - pr-ready-check
+    - gh-pr-opener
+    - artifact-provenance
+    output_schema: issue_to_pr_summary.v1
+    aliases:
+    - issue-to-pr
+    - gh-issue-to-pr
+  gh-issue-clarifier:
+    description: Clarify ambiguous GitHub issues by tightening scope and acceptance criteria, proposing
+      solution options with pros/cons, and marking decision-required issues when maintainer input is needed.
+    category: github-issue
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: true
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  gh-issue-creator:
+    description: 'Create structured GitHub issues from vague prompts using repo templates, conservative
+      assumptions, and Project #5 metadata.'
+    category: github-issue
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: true
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  gh-issue-priority-assessor:
+    description: 'LLM-backed review workflow for Project #5 priority inputs; assess plausibility, propose
+      values with uncertainty, and optionally apply explicit opt-in updates.'
+    category: github-issue
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: true
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  gh-issue-sequencer:
+    description: 'Maintain a clear next-work queue in GitHub Project #5 by normalizing issue status, priority,
+      and execution order.'
+    category: github-issue
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: true
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  gh-issue-template-auditor:
+    description: Review existing GitHub issues against the repo's issue-template contract and repair underspecified
+      issues when the fix is clear.
+    category: github-issue
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: true
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  gh-pr-comment-fixer:
+    description: Fix GitHub PR review comments with branch-safe edits, validation, and explicit thread
+      resolution.
+    category: github-pr
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: false
+      github_project: false
+      github_pr: true
+      filesystem: true
+    requires:
+    - gh
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  gh-pr-opener:
+    description: Open a conservative Robot SF PR with scope verification, freshness checks, and artifact
+      discipline.
+    category: github-pr
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: false
+      github_project: false
+      github_pr: true
+      filesystem: true
+    requires:
+    - gh
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  goal-issue-discovery:
+    description: Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities
+      and creates evidence-graded GitHub issues; not for implementation.
+    category: github-issue
+    kind: orchestrator
+    phase: analysis
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: true
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to:
+    - gh-issue-creator
+    - gh-issue-sequencer
+    - gh-issue-priority-assessor
+    - agentic-eval
+    - auto-improvement
+    - autoresearch
+    - context-map
+    output_schema: skill_run_summary.v1
+    aliases:
+    - issue-discovery
+  goal-issue-implementation:
+    description: Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues,
+      implements one scoped issue at a time, validates, pushes, and opens PRs.
+    category: github-issue
+    kind: orchestrator
+    phase: implementation
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: true
+      github_project: true
+      github_pr: true
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to:
+    - gh-issue-sequencer
+    - gh-issue-autopilot
+    - implementation-verification
+    - pr-ready-check
+    - gh-pr-opener
+    - gh-issue-creator
+    - context-note-maintainer
+    output_schema: issue_to_pr_summary.v1
+    aliases:
+    - issue-queue-runner
+  goal-pr-review:
+    description: Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates
+      proof, resolves review threads, and applies merge-ready; not for merging.
+    category: github-pr
+    kind: orchestrator
+    phase: verification
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: true
+      github_project: true
+      github_pr: true
+      filesystem: true
+    requires:
+    - gh
+    - git
+    delegates_to:
+    - implementation-verification
+    - pr-ready-check
+    - gh-pr-comment-fixer
+    - review-benchmark-change
+    - gh-issue-creator
+    - context-note-maintainer
+    output_schema: skill_run_summary.v1
+    aliases:
+    - pr-review-runner
+  hybrid-learning-component-eval:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Evaluate hybrid-learning components with mechanism-level evidence tables, config provenance,
+      and claim boundaries.
+    category: campaign-analysis
+    kind: analysis
+    phase: analysis
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - artifact-provenance
+    - benchmark-row-status
+    - evidence-synthesis
+    output_schema: evidence_synthesis_summary.v1
+    aliases: []
+    requires_slurm: false
+  implementation-verification:
+    description: Verify branch changes against origin/main with claim-based evidence, not only test status.
+    category: validation
+    kind: atomic
+    phase: verification
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  issue-audit:
+    description: User-in-the-loop open-issue audit that asks one readiness-blocking question at a time
+      and updates issues as decisions are made.
+    category: github-issue
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: true
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  issue-contract-maintainer:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Maintain GitHub issue contracts through template audits, ambiguity clarification, and
+      user-decision application.
+    category: github-issue
+    kind: orchestrator
+    phase: planning
+    requires_write: true
+    requires:
+    - gh
+    - git
+    - project5
+    delegates_to:
+    - gh-issue-clarifier
+    - gh-issue-template-auditor
+    - issue-audit
+    output_schema: skill_run_summary.v1
+    aliases:
+    - issue-contract-audit
+    - issue-clarification
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+  oracle-imitation-campaign:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Analyze oracle-imitation campaign outputs with lineage, dataset, checkpoint, metric,
+      and caveat discipline.
+    category: campaign-analysis
+    kind: analysis
+    phase: analysis
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - artifact-provenance
+    - benchmark-row-status
+    - evidence-synthesis
+    output_schema: benchmark_analysis_summary.v1
+    aliases: []
+    requires_slurm: false
+  paper-facing-docs:
+    description: Draft or review benchmark and manuscript-support docs conservatively, with explicit provenance,
+      reproducibility, and caveat handling.
+    category: benchmark-evidence
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: true
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  planner-integration:
+    description: Assess planner-family integration feasibility, adapter burden, provenance safety, and
+      benchmark-readiness boundaries in robot_sf_ll7.
+    category: benchmark-evidence
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: true
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  pr-ready-check:
+    description: Run the repository PR readiness pipeline using shared scripts/dev entry points (ruff
+      fix/format, parallel tests, coverage, and docstring checks).
+    category: validation
+    kind: atomic
+    phase: verification
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  predictive-planner-comparison:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Compare predictive planner v2 runs against baseline planners with config, seed, artifact,
+      and failure-mode discipline.
+    category: campaign-analysis
+    kind: analysis
+    phase: analysis
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - benchmark-row-status
+    - artifact-provenance
+    - evidence-synthesis
+    output_schema: benchmark_analysis_summary.v1
+    aliases: []
+    requires_slurm: false
+  quality-playbook:
+    description: Repo-wide proof-first workflow for non-trivial changes with context, risk, validation,
+      and follow-through.
+    category: validation
+    kind: policy
+    phase: verification
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases:
+    - quality-strategy
+    - proof-policy
+  review-and-refactor:
+    description: Surgical review-then-refactor workflow for small code or docs changes; use when a task
+      needs inspection before a narrow improvement.
+    category: validation
+    kind: atomic
+    phase: verification
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  review-benchmark-change:
+    description: Review benchmark-sensitive code or docs changes for semantic regressions, normalization
+      drift, reproducibility gaps, and provenance overclaim.
+    category: benchmark-evidence
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: true
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  skill-picker:
+    description: Choose the most appropriate repo-local skill for an ambiguous task by consulting .agents/skills/README.md.
+    category: context-docs
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  slurm-campaign-submit:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Submit generic SLURM campaigns with preflight, config provenance, job metadata, artifact
+      expectations, and failure classification.
+    category: slurm
+    kind: atomic
+    phase: implementation
+    requires_write: true
+    requires_slurm: true
+    requires:
+    - git
+    - slurm
+    - uv
+    delegates_to:
+    - artifact-provenance
+    output_schema: campaign_submission.v1
+    aliases: []
+    requires_benchmark_artifacts: false
+  svg-inspection:
+    description: Inspect and debug SVG maps for parser-facing issues using reusable Robot SF helpers.
+    category: domain-utility
+    kind: atomic
+    phase: analysis
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    - uv
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  trace-mechanism-review:
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    description: Review exact planner/scenario/seed/episode traces and videos without overgeneralizing
+      from qualitative samples.
+    category: campaign-analysis
+    kind: analysis
+    phase: analysis
+    requires_write: true
+    requires_benchmark_artifacts: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - artifact-provenance
+    - evidence-synthesis
+    output_schema: trace_mechanism_summary.v1
+    aliases: []
+    requires_slurm: false
+  update-docs-on-code-change:
+    description: Keep docs aligned with code changes that affect workflows, contracts, or user-facing
+      behavior.
+    category: context-docs
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
+  what-context-needed:
+    description: Ask for the minimum repository context needed to answer or implement a task safely.
+    category: context-docs
+    kind: atomic
+    phase: context
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases:
+    - context-unblocker

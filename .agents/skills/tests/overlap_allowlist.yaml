@@ -1,0 +1,10 @@
+overlap_allowlist:
+- skills:
+  - clean-up
+  - pr-ready-check
+  reason: cleanup mutates branch hygiene; readiness gate proves final state
+- skills:
+  - issue-contract-maintainer
+  - gh-issue-clarifier
+  reason: legacy compatibility entry point delegates to consolidated issue contract
+    maintenance

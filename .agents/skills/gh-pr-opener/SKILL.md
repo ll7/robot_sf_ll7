@@ -1,6 +1,14 @@
 ---
 name: gh-pr-opener
-description: "Open a conservative Robot SF PR with scope verification, freshness checks, and artifact discipline."
+description: Open a conservative Robot SF PR with scope verification, freshness checks, and artifact discipline.
+category: github-pr
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # GH PR Opener
@@ -57,3 +65,18 @@ Freshness check:
 - freshness evidence source,
 - artifact decision,
 - follow-up issues created.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.
+
+
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.
+
+
+## Output
+
+Return the schema named by the `output_schema` frontmatter field, or a compact equivalent when the caller does not require YAML.

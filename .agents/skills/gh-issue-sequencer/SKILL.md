@@ -1,6 +1,15 @@
 ---
 name: gh-issue-sequencer
-description: "Maintain a clear next-work queue in GitHub Project #5 by normalizing issue status, priority, and execution order."
+description: 'Maintain a clear next-work queue in GitHub Project #5 by normalizing issue status, priority,
+  and execution order.'
+category: github-issue
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # GH Issue Sequencer
@@ -46,3 +55,6 @@ one-pass sequencing metadata writes.
 - Status and priority changes applied.
 - Unresolved blockers and next candidate issue.
 - Whether final score sync completed.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

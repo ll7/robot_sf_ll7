@@ -1,6 +1,16 @@
 ---
 name: clean-up
-description: "Clean up the current branch in the Robot SF repo by following docs/dev_guide.md and reusable scripts/dev commands; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest before sharing changes."
+description: Clean up the current branch in the Robot SF repo by following docs/dev_guide.md and reusable
+  scripts/dev commands; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest before
+  sharing changes.
+category: validation
+kind: atomic
+phase: verification
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Clean Up
@@ -41,3 +51,6 @@ parallel tests, and diff-based quality gates.
 - Commands executed and pass/fail status.
 - List of remaining failures and the decision (fix, defer, investigate).
 - Remaining follow-up tasks before merge-ready handoff.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

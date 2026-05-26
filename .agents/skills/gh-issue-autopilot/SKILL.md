@@ -1,6 +1,23 @@
 ---
 name: gh-issue-autopilot
-description: "Autonomous issue-to-PR workflow from next eligible issue to draft PR with consistent metadata handling."
+description: Autonomous issue-to-PR workflow from next eligible issue to draft PR with consistent metadata
+  handling.
+category: github-issue
+kind: orchestrator
+phase: implementation
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to:
+- gh-issue-sequencer
+- implementation-verification
+- pr-ready-check
+- gh-pr-opener
+- artifact-provenance
+output_schema: issue_to_pr_summary.v1
+aliases:
+- issue-to-pr
+- gh-issue-to-pr
 ---
 
 # GH Issue Autopilot
@@ -26,11 +43,8 @@ Choose the next issue in order:
 3. Project status `Tracked`
 4. Explicit user-requested issue
 
-Within the same status, prefer higher Project `Priority` (`Very High` to `Very Low`) before the
-remaining tie-breakers.
-Tie-breakers: no blocker labels, no linked PR, older open issue first, stronger evidence first.
-Within the same status, prefer higher Project #5 Priority (`Very High`, `High`, `Medium`, `Low`,
-then `Very Low`) before the remaining tie-breakers.
+Within the same status, use `gh-issue-sequencer` as the source of truth for Project #5 ordering.
+Tie-breakers after sequencing: no blocker labels, no linked PR, older open issue first, stronger evidence first.
 
 ## Workflow
 
@@ -71,3 +85,13 @@ Emit:
 - artifact classification decision,
 - follow-up issues created,
 - final PR URL or blocker reason.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.
+
+
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

@@ -1,6 +1,24 @@
 ---
 name: goal-issue-implementation
-description: "Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements one scoped issue at a time, validates, pushes, and opens PRs."
+description: Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements
+  one scoped issue at a time, validates, pushes, and opens PRs.
+category: github-issue
+kind: orchestrator
+phase: implementation
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to:
+- gh-issue-sequencer
+- gh-issue-autopilot
+- implementation-verification
+- pr-ready-check
+- gh-pr-opener
+- gh-issue-creator
+- context-note-maintainer
+output_schema: issue_to_pr_summary.v1
+aliases:
+- issue-queue-runner
 ---
 
 # Goal Issue Implementation
@@ -176,3 +194,18 @@ For each issue completed or stopped, report:
 - PR URL when opened,
 - follow-up issues,
 - blocker and next action.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.
+
+
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.
+
+
+## Output
+
+Return the schema named by the `output_schema` frontmatter field, or a compact equivalent when the caller does not require YAML.

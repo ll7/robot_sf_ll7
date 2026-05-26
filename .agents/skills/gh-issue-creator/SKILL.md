@@ -1,6 +1,15 @@
 ---
 name: gh-issue-creator
-description: "Create structured GitHub issues from vague prompts using repo templates, conservative assumptions, and Project #5 metadata."
+description: 'Create structured GitHub issues from vague prompts using repo templates, conservative assumptions,
+  and Project #5 metadata.'
+category: github-issue
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # GH Issue Creator
@@ -55,3 +64,6 @@ execution.
 - Issue URL.
 - Final labels, project fields touched, and any batch routing actions queued.
 - Explicit assumptions and unresolved metadata updates, if any.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

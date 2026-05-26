@@ -1,0 +1,34 @@
+expected_stacks:
+  issue_to_pr:
+  - gh-issue-sequencer
+  - gh-issue-autopilot
+  - implementation-verification
+  - pr-ready-check
+  - gh-pr-opener
+  benchmark_analysis:
+  - benchmark-row-status
+  - artifact-provenance
+  - evidence-synthesis
+  slurm_campaign:
+  - slurm-campaign-submit
+  - artifact-provenance
+  adversarial_search_campaign:
+  - adversarial-search-campaign
+  - benchmark-row-status
+  - artifact-provenance
+  - evidence-synthesis
+  data_staging:
+  - data-staging-provenance
+  - artifact-provenance
+  - context-note-maintainer
+  auxme_issue791_submit:
+  - auxme-issue791-submit
+  - slurm-campaign-submit
+  - artifact-provenance
+  campaign_analysis:
+  - benchmark-row-status
+  - artifact-provenance
+  - evidence-synthesis
+  negative_cleanup:
+  - clean-up
+  - pr-ready-check

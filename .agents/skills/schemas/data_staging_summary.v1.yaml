@@ -1,0 +1,9 @@
+dataset: name
+source_url: url
+license: string
+checksums:
+- path: path
+  sha256: hash
+raw_files_tracked: false
+derived_status: benchmark_ready | exploratory_only
+artifact_classification: string

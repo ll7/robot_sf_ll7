@@ -1,6 +1,24 @@
 ---
 name: goal-issue-discovery
-description: "Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities and creates evidence-graded GitHub issues; not for implementation."
+description: Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities
+  and creates evidence-graded GitHub issues; not for implementation.
+category: github-issue
+kind: orchestrator
+phase: analysis
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to:
+- gh-issue-creator
+- gh-issue-sequencer
+- gh-issue-priority-assessor
+- agentic-eval
+- auto-improvement
+- autoresearch
+- context-map
+output_schema: skill_run_summary.v1
+aliases:
+- issue-discovery
 ---
 
 # Goal Issue Discovery
@@ -130,3 +148,13 @@ For benchmark or planner issues, use `review-benchmark-change` semantics before 
 - duplicates intentionally avoided,
 - Project #5 writes + score-sync status,
 - deferred/blocked candidates and race failures.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.
+
+
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

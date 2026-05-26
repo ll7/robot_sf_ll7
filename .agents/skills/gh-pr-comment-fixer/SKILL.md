@@ -1,6 +1,14 @@
 ---
 name: gh-pr-comment-fixer
-description: "Fix GitHub PR review comments with branch-safe edits, validation, and explicit thread resolution."
+description: Fix GitHub PR review comments with branch-safe edits, validation, and explicit thread resolution.
+category: github-pr
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Gh Pr Comment Fixer
@@ -47,3 +55,18 @@ Use this on a writable PR branch when actionable review feedback exists.
 - commit SHA pushed,
 - resolved thread IDs,
 - remaining open threads/blockers.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.
+
+
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.
+
+
+## Output
+
+Return the schema named by the `output_schema` frontmatter field, or a compact equivalent when the caller does not require YAML.

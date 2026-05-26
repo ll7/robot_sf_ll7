@@ -171,8 +171,8 @@ def _is_ego_conditioned_feature_schema(
         return True
     if not isinstance(feature_schema, dict):
         return False
-    schema_name = str(feature_schema.get("name", "")).strip()
-    base_schema = str(feature_schema.get("base_schema", "")).strip()
+    schema_name = str(feature_schema.get("name") or "").strip()
+    base_schema = str(feature_schema.get("base_schema") or "").strip()
     return PREDICTIVE_EGO_FEATURE_SCHEMA in {schema_name, base_schema}
 
 
@@ -236,7 +236,7 @@ def _write_producer_metadata_preflight_report(
     status = "ok"
     failure_reason = None
     failing_datasets = [
-        role for role, payload in datasets.items() if str(payload.get("status")) == "failed"
+        role for role, payload in datasets.items() if str(payload.get("status") or "") == "failed"
     ]
     if failing_datasets:
         status = "failed"
@@ -296,7 +296,7 @@ def _obstacle_feature_preflight(dataset_path: Path) -> dict[str, Any]:
         state = np.asarray(raw["state"], dtype=np.float32)
         mask = np.asarray(raw["mask"], dtype=np.float32)
         feature_schema = _load_feature_schema_metadata(raw)
-    schema_name = str(feature_schema.get("name", "")).strip()
+    schema_name = str(feature_schema.get("name") or "").strip()
     report: dict[str, Any] = {
         "dataset_path": str(dataset_path),
         "feature_schema": feature_schema,
@@ -383,7 +383,7 @@ def _write_obstacle_preflight_report(
     """Write compact obstacle-row preflight evidence for pipeline handoff."""
     status = "ok"
     failing_datasets = [
-        role for role, payload in datasets.items() if str(payload.get("status")) == "failed"
+        role for role, payload in datasets.items() if str(payload.get("status") or "") == "failed"
     ]
     if failing_datasets:
         status = "failed"
@@ -770,7 +770,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "hardcase": _predictive_feature_dataset_report(paths.hardcase_dataset),
         },
     )
-    if str(producer_preflight_payload.get("status")) == "failed":
+    if str(producer_preflight_payload.get("status") or "") == "failed":
         base_reason = str(
             producer_preflight_payload["datasets"]["base"].get("failure_reason") or ""
         ).strip()
@@ -844,7 +844,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "base_dataset": str(paths.base_dataset),
             "hardcase_dataset": str(paths.hardcase_dataset),
             "producer_metadata_preflight_report": str(paths.producer_preflight_report),
-            "producer_metadata_preflight_status": str(producer_preflight_payload.get("status")),
+            "producer_metadata_preflight_status": str(
+                producer_preflight_payload.get("status") or ""
+            ),
             "producer_metadata_preflight": producer_preflight_payload,
         },
     )

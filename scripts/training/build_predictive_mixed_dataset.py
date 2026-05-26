@@ -64,8 +64,8 @@ def _is_ego_conditioned_schema(
         return True
     if not isinstance(feature_schema, dict):
         return False
-    schema_name = str(feature_schema.get("name", "")).strip()
-    base_schema = str(feature_schema.get("base_schema", "")).strip()
+    schema_name = str(feature_schema.get("name") or "").strip()
+    base_schema = str(feature_schema.get("base_schema") or "").strip()
     return PREDICTIVE_EGO_FEATURE_SCHEMA in {schema_name, base_schema}
 
 

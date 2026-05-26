@@ -611,7 +611,7 @@ def validate_predictive_feature_schema_metadata(
     """Fail closed when predictive feature metadata and input dimensions disagree."""
     if not isinstance(metadata, dict):
         raise ObstacleFeatureSchemaError("Predictive feature schema metadata must be a mapping")
-    schema_name = str(metadata.get("name", "")).strip()
+    schema_name = str(metadata.get("name") or "").strip()
     if expected_schema_name is not None and schema_name != str(expected_schema_name):
         raise ObstacleFeatureSchemaError(
             "Predictive feature schema mismatch: "

@@ -3813,7 +3813,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """Reject explicit standalone-producer checkpoints against runtime speed semantics."""
         if not isinstance(feature_schema, dict):
             return
-        base_schema = str(feature_schema.get("base_schema", "")).strip()
+        base_schema = str(feature_schema.get("base_schema") or "").strip()
         if base_schema != PREDICTIVE_EGO_FEATURE_SCHEMA:
             return
         actual_producer = predictive_ego_motion_channel_producer_key(feature_schema)
@@ -3821,7 +3821,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return
         expected_producer = predictive_ego_motion_channel_producer_key(
             predictive_feature_schema_metadata(
-                model_family=str(feature_schema.get("name", "")),
+                model_family=str(feature_schema.get("name") or ""),
                 ego_conditioning=True,
                 ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
             )

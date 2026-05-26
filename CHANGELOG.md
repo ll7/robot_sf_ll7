@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Updated the issue-1519 predictive ego-feature contract so ego-conditioned schema metadata now
+  records a machine-readable motion-channel producer key for same-seed/runtime vs standalone
+  collection, and runtime inference rejects explicit standalone-producer checkpoints instead of
+  silently treating mixed producer rows as equivalent.
+* Tightened the issue-1519 mixed predictive dataset flow so ego-conditioned base/hardcase inputs now
+  fail closed on missing or mismatched producer metadata before mixing/training, and successful
+  mixed NPZ outputs preserve `feature_schema_json` producer provenance instead of silently dropping
+  it.
 * Implemented the issue-1187 render-helper slice: `capture_frames()` now samples real RGB frame
   buffers or one direct render result, `generate_video_contact_sheet.py` writes deterministic PNG
   contact sheets from episode frame metadata, and the helper catalog documents the supported

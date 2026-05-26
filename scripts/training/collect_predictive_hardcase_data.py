@@ -16,6 +16,7 @@ from robot_sf.benchmark.map_runner import _build_env_config
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
@@ -55,6 +56,7 @@ def _effective_predictive_feature_schema(
     return predictive_feature_schema_metadata(
         model_family=effective_family,
         ego_conditioning=bool(ego_conditioning),
+        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
     )
 
 

@@ -6,6 +6,8 @@ import torch
 
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     ObstacleFeatureSchemaError,
     predictive_feature_schema_metadata,
@@ -161,4 +163,26 @@ def test_predictive_schema_validation_rejects_legacy_name_with_ego_dimension() -
         predictive_feature_schema_metadata(model_family=PREDICTIVE_EGO_FEATURE_SCHEMA),
         input_dim=9,
         expected_schema_name=PREDICTIVE_EGO_FEATURE_SCHEMA,
+    )
+
+
+def test_predictive_schema_metadata_records_ego_motion_producers() -> None:
+    """Ego-conditioned schema metadata should encode the active motion-channel producer."""
+    ego_schema = predictive_feature_schema_metadata(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+    )
+    ego_obstacle_schema = predictive_feature_schema_metadata(
+        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        ego_conditioning=True,
+        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    )
+
+    assert ego_schema["ego_motion_channel_producer"]["producer_key"] == (
+        PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE
+    )
+    assert ego_obstacle_schema["base_schema"] == PREDICTIVE_EGO_FEATURE_SCHEMA
+    assert ego_obstacle_schema["input_dim"] == 15
+    assert ego_obstacle_schema["ego_motion_channel_producer"]["producer_key"] == (
+        PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME
     )

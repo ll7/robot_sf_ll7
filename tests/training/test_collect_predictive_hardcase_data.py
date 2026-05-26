@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 
 from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
 )
@@ -66,6 +68,23 @@ def test_hardcase_effective_schema_tracks_ego_obstacle_width() -> None:
     assert schema["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
     assert schema["base_feature_dim"] == 9
     assert schema["input_dim"] == 15
+    assert schema["ego_motion_channel_producer"]["producer_key"] == (
+        PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME
+    )
+
+
+def test_hardcase_ego_schema_records_runtime_motion_producer() -> None:
+    """Hardcase ego metadata should label the runtime-aligned speed producer."""
+    schema = collect._effective_predictive_feature_schema(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        ego_conditioning=True,
+    )
+
+    assert schema["name"] == PREDICTIVE_EGO_FEATURE_SCHEMA
+    assert schema["input_dim"] == 9
+    assert schema["ego_motion_channel_producer"]["producer_key"] == (
+        PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME
+    )
 
 
 def test_hardcase_effective_schema_treats_none_model_family_as_legacy() -> None:

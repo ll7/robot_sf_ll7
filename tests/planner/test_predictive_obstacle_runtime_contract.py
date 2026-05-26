@@ -9,6 +9,8 @@ import numpy as np
 
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     ObstacleFeatureSchemaError,
     predictive_feature_schema_metadata,
@@ -56,6 +58,45 @@ def test_prediction_planner_adapter_fails_closed_on_schema_mismatch(tmp_path: Pa
         adapter._build_model()
     except ObstacleFeatureSchemaError as exc:
         assert "Predictive feature schema mismatch" in str(exc)
+    else:  # pragma: no cover - defensive assertion style for clearer failure
+        raise AssertionError("expected ObstacleFeatureSchemaError")
+
+
+def test_prediction_planner_adapter_rejects_standalone_ego_motion_checkpoint(
+    tmp_path: Path,
+) -> None:
+    """Runtime should fail closed when explicit standalone ego-motion metadata reaches inference."""
+    checkpoint = tmp_path / "predictive_ego_standalone.pt"
+    cfg = PredictiveModelConfig(
+        max_agents=3,
+        horizon_steps=2,
+        input_dim=9,
+        hidden_dim=16,
+        message_passing_steps=1,
+        feature_schema_name=PREDICTIVE_EGO_FEATURE_SCHEMA,
+    )
+    save_predictive_checkpoint(
+        checkpoint,
+        model=PredictiveTrajectoryModel(cfg),
+        optimizer=None,
+        epoch=1,
+        feature_schema_metadata=predictive_feature_schema_metadata(
+            model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+            ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+        ),
+    )
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(
+            predictive_checkpoint_path=str(checkpoint),
+            predictive_feature_schema_name=PREDICTIVE_EGO_FEATURE_SCHEMA,
+            predictive_ego_conditioning=True,
+        )
+    )
+
+    try:
+        adapter._build_model()
+    except ObstacleFeatureSchemaError as exc:
+        assert "ego motion producer mismatch" in str(exc)
     else:  # pragma: no cover - defensive assertion style for clearer failure
         raise AssertionError("expected ObstacleFeatureSchemaError")
 

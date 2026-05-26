@@ -9,7 +9,8 @@ Related issues: [Issue #1504](https://github.com/ll7/robot_sf_ll7/issues/1504),
 The `predictive_ego_v1` 9D row shape is already wired through the predictive planner stack, but
 the code paths do not currently populate channels [4:6] with one identical semantic payload.
 This note documents the current implementation rather than inventing a cleaner contract than the
-code actually provides.
+code actually provides. Issue #1519 keeps that producer-specific behavior and requires
+machine-readable producer metadata whenever ego-conditioned rows are serialized or compared.
 
 Current producer behavior:
 
@@ -37,6 +38,19 @@ those two channels.
   `scripts/training/collect_predictive_planner_data.py` (`_frames_to_samples`)
   `scripts/training/collect_predictive_hardcase_data.py`
 
+## Producer Metadata Policy
+
+Issue #1519 adds a machine-readable `ego_motion_channel_producer` object to ego-conditioned schema
+metadata. The stable producer keys are:
+
+| Producer key | Path(s) | Slots [4:6] source | Comparison rule |
+| --- | --- | --- | --- |
+| `same_seed_hardcase_runtime_robot_speed_v1` | same-seed hardcase collection, runtime inference | `robot.speed -> (linear_speed, angular_speed)` | Comparable only to rows with the same producer key |
+| `standalone_rollout_velocity_xy_preferred_v1` | standalone rollout collection | `robot.velocity_xy` when present, else `robot.speed` | Not equivalent to same-seed/runtime rows without an explicit caveat |
+
+This metadata is provenance, not a benchmark-improvement claim. It prevents future reports or
+preflights from treating mixed-producer rows as identical just because they share the same width.
+
 ## Feature Layout (`predictive_ego_v1`, input_dim=9)
 
 Per-agent feature vector in robot ego frame, shape `(max_agents, 9)`, dtype `float32`:
@@ -57,9 +71,9 @@ Per-agent feature vector in robot ego frame, shape `(max_agents, 9)`, dtype `flo
 
 | Path | Channel 4 | Channel 5 | Why it matters |
 | --- | --- | --- | --- |
-| `scripts/training/collect_predictive_hardcase_data.py` | `robot.speed[0]` (`linear_speed`) | `robot.speed[1]` (`angular_speed`) | This is the collection path used by the committed Issue #1504 same-seed configs |
-| `robot_sf/planner/socnav.py::_build_model_input` | `robot.speed[0]` (`linear_speed`) | `robot.speed[1]` (`angular_speed`) | This keeps training/runtime semantics aligned for the same-seed path |
-| `scripts/training/collect_predictive_planner_data.py` | `robot.velocity_xy[0]` when present, else `robot.speed[0]` | `robot.velocity_xy[1]` when present, else `robot.speed[1]` | This standalone collector is not the same-seed training path and should not be used to reinterpret the committed same-seed configs |
+| `scripts/training/collect_predictive_hardcase_data.py` | `robot.speed[0]` (`linear_speed`) | `robot.speed[1]` (`angular_speed`) | Producer key `same_seed_hardcase_runtime_robot_speed_v1`; this is the collection path used by the committed Issue #1504 same-seed configs |
+| `robot_sf/planner/socnav.py::_build_model_input` | `robot.speed[0]` (`linear_speed`) | `robot.speed[1]` (`angular_speed`) | Producer key `same_seed_hardcase_runtime_robot_speed_v1`; runtime now rejects explicit standalone-producer checkpoints |
+| `scripts/training/collect_predictive_planner_data.py` | `robot.velocity_xy[0]` when present, else `robot.speed[0]` | `robot.velocity_xy[1]` when present, else `robot.speed[1]` | Producer key `standalone_rollout_velocity_xy_preferred_v1`; this standalone collector is not the same-seed training path |
 
 ### Normalization
 
@@ -82,6 +96,8 @@ directly.
 - Features [0:4] are in **robot ego frame** (rotated by robot heading).
 - Features [4:6] are **producer-dependent today**. The same-seed collection/runtime path uses
   `robot.speed`; the standalone collector uses `robot.velocity_xy` when available.
+- Ego-conditioned schema metadata must carry `ego_motion_channel_producer`. Mixed producer keys are
+  not directly comparable without an explicit provenance caveat.
 - Features [6:8] are in **robot ego frame**.
 - Feature [8] is a **scalar** (world-frame distance).
 
@@ -225,7 +241,6 @@ Issue #1507 (transfer analysis) should:
 - Compare forecast-to-control transfer across the four variants.
 - Keep ADE/FDE and navigation metrics separate in the report.
 
-Issue [#1519](https://github.com/ll7/robot_sf_ll7/issues/1519) should:
-- Decide whether slots [4:6] stay producer-specific or converge on one motion-channel source.
-- Add producer metadata or tests before future work mixes standalone collection with the
-  same-seed/runtime path.
+Issue [#1519](https://github.com/ll7/robot_sf_ll7/issues/1519) now records producer-specific
+metadata and adds a narrow runtime mismatch guard. A future follow-up can still decide whether
+slots [4:6] should converge on one motion-channel source instead of remaining producer-specific.

@@ -291,7 +291,9 @@ def _validate_semantics(
             "timeout",
             "cannot be true when low_progress is already true for the same row",
         )
-    if row_status == "degraded" and all(value is None for value in (*outcomes.values(), min_distance)):
+    if row_status == "degraded" and all(
+        value is None for value in (*outcomes.values(), min_distance)
+    ):
         _append_problem(
             warnings,
             "status",

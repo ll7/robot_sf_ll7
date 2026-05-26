@@ -2,15 +2,28 @@
 
 Related issues: [Issue #1504](https://github.com/ll7/robot_sf_ll7/issues/1504),
 [Issue #1490](https://github.com/ll7/robot_sf_ll7/issues/1490),
-[Issue #1427](https://github.com/ll7/robot_sf_ll7/issues/1427).
+[Issue #1427](https://github.com/ll7/robot_sf_ll7/issues/1427),
+[Issue #1519](https://github.com/ll7/robot_sf_ll7/issues/1519),
+[Issue #1537](https://github.com/ll7/robot_sf_ll7/issues/1537).
 
 ## Decision
 
 The `predictive_ego_v1` 9D row shape is already wired through the predictive planner stack, but
 the code paths do not currently populate channels [4:6] with one identical semantic payload.
-This note documents the current implementation rather than inventing a cleaner contract than the
-code actually provides. Issue #1519 keeps that producer-specific behavior and requires
-machine-readable producer metadata whenever ego-conditioned rows are serialized or compared.
+Issue #1537 records the conservative long-term policy decision to **keep producer-specific
+semantics** instead of rewriting all paths to one unified source today.
+
+Rationale:
+
+- The current producers reflect different real collection/runtime data paths rather than an
+  incidental implementation mismatch.
+- Reinterpreting existing datasets or checkpoints as `robot.speed`-only or
+  `robot.velocity_xy`-only would silently change the meaning of already-collected artifacts.
+- Issue #1519 already established machine-readable producer metadata plus fail-closed validation as
+  the compatibility contract.
+
+This note therefore documents the current implementation and the selected long-term policy rather
+than inventing a cleaner contract than the code actually provides.
 
 Current producer behavior:
 
@@ -41,7 +54,8 @@ those two channels.
 ## Producer Metadata Policy
 
 Issue #1519 adds a machine-readable `ego_motion_channel_producer` object to ego-conditioned schema
-metadata. The stable producer keys are:
+metadata. Issue #1537 keeps that metadata as the long-term policy surface. The stable producer keys
+are:
 
 | Producer key | Path(s) | Slots [4:6] source | Comparison rule |
 | --- | --- | --- | --- |
@@ -50,6 +64,30 @@ metadata. The stable producer keys are:
 
 This metadata is provenance, not a benchmark-improvement claim. It prevents future reports or
 preflights from treating mixed-producer rows as identical just because they share the same width.
+
+### Mixed-producer comparison and reporting policy
+
+- Mixed producer keys are **not directly comparable/equivalent** for benchmark or report rows.
+- Comparison/report tooling must either group rows by the same `producer_key` or carry an explicit
+  caveat that the ego motion slots came from different producers.
+- Same-seed/runtime rows remain aligned to
+  `same_seed_hardcase_runtime_robot_speed_v1`.
+- Standalone rollout rows remain aligned to
+  `standalone_rollout_velocity_xy_preferred_v1`.
+
+### Existing validator behavior
+
+- Mixed-dataset validation fails closed when ego-conditioned inputs disagree on
+  `ego_motion_channel_producer.producer_key`, or when one ego-conditioned input omits schema
+  metadata entirely (`tests/training/test_build_predictive_mixed_dataset.py`).
+- Runtime loading fails closed when a checkpoint explicitly declares the standalone producer for an
+  ego-conditioned runtime path that expects the same-seed/runtime producer
+  (`tests/planner/test_predictive_obstacle_runtime_contract.py`).
+- Schema metadata keeps an explicit comparability contract:
+  `group=predictive_ego_motion_slots_v1`,
+  `same_producer_key_required=True`, and
+  `mixed_producer_status=not_comparable_without_caveat`
+  (`tests/test_predictive_model.py`).
 
 ## Feature Layout (`predictive_ego_v1`, input_dim=9)
 
@@ -222,6 +260,13 @@ for path in configs/training/predictive/predictive_same_seed_issue_1427_base_see
     [ -f "$path" ] && echo "OK: $path" || echo "MISSING: $path"
 done
 
+# Issue #1537 proof path
+uv run pytest tests/test_predictive_model.py \
+    tests/training/test_build_predictive_mixed_dataset.py \
+    tests/training/test_collect_predictive_planner_data.py \
+    tests/training/test_collect_predictive_hardcase_data.py \
+    tests/planner/test_predictive_obstacle_runtime_contract.py
+
 # Diff/doc proof checks for the issue-scoped patch
 git --no-pager diff --check origin/main...HEAD
 BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
@@ -241,6 +286,7 @@ Issue #1507 (transfer analysis) should:
 - Compare forecast-to-control transfer across the four variants.
 - Keep ADE/FDE and navigation metrics separate in the report.
 
-Issue [#1519](https://github.com/ll7/robot_sf_ll7/issues/1519) now records producer-specific
-metadata and adds a narrow runtime mismatch guard. A future follow-up can still decide whether
-slots [4:6] should converge on one motion-channel source instead of remaining producer-specific.
+Issue [#1519](https://github.com/ll7/robot_sf_ll7/issues/1519) records producer-specific metadata
+and adds the narrow runtime mismatch guard. Issue [#1537](https://github.com/ll7/robot_sf_ll7/issues/1537)
+keeps that producer-specific policy in place; any future migration would need a new explicit
+artifact-compatibility plan rather than silently reinterpreting existing checkpoints or datasets.

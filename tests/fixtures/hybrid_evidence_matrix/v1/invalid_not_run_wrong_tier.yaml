@@ -1,0 +1,24 @@
+- component: oracle_imitation_v1
+  source_issue: "#1470"
+  commit_artifact: "e14e2f8, docs/context/issue_1499_hybrid_evidence_matrix_schema.md"
+  evaluation_slice: not_run
+  guard_authority:
+    mechanism: static_margin
+    active: false
+    veto_rate: null
+  learned_component_contribution:
+    contribution_type: warm_start_initialisation
+    bound: "oracle dataset only"
+    active_rate: null
+  intervention_fallback_rates:
+    guard_veto_rate: null
+    fallback_rate: null
+    degraded_rate: null
+  outcomes:
+    success_rate: null
+    collision_rate: null
+    near_miss_rate: null
+    low_progress_rate: null
+    timeout_rate: null
+  evidence_tier: not_available
+  verdict: pending

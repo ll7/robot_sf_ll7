@@ -168,18 +168,44 @@ actual campaign results and must not be cited as paper claims.
   zero success. **Must be excluded from synthesis.** Illustrates the fail-closed fallback contract
   from `docs/context/issue_691_benchmark_fallback_policy.md`.
 
+## Machine-Readable Validation
+
+Issue [#1515](https://github.com/ll7/robot_sf_ll7/issues/1515) adds a read-only validator for
+future matrix inputs:
+
+```bash
+uv run python scripts/validation/validate_hybrid_evidence_matrix.py \
+  --input tests/fixtures/hybrid_evidence_matrix/v1/valid_rows.yaml
+```
+
+Validation surface:
+
+- accepts a single row, a list of rows, or a mapping with `rows: [...]` from YAML or JSON input,
+- validates required fields, enums, nullability, and rate bounds,
+- checks `commit_artifact` as a comma- or newline-separated string containing a git SHA token plus
+  one or more provenance tokens,
+- requires repository-local provenance tokens to be repository-root-relative, present in the
+  checkout, and outside `output/`,
+- enforces fail-closed fallback/degraded semantics for success-like evidence tiers,
+- verifies `guard_authority.veto_rate` matches
+  `intervention_fallback_rates.guard_veto_rate` for synthesis-candidate rows,
+- preserves launch-packet / `not_run` rows as valid non-synthesis inputs instead of forcing them to
+  look like execution evidence.
+
+The validator is intentionally conservative: it does not synthesize results, resolve remote artifact
+availability, or upgrade local `output/` paths into durable evidence.
+
 ## Known Gaps
 
-1. A machine-readable JSON Schema or YAML schema for validation is deferred (#1515). The current
-   schema is a human-readable contract that future tooling can consume.
-2. Automatic cross-row consistency checks (e.g. verifying that `guard_authority.veto_rate` matches
-   `intervention_fallback_rates.guard_veto_rate`) are not implemented (#1515).
-3. Seed-schedule and scenario-manifest references are optional diagnostic fields; mandatory
+1. Seed-schedule and scenario-manifest references remain optional diagnostic fields; stricter
    provenance requirements may be added after component campaigns demonstrate what is feasible.
+2. The validator proves row-level contract compliance, but it does not interpret benchmark outcomes
+   or replace the synthesis consumer planned in #1489.
 
 ## Validation
 
-This is a docs-only change. Validation of the schema itself is through review against the Issue #1499 acceptance criteria:
+Validation of the schema itself is through review against the Issue #1499 acceptance criteria plus
+the #1515 validator/tests:
 
 - [x] All required fields present: `component`, `source_issue`, `commit_artifact`,
   `evaluation_slice`, `guard_authority`, `learned_component_contribution`,
@@ -195,9 +221,14 @@ This is a docs-only change. Validation of the schema itself is through review ag
 - [x] Links to canonical policies: fallback policy (#691), evidence vocabulary, readiness/fallback
   audit (#1054).
 - [x] Repository-root-relative paths only.
+- [x] Machine-readable row validator rejects invalid enums, nullability, provenance, and guard-veto
+  divergence before synthesis.
 
-Run the standard docs validation:
+Run the targeted validator proof and the standard readiness gate:
 
 ```bash
+uv run pytest tests/benchmark/test_hybrid_evidence_matrix.py
+uv run python scripts/validation/validate_hybrid_evidence_matrix.py \
+  --input tests/fixtures/hybrid_evidence_matrix/v1/valid_rows.yaml
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```

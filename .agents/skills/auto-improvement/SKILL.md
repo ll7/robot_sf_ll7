@@ -1,6 +1,15 @@
 ---
 name: auto-improvement
-description: "Focused measurement-aware refinement loop for Robot SF prompts, docs, and small code changes; use when a task benefits from trying a few simple improvements."
+description: Focused measurement-aware refinement loop for Robot SF prompts, docs, and small code changes;
+  use when a task benefits from trying a few simple improvements.
+category: research-iteration
+kind: atomic
+phase: analysis
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Auto Improvement
@@ -49,3 +58,8 @@ Summarize:
 - what changed,
 - what improved,
 - what remains open.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

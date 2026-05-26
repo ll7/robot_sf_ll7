@@ -1,0 +1,14 @@
+campaign_submission:
+  issue: '#optional'
+  commit: sha
+  config: configs/...
+  command: sbatch ...
+  slurm_job_id: id
+  stdout: path
+  stderr: path
+  output_root: path
+  expected_artifacts:
+  - manifest
+  - checkpoint
+  - report
+  status: submitted | blocked | failed_preflight

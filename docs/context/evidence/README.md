@@ -59,6 +59,8 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_1454_s10_h500_candidates_2026-05-23/`: compact exploratory S10 scenario-horizon h500
   evidence for the seven functioning Stage A rows plus local policy-search candidate rows, with a
   pointer to the non-package GitHub artifact release for the raw campaign archive.
+- `issue_1462_s10_h500_failure_modes_2026-05-24/`: compact scenario, candidate-vs-core, and seed
+  failure-mode tables derived from the issue #1454 S10/h500 candidate evidence.
 - `issue_1428_orca_residual_lineage_2026-05-24/`: compact diagnostic-contract evidence for the
   pre-SLURM ORCA-residual behavior-cloning lineage packet.
 - `issue_1396_shielded_ppo_launch_packet_2026-05-24/`: comparison-freeze fixture for the

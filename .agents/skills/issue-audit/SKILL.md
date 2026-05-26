@@ -1,9 +1,21 @@
 ---
 name: issue-audit
-description: "User-in-the-loop open-issue audit that asks one readiness-blocking question at a time and updates issues as decisions are made."
+description: User-in-the-loop open-issue audit that asks one readiness-blocking question at a time and
+  updates issues as decisions are made.
+category: github-issue
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Issue Audit
+
+Compatibility entry point: for new routing, use `issue-contract-maintainer` with mode `apply-user-decision` unless the user explicitly asks for the legacy guided audit loop.
+
 
 ## Purpose
 
@@ -40,3 +52,6 @@ decisions, and clear handoff state.
 - Question asked and answer applied.
 - Changes made (body/labels/project state) and follow-up issues.
 - Next blocker and optional stop reason if interrupted.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

@@ -1,6 +1,15 @@
 ---
 name: context-map
-description: "Generate a focused repository context map before multi-file changes; use when you need to identify the relevant files, docs, commands, and risks."
+description: Generate a focused repository context map before multi-file changes; use when you need to
+  identify the relevant files, docs, commands, and risks.
+category: context-docs
+kind: atomic
+phase: context
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Context Map

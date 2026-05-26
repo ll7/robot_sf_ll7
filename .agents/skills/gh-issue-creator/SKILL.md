@@ -1,6 +1,15 @@
 ---
 name: gh-issue-creator
-description: "Create structured GitHub issues from vague prompts using repo templates, conservative assumptions, and Project #5 metadata."
+description: 'Create structured GitHub issues from vague prompts using repo templates, conservative assumptions,
+  and Project #5 metadata.'
+category: github-issue
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # GH Issue Creator
@@ -15,27 +24,32 @@ execution.
 1. Read required inputs:
    - issue templates under `.github/ISSUE_TEMPLATE/`
    - `docs/dev_guide.md`
-   - `docs/context/issue_713_batch_first_issue_workflow.md` (for batch routing).
+   - `docs/context/issue_713_batch_first_issue_workflow.md` (for batch routing)
+   - `docs/context/issue_1512_issue_archetypes.md` (for archetype and evidence-tier convention)
 2. Choose the narrowest matching template (`bug`, `enhancement`, `documentation`, `refactor`,
    `research`, `planner_integration.md`, `benchmark_experiment.md`, fallback
    `issue_default.md`).
 3. Normalize prompt into required fields:
    - goal, scope/non-scope, value/effort/complexity/risk, definition of done, success metrics,
      validation plan.
-4. Create issue:
-   - use GitHub MCP / GitHub app tools when available; use `gh` for deterministic fallback.
+4. Assign an archetype and evidence tier using the convention in
+   `docs/context/issue_1512_issue_archetypes.md`. Include the archetype metadata block in
+   the issue body. Use only the canonical values from that note. When the archetype is unclear,
+   default to `archetype: workflow` with `evidence_tier: idea` and note the assumption.
+5. Create issue:
+   - use GitHub MCP / GitHub app tools when available; use `gh` for deterministic fallback
    - `gh issue create --title "<title>" --body-file <body.md> --template <template> --label "<labels>"`
-   - prefer existing labels; avoid inventing taxonomy.
+   - prefer existing labels; avoid inventing taxonomy
    - prefer GitHub MCP / GitHub app tools for interactive issue creation when available; keep `gh`
-     for scripted or fallback paths.
-5. Project routing:
-   - use `gh project item-add` when the CLI route is the active Project #5 write path.
-   - use `gh project item-edit` for explicit field updates when the CLI route is active.
+     for scripted or fallback paths
+6. Project routing:
+   - use `gh project item-add` when the CLI route is the active Project #5 write path
+   - use `gh project item-edit` for explicit field updates when the CLI route is active
    - add issue to Project #5 and update only expected fields (`Priority`, `Expected Duration in Hours`,
-     `Reviewed`) using existing field/schema IDs.
-6. Batch discipline:
-   - for multiple issues, perform body/label cleanup first, then bulk Project #5 writes, then one sync.
-   - if API is rate-limited, record pending project mutations and resume later.
+     `Reviewed`) using existing field/schema IDs
+7. Batch discipline:
+   - for multiple issues, perform body/label cleanup first, then bulk Project #5 writes, then one sync
+   - if API is rate-limited, record pending project mutations and resume later
 
 ## Guardrails
 
@@ -50,3 +64,6 @@ execution.
 - Issue URL.
 - Final labels, project fields touched, and any batch routing actions queued.
 - Explicit assumptions and unresolved metadata updates, if any.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

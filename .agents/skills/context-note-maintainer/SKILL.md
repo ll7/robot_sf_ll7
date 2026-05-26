@@ -1,6 +1,15 @@
 ---
 name: context-note-maintainer
-description: "Create or refresh linked docs/context notes so reusable agent knowledge stays discoverable, current, and easy to hand off."
+description: Create or refresh linked docs/context notes so reusable agent knowledge stays discoverable,
+  current, and easy to hand off.
+category: context-docs
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Context Note Maintainer
@@ -65,3 +74,8 @@ Always report:
 
 Also include:
 - confirmation that the note is durable handoff content, not a temporary scratchpad.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

@@ -1,9 +1,21 @@
 ---
 name: gh-issue-template-auditor
-description: "Review existing GitHub issues against the repo's issue-template contract and repair underspecified issues when the fix is clear."
+description: Review existing GitHub issues against the repo's issue-template contract and repair underspecified
+  issues when the fix is clear.
+category: github-issue
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # GH Issue Template Auditor
+
+Compatibility entry point: for new routing, use `issue-contract-maintainer` with mode `audit-template-compliance` unless a caller explicitly names this skill.
+
 
 ## Purpose
 
@@ -38,3 +50,6 @@ writes when available.
 - Issue number and exact missing contract sections.
 - Whether repair was applied, skipped, or blocked.
 - Any required escalation and follow-up action.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

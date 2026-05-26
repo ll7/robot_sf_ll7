@@ -98,6 +98,8 @@ knowledge, not every transient iteration detail.
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1167 predictive obstacle-feature pipeline:
   [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
+* Issue #1504 ego-conditioned feature contract:
+  [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)
 * Issue #1348 capability-aware map catalog design:
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #1414 parser capability metadata:
@@ -130,6 +132,8 @@ knowledge, not every transient iteration detail.
   [adaptive_test_claim_audit_2026-05.md](adaptive_test_claim_audit_2026-05.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
+* Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):
+  [issue_1500_adversarial_manifest.md](issue_1500_adversarial_manifest.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1342 GH-Act Runtime Requirements:
@@ -152,6 +156,8 @@ knowledge, not every transient iteration detail.
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
+* Issue archetypes and evidence tiers:
+  [issue_1512_issue_archetypes.md](issue_1512_issue_archetypes.md)
 * Artifact evidence vocabulary:
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:
@@ -218,6 +224,7 @@ knowledge, not every transient iteration detail.
   [issue 1023 scenario-horizon preflight](evidence/issue_1023_scenario_horizons_preflight_2026-05-06/README.md),
   [issue 1023 local full campaign](evidence/issue_1023_scenario_horizons_local_full_2026-05-06/README.md),
   [issue 1045 h500 solvability mechanisms](evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/README.md),
+  [issue 1462 S10/h500 failure modes](evidence/issue_1462_s10_h500_failure_modes_2026-05-24/README.md),
   [issue 1396 shielded PPO launch packet](evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/README.md),
   [issue 1395 learned-risk launch packet](evidence/issue_1395_learned_risk_launch_packet_2026-05-24/README.md),
   [issue 1397 oracle imitation launch packet](evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/README.md),
@@ -267,6 +274,9 @@ knowledge, not every transient iteration detail.
   classifies aggregate fixed-to-h500 timeout relief into clean budget relief, late completion,
   exposure-enabled completion, partial relief, and safety-regressed completion while marking
   wait-then-go explanations as trace-required.
+* [Issue #1462 S10 H500 Failure Modes](issue_1462_s10_h500_failure_modes.md)
+  derives scenario, candidate-vs-core, and seed-level failure-mode tables from the issue #1454
+  S10/h500 candidate evidence.
 * [Issue #1051 Camera-Ready Evidence Provenance Audit](issue_1051_camera_ready_evidence_provenance_audit.md)
   inventories PPO provenance, release inputs, SNQI assets, seed/bootstrap evidence, and durable
   artifact gaps before the paper evidence trail is treated as archive-complete.
@@ -704,3 +714,10 @@ why a change was made rather than a full issue execution transcript.
   Algorithm/RLModule restore, not a clean Robot SF world-model import contract.
 * [Issue 789: DreamerV3 multimodal encoder stop note](issue_789_dreamer_multimodal_encoder.md)
   Fail-closed investigation result for mixed observation spaces on Ray 2.53.0 DreamerV3.
+
+## Hybrid-Learning Program Notes
+
+* [Issue #1499 Hard-Guarded Hybrid-Learning Evidence Matrix Schema](issue_1499_hybrid_evidence_matrix_schema.md)
+  defines the canonical evidence matrix schema that the synthesis consumer (#1489) will reference
+  when component campaigns complete. Includes field contracts, evidence-tier vocabulary,
+  non-evidence/failure-mode enumeration, guard-authority constraints, and consumer rules.

@@ -1,0 +1,39 @@
+schema_version: 1
+required_registry_keys:
+  - category
+  - kind
+  - phase
+  - requires_write
+  - requires_slurm
+  - requires_benchmark_artifacts
+  - delegates_to
+  - output_schema
+allowed_categories:
+  - benchmark-evidence
+  - campaign-analysis
+  - context-docs
+  - domain-utility
+  - general
+  - github-issue
+  - github-pr
+  - research-iteration
+  - slurm
+  - validation
+allowed_kinds:
+  - atomic
+  - analysis
+  - context
+  - orchestrator
+  - policy
+allowed_phases:
+  - analysis
+  - context
+  - implementation
+  - planning
+  - verification
+allowed_write_scopes:
+  - filesystem
+  - git
+  - github_issue
+  - github_project
+  - github_pr

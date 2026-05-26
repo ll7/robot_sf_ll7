@@ -1,0 +1,10 @@
+mechanisms:
+- mechanism: string
+  source_issue: '#id'
+  evidence_tier: 0 | 1 | 2 | 3
+  config: path
+  seeds: string
+  artifacts: string
+  metrics: string
+  verdict: supported | contradicted | unresolved
+  caveats: string

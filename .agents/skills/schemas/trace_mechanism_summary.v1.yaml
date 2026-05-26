@@ -1,0 +1,8 @@
+planner: string
+scenario: string
+seed: string
+episode_id: string
+trace_artifact: path-or-url
+video_artifact: path-or-url
+claim_status: supported | contradicted | unresolved
+limits: string

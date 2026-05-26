@@ -1,6 +1,15 @@
 ---
 name: planner-integration
-description: "Assess planner-family integration feasibility, adapter burden, provenance safety, and benchmark-readiness boundaries in robot_sf_ll7."
+description: Assess planner-family integration feasibility, adapter burden, provenance safety, and benchmark-readiness
+  boundaries in robot_sf_ll7.
+category: benchmark-evidence
+kind: atomic
+phase: context
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: true
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Planner Integration
@@ -39,3 +48,8 @@ State clearly:
 - whether the planner is wrapper-friendly, model-only, or research-only,
 - required first-step validation and evidence,
 - safe claim boundary after integration.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

@@ -1,108 +1,190 @@
 # Robot SF Skills
 
-This directory contains repo-local skills for Coding Agents. Use this file as a quick index;
-read the specific `SKILL.md` before applying a skill.
+This directory contains repo-local skills for Coding Agents. Use this README as the
+generated routing index; read the specific `SKILL.md` before applying a skill.
 
-## Selection Guide
+## Quick Routing
 
-- Not sure which skill applies: `skill-picker`
-- Discover and open improvement issues autonomously: `goal-issue-discovery`
-- Audit open issues with one user decision at a time: `issue-audit`
-- Implement eligible issue queues sequentially: `goal-issue-implementation`
-- Review open PRs, fix safe actionable gaps, and apply merge-ready after proof: `goal-pr-review`
-- Implement an issue end-to-end: `gh-issue-autopilot`
-- Sequence Project #5 issue batches: `gh-issue-sequencer`
-- Address PR review comments: `gh-pr-comment-fixer`
-- Open a PR from a ready branch: `gh-pr-opener`
-- Verify a branch against `origin/main`: `implementation-verification`
-- Run only the standard gate: `pr-ready-check`
-- Review benchmark-sensitive changes: `review-benchmark-change`
-- Update docs after code changes: `update-docs-on-code-change`
-- Create or refresh linked context notes: `context-note-maintainer`
-- Gather repository context before editing: `context-map`, `benchmark-overview`, or
-  `experiment-context`
-- Submit Auxme issue-791 jobs reliably: `auxme-slurm-reliable-submit`
+| User intent | Primary skill | Secondary skill |
+| --- | --- | --- |
+| Not sure which skill applies | `skill-picker` | none |
+| Take the next eligible issue to PR | `goal-issue-implementation` | `gh-issue-autopilot` |
+| Execute one selected issue to draft PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |
+| Clarify or repair issue contracts | `issue-contract-maintainer` | legacy aliases only when explicitly named |
+| Fix PR review comments | `gh-pr-comment-fixer` | `pr-ready-check` |
+| Open a ready PR | `gh-pr-opener` | `artifact-provenance` |
+| Verify branch claims | `implementation-verification` | `pr-ready-check` |
+| Run the standard readiness gate | `pr-ready-check` | none |
+| Review benchmark output | `analyze-camera-ready-benchmark` | `benchmark-row-status`, `artifact-provenance` |
+| Classify benchmark rows | `benchmark-row-status` | `review-benchmark-change` |
+| Submit a generic SLURM campaign | `slurm-campaign-submit` | `artifact-provenance` |
+| Submit issue-791 Auxme training | `auxme-issue791-submit` | `slurm-campaign-submit` |
+| Stage external data | `data-staging-provenance` | `artifact-provenance` |
+| Synthesize evidence across issues | `evidence-synthesis` | `paper-facing-docs` |
 
-## Skill Routing
+## Negative Routing
 
-- `quality-playbook` plans proof for non-trivial work; `implementation-verification` audits whether
-  branch claims are actually proven against `origin/main`.
-- `clean-up` is a branch-tidying workflow; `pr-ready-check` is the narrower readiness gate.
-- `agentic-eval` evaluates skills/prompts/instructions; `auto-improvement` iterates on a small
-  prompt, docs, or code improvement target.
-- `review-benchmark-change` reviews benchmark-sensitive semantics; `implementation-verification`
-  can include benchmark checks but starts from branch claims and evidence.
-- `context-map` discovers the relevant surface before work; `skill-picker` chooses which skill to
-  use when routing is unclear.
-- Goal-loop skills are orchestration layers. They should reuse the narrower `gh-*`,
-  verification, and context-note skills instead of duplicating their procedures.
+- Do not use `autoresearch` for ordinary cleanup.
+- Do not use `paper-facing-docs` for non-claim documentation.
+- Do not use `gh-issue-autopilot` for ambiguous issues; route to `issue-contract-maintainer` first.
+- Do not use `auxme-issue791-submit` for non-issue-791 campaigns.
+- Do not count fallback or degraded benchmark rows as success evidence; use `benchmark-row-status`.
+- Do not cite local `output/` contents as durable evidence; use `artifact-provenance`.
 
-## GitHub Skill Policy
+## Canonical Skill Stacks
 
-- Prefer REST-backed issue/PR/label/comment operations for ordinary GitHub state; use local `git`
-  for branch, commit, diff, and merge-base state.
-- Reserve GraphQL for Projects v2, review-thread state, and nested reads that are genuinely cheaper.
-- Prefer GitHub MCP / GitHub app tools for interactive reads and comments when available, but
-  switch to REST when GraphQL quota is low.
-- Use `gh` for deterministic batch/project operations, REST fallback, auth debugging, and GraphQL
-  review-thread state that MCP does not expose cleanly.
+| Stack | Skills |
+| --- | --- |
+| Issue queue to PR | `gh-issue-sequencer` -> `gh-issue-autopilot` -> `implementation-verification` -> `pr-ready-check` -> `gh-pr-opener` |
+| Issue contract repair | `issue-contract-maintainer` -> `gh-issue-sequencer` |
+| PR review cleanup | `gh-pr-comment-fixer` -> `implementation-verification` -> `pr-ready-check` |
+| Benchmark evidence audit | `benchmark-row-status` -> `artifact-provenance` -> `evidence-synthesis` |
+| SLURM campaign launch | `slurm-campaign-submit` -> `artifact-provenance` |
+| External data staging | `data-staging-provenance` -> `artifact-provenance` -> `context-note-maintainer` |
+
+## Validation Tiers
+
+| Tier | Use for | Required proof |
+| --- | --- | --- |
+| 0 | docs-only, metadata-only | render, link, path, or registry check |
+| 1 | local code or CLI behavior | targeted tests plus lint where relevant |
+| 2 | planner, metric, benchmark, artifact behavior | targeted tests plus benchmark preflight or sample run |
+| 3 | campaign or paper-facing evidence | full provenance, seeds, configs, artifacts, and interpretation note |
+
+## GitHub And Project Policy
+
+- `goal-issue-implementation` owns the multi-issue loop and stop condition.
+- `gh-issue-sequencer` owns Project #5 queue ordering.
+- `gh-issue-autopilot` owns one selected issue -> branch -> validation -> draft PR.
+- `gh-issue-creator` owns new issue creation.
+- `issue-contract-maintainer` owns ambiguity, template, and decision repair.
+- Use Project #5 `Priority Score` as the queue-ordering source; use
+  `gh-issue-priority-assessor` when score inputs need review.
 - Batch issue cleanup separately from Project #5 metadata writes; follow
   `docs/context/issue_713_batch_first_issue_workflow.md`.
-- Cache Project #5 IDs once per shell session; for long-running or multi-agent work, use the
-  local gitignored Project #5 cache shape from
-  `docs/templates/github.project5-cache.example.json`.
-- Use Project #5 `Priority Score` as the issue-ordering source; use `gh-issue-priority-assessor`
-  when the score inputs need review.
-- Use `scripts/dev/gh_comment.sh` for multiline PR/issue comments.
 
-## Maintenance
+## Maintenance And Validation
 
+- Edit `.agents/skills/skills.yaml` when adding aliases, categories, routing metadata,
+  delegated skills, write scopes, or output schemas.
+- Run `uv run python scripts/dev/generate_skills_readme.py` after registry changes.
 - Run `uv run python scripts/dev/check_skills.py` after adding, renaming, or removing skills.
-- Keep skill directory names aligned with `name:` frontmatter.
-- Keep this README in sync with every repo-local `SKILL.md`.
+- Keep legacy compatibility wrappers only when they reduce routing breakage.
+- Keep group notes under `.agents/skills/groups/`; direct children of `.agents/skills/`
+  must be real skill directories unless explicitly whitelisted by the checker.
 
-## Available Skills
+## Generated Skill Index
 
-| Skill | Use When |
+### Benchmark And Experiment Evidence
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `analyze-camera-ready-benchmark` | atomic | context | no | no | yes | none | Analyze a camera-ready benchmark campaign for consistency, runtime hotspots, fallback/degraded planners, and reproducibility metadata. |
+| `analyze-latest-policy-sweep` | atomic | context | no | no | yes | none | Analyze latest policy analysis sweep runs (*_policy_analysis_*) by comparing episodes/summary metrics, diagnostics, and video artifacts; generate a concise markdown report and optional frame snapshots. |
+| `artifact-provenance` | atomic | verification | yes | no | yes | none | Classify, promote, or document generated artifacts so durable evidence is separated from local output caches. |
+| `benchmark-overview` | atomic | context | no | no | yes | none | Fast benchmark-faithful orientation for scenario splits, baselines, metrics, artifacts, and reproducibility constraints in robot_sf_ll7. |
+| `benchmark-row-status` | policy | analysis | no | no | yes | none | Classify benchmark campaign rows under the fail-closed policy so fallback or degraded execution never counts as successful evidence. |
+| `data-staging-provenance` | atomic | planning | yes | no | yes | `artifact-provenance` | Stage external datasets and assets with checksum, license, raw-file, derived-file, and benchmark-readiness provenance. |
+| `evidence-synthesis` | analysis | analysis | yes | no | yes | `artifact-provenance`, `benchmark-row-status`, `paper-facing-docs` | Synthesize multiple issues, configs, seeds, metrics, and artifacts into conservative mechanism-level conclusions with caveats. |
+| `paper-facing-docs` | atomic | context | no | no | yes | none | Draft or review benchmark and manuscript-support docs conservatively, with explicit provenance, reproducibility, and caveat handling. |
+| `planner-integration` | atomic | context | no | no | yes | none | Assess planner-family integration feasibility, adapter burden, provenance safety, and benchmark-readiness boundaries in robot_sf_ll7. |
+| `review-benchmark-change` | atomic | context | no | no | yes | none | Review benchmark-sensitive code or docs changes for semantic regressions, normalization drift, reproducibility gaps, and provenance overclaim. |
+
+### Campaign Analysis
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `adversarial-search-campaign` | analysis | analysis | yes | no | yes | `benchmark-row-status`, `artifact-provenance`, `evidence-synthesis` | Analyze adversarial route/search campaigns with canonical commands, expected artifacts, status boundaries, and claim limits. |
+| `carla-replay-parity` | analysis | analysis | yes | no | yes | `benchmark-row-status`, `artifact-provenance`, `evidence-synthesis` | Review CARLA replay parity evidence with scenario, replay, metric, and limitation tracking. |
+| `hybrid-learning-component-eval` | analysis | analysis | yes | no | yes | `artifact-provenance`, `benchmark-row-status`, `evidence-synthesis` | Evaluate hybrid-learning components with mechanism-level evidence tables, config provenance, and claim boundaries. |
+| `oracle-imitation-campaign` | analysis | analysis | yes | no | yes | `artifact-provenance`, `benchmark-row-status`, `evidence-synthesis` | Analyze oracle-imitation campaign outputs with lineage, dataset, checkpoint, metric, and caveat discipline. |
+| `predictive-planner-comparison` | analysis | analysis | yes | no | yes | `benchmark-row-status`, `artifact-provenance`, `evidence-synthesis` | Compare predictive planner v2 runs against baseline planners with config, seed, artifact, and failure-mode discipline. |
+| `trace-mechanism-review` | analysis | analysis | yes | no | yes | `artifact-provenance`, `evidence-synthesis` | Review exact planner/scenario/seed/episode traces and videos without overgeneralizing from qualitative samples. |
+
+### Context And Docs
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `context-map` | atomic | context | no | no | no | none | Generate a focused repository context map before multi-file changes; use when you need to identify the relevant files, docs, commands, and risks. |
+| `context-note-maintainer` | atomic | context | yes | no | no | none | Create or refresh linked docs/context notes so reusable agent knowledge stays discoverable, current, and easy to hand off. |
+| `experiment-context` | atomic | context | no | no | no | none | Find the canonical config-first training or evaluation path, artifact lineage, and validation gates for a concrete experiment task in robot_sf_ll7. |
+| `skill-picker` | atomic | context | no | no | no | none | Choose the most appropriate repo-local skill for an ambiguous task by consulting .agents/skills/README.md. |
+| `update-docs-on-code-change` | atomic | context | yes | no | no | none | Keep docs aligned with code changes that affect workflows, contracts, or user-facing behavior. |
+| `what-context-needed` | atomic | context | no | no | no | none | Ask for the minimum repository context needed to answer or implement a task safely. |
+
+### Domain-Specific Utilities
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `svg-inspection` | atomic | analysis | no | no | no | none | Inspect and debug SVG maps for parser-facing issues using reusable Robot SF helpers. |
+
+### Issue Lifecycle
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `gh-issue-autopilot` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `artifact-provenance` | Autonomous issue-to-PR workflow from next eligible issue to draft PR with consistent metadata handling. |
+| `gh-issue-clarifier` | atomic | context | yes | no | no | none | Clarify ambiguous GitHub issues by tightening scope and acceptance criteria, proposing solution options with pros/cons, and marking decision-required issues when maintainer input is needed. |
+| `gh-issue-creator` | atomic | context | yes | no | no | none | Create structured GitHub issues from vague prompts using repo templates, conservative assumptions, and Project #5 metadata. |
+| `gh-issue-priority-assessor` | atomic | context | yes | no | no | none | LLM-backed review workflow for Project #5 priority inputs; assess plausibility, propose values with uncertainty, and optionally apply explicit opt-in updates. |
+| `gh-issue-sequencer` | atomic | context | yes | no | no | none | Maintain a clear next-work queue in GitHub Project #5 by normalizing issue status, priority, and execution order. |
+| `gh-issue-template-auditor` | atomic | context | yes | no | no | none | Review existing GitHub issues against the repo's issue-template contract and repair underspecified issues when the fix is clear. |
+| `goal-issue-discovery` | orchestrator | analysis | yes | no | no | `gh-issue-creator`, `gh-issue-sequencer`, `gh-issue-priority-assessor`, `agentic-eval`, `auto-improvement`, `autoresearch`, `context-map` | Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities and creates evidence-graded GitHub issues; not for implementation. |
+| `goal-issue-implementation` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `gh-issue-autopilot`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `gh-issue-creator`, `context-note-maintainer` | Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements one scoped issue at a time, validates, pushes, and opens PRs. |
+| `issue-audit` | atomic | context | yes | no | no | none | User-in-the-loop open-issue audit that asks one readiness-blocking question at a time and updates issues as decisions are made. |
+| `issue-contract-maintainer` | orchestrator | planning | yes | no | no | `gh-issue-clarifier`, `gh-issue-template-auditor`, `issue-audit` | Maintain GitHub issue contracts through template audits, ambiguity clarification, and user-decision application. |
+
+### PR Lifecycle
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `gh-pr-comment-fixer` | atomic | context | yes | no | no | none | Fix GitHub PR review comments with branch-safe edits, validation, and explicit thread resolution. |
+| `gh-pr-opener` | atomic | context | yes | no | no | none | Open a conservative Robot SF PR with scope verification, freshness checks, and artifact discipline. |
+| `goal-pr-review` | orchestrator | verification | yes | no | no | `implementation-verification`, `pr-ready-check`, `gh-pr-comment-fixer`, `review-benchmark-change`, `gh-issue-creator`, `context-note-maintainer` | Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof, resolves review threads, and applies merge-ready; not for merging. |
+
+### Research Iteration
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `agentic-eval` | atomic | analysis | yes | no | no | none | Evaluate and improve AI workflow outputs with small goldens, rubrics, and repeatable checks; use when tuning skills, prompts, instructions, or agent behavior. |
+| `auto-improvement` | atomic | analysis | yes | no | no | none | Focused measurement-aware refinement loop for Robot SF prompts, docs, and small code changes; use when a task benefits from trying a few simple improvements. |
+| `autoresearch` | atomic | analysis | yes | no | no | none | Autonomous iterative experimentation loop for measurable Robot SF tasks; use when the user wants an improvement loop with baseline, experiments, and keep/discard decisions. |
+
+### SLURM And Campaign Submission
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `auxme-issue791-submit` | atomic | implementation | yes | yes | no | `slurm-campaign-submit` | Submit issue-791-specific Auxme training jobs with explicit config provenance and wrapper-safety checks. |
+| `auxme-slurm-reliable-submit` | atomic | implementation | yes | yes | no | `auxme-issue791-submit` | Submit issue-791 style Auxme SLURM jobs with explicit config, live partition pressure checks, and max-time-safe wrapper routing. |
+| `slurm-campaign-submit` | atomic | implementation | yes | yes | no | `artifact-provenance` | Submit generic SLURM campaigns with preflight, config provenance, job metadata, artifact expectations, and failure classification. |
+
+### Validation And Cleanup
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `clean-up` | atomic | verification | yes | no | no | none | Clean up the current branch in the Robot SF repo by following docs/dev_guide.md and reusable scripts/dev commands; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest before sharing changes. |
+| `implementation-verification` | atomic | verification | no | no | no | none | Verify branch changes against origin/main with claim-based evidence, not only test status. |
+| `pr-ready-check` | atomic | verification | no | no | no | none | Run the repository PR readiness pipeline using shared scripts/dev entry points (ruff fix/format, parallel tests, coverage, and docstring checks). |
+| `quality-playbook` | policy | verification | no | no | no | none | Repo-wide proof-first workflow for non-trivial changes with context, risk, validation, and follow-through. |
+| `review-and-refactor` | atomic | verification | yes | no | no | none | Surgical review-then-refactor workflow for small code or docs changes; use when a task needs inspection before a narrow improvement. |
+
+## Aliases
+
+| Alias | Canonical skill |
 | --- | --- |
-| `agentic-eval` | Evaluating or improving skills, prompts, instructions, or other AI workflow artifacts. |
-| `analyze-camera-ready-benchmark` | Auditing a camera-ready benchmark campaign for consistency, runtime, fallback, and reproducibility signals. |
-| `analyze-latest-policy-sweep` | Comparing recent policy-analysis sweep outputs and optional video/frame artifacts. |
-| `auto-improvement` | Running a short measurement-aware refinement loop for prompts, docs, or small code changes. |
-| `auxme-slurm-reliable-submit` | Submitting Auxme issue-791 jobs with explicit config, live partition checks, and max-time-safe wrapper routing. |
-| `autoresearch` | Running an autonomous experiment loop with baseline, variants, and keep/discard decisions. |
-| `benchmark-overview` | Getting fast benchmark-faithful orientation for scenario splits, baselines, metrics, and artifacts. |
-| `clean-up` | Tidying the current branch with Ruff, tests, changed-file gates, and docstring TODO checks. |
-| `context-map` | Building a focused map of relevant files, docs, commands, and risks before multi-file work. |
-| `context-note-maintainer` | Creating or refreshing linked `docs/context/` notes so reusable agent knowledge stays discoverable and current. |
-| `experiment-context` | Finding canonical config-first training/evaluation paths, artifact lineage, and validation gates. |
-| `goal-issue-discovery` | Autonomously finding evidence-graded improvement opportunities and creating detailed GitHub issues. |
-| `goal-issue-implementation` | Sequentially implementing eligible open issues through branch, validation, push, and PR creation. |
-| `goal-pr-review` | Reviewing open PRs against linked issue contracts, fixing safe actionable gaps on writable branches, and applying `merge-ready` after full proof. |
-| `gh-issue-autopilot` | Selecting or executing an issue through implementation, validation, push, and draft PR. |
-| `gh-issue-clarifier` | Tightening ambiguous GitHub issues and marking decision-required items when needed. |
-| `gh-issue-creator` | Creating structured GitHub issues from rough prompts with repo template conventions. |
-| `gh-issue-priority-assessor` | Reviewing Project #5 priority inputs and proposing field values with uncertainty. |
-| `gh-issue-sequencer` | Maintaining a clear Project #5 execution queue and batching project metadata updates. |
-| `gh-issue-template-auditor` | Auditing existing issues against the issue-template contract and repairing clear gaps. |
-| `gh-pr-comment-fixer` | Fetching PR review comments, implementing fixes, validating, pushing, and resolving threads. |
-| `gh-pr-opener` | Opening Robot SF PRs with issue-scope verification and PR-readiness freshness checks. |
-| `implementation-verification` | Comparing the current branch to `origin/main` and proving each claimed feature works as designed. |
-| `issue-audit` | Refining open issues with one user-facing readiness question at a time, then updating issue/project state. |
-| `paper-facing-docs` | Drafting or reviewing benchmark/manuscript-support docs with conservative provenance handling. |
-| `planner-integration` | Assessing planner-family adapter burden, provenance safety, and benchmark readiness. |
-| `pr-ready-check` | Running the standard PR readiness pipeline through shared `scripts/dev` entry points. |
-| `quality-playbook` | Planning and validating non-trivial changes with proof-first risk classification. |
-| `review-and-refactor` | Inspecting a small code/docs surface and making a narrow justified improvement. |
-| `review-benchmark-change` | Reviewing benchmark-sensitive patches for semantic, normalization, reproducibility, or provenance regressions. |
-| `skill-picker` | Choosing the most appropriate repo-local skill when the task is ambiguous or the user asks for skill routing. |
-| `svg-inspection` | Debugging SVG map parser issues such as route-only mode, zone mismatches, and obstacle-crossing routes. |
-| `update-docs-on-code-change` | Keeping docs aligned with code changes that alter workflows, commands, contracts, or user behavior. |
-| `what-context-needed` | Asking for the minimum missing context when a task cannot be answered safely. |
+| `auxme-issue791-reliable-submit` | `auxme-slurm-reliable-submit` |
+| `context-unblocker` | `what-context-needed` |
+| `gh-issue-to-pr` | `gh-issue-autopilot` |
+| `issue-clarification` | `issue-contract-maintainer` |
+| `issue-contract-audit` | `issue-contract-maintainer` |
+| `issue-discovery` | `goal-issue-discovery` |
+| `issue-queue-runner` | `goal-issue-implementation` |
+| `issue-to-pr` | `gh-issue-autopilot` |
+| `pr-review-runner` | `goal-pr-review` |
+| `proof-policy` | `quality-playbook` |
+| `quality-strategy` | `quality-playbook` |
 
 ## Notes
 
 - Prefer the most specific skill that matches the task.
-- Combine skills only when they cover different phases, such as `context-map` before
-  `implementation-verification`, then `pr-ready-check` before PR handoff.
-- This README is an index, not a replacement for each skill's `SKILL.md`.
+- Combine skills only when they cover different phases.
+- This README is generated from `.agents/skills/skills.yaml`; do not hand-edit the index.

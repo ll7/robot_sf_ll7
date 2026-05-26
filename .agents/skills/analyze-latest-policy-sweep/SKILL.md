@@ -1,6 +1,15 @@
 ---
 name: analyze-latest-policy-sweep
-description: Analyze latest policy analysis sweep runs (*_policy_analysis_*) by comparing episodes/summary metrics, diagnostics, and video artifacts; generate a concise markdown report and optional frame snapshots.
+description: Analyze latest policy analysis sweep runs (*_policy_analysis_*) by comparing episodes/summary
+  metrics, diagnostics, and video artifacts; generate a concise markdown report and optional frame snapshots.
+category: benchmark-evidence
+kind: atomic
+phase: context
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: true
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Analyze Latest Policy Sweep
@@ -66,3 +75,8 @@ Report:
 - ranking summary,
 - top failures/scenarios with links,
 - reproducibility note and open risks.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

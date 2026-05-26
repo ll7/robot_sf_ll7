@@ -1,6 +1,15 @@
 ---
 name: analyze-camera-ready-benchmark
-description: "Analyze a camera-ready benchmark campaign for consistency, runtime hotspots, fallback/degraded planners, and reproducibility metadata."
+description: Analyze a camera-ready benchmark campaign for consistency, runtime hotspots, fallback/degraded
+  planners, and reproducibility metadata.
+category: benchmark-evidence
+kind: atomic
+phase: context
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: true
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Analyze Camera-Ready Benchmark
@@ -77,3 +86,8 @@ Provide a concise judgment with:
 - consistency status,
 - planner ranking by observed-mode,
 - concrete remediation steps or explicit pass conditions.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

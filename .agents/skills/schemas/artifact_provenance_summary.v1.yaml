@@ -1,0 +1,8 @@
+artifacts:
+- path: path
+  classification: discard | ignored-cache | tracked-compact-evidence | durable-required | durable-promoted
+    | non-evidence-local-only
+  checksum: optional
+  durable_pointer: optional
+local_output_risk: string
+next_action: string

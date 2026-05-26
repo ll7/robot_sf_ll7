@@ -1,9 +1,21 @@
 ---
 name: gh-issue-clarifier
-description: "Clarify ambiguous GitHub issues by tightening scope and acceptance criteria, proposing solution options with pros/cons, and marking decision-required issues when maintainer input is needed."
+description: Clarify ambiguous GitHub issues by tightening scope and acceptance criteria, proposing solution
+  options with pros/cons, and marking decision-required issues when maintainer input is needed.
+category: github-issue
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # GH Issue Clarifier
+
+Compatibility entry point: for new routing, use `issue-contract-maintainer` with mode `clarify-ambiguity` unless a caller explicitly names this skill.
+
 
 ## Purpose
 
@@ -38,3 +50,6 @@ decision trail. Keep the issue small, stable, and ready for implementation.
 - Any option analysis and final recommendation.
 - Metadata edits (`labels`, project status/milestone where changed).
 - Follow-up issues created and reason for each.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

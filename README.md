@@ -3,6 +3,8 @@
 [![CI](https://github.com/ll7/robot_sf_ll7/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ll7/robot_sf_ll7/actions/workflows/ci.yml?query=branch%3Amain)
 [![License](https://img.shields.io/github/license/ll7/robot_sf_ll7)](LICENSE)
 [![Python >=3.11](https://img.shields.io/badge/Python-%3E%3D3.11-blue)](pyproject.toml)
+
+**DOI**: [10.5281/zenodo.19563812](https://doi.org/10.5281/zenodo.19563812)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19563812.svg)](https://doi.org/10.5281/zenodo.19563812)
 
 Gymnasium-based social navigation simulation and benchmarking for a robot moving through

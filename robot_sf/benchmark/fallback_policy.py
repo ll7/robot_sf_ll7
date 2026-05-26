@@ -37,6 +37,7 @@ _UNEXPECTED_FAILURE_STATUSES = {"failed", "partial-failure"}
 _SUCCESS_CAMPAIGN_STATUSES = {"benchmark_success", "ok"}
 _ACCEPTED_UNAVAILABLE_CAMPAIGN_STATUSES = {"accepted_unavailable_only"}
 _UNEXPECTED_FAILURE_CAMPAIGN_STATUSES = {"unexpected_failure"}
+_CANONICAL_EXIT_CODES: set[int] = {0, 2, 3}
 
 
 def _int_field(result: dict[str, Any], key: str) -> int:
@@ -55,6 +56,9 @@ def _int_field(result: dict[str, Any], key: str) -> int:
 def _run_statuses_from_result(result: dict[str, Any]) -> list[str]:
     """Extract normalized planner/run statuses from a campaign payload.
 
+    planner_rows statuses are trusted only when every row has a non-empty status.
+    Otherwise the function falls back to ``runs`` entries or returns an empty list.
+
     Returns:
         Ordered planner/run status labels when available.
     """
@@ -66,6 +70,9 @@ def _run_statuses_from_result(result: dict[str, Any]) -> list[str]:
                 status = str(row.get("status", "")).strip().lower()
                 if status:
                     run_statuses.append(status)
+                else:
+                    run_statuses.clear()
+                    break
     if run_statuses:
         return run_statuses
 
@@ -438,12 +445,35 @@ def summarize_campaign_outcome(result: dict[str, Any] | None) -> CampaignOutcome
 
 
 def campaign_exit_code(result: dict[str, Any] | None) -> int:
-    """Return camera-ready campaign CLI exit code for a result payload."""
+    """Return camera-ready campaign CLI exit code for a result payload.
+
+    Only canonical integer (non-bool) exit codes {0, 2, 3} are trusted
+    from the payload.  Bool values and unknown integers fall through to
+    the summarised outcome.
+    """
     if isinstance(result, dict):
         explicit_exit_code = result.get("exit_code")
-        if isinstance(explicit_exit_code, int) and explicit_exit_code >= 0:
+        if (
+            isinstance(explicit_exit_code, int)
+            and not isinstance(explicit_exit_code, bool)
+            and explicit_exit_code in _CANONICAL_EXIT_CODES
+        ):
             return explicit_exit_code
     return summarize_campaign_outcome(result).exit_code
+
+
+def classify_planner_row_status(status: str) -> str:
+    """Classify a planner-row status label into a canonical outcome class.
+
+    Returns:
+        One of ``"ok"``, ``"accepted_unavailable"``, or ``"unexpected_failure"``.
+    """
+    normalized = str(status or "").strip().lower()
+    if normalized == "ok":
+        return "ok"
+    if normalized in _ACCEPTED_UNAVAILABLE_STATUSES:
+        return "accepted_unavailable"
+    return "unexpected_failure"
 
 
 __all__ = [
@@ -452,6 +482,7 @@ __all__ = [
     "availability_payload",
     "benchmark_run_exit_code",
     "campaign_exit_code",
+    "classify_planner_row_status",
     "resolve_execution_mode",
     "summarize_benchmark_availability",
     "summarize_campaign_outcome",

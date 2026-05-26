@@ -29,6 +29,7 @@ from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
 from robot_sf.benchmark.fallback_policy import (
     availability_payload,
+    classify_planner_row_status,
     summarize_benchmark_availability,
     summarize_campaign_outcome,
 )
@@ -2826,10 +2827,14 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     rows = payload.get("planner_rows", [])
     warnings = payload.get("warnings", [])
     accepted_unavailable_rows = [
-        row for row in rows if str(row.get("status", "")).lower() in {"not_available", "excluded"}
+        row
+        for row in rows
+        if classify_planner_row_status(str(row.get("status", ""))) == "accepted_unavailable"
     ]
     unexpected_failed_rows = [
-        row for row in rows if str(row.get("status", "")).lower() in {"failed", "partial-failure"}
+        row
+        for row in rows
+        if classify_planner_row_status(str(row.get("status", ""))) == "unexpected_failure"
     ]
 
     lines = [
@@ -3279,7 +3284,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
                     f"most_likely_reason='{reason}'"
                 )
-            elif status == "not_available":
+            elif classify_planner_row_status(status) == "accepted_unavailable":
                 reason = str(row.get("availability_reason", "")).strip() or "unspecified"
                 warnings.append(
                     "Accepted unavailable planner row recorded: "
@@ -3320,7 +3325,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 },
             )
 
-            if status in {"failed", "partial-failure"} and cfg.stop_on_failure:
+            if classify_planner_row_status(status) == "unexpected_failure" and cfg.stop_on_failure:
                 logger.warning(
                     "Campaign stop_on_failure triggered: planner key={} kinematics={} status={} (halting remaining planners).",
                     planner.key,

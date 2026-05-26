@@ -94,6 +94,35 @@ def test_campaign_outcome_and_exit_code_distinguish_non_success_campaign_classes
     assert campaign_exit_code(None) == 2
 
 
+def test_campaign_outcome_ignores_partial_planner_rows_and_falls_back_to_runs() -> None:
+    """Planner-row status summaries are trusted only when every row supplies a status."""
+    outcome = summarize_campaign_outcome(
+        {
+            "planner_rows": [{"status": "ok"}, {}],
+            "runs": [{"status": "partial-failure"}],
+        }
+    )
+
+    assert outcome.status == "unexpected_failure"
+    assert outcome.unexpected_failed_runs == 1
+    assert outcome.exit_code == 2
+
+
+def test_campaign_exit_code_rejects_noncanonical_explicit_values() -> None:
+    """Only canonical integer, non-bool campaign exit codes should bypass summarization."""
+    success_payload = {"exit_code": True, "planner_rows": [{"status": "ok"}]}
+    accepted_unavailable_payload = {
+        "exit_code": 7,
+        "planner_rows": [{"status": "ok"}, {"status": "not_available"}],
+    }
+
+    assert (
+        campaign_exit_code({"exit_code": 0, "planner_rows": [{"status": "partial-failure"}]}) == 0
+    )
+    assert campaign_exit_code(success_payload) == 0
+    assert campaign_exit_code(accepted_unavailable_payload) == 3
+
+
 def test_campaign_outcome_accepts_all_ok_explicit_fields_without_rows() -> None:
     """Explicit campaign-success fields should preserve the benchmark-success class."""
     outcome = summarize_campaign_outcome(

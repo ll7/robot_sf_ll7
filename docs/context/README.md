@@ -262,6 +262,10 @@ knowledge, not every transient iteration detail.
 * [Issue #1454 S10 H500 Candidate Comparison](issue_1454_s10_h500_candidate_comparison.md)
   records the exploratory h500 candidate comparison against previous h500, fixed-h100, and
   policy-search evidence, with the direct-metric claim boundary and SNQI caveat.
+* [Issue #1545 Power-Aware Seed-Budget Planning](issue_1545_power_aware_seed_budget_planning.md)
+  defines conservative smoke, nominal-sanity, compact-benchmark, and paper-facing seed tiers from
+  existing durable summaries without changing benchmark gates or promoting post-hoc significance
+  claims.
 * [Camera-Ready All-Planners SLURM Check (2026-05-04)](camera_ready_all_planners_slurm_2026-05-04.md)
   records the failed `rsf-allbench` SLURM job, partial seven-planner campaign evidence,
   `socnav_bench` asset blocker, and rerun decision boundary for the May 4 all-planners matrix.

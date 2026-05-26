@@ -193,6 +193,29 @@ linked_policy:
     }
 
 
+def test_issue_template_audit_accepts_yaml_fence_aliases() -> None:
+    """Verify metadata parsing accepts common YAML code-fence variants."""
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+  ```YML
+archetype: workflow
+evidence_tier: smoke
+linked_policy:
+  - docs/context/issue_1512_issue_archetypes.md
+  ```
+"""
+
+    result = audit_issue_body(body)
+
+    assert result.metadata.block_present is True
+    assert result.metadata.findings == ()
+
+
 def test_issue_template_audit_flags_missing_metadata_block() -> None:
     """Verify the metadata section is reported when the YAML block is absent.
 
@@ -300,6 +323,31 @@ linked_policy:
 
     assert result.metadata.invalid_values == {"evidence_tier": "almost_done"}
     assert "Invalid 'evidence_tier' value 'almost_done'" in result.metadata.findings[0]
+
+
+def test_issue_template_audit_preserves_invalid_metadata_value_types() -> None:
+    """Verify invalid metadata values stay type-preserving in structured output."""
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: 7
+evidence_tier:
+  - smoke
+linked_policy:
+  - docs/context/issue_1512_issue_archetypes.md
+```
+"""
+
+    result = audit_issue_body(body)
+
+    assert result.metadata.invalid_values == {"archetype": 7, "evidence_tier": ["smoke"]}
+    assert "Invalid 'archetype' value 7" in result.metadata.findings[0]
+    assert "Invalid 'evidence_tier' value ['smoke']" in result.metadata.findings[1]
 
 
 def test_issue_template_audit_flags_malformed_metadata_yaml() -> None:

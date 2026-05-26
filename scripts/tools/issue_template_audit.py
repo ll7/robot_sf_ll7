@@ -75,7 +75,10 @@ SECTION_PLACEHOLDERS: dict[str, str] = {
 
 HEADING_RE = re.compile(r"^##\s+(?P<title>.+?)\s*$", re.MULTILINE)
 METADATA_SECTION_TITLE = "Archetype Metadata"
-METADATA_YAML_RE = re.compile(r"```yaml\s*\r?\n(?P<block>.*?)\r?\n```", re.DOTALL)
+METADATA_YAML_RE = re.compile(
+    r"^[ \t]*```ya?ml\s*\r?\n(?P<block>.*?)(?:\r?\n)?^[ \t]*```",
+    re.DOTALL | re.IGNORECASE | re.MULTILINE,
+)
 ARCHETYPE_METADATA_REQUIRED_KEYS: tuple[str, ...] = (
     "archetype",
     "evidence_tier",
@@ -125,7 +128,7 @@ class ArchetypeMetadataAuditResult:
     block_present: bool
     parsed_metadata: dict[str, object] | None
     missing_keys: tuple[str, ...]
-    invalid_values: dict[str, str]
+    invalid_values: dict[str, object]
     parse_error: str | None
 
     @property
@@ -245,21 +248,21 @@ def audit_archetype_metadata(body: str) -> ArchetypeMetadataAuditResult:
         )
 
     missing_keys = tuple(key for key in ARCHETYPE_METADATA_REQUIRED_KEYS if key not in parsed)
-    invalid_values: dict[str, str] = {}
+    invalid_values: dict[str, object] = {}
 
     if "archetype" in parsed:
         archetype_finding = _validate_canonical_value(
             "archetype", parsed.get("archetype"), VALID_ARCHETYPES
         )
         if archetype_finding is not None:
-            invalid_values["archetype"] = str(parsed.get("archetype"))
+            invalid_values["archetype"] = parsed.get("archetype")
 
     if "evidence_tier" in parsed:
         evidence_tier_finding = _validate_canonical_value(
             "evidence_tier", parsed.get("evidence_tier"), VALID_EVIDENCE_TIERS
         )
         if evidence_tier_finding is not None:
-            invalid_values["evidence_tier"] = str(parsed.get("evidence_tier"))
+            invalid_values["evidence_tier"] = parsed.get("evidence_tier")
 
     return ArchetypeMetadataAuditResult(
         heading_present=True,

@@ -42,6 +42,7 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
+from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.seed_variance import (
     build_seed_episode_rows,
@@ -2241,8 +2242,12 @@ def prepare_campaign_preflight(
 
     Returns:
         Paths and metadata required by preflight-only workflows and full runs.
+
+    Raises:
+        SystemExit: When enabled ORCA-dependent planners require ``rvo2`` but it is not importable.
     """
     _validate_campaign_config(cfg)
+    check_orca_rvo2_preflight(cfg)
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
     base_dir = (
@@ -3128,12 +3133,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
 
     Returns:
         Campaign execution summary with output paths and high-level counters.
-    """
-    snqi_weights = load_optional_json(str(cfg.snqi_weights_path) if cfg.snqi_weights_path else None)
-    snqi_baseline = load_optional_json(
-        str(cfg.snqi_baseline_path) if cfg.snqi_baseline_path else None
-    )
 
+    Raises:
+        SystemExit: When enabled ORCA-dependent planners require ``rvo2`` but it is not importable.
+    """
     start = time.perf_counter()
     prepared = prepare_campaign_preflight(
         cfg,
@@ -3162,6 +3165,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     scenario_hash = str(prepared["scenario_hash"])
     git_meta = dict(prepared["git_meta"])
     config_hash = str(prepared["config_hash"])
+    snqi_weights = load_optional_json(str(cfg.snqi_weights_path) if cfg.snqi_weights_path else None)
+    snqi_baseline = load_optional_json(
+        str(cfg.snqi_baseline_path) if cfg.snqi_baseline_path else None
+    )
 
     runs_dir = campaign_root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)

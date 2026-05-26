@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the issue-1527 ORCA benchmark preflight gap by moving the `rvo2` fail-fast check into the
+  shared camera-ready campaign layer, so direct `prepare_campaign_preflight(...)`,
+  `run_campaign(...)`, and wrapper entrypoints such as `scripts/tools/run_benchmark_release.py`
+  cannot bypass the actionable `uv sync --extra orca` / `uv sync --all-extras` guidance for
+  enabled ORCA-dependent rows.
 * Fixed the README Zenodo DOI header by replacing the fragile badge image with a plain-text DOI
   link while preserving the canonical `https://doi.org/10.5281/zenodo.19563812` target.
 * Fixed the crowd-only Gymnasium environment contract so `CrowdSimEnv` keeps a stable

@@ -24,7 +24,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     run_campaign,
     write_campaign_report,
 )
-from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
+from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca_rvo2_preflight
 from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
     build_resolved_release_manifest,
@@ -152,7 +152,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     cfg = load_campaign_config(manifest.canonical_campaign_config_path)
     try:
         check_orca_rvo2_preflight(cfg)
-    except SystemExit as exc:
+    except OrcaRvo2PreflightError as exc:
         reason = str(exc)
         result = {
             "mode": args.mode,

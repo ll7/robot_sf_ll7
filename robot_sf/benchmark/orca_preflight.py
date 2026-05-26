@@ -20,6 +20,22 @@ _SYNC_COMMAND_EXTRA = "uv sync --extra orca"
 _SYNC_COMMAND_ALL = "uv sync --all-extras"
 
 
+class OrcaRvo2PreflightError(RuntimeError):
+    """Typed ORCA preflight failure for library-facing campaign callers."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        planner_keys: tuple[str, ...] = (),
+        error: Exception | None = None,
+    ) -> None:
+        """Store the actionable message plus optional planner/import context."""
+        super().__init__(message)
+        self.planner_keys = planner_keys
+        self.error = error
+
+
 def _missing_rvo2_message(
     *, planner_keys: list[str] | None = None, error: Exception | None = None
 ) -> str:
@@ -66,33 +82,42 @@ def _is_orca_dependent_planner(planner_spec: PlannerSpec) -> bool:
     return enabled and _has_orca_algo(algo)
 
 
+def _ensure_rvo2_importable(*, planner_keys: list[str] | None = None) -> None:
+    """Raise a typed preflight error when ``rvo2`` is unavailable."""
+    try:
+        import rvo2  # type: ignore[import-untyped,unused-ignore]  # noqa: F401, PLC0415
+    except Exception as exc:
+        message = _missing_rvo2_message(planner_keys=planner_keys, error=exc)
+        logger.error(message)
+        raise OrcaRvo2PreflightError(
+            message,
+            planner_keys=tuple(planner_keys or ()),
+            error=exc,
+        ) from None
+
+
 def check_rvo2_importable() -> None:
     """Check whether ``rvo2`` can be imported in the current interpreter.
 
     Raises:
-        SystemExit: When ``rvo2`` is not importable, with a message naming the
+        OrcaRvo2PreflightError: When ``rvo2`` is not importable, with a message naming the
             missing dependency and the exact sync commands.
     """
-    try:
-        import rvo2  # type: ignore[import-untyped,unused-ignore]  # noqa: F401, PLC0415
-    except Exception as exc:
-        message = _missing_rvo2_message(error=exc)
-        logger.error(message)
-        raise SystemExit(message) from None
+    _ensure_rvo2_importable()
 
 
 def check_orca_rvo2_preflight(cfg: CampaignConfig) -> None:
     """Validate that rvo2 is importable when a campaign config includes ORCA planners.
 
     When the config contains enabled ORCA planners and rvo2 is not importable, this
-    function raises ``SystemExit`` with an actionable error message naming the
+    function raises ``OrcaRvo2PreflightError`` with an actionable error message naming the
     ORCA planner keys, the missing dependency, and the exact sync commands.
 
     Args:
         cfg: A loaded camera-ready campaign config.
 
     Raises:
-        SystemExit: When ORCA planners are present and ``rvo2`` is not importable.
+        OrcaRvo2PreflightError: When ORCA planners are present and ``rvo2`` is not importable.
     """
     orca_specs = [p for p in cfg.planners if _is_orca_dependent_planner(p)]
     if not orca_specs:
@@ -105,12 +130,7 @@ def check_orca_rvo2_preflight(cfg: CampaignConfig) -> None:
         f"ORCA-dependent planner(s) detected: {orca_keys_str}. Checking rvo2 importability..."
     )
 
-    try:
-        import rvo2  # type: ignore[import-untyped,unused-ignore]  # noqa: F401, PLC0415
-    except Exception as exc:
-        message = _missing_rvo2_message(planner_keys=orca_keys, error=exc)
-        logger.error(message)
-        raise SystemExit(message) from None
+    _ensure_rvo2_importable(planner_keys=orca_keys)
 
     logger.info("rvo2 is importable; ORCA preflight passed.")
 
@@ -125,7 +145,7 @@ def check_orca_rvo2_preflight_from_config(config_path: Path) -> None:
         config_path: Path to a camera-ready campaign config YAML.
 
     Raises:
-        SystemExit: When ORCA planners are present and ``rvo2`` is not importable.
+        OrcaRvo2PreflightError: When ORCA planners are present and ``rvo2`` is not importable.
     """
     from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415
         load_campaign_config,
@@ -136,6 +156,7 @@ def check_orca_rvo2_preflight_from_config(config_path: Path) -> None:
 
 
 __all__ = [
+    "OrcaRvo2PreflightError",
     "check_orca_rvo2_preflight",
     "check_orca_rvo2_preflight_from_config",
     "check_rvo2_importable",

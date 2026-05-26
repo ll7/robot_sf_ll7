@@ -24,6 +24,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     run_campaign,
 )
 from robot_sf.benchmark.fallback_policy import campaign_exit_code
+from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -92,45 +93,64 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     cfg = load_campaign_config(args.config)
     invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
-    if args.mode == "preflight":
-        prepared = prepare_campaign_preflight(
-            cfg,
-            output_root=args.output_root,
-            label=args.label,
-            campaign_id=args.campaign_id,
-            invoked_command=invoked_command,
-        )
+    try:
+        if args.mode == "preflight":
+            prepared = prepare_campaign_preflight(
+                cfg,
+                output_root=args.output_root,
+                label=args.label,
+                campaign_id=args.campaign_id,
+                invoked_command=invoked_command,
+            )
+            result = {
+                "campaign_id": prepared["campaign_id"],
+                "campaign_root": str(prepared["campaign_root"]),
+                "validate_config_path": str(prepared["validate_config_path"]),
+                "preview_scenarios_path": str(prepared["preview_scenarios_path"]),
+                "matrix_summary_json": str(prepared["matrix_summary_json_path"]),
+                "matrix_summary_csv": str(prepared["matrix_summary_csv_path"]),
+                "amv_coverage_json": str(prepared["amv_coverage_json_path"]),
+                "amv_coverage_md": str(prepared["amv_coverage_md_path"]),
+                "comparability_json": (
+                    str(prepared["comparability_json_path"])
+                    if prepared.get("comparability_json_path") is not None
+                    else None
+                ),
+                "comparability_md": (
+                    str(prepared["comparability_md_path"])
+                    if prepared.get("comparability_md_path") is not None
+                    else None
+                ),
+            }
+        else:
+            result = run_campaign(
+                cfg,
+                output_root=args.output_root,
+                label=args.label,
+                campaign_id=args.campaign_id,
+                skip_publication_bundle=bool(args.skip_publication_bundle),
+                invoked_command=invoked_command,
+            )
+    except OrcaRvo2PreflightError as exc:
         result = {
-            "campaign_id": prepared["campaign_id"],
-            "campaign_root": str(prepared["campaign_root"]),
-            "validate_config_path": str(prepared["validate_config_path"]),
-            "preview_scenarios_path": str(prepared["preview_scenarios_path"]),
-            "matrix_summary_json": str(prepared["matrix_summary_json_path"]),
-            "matrix_summary_csv": str(prepared["matrix_summary_csv_path"]),
-            "amv_coverage_json": str(prepared["amv_coverage_json_path"]),
-            "amv_coverage_md": str(prepared["amv_coverage_md_path"]),
-            "comparability_json": (
-                str(prepared["comparability_json_path"])
-                if prepared.get("comparability_json_path") is not None
-                else None
-            ),
-            "comparability_md": (
-                str(prepared["comparability_md_path"])
-                if prepared.get("comparability_md_path") is not None
-                else None
-            ),
+            "mode": args.mode,
+            "status": "orca_preflight_failed",
+            "status_reason": str(exc),
+            "benchmark_success": False,
+            "exit_code": 2,
+            "campaign_execution_status": "failed",
+            "evidence_status": "blocked",
+            "row_status_summary": {
+                "successful_evidence_rows": 0,
+                "accepted_unavailable_rows": 0,
+                "unexpected_failed_rows": 0,
+                "fallback_or_degraded_rows": 0,
+            },
         }
-    else:
-        result = run_campaign(
-            cfg,
-            output_root=args.output_root,
-            label=args.label,
-            campaign_id=args.campaign_id,
-            skip_publication_bundle=bool(args.skip_publication_bundle),
-            invoked_command=invoked_command,
-        )
     print(json.dumps(result, indent=2))
-    return 0 if args.mode == "preflight" else campaign_exit_code(result)
+    if args.mode == "preflight" and result.get("status") != "orca_preflight_failed":
+        return 0
+    return campaign_exit_code(result)
 
 
 if __name__ == "__main__":

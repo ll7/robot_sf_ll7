@@ -52,7 +52,12 @@ BACKTICK_TOKEN_PATTERN = re.compile(r"`([a-z][a-z0-9-]+)`")
 def _read_yaml(path: Path) -> Any:
     """Read a YAML file and fail with a path-qualified message."""
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if data is None:
+            raise AssertionError(f"{path.relative_to(REPO_ROOT)}: YAML file is empty")
+        if not isinstance(data, dict):
+            raise AssertionError(f"{path.relative_to(REPO_ROOT)}: YAML top level must be a mapping")
+        return data
     except yaml.YAMLError as exc:
         raise AssertionError(f"{path.relative_to(REPO_ROOT)}: invalid YAML: {exc}") from exc
 
@@ -73,7 +78,11 @@ def _frontmatter(path: Path) -> tuple[dict[str, Any], str]:
         ) from exc
     raw = "\n".join(lines[1:closing_idx])
     try:
-        metadata = yaml.safe_load(raw) or {}
+        metadata = yaml.safe_load(raw)
+        if not isinstance(metadata, dict):
+            raise AssertionError(
+                f"{path.relative_to(REPO_ROOT)}: frontmatter must be a YAML mapping"
+            )
     except yaml.YAMLError as exc:
         raise AssertionError(
             f"{path.relative_to(REPO_ROOT)}: invalid frontmatter YAML: {exc}"
@@ -119,6 +128,9 @@ def _validate_registry_shape(registry: dict[str, Any], schema: dict[str, Any]) -
     names = set(skills)
     aliases: dict[str, str] = {}
     for name, metadata in skills.items():
+        if not isinstance(metadata, dict):
+            errors.append(f"{name}: metadata must be a dictionary")
+            continue
         missing = REQUIRED_REGISTRY_KEYS - set(metadata)
         if missing:
             errors.append(f"{name}: registry missing keys {sorted(missing)}")
@@ -140,9 +152,9 @@ def _validate_registry_shape(registry: dict[str, Any], schema: dict[str, Any]) -
         for delegate in metadata.get("delegates_to", []):
             if delegate not in names:
                 errors.append(f"{name}: delegates_to missing skill {delegate!r}")
-        schema = metadata.get("output_schema")
-        if schema and not (SCHEMAS_ROOT / f"{schema}.yaml").exists():
-            errors.append(f"{name}: missing output schema {schema!r}")
+        output_schema_name = metadata.get("output_schema")
+        if output_schema_name and not (SCHEMAS_ROOT / f"{output_schema_name}.yaml").exists():
+            errors.append(f"{name}: missing output schema {output_schema_name!r}")
         if metadata.get("requires_write"):
             writes = metadata.get("writes", {})
             if not any(bool(writes.get(key)) for key in writes):

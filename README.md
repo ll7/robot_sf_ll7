@@ -45,8 +45,6 @@ cd robot_sf_ll7
 
 scripts/dev/check_runtime_requirements.sh
 uv sync --all-extras
-source .venv/bin/activate
-uv run pre-commit install
 
 uv run python examples/quickstart/01_basic_robot.py
 uv run python examples/quickstart/02_trained_model.py
@@ -77,7 +75,7 @@ For host packages, optional capabilities, and a fuller setup walkthrough, see
 Use the development guide as the source of truth for contributor commands. The common local flow is:
 
 ```bash
-source .venv/bin/activate
+uv run pre-commit install
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh

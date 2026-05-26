@@ -77,7 +77,7 @@ Keep these claim boundaries explicit:
   explicitly aligned spawn can run, but it is not the same as regenerating the
   durable certified #1111 fixture as native metric-bearing evidence.
 - Current comparable native replay metrics are limited to fields emitted by the
-  live replay summary, such as success, collision, intervention rate, and
+  live replay summary, such as success, collision, intervention_rate, and
   `min_distance_m` when geometry exists. They do not justify broader transfer
   claims by themselves.
 - The #1467 native metric probe is comparable smoke evidence, not a broad CARLA

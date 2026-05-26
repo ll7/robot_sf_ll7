@@ -87,7 +87,7 @@ EXPECTED_BROADER_ROWS = {
         "algo": "socnav_sampling",
         "planner_group": "experimental",
         "benchmark_profile": "experimental",
-        "socnav_missing_prereq_policy": "fail-fast",
+        "socnav_missing_prereq_policy": "skip-with-warning",
     },
     "sacadrl": {
         "algo": "sacadrl",
@@ -99,7 +99,7 @@ EXPECTED_BROADER_ROWS = {
         "algo": "socnav_bench",
         "planner_group": "experimental",
         "benchmark_profile": "experimental",
-        "socnav_missing_prereq_policy": "fail-fast",
+        "socnav_missing_prereq_policy": "skip-with-warning",
     },
 }
 

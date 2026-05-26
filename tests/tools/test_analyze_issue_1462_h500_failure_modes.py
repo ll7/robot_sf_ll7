@@ -65,6 +65,48 @@ def test_std_helper_uses_population_standard_deviation() -> None:
     assert analyze_issue_1462_h500_failure_modes._std([0.0, 1.0]) == 0.5
 
 
+def test_output_drift_compares_all_generated_evidence_files(tmp_path: Path) -> None:
+    """Committed evidence freshness checks should catch stale derived files."""
+    generated_dir = tmp_path / "generated"
+    expected_dir = tmp_path / "expected"
+    generated_dir.mkdir()
+    expected_dir.mkdir()
+
+    for filename in analyze_issue_1462_h500_failure_modes._generated_filenames():
+        (generated_dir / filename).write_text("fresh\n", encoding="utf-8")
+        (expected_dir / filename).write_text("fresh\n", encoding="utf-8")
+
+    (expected_dir / "summary.json").write_text("stale\n", encoding="utf-8")
+
+    assert analyze_issue_1462_h500_failure_modes._output_drift(generated_dir, expected_dir) == [
+        "summary.json: content differs"
+    ]
+
+
+def test_output_drift_ignores_summary_output_directory(tmp_path: Path) -> None:
+    """Freshness checks should allow temp regeneration paths for summary metadata."""
+    generated_dir = tmp_path / "generated"
+    expected_dir = tmp_path / "expected"
+    generated_dir.mkdir()
+    expected_dir.mkdir()
+
+    for filename in analyze_issue_1462_h500_failure_modes._generated_filenames():
+        if filename == "summary.json":
+            (generated_dir / filename).write_text(
+                json.dumps({"derived_output_dir": str(generated_dir), "value": 1}) + "\n",
+                encoding="utf-8",
+            )
+            (expected_dir / filename).write_text(
+                json.dumps({"derived_output_dir": str(expected_dir), "value": 1}) + "\n",
+                encoding="utf-8",
+            )
+        else:
+            (generated_dir / filename).write_text("fresh\n", encoding="utf-8")
+            (expected_dir / filename).write_text("fresh\n", encoding="utf-8")
+
+    assert analyze_issue_1462_h500_failure_modes._output_drift(generated_dir, expected_dir) == []
+
+
 def test_analyzer_requires_raw_campaign_dir(monkeypatch) -> None:
     """Raw outcome rollups are required so benchmark evidence cannot silently zero-fill them."""
     monkeypatch.setattr(

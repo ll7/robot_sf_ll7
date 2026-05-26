@@ -8,6 +8,7 @@ import csv
 import json
 import math
 import statistics
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--unsolved-success-max", type=float, default=0.20)
     parser.add_argument("--broad-success-min", type=float, default=0.65)
     parser.add_argument("--seed-range-min", type=float, default=0.40)
+    parser.add_argument(
+        "--check-output-dir",
+        type=Path,
+        help=(
+            "After writing --output-dir, compare the generated evidence files with this "
+            "committed evidence directory and exit non-zero on drift."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -62,7 +71,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         path.write_text("", encoding="utf-8")
         return
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -71,6 +80,48 @@ def _write_json(path: Path, payload: Any) -> None:
     """Write deterministic JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _generated_filenames() -> tuple[str, ...]:
+    """Return the derived evidence files that should stay fresh together."""
+    return (
+        "README.md",
+        "candidate_vs_core_matrix.csv",
+        "planner_scenario_seed_variability.csv",
+        "scenario_difficulty_table.csv",
+        "seed_difficulty_table.csv",
+        "summary.json",
+    )
+
+
+def _output_drift(generated_dir: Path, expected_dir: Path) -> list[str]:
+    """Return evidence files whose regenerated content differs from the expected bundle."""
+    drift: list[str] = []
+    for filename in _generated_filenames():
+        generated_path = generated_dir / filename
+        expected_path = expected_dir / filename
+        if not generated_path.exists():
+            drift.append(f"{filename}: generated file is missing")
+        elif not expected_path.exists():
+            drift.append(f"{filename}: expected file is missing")
+        elif not _generated_file_matches(generated_path, expected_path, filename):
+            drift.append(f"{filename}: content differs")
+    return drift
+
+
+def _generated_file_matches(generated_path: Path, expected_path: Path, filename: str) -> bool:
+    """Compare generated evidence files while ignoring location-only metadata."""
+    if filename != "summary.json":
+        return generated_path.read_bytes() == expected_path.read_bytes()
+
+    try:
+        generated = json.loads(generated_path.read_text(encoding="utf-8"))
+        expected = json.loads(expected_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    generated.pop("derived_output_dir", None)
+    expected.pop("derived_output_dir", None)
+    return generated == expected
 
 
 def _mean(values: list[float]) -> float:
@@ -542,6 +593,15 @@ def main() -> int:
     }
     _write_json(output_dir / "summary.json", summary)
     _write_readme(output_dir, difficulty_rows, matrix_rows, seed_table, variability_rows)
+    if args.check_output_dir is not None:
+        drift = _output_drift(output_dir, args.check_output_dir)
+        if drift:
+            print(
+                "Generated evidence differs from committed evidence:\n"
+                + "\n".join(f"- {item}" for item in drift),
+                file=sys.stderr,
+            )
+            return 1
     return 0
 
 

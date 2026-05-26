@@ -2085,6 +2085,9 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert record["observation_level"] == "oracle_full_state"
     assert record["scenario_params"]["observation_mode"] == "goal_state"
     assert record["scenario_params"]["observation_level"] == "oracle_full_state"
+    assert "command_clip_fraction" not in record["metrics"]
+    assert "yaw_rate_saturation_fraction" not in record["metrics"]
+    assert "signed_braking_peak_m_s2" not in record["metrics"]
     assert algo_md["observation_spec"]["active_mode"] == "goal_state"
     assert algo_md["observation_level"]["key"] == "oracle_full_state"
     assert algo_md["planner_kinematics"]["robot_kinematics"] in {"unknown", "differential_drive"}

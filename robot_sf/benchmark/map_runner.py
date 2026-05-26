@@ -3165,16 +3165,17 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
     )
-    for metric_name, metric_value in actuation_summary.items():
-        if metric_name in {
-            "schema_version",
-            "status",
-            "step_count",
-            "command_clip_steps",
-            "yaw_rate_saturation_steps",
-        }:
-            continue
-        metrics[metric_name] = metric_value
+    if actuation_controller is not None:
+        for metric_name, metric_value in actuation_summary.items():
+            if metric_name in {
+                "schema_version",
+                "status",
+                "step_count",
+                "command_clip_steps",
+                "yaw_rate_saturation_steps",
+            }:
+                continue
+            metrics[metric_name] = metric_value
 
     ts_end = datetime.now(UTC).isoformat()
     scenario_params = _scenario_identity_payload(

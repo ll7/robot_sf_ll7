@@ -11,6 +11,11 @@ from typing import Any
 import yaml
 
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.planner.obstacle_features import (
+    ObstacleFeatureSchemaError,
+    predictive_ego_motion_channel_producer_key,
+    validate_predictive_feature_schema_metadata,
+)
 
 ROW_STATUSES = frozenset({"ok", "failed", "degraded", "unavailable", "unknown"})
 ROW_REQUIRED_FIELDS = frozenset(
@@ -36,6 +41,7 @@ ROW_REQUIRED_FIELDS = frozenset(
 ROW_OPTIONAL_FIELDS = frozenset(
     {
         "comparison_group",
+        "feature_schema",
         "scenario_matrix",
         "seed_manifest",
         "source_note",
@@ -133,6 +139,8 @@ def validate_predictive_same_seed_row_summary_rows(
         for index, row in enumerate(rows)
     ]
     _mark_duplicate_row_keys(row_reports)
+    _guard_mixed_ego_motion_producer_keys(row_reports)
+    _strip_internal_row_metadata(row_reports)
     invalid_row_count = sum(1 for row in row_reports if row["status"] == "invalid")
     return {
         "status": "valid" if invalid_row_count == 0 else "invalid",
@@ -224,6 +232,7 @@ def _validate_row(
     _validate_optional_reference(row, "source_note", repo_root=repo_root, errors=errors)
     if "comparison_group" in row:
         _require_non_empty_string(row, "comparison_group", errors)
+    feature_schema = _validate_optional_feature_schema(row, errors=errors)
 
     _validate_semantics(
         row_status=row_status,
@@ -261,7 +270,201 @@ def _validate_row(
         "status": "valid" if not errors else "invalid",
         "errors": errors,
         "warnings": warnings,
+        "_comparison_context": _comparison_context(
+            campaign=campaign,
+            comparison_group=row.get("comparison_group"),
+            scenario=scenario,
+            seed=seed,
+            planner_grid_key=planner_grid_key,
+        ),
+        "_feature_schema_present": feature_schema is not None,
+        "_producer_key": (
+            predictive_ego_motion_channel_producer_key(feature_schema)
+            if isinstance(feature_schema, dict)
+            else None
+        ),
     }
+
+
+def _validate_optional_feature_schema(
+    mapping: dict[str, Any],
+    *,
+    errors: list[dict[str, str]],
+) -> dict[str, Any] | None:
+    if "feature_schema" not in mapping or mapping["feature_schema"] is None:
+        return None
+    feature_schema = mapping.get("feature_schema")
+    if not isinstance(feature_schema, dict):
+        _append_problem(errors, "feature_schema", "must be a mapping when provided")
+        return None
+    try:
+        validate_predictive_feature_schema_metadata(
+            feature_schema,
+            input_dim=_feature_schema_input_dim(feature_schema),
+        )
+    except (ObstacleFeatureSchemaError, TypeError, ValueError) as exc:
+        _append_problem(
+            errors, "feature_schema", f"invalid predictive feature schema metadata: {exc}"
+        )
+        return None
+    return feature_schema
+
+
+def _feature_schema_input_dim(feature_schema: dict[str, Any]) -> int:
+    input_dim = feature_schema.get("input_dim")
+    if isinstance(input_dim, bool) or not isinstance(input_dim, int):
+        raise ValueError("feature_schema.input_dim must be an integer")
+    return int(input_dim)
+
+
+def _comparison_context(
+    *,
+    campaign: str | None,
+    comparison_group: object,
+    scenario: str | None,
+    seed: int | None,
+    planner_grid_key: str | None,
+) -> tuple[str | None, str | None, str | None, int | None, str | None] | None:
+    if scenario is None or seed is None or planner_grid_key is None:
+        return None
+    normalized_group = None
+    if isinstance(comparison_group, str) and comparison_group.strip():
+        normalized_group = comparison_group.strip()
+    return (campaign, normalized_group, scenario, seed, planner_grid_key)
+
+
+def _guard_mixed_ego_motion_producer_keys(row_reports: list[dict[str, Any]]) -> None:
+    grouped_reports: dict[
+        tuple[str | None, str | None, str | None, int | None, str | None],
+        list[dict[str, Any]],
+    ] = {}
+    for row_report in row_reports:
+        context = row_report.get("_comparison_context")
+        if context is None:
+            continue
+        grouped_reports.setdefault(context, []).append(row_report)
+    for context, grouped in grouped_reports.items():
+        if len(grouped) < 2:
+            continue
+        if not any(row_report.get("_feature_schema_present") for row_report in grouped):
+            continue
+        _apply_ego_motion_producer_guard(grouped, context=context)
+
+
+def _apply_ego_motion_producer_guard(
+    grouped: list[dict[str, Any]],
+    *,
+    context: tuple[str | None, str | None, str | None, int | None, str | None],
+) -> None:
+    producer_keys = sorted(
+        {
+            str(producer_key)
+            for producer_key in (row_report.get("_producer_key") for row_report in grouped)
+            if producer_key
+        }
+    )
+    rows_without_producer = [
+        row_report for row_report in grouped if row_report.get("_producer_key") is None
+    ]
+    if len(producer_keys) > 1:
+        _mark_grouped_rows_invalid_for_mixed_producers(
+            grouped, context=context, producer_keys=producer_keys
+        )
+    if rows_without_producer and producer_keys:
+        _warn_grouped_rows_for_missing_producers(
+            grouped,
+            context=context,
+            producer_keys=producer_keys,
+        )
+        return
+    if rows_without_producer:
+        _warn_grouped_rows_for_unknown_comparability(grouped, context=context)
+
+
+def _mark_grouped_rows_invalid_for_mixed_producers(
+    grouped: list[dict[str, Any]],
+    *,
+    context: tuple[str | None, str | None, str | None, int | None, str | None],
+    producer_keys: list[str],
+) -> None:
+    producer_list = ", ".join(repr(key) for key in producer_keys)
+    message = (
+        f"{_format_comparison_context(context)} mixes "
+        "ego_motion_channel_producer.producer_key values "
+        f"[{producer_list}]; rows are not directly comparable without grouping or an explicit caveat"
+    )
+    for row_report in grouped:
+        _append_problem(
+            row_report["errors"],
+            "feature_schema.ego_motion_channel_producer.producer_key",
+            message,
+        )
+        row_report["status"] = "invalid"
+
+
+def _warn_grouped_rows_for_missing_producers(
+    grouped: list[dict[str, Any]],
+    *,
+    context: tuple[str | None, str | None, str | None, int | None, str | None],
+    producer_keys: list[str],
+) -> None:
+    producer_list = ", ".join(repr(key) for key in producer_keys)
+    message = (
+        f"{_format_comparison_context(context)} includes legacy/no-metadata rows without "
+        "ego_motion_channel_producer.producer_key alongside producer-stamped rows "
+        f"[{producer_list}]; direct comparability is not proven"
+    )
+    for row_report in grouped:
+        _append_problem(
+            row_report["warnings"],
+            "feature_schema.ego_motion_channel_producer.producer_key",
+            message,
+        )
+
+
+def _warn_grouped_rows_for_unknown_comparability(
+    grouped: list[dict[str, Any]],
+    *,
+    context: tuple[str | None, str | None, str | None, int | None, str | None],
+) -> None:
+    message = (
+        f"{_format_comparison_context(context)} has rows without "
+        "ego_motion_channel_producer.producer_key metadata; direct comparability is not proven"
+    )
+    for row_report in grouped:
+        _append_problem(
+            row_report["warnings"],
+            "feature_schema.ego_motion_channel_producer.producer_key",
+            message,
+        )
+
+
+def _format_comparison_context(
+    context: tuple[str | None, str | None, str | None, int | None, str | None],
+) -> str:
+    campaign, comparison_group, scenario, seed, planner_grid_key = context
+    parts = []
+    if campaign:
+        parts.append(f"campaign={campaign!r}")
+    if comparison_group:
+        parts.append(f"comparison_group={comparison_group!r}")
+    if scenario:
+        parts.append(f"scenario={scenario!r}")
+    if seed is not None:
+        parts.append(f"seed={seed}")
+    if planner_grid_key:
+        parts.append(f"planner_grid_key={planner_grid_key!r}")
+    return "comparison context " + ", ".join(parts)
+
+
+def _strip_internal_row_metadata(row_reports: list[dict[str, Any]]) -> None:
+    for row_report in row_reports:
+        for field in (
+            "_comparison_context",
+            "_feature_schema_present",
+            "_producer_key",
+        ):
+            row_report.pop(field, None)
 
 
 def _validate_semantics(

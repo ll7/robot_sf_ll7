@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import sys
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ import pytest
 import yaml
 from loguru import logger
 
+import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready_campaign import (
     DEFAULT_SEED_SETS_PATH,
@@ -2151,6 +2153,58 @@ def test_prepare_campaign_preflight_validates_campaign_config(tmp_path: Path) ->
     )
     with pytest.raises(ValueError, match="paper_profile_version"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="invalid")
+
+
+def test_prepare_campaign_preflight_checks_orca_rvo2_before_loading_scenarios(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Direct preflight calls fail before scenario loading when enabled ORCA rows lack rvo2."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    cfg = CampaignConfig(
+        name="orca_preflight_guard",
+        scenario_matrix_path=scenario_path,
+        planners=(PlannerSpec(key="orca", algo="orca"),),
+        seed_policy=SeedPolicy(),
+    )
+
+    monkeypatch.setitem(sys.modules, "rvo2", None)
+    monkeypatch.setattr(
+        camera_ready_campaign_module,
+        "_load_campaign_scenarios",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("_load_campaign_scenarios should not run before ORCA preflight")
+        ),
+    )
+
+    with pytest.raises(SystemExit, match="rvo2"):
+        prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="orca")
+
+
+def test_run_campaign_checks_orca_rvo2_before_loading_optional_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Direct campaign runs fail before optional JSON loading when ORCA rows lack rvo2."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    cfg = CampaignConfig(
+        name="orca_run_guard",
+        scenario_matrix_path=scenario_path,
+        planners=(PlannerSpec(key="orca", algo="orca"),),
+        seed_policy=SeedPolicy(),
+    )
+
+    monkeypatch.setitem(sys.modules, "rvo2", None)
+    monkeypatch.setattr(
+        camera_ready_campaign_module,
+        "load_optional_json",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("load_optional_json should not run before ORCA preflight")
+        ),
+    )
+
+    with pytest.raises(SystemExit, match="rvo2"):
+        run_campaign(cfg, output_root=tmp_path / "out", label="orca")
 
 
 def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) -> None:

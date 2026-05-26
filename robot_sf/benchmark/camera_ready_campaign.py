@@ -50,11 +50,6 @@ from robot_sf.benchmark.seed_variance import (
     build_seed_variability_rows,
     build_statistical_sufficiency_rows,
 )
-from robot_sf.benchmark.synthetic_actuation import (
-    SyntheticActuationProfile,
-    not_available_saturation_metrics,
-    validate_synthetic_actuation_profile,
-)
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
     build_positioning_recommendation,
@@ -70,6 +65,11 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     sanitize_baseline_stats,
 )
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
+from robot_sf.benchmark.synthetic_actuation import (
+    SyntheticActuationProfile,
+    not_available_saturation_metrics,
+    validate_synthetic_actuation_profile,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
@@ -271,7 +271,9 @@ class CampaignConfig:
     name: str
     scenario_matrix_path: Path
     planners: tuple[PlannerSpec, ...]
-    scenario_candidates: ScenarioCandidateSelection = field(default_factory=ScenarioCandidateSelection)
+    scenario_candidates: ScenarioCandidateSelection = field(
+        default_factory=ScenarioCandidateSelection
+    )
     seed_policy: SeedPolicy = SeedPolicy()
     scenario_horizons_path: Path | None = None
     workers: int = 1
@@ -606,6 +608,37 @@ def _scenario_horizon_summary(
     }
 
 
+def _filter_scenario_candidates(
+    scenarios: list[dict[str, Any]],
+    *,
+    names: tuple[str, ...],
+    matrix_path: Path,
+) -> list[dict[str, Any]]:
+    """Return the configured compact candidate subset.
+
+    Returns:
+        Candidate-filtered scenario list.
+    """
+    if not names:
+        return scenarios
+    requested_counts = dict.fromkeys(names, 0)
+    filtered: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        scenario_name = str(
+            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or ""
+        ).strip()
+        if scenario_name in requested_counts:
+            requested_counts[scenario_name] += 1
+            filtered.append(scenario)
+    missing = [name for name, count in requested_counts.items() if count <= 0]
+    if missing:
+        raise ValueError(
+            "scenario_candidates did not resolve in "
+            f"{_repo_relative(matrix_path)}: {', '.join(missing)}"
+        )
+    return filtered
+
+
 def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
     """Load campaign scenarios and apply optional seed override.
 
@@ -639,24 +672,11 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
                         patched["map_file"] = candidate.as_posix()
         normalized.append(patched)
 
-    scenario_dicts = normalized
-    if cfg.scenario_candidates.names:
-        requested_counts = {name: 0 for name in cfg.scenario_candidates.names}
-        filtered: list[dict[str, Any]] = []
-        for scenario in scenario_dicts:
-            scenario_name = str(
-                scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or ""
-            ).strip()
-            if scenario_name in requested_counts:
-                requested_counts[scenario_name] += 1
-                filtered.append(scenario)
-        missing = [name for name, count in requested_counts.items() if count <= 0]
-        if missing:
-            raise ValueError(
-                "scenario_candidates did not resolve in "
-                f"{_repo_relative(cfg.scenario_matrix_path)}: {', '.join(missing)}"
-            )
-        scenario_dicts = filtered
+    scenario_dicts = _filter_scenario_candidates(
+        normalized,
+        names=cfg.scenario_candidates.names,
+        matrix_path=cfg.scenario_matrix_path,
+    )
     scenario_dicts = _apply_scenario_horizon_schedule(
         scenario_dicts,
         schedule_path=cfg.scenario_horizons_path,
@@ -1206,9 +1226,7 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         validate_synthetic_actuation_profile(cfg.synthetic_actuation_profile)
         if cfg.paper_facing:
             raise ValueError("synthetic_actuation_profile requires paper_facing=false")
-        normalized_kinematics = tuple(
-            str(value).strip().lower() for value in cfg.kinematics_matrix
-        )
+        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
         if normalized_kinematics != ("differential_drive",):
             raise ValueError(
                 "synthetic_actuation_profile requires kinematics_matrix=['differential_drive']"
@@ -1511,9 +1529,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                 max_linear_decel_m_s2=float(
                     synthetic_actuation_raw.get("max_linear_decel_m_s2", 0.0)
                 ),
-                max_yaw_rate_rad_s=float(
-                    synthetic_actuation_raw.get("max_yaw_rate_rad_s", 0.0)
-                ),
+                max_yaw_rate_rad_s=float(synthetic_actuation_raw.get("max_yaw_rate_rad_s", 0.0)),
                 max_angular_accel_rad_s2=float(
                     synthetic_actuation_raw.get("max_angular_accel_rad_s2", 0.0)
                 ),
@@ -1523,9 +1539,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                     .lower()
                 ),
                 update_mode=(
-                    str(synthetic_actuation_raw.get("update_mode", "10hz-matched"))
-                    .strip()
-                    .lower()
+                    str(synthetic_actuation_raw.get("update_mode", "10hz-matched")).strip().lower()
                 ),
             )
             if synthetic_actuation_raw is not None
@@ -1983,7 +1997,11 @@ def _build_actuation_envelope_summary(
     profile: SyntheticActuationProfile,
     planner_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Build a synthetic actuation-envelope diagnostic summary payload."""
+    """Build a synthetic actuation-envelope diagnostic summary payload.
+
+    Returns:
+        JSON-safe actuation-envelope summary payload.
+    """
     rows: list[dict[str, Any]] = []
     for planner_row in planner_rows:
         saturation = {
@@ -2032,7 +2050,11 @@ def _write_actuation_envelope_artifacts(
     reports_dir: Path,
     payload: dict[str, Any],
 ) -> tuple[Path, Path]:
-    """Write synthetic actuation-envelope JSON and Markdown artifacts."""
+    """Write synthetic actuation-envelope JSON and Markdown artifacts.
+
+    Returns:
+        Paths to the JSON and Markdown artifacts.
+    """
     json_path = reports_dir / "actuation_envelope_summary.json"
     md_path = reports_dir / "actuation_envelope_summary.md"
     _write_json(json_path, payload)
@@ -2544,7 +2566,9 @@ def prepare_campaign_preflight(
                 key: list(values) for key, values in cfg.amv_profile.required_dimensions.items()
             },
         },
-        "synthetic_actuation_profile": _synthetic_actuation_metadata(cfg.synthetic_actuation_profile),
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
         "comparability_mapping": (
             _repo_relative(cfg.comparability_mapping_path)
             if cfg.comparability_mapping_path is not None
@@ -2593,7 +2617,9 @@ def prepare_campaign_preflight(
         "scenario_count": len(scenarios),
         "preview_limit": preview_limit,
         "scenario_candidates": list(cfg.scenario_candidates.names),
-        "synthetic_actuation_profile": _synthetic_actuation_metadata(cfg.synthetic_actuation_profile),
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
         "route_clearance_warning_summary": route_clearance_warning_summary,
@@ -2699,7 +2725,9 @@ def prepare_campaign_preflight(
         "amv_contract_version": cfg.amv_profile.contract_version,
         "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
         "amv_coverage_status": amv_summary.get("status", "unknown"),
-        "synthetic_actuation_profile": _synthetic_actuation_metadata(cfg.synthetic_actuation_profile),
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
         "comparability_mapping_path": (
             _repo_relative(comparability_mapping_path) if comparability_mapping_path else None
         ),
@@ -2797,7 +2825,7 @@ def prepare_campaign_preflight(
     }
 
 
-def _planner_report_row(  # noqa: C901
+def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
     planner: PlannerSpec,
     summary: dict[str, Any],
     aggregates: dict[str, Any] | None,

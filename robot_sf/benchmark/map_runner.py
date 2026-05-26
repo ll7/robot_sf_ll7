@@ -241,7 +241,11 @@ _validate_planner_contract = planner_commands.validate_planner_contract
 
 
 def _load_synthetic_actuation_profile(payload: Any) -> SyntheticActuationProfile | None:
-    """Normalize optional synthetic-actuation payloads into the typed profile contract."""
+    """Normalize optional synthetic-actuation payloads into the typed profile contract.
+
+    Returns:
+        A validated profile, or ``None`` when the payload is absent.
+    """
     if payload is None:
         return None
     if isinstance(payload, SyntheticActuationProfile):
@@ -2928,7 +2932,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
 
     planner_runtime_snapshot: dict[str, Any] | None = None
     actuation_controller = (
-        SyntheticActuationController(profile=actuation_profile, dt=config.sim_config.time_per_step_in_secs)
+        SyntheticActuationController(
+            profile=actuation_profile, dt=config.sim_config.time_per_step_in_secs
+        )
         if actuation_profile is not None
         else None
     )
@@ -2969,7 +2975,10 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     "native env actions cannot be wrapped safely"
                 )
             if actuation_controller is not None:
-                if not isinstance(policy_command, (tuple, list, np.ndarray)) or len(policy_command) < 2:
+                if (
+                    not isinstance(policy_command, (tuple, list, np.ndarray))
+                    or len(policy_command) < 2
+                ):
                     raise TypeError(
                         "synthetic_actuation_profile expects planner commands shaped like "
                         "(linear_velocity, angular_velocity)"
@@ -3157,7 +3166,13 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         snqi_baseline=snqi_baseline,
     )
     for metric_name, metric_value in actuation_summary.items():
-        if metric_name in {"schema_version", "status", "step_count", "command_clip_steps", "yaw_rate_saturation_steps"}:
+        if metric_name in {
+            "schema_version",
+            "status",
+            "step_count",
+            "command_clip_steps",
+            "yaw_rate_saturation_steps",
+        }:
             continue
         metrics[metric_name] = metric_value
 

@@ -353,7 +353,9 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
     cfg = load_campaign_config(config_path)
     prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="issue1556")
 
-    preview_payload = json.loads(Path(prepared["preview_scenarios_path"]).read_text(encoding="utf-8"))
+    preview_payload = json.loads(
+        Path(prepared["preview_scenarios_path"]).read_text(encoding="utf-8")
+    )
     assert preview_payload["scenario_count"] == 5
     assert [scenario["name"] for scenario in preview_payload["scenarios"]] == [
         "classic_overtaking_medium",
@@ -364,7 +366,9 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
     ]
 
     manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
-    validate_payload = json.loads(Path(prepared["validate_config_path"]).read_text(encoding="utf-8"))
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
     assert validate_payload["scenario_candidates"]["requested"] == [
         "classic_overtaking_medium",
         "classic_bottleneck_high",
@@ -1650,7 +1654,11 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
             "failed_jobs": 0,
             "failures": [],
             "out_path": str(out_file),
-            "algorithm_readiness": {"name": algo, "tier": "baseline-ready", "profile": "baseline-safe"},
+            "algorithm_readiness": {
+                "name": algo,
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
             "preflight": {
                 "status": "ok",
                 "synthetic_actuation_profile": kwargs["synthetic_actuation_profile"],

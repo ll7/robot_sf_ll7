@@ -6,7 +6,6 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-
 _LATENCY_MODE_TO_STEPS = {
     "zero-step-delay": 0,
     "one-step-delay": 1,

@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the issue-1515 hybrid-evidence matrix validation surface: `robot_sf/benchmark/hybrid_evidence_matrix.py`
+  and `scripts/validation/validate_hybrid_evidence_matrix.py` now validate the #1499 row contract
+  for enums, nullability, repository-relative provenance, fail-closed fallback/degraded semantics,
+  and synthesis-candidate guard-veto consistency, with checked-in fixtures and targeted regression
+  coverage under `tests/benchmark/test_hybrid_evidence_matrix.py`.
 * Added the issue-1214 docs/proof consistency checker surface: `scripts/validation/check_docs_proof_consistency.py`
   now scans changed docs/evidence files for high-confidence PR handoff drift, the
   `scripts/dev/check_docs_proof_consistency_diff.sh` wrapper exposes the branch-diff command, and

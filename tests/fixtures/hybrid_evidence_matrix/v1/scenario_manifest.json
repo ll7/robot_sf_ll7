@@ -1,0 +1,7 @@
+{
+  "schema_version": "scenario-manifest-fixture.v1",
+  "scenarios": [
+    "stress_demo_001",
+    "stress_demo_002"
+  ]
+}

@@ -1,0 +1,755 @@
+"""Machine-readable validation for hybrid-learning evidence matrix rows."""
+
+from __future__ import annotations
+
+import math
+import re
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from robot_sf.common.artifact_paths import get_repository_root
+
+EVALUATION_SLICES = frozenset({"not_run", "smoke", "nominal_sanity", "stress_slice", "full_matrix"})
+EVIDENCE_TIERS = frozenset(
+    {
+        "launch_packet",
+        "smoke_only",
+        "nominal_only",
+        "stress",
+        "full_matrix",
+        "degraded",
+        "fallback",
+        "failed",
+        "not_available",
+    }
+)
+VERDICTS = frozenset({"continue", "revise", "stop", "insufficient_evidence", "pending"})
+SUCCESS_LIKE_TIERS = frozenset({"smoke_only", "nominal_only", "stress", "full_matrix"})
+SYNTHESIS_TIERS = frozenset({"stress", "full_matrix"})
+SYNTHESIS_VERDICTS = frozenset({"continue", "revise"})
+ROW_REQUIRED_FIELDS = frozenset(
+    {
+        "component",
+        "source_issue",
+        "commit_artifact",
+        "evaluation_slice",
+        "guard_authority",
+        "learned_component_contribution",
+        "intervention_fallback_rates",
+        "outcomes",
+        "evidence_tier",
+        "verdict",
+    }
+)
+ROW_OPTIONAL_FIELDS = frozenset(
+    {
+        "comfort_exposure",
+        "min_pedestrian_distance",
+        "force_exposure_rate",
+        "path_efficiency",
+        "mean_time_to_goal",
+        "baseline_comparator",
+        "seed_schedule",
+        "scenario_manifest",
+    }
+)
+GUARD_FIELDS = frozenset({"mechanism", "active", "veto_rate"})
+CONTRIBUTION_FIELDS = frozenset({"contribution_type", "bound", "active_rate"})
+INTERVENTION_FIELDS = frozenset({"guard_veto_rate", "fallback_rate", "degraded_rate"})
+OUTCOME_FIELDS = frozenset(
+    {"success_rate", "collision_rate", "near_miss_rate", "low_progress_rate", "timeout_rate"}
+)
+DURABLE_URI_PREFIXES = (
+    "wandb://",
+    "wandb-artifact://",
+    "artifact://",
+    "s3://",
+    "gs://",
+    "https://",
+)
+_ISSUE_RE = re.compile(r"^#\d+$")
+_GIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+class HybridEvidenceMatrixValidationError(ValueError):
+    """Raised when the validator cannot parse the input payload."""
+
+
+def load_hybrid_evidence_input(path: Path) -> tuple[str, list[dict[str, Any]]]:
+    """Load a hybrid evidence matrix file as one or more row mappings.
+
+    Returns:
+        Tuple containing the input format label and the loaded row list.
+    """
+    if not path.is_file():
+        raise HybridEvidenceMatrixValidationError(f"input file does not exist: {path}")
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if isinstance(payload, list):
+        rows = payload
+        input_format = "rows"
+    elif isinstance(payload, dict) and "rows" in payload:
+        rows = payload["rows"]
+        input_format = "matrix"
+    elif isinstance(payload, dict):
+        rows = [payload]
+        input_format = "row"
+    else:
+        raise HybridEvidenceMatrixValidationError(
+            "input payload must be a mapping, a list of rows, or a mapping with a 'rows' list"
+        )
+    if not isinstance(rows, list):
+        raise HybridEvidenceMatrixValidationError("rows must be a list of mappings")
+    return input_format, rows
+
+
+def validate_hybrid_evidence_file(
+    path: Path,
+    *,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Load and validate a hybrid evidence matrix file.
+
+    Returns:
+        Structured validation report with per-row status, errors, and warnings.
+    """
+    input_format, rows = load_hybrid_evidence_input(path)
+    report = validate_hybrid_evidence_rows(rows, repo_root=repo_root)
+    report["input_format"] = input_format
+    report["input_path"] = _repo_relative_or_absolute(
+        path.resolve(), root=(repo_root or get_repository_root())
+    )
+    return report
+
+
+def validate_hybrid_evidence_rows(
+    rows: list[dict[str, Any]],
+    *,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Validate one or more hybrid evidence matrix rows.
+
+    Returns:
+        Structured validation report with aggregate counts and per-row details.
+    """
+    root = (repo_root or get_repository_root()).resolve()
+    row_reports = [
+        _validate_row(row, index=index, repo_root=root) for index, row in enumerate(rows)
+    ]
+    invalid_row_count = sum(1 for row in row_reports if row["status"] == "invalid")
+    return {
+        "status": "valid" if invalid_row_count == 0 else "invalid",
+        "row_count": len(row_reports),
+        "valid_row_count": len(row_reports) - invalid_row_count,
+        "invalid_row_count": invalid_row_count,
+        "rows": row_reports,
+    }
+
+
+def _validate_row(row: object, *, index: int, repo_root: Path) -> dict[str, Any]:
+    errors: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+    if not isinstance(row, dict):
+        _append_problem(errors, "row", "must be a mapping")
+        return {
+            "index": index,
+            "component": None,
+            "status": "invalid",
+            "synthesis_candidate": False,
+            "synthesis_eligible": False,
+            "errors": errors,
+            "warnings": warnings,
+        }
+
+    _check_expected_fields(
+        row,
+        required=ROW_REQUIRED_FIELDS,
+        optional=ROW_OPTIONAL_FIELDS,
+        prefix="row",
+        errors=errors,
+    )
+
+    component = _require_non_empty_string(row, "component", errors)
+    source_issue = _require_non_empty_string(row, "source_issue", errors)
+    if source_issue is not None and not _ISSUE_RE.fullmatch(source_issue):
+        _append_problem(errors, "source_issue", "must match '#<number>'")
+
+    evaluation_slice = _require_enum(row, "evaluation_slice", EVALUATION_SLICES, errors)
+    evidence_tier = _require_enum(row, "evidence_tier", EVIDENCE_TIERS, errors)
+    verdict = _require_enum(row, "verdict", VERDICTS, errors)
+    synthesis_candidate = bool(evidence_tier in SYNTHESIS_TIERS and verdict in SYNTHESIS_VERDICTS)
+
+    _validate_commit_artifact(
+        row.get("commit_artifact"),
+        field="commit_artifact",
+        repo_root=repo_root,
+        synthesis_candidate=synthesis_candidate,
+        errors=errors,
+    )
+    guard = _validate_guard_authority(row.get("guard_authority"), errors)
+    contribution = _validate_learned_component_contribution(
+        row.get("learned_component_contribution"),
+        evaluation_slice=evaluation_slice,
+        evidence_tier=evidence_tier,
+        errors=errors,
+    )
+    intervention = _validate_intervention_rates(row.get("intervention_fallback_rates"), errors)
+    _validate_outcomes(row.get("outcomes"), errors)
+    _validate_optional_fields(row, repo_root=repo_root, errors=errors)
+    _validate_semantics(
+        evaluation_slice=evaluation_slice,
+        evidence_tier=evidence_tier,
+        verdict=verdict,
+        guard=guard,
+        contribution=contribution,
+        intervention=intervention,
+        synthesis_candidate=synthesis_candidate,
+        errors=errors,
+        warnings=warnings,
+    )
+
+    return {
+        "index": index,
+        "component": component,
+        "source_issue": source_issue,
+        "evaluation_slice": evaluation_slice,
+        "evidence_tier": evidence_tier,
+        "verdict": verdict,
+        "status": "valid" if not errors else "invalid",
+        "synthesis_candidate": synthesis_candidate,
+        "synthesis_eligible": synthesis_candidate and not errors,
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
+def _validate_guard_authority(
+    guard_raw: object,
+    errors: list[dict[str, str]],
+) -> dict[str, Any]:
+    if not isinstance(guard_raw, dict):
+        _append_problem(errors, "guard_authority", "must be a mapping")
+        return {}
+    _check_expected_fields(
+        guard_raw,
+        required=GUARD_FIELDS,
+        optional=frozenset(),
+        prefix="guard_authority",
+        errors=errors,
+    )
+    mechanism = _require_non_empty_string(
+        guard_raw, "guard_authority.mechanism", errors, parent=guard_raw
+    )
+    active = guard_raw.get("active")
+    if not isinstance(active, bool):
+        _append_problem(errors, "guard_authority.active", "must be a boolean")
+    veto_rate = _require_nullable_rate(
+        guard_raw,
+        "guard_authority.veto_rate",
+        errors,
+        parent=guard_raw,
+    )
+    if active is True and veto_rate is None:
+        _append_problem(errors, "guard_authority.veto_rate", "must be a number when active is true")
+    if active is False and veto_rate is not None:
+        _append_problem(errors, "guard_authority.veto_rate", "must be null when active is false")
+    return {"mechanism": mechanism, "active": active, "veto_rate": veto_rate}
+
+
+def _validate_learned_component_contribution(
+    contribution_raw: object,
+    *,
+    evaluation_slice: str | None,
+    evidence_tier: str | None,
+    errors: list[dict[str, str]],
+) -> dict[str, Any]:
+    if not isinstance(contribution_raw, dict):
+        _append_problem(errors, "learned_component_contribution", "must be a mapping")
+        return {}
+    _check_expected_fields(
+        contribution_raw,
+        required=CONTRIBUTION_FIELDS,
+        optional=frozenset(),
+        prefix="learned_component_contribution",
+        errors=errors,
+    )
+    contribution_type = _require_non_empty_string(
+        contribution_raw,
+        "learned_component_contribution.contribution_type",
+        errors,
+        parent=contribution_raw,
+    )
+    bound = _require_non_empty_string(
+        contribution_raw,
+        "learned_component_contribution.bound",
+        errors,
+        parent=contribution_raw,
+    )
+    active_rate = _require_nullable_rate(
+        contribution_raw,
+        "learned_component_contribution.active_rate",
+        errors,
+        parent=contribution_raw,
+    )
+    if (
+        active_rate is None
+        and evaluation_slice != "not_run"
+        and evidence_tier not in {"launch_packet", "failed", "not_available"}
+    ):
+        _append_problem(
+            errors,
+            "learned_component_contribution.active_rate",
+            "must be a number for executed rows; use 0.0 when the component was active but made no change",
+        )
+    return {"contribution_type": contribution_type, "bound": bound, "active_rate": active_rate}
+
+
+def _validate_intervention_rates(
+    intervention_raw: object,
+    errors: list[dict[str, str]],
+) -> dict[str, Any]:
+    if not isinstance(intervention_raw, dict):
+        _append_problem(errors, "intervention_fallback_rates", "must be a mapping")
+        return {}
+    _check_expected_fields(
+        intervention_raw,
+        required=INTERVENTION_FIELDS,
+        optional=frozenset(),
+        prefix="intervention_fallback_rates",
+        errors=errors,
+    )
+    return {
+        "guard_veto_rate": _require_nullable_rate(
+            intervention_raw,
+            "intervention_fallback_rates.guard_veto_rate",
+            errors,
+            parent=intervention_raw,
+        ),
+        "fallback_rate": _require_nullable_rate(
+            intervention_raw,
+            "intervention_fallback_rates.fallback_rate",
+            errors,
+            parent=intervention_raw,
+        ),
+        "degraded_rate": _require_nullable_rate(
+            intervention_raw,
+            "intervention_fallback_rates.degraded_rate",
+            errors,
+            parent=intervention_raw,
+        ),
+    }
+
+
+def _validate_outcomes(outcomes_raw: object, errors: list[dict[str, str]]) -> None:
+    if not isinstance(outcomes_raw, dict):
+        _append_problem(errors, "outcomes", "must be a mapping")
+        return
+    _check_expected_fields(
+        outcomes_raw,
+        required=OUTCOME_FIELDS,
+        optional=frozenset(),
+        prefix="outcomes",
+        errors=errors,
+    )
+    for key in sorted(OUTCOME_FIELDS):
+        _require_nullable_rate(outcomes_raw, f"outcomes.{key}", errors, parent=outcomes_raw)
+
+
+def _validate_optional_fields(
+    row: dict[str, Any],
+    *,
+    repo_root: Path,
+    errors: list[dict[str, str]],
+) -> None:
+    for field in (
+        "comfort_exposure",
+        "min_pedestrian_distance",
+        "force_exposure_rate",
+        "path_efficiency",
+        "mean_time_to_goal",
+    ):
+        if field in row:
+            _require_nullable_number(row, field, errors)
+    if "baseline_comparator" in row and row["baseline_comparator"] is not None:
+        _require_non_empty_string(row, "baseline_comparator", errors)
+    if "seed_schedule" in row and row["seed_schedule"] is not None:
+        _require_non_empty_string(row, "seed_schedule", errors)
+    if "scenario_manifest" in row and row["scenario_manifest"] is not None:
+        value = _require_non_empty_string(row, "scenario_manifest", errors)
+        if value is not None:
+            _validate_reference_token(
+                value, "scenario_manifest", repo_root=repo_root, errors=errors
+            )
+
+
+def _validate_semantics(  # noqa: PLR0913
+    *,
+    evaluation_slice: str | None,
+    evidence_tier: str | None,
+    verdict: str | None,
+    guard: dict[str, Any],
+    contribution: dict[str, Any],
+    intervention: dict[str, Any],
+    synthesis_candidate: bool,
+    errors: list[dict[str, str]],
+    warnings: list[dict[str, str]],
+) -> None:
+    active = guard.get("active")
+    veto_rate = guard.get("veto_rate")
+    guard_veto_rate = intervention.get("guard_veto_rate")
+    fallback_rate = intervention.get("fallback_rate")
+    degraded_rate = intervention.get("degraded_rate")
+    active_rate = contribution.get("active_rate")
+
+    _validate_execution_state(
+        evaluation_slice=evaluation_slice,
+        evidence_tier=evidence_tier,
+        active=active,
+        errors=errors,
+    )
+    _validate_slice_tier_alignment(
+        evaluation_slice=evaluation_slice,
+        evidence_tier=evidence_tier,
+        errors=errors,
+    )
+    _validate_fallback_degraded_semantics(
+        evidence_tier=evidence_tier,
+        fallback_rate=fallback_rate,
+        degraded_rate=degraded_rate,
+        errors=errors,
+    )
+    if synthesis_candidate:
+        _validate_synthesis_candidate(
+            active=active,
+            veto_rate=veto_rate,
+            guard_veto_rate=guard_veto_rate,
+            fallback_rate=fallback_rate,
+            degraded_rate=degraded_rate,
+            active_rate=active_rate,
+            errors=errors,
+            warnings=warnings,
+        )
+
+    if (
+        evidence_tier in {"launch_packet", "fallback", "degraded", "failed", "not_available"}
+        and verdict in SYNTHESIS_VERDICTS
+    ):
+        _append_problem(
+            warnings,
+            "verdict",
+            f"{verdict!r} does not make the row synthesis-eligible because evidence_tier is {evidence_tier!r}",
+        )
+
+
+def _validate_execution_state(
+    *,
+    evaluation_slice: str | None,
+    evidence_tier: str | None,
+    active: object,
+    errors: list[dict[str, str]],
+) -> None:
+    if evaluation_slice == "not_run":
+        if evidence_tier != "launch_packet":
+            _append_problem(
+                errors,
+                "evidence_tier",
+                "must be 'launch_packet' when evaluation_slice is 'not_run'",
+            )
+        if active is not False:
+            _append_problem(
+                errors,
+                "guard_authority.active",
+                "must be false for non-execution launch-packet rows",
+            )
+        return
+    if active is not True:
+        _append_problem(errors, "guard_authority.active", "must be true for executed rows")
+
+
+def _validate_slice_tier_alignment(
+    *,
+    evaluation_slice: str | None,
+    evidence_tier: str | None,
+    errors: list[dict[str, str]],
+) -> None:
+    tier_to_slice = {
+        "launch_packet": "not_run",
+        "smoke_only": "smoke",
+        "nominal_only": "nominal_sanity",
+        "stress": "stress_slice",
+        "full_matrix": "full_matrix",
+    }
+    expected_slice = tier_to_slice.get(evidence_tier)
+    if expected_slice is None or evaluation_slice is None or evaluation_slice == expected_slice:
+        return
+    _append_problem(
+        errors,
+        "evaluation_slice",
+        f"must be {expected_slice!r} when evidence_tier is {evidence_tier!r}",
+    )
+
+
+def _validate_fallback_degraded_semantics(
+    *,
+    evidence_tier: str | None,
+    fallback_rate: float | None,
+    degraded_rate: float | None,
+    errors: list[dict[str, str]],
+) -> None:
+    if fallback_rate is not None and fallback_rate > 0 and evidence_tier in SUCCESS_LIKE_TIERS:
+        _append_problem(
+            errors,
+            "intervention_fallback_rates.fallback_rate",
+            "requires a non-success evidence_tier because fallback is diagnostic-only",
+        )
+    if degraded_rate is not None and degraded_rate > 0 and evidence_tier in SUCCESS_LIKE_TIERS:
+        _append_problem(
+            errors,
+            "intervention_fallback_rates.degraded_rate",
+            "requires a non-success evidence_tier because degraded rows are excluded from synthesis",
+        )
+    if evidence_tier == "fallback" and not _is_positive_rate(fallback_rate):
+        _append_problem(
+            errors,
+            "intervention_fallback_rates.fallback_rate",
+            "must be > 0 when evidence_tier is 'fallback'",
+        )
+    if evidence_tier == "degraded" and not _is_positive_rate(degraded_rate):
+        _append_problem(
+            errors,
+            "intervention_fallback_rates.degraded_rate",
+            "must be > 0 when evidence_tier is 'degraded'",
+        )
+
+
+def _validate_synthesis_candidate(
+    *,
+    active: object,
+    veto_rate: float | None,
+    guard_veto_rate: float | None,
+    fallback_rate: float | None,
+    degraded_rate: float | None,
+    active_rate: float | None,
+    errors: list[dict[str, str]],
+    warnings: list[dict[str, str]],
+) -> None:
+    if active is not True:
+        _append_problem(
+            errors, "guard_authority.active", "must be true for synthesis-eligible rows"
+        )
+    if veto_rate is None:
+        _append_problem(
+            errors,
+            "guard_authority.veto_rate",
+            "must be a number for synthesis-eligible rows",
+        )
+    if guard_veto_rate is None:
+        _append_problem(
+            errors,
+            "intervention_fallback_rates.guard_veto_rate",
+            "must be a number for synthesis-eligible rows",
+        )
+    if (
+        veto_rate is not None
+        and guard_veto_rate is not None
+        and not math.isclose(veto_rate, guard_veto_rate, rel_tol=0.0, abs_tol=1e-9)
+    ):
+        _append_problem(
+            errors,
+            "intervention_fallback_rates.guard_veto_rate",
+            "must match guard_authority.veto_rate for synthesis-eligible rows",
+        )
+    if fallback_rate is not None and fallback_rate > 0:
+        _append_problem(
+            errors,
+            "intervention_fallback_rates.fallback_rate",
+            "must be 0.0 or null for synthesis-eligible rows",
+        )
+    if degraded_rate is not None and degraded_rate > 0:
+        _append_problem(
+            errors,
+            "intervention_fallback_rates.degraded_rate",
+            "must be 0.0 or null for synthesis-eligible rows",
+        )
+    if active_rate is not None and active_rate > 0 and veto_rate == 0:
+        _append_problem(
+            warnings,
+            "guard_authority.veto_rate",
+            "is 0.0 while the learned component was active; #1489 should preserve the guard-not-exercised caveat",
+        )
+
+
+def _validate_commit_artifact(
+    value: object,
+    *,
+    field: str,
+    repo_root: Path,
+    synthesis_candidate: bool,
+    errors: list[dict[str, str]],
+) -> None:
+    if not isinstance(value, str) or not value.strip():
+        _append_problem(errors, field, "must be a non-empty string")
+        return
+    tokens = [token for token in _split_reference_tokens(value) if token]
+    if not tokens:
+        _append_problem(
+            errors,
+            field,
+            "must include a git SHA token plus one or more provenance tokens",
+        )
+        return
+    has_git_sha = False
+    has_provenance_token = False
+    for token in tokens:
+        normalized = token.lower()
+        if _GIT_SHA_RE.fullmatch(normalized):
+            has_git_sha = True
+            continue
+        has_provenance_token = True
+        _validate_reference_token(token, field, repo_root=repo_root, errors=errors)
+    if not has_git_sha:
+        _append_problem(errors, field, "must include a 7-40 character git SHA token")
+    if not has_provenance_token:
+        _append_problem(errors, field, "must include at least one provenance pointer token")
+
+
+def _validate_reference_token(
+    token: str,
+    field: str,
+    *,
+    repo_root: Path,
+    errors: list[dict[str, str]],
+) -> None:
+    if token.startswith(DURABLE_URI_PREFIXES):
+        return
+    path = Path(token)
+    if path.is_absolute():
+        _append_problem(
+            errors, field, f"must use repository-root-relative paths, not absolute path {token!r}"
+        )
+        return
+    if ".." in path.parts:
+        _append_problem(errors, field, f"must not escape the repository root: {token!r}")
+        return
+    if "output" in path.parts:
+        _append_problem(errors, field, f"must not depend on worktree-local output paths: {token!r}")
+        return
+    resolved = (repo_root / path).resolve()
+    try:
+        resolved.relative_to(repo_root.resolve())
+    except ValueError:
+        _append_problem(errors, field, f"must resolve inside the repository root: {token!r}")
+        return
+    if not resolved.exists():
+        _append_problem(errors, field, f"references a missing repository path: {token!r}")
+
+
+def _check_expected_fields(
+    mapping: dict[str, Any],
+    *,
+    required: frozenset[str],
+    optional: frozenset[str],
+    prefix: str,
+    errors: list[dict[str, str]],
+) -> None:
+    missing = sorted(required - mapping.keys())
+    for field in missing:
+        _append_problem(errors, f"{prefix}.{field}" if prefix != "row" else field, "is required")
+    allowed = required | optional
+    unexpected = sorted(set(mapping) - allowed)
+    for field in unexpected:
+        _append_problem(
+            errors,
+            f"{prefix}.{field}" if prefix != "row" else field,
+            "is not part of the canonical schema",
+        )
+
+
+def _require_non_empty_string(
+    mapping: dict[str, Any],
+    field: str,
+    errors: list[dict[str, str]],
+    *,
+    parent: dict[str, Any] | None = None,
+) -> str | None:
+    source = mapping if parent is None else parent
+    key = field if parent is None else field.rsplit(".", maxsplit=1)[-1]
+    value = source.get(key)
+    if not isinstance(value, str) or not value.strip():
+        _append_problem(errors, field, "must be a non-empty string")
+        return None
+    return value.strip()
+
+
+def _require_enum(
+    mapping: dict[str, Any],
+    field: str,
+    allowed: frozenset[str],
+    errors: list[dict[str, str]],
+) -> str | None:
+    value = mapping.get(field)
+    if not isinstance(value, str) or value not in allowed:
+        _append_problem(errors, field, f"must be one of {sorted(allowed)!r}")
+        return None
+    return value
+
+
+def _require_nullable_rate(
+    mapping: dict[str, Any],
+    field: str,
+    errors: list[dict[str, str]],
+    *,
+    parent: dict[str, Any] | None = None,
+) -> float | None:
+    value = _require_nullable_number(mapping, field, errors, parent=parent)
+    if value is None:
+        return None
+    if not 0.0 <= value <= 1.0:
+        _append_problem(errors, field, "must be between 0.0 and 1.0 inclusive")
+    return value
+
+
+def _require_nullable_number(
+    mapping: dict[str, Any],
+    field: str,
+    errors: list[dict[str, str]],
+    *,
+    parent: dict[str, Any] | None = None,
+) -> float | None:
+    source = mapping if parent is None else parent
+    key = field if parent is None else field.rsplit(".", maxsplit=1)[-1]
+    value = source.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        _append_problem(errors, field, "must be a finite number or null")
+        return None
+    return float(value)
+
+
+def _split_reference_tokens(value: str) -> list[str]:
+    return [token.strip() for token in re.split(r"[\n,]+", value) if token.strip()]
+
+
+def _append_problem(problems: list[dict[str, str]], field: str, message: str) -> None:
+    problems.append({"field": field, "message": message})
+
+
+def _is_positive_rate(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) > 0
+
+
+def _repo_relative_or_absolute(path: Path, *, root: Path) -> str:
+    try:
+        return path.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+__all__ = [
+    "HybridEvidenceMatrixValidationError",
+    "load_hybrid_evidence_input",
+    "validate_hybrid_evidence_file",
+    "validate_hybrid_evidence_rows",
+]

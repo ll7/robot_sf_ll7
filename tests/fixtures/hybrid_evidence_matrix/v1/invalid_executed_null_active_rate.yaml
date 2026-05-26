@@ -1,0 +1,24 @@
+- component: learned_risk_model_v1
+  source_issue: "#1472"
+  commit_artifact: "e14e2f8, tests/fixtures/hybrid_evidence_matrix/v1/durable_summary.json"
+  evaluation_slice: stress_slice
+  guard_authority:
+    mechanism: risk_guarded_ppo
+    active: true
+    veto_rate: 0.12
+  learned_component_contribution:
+    contribution_type: auxiliary_cost
+    bound: "cost_weight in [0,1]"
+    active_rate: null
+  intervention_fallback_rates:
+    guard_veto_rate: 0.12
+    fallback_rate: 0.0
+    degraded_rate: null
+  outcomes:
+    success_rate: 0.72
+    collision_rate: 0.04
+    near_miss_rate: 0.08
+    low_progress_rate: 0.05
+    timeout_rate: 0.11
+  evidence_tier: stress
+  verdict: continue

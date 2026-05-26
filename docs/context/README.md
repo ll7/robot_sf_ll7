@@ -168,6 +168,8 @@ knowledge, not every transient iteration detail.
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Issue archetypes and evidence tiers:
   [issue_1512_issue_archetypes.md](issue_1512_issue_archetypes.md)
+* Issue #1532 archetype metadata sync decision:
+  [issue_1532_archetype_metadata_sync_decision.md](issue_1532_archetype_metadata_sync_decision.md)
 * Artifact evidence vocabulary:
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:

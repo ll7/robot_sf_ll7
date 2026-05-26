@@ -152,6 +152,8 @@ knowledge, not every transient iteration detail.
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
+* Issue archetypes and evidence tiers:
+  [issue_1512_issue_archetypes.md](issue_1512_issue_archetypes.md)
 * Artifact evidence vocabulary:
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md)
 * PR first-pass review audit:

@@ -1,6 +1,23 @@
 ---
 name: goal-pr-review
-description: "Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof, resolves review threads, and applies merge-ready; not for merging."
+description: Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof,
+  resolves review threads, and applies merge-ready; not for merging.
+category: github-pr
+kind: orchestrator
+phase: verification
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to:
+- implementation-verification
+- pr-ready-check
+- gh-pr-comment-fixer
+- review-benchmark-change
+- gh-issue-creator
+- context-note-maintainer
+output_schema: skill_run_summary.v1
+aliases:
+- pr-review-runner
 ---
 
 # Goal PR Review
@@ -133,3 +150,13 @@ For each reviewed PR, report:
 - `merge-ready` decision + confidence,
 - blockers and `follow-up` issues,
 - artifact classification decision.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.
+
+
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

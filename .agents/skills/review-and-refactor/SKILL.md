@@ -1,6 +1,15 @@
 ---
 name: review-and-refactor
-description: "Surgical review-then-refactor workflow for small code or docs changes; use when a task needs inspection before a narrow improvement."
+description: Surgical review-then-refactor workflow for small code or docs changes; use when a task needs
+  inspection before a narrow improvement.
+category: validation
+kind: atomic
+phase: verification
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Review And Refactor
@@ -28,3 +37,6 @@ refactor needed to fix the identified issue.
 - Issue found, files touched, and exact narrow fix.
 - Validation command(s) and outcome.
 - Any risk introduced or deferred.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

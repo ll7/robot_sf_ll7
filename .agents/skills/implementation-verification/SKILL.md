@@ -1,6 +1,14 @@
 ---
 name: implementation-verification
-description: "Verify branch changes against origin/main with claim-based evidence, not only test status."
+description: Verify branch changes against origin/main with claim-based evidence, not only test status.
+category: validation
+kind: atomic
+phase: verification
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Implementation Verification
@@ -37,3 +45,6 @@ rather than only a global test pass signal.
 - Evidence matrix (`claim`, `proof`, `command/artifact`, `result`, `residual risk`).
 - Items proven vs unresolved.
 - Recommended follow-up tickets for unproven claims.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

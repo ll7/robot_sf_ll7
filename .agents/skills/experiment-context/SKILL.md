@@ -1,6 +1,15 @@
 ---
 name: experiment-context
-description: "Find the canonical config-first training or evaluation path, artifact lineage, and validation gates for a concrete experiment task in robot_sf_ll7."
+description: Find the canonical config-first training or evaluation path, artifact lineage, and validation
+  gates for a concrete experiment task in robot_sf_ll7.
+category: context-docs
+kind: atomic
+phase: context
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Experiment Context
@@ -39,3 +48,8 @@ Return:
 - expected artifact root,
 - required checks,
 - the noncompliance risk if the canonical path is not used.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

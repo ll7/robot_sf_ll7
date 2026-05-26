@@ -1,6 +1,15 @@
 ---
 name: autoresearch
-description: "Autonomous iterative experimentation loop for measurable Robot SF tasks; use when the user wants an improvement loop with baseline, experiments, and keep/discard decisions."
+description: Autonomous iterative experimentation loop for measurable Robot SF tasks; use when the user
+  wants an improvement loop with baseline, experiments, and keep/discard decisions.
+category: research-iteration
+kind: atomic
+phase: analysis
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Autoresearch
@@ -61,3 +70,8 @@ Summarize:
 - baseline and best result,
 - discarded attempts and reasons,
 - unresolved assumptions and next risk.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

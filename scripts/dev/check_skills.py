@@ -1,61 +1,84 @@
 #!/usr/bin/env python3
-"""Validate repo-local skill metadata and index discoverability."""
+# ruff: noqa: C901, PLR0912
+"""Validate repo-local skill metadata, registry links, and generated index drift."""
 
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
+from typing import Any
+
+import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from generate_skills_readme import render_readme
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / ".agents" / "skills"
 README = SKILLS_ROOT / "README.md"
+REGISTRY = SKILLS_ROOT / "skills.yaml"
+SCHEMAS_ROOT = SKILLS_ROOT / "schemas"
+SKILLS_SCHEMA = SCHEMAS_ROOT / "skills.schema.yaml"
+TESTS_ROOT = SKILLS_ROOT / "tests"
+ALLOWED_NON_SKILL_DIRS = {"groups", "schemas", "tests"}
+REQUIRED_FRONTMATTER = {
+    "name",
+    "description",
+    "category",
+    "kind",
+    "phase",
+    "requires_write",
+    "requires_slurm",
+    "requires_benchmark_artifacts",
+    "delegates_to",
+    "output_schema",
+}
+REQUIRED_REGISTRY_KEYS = REQUIRED_FRONTMATTER - {"name"}
+REQUIRED_SECTIONS = ("## When to use", "## Guardrails", "## Output")
 GENERIC_REFERENCE_PREFIXES = ("docs/config", "docs/provenance", "tests/checks")
 PATH_PATTERN = re.compile(
     r"`[^`]*?((?:AGENTS\.md|code_review\.md|"
     r"(?:\.agent|\.specify|\.agents|\.codex|\.opencode|docs|scripts|configs|tests|"
-    r"\.github)/[^\s`]+))[^`]*?`"
+    r"SLURM|\.github)/[^\s`]+))[^`]*?`"
 )
+CRITICAL_DUPLICATE_PATTERNS = (
+    "Within the same status, prefer higher Project",
+    "fallback/degraded should be treated as a caveat",
+)
+BACKTICK_TOKEN_PATTERN = re.compile(r"`([a-z][a-z0-9-]+)`")
 
 
-def _frontmatter_value(lines: list[str], key: str, path: Path) -> str:
-    """Return a frontmatter value from the first few lines or raise with the file path."""
-    prefix = f"{key}: "
-    for line in lines[:10]:
-        if line.startswith(prefix):
-            return line.removeprefix(prefix).strip().strip('"')
-    raise AssertionError(f"{path}: missing frontmatter key {key!r}")
+def _read_yaml(path: Path) -> Any:
+    """Read a YAML file and fail with a path-qualified message."""
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise AssertionError(f"{path.relative_to(REPO_ROOT)}: invalid YAML: {exc}") from exc
 
 
-def _validate_skill_metadata(
-    path: Path,
-    readme_text: str,
-    errors: list[str],
-    missing_from_readme: list[str],
-    directory_mismatches: list[str],
-) -> str:
-    """Validate one skill file, record index drift, and return its text for path checks."""
+def _frontmatter(path: Path) -> tuple[dict[str, Any], str]:
+    """Return parsed frontmatter and body text."""
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     if not lines or lines[0] != "---":
-        errors.append(f"{path}: missing opening YAML frontmatter marker")
-        return text
+        raise AssertionError(
+            f"{path.relative_to(REPO_ROOT)}: missing opening YAML frontmatter marker"
+        )
     try:
         closing_idx = lines[1:].index("---") + 1
-    except ValueError:
-        errors.append(f"{path}: missing closing YAML frontmatter marker")
-        return text
-    frontmatter_lines = lines[: closing_idx + 1]
+    except ValueError as exc:
+        raise AssertionError(
+            f"{path.relative_to(REPO_ROOT)}: missing closing YAML frontmatter marker"
+        ) from exc
+    raw = "\n".join(lines[1:closing_idx])
     try:
-        name = _frontmatter_value(frontmatter_lines, "name", path)
-        _frontmatter_value(frontmatter_lines, "description", path)
-    except AssertionError as exc:
-        errors.append(str(exc))
-        return text
-    if f"`{name}`" not in readme_text:
-        missing_from_readme.append(name)
-    if path.parent.name != name:
-        directory_mismatches.append(f"{path.parent.name} != {name}")
-    return text
+        metadata = yaml.safe_load(raw) or {}
+    except yaml.YAMLError as exc:
+        raise AssertionError(
+            f"{path.relative_to(REPO_ROOT)}: invalid frontmatter YAML: {exc}"
+        ) from exc
+    return metadata, "\n".join(lines[closing_idx + 1 :])
 
 
 def _reference_path(match: str) -> str:
@@ -80,45 +103,245 @@ def _find_broken_paths(path: Path, text: str) -> list[str]:
     return broken_paths
 
 
+def _validate_registry_shape(registry: dict[str, Any], schema: dict[str, Any]) -> list[str]:
+    """Validate registry-level metadata and links."""
+    errors: list[str] = []
+    if registry.get("version") != 1:
+        errors.append(".agents/skills/skills.yaml: expected version: 1")
+    skills = registry.get("skills")
+    if not isinstance(skills, dict) or not skills:
+        errors.append(".agents/skills/skills.yaml: missing non-empty skills map")
+        return errors
+    allowed_categories = set(schema["allowed_categories"])
+    allowed_kinds = set(schema["allowed_kinds"])
+    allowed_phases = set(schema["allowed_phases"])
+    allowed_write_scopes = set(schema["allowed_write_scopes"])
+    names = set(skills)
+    aliases: dict[str, str] = {}
+    for name, metadata in skills.items():
+        missing = REQUIRED_REGISTRY_KEYS - set(metadata)
+        if missing:
+            errors.append(f"{name}: registry missing keys {sorted(missing)}")
+        if metadata.get("category") not in allowed_categories:
+            errors.append(f"{name}: invalid category {metadata.get('category')!r}")
+        if metadata.get("kind") not in allowed_kinds:
+            errors.append(f"{name}: invalid kind {metadata.get('kind')!r}")
+        if metadata.get("phase") not in allowed_phases:
+            errors.append(f"{name}: invalid phase {metadata.get('phase')!r}")
+        writes = metadata.get("writes", {})
+        unknown_write_scopes = set(writes) - allowed_write_scopes
+        if unknown_write_scopes:
+            errors.append(f"{name}: invalid write scopes {sorted(unknown_write_scopes)}")
+        non_boolean_writes = sorted(
+            scope for scope, value in writes.items() if not isinstance(value, bool)
+        )
+        if non_boolean_writes:
+            errors.append(f"{name}: write scopes must be booleans: {non_boolean_writes}")
+        for delegate in metadata.get("delegates_to", []):
+            if delegate not in names:
+                errors.append(f"{name}: delegates_to missing skill {delegate!r}")
+        schema = metadata.get("output_schema")
+        if schema and not (SCHEMAS_ROOT / f"{schema}.yaml").exists():
+            errors.append(f"{name}: missing output schema {schema!r}")
+        if metadata.get("requires_write"):
+            writes = metadata.get("writes", {})
+            if not any(bool(writes.get(key)) for key in writes):
+                errors.append(f"{name}: mutating skill requires a writes scope")
+        elif any(bool(value) for value in metadata.get("writes", {}).values()):
+            errors.append(f"{name}: declares write scopes but requires_write is false")
+        for alias in metadata.get("aliases", []):
+            if alias in names:
+                errors.append(f"{name}: alias {alias!r} collides with a skill name")
+            if alias in aliases:
+                errors.append(f"{name}: alias {alias!r} duplicates alias from {aliases[alias]!r}")
+            aliases[alias] = name
+    return errors
+
+
+def _validate_skill_file(
+    path: Path,
+    registry_metadata: dict[str, Any],
+    readme_text: str,
+) -> tuple[list[str], str]:
+    """Validate one skill file and return errors plus its body for path checks."""
+    errors: list[str] = []
+    metadata, body = _frontmatter(path)
+    rel = path.relative_to(REPO_ROOT)
+    missing = REQUIRED_FRONTMATTER - set(metadata)
+    if missing:
+        errors.append(f"{rel}: missing frontmatter keys {sorted(missing)}")
+        return errors, body
+    name = metadata["name"]
+    if path.parent.name != name:
+        errors.append(f"{rel}: directory name {path.parent.name!r} != frontmatter name {name!r}")
+    if name not in registry_metadata:
+        errors.append(f"{rel}: skill missing from skills.yaml")
+        return errors, body
+    for key in REQUIRED_REGISTRY_KEYS:
+        if metadata.get(key) != registry_metadata[name].get(key):
+            errors.append(f"{rel}: frontmatter key {key!r} differs from skills.yaml")
+    aliases = metadata.get("aliases", [])
+    if aliases != registry_metadata[name].get("aliases", []):
+        errors.append(f"{rel}: aliases differ from skills.yaml")
+    if f"`{name}`" not in readme_text:
+        errors.append(f"{rel}: skill missing from README index")
+    for section in REQUIRED_SECTIONS:
+        if section not in body:
+            errors.append(f"{rel}: missing required section {section!r}")
+    if registry_metadata[name].get("requires_benchmark_artifacts"):
+        policy_refs = (
+            "fail-closed" in body.lower()
+            or "fallback" in body.lower()
+            or "docs/context/issue_691_benchmark_fallback_policy.md" in body
+        )
+        if not policy_refs:
+            errors.append(
+                f"{rel}: benchmark-related skill lacks fail-closed/fallback policy reference"
+            )
+    return errors, body
+
+
+def _validate_non_skill_dirs() -> list[str]:
+    """Ensure direct children are either skill directories or explicit support directories."""
+    errors: list[str] = []
+    for child in sorted(path for path in SKILLS_ROOT.iterdir() if path.is_dir()):
+        if child.name in ALLOWED_NON_SKILL_DIRS:
+            continue
+        if not (child / "SKILL.md").exists():
+            errors.append(f"{child.relative_to(REPO_ROOT)}: non-skill directory is not whitelisted")
+    return errors
+
+
+def _validate_generated_readme(registry: dict[str, Any], readme_text: str) -> list[str]:
+    """Return drift errors when README is not generated from the registry."""
+    expected = render_readme(registry)
+    if readme_text != expected:
+        return [
+            ".agents/skills/README.md is stale; run "
+            "`uv run python scripts/dev/generate_skills_readme.py`"
+        ]
+    return []
+
+
+def _validate_backticked_skill_tokens(
+    path: Path, text: str, skill_names: set[str], aliases: set[str]
+) -> list[str]:
+    """Validate skill-looking backtick tokens in generated routing docs."""
+    errors: list[str] = []
+    allowed_tokens = skill_names | aliases | {"none"}
+    for token in BACKTICK_TOKEN_PATTERN.findall(text):
+        if token not in allowed_tokens:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT)}: unknown backticked skill token `{token}`"
+            )
+    return errors
+
+
+def _validate_routing_goldens(registry: dict[str, Any]) -> list[str]:
+    """Execute simple routing golden assertions."""
+    errors: list[str] = []
+    skill_names = set(registry["skills"])
+    aliases = {
+        alias for metadata in registry["skills"].values() for alias in metadata.get("aliases", [])
+    }
+    valid_names = skill_names | aliases
+
+    routing_cases = _read_yaml(TESTS_ROOT / "routing_cases.yaml")
+    for index, case in enumerate(routing_cases.get("cases", []), start=1):
+        for field in ("primary",):
+            if case.get(field) not in valid_names:
+                errors.append(
+                    f"routing_cases.yaml case {index}: unknown {field} {case.get(field)!r}"
+                )
+        for field in ("secondary", "negative"):
+            for skill in case.get(field, []):
+                if skill not in valid_names:
+                    errors.append(
+                        f"routing_cases.yaml case {index}: unknown {field} skill {skill!r}"
+                    )
+
+    stacks = _read_yaml(TESTS_ROOT / "expected_skill_stacks.yaml").get("expected_stacks", {})
+    for stack_name, stack in stacks.items():
+        if not stack:
+            errors.append(f"expected_skill_stacks.yaml {stack_name}: empty stack")
+        for skill in stack:
+            if skill not in valid_names:
+                errors.append(f"expected_skill_stacks.yaml {stack_name}: unknown skill {skill!r}")
+    return errors
+
+
+def _validate_duplicate_routing(text_by_path: dict[Path, str]) -> list[str]:
+    """Catch repeated routing sentences in critical docs."""
+    errors: list[str] = []
+    for path, text in text_by_path.items():
+        for pattern in CRITICAL_DUPLICATE_PATTERNS:
+            if text.count(pattern) > 1:
+                errors.append(f"{path.relative_to(REPO_ROOT)}: duplicate routing line {pattern!r}")
+    return errors
+
+
 def main() -> int:
-    """Return non-zero when skill metadata or README coverage is stale."""
+    """Return non-zero when skill metadata, registry links, or docs are stale."""
+    registry = _read_yaml(REGISTRY)
+    schema = _read_yaml(SKILLS_SCHEMA)
     readme_text = README.read_text(encoding="utf-8")
     skill_paths = sorted(SKILLS_ROOT.glob("*/SKILL.md"))
     if not skill_paths:
         raise AssertionError(f"No SKILL.md files found under {SKILLS_ROOT}")
 
-    missing_from_readme: list[str] = []
-    directory_mismatches: list[str] = []
-    metadata_errors: list[str] = []
-    broken_paths = _find_broken_paths(README, readme_text)
+    errors: list[str] = []
+    errors.extend(_validate_registry_shape(registry, schema))
+    errors.extend(_validate_non_skill_dirs())
+    errors.extend(_validate_generated_readme(registry, readme_text))
+    errors.extend(_find_broken_paths(README, readme_text))
+
+    registry_metadata = registry.get("skills", {})
+    skill_names_on_disk: set[str] = set()
+    text_by_path = {README: readme_text}
     for path in skill_paths:
-        text = _validate_skill_metadata(
-            path,
-            readme_text,
-            metadata_errors,
-            missing_from_readme,
-            directory_mismatches,
-        )
-        broken_paths.extend(_find_broken_paths(path, text))
+        metadata, _ = _frontmatter(path)
+        skill_names_on_disk.add(metadata.get("name", path.parent.name))
+        skill_errors, _body = _validate_skill_file(path, registry_metadata, readme_text)
+        text = path.read_text(encoding="utf-8")
+        text_by_path[path] = text
+        errors.extend(skill_errors)
+        errors.extend(_find_broken_paths(path, text))
 
-    if metadata_errors:
-        raise AssertionError("Invalid skill metadata: " + "; ".join(sorted(metadata_errors)))
-    if missing_from_readme:
-        raise AssertionError(
-            "Skills missing from .agents/skills/README.md: "
-            + ", ".join(sorted(missing_from_readme))
-        )
-    if directory_mismatches:
-        raise AssertionError(
-            "Skill directory names should match frontmatter names: "
-            + "; ".join(sorted(directory_mismatches))
-        )
-    if broken_paths:
-        raise AssertionError(
-            "Skill docs reference missing paths: " + "; ".join(sorted(broken_paths))
-        )
+    missing_dirs = sorted(set(registry_metadata) - skill_names_on_disk)
+    if missing_dirs:
+        errors.append("Skills in skills.yaml without SKILL.md: " + ", ".join(missing_dirs))
+    extra_dirs = sorted(skill_names_on_disk - set(registry_metadata))
+    if extra_dirs:
+        errors.append("Skills on disk missing from skills.yaml: " + ", ".join(extra_dirs))
 
-    print(f"Validated {len(skill_paths)} skills and README coverage.")
+    for required in [SCHEMAS_ROOT, TESTS_ROOT]:
+        if not required.exists():
+            errors.append(f"{required.relative_to(REPO_ROOT)}: required support directory missing")
+    for required_file in [
+        SKILLS_SCHEMA,
+        TESTS_ROOT / "routing_cases.yaml",
+        TESTS_ROOT / "expected_skill_stacks.yaml",
+        TESTS_ROOT / "overlap_allowlist.yaml",
+    ]:
+        if not required_file.exists():
+            errors.append(f"{required_file.relative_to(REPO_ROOT)}: required golden file missing")
+        else:
+            _read_yaml(required_file)
+
+    aliases = {
+        alias for metadata in registry_metadata.values() for alias in metadata.get("aliases", [])
+    }
+    errors.extend(
+        _validate_backticked_skill_tokens(README, readme_text, set(registry_metadata), aliases)
+    )
+    errors.extend(_validate_routing_goldens(registry))
+    errors.extend(_validate_duplicate_routing(text_by_path))
+    if errors:
+        raise AssertionError("; ".join(sorted(errors)))
+
+    print(
+        f"Validated {len(skill_paths)} skills, typed registry, generated README, and routing tests."
+    )
     return 0
 
 

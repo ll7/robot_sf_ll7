@@ -1,6 +1,15 @@
 ---
 name: benchmark-overview
-description: "Fast benchmark-faithful orientation for scenario splits, baselines, metrics, artifacts, and reproducibility constraints in robot_sf_ll7."
+description: Fast benchmark-faithful orientation for scenario splits, baselines, metrics, artifacts, and
+  reproducibility constraints in robot_sf_ll7.
+category: benchmark-evidence
+kind: atomic
+phase: context
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: true
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Benchmark Overview
@@ -36,3 +45,8 @@ metrics, and artifact layout before changing code or producing claims.
 - benchmark contract and why it applies,
 - what evidence supports the interpretation,
 - known caveats and non-covered cases.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

@@ -1,0 +1,15 @@
+skill_stack:
+  primary: string
+  secondary:
+  - string
+inputs:
+- string
+writes:
+  git: boolean
+  github: boolean
+  filesystem: boolean
+commands_run:
+- string
+blockers:
+- string
+next_action: string

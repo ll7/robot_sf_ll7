@@ -1,0 +1,58 @@
+cases:
+- intent: Take the next issue to PR
+  primary: goal-issue-implementation
+  secondary:
+  - gh-issue-autopilot
+- intent: Fix PR comments
+  primary: gh-pr-comment-fixer
+  secondary:
+  - pr-ready-check
+- intent: Review benchmark output
+  primary: analyze-camera-ready-benchmark
+  secondary:
+  - benchmark-row-status
+- intent: Submit training job
+  primary: slurm-campaign-submit
+  secondary:
+  - artifact-provenance
+- intent: Stage external data
+  primary: data-staging-provenance
+  secondary:
+  - context-note-maintainer
+- intent: Do ordinary cleanup
+  primary: clean-up
+  secondary:
+  - pr-ready-check
+  negative:
+  - autoresearch
+- intent: Edit non-claim docs
+  primary: update-docs-on-code-change
+  secondary: []
+  negative:
+  - paper-facing-docs
+- intent: Clarify ambiguous issue
+  primary: issue-contract-maintainer
+  secondary:
+  - gh-issue-sequencer
+  negative:
+  - gh-issue-autopilot
+- intent: Analyze adversarial search campaign
+  primary: adversarial-search-campaign
+  secondary:
+  - benchmark-row-status
+  - artifact-provenance
+- intent: Review CARLA replay parity
+  primary: carla-replay-parity
+  secondary:
+  - benchmark-row-status
+  - evidence-synthesis
+- intent: Evaluate hybrid learning components
+  primary: hybrid-learning-component-eval
+  secondary:
+  - artifact-provenance
+  - evidence-synthesis
+- intent: Submit issue 791 Auxme job
+  primary: auxme-issue791-submit
+  secondary:
+  - slurm-campaign-submit
+  - artifact-provenance

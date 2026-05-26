@@ -1,0 +1,13 @@
+issue: '#1234'
+branch: issue-1234-slug
+head_sha: sha
+scope_status: complete | narrowed | blocked
+validation:
+- command: string
+  result: pass | fail | skipped
+artifacts:
+  classification: tracked-compact-evidence | durable-required | none
+pr: url-or-empty
+followups:
+- '#1235'
+confidence: high | medium | low

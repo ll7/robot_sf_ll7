@@ -1,6 +1,15 @@
 ---
 name: review-benchmark-change
-description: "Review benchmark-sensitive code or docs changes for semantic regressions, normalization drift, reproducibility gaps, and provenance overclaim."
+description: Review benchmark-sensitive code or docs changes for semantic regressions, normalization drift,
+  reproducibility gaps, and provenance overclaim.
+category: benchmark-evidence
+kind: atomic
+phase: context
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: true
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Review Benchmark Change
@@ -48,3 +57,8 @@ interpretation, or reproducibility.
   3. provenance overclaim,
   4. missing reproducibility hooks,
   5. missing tests/docs for changed public behavior.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

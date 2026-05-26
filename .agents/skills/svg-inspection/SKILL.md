@@ -1,6 +1,14 @@
 ---
 name: svg-inspection
-description: "Inspect and debug SVG maps for parser-facing issues using reusable Robot SF helpers."
+description: Inspect and debug SVG maps for parser-facing issues using reusable Robot SF helpers.
+category: domain-utility
+kind: atomic
+phase: analysis
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # SVG Inspection
@@ -31,3 +39,6 @@ Diagnose map parse/runtime mismatches in `maps/svg_maps/` and produce a short, r
 - Findings (warnings/errors), map(s) checked, helper output path.
 - Whether additional follow-up tests or label edits are required.
 - Recommendation for safe remediation.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

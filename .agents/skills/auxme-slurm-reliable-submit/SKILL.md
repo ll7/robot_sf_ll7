@@ -1,9 +1,24 @@
 ---
 name: auxme-slurm-reliable-submit
-description: "Submit issue-791 style Auxme SLURM jobs with explicit config, live partition pressure checks, and max-time-safe wrapper routing."
+description: Submit issue-791 style Auxme SLURM jobs with explicit config, live partition pressure checks,
+  and max-time-safe wrapper routing.
+category: slurm
+kind: atomic
+phase: implementation
+requires_write: true
+requires_slurm: true
+requires_benchmark_artifacts: false
+delegates_to:
+- auxme-issue791-submit
+output_schema: skill_run_summary.v1
+aliases:
+- auxme-issue791-reliable-submit
 ---
 
 # Auxme SLURM Reliable Submit
+
+Compatibility entry point: for new routing, prefer `slurm-campaign-submit` for generic campaigns and `auxme-issue791-submit` for issue-791-specific Auxme jobs.
+
 
 ## Purpose
 
@@ -42,3 +57,6 @@ Use this when reliability, provenance, and correct config routing matter more th
 - Chosen config path, partition/QoS decision, submit command.
 - Startup provenance (stdout markers) and whether a retry was triggered.
 - Final outcome (`submitted` / `blocked` / `retry suggested`) with exact reason.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

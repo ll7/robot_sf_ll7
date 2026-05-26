@@ -1,6 +1,18 @@
 ---
 name: quality-playbook
-description: "Repo-wide proof-first workflow for non-trivial changes with context, risk, validation, and follow-through."
+description: Repo-wide proof-first workflow for non-trivial changes with context, risk, validation, and
+  follow-through.
+category: validation
+kind: policy
+phase: verification
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
+aliases:
+- quality-strategy
+- proof-policy
 ---
 
 # Quality Playbook
@@ -34,3 +46,6 @@ risk accounting.
 - Objective + risk class.
 - Proof strategy and validation results.
 - Residual risk and next required step.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

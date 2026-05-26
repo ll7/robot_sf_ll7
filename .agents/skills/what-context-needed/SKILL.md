@@ -1,6 +1,16 @@
 ---
 name: what-context-needed
-description: "Ask for the minimum repository context needed to answer or implement a task safely."
+description: Ask for the minimum repository context needed to answer or implement a task safely.
+category: context-docs
+kind: atomic
+phase: context
+requires_write: false
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
+aliases:
+- context-unblocker
 ---
 
 # What Context Needed
@@ -31,3 +41,6 @@ Request only the missing inputs required to avoid speculative or unsafe work.
 
 - Minimal missing context checklist and why each item is required.
 - The first executable workflow to run next.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

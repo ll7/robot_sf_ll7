@@ -1,0 +1,13 @@
+campaign_root: path
+config: path
+commit: sha
+seeds: description
+row_status_counts:
+  successful_evidence: 0
+  accepted_unavailable: 0
+  fallback: 0
+  degraded: 0
+consistency:
+  episode_count: pass | fail | skipped
+  metric_summary: pass | fail | skipped
+claim_boundary: string

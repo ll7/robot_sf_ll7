@@ -1,6 +1,15 @@
 ---
 name: agentic-eval
-description: "Evaluate and improve AI workflow outputs with small goldens, rubrics, and repeatable checks; use when tuning skills, prompts, instructions, or agent behavior."
+description: Evaluate and improve AI workflow outputs with small goldens, rubrics, and repeatable checks;
+  use when tuning skills, prompts, instructions, or agent behavior.
+category: research-iteration
+kind: atomic
+phase: analysis
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # Agentic Eval
@@ -56,3 +65,8 @@ Report:
 - baseline and final score,
 - keep/discard decision with rationale,
 - open questions.
+## Guardrails
+
+- Stay within the skill scope declared in `.agents/skills/skills.yaml`.
+- Prefer repository scripts and canonical docs before ad-hoc commands.
+- Record blockers and validation gaps instead of overstating completion.

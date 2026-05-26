@@ -1,6 +1,15 @@
 ---
 name: gh-issue-priority-assessor
-description: "LLM-backed review workflow for Project #5 priority inputs; assess plausibility, propose values with uncertainty, and optionally apply explicit opt-in updates."
+description: 'LLM-backed review workflow for Project #5 priority inputs; assess plausibility, propose
+  values with uncertainty, and optionally apply explicit opt-in updates.'
+category: github-issue
+kind: atomic
+phase: context
+requires_write: true
+requires_slurm: false
+requires_benchmark_artifacts: false
+delegates_to: []
+output_schema: skill_run_summary.v1
 ---
 
 # GH Issue Priority Assessor
@@ -45,3 +54,6 @@ interactive reads when available.
 - Plausibility verdict and needed evidence to justify changes, including `Estimate Discussion`
   updates when relevant.
 - Whether writeback was applied.
+## When to use
+
+Use this skill for the scope named in its frontmatter description and registry metadata.

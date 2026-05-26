@@ -32,6 +32,7 @@ schemas:
     base_schema: "predictive_ego_v1"
     base_feature_dim: 9
     obstacle_schema: null
+    ego_motion_channel_producer_required: true
 
   predictive_obstacle_features_v1:
     name: "predictive_obstacle_features_v1"
@@ -46,6 +47,37 @@ schemas:
       - base_schema: "predictive_ego_v1"
         base_feature_dim: 9
         input_dim: 15
+        ego_motion_channel_producer_required: true
+
+ego_motion_channel_producers:
+  same_seed_hardcase_runtime_robot_speed_v1:
+    producer_key: "same_seed_hardcase_runtime_robot_speed_v1"
+    slot_range: [4, 5]
+    source:
+      observation_key: "robot.speed"
+      channel_labels: ["linear_speed", "angular_speed"]
+    semantics: "benchmark_linear_angular_speed"
+    fallback: null
+    comparability:
+      group: "predictive_ego_motion_slots_v1"
+      same_producer_key_required: true
+      mixed_producer_status: "not_comparable_without_caveat"
+  standalone_rollout_velocity_xy_preferred_v1:
+    producer_key: "standalone_rollout_velocity_xy_preferred_v1"
+    slot_range: [4, 5]
+    source:
+      observation_key: "robot.velocity_xy"
+      channel_labels: ["vx_world", "vy_world"]
+      selection: "preferred_when_available"
+    semantics: "world_velocity_xy_with_robot_speed_fallback"
+    fallback:
+      observation_key: "robot.speed"
+      channel_labels: ["linear_speed", "angular_speed"]
+      condition: "when_robot_velocity_xy_missing_or_short"
+    comparability:
+      group: "predictive_ego_motion_slots_v1"
+      same_producer_key_required: true
+      mixed_producer_status: "not_comparable_without_caveat"
 
 features:
   predictive_ego_v1:
@@ -104,6 +136,9 @@ features:
           Set missing elements to 0.0. The standalone collector falls back from
           `robot.velocity_xy` to `robot.speed` before zero-filling. The
           same-seed pipeline and runtime use `robot.speed` directly.
+        producer_metadata_policy: >
+          Comparisons across rows with different `ego_motion_channel_producer`
+          values are not equivalent without an explicit caveat.
 
       - slot: [6, 7]
         name: "goal_direction_ego"
@@ -180,6 +215,7 @@ composed_schemas:
         name: "predictive_obstacle_features_v1"
         feature_dim: 6
       input_dim: 15
+      ego_motion_channel_producer_required: true
 
 row_identifiers:
   baseline:
@@ -195,11 +231,13 @@ row_identifiers:
     schema_name: "predictive_ego_v1"
     input_dim: 9
     config: "configs/training/predictive/predictive_ego_features_same_seed_issue_1504.yaml"
+    ego_motion_channel_producer: "same_seed_hardcase_runtime_robot_speed_v1"
   ego_obstacle_combined:
     schema_name: "predictive_obstacle_features_v1"
     input_dim: 15
     base_schema: "predictive_ego_v1"
     config: "configs/training/predictive/predictive_ego_obstacle_features_same_seed_issue_1504.yaml"
+    ego_motion_channel_producer: "same_seed_hardcase_runtime_robot_speed_v1"
 
 same_seed_comparability:
   seed_manifest: "configs/training/predictive/predictive_same_seed_issue_1427_base_seed_manifest.yaml"

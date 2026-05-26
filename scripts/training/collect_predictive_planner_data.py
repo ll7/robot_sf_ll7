@@ -17,6 +17,7 @@ from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
@@ -56,6 +57,7 @@ def _effective_predictive_feature_schema(
     return predictive_feature_schema_metadata(
         model_family=effective_family,
         ego_conditioning=bool(ego_conditioning),
+        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
     )
 
 

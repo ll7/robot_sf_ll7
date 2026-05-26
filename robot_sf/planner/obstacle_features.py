@@ -19,6 +19,9 @@ PREDICTIVE_LEGACY_FEATURE_SCHEMA = "predictive_legacy_v1"
 PREDICTIVE_LEGACY_FEATURE_DIM = 4
 PREDICTIVE_EGO_FEATURE_SCHEMA = "predictive_ego_v1"
 PREDICTIVE_EGO_FEATURE_DIM = 9
+PREDICTIVE_EGO_MOTION_CHANNEL_SLOTS = (4, 5)
+PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME = "same_seed_hardcase_runtime_robot_speed_v1"
+PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE = "standalone_rollout_velocity_xy_preferred_v1"
 
 
 class ObstacleFeatureSchemaError(ValueError):
@@ -418,6 +421,7 @@ def predictive_feature_schema_metadata(
     *,
     model_family: str,
     ego_conditioning: bool = False,
+    ego_motion_channel_producer: str | None = None,
 ) -> dict[str, object]:
     """Return predictive input-schema metadata for a dataset/model family.
 
@@ -431,14 +435,21 @@ def predictive_feature_schema_metadata(
         base_dim = (
             PREDICTIVE_EGO_FEATURE_DIM if bool(ego_conditioning) else PREDICTIVE_LEGACY_FEATURE_DIM
         )
+        base_schema = (
+            PREDICTIVE_EGO_FEATURE_SCHEMA
+            if bool(ego_conditioning)
+            else PREDICTIVE_LEGACY_FEATURE_SCHEMA
+        )
         return {
             "name": PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
-            "base_schema": PREDICTIVE_EGO_FEATURE_SCHEMA
-            if bool(ego_conditioning)
-            else PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+            "base_schema": base_schema,
             "base_feature_dim": base_dim,
             "obstacle_feature_schema": ObstacleFeatureSchema().to_metadata(),
             "input_dim": base_dim + PREDICTIVE_OBSTACLE_FEATURE_DIM,
+            "ego_motion_channel_producer": _predictive_ego_motion_channel_producer_metadata(
+                ego_motion_channel_producer,
+                base_schema=base_schema,
+            ),
         }
     if normalized == PREDICTIVE_LEGACY_FEATURE_SCHEMA:
         return {
@@ -447,6 +458,7 @@ def predictive_feature_schema_metadata(
             "base_feature_dim": PREDICTIVE_LEGACY_FEATURE_DIM,
             "obstacle_feature_schema": None,
             "input_dim": PREDICTIVE_LEGACY_FEATURE_DIM,
+            "ego_motion_channel_producer": None,
         }
     if normalized == PREDICTIVE_EGO_FEATURE_SCHEMA:
         return {
@@ -455,6 +467,10 @@ def predictive_feature_schema_metadata(
             "base_feature_dim": PREDICTIVE_EGO_FEATURE_DIM,
             "obstacle_feature_schema": None,
             "input_dim": PREDICTIVE_EGO_FEATURE_DIM,
+            "ego_motion_channel_producer": _predictive_ego_motion_channel_producer_metadata(
+                ego_motion_channel_producer,
+                base_schema=PREDICTIVE_EGO_FEATURE_SCHEMA,
+            ),
         }
     raise ObstacleFeatureSchemaError(f"Unsupported predictive feature schema: {model_family!r}")
 
@@ -484,6 +500,7 @@ def infer_predictive_feature_schema(state_dim: int) -> dict[str, object]:
             "base_feature_dim": dim - PREDICTIVE_OBSTACLE_FEATURE_DIM,
             "obstacle_feature_schema": ObstacleFeatureSchema().to_metadata(),
             "input_dim": dim,
+            "ego_motion_channel_producer": None,
         }
     raise ObstacleFeatureSchemaError(f"Cannot infer predictive feature schema for input_dim={dim}")
 
@@ -497,6 +514,94 @@ def _base_schema_feature_dim(schema_name: str) -> int | None:
     return None
 
 
+def _predictive_ego_motion_channel_producer_metadata(
+    producer: str | None,
+    *,
+    base_schema: str,
+) -> dict[str, object] | None:
+    """Return machine-readable producer metadata for ego motion slots when applicable."""
+    if base_schema != PREDICTIVE_EGO_FEATURE_SCHEMA:
+        return None
+    normalized = str(producer or "").strip()
+    if not normalized:
+        return None
+    comparability = {
+        "group": "predictive_ego_motion_slots_v1",
+        "same_producer_key_required": True,
+        "mixed_producer_status": "not_comparable_without_caveat",
+    }
+    slot_range = list(PREDICTIVE_EGO_MOTION_CHANNEL_SLOTS)
+    if normalized == PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME:
+        return {
+            "producer_key": PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+            "slot_range": slot_range,
+            "source": {
+                "observation_key": "robot.speed",
+                "channel_labels": ["linear_speed", "angular_speed"],
+            },
+            "semantics": "benchmark_linear_angular_speed",
+            "fallback": None,
+            "comparability": comparability,
+        }
+    if normalized == PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE:
+        return {
+            "producer_key": PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+            "slot_range": slot_range,
+            "source": {
+                "observation_key": "robot.velocity_xy",
+                "channel_labels": ["vx_world", "vy_world"],
+                "selection": "preferred_when_available",
+            },
+            "semantics": "world_velocity_xy_with_robot_speed_fallback",
+            "fallback": {
+                "observation_key": "robot.speed",
+                "channel_labels": ["linear_speed", "angular_speed"],
+                "condition": "when_robot_velocity_xy_missing_or_short",
+            },
+            "comparability": comparability,
+        }
+    raise ObstacleFeatureSchemaError(
+        f"Unsupported predictive ego motion producer metadata: {producer!r}"
+    )
+
+
+def predictive_ego_motion_channel_producer_key(metadata: dict[str, object]) -> str | None:
+    """Return the stable ego-motion producer key from predictive schema metadata."""
+    producer = metadata.get("ego_motion_channel_producer")
+    if not isinstance(producer, dict):
+        return None
+    producer_key = producer.get("producer_key")
+    if producer_key is None:
+        return None
+    return str(producer_key).strip() or None
+
+
+def _validate_predictive_ego_motion_channel_producer(metadata: dict[str, object]) -> None:
+    """Validate optional ego-motion producer metadata without requiring it on legacy artifacts."""
+    if "ego_motion_channel_producer" not in metadata:
+        return
+    producer_meta = metadata.get("ego_motion_channel_producer")
+    if producer_meta is None:
+        return
+    if not isinstance(producer_meta, dict):
+        raise ObstacleFeatureSchemaError("ego_motion_channel_producer must be a mapping")
+    producer_key = predictive_ego_motion_channel_producer_key(metadata)
+    if producer_key is None:
+        raise ObstacleFeatureSchemaError(
+            "ego_motion_channel_producer.producer_key must be a non-empty string when provided"
+        )
+    base_schema = str(metadata.get("base_schema") or "").strip()
+    if base_schema != PREDICTIVE_EGO_FEATURE_SCHEMA:
+        raise ObstacleFeatureSchemaError(
+            "Predictive ego motion producer metadata is only valid for "
+            f"base_schema={PREDICTIVE_EGO_FEATURE_SCHEMA!r}; got {base_schema!r}"
+        )
+    _predictive_ego_motion_channel_producer_metadata(
+        producer_key,
+        base_schema=base_schema,
+    )
+
+
 def validate_predictive_feature_schema_metadata(
     metadata: dict[str, object],
     *,
@@ -506,7 +611,7 @@ def validate_predictive_feature_schema_metadata(
     """Fail closed when predictive feature metadata and input dimensions disagree."""
     if not isinstance(metadata, dict):
         raise ObstacleFeatureSchemaError("Predictive feature schema metadata must be a mapping")
-    schema_name = str(metadata.get("name", "")).strip()
+    schema_name = str(metadata.get("name") or "").strip()
     if expected_schema_name is not None and schema_name != str(expected_schema_name):
         raise ObstacleFeatureSchemaError(
             "Predictive feature schema mismatch: "
@@ -518,6 +623,7 @@ def validate_predictive_feature_schema_metadata(
             "Predictive input dimension mismatch: "
             f"metadata input_dim={metadata_dim}, model input_dim={int(input_dim)}"
         )
+    _validate_predictive_ego_motion_channel_producer(metadata)
     if schema_name == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
         obstacle_meta = metadata.get("obstacle_feature_schema")
         if not isinstance(obstacle_meta, dict):

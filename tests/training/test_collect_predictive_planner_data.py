@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from robot_sf.planner.obstacle_features import PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+    PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+)
 from scripts.training import collect_predictive_planner_data as collect
 
 
@@ -181,6 +184,24 @@ def test_effective_feature_schema_follows_emitted_ego_conditioning_features() ->
 
     assert schema["name"] == "predictive_ego_v1"
     assert schema["input_dim"] == 9
+    assert schema["ego_motion_channel_producer"]["producer_key"] == (
+        PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE
+    )
+
+
+def test_effective_obstacle_ego_schema_records_standalone_motion_producer() -> None:
+    """Standalone obstacle+ego metadata should expose the rollout producer contract."""
+    schema = collect._effective_predictive_feature_schema(
+        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+        ego_conditioning=True,
+    )
+
+    assert schema["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA
+    assert schema["base_schema"] == "predictive_ego_v1"
+    assert schema["input_dim"] == 15
+    assert schema["ego_motion_channel_producer"]["producer_key"] == (
+        PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE
+    )
 
 
 def test_parse_args_accepts_ego_conditioning_flag(monkeypatch) -> None:

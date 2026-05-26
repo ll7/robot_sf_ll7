@@ -19,10 +19,13 @@ import yaml
 from loguru import logger
 
 from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_DIM,
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
     PREDICTIVE_OBSTACLE_FEATURE_DIM,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     PREDICTIVE_OBSTACLE_UNAVAILABLE_FEATURE_ROW,
+    predictive_ego_motion_channel_producer_key,
 )
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -45,6 +48,7 @@ class PipelinePaths:
     diagnostics_dir: Path
     campaign_dir: Path
     obstacle_preflight_report: Path
+    producer_preflight_report: Path
     final_summary: Path
 
 
@@ -133,17 +137,153 @@ def _dataset_npz_diagnostics(path: Path) -> dict[str, Any]:
 
 def _load_feature_schema_metadata(raw: Any) -> dict[str, Any]:
     """Resolve predictive feature-schema metadata from dataset payloads."""
-    if "feature_schema_json" in raw:
-        raw_value = raw["feature_schema_json"]
-        if isinstance(raw_value, np.ndarray) and raw_value.shape == ():
-            raw_value = raw_value.item()
-        if isinstance(raw_value, bytes):
-            raw_value = raw_value.decode("utf-8")
-        if isinstance(raw_value, str):
-            payload = json.loads(raw_value)
-            if isinstance(payload, dict):
-                return payload
+    payload = _load_optional_feature_schema_metadata(raw)
+    if payload is not None:
+        return payload
     raise ValueError("Missing or invalid feature_schema_json in dataset payload.")
+
+
+def _load_optional_feature_schema_metadata(raw: Any) -> dict[str, Any] | None:
+    """Resolve optional predictive feature-schema metadata from dataset payloads."""
+    if "feature_schema_json" not in raw:
+        return None
+    raw_value = raw["feature_schema_json"]
+    if isinstance(raw_value, np.ndarray) and raw_value.shape == ():
+        raw_value = raw_value.item()
+    if isinstance(raw_value, bytes):
+        raw_value = raw_value.decode("utf-8")
+    if isinstance(raw_value, str):
+        payload = json.loads(raw_value)
+        if isinstance(payload, dict):
+            return payload
+    raise ValueError("Missing or invalid feature_schema_json in dataset payload.")
+
+
+def _is_ego_conditioned_feature_schema(
+    feature_schema: dict[str, Any] | None,
+    *,
+    input_dim: int,
+) -> bool:
+    """Return whether the dataset width/schema uses ego-conditioned predictive slots."""
+    if int(input_dim) == PREDICTIVE_EGO_FEATURE_DIM:
+        return True
+    if int(input_dim) == PREDICTIVE_EGO_FEATURE_DIM + PREDICTIVE_OBSTACLE_FEATURE_DIM:
+        return True
+    if not isinstance(feature_schema, dict):
+        return False
+    schema_name = str(feature_schema.get("name") or "").strip()
+    base_schema = str(feature_schema.get("base_schema") or "").strip()
+    return PREDICTIVE_EGO_FEATURE_SCHEMA in {schema_name, base_schema}
+
+
+def _feature_schema_contract(feature_schema: dict[str, Any]) -> dict[str, Any]:
+    """Return the schema fields that must agree before mixing predictive datasets."""
+    return {
+        "name": feature_schema.get("name"),
+        "base_schema": feature_schema.get("base_schema"),
+        "base_feature_dim": feature_schema.get("base_feature_dim"),
+        "input_dim": feature_schema.get("input_dim"),
+        "obstacle_feature_schema": feature_schema.get("obstacle_feature_schema"),
+    }
+
+
+def _predictive_feature_dataset_report(dataset_path: Path) -> dict[str, Any]:
+    """Read compact producer/schema metadata for one predictive dataset."""
+    with np.load(dataset_path) as raw:
+        state = np.asarray(raw["state"], dtype=np.float32)
+        feature_schema = _load_optional_feature_schema_metadata(raw)
+    input_dim = int(state.shape[2])
+    ego_conditioned = _is_ego_conditioned_feature_schema(feature_schema, input_dim=input_dim)
+    producer_key = (
+        predictive_ego_motion_channel_producer_key(feature_schema)
+        if isinstance(feature_schema, dict)
+        else None
+    )
+    report: dict[str, Any] = {
+        "dataset_path": str(dataset_path),
+        "input_dim": input_dim,
+        "feature_schema_present": feature_schema is not None,
+        "feature_schema": feature_schema,
+        "ego_conditioned": ego_conditioned,
+        "producer_key": producer_key,
+        "status": "ok",
+        "failure_reason": None,
+    }
+    if ego_conditioned and feature_schema is None:
+        report["status"] = "failed"
+        report["failure_reason"] = (
+            "Ego-conditioned dataset is missing feature_schema_json metadata."
+        )
+    elif ego_conditioned and producer_key is None:
+        report["status"] = "failed"
+        report["failure_reason"] = (
+            "Ego-conditioned dataset is missing ego_motion_channel_producer metadata."
+        )
+    return report
+
+
+def _write_producer_metadata_preflight_report(
+    *,
+    report_path: Path,
+    run_id: str,
+    config_path: Path,
+    config_hash: str,
+    git_commit: str,
+    model_family: str,
+    datasets: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Write compact predictive producer/schema preflight evidence for mixed-dataset builds."""
+    status = "ok"
+    failure_reason = None
+    failing_datasets = [
+        role for role, payload in datasets.items() if str(payload.get("status") or "") == "failed"
+    ]
+    if failing_datasets:
+        status = "failed"
+        failure_reason = "One or more datasets are missing required ego-conditioned metadata."
+    else:
+        base_schema = datasets["base"].get("feature_schema")
+        hardcase_schema = datasets["hardcase"].get("feature_schema")
+        base_has_schema = isinstance(base_schema, dict)
+        hardcase_has_schema = isinstance(hardcase_schema, dict)
+        if base_has_schema != hardcase_has_schema:
+            status = "failed"
+            failure_reason = (
+                "Predictive feature schema presence mismatch between datasets "
+                "(one dataset has parsed feature_schema while the other does not)."
+            )
+        elif base_has_schema and hardcase_has_schema:
+            if _feature_schema_contract(base_schema) != _feature_schema_contract(hardcase_schema):
+                status = "failed"
+                failure_reason = "Predictive feature schemas do not match between datasets."
+            else:
+                base_producer = str(datasets["base"].get("producer_key") or "").strip() or None
+                hardcase_producer = (
+                    str(datasets["hardcase"].get("producer_key") or "").strip() or None
+                )
+                if base_producer is not None and hardcase_producer is not None:
+                    if base_producer != hardcase_producer:
+                        status = "failed"
+                        failure_reason = (
+                            "Predictive ego motion producer keys do not match between datasets."
+                        )
+    payload = {
+        "artifact_role": "predictive_producer_metadata_preflight",
+        "contract_version": _CONTRACT_VERSION,
+        "training_family": _TRAINING_FAMILY,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "run_id": run_id,
+        "config_path": str(config_path),
+        "config_hash": config_hash,
+        "git_commit": git_commit,
+        "model_family": model_family,
+        "status": status,
+        "failure_reason": failure_reason,
+        "datasets": datasets,
+    }
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(report_path, payload)
+    return payload
 
 
 def _obstacle_feature_preflight(dataset_path: Path) -> dict[str, Any]:
@@ -156,7 +296,7 @@ def _obstacle_feature_preflight(dataset_path: Path) -> dict[str, Any]:
         state = np.asarray(raw["state"], dtype=np.float32)
         mask = np.asarray(raw["mask"], dtype=np.float32)
         feature_schema = _load_feature_schema_metadata(raw)
-    schema_name = str(feature_schema.get("name", "")).strip()
+    schema_name = str(feature_schema.get("name") or "").strip()
     report: dict[str, Any] = {
         "dataset_path": str(dataset_path),
         "feature_schema": feature_schema,
@@ -243,7 +383,7 @@ def _write_obstacle_preflight_report(
     """Write compact obstacle-row preflight evidence for pipeline handoff."""
     status = "ok"
     failing_datasets = [
-        role for role, payload in datasets.items() if str(payload.get("status")) == "failed"
+        role for role, payload in datasets.items() if str(payload.get("status") or "") == "failed"
     ]
     if failing_datasets:
         status = "failed"
@@ -413,6 +553,7 @@ def _paths_from_config(
         diagnostics_dir=diagnostics_dir,
         campaign_dir=campaign_dir,
         obstacle_preflight_report=run_root / "obstacle_feature_preflight.json",
+        producer_preflight_report=run_root / "producer_metadata_preflight.json",
         final_summary=run_root / "final_performance_summary.json",
     )
 
@@ -617,6 +758,32 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "model_family": hardcase_model_family,
         },
     )
+    producer_preflight_payload = _write_producer_metadata_preflight_report(
+        report_path=paths.producer_preflight_report,
+        run_id=run_id,
+        config_path=config_path,
+        config_hash=config_hash,
+        git_commit=git_commit,
+        model_family=model_family,
+        datasets={
+            "base": _predictive_feature_dataset_report(paths.base_dataset),
+            "hardcase": _predictive_feature_dataset_report(paths.hardcase_dataset),
+        },
+    )
+    if str(producer_preflight_payload.get("status") or "") == "failed":
+        base_reason = str(
+            producer_preflight_payload["datasets"]["base"].get("failure_reason") or ""
+        ).strip()
+        hardcase_reason = str(
+            producer_preflight_payload["datasets"]["hardcase"].get("failure_reason") or ""
+        ).strip()
+        mismatch_reason = str(producer_preflight_payload.get("failure_reason") or "").strip()
+        reasons = [reason for reason in [base_reason, hardcase_reason, mismatch_reason] if reason]
+        raise RuntimeError(
+            "Predictive producer metadata preflight failed before mixed dataset build: "
+            + "; ".join(dict.fromkeys(reasons))
+            + f". See {paths.producer_preflight_report}."
+        )
     obstacle_preflight_payload: dict[str, Any] | None = None
     if model_family == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
         obstacle_preflight_payload = _write_obstacle_preflight_report(
@@ -676,6 +843,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         extra={
             "base_dataset": str(paths.base_dataset),
             "hardcase_dataset": str(paths.hardcase_dataset),
+            "producer_metadata_preflight_report": str(paths.producer_preflight_report),
+            "producer_metadata_preflight_status": str(
+                producer_preflight_payload.get("status") or ""
+            ),
+            "producer_metadata_preflight": producer_preflight_payload,
         },
     )
 
@@ -924,6 +1096,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "hard_seed_manifest": str(hard_seed_manifest),
         "planner_grid": str(planner_grid),
         "model_family": model_family,
+        "producer_metadata_preflight_report": str(paths.producer_preflight_report),
+        "producer_metadata_preflight": producer_preflight_payload,
         "obstacle_feature_preflight_report": (
             str(paths.obstacle_preflight_report) if obstacle_preflight_payload is not None else None
         ),

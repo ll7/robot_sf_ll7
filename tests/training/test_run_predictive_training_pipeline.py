@@ -10,10 +10,31 @@ import pytest
 import yaml
 
 from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
     PREDICTIVE_OBSTACLE_FEATURE_DIM,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+    predictive_feature_schema_metadata,
 )
 from scripts.training import run_predictive_training_pipeline as pipeline
+
+
+def _predictive_feature_schema_json(
+    *,
+    model_family: str = "predictive_legacy_v1",
+    ego_conditioning: bool = False,
+    producer: str | None = None,
+) -> str:
+    """Return predictive feature-schema metadata for pipeline NPZ fixtures."""
+    return json.dumps(
+        predictive_feature_schema_metadata(
+            model_family=model_family,
+            ego_conditioning=ego_conditioning,
+            ego_motion_channel_producer=producer,
+        ),
+        sort_keys=True,
+    )
 
 
 def _obstacle_feature_schema_json(base_dim: int = 4) -> str:
@@ -30,6 +51,106 @@ def _obstacle_feature_schema_json(base_dim: int = 4) -> str:
             "input_dim": base_dim + PREDICTIVE_OBSTACLE_FEATURE_DIM,
         }
     )
+
+
+def _write_seed_manifest(output_path: Path) -> Path:
+    """Write a minimal seed manifest used by pipeline smoke tests."""
+    output_path.write_text("scenario: [1]\n", encoding="utf-8")
+    return output_path
+
+
+def _write_predictive_dataset_fixture(
+    path: Path,
+    *,
+    state_dim: int,
+    feature_schema_json: str | None = None,
+    summary: dict[str, object] | None = None,
+) -> None:
+    """Write a predictive dataset fixture with optional embedded schema metadata."""
+    payload: dict[str, object] = {
+        "state": np.zeros((2, 3, state_dim), dtype=np.float32),
+        "target": np.zeros((2, 3, 5, 2), dtype=np.float32),
+        "mask": np.ones((2, 3), dtype=np.float32),
+        "target_mask": np.ones((2, 3, 5), dtype=np.float32),
+    }
+    if feature_schema_json is not None:
+        payload["feature_schema_json"] = np.asarray(feature_schema_json)
+    np.savez(path, **payload)
+    path.with_suffix(".json").write_text(
+        json.dumps(summary or {"num_samples": 2}),
+        encoding="utf-8",
+    )
+
+
+def _make_ego_pipeline_run_stub(invoked: list[list[str]]):
+    """Return a pipeline stage stub that materializes ego-conditioned dataset artifacts."""
+    ego_schema_json = _predictive_feature_schema_json(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        ego_conditioning=True,
+        producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    )
+
+    def _fake_run(cmd: list[str], *, log_level: str) -> None:
+        del log_level
+        invoked.append(list(cmd))
+        if any("collect_predictive_hardcase_data.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _write_predictive_dataset_fixture(
+                output,
+                state_dim=9 if "--ego-conditioning" in cmd else 4,
+                feature_schema_json=ego_schema_json if "--ego-conditioning" in cmd else None,
+            )
+            return
+        if any("build_predictive_mixed_dataset.py" in part for part in cmd):
+            output = Path(cmd[cmd.index("--output") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            _write_predictive_dataset_fixture(
+                output,
+                state_dim=9,
+                feature_schema_json=ego_schema_json,
+            )
+            return
+        if any("train_predictive_planner.py" in part for part in cmd):
+            out_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "training_summary.json").write_text(
+                json.dumps(
+                    {
+                        "best_checkpoint": str(out_dir / "predictive_model.pt"),
+                        "selection": {"selected_epoch": 1},
+                        "selected_checkpoint_reason": "proxy",
+                        "source_dataset_ids": ["a", "b"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (out_dir / "predictive_model.pt").write_text("stub", encoding="utf-8")
+            return
+        if any("evaluate_predictive_planner.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "final_eval_summary.json").write_text(
+                json.dumps({"quality_gates": {"pass_all": True}, "integrity": {"pass": True}}),
+                encoding="utf-8",
+            )
+            return
+        if any("run_predictive_hard_seed_diagnostics.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "summary.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+            return
+        if any("run_predictive_success_campaign.py" in part for part in cmd):
+            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "campaign_summary.json").write_text(
+                json.dumps({"integrity": {"pass": True}}),
+                encoding="utf-8",
+            )
+            return
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    return _fake_run
 
 
 def test_paths_from_config_resolves_root_relative_to_output_base(tmp_path: Path) -> None:
@@ -181,81 +302,13 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     monkeypatch.setattr(pipeline, "_sha1_file", lambda _path: "cfghash")
     monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
 
-    def _fake_build_random_seed_manifest(**kwargs) -> Path:
-        """Write the seed manifest path requested by the pipeline."""
-        output_path = Path(kwargs["output_path"])
-        output_path.write_text("scenario: [1]\n", encoding="utf-8")
-        return output_path
-
-    monkeypatch.setattr(pipeline, "_build_random_seed_manifest", _fake_build_random_seed_manifest)
-
-    def _fake_dataset(path: Path, *, state_dim: int) -> None:
-        """Write a predictive dataset fixture with the requested state dimension."""
-        np.savez(
-            path,
-            state=np.zeros((2, 3, state_dim), dtype=np.float32),
-            target=np.zeros((2, 3, 5, 2), dtype=np.float32),
-            mask=np.ones((2, 3), dtype=np.float32),
-            target_mask=np.ones((2, 3, 5), dtype=np.float32),
-        )
-        path.with_suffix(".json").write_text(json.dumps({"num_samples": 2}), encoding="utf-8")
-
     invoked: list[list[str]] = []
-
-    def _fake_run(cmd: list[str], *, log_level: str) -> None:
-        """Simulate pipeline commands and materialize expected stage artifacts."""
-        invoked.append(list(cmd))
-        if any("collect_predictive_hardcase_data.py" in part for part in cmd):
-            output = Path(cmd[cmd.index("--output") + 1])
-            state_dim = 9 if "--ego-conditioning" in cmd else 4
-            output.parent.mkdir(parents=True, exist_ok=True)
-            _fake_dataset(output, state_dim=state_dim)
-            return
-        if any("build_predictive_mixed_dataset.py" in part for part in cmd):
-            output = Path(cmd[cmd.index("--output") + 1])
-            output.parent.mkdir(parents=True, exist_ok=True)
-            _fake_dataset(output, state_dim=9)
-            return
-        if any("train_predictive_planner.py" in part for part in cmd):
-            out_dir = Path(cmd[cmd.index("--output-dir") + 1])
-            out_dir.mkdir(parents=True, exist_ok=True)
-            (out_dir / "training_summary.json").write_text(
-                json.dumps(
-                    {
-                        "best_checkpoint": str(out_dir / "predictive_model.pt"),
-                        "selection": {"selected_epoch": 1},
-                        "selected_checkpoint_reason": "proxy",
-                        "source_dataset_ids": ["a", "b"],
-                    }
-                ),
-                encoding="utf-8",
-            )
-            (out_dir / "predictive_model.pt").write_text("stub", encoding="utf-8")
-            return
-        if any("evaluate_predictive_planner.py" in part for part in cmd):
-            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
-            output_dir.mkdir(parents=True, exist_ok=True)
-            (output_dir / "final_eval_summary.json").write_text(
-                json.dumps({"quality_gates": {"pass_all": True}, "integrity": {"pass": True}}),
-                encoding="utf-8",
-            )
-            return
-        if any("run_predictive_hard_seed_diagnostics.py" in part for part in cmd):
-            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
-            output_dir.mkdir(parents=True, exist_ok=True)
-            (output_dir / "summary.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
-            return
-        if any("run_predictive_success_campaign.py" in part for part in cmd):
-            output_dir = Path(cmd[cmd.index("--output-dir") + 1])
-            output_dir.mkdir(parents=True, exist_ok=True)
-            (output_dir / "campaign_summary.json").write_text(
-                json.dumps({"integrity": {"pass": True}}),
-                encoding="utf-8",
-            )
-            return
-        raise AssertionError(f"Unexpected command: {cmd}")
-
-    monkeypatch.setattr(pipeline, "_run", _fake_run)
+    monkeypatch.setattr(
+        pipeline,
+        "_build_random_seed_manifest",
+        lambda **kwargs: _write_seed_manifest(Path(kwargs["output_path"])),
+    )
+    monkeypatch.setattr(pipeline, "_run", _make_ego_pipeline_run_stub(invoked))
     monkeypatch.setattr(
         pipeline,
         "_run_capture_json",
@@ -271,6 +324,12 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
         ),
     )
 
+    resolved_paths = pipeline._paths_from_config(
+        yaml.safe_load(config_path.read_text(encoding="utf-8")),
+        run_id="predictive_promotion_smoke",
+        base_dir=config_path.parent,
+        output_base_dir=pipeline._REPO_ROOT,
+    )
     code = pipeline.main()
     assert code == 0
     collector_cmds = [
@@ -278,6 +337,12 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     ]
     assert len(collector_cmds) == 2
     assert all("--ego-conditioning" in cmd for cmd in collector_cmds)
+    final_summary = json.loads(resolved_paths.final_summary.read_text(encoding="utf-8"))
+    assert final_summary["producer_metadata_preflight"]["status"] == "ok"
+    mixed_manifest = json.loads(
+        Path(final_summary["dataset_manifests"]["mixed"]).read_text(encoding="utf-8")
+    )
+    assert mixed_manifest["extra"]["producer_metadata_preflight_status"] == "ok"
 
 
 def test_pipeline_passes_obstacle_model_family_to_collectors_and_training(
@@ -496,6 +561,120 @@ def test_obstacle_feature_preflight_rejects_non_map_source_with_valid_rows(tmp_p
     assert report["failure_reason"] == (
         "Dataset obstacle_feature_source must be an explicit map-derived source; got "
         "'not_available'."
+    )
+
+
+def test_producer_metadata_preflight_rejects_mismatched_ego_producers(tmp_path: Path) -> None:
+    """Producer preflight must fail before mixing incompatible ego-conditioned datasets."""
+    base_path = tmp_path / "predictive_rollouts_base.npz"
+    hardcase_path = tmp_path / "predictive_rollouts_hardcase.npz"
+    for path, producer in [
+        (base_path, PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME),
+        (hardcase_path, PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE),
+    ]:
+        np.savez(
+            path,
+            state=np.zeros((2, 3, 9), dtype=np.float32),
+            target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+            mask=np.ones((2, 3), dtype=np.float32),
+            target_mask=np.ones((2, 3, 5), dtype=np.float32),
+            feature_schema_json=np.asarray(
+                _predictive_feature_schema_json(
+                    model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+                    ego_conditioning=True,
+                    producer=producer,
+                )
+            ),
+        )
+
+    report_path = tmp_path / "producer_metadata_preflight.json"
+    payload = pipeline._write_producer_metadata_preflight_report(
+        report_path=report_path,
+        run_id="predictive_ego_producer_mismatch",
+        config_path=tmp_path / "config.yaml",
+        config_hash="cfghash",
+        git_commit="deadbeef",
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        datasets={
+            "base": pipeline._predictive_feature_dataset_report(base_path),
+            "hardcase": pipeline._predictive_feature_dataset_report(hardcase_path),
+        },
+    )
+
+    assert payload["status"] == "failed"
+    assert payload["failure_reason"] == (
+        "Predictive ego motion producer keys do not match between datasets."
+    )
+    assert json.loads(report_path.read_text(encoding="utf-8"))["status"] == "failed"
+
+
+def test_producer_metadata_preflight_rejects_schema_presence_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Producer preflight must fail when only one dataset has parsed schema metadata."""
+    base_path = tmp_path / "predictive_rollouts_base.npz"
+    hardcase_path = tmp_path / "predictive_rollouts_hardcase.npz"
+    np.savez(
+        base_path,
+        state=np.zeros((2, 3, 4), dtype=np.float32),
+        target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+        mask=np.ones((2, 3), dtype=np.float32),
+        target_mask=np.ones((2, 3, 5), dtype=np.float32),
+        feature_schema_json=np.asarray(
+            _predictive_feature_schema_json(model_family="predictive_legacy_v1")
+        ),
+    )
+    np.savez(
+        hardcase_path,
+        state=np.zeros((2, 3, 4), dtype=np.float32),
+        target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+        mask=np.ones((2, 3), dtype=np.float32),
+        target_mask=np.ones((2, 3, 5), dtype=np.float32),
+    )
+
+    payload = pipeline._write_producer_metadata_preflight_report(
+        report_path=tmp_path / "producer_metadata_preflight.json",
+        run_id="predictive_schema_presence_mismatch",
+        config_path=tmp_path / "config.yaml",
+        config_hash="cfghash",
+        git_commit="deadbeef",
+        model_family="predictive_legacy_v1",
+        datasets={
+            "base": pipeline._predictive_feature_dataset_report(base_path),
+            "hardcase": pipeline._predictive_feature_dataset_report(hardcase_path),
+        },
+    )
+
+    assert payload["status"] == "failed"
+    assert payload["failure_reason"] == (
+        "Predictive feature schema presence mismatch between datasets "
+        "(one dataset has parsed feature_schema while the other does not)."
+    )
+
+
+def test_predictive_feature_dataset_report_rejects_missing_ego_producer(tmp_path: Path) -> None:
+    """Ego-conditioned datasets without producer metadata must fail preflight."""
+    dataset_path = tmp_path / "predictive_rollouts_base.npz"
+    np.savez(
+        dataset_path,
+        state=np.zeros((2, 3, 9), dtype=np.float32),
+        target=np.zeros((2, 3, 5, 2), dtype=np.float32),
+        mask=np.ones((2, 3), dtype=np.float32),
+        target_mask=np.ones((2, 3, 5), dtype=np.float32),
+        feature_schema_json=np.asarray(
+            _predictive_feature_schema_json(
+                model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+                ego_conditioning=True,
+                producer=None,
+            )
+        ),
+    )
+
+    report = pipeline._predictive_feature_dataset_report(dataset_path)
+
+    assert report["status"] == "failed"
+    assert report["failure_reason"] == (
+        "Ego-conditioned dataset is missing ego_motion_channel_producer metadata."
     )
 
 

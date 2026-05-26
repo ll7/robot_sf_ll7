@@ -2169,12 +2169,14 @@ def test_prepare_campaign_preflight_checks_orca_rvo2_before_loading_scenarios(
     )
 
     monkeypatch.setitem(sys.modules, "rvo2", None)
+
+    def fail_if_scenarios_load(*_args, **_kwargs):
+        raise AssertionError("_load_campaign_scenarios should not run before ORCA preflight")
+
     monkeypatch.setattr(
         camera_ready_campaign_module,
         "_load_campaign_scenarios",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("_load_campaign_scenarios should not run before ORCA preflight")
-        ),
+        fail_if_scenarios_load,
     )
 
     with pytest.raises(SystemExit, match="rvo2"):
@@ -2195,12 +2197,14 @@ def test_run_campaign_checks_orca_rvo2_before_loading_optional_artifacts(
     )
 
     monkeypatch.setitem(sys.modules, "rvo2", None)
+
+    def fail_if_optional_json_loads(*_args, **_kwargs):
+        raise AssertionError("load_optional_json should not run before ORCA preflight")
+
     monkeypatch.setattr(
         camera_ready_campaign_module,
         "load_optional_json",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("load_optional_json should not run before ORCA preflight")
-        ),
+        fail_if_optional_json_loads,
     )
 
     with pytest.raises(SystemExit, match="rvo2"):

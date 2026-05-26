@@ -30,6 +30,11 @@ Use this skill when an issue needs contract maintenance before implementation: t
 - `clarify-ambiguity`: identify problem, scope, solution, or validation ambiguity and post concise options with pros/cons.
 - `apply-user-decision`: update issue text, labels, and Project #5 state after the user resolves a readiness question.
 
+For `audit-template-compliance`, treat the `## Archetype Metadata` YAML block as part of the issue
+contract. Preserve the block, validate `archetype` and `evidence_tier` against
+`docs/context/issue_1512_issue_archetypes.md`, require a `linked_policy` key to remain present, and
+flag malformed YAML or invalid values instead of inventing replacements.
+
 ## Workflow
 
 1. Read the issue, labels, linked PRs, recent comments, and Project #5 fields.

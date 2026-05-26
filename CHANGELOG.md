@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Updated the issue-template audit flow for issue-1513 so `scripts/tools/issue_template_audit.py`
+  now parses the `## Archetype Metadata` YAML block, flags invalid canonical `archetype` and
+  `evidence_tier` values plus malformed metadata, reports those findings alongside the existing
+  section audit, and aligns the issue-audit skill docs with the bounded metadata triage behavior.
 * Implemented the issue-1187 render-helper slice: `capture_frames()` now samples real RGB frame
   buffers or one direct render result, `generate_video_contact_sheet.py` writes deterministic PNG
   contact sheets from episode frame metadata, and the helper catalog documents the supported

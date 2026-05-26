@@ -16,6 +16,7 @@ SKILL_FILES = [
     ROOT / ".agents" / "skills" / "gh-issue-creator" / "SKILL.md",
     ROOT / ".agents" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
     ROOT / ".agents" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "issue-contract-maintainer" / "SKILL.md",
 ]
 KNOWN_LABELS = {
     "agent",
@@ -120,7 +121,15 @@ def test_specialized_issue_templates_include_domain_specific_sections() -> None:
     """
 
     template_markers = {
-        "issue_default.md": ["## Goal / Problem", "Task type", "Entry points"],
+        "issue_default.md": [
+            "## Goal / Problem",
+            "## Archetype Metadata",
+            "archetype:",
+            "evidence_tier:",
+            "linked_policy:",
+            "Task type",
+            "Entry points",
+        ],
         "planner_integration.md": ["## Goal / Problem", "Planner", "Integration goal"],
         "benchmark_experiment.md": ["## Goal / Problem", "Scenario description", "Hypothesis"],
         "refactor.md": ["## Goal / Problem", "Objective", "Motivation"],
@@ -202,6 +211,8 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "gh issue view" in auditor_text
     assert "gh issue edit" in auditor_text
     assert "decision-required" in auditor_text
+    assert "Archetype Metadata" in auditor_text
+    assert "docs/context/issue_1512_issue_archetypes.md" in auditor_text
 
     assessor_text = SKILL_FILES[2].read_text(encoding="utf-8")
     assert "GitHub MCP / GitHub app tools" in assessor_text
@@ -212,6 +223,11 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "Priority Score" in assessor_text
     assert "Estimate Discussion" in assessor_text
     assert "plausibility" in assessor_text.lower()
+
+    maintainer_text = SKILL_FILES[3].read_text(encoding="utf-8")
+    assert "audit-template-compliance" in maintainer_text
+    assert "Archetype Metadata" in maintainer_text
+    assert "docs/context/issue_1512_issue_archetypes.md" in maintainer_text
 
     documentation_text = (TEMPLATE_DIR / "documentation.md").read_text(encoding="utf-8")
     assert "docs/README.md" in documentation_text

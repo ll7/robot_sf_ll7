@@ -40,6 +40,8 @@ Add a structured issue workflow.
     assert "## Added Value Estimation" in result.repaired_body
     assert "## Estimate Discussion" in result.repaired_body
     assert "## Definition of Done" in result.repaired_body
+    assert "## Archetype Metadata" not in result.repaired_body
+    assert result.metadata.findings == ("Missing '## Archetype Metadata' section.",)
     assert result.repaired_body.endswith("\n")
 
 
@@ -146,6 +148,186 @@ More legacy text.
     assert "## Goal / Problem" not in result.repaired_body
 
 
+def test_issue_template_audit_accepts_valid_archetype_metadata() -> None:
+    """Verify canonical archetype metadata parses without findings.
+
+    This matters because issue archetype triage should accept the documented
+    values without inventing repairs or blocking a valid issue contract.
+    """
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: workflow
+evidence_tier: smoke
+linked_policy:
+  - docs/context/issue_1512_issue_archetypes.md
+  - docs/context/artifact_evidence_vocabulary.md
+```
+
+## Scope
+
+- In scope:
+- Out of scope:
+"""
+
+    result = audit_issue_body(body)
+
+    assert result.metadata.heading_present is True
+    assert result.metadata.block_present is True
+    assert result.metadata.missing_keys == ()
+    assert result.metadata.invalid_values == {}
+    assert result.metadata.parse_error is None
+    assert result.metadata.findings == ()
+    assert result.metadata.parsed_metadata == {
+        "archetype": "workflow",
+        "evidence_tier": "smoke",
+        "linked_policy": [
+            "docs/context/issue_1512_issue_archetypes.md",
+            "docs/context/artifact_evidence_vocabulary.md",
+        ],
+    }
+
+
+def test_issue_template_audit_flags_missing_metadata_block() -> None:
+    """Verify the metadata section is reported when the YAML block is absent.
+
+    This matters because the auditor should preserve the section heading while
+    still telling triage workflows that the structured metadata is incomplete.
+    """
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+Metadata still needs to be filled in.
+"""
+
+    result = audit_issue_body(body)
+
+    assert result.metadata.heading_present is True
+    assert result.metadata.block_present is False
+    assert result.metadata.missing_keys == (
+        "archetype",
+        "evidence_tier",
+        "linked_policy",
+    )
+    assert result.metadata.findings == ("Missing YAML code block under '## Archetype Metadata'.",)
+
+
+def test_issue_template_audit_flags_missing_metadata_keys() -> None:
+    """Verify missing metadata keys are surfaced without inventing defaults.
+
+    This matters because the issue archetype convention is opt-in metadata, so
+    the auditor must flag gaps instead of silently filling them.
+    """
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: workflow
+```
+"""
+
+    result = audit_issue_body(body)
+
+    assert result.metadata.missing_keys == ("evidence_tier", "linked_policy")
+    assert result.metadata.invalid_values == {}
+    assert result.metadata.findings == (
+        "Missing archetype metadata keys: evidence_tier, linked_policy",
+    )
+
+
+def test_issue_template_audit_flags_invalid_archetype() -> None:
+    """Verify invalid archetype values are rejected against the canonical set.
+
+    This matters because issue triage should only emit the documented archetype
+    taxonomy from issue 1512.
+    """
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: made-up
+evidence_tier: smoke
+linked_policy:
+  - docs/context/issue_1512_issue_archetypes.md
+```
+"""
+
+    result = audit_issue_body(body)
+
+    assert result.metadata.invalid_values == {"archetype": "made-up"}
+    assert "Invalid 'archetype' value 'made-up'" in result.metadata.findings[0]
+
+
+def test_issue_template_audit_flags_invalid_evidence_tier() -> None:
+    """Verify invalid evidence tiers are rejected against the canonical set.
+
+    This matters because the evidence tier controls how strongly an issue can
+    claim proof, so invalid values should be surfaced during audit.
+    """
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: workflow
+evidence_tier: almost_done
+linked_policy:
+  - docs/context/issue_1512_issue_archetypes.md
+```
+"""
+
+    result = audit_issue_body(body)
+
+    assert result.metadata.invalid_values == {"evidence_tier": "almost_done"}
+    assert "Invalid 'evidence_tier' value 'almost_done'" in result.metadata.findings[0]
+
+
+def test_issue_template_audit_flags_malformed_metadata_yaml() -> None:
+    """Verify malformed metadata YAML is surfaced as an explicit parse failure.
+
+    This matters because triage workflows need a concrete repair signal when the
+    metadata block exists but cannot be parsed safely.
+    """
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: workflow
+evidence_tier: smoke
+linked_policy: [docs/context/issue_1512_issue_archetypes.md
+```
+"""
+
+    result = audit_issue_body(body)
+
+    assert result.metadata.parse_error is not None
+    assert result.metadata.findings[0].startswith("Malformed archetype metadata YAML:")
+
+
 def test_issue_template_audit_cli_repairs_body(tmp_path: Path, capsys) -> None:
     """Verify the CLI wrapper can audit and repair a body file in place.
 
@@ -168,6 +350,7 @@ Repair the issue template body.
 
     assert exit_code == 0
     assert '"missing_sections": [' in captured.out
+    assert '"metadata": {' in captured.out
     assert repair_file.read_text(encoding="utf-8").startswith("## Goal / Problem")
     assert "## Validation / Testing" in repair_file.read_text(encoding="utf-8")
     assert "## Estimate Discussion" in repair_file.read_text(encoding="utf-8")

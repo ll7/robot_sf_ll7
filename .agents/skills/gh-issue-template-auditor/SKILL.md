@@ -28,6 +28,9 @@ writes when available.
 1. Read template contract files and run
    `uv run python scripts/tools/issue_template_audit.py` for bulk or targeted audits.
    - For batch routing, preserve `docs/context/issue_713_batch_first_issue_workflow.md`.
+   - Preserve the `## Archetype Metadata` YAML block from
+    `docs/context/issue_1512_issue_archetypes.md`; repair or flag missing keys and invalid
+    `archetype` / `evidence_tier` values conservatively instead of inventing replacements.
 2. Load issue body and metadata with GitHub MCP / GitHub app tools when available, or `gh issue view`.
 3. Compare required sections (problem statement, scope/non-goals, estimates, risks, acceptance, validation, metadata).
 4. If gaps are limited and obvious:
@@ -43,6 +46,8 @@ writes when available.
 
 - Preserve original issue content and decisions; avoid speculative rewrite.
 - Use `decision-required` instead of guessing when scope or problem statement is missing.
+- Preserve the metadata block even when values are incomplete; flag malformed YAML or invalid
+  canonical values instead of deleting or broad-rewriting the issue body.
 - Keep route/metadata cleanup separate from body repair.
 
 ## Output

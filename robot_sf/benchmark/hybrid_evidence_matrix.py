@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -108,6 +109,7 @@ def validate_hybrid_evidence_file(
     path: Path,
     *,
     repo_root: Path | None = None,
+    check_git_history: bool = False,
 ) -> dict[str, Any]:
     """Load and validate a hybrid evidence matrix file.
 
@@ -115,7 +117,11 @@ def validate_hybrid_evidence_file(
         Structured validation report with per-row status, errors, and warnings.
     """
     input_format, rows = load_hybrid_evidence_input(path)
-    report = validate_hybrid_evidence_rows(rows, repo_root=repo_root)
+    report = validate_hybrid_evidence_rows(
+        rows,
+        repo_root=repo_root,
+        check_git_history=check_git_history,
+    )
     report["input_format"] = input_format
     report["input_path"] = _repo_relative_or_absolute(
         path.resolve(), root=(repo_root or get_repository_root())
@@ -127,6 +133,7 @@ def validate_hybrid_evidence_rows(
     rows: list[dict[str, Any]],
     *,
     repo_root: Path | None = None,
+    check_git_history: bool = False,
 ) -> dict[str, Any]:
     """Validate one or more hybrid evidence matrix rows.
 
@@ -134,12 +141,22 @@ def validate_hybrid_evidence_rows(
         Structured validation report with aggregate counts and per-row details.
     """
     root = (repo_root or get_repository_root()).resolve()
+    provenance_validation = "git_history" if check_git_history else "format_only"
+    git_commit_cache: dict[str, bool] = {}
     row_reports = [
-        _validate_row(row, index=index, repo_root=root) for index, row in enumerate(rows)
+        _validate_row(
+            row,
+            index=index,
+            repo_root=root,
+            provenance_validation=provenance_validation,
+            git_commit_cache=git_commit_cache,
+        )
+        for index, row in enumerate(rows)
     ]
     invalid_row_count = sum(1 for row in row_reports if row["status"] == "invalid")
     return {
         "status": "valid" if invalid_row_count == 0 else "invalid",
+        "provenance_validation": provenance_validation,
         "row_count": len(row_reports),
         "valid_row_count": len(row_reports) - invalid_row_count,
         "invalid_row_count": invalid_row_count,
@@ -147,7 +164,14 @@ def validate_hybrid_evidence_rows(
     }
 
 
-def _validate_row(row: object, *, index: int, repo_root: Path) -> dict[str, Any]:
+def _validate_row(
+    row: object,
+    *,
+    index: int,
+    repo_root: Path,
+    provenance_validation: str,
+    git_commit_cache: dict[str, bool],
+) -> dict[str, Any]:
     errors: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
     if not isinstance(row, dict):
@@ -185,6 +209,8 @@ def _validate_row(row: object, *, index: int, repo_root: Path) -> dict[str, Any]
         field="commit_artifact",
         repo_root=repo_root,
         synthesis_candidate=synthesis_candidate,
+        provenance_validation=provenance_validation,
+        git_commit_cache=git_commit_cache,
         errors=errors,
     )
     guard = _validate_guard_authority(row.get("guard_authority"), errors)
@@ -586,6 +612,8 @@ def _validate_commit_artifact(
     field: str,
     repo_root: Path,
     synthesis_candidate: bool,
+    provenance_validation: str,
+    git_commit_cache: dict[str, bool],
     errors: list[dict[str, str]],
 ) -> None:
     if not isinstance(value, str) or not value.strip():
@@ -601,10 +629,12 @@ def _validate_commit_artifact(
         return
     has_git_sha = False
     has_provenance_token = False
+    git_sha_tokens: list[str] = []
     for token in tokens:
         normalized = token.lower()
         if _GIT_SHA_RE.fullmatch(normalized):
             has_git_sha = True
+            git_sha_tokens.append(normalized)
             continue
         has_provenance_token = True
         _validate_reference_token(token, field, repo_root=repo_root, errors=errors)
@@ -612,6 +642,30 @@ def _validate_commit_artifact(
         _append_problem(errors, field, "must include a 7-40 character git SHA token")
     if not has_provenance_token:
         _append_problem(errors, field, "must include at least one provenance pointer token")
+    if provenance_validation == "git_history":
+        for sha in git_sha_tokens:
+            if _git_commit_exists(sha, repo_root=repo_root, cache=git_commit_cache):
+                continue
+            _append_problem(
+                errors,
+                field,
+                f"references unknown git commit SHA in repository history: {sha!r}",
+            )
+
+
+def _git_commit_exists(sha: str, *, repo_root: Path, cache: dict[str, bool]) -> bool:
+    cached = cache.get(sha)
+    if cached is not None:
+        return cached
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    exists = result.returncode == 0
+    cache[sha] = exists
+    return exists
 
 
 def _validate_reference_token(

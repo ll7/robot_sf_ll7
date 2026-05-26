@@ -28,6 +28,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Repository root used to resolve repository-relative provenance paths.",
     )
+    parser.add_argument(
+        "--check-git-history",
+        action="store_true",
+        help=(
+            "Also verify that each git SHA token in commit_artifact resolves to a commit in the "
+            "local repository history. Default validation remains format-only."
+        ),
+    )
     return parser
 
 
@@ -35,7 +43,11 @@ def main(argv: list[str] | None = None) -> int:
     """Validate a matrix file and return a shell-friendly exit code."""
     args = build_arg_parser().parse_args(argv)
     try:
-        report = validate_hybrid_evidence_file(args.input, repo_root=args.repo_root)
+        report = validate_hybrid_evidence_file(
+            args.input,
+            repo_root=args.repo_root,
+            check_git_history=args.check_git_history,
+        )
     except HybridEvidenceMatrixValidationError as exc:
         print(json.dumps({"status": "error", "error": str(exc)}, indent=2, sort_keys=True))
         return 1

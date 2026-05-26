@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Extended the issue-1515 hybrid-evidence matrix validator with an opt-in git-history proof path:
+  default validation still only checks `commit_artifact` shape plus provenance pointers, while
+  `scripts/validation/validate_hybrid_evidence_matrix.py --check-git-history` now additionally fails
+  closed on unknown local commit SHAs before issue-1489 synthesis consumes stress/full-matrix rows.
 * Updated the issue-1519 predictive ego-feature contract so ego-conditioned schema metadata now
   records a machine-readable motion-channel producer key for same-seed/runtime vs standalone
   collection, and runtime inference rejects explicit standalone-producer checkpoints instead of

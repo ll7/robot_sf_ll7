@@ -158,6 +158,8 @@ knowledge, not every transient iteration detail.
   [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
 * Issue #1546 AMV actuation-envelope stress slice:
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
+* Issue #1556 synthetic AMV actuation stress slice:
+  [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
 * Issue #1398 metric rollup reconciliation:
   [issue_1398_metric_rollup_reconciliation.md](issue_1398_metric_rollup_reconciliation.md)
 * Issue #1396 Shielded PPO Repair Launch Packet:

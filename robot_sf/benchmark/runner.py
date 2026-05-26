@@ -1646,6 +1646,7 @@ def run_batch(  # noqa: PLR0913
     observation_mode: str | None = None,
     observation_level: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    synthetic_actuation_profile: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -1687,6 +1688,7 @@ def run_batch(  # noqa: PLR0913
             observation_mode=observation_mode,
             observation_level=observation_level,
             observation_noise=observation_noise,
+            synthetic_actuation_profile=synthetic_actuation_profile,
             workers=workers,
             resume=resume,
         )

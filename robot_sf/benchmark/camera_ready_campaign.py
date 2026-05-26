@@ -65,6 +65,11 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     sanitize_baseline_stats,
 )
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
+from robot_sf.benchmark.synthetic_actuation import (
+    SyntheticActuationProfile,
+    not_available_saturation_metrics,
+    validate_synthetic_actuation_profile,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
@@ -116,6 +121,25 @@ _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
 _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
 _ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
+_ACTUATION_REPORT_METRICS: tuple[str, ...] = (
+    "success",
+    "total_collision_count",
+    "near_misses",
+    "min_clearance",
+    "time_to_collision_min",
+    "time_to_goal_norm",
+    "failure_to_progress",
+    "stalled_time",
+    "velocity_max",
+    "acceleration_max",
+    "jerk_mean",
+    "jerk_max",
+    "curvature_mean",
+    "energy",
+    "command_clip_fraction",
+    "yaw_rate_saturation_fraction",
+    "signed_braking_peak_m_s2",
+)
 _ROUTE_CLEARANCE_CERTIFICATION_STATUSES = {
     "certified_stress_geometry",
     "excluded_from_planner_attribution",
@@ -196,6 +220,14 @@ class SeedPolicy:
 
 
 @dataclass(frozen=True)
+class ScenarioCandidateSelection:
+    """Optional named scenario subset for compact benchmark slices."""
+
+    names: tuple[str, ...] = ()
+    selection_name: str | None = None
+
+
+@dataclass(frozen=True)
 class PlannerSpec:
     """One planner entry in a benchmark campaign matrix."""
 
@@ -239,6 +271,9 @@ class CampaignConfig:
     name: str
     scenario_matrix_path: Path
     planners: tuple[PlannerSpec, ...]
+    scenario_candidates: ScenarioCandidateSelection = field(
+        default_factory=ScenarioCandidateSelection
+    )
     seed_policy: SeedPolicy = SeedPolicy()
     scenario_horizons_path: Path | None = None
     workers: int = 1
@@ -266,6 +301,7 @@ class CampaignConfig:
     paper_facing: bool = False
     paper_profile_version: str | None = None
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
+    synthetic_actuation_profile: SyntheticActuationProfile | None = None
     comparability_mapping_path: Path | None = None
     snqi_contract: SnqiContractConfig = field(default_factory=SnqiContractConfig)
     route_clearance_certifications_path: Path | None = None
@@ -572,6 +608,37 @@ def _scenario_horizon_summary(
     }
 
 
+def _filter_scenario_candidates(
+    scenarios: list[dict[str, Any]],
+    *,
+    names: tuple[str, ...],
+    matrix_path: Path,
+) -> list[dict[str, Any]]:
+    """Return the configured compact candidate subset.
+
+    Returns:
+        Candidate-filtered scenario list.
+    """
+    if not names:
+        return scenarios
+    requested_counts = dict.fromkeys(names, 0)
+    filtered: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        scenario_name = str(
+            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or ""
+        ).strip()
+        if scenario_name in requested_counts:
+            requested_counts[scenario_name] += 1
+            filtered.append(scenario)
+    missing = [name for name, count in requested_counts.items() if count <= 0]
+    if missing:
+        raise ValueError(
+            "scenario_candidates did not resolve in "
+            f"{_repo_relative(matrix_path)}: {', '.join(missing)}"
+        )
+    return filtered
+
+
 def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
     """Load campaign scenarios and apply optional seed override.
 
@@ -605,7 +672,11 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
                         patched["map_file"] = candidate.as_posix()
         normalized.append(patched)
 
-    scenario_dicts = normalized
+    scenario_dicts = _filter_scenario_candidates(
+        normalized,
+        names=cfg.scenario_candidates.names,
+        matrix_path=cfg.scenario_matrix_path,
+    )
     scenario_dicts = _apply_scenario_horizon_schedule(
         scenario_dicts,
         schedule_path=cfg.scenario_horizons_path,
@@ -1147,6 +1218,19 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         for value in values:
             if not str(value).strip():
                 raise ValueError(f"AMV required dimension '{key}' contains an empty value")
+    if cfg.scenario_candidates.names and any(
+        not str(name).strip() for name in cfg.scenario_candidates.names
+    ):
+        raise ValueError("scenario_candidates must not contain empty names")
+    if cfg.synthetic_actuation_profile is not None:
+        validate_synthetic_actuation_profile(cfg.synthetic_actuation_profile)
+        if cfg.paper_facing:
+            raise ValueError("synthetic_actuation_profile requires paper_facing=false")
+        normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
+        if normalized_kinematics != ("differential_drive",):
+            raise ValueError(
+                "synthetic_actuation_profile requires kinematics_matrix=['differential_drive']"
+            )
     if cfg.snqi_contract.enforcement not in _SNQI_CONTRACT_ENFORCEMENT:
         known = ", ".join(sorted(_SNQI_CONTRACT_ENFORCEMENT))
         raise ValueError(
@@ -1355,11 +1439,28 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         else:
             normalized = ()
         required_dimensions[dimension] = normalized
+    scenario_candidates_raw = payload.get("scenario_candidates", [])
+    if isinstance(scenario_candidates_raw, (str, int, float)):
+        scenario_candidates = (str(scenario_candidates_raw).strip(),)
+    elif isinstance(scenario_candidates_raw, list):
+        if any(not isinstance(value, (str, int, float)) for value in scenario_candidates_raw):
+            raise TypeError("scenario_candidates entries must be scalar names")
+        scenario_candidates = tuple(
+            str(value).strip() for value in scenario_candidates_raw if str(value).strip()
+        )
+    elif "scenario_candidates" in payload:
+        raise TypeError("scenario_candidates must be a scalar name or list of scalar names")
+    else:
+        scenario_candidates = ()
+    synthetic_actuation_raw = payload.get("synthetic_actuation_profile")
+    if synthetic_actuation_raw is not None and not isinstance(synthetic_actuation_raw, dict):
+        raise TypeError("synthetic_actuation_profile must be a mapping when provided")
 
     cfg = CampaignConfig(
         name=name,
         scenario_matrix_path=scenario_matrix_path,
         planners=tuple(planner_specs),
+        scenario_candidates=ScenarioCandidateSelection(names=scenario_candidates),
         scenario_horizons_path=scenario_horizons,
         seed_policy=SeedPolicy(
             mode=mode,
@@ -1412,6 +1513,38 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
             ),
             required_dimensions=required_dimensions,
         ),
+        synthetic_actuation_profile=(
+            SyntheticActuationProfile(
+                name=str(synthetic_actuation_raw.get("name", "")).strip(),
+                profile_version=(
+                    str(synthetic_actuation_raw.get("profile_version", "v0")).strip() or "v0"
+                ),
+                claim_scope=(
+                    str(synthetic_actuation_raw.get("claim_scope", "synthetic-only")).strip()
+                    or "synthetic-only"
+                ),
+                max_linear_accel_m_s2=float(
+                    synthetic_actuation_raw.get("max_linear_accel_m_s2", 0.0)
+                ),
+                max_linear_decel_m_s2=float(
+                    synthetic_actuation_raw.get("max_linear_decel_m_s2", 0.0)
+                ),
+                max_yaw_rate_rad_s=float(synthetic_actuation_raw.get("max_yaw_rate_rad_s", 0.0)),
+                max_angular_accel_rad_s2=float(
+                    synthetic_actuation_raw.get("max_angular_accel_rad_s2", 0.0)
+                ),
+                latency_mode=(
+                    str(synthetic_actuation_raw.get("latency_mode", "zero-step-delay"))
+                    .strip()
+                    .lower()
+                ),
+                update_mode=(
+                    str(synthetic_actuation_raw.get("update_mode", "10hz-matched")).strip().lower()
+                ),
+            )
+            if synthetic_actuation_raw is not None
+            else None
+        ),
         comparability_mapping_path=comparability_mapping_path,
         route_clearance_certifications_path=route_clearance_certifications_path,
         snqi_contract=SnqiContractConfig(
@@ -1453,6 +1586,15 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write JSON with stable formatting and trailing newline."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+
+
+def _synthetic_actuation_metadata(
+    profile: SyntheticActuationProfile | None,
+) -> dict[str, Any] | None:
+    """Return a JSON-safe synthetic-actuation metadata payload when configured."""
+    if profile is None:
+        return None
+    return profile.to_metadata()
 
 
 def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple[str, ...]) -> None:
@@ -1535,6 +1677,10 @@ def _build_matrix_summary_rows(
                     "scenario_matrix": matrix_path,
                     "scenario_matrix_hash": scenario_hash,
                     "scenario_count": len(scenarios),
+                    "scenario_candidates": list(cfg.scenario_candidates.names),
+                    "synthetic_actuation_profile": _synthetic_actuation_metadata(
+                        cfg.synthetic_actuation_profile
+                    ),
                     "planner_key": planner.key,
                     "algo": planner.algo,
                     "human_model_variant": planner.human_model_variant,
@@ -1840,6 +1986,108 @@ def _write_amv_coverage_artifacts(
             f"{_escape_markdown_cell(observed_values)} | "
             f"{_escape_markdown_cell(missing_values)} |"
         )
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return json_path, md_path
+
+
+def _build_actuation_envelope_summary(
+    *,
+    campaign_id: str,
+    generated_at_utc: str,
+    profile: SyntheticActuationProfile,
+    planner_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build a synthetic actuation-envelope diagnostic summary payload.
+
+    Returns:
+        JSON-safe actuation-envelope summary payload.
+    """
+    rows: list[dict[str, Any]] = []
+    for planner_row in planner_rows:
+        saturation = {
+            "command_clip_fraction": str(
+                planner_row.get("command_clip_fraction_mean", "not_available")
+            ),
+            "yaw_rate_saturation_fraction": str(
+                planner_row.get("yaw_rate_saturation_fraction_mean", "not_available")
+            ),
+            "signed_braking_peak_m_s2": str(
+                planner_row.get("signed_braking_peak_m_s2_mean", "not_available")
+            ),
+        }
+        rows.append(
+            {
+                "planner_key": str(planner_row.get("planner_key", "")),
+                "algo": str(planner_row.get("algo", "")),
+                "planner_group": str(planner_row.get("planner_group", "")),
+                "kinematics": str(planner_row.get("kinematics", "")),
+                "status": str(planner_row.get("status", "")),
+                "readiness_status": str(planner_row.get("readiness_status", "")),
+                "benchmark_success": str(planner_row.get("benchmark_success", "")),
+                "metric_means": {
+                    metric: str(planner_row.get(f"{metric}_mean", "nan"))
+                    for metric in _ACTUATION_REPORT_METRICS
+                    if metric not in saturation
+                },
+                "saturation_metrics": saturation,
+            }
+        )
+    return {
+        "schema_version": "benchmark-actuation-envelope-summary.v1",
+        "campaign_id": campaign_id,
+        "generated_at_utc": generated_at_utc,
+        "paper_facing": False,
+        "claim_boundary": (
+            "Synthetic diagnostic only; not a hardware-calibrated or paper-facing AMV claim."
+        ),
+        "synthetic_actuation_profile": profile.to_metadata(),
+        "row_count": len(rows),
+        "rows": rows,
+    }
+
+
+def _write_actuation_envelope_artifacts(
+    reports_dir: Path,
+    payload: dict[str, Any],
+) -> tuple[Path, Path]:
+    """Write synthetic actuation-envelope JSON and Markdown artifacts.
+
+    Returns:
+        Paths to the JSON and Markdown artifacts.
+    """
+    json_path = reports_dir / "actuation_envelope_summary.json"
+    md_path = reports_dir / "actuation_envelope_summary.md"
+    _write_json(json_path, payload)
+    lines = [
+        "# Synthetic Actuation Envelope Summary",
+        "",
+        f"- Campaign ID: `{payload.get('campaign_id', 'unknown')}`",
+        f"- Claim boundary: {payload.get('claim_boundary', '')}",
+        "",
+        "## Profile",
+        "",
+    ]
+    profile = payload.get("synthetic_actuation_profile")
+    if isinstance(profile, dict):
+        for key, value in profile.items():
+            lines.append(f"- {key}: `{value}`")
+    rows = payload.get("rows")
+    if isinstance(rows, list) and rows:
+        lines.extend(["", "## Planner Rows", ""])
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            saturation = row.get("saturation_metrics")
+            if not isinstance(saturation, dict):
+                saturation = {}
+            lines.append(
+                "- "
+                f"{row.get('planner_key', 'unknown')} ({row.get('algo', 'unknown')}, "
+                f"{row.get('kinematics', 'unknown')}): status={row.get('status', 'unknown')}, "
+                f"clip={saturation.get('command_clip_fraction', 'not_available')}, "
+                f"yaw_sat={saturation.get('yaw_rate_saturation_fraction', 'not_available')}, "
+                f"braking_peak={saturation.get('signed_braking_peak_m_s2', 'not_available')}"
+            )
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return json_path, md_path
 
@@ -2291,6 +2539,13 @@ def prepare_campaign_preflight(
         "generated_at_utc": created_at_utc,
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
         "scenario_count": len(scenarios),
+        "scenario_candidates": {
+            "requested": list(cfg.scenario_candidates.names),
+            "resolved": [
+                str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
+                for scenario in scenarios
+            ],
+        },
         "planner_count": len([planner for planner in cfg.planners if planner.enabled]),
         "workers": cfg.workers,
         "horizon": cfg.horizon,
@@ -2311,6 +2566,9 @@ def prepare_campaign_preflight(
                 key: list(values) for key, values in cfg.amv_profile.required_dimensions.items()
             },
         },
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
         "comparability_mapping": (
             _repo_relative(cfg.comparability_mapping_path)
             if cfg.comparability_mapping_path is not None
@@ -2358,6 +2616,10 @@ def prepare_campaign_preflight(
         "generated_at_utc": created_at_utc,
         "scenario_count": len(scenarios),
         "preview_limit": preview_limit,
+        "scenario_candidates": list(cfg.scenario_candidates.names),
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
         "route_clearance_warning_summary": route_clearance_warning_summary,
@@ -2446,6 +2708,7 @@ def prepare_campaign_preflight(
         "started_at_utc": created_at_utc,
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
+        "scenario_candidates": list(cfg.scenario_candidates.names),
         "seed_policy": {
             "mode": cfg.seed_policy.mode,
             "seed_set": cfg.seed_policy.seed_set,
@@ -2462,6 +2725,9 @@ def prepare_campaign_preflight(
         "amv_contract_version": cfg.amv_profile.contract_version,
         "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
         "amv_coverage_status": amv_summary.get("status", "unknown"),
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
         "comparability_mapping_path": (
             _repo_relative(comparability_mapping_path) if comparability_mapping_path else None
         ),
@@ -2559,12 +2825,13 @@ def prepare_campaign_preflight(
     }
 
 
-def _planner_report_row(  # noqa: C901
+def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
     planner: PlannerSpec,
     summary: dict[str, Any],
     aggregates: dict[str, Any] | None,
     *,
     kinematics: str,
+    synthetic_actuation_profile: SyntheticActuationProfile | None = None,
     records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build one campaign table row for a planner run.
@@ -2611,10 +2878,24 @@ def _planner_report_row(  # noqa: C901
         "obstacle_collision_count_mean": _metric_mean(metric_block, "obstacle_collision_count"),
         "total_collision_count_mean": _metric_mean(metric_block, "total_collision_count"),
         "near_misses_mean": _metric_mean(metric_block, "near_misses"),
+        "min_clearance_mean": _metric_mean(metric_block, "min_clearance"),
+        "time_to_collision_min_mean": _metric_mean(metric_block, "time_to_collision_min"),
         "time_to_goal_norm_mean": _metric_mean(metric_block, "time_to_goal_norm"),
+        "failure_to_progress_mean": _metric_mean(metric_block, "failure_to_progress"),
+        "stalled_time_mean": _metric_mean(metric_block, "stalled_time"),
         "path_efficiency_mean": _metric_mean(metric_block, "path_efficiency"),
+        "velocity_max_mean": _metric_mean(metric_block, "velocity_max"),
+        "acceleration_max_mean": _metric_mean(metric_block, "acceleration_max"),
         "comfort_exposure_mean": _metric_mean(metric_block, "comfort_exposure"),
         "jerk_mean": _metric_mean(metric_block, "jerk_mean"),
+        "jerk_max_mean": _metric_mean(metric_block, "jerk_max"),
+        "curvature_mean_mean": _metric_mean(metric_block, "curvature_mean"),
+        "energy_mean": _metric_mean(metric_block, "energy"),
+        "command_clip_fraction_mean": _metric_mean(metric_block, "command_clip_fraction"),
+        "yaw_rate_saturation_fraction_mean": _metric_mean(
+            metric_block, "yaw_rate_saturation_fraction"
+        ),
+        "signed_braking_peak_m_s2_mean": _metric_mean(metric_block, "signed_braking_peak_m_s2"),
         "snqi_mean": _metric_mean(metric_block, "snqi"),
     }
     if records:
@@ -2625,10 +2906,22 @@ def _planner_report_row(  # noqa: C901
             "obstacle_collision_count_mean": "obstacle_collision_count",
             "total_collision_count_mean": "total_collision_count",
             "near_misses_mean": "near_misses",
+            "min_clearance_mean": "min_clearance",
+            "time_to_collision_min_mean": "time_to_collision_min",
             "time_to_goal_norm_mean": "time_to_goal_norm",
+            "failure_to_progress_mean": "failure_to_progress",
+            "stalled_time_mean": "stalled_time",
             "path_efficiency_mean": "path_efficiency",
+            "velocity_max_mean": "velocity_max",
+            "acceleration_max_mean": "acceleration_max",
             "comfort_exposure_mean": "comfort_exposure",
             "jerk_mean": "jerk_mean",
+            "jerk_max_mean": "jerk_max",
+            "curvature_mean_mean": "curvature_mean",
+            "energy_mean": "energy",
+            "command_clip_fraction_mean": "command_clip_fraction",
+            "yaw_rate_saturation_fraction_mean": "yaw_rate_saturation_fraction",
+            "signed_braking_peak_m_s2_mean": "signed_braking_peak_m_s2",
             "snqi_mean": "snqi",
         }
         for field_name, metric_name in metric_sources.items():
@@ -2667,10 +2960,26 @@ def _planner_report_row(  # noqa: C901
         ),
         "total_collision_count_mean": _safe_float(resolved_metrics["total_collision_count_mean"]),
         "near_misses_mean": _safe_float(resolved_metrics["near_misses_mean"]),
+        "min_clearance_mean": _safe_float(resolved_metrics["min_clearance_mean"]),
+        "time_to_collision_min_mean": _safe_float(resolved_metrics["time_to_collision_min_mean"]),
         "time_to_goal_norm_mean": _safe_float(resolved_metrics["time_to_goal_norm_mean"]),
+        "failure_to_progress_mean": _safe_float(resolved_metrics["failure_to_progress_mean"]),
+        "stalled_time_mean": _safe_float(resolved_metrics["stalled_time_mean"]),
         "path_efficiency_mean": _safe_float(resolved_metrics["path_efficiency_mean"]),
+        "velocity_max_mean": _safe_float(resolved_metrics["velocity_max_mean"]),
+        "acceleration_max_mean": _safe_float(resolved_metrics["acceleration_max_mean"]),
         "comfort_exposure_mean": _safe_float(resolved_metrics["comfort_exposure_mean"]),
         "jerk_mean": _safe_float(resolved_metrics["jerk_mean"]),
+        "jerk_max_mean": _safe_float(resolved_metrics["jerk_max_mean"]),
+        "curvature_mean_mean": _safe_float(resolved_metrics["curvature_mean_mean"]),
+        "energy_mean": _safe_float(resolved_metrics["energy_mean"]),
+        "command_clip_fraction_mean": _safe_float(resolved_metrics["command_clip_fraction_mean"]),
+        "yaw_rate_saturation_fraction_mean": _safe_float(
+            resolved_metrics["yaw_rate_saturation_fraction_mean"]
+        ),
+        "signed_braking_peak_m_s2_mean": _safe_float(
+            resolved_metrics["signed_braking_peak_m_s2_mean"]
+        ),
         "snqi_mean": _safe_float(resolved_metrics["snqi_mean"]),
         "success_ci_low": _safe_float(success_ci[0]),
         "success_ci_high": _safe_float(success_ci[1]),
@@ -2701,6 +3010,26 @@ def _planner_report_row(  # noqa: C901
         "learned_policy_contract_critical": contract_critical,
         "learned_policy_contract_warnings": contract_warnings,
     }
+    if synthetic_actuation_profile is not None:
+        row["synthetic_actuation_profile_name"] = synthetic_actuation_profile.name
+        row["synthetic_actuation_profile_version"] = synthetic_actuation_profile.profile_version
+        row["synthetic_actuation_latency_mode"] = synthetic_actuation_profile.latency_mode
+        row["synthetic_actuation_update_mode"] = synthetic_actuation_profile.update_mode
+        row["synthetic_actuation_max_linear_accel_m_s2"] = _safe_float(
+            synthetic_actuation_profile.max_linear_accel_m_s2
+        )
+        row["synthetic_actuation_max_linear_decel_m_s2"] = _safe_float(
+            synthetic_actuation_profile.max_linear_decel_m_s2
+        )
+        row["synthetic_actuation_max_yaw_rate_rad_s"] = _safe_float(
+            synthetic_actuation_profile.max_yaw_rate_rad_s
+        )
+        row["synthetic_actuation_max_angular_accel_rad_s2"] = _safe_float(
+            synthetic_actuation_profile.max_angular_accel_rad_s2
+        )
+    else:
+        for key, value in not_available_saturation_metrics().items():
+            row[f"{key}_mean"] = value
     feasibility = algorithm_metadata_contract.get("kinematics_feasibility")
     if isinstance(feasibility, dict):
         row["commands_evaluated"] = int(feasibility.get("commands_evaluated", 0) or 0)
@@ -3261,6 +3590,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     adapter_impact_eval=planner.adapter_impact_eval,
                     observation_mode=active_observation_mode,
                     observation_noise=cfg.observation_noise,
+                    synthetic_actuation_profile=_synthetic_actuation_metadata(
+                        cfg.synthetic_actuation_profile
+                    ),
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
@@ -3329,6 +3661,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 summary,
                 aggregates,
                 kinematics=kinematics,
+                synthetic_actuation_profile=cfg.synthetic_actuation_profile,
                 records=records,
             )
             planner_rows.append(row)
@@ -3724,6 +4057,19 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         reports_dir,
         statistical_sufficiency_payload,
     )
+    actuation_envelope_payload: dict[str, Any] | None = None
+    actuation_envelope_json_path: Path | None = None
+    actuation_envelope_md_path: Path | None = None
+    if cfg.synthetic_actuation_profile is not None:
+        actuation_envelope_payload = _build_actuation_envelope_summary(
+            campaign_id=campaign_id,
+            generated_at_utc=campaign_finished_at_utc,
+            profile=cfg.synthetic_actuation_profile,
+            planner_rows=planner_rows,
+        )
+        actuation_envelope_json_path, actuation_envelope_md_path = (
+            _write_actuation_envelope_artifacts(reports_dir, actuation_envelope_payload)
+        )
     release_tag_value = cfg.release_tag
     expected_archive_name = f"{campaign_id}_publication_bundle.tar.gz"
     repository_url = cfg.repository_url.rstrip("/")
@@ -3919,6 +4265,11 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "amv_coverage_status": str(
                 (manifest_payload or {}).get("amv_coverage_status", "unknown")
             ),
+            "scenario_candidates": list(cfg.scenario_candidates.names),
+            "scenario_candidates_selection_name": cfg.scenario_candidates.selection_name,
+            "synthetic_actuation_profile": _synthetic_actuation_metadata(
+                cfg.synthetic_actuation_profile
+            ),
             "comparability_mapping_path": manifest_payload.get("comparability_mapping_path"),
             "comparability_mapping_version": manifest_payload.get("comparability_mapping_version"),
             "comparability_mapping_hash": manifest_payload.get("comparability_mapping_hash"),
@@ -3976,6 +4327,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "seed_variability_csv": _repo_relative(seed_variability_csv_path),
             "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
             "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
+            "actuation_envelope_json": (
+                _repo_relative(actuation_envelope_json_path)
+                if actuation_envelope_json_path is not None
+                else None
+            ),
+            "actuation_envelope_md": (
+                _repo_relative(actuation_envelope_md_path)
+                if actuation_envelope_md_path is not None
+                else None
+            ),
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
             "scenario_breakdown_csv": _repo_relative(scenario_csv_path),
@@ -4026,6 +4387,28 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "seed_variability_csv": _repo_relative(seed_variability_csv_path),
             "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
             "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
+            "actuation_envelope_json": (
+                _repo_relative(actuation_envelope_json_path)
+                if actuation_envelope_json_path is not None
+                else None
+            ),
+            "actuation_envelope_md": (
+                _repo_relative(actuation_envelope_md_path)
+                if actuation_envelope_md_path is not None
+                else None
+            ),
+        },
+        "synthetic_actuation_artifacts": {
+            "json": (
+                _repo_relative(actuation_envelope_json_path)
+                if actuation_envelope_json_path is not None
+                else None
+            ),
+            "md": (
+                _repo_relative(actuation_envelope_md_path)
+                if actuation_envelope_md_path is not None
+                else None
+            ),
         },
         "snqi_artifacts": {
             "diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
@@ -4084,6 +4467,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                 "seed_variability_csv": _repo_relative(seed_variability_csv_path),
                 "seed_episode_rows_csv": _repo_relative(seed_episode_rows_csv_path),
                 "statistical_sufficiency_json": _repo_relative(statistical_sufficiency_json_path),
+                "actuation_envelope_json": (
+                    _repo_relative(actuation_envelope_json_path)
+                    if actuation_envelope_json_path is not None
+                    else None
+                ),
+                "actuation_envelope_md": (
+                    _repo_relative(actuation_envelope_md_path)
+                    if actuation_envelope_md_path is not None
+                    else None
+                ),
                 "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
                 "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
                 "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
@@ -4168,6 +4561,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         "seed_variability_csv": str(seed_variability_csv_path),
         "seed_episode_rows_csv": str(seed_episode_rows_csv_path),
         "statistical_sufficiency_json": str(statistical_sufficiency_json_path),
+        "actuation_envelope_json": (
+            str(actuation_envelope_json_path) if actuation_envelope_json_path is not None else None
+        ),
+        "actuation_envelope_md": (
+            str(actuation_envelope_md_path) if actuation_envelope_md_path is not None else None
+        ),
         "total_runs": len(run_entries),
         "successful_runs": successful_runs,
         "non_success_runs": campaign_outcome.non_success_runs,

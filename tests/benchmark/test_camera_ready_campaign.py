@@ -164,6 +164,236 @@ def test_load_campaign_config_rejects_directory_observation_noise_profile(
         load_campaign_config(cfg_path)
 
 
+def test_load_campaign_config_rejects_malformed_scenario_candidates(
+    tmp_path: Path,
+) -> None:
+    """Malformed scenario candidate selectors should not silently expand the slice."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_candidates",
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "scenario_candidates": {"name": "francis2023_blind_corner"},
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TypeError, match="scenario_candidates must be"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_malformed_synthetic_actuation_profile(
+    tmp_path: Path,
+) -> None:
+    """Malformed synthetic actuation profile payloads should fail closed."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_actuation_profile",
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "synthetic_actuation_profile": [],
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TypeError, match="synthetic_actuation_profile must be a mapping"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_non_synthetic_actuation_claim_scope(
+    tmp_path: Path,
+) -> None:
+    """Synthetic actuation diagnostics should reject hardware or paper-facing claim scopes."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_actuation_scope",
+                "paper_facing": False,
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "kinematics_matrix": ["differential_drive"],
+                "synthetic_actuation_profile": {
+                    "name": "amv-actuation-stress-v0",
+                    "profile_version": "v0",
+                    "claim_scope": "hardware-calibrated",
+                    "max_linear_accel_m_s2": 2.0,
+                    "max_linear_decel_m_s2": 2.5,
+                    "max_yaw_rate_rad_s": 1.2,
+                    "max_angular_accel_rad_s2": 4.0,
+                    "latency_mode": "one-step-delay",
+                    "update_mode": "5hz-hold",
+                },
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="claim_scope must be 'synthetic-only'"):
+        load_campaign_config(config_path)
+
+
+def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
+    tmp_path: Path,
+) -> None:
+    """Preflight should resolve candidate scenarios, eval seeds, and synthetic profile metadata."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "classic_overtaking_medium",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "metadata": {"archetype": "classic_crossing"},
+                    "amv": {
+                        "use_case": "delivery_robot",
+                        "context": "sidewalk",
+                        "speed_regime": "walking_speed",
+                        "maneuver_type": "overtake",
+                    },
+                },
+                {
+                    "name": "classic_bottleneck_high",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "metadata": {"archetype": "classic_crossing"},
+                    "amv": {
+                        "use_case": "delivery_robot",
+                        "context": "sidewalk",
+                        "speed_regime": "walking_speed",
+                        "maneuver_type": "bottleneck",
+                    },
+                },
+                {
+                    "name": "classic_cross_trap_high",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "metadata": {"archetype": "classic_crossing"},
+                    "amv": {
+                        "use_case": "shared_space_micromobility",
+                        "context": "shared_space",
+                        "speed_regime": "scooter_speed",
+                        "maneuver_type": "crossing",
+                    },
+                },
+                {
+                    "name": "francis2023_blind_corner",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "metadata": {"archetype": "classic_crossing"},
+                    "amv": {
+                        "use_case": "delivery_robot",
+                        "context": "sidewalk",
+                        "speed_regime": "walking_speed",
+                        "maneuver_type": "crossing",
+                    },
+                },
+                {
+                    "name": "francis2023_intersection_wait",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "metadata": {"archetype": "classic_crossing"},
+                    "amv": {
+                        "use_case": "shared_space_micromobility",
+                        "context": "shared_space",
+                        "speed_regime": "scooter_speed",
+                        "maneuver_type": "bottleneck",
+                    },
+                },
+                {
+                    "name": "unused_extra_row",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "metadata": {"archetype": "classic_crossing"},
+                    "amv": {
+                        "use_case": "delivery_robot",
+                        "context": "sidewalk",
+                        "speed_regime": "walking_speed",
+                        "maneuver_type": "crossing",
+                    },
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "issue_1556_preflight",
+                "paper_facing": False,
+                "scenario_matrix": str(scenario_path),
+                "kinematics_matrix": ["differential_drive"],
+                "scenario_candidates": [
+                    "classic_overtaking_medium",
+                    "classic_bottleneck_high",
+                    "classic_cross_trap_high",
+                    "francis2023_blind_corner",
+                    "francis2023_intersection_wait",
+                ],
+                "seed_policy": {"mode": "seed-set", "seed_set": "eval"},
+                "synthetic_actuation_profile": {
+                    "name": "amv-actuation-stress-v0",
+                    "profile_version": "v0",
+                    "claim_scope": "synthetic-only",
+                    "max_linear_accel_m_s2": 2.0,
+                    "max_linear_decel_m_s2": 2.5,
+                    "max_yaw_rate_rad_s": 1.2,
+                    "max_angular_accel_rad_s2": 4.0,
+                    "latency_mode": "one-step-delay",
+                    "update_mode": "5hz-hold",
+                },
+                "planners": [{"key": "goal", "algo": "goal", "planner_group": "core"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="issue1556")
+
+    preview_payload = json.loads(
+        Path(prepared["preview_scenarios_path"]).read_text(encoding="utf-8")
+    )
+    assert preview_payload["scenario_count"] == 5
+    assert [scenario["name"] for scenario in preview_payload["scenarios"]] == [
+        "classic_overtaking_medium",
+        "classic_bottleneck_high",
+        "classic_cross_trap_high",
+        "francis2023_blind_corner",
+        "francis2023_intersection_wait",
+    ]
+
+    manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+    assert validate_payload["scenario_candidates"]["requested"] == [
+        "classic_overtaking_medium",
+        "classic_bottleneck_high",
+        "classic_cross_trap_high",
+        "francis2023_blind_corner",
+        "francis2023_intersection_wait",
+    ]
+    assert validate_payload["scenario_candidates"]["resolved"] == [
+        "classic_overtaking_medium",
+        "classic_bottleneck_high",
+        "classic_cross_trap_high",
+        "francis2023_blind_corner",
+        "francis2023_intersection_wait",
+    ]
+    assert manifest["scenario_candidates"] == [
+        "classic_overtaking_medium",
+        "classic_bottleneck_high",
+        "classic_cross_trap_high",
+        "francis2023_blind_corner",
+        "francis2023_intersection_wait",
+    ]
+    assert manifest["synthetic_actuation_profile"]["name"] == "amv-actuation-stress-v0"
+    assert manifest["seed_policy"]["seed_set"] == "eval"
+
+
 def test_load_campaign_config_parses_observation_mode_overrides(tmp_path: Path) -> None:
     """Campaign configs should support global and per-planner observation-mode overrides."""
     scenario_path = tmp_path / "scenarios.yaml"
@@ -1322,6 +1552,182 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         "Publication bundle export skipped because benchmark_success=false." in warning
         for warning in summary_payload["warnings"]
     )
+
+
+def test_run_campaign_writes_synthetic_actuation_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Synthetic actuation slices should emit diagnostic artifacts and propagate profile metadata."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        "- name: classic_overtaking_medium\n  map_file: maps/svg_maps/classic_crossing.svg\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "issue_1556_runner",
+                "paper_facing": False,
+                "scenario_matrix": str(scenario_path),
+                "kinematics_matrix": ["differential_drive"],
+                "scenario_candidates": ["classic_overtaking_medium"],
+                "seed_policy": {"mode": "fixed-list", "seeds": [111]},
+                "synthetic_actuation_profile": {
+                    "name": "amv-actuation-stress-v0",
+                    "profile_version": "v0",
+                    "claim_scope": "synthetic-only",
+                    "max_linear_accel_m_s2": 2.0,
+                    "max_linear_decel_m_s2": 2.5,
+                    "max_yaw_rate_rad_s": 1.2,
+                    "max_angular_accel_rad_s2": 4.0,
+                    "latency_mode": "one-step-delay",
+                    "update_mode": "5hz-hold",
+                },
+                "planners": [{"key": "goal", "algo": "goal", "planner_group": "core"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    run_batch_calls: list[dict[str, object]] = []
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, schema_path, benchmark_profile
+        run_batch_calls.append({"algo": algo, **kwargs})
+        out_file = Path(out_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "episode_id": "e-goal-0",
+            "scenario_id": "classic_overtaking_medium",
+            "seed": 111,
+            "scenario_params": {
+                "algo": algo,
+                "synthetic_actuation_profile": kwargs["synthetic_actuation_profile"],
+            },
+            "metrics": {
+                "success": 1.0,
+                "collisions": 0.0,
+                "near_misses": 0.0,
+                "command_clip_fraction": 0.25,
+                "yaw_rate_saturation_fraction": 0.5,
+                "signed_braking_peak_m_s2": -1.5,
+                "stalled_time": 0.0,
+                "failure_to_progress": 0.0,
+                "jerk_mean": 0.1,
+                "jerk_max": 0.2,
+                "curvature_mean": 0.3,
+                "energy": 1.0,
+                "min_clearance": 0.8,
+                "time_to_collision_min": 1.2,
+                "time_to_goal_norm": 0.7,
+                "velocity_max": 1.0,
+                "acceleration_max": 2.0,
+                "total_collision_count": 0.0,
+            },
+            "algorithm_metadata": {
+                "algorithm": algo,
+                "status": "ok",
+                "synthetic_actuation": {
+                    "profile": kwargs["synthetic_actuation_profile"],
+                    "summary": {
+                        "status": "ok",
+                        "command_clip_fraction": 0.25,
+                        "yaw_rate_saturation_fraction": 0.5,
+                        "signed_braking_peak_m_s2": -1.5,
+                    },
+                },
+            },
+        }
+        out_file.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "out_path": str(out_file),
+            "algorithm_readiness": {
+                "name": algo,
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+            "preflight": {
+                "status": "ok",
+                "synthetic_actuation_profile": kwargs["synthetic_actuation_profile"],
+            },
+            "synthetic_actuation_profile": kwargs["synthetic_actuation_profile"],
+        }
+
+    def _fake_compute_aggregates_with_ci(
+        records,
+        *,
+        group_by,
+        bootstrap_samples,
+        bootstrap_confidence,
+        bootstrap_seed,
+    ):
+        del records, group_by, bootstrap_samples, bootstrap_confidence, bootstrap_seed
+        return {
+            "mock_group": {
+                "success": {"mean": 1.0, "mean_ci": [1.0, 1.0]},
+                "time_to_goal_norm": {"mean": 0.7, "mean_ci": [0.6, 0.8]},
+                "total_collision_count": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+                "near_misses": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+                "min_clearance": {"mean": 0.8, "mean_ci": [0.8, 0.8]},
+                "time_to_collision_min": {"mean": 1.2, "mean_ci": [1.2, 1.2]},
+                "velocity_max": {"mean": 1.0, "mean_ci": [1.0, 1.0]},
+                "acceleration_max": {"mean": 2.0, "mean_ci": [2.0, 2.0]},
+                "jerk_mean": {"mean": 0.1, "mean_ci": [0.1, 0.1]},
+                "jerk_max": {"mean": 0.2, "mean_ci": [0.2, 0.2]},
+                "curvature_mean": {"mean": 0.3, "mean_ci": [0.3, 0.3]},
+                "energy": {"mean": 1.0, "mean_ci": [1.0, 1.0]},
+                "stalled_time": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+                "failure_to_progress": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+                "command_clip_fraction": {"mean": 0.25, "mean_ci": [0.25, 0.25]},
+                "yaw_rate_saturation_fraction": {"mean": 0.5, "mean_ci": [0.5, 0.5]},
+                "signed_braking_peak_m_s2": {"mean": -1.5, "mean_ci": [-1.5, -1.5]},
+            },
+            "_meta": {"warnings": [], "missing_algorithms": []},
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.compute_aggregates_with_ci",
+        _fake_compute_aggregates_with_ci,
+    )
+
+    result = run_campaign(cfg, output_root=tmp_path / "out", label="issue1556")
+    campaign_root = Path(result["campaign_root"])
+    summary_payload = json.loads(
+        (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    actuation_payload = json.loads(
+        (campaign_root / "reports" / "actuation_envelope_summary.json").read_text(encoding="utf-8")
+    )
+
+    assert run_batch_calls[0]["synthetic_actuation_profile"]["name"] == "amv-actuation-stress-v0"
+    assert summary_payload["campaign"]["synthetic_actuation_profile"]["name"] == (
+        "amv-actuation-stress-v0"
+    )
+    assert summary_payload["artifacts"]["actuation_envelope_json"].endswith(
+        "reports/actuation_envelope_summary.json"
+    )
+    assert summary_payload["artifacts"]["actuation_envelope_md"].endswith(
+        "reports/actuation_envelope_summary.md"
+    )
+    assert actuation_payload["claim_boundary"].startswith("Synthetic diagnostic only")
+    assert actuation_payload["synthetic_actuation_profile"]["update_mode"] == "5hz-hold"
+    assert "metric_means" in actuation_payload["rows"][0]
+    assert "metrics" not in actuation_payload["rows"][0]
+    assert actuation_payload["rows"][0]["saturation_metrics"]["command_clip_fraction"] == "0.2500"
 
 
 def test_load_campaign_config_uses_repo_default_seed_sets_path(tmp_path: Path):

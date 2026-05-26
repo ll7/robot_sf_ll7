@@ -43,6 +43,13 @@ provisioned first. The current repository exposes both broad labels such as `wor
 automation should treat the typed families as the only candidate programmatic mirrors. Broad labels
 may remain human-facing discovery or triage labels, but they are not canonical metadata mirrors.
 
+Any metadata-audit finding must fail closed for label mirroring. If the
+`## Archetype Metadata` block is malformed, has invalid canonical values, or is
+missing required keys such as `linked_policy`, the sync report/apply path
+should not propose typed-label mirrors from that block even when
+`archetype` or `evidence_tier` individually look valid. The full metadata block
+stays authoritative until a human repairs it.
+
 Recommended conservative archetype mappings:
 
 | Body metadata | Existing/provisioned typed label | Recommendation |
@@ -58,10 +65,12 @@ Everything else should remain body-only unless maintainers explicitly add and do
 typed label taxonomy first. In particular, do **not** infer new labels for `preflight`,
 `slurm-execution`, `blocked-asset`, or any other archetype that lacks an exact typed label.
 
-`evidence_tier` should remain body-only by default. If maintainers later want evidence-tier label
-mirrors, they should document exact `evidence:*` mappings separately and keep them optional. Do not
-infer evidence-tier labels from partial name similarity, and do not treat labels such as
-`evidence:proposal` as changing the canonical body value.
+`evidence_tier` should remain body-only by default, including when an incomplete
+metadata block otherwise contains a valid-looking evidence tier. If maintainers
+later want evidence-tier label mirrors, they should document exact
+`evidence:*` mappings separately and keep them optional. Do not infer
+evidence-tier labels from partial name similarity, and do not treat labels such
+as `evidence:proposal` as changing the canonical body value.
 
 ### Project #5
 

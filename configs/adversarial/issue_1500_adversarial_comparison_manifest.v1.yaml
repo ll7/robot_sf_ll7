@@ -1,4 +1,5 @@
-schema_version: adversarial-campaign-manifest.v1
+manifest_version: adversarial-campaign-manifest.v1
+schema_status: prose_contract_pending_executable_validator
 parent_issue: 1488
 child_issues: [1500, 1501, 1502, 1503]
 stage: manifest_freeze
@@ -87,7 +88,8 @@ search_engines:
       relative to random search.
 
   - engine_id: guided_route_search
-    class: OptunaBasedRouteSearch
+    entrypoint: scripts/tools/generate_adversarial_routes.py
+    function: robot_sf.nav.adversarial_route_generation.optimize_route_set
     script: scripts/tools/generate_adversarial_routes.py
     config: configs/adversarial_routes/default.yaml
     objective: composite
@@ -164,6 +166,8 @@ row_classification:
     archive_eligible: false
     evidence_class: budget_audit_only
     failure_mode: not_an_episode_failure
+    readiness_status: failed
+    availability_status: failed
     benchmark_evidence: false
     comparison_treatment: explicit_exclusion
 
@@ -172,6 +176,7 @@ row_classification:
       Planner execution entered fallback mode. Per issue #691, fallback is not
       benchmark evidence. Counted separately; excluded from stress-coverage.
     readiness_status: fallback
+    availability_status: not_available
     evidence_class: not_benchmark_evidence
     benchmark_evidence: false
     comparison_treatment: explicit_caveat
@@ -182,6 +187,7 @@ row_classification:
       contract cleanly. Per issue #691, degraded is not benchmark evidence.
       Counted separately; excluded from stress-coverage.
     readiness_status: degraded
+    availability_status: not_available
     evidence_class: not_benchmark_evidence
     benchmark_evidence: false
     comparison_treatment: explicit_caveat
@@ -248,7 +254,6 @@ artifact_layout:
   tracked_evidence:
     location: docs/context/evidence/issue_1500_adversarial_manifest/
     contents:
-      - issue_1500_adversarial_comparison_manifest.v1.yaml
       - config_checksums.md
       - row_classification_report.md
 

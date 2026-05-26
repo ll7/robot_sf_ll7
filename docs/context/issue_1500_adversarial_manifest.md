@@ -18,8 +18,9 @@ Related issues:
 Freeze scenario families, seeds, search engines, budgets, replay determinism checks, and
 artifact layout for the bounded adversarial comparison campaign in
 [issue #1488](https://github.com/ll7/robot_sf_ll7/issues/1488). This manifest is a
-**specification artifact**; it does not run evaluations, emit dry-run outputs, or produce
-benchmark evidence.
+**specification artifact**. It is a prose/YAML contract pending an executable validator in
+[issue #1501](https://github.com/ll7/robot_sf_ll7/issues/1501); it does not run evaluations,
+emit dry-run outputs, or produce benchmark evidence.
 
 ## Manifest Artifact
 
@@ -55,7 +56,7 @@ which does not map to the parametric crossing/TTC template.
 |---|---|---|---|---|---|
 | `random` | `RandomCandidateSampler` | `worst_case_snqi` | 42 | 32 | crossing_ttc |
 | `optuna_tpe` | `OptunaCandidateSampler` | `worst_case_snqi` | 42 | 32 | crossing_ttc |
-| `guided_route_search` | `OptunaBasedRouteSearch` | `composite` | 123 | 20 | classic_head_on_corridor |
+| `guided_route_search` | `scripts/tools/generate_adversarial_routes.py` -> `robot_sf.nav.adversarial_route_generation.optimize_route_set` | `composite` | 123 | 20 | classic_head_on_corridor |
 
 Total campaign budget (local): 84 candidate evaluations. SLURM budget: 612.
 
@@ -97,19 +98,25 @@ raw outputs in `output/` are git-ignored and worktree-local.
 Small reviewable evidence copies may be promoted to `docs/context/evidence/` when they
 support a design decision or bug report. Do not commit raw search outputs.
 
+Tracked evidence for this manifest lives under
+`docs/context/evidence/issue_1500_adversarial_manifest/` and contains:
+
+- `config_checksums.md`: checksums for the frozen manifest and referenced source surfaces.
+- `row_classification_report.md`: compact row-classification interpretation table.
+
 ## Row Classification Contract
 
 Every candidate evaluation is classified into exactly one row type:
 
-| Row Type | Archive Eligible | Evidence Class | Description |
-|---|---|---|---|
-| `valid_behavioral_failure` | yes | `development_stress_test` | Collision, near_miss, timeout, comfort_violation |
-| `success` | no | `budget_audit_only` | Episode completed without failure |
-| `invalid_candidate` | no | `budget_audit_only` | Search-space/constraint violation |
-| `simulation_error` | no | `budget_audit_only` | Simulator exception; explicit exclusion from archive and benchmark-style interpretation |
-| `fallback` | no | `not_benchmark_evidence` | Planner entered fallback mode |
-| `degraded` | no | `not_benchmark_evidence` | Planner deviated from contract |
-| `not_available` | no | `exclusion` | Engine x family design exclusion |
+| Row Type | Archive Eligible | Evidence Class | Readiness/Availability | Description |
+|---|---|---|---|---|
+| `valid_behavioral_failure` | yes | `development_stress_test` | `native` or `adapter` / available | Collision, near_miss, timeout, comfort_violation |
+| `success` | no | `budget_audit_only` | `native` or `adapter` / available | Episode completed without failure |
+| `invalid_candidate` | no | `budget_audit_only` | not simulation evidence | Search-space/constraint violation |
+| `simulation_error` | no | `budget_audit_only` | `failed` / `failed` | Simulator exception; explicit exclusion from archive and benchmark-style interpretation |
+| `fallback` | no | `not_benchmark_evidence` | `fallback` / `not_available` | Planner entered fallback mode |
+| `degraded` | no | `not_benchmark_evidence` | `degraded` / `not_available` | Planner deviated from contract |
+| `not_available` | no | `exclusion` | not applicable / `not_available` | Engine x family design exclusion |
 
 Per [issue #691](https://github.com/ll7/robot_sf_ll7/issues/691): fallback and degraded rows are
 explicitly **not** benchmark evidence. Per
@@ -162,6 +169,20 @@ This manifest stage:
   [issue #1237](https://github.com/ll7/robot_sf_ll7/issues/1237).
 - The `generated_cases_are_benchmark_evidence: false` marker in the crossing/TTC template
   carries through to all search outputs.
+
+## Validation
+
+2026-05-26 review validation:
+
+- `git diff --check origin/main...HEAD`
+- `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh`
+- YAML parse and reference check for
+  `configs/adversarial/issue_1500_adversarial_comparison_manifest.v1.yaml`.
+
+The manifest intentionally uses `manifest_version` plus
+`schema_status: prose_contract_pending_executable_validator` because no executable schema or
+typed loader exists in this PR. That validator belongs to the next execution stage, not this
+manifest freeze.
 
 ## Follow-Up
 

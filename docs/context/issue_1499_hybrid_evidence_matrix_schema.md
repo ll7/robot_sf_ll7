@@ -184,6 +184,11 @@ Validation surface:
 - validates required fields, enums, nullability, and rate bounds,
 - checks `commit_artifact` as a comma- or newline-separated string containing a git SHA token plus
   one or more provenance tokens,
+- defaults to **format-only** `commit_artifact` validation so local row checks stay lightweight and
+  deterministic even when a SHA-looking token has not yet been proven against repository history,
+- supports an opt-in **history-backed** proof path via
+  `--check-git-history`, which additionally requires each git SHA token to resolve in the selected
+  local repository history before a row can pass,
 - requires repository-local provenance tokens to be repository-root-relative, present in the
   checkout, and outside `output/`,
 - enforces fail-closed fallback/degraded semantics for success-like evidence tiers,
@@ -194,6 +199,12 @@ Validation surface:
 
 The validator is intentionally conservative: it does not synthesize results, resolve remote artifact
 availability, or upgrade local `output/` paths into durable evidence.
+
+Use the default validator path while drafting rows, launch packets, and local schema fixes. Before
+issue [#1489](https://github.com/ll7/robot_sf_ll7/issues/1489) treats a `stress` or `full_matrix`
+row as synthesis input, rerun the same file with `--check-git-history` from a checkout whose git
+history includes the cited commit(s). That stricter pass separates shape validation from local
+repository-history proof without downgrading launch-packet rows or durable remote artifact pointers.
 
 ## Known Gaps
 
@@ -230,5 +241,8 @@ Run the targeted validator proof and the standard readiness gate:
 uv run pytest tests/benchmark/test_hybrid_evidence_matrix.py
 uv run python scripts/validation/validate_hybrid_evidence_matrix.py \
   --input tests/fixtures/hybrid_evidence_matrix/v1/valid_rows.yaml
+uv run python scripts/validation/validate_hybrid_evidence_matrix.py \
+  --input path/to/hybrid_evidence_rows.yaml \
+  --check-git-history
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```

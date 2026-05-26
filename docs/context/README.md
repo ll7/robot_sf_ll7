@@ -556,6 +556,9 @@ why a change was made rather than a full issue execution transcript.
 * [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.
+* [Issue #1544 Slurm Experiment State Ledger](issue_1544_slurm_experiment_state_ledger.md) -
+  lightweight state block, stale-trail closure protocol, local-vs-durable evidence boundary, and a
+  conservative #1108 classification for execution issues.
 * [Issue #856 PPO All-Scenarios Full Budget](issue_856_ppo_all_scenarios_full_budget.md) -
   broad-training PPO campaign record, camera-ready comparison, replica gate, and the horizon-500
   best-checkpoint Slurm handoff after the local env22 OOM.

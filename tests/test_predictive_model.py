@@ -2,6 +2,7 @@
 
 from dataclasses import asdict
 
+import pytest
 import torch
 
 from robot_sf.planner.obstacle_features import (
@@ -166,26 +167,48 @@ def test_predictive_schema_validation_rejects_legacy_name_with_ego_dimension() -
     )
 
 
-def test_predictive_schema_metadata_records_ego_motion_producers() -> None:
-    """Ego-conditioned schema metadata should encode the active motion-channel producer."""
-    ego_schema = predictive_feature_schema_metadata(
-        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
-        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
-    )
-    ego_obstacle_schema = predictive_feature_schema_metadata(
-        model_family=PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
-        ego_conditioning=True,
-        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+@pytest.mark.parametrize(
+    ("model_family", "ego_conditioning", "producer_key", "expected_input_dim"),
+    [
+        (PREDICTIVE_EGO_FEATURE_SCHEMA, False, PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME, 9),
+        (PREDICTIVE_EGO_FEATURE_SCHEMA, False, PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE, 9),
+        (
+            PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+            True,
+            PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+            15,
+        ),
+        (
+            PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
+            True,
+            PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+            15,
+        ),
+    ],
+)
+def test_predictive_schema_metadata_records_ego_motion_producers(
+    model_family: str,
+    ego_conditioning: bool,
+    producer_key: str,
+    expected_input_dim: int,
+) -> None:
+    """Ego-conditioned schema metadata should pin the producer comparability contract."""
+    schema = predictive_feature_schema_metadata(
+        model_family=model_family,
+        ego_conditioning=ego_conditioning,
+        ego_motion_channel_producer=producer_key,
     )
 
-    assert ego_schema["ego_motion_channel_producer"]["producer_key"] == (
-        PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE
-    )
-    assert ego_obstacle_schema["base_schema"] == PREDICTIVE_EGO_FEATURE_SCHEMA
-    assert ego_obstacle_schema["input_dim"] == 15
-    assert ego_obstacle_schema["ego_motion_channel_producer"]["producer_key"] == (
-        PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME
-    )
+    producer_meta = schema["ego_motion_channel_producer"]
+
+    assert schema["base_schema"] == PREDICTIVE_EGO_FEATURE_SCHEMA
+    assert schema["input_dim"] == expected_input_dim
+    assert producer_meta["producer_key"] == producer_key
+    assert producer_meta["comparability"] == {
+        "group": "predictive_ego_motion_slots_v1",
+        "same_producer_key_required": True,
+        "mixed_producer_status": "not_comparable_without_caveat",
+    }
 
     malformed_missing_key = predictive_feature_schema_metadata(
         model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,

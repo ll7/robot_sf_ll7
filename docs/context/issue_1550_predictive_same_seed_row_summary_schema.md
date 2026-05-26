@@ -53,6 +53,7 @@ identity and must be unique within a summary file.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `comparison_group` | string | Stable label tying baseline and variant rows together. |
+| `feature_schema` | mapping | Optional predictive feature schema metadata for the row. When present, use the same machine-readable shape already emitted by predictive datasets/checkpoints so validators can inspect `ego_motion_channel_producer.producer_key`. |
 | `scenario_matrix` | string | Repository-relative path to the scenario matrix used for the row. |
 | `seed_manifest` | string | Repository-relative path to the committed seed manifest. |
 | `source_note` | string | Repository-relative path to the note or evidence summary that interprets the row. |
@@ -103,3 +104,13 @@ can survive worktree cleanup. Typical cases:
 Do **not** use this schema to restate old #1427 rows from memory, from screenshots, or from deleted
 local output trees. If a durable source was not preserved, keep the row as `unknown` or leave it out
 until a real source exists.
+
+When `feature_schema` is present for same-seed comparison rows, report validation must treat
+`ego_motion_channel_producer.producer_key` as a comparability guard, not as a benchmark-improvement
+signal. Mixed producer keys in one comparison context are not directly comparable. Rows that omit
+producer metadata remain valid for legacy bookkeeping, but the validator should emit an explicit
+caveat instead of implying those rows are proven comparable to producer-stamped rows. See
+`docs/context/issue_1504_ego_feature_contract.md` for the producer-specific ego-slot contract and
+comparison policy. The row validator applies this guard within each
+`campaign` + `comparison_group` + `scenario` + `seed` + `planner_grid_key` context, which matches
+the row identity fields used for same-seed baseline/candidate comparisons.

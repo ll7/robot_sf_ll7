@@ -14,9 +14,28 @@ from robot_sf.benchmark.predictive_same_seed_row_summary import (
     validate_predictive_same_seed_row_summary_file,
     validate_predictive_same_seed_row_summary_rows,
 )
+from robot_sf.planner.obstacle_features import (
+    PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+    PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    predictive_feature_schema_metadata,
+)
 from scripts.validation.validate_predictive_same_seed_row_summary import main as validate_cli_main
 
 FIXTURE_ROOT = Path("tests/fixtures/predictive_same_seed_row_summary/v1")
+
+
+def _predictive_feature_schema(
+    *,
+    model_family: str,
+    producer_key: str | None = None,
+) -> dict[str, object]:
+    """Return valid predictive feature schema metadata for row-summary validation tests."""
+    kwargs: dict[str, object] = {"model_family": model_family}
+    if model_family == PREDICTIVE_EGO_FEATURE_SCHEMA:
+        kwargs["ego_motion_channel_producer"] = producer_key
+    return predictive_feature_schema_metadata(**kwargs)
 
 
 def test_valid_rows_accept_ok_and_unavailable_records() -> None:
@@ -208,6 +227,108 @@ def test_status_specific_nullability_and_degraded_warning() -> None:
             ),
         }
     ]
+
+
+def test_same_producer_rows_remain_valid_when_feature_schema_matches() -> None:
+    """Matching producer-stamped rows must remain comparable within one same-seed group."""
+    _input_format, rows = load_predictive_same_seed_row_summary_input(
+        FIXTURE_ROOT / "valid_rows.yaml"
+    )
+    stamped_rows = copy.deepcopy(rows)
+    runtime_schema = _predictive_feature_schema(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        producer_key=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    )
+    stamped_rows[0]["feature_schema"] = runtime_schema
+    stamped_rows[1]["feature_schema"] = runtime_schema
+
+    report = validate_predictive_same_seed_row_summary_rows(stamped_rows)
+
+    assert report["status"] == "valid"
+    assert all(row["warnings"] == [] for row in report["rows"])
+
+
+def test_mixed_producer_rows_fail_closed_with_named_producer_keys() -> None:
+    """Mixed producer keys must invalidate the comparison group instead of looking comparable."""
+    _input_format, rows = load_predictive_same_seed_row_summary_input(
+        FIXTURE_ROOT / "valid_rows.yaml"
+    )
+    stamped_rows = copy.deepcopy(rows)
+    stamped_rows[0]["feature_schema"] = _predictive_feature_schema(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        producer_key=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    )
+    stamped_rows[1]["feature_schema"] = _predictive_feature_schema(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        producer_key=PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+    )
+
+    report = validate_predictive_same_seed_row_summary_rows(stamped_rows)
+
+    assert report["status"] == "invalid"
+    for row in report["rows"]:
+        producer_errors = [
+            error
+            for error in row["errors"]
+            if error["field"] == "feature_schema.ego_motion_channel_producer.producer_key"
+        ]
+        assert producer_errors
+        assert "ego_motion_channel_producer.producer_key" in producer_errors[0]["message"]
+        assert PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME in producer_errors[0]["message"]
+        assert PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE in producer_errors[0]["message"]
+
+
+def test_legacy_or_missing_producer_metadata_rows_emit_conservative_caveat() -> None:
+    """Legacy or unstamped rows stay valid but must not be treated as proven comparable."""
+    _input_format, rows = load_predictive_same_seed_row_summary_input(
+        FIXTURE_ROOT / "valid_rows.yaml"
+    )
+    mixed_rows = copy.deepcopy(rows)
+    mixed_rows[0]["feature_schema"] = _predictive_feature_schema(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        producer_key=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+    )
+    mixed_rows[1]["feature_schema"] = _predictive_feature_schema(
+        model_family=PREDICTIVE_LEGACY_FEATURE_SCHEMA,
+    )
+
+    report = validate_predictive_same_seed_row_summary_rows(mixed_rows)
+
+    assert report["status"] == "valid"
+    for row in report["rows"]:
+        producer_warnings = [
+            warning
+            for warning in row["warnings"]
+            if warning["field"] == "feature_schema.ego_motion_channel_producer.producer_key"
+        ]
+        assert producer_warnings
+        assert "ego_motion_channel_producer.producer_key" in producer_warnings[0]["message"]
+        assert PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME in producer_warnings[0]["message"]
+        assert "legacy/no-metadata rows" in producer_warnings[0]["message"]
+
+
+def test_all_legacy_feature_schema_rows_emit_unknown_comparability_caveat() -> None:
+    """All-legacy feature schemas remain valid while carrying an explicit comparability caveat."""
+    _input_format, rows = load_predictive_same_seed_row_summary_input(
+        FIXTURE_ROOT / "valid_rows.yaml"
+    )
+    legacy_rows = copy.deepcopy(rows)
+    legacy_schema = _predictive_feature_schema(model_family=PREDICTIVE_LEGACY_FEATURE_SCHEMA)
+    legacy_rows[0]["feature_schema"] = legacy_schema
+    legacy_rows[1]["feature_schema"] = legacy_schema
+
+    report = validate_predictive_same_seed_row_summary_rows(legacy_rows)
+
+    assert report["status"] == "valid"
+    for row in report["rows"]:
+        producer_warnings = [
+            warning
+            for warning in row["warnings"]
+            if warning["field"] == "feature_schema.ego_motion_channel_producer.producer_key"
+        ]
+        assert producer_warnings
+        assert "ego_motion_channel_producer.producer_key" in producer_warnings[0]["message"]
+        assert "direct comparability is not proven" in producer_warnings[0]["message"]
 
 
 def test_repository_reference_guards_reject_unsafe_paths(tmp_path: Path) -> None:

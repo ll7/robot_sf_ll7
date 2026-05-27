@@ -14,6 +14,7 @@ import math
 import re
 import subprocess
 import time
+from collections import defaultdict
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
@@ -3293,7 +3294,9 @@ def _build_breakdown_rows(  # noqa: C901
     per_scenario: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     per_family: dict[tuple[str, str, str], dict[str, Any]] = {}
 
-    family_amv_values: dict[tuple[str, str, str], dict[str, set[str]]] = {}
+    family_amv_values: defaultdict[tuple[str, str, str], defaultdict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
 
     def _add_metric(bucket: dict[str, Any], metric: str, value: float | None) -> None:
         """Append one finite metric sample to an aggregation bucket."""
@@ -3362,11 +3365,10 @@ def _build_breakdown_rows(  # noqa: C901
             for dimension in _AMV_DIMENSIONS:
                 scenario_bucket.setdefault(dimension, scenario_amv.get(dimension, ""))
 
-            family_amv_bucket = family_amv_values.setdefault(family_key, {})
             for dimension in _AMV_DIMENSIONS:
                 dim_value = scenario_amv.get(dimension, "")
                 if dim_value:
-                    family_amv_bucket.setdefault(dimension, set()).add(dim_value)
+                    family_amv_values[family_key][dimension].add(dim_value)
 
     def _finalize(row: dict[str, Any]) -> dict[str, Any]:
         """Replace metric sample lists with report-ready mean fields.

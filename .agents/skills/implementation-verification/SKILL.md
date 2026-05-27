@@ -43,8 +43,8 @@ rather than only a global test pass signal.
   exited, not that the model returned useful findings.
 - For read-only delegates, require a structured final answer in `RESULT.md`; otherwise keep the
   worker output at low confidence and inspect local evidence directly.
-- When worker metadata says `changed_files: []`, still inspect `status.txt` or `git status
-  --porcelain` for untracked files before using the run as implementation evidence.
+- When worker metadata says `changed_files: []`, still inspect `status.txt` or `git status --porcelain`
+  for untracked files before using the run as implementation evidence.
 
 ## Output
 

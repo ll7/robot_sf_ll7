@@ -189,11 +189,15 @@ manifest freeze.
 The next implementation stage
 ([issue #1501](https://github.com/ll7/robot_sf_ll7/issues/1501)) should:
 1. Load this manifest.
-2. Run the crossing/TTC family with random and TPE search engines.
+2. Run the crossing/TTC family with random and TPE search engines, and carry
+   `guided_route_search` only as an explicit `not_available` design-exclusion row for this family.
 3. Emit `adversarial-search-manifest.v1` with explicit row classification.
 4. Archive failures into `adversarial_failure_archive.v1`.
 5. Report per-row counts and determinism-check results.
-6. Update this context note with smoke evidence and any manifest revisions.
+6. Follow the packet clarification in
+   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
+   before broadening to the two-family comparison.
+7. Update this context note with smoke evidence and any manifest revisions.
 
 Coverage/stress report synthesis
 ([issue #1503](https://github.com/ll7/robot_sf_ll7/issues/1503)) should not begin before

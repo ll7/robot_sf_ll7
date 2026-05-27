@@ -39,6 +39,12 @@ rather than only a global test pass signal.
 - Do not treat a passing test suite as sufficient if it does not exercise the claim.
 - Do not edit unrelated code while proving current claims.
 - If `origin/main` is unavailable, switch to an explicit documented base and note why.
+- Treat delegated worker artifacts as leads until locally checked. `status=0` only proves the wrapper
+  exited, not that the model returned useful findings.
+- For read-only delegates, require a structured final answer in `RESULT.md`; otherwise keep the
+  worker output at low confidence and inspect local evidence directly.
+- When worker metadata says `changed_files: []`, still inspect `status.txt` or `git status
+  --porcelain` for untracked files before using the run as implementation evidence.
 
 ## Output
 

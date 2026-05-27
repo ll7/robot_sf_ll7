@@ -33,8 +33,10 @@ Use this on a writable PR branch when actionable review feedback exists.
 4. Apply minimal edits grouped by concern.
 5. Run appropriate validation (prefer targeted first; full suite only when needed by risk).
 6. Commit and push.
-7. Resolve only addressed threads using the `resolveReviewThread` mutation via `gh api graphql`.
-8. Re-check thread state; report any unresolved items with blocker reason (permissions, rate limits, or
+7. Re-query unresolved review threads after the push before resolving anything. Bots may add fresh
+   findings once a draft PR becomes ready or after the first fix commit.
+8. Resolve only addressed threads using the `resolveReviewThread` mutation via `gh api graphql`.
+9. Re-check thread state; report any unresolved items with blocker reason (permissions, rate limits, or
    external dependency).
 
 ## Anti-Loop / Retry
@@ -53,6 +55,7 @@ Use this on a writable PR branch when actionable review feedback exists.
 - Which comments were fixed,
 - validation command and result,
 - commit SHA pushed,
+- post-push unresolved-thread re-query result,
 - resolved thread IDs,
 - remaining open threads/blockers.
 ## When to use

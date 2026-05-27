@@ -93,8 +93,11 @@ Avoid loops:
    - classify findings as fixable now, deferred, or blocker.
 4. Fix actionable items on writable branches; commit and push.
 5. Validate per required tier.
-6. Resolve review threads only after push and verification.
-7. Update `merge-ready` only after full proof bar closes.
+6. Re-query unresolved review threads after push and verification before resolving anything, especially
+   when moving draft PRs to ready or when bot reviewers were previously pending or skipped.
+7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
+   actionable comments.
+8. Update `merge-ready` only after full proof bar closes.
 
 ## Proof and Validation
 

@@ -17,10 +17,16 @@ benchmark gates or making paper-facing or hardware-calibration claims.
 - The slice uses the compact scenario candidate set from `#1546`:
   `classic_overtaking_medium`, `classic_bottleneck_high`, `classic_cross_trap_high`,
   `francis2023_blind_corner`, and `francis2023_intersection_wait`.
+- The checked-in config now carries slice-local `scenario_amv_overrides` for those five scenarios so
+  AMV coverage artifacts and compact actuation summaries do not depend on unrelated global scenario
+  files carrying the same taxonomy.
 - The seed policy stays on the named `eval` seed set for the checked-in config.
 - Synthetic profile provenance is carried in preflight output, campaign manifests, episode
   `scenario_params`, planner-row summaries, and the diagnostic
   `reports/actuation_envelope_summary.{json,md}` artifacts.
+- The diagnostic actuation summary now also records AMV coverage status, compact scenario-level AMV
+  rows, and planner command-space/projection-policy metadata so issue-1572-style evidence review can
+  distinguish scenario taxonomy gaps from adapter metadata gaps without reopening raw campaign rows.
 - Derived saturation metrics currently reported when the command path supports them are:
   `command_clip_fraction`, `yaw_rate_saturation_fraction`, and `signed_braking_peak_m_s2`.
 - If the synthetic profile cannot be applied, the runner fails closed instead of silently dropping
@@ -57,6 +63,7 @@ The key contract checks are:
 1. config provenance for scenario candidates, eval seeds, and synthetic profile fields,
 2. preflight propagation of candidate resolution and synthetic profile metadata,
 3. campaign-summary/report artifact emission for the actuation supplement,
-4. map-runner episode metrics and fail-closed behavior for non-differential-drive scenarios.
-5. config-loader fail-closed behavior for malformed scenario candidate and synthetic profile
+4. slice-local scenario AMV override propagation into preflight and compact actuation artifacts,
+5. map-runner episode metrics and fail-closed behavior for non-differential-drive scenarios.
+6. config-loader fail-closed behavior for malformed scenario candidate, scenario AMV override, and synthetic profile
    payloads.

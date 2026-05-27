@@ -14,6 +14,7 @@ import math
 import re
 import subprocess
 import time
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -85,7 +86,7 @@ from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Sequence
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
@@ -274,6 +275,7 @@ class CampaignConfig:
     scenario_candidates: ScenarioCandidateSelection = field(
         default_factory=ScenarioCandidateSelection
     )
+    scenario_amv_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     seed_policy: SeedPolicy = SeedPolicy()
     scenario_horizons_path: Path | None = None
     workers: int = 1
@@ -639,6 +641,69 @@ def _filter_scenario_candidates(
     return filtered
 
 
+def _scenario_name_key(scenario: Mapping[str, Any]) -> str:
+    """Return the normalized scenario name key used by campaign selectors."""
+    return str(
+        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or ""
+    ).strip()
+
+
+def _validate_scenario_amv_override_keys(
+    scenarios: Sequence[Mapping[str, Any]],
+    *,
+    overrides: Mapping[str, Mapping[str, str]],
+    matrix_path: Path,
+) -> None:
+    """Fail closed when AMV overrides target scenarios outside the loaded slice."""
+    if not overrides:
+        return
+
+    loaded_names = {_scenario_name_key(scenario) for scenario in scenarios}
+    unmatched = sorted(name for name in overrides if name not in loaded_names)
+    if unmatched:
+        raise ValueError(
+            "scenario_amv_overrides did not resolve in "
+            f"{_repo_relative(matrix_path)}: {', '.join(unmatched)}"
+        )
+
+
+def _apply_scenario_amv_overrides(
+    scenarios: list[dict[str, Any]],
+    *,
+    overrides: Mapping[str, Mapping[str, str]],
+) -> list[dict[str, Any]]:
+    """Apply slice-local AMV taxonomy overrides without mutating source scenarios.
+
+    Returns:
+        Scenario list with any configured AMV taxonomy overrides merged into
+        both ``scenario["amv"]`` and ``scenario["metadata"]["amv"]``.
+    """
+    if not overrides:
+        return scenarios
+
+    patched_scenarios: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        patched = dict(scenario)
+        scenario_name = _scenario_name_key(scenario)
+        taxonomy_override = overrides.get(scenario_name)
+        if isinstance(taxonomy_override, Mapping) and taxonomy_override:
+            amv = dict(scenario.get("amv")) if isinstance(scenario.get("amv"), dict) else {}
+            amv.update({key: str(value) for key, value in taxonomy_override.items()})
+            patched["amv"] = amv
+
+            metadata = (
+                dict(scenario.get("metadata")) if isinstance(scenario.get("metadata"), dict) else {}
+            )
+            metadata_amv = (
+                dict(metadata.get("amv")) if isinstance(metadata.get("amv"), dict) else {}
+            )
+            metadata_amv.update(amv)
+            metadata["amv"] = metadata_amv
+            patched["metadata"] = metadata
+        patched_scenarios.append(patched)
+    return patched_scenarios
+
+
 def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
     """Load campaign scenarios and apply optional seed override.
 
@@ -676,6 +741,15 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
         normalized,
         names=cfg.scenario_candidates.names,
         matrix_path=cfg.scenario_matrix_path,
+    )
+    _validate_scenario_amv_override_keys(
+        scenario_dicts,
+        overrides=cfg.scenario_amv_overrides,
+        matrix_path=cfg.scenario_matrix_path,
+    )
+    scenario_dicts = _apply_scenario_amv_overrides(
+        scenario_dicts,
+        overrides=cfg.scenario_amv_overrides,
     )
     scenario_dicts = _apply_scenario_horizon_schedule(
         scenario_dicts,
@@ -1222,6 +1296,13 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         not str(name).strip() for name in cfg.scenario_candidates.names
     ):
         raise ValueError("scenario_candidates must not contain empty names")
+    for scenario_name, amv_override in cfg.scenario_amv_overrides.items():
+        if not str(scenario_name).strip():
+            raise ValueError("scenario_amv_overrides keys must be non-empty scenario names")
+        if not amv_override:
+            raise ValueError(
+                "scenario_amv_overrides entries must include at least one AMV taxonomy dimension"
+            )
     if cfg.synthetic_actuation_profile is not None:
         validate_synthetic_actuation_profile(cfg.synthetic_actuation_profile)
         if cfg.paper_facing:
@@ -1452,6 +1533,43 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         raise TypeError("scenario_candidates must be a scalar name or list of scalar names")
     else:
         scenario_candidates = ()
+    scenario_amv_overrides_raw = payload.get("scenario_amv_overrides")
+    if scenario_amv_overrides_raw is None:
+        scenario_amv_overrides: dict[str, dict[str, str]] = {}
+    elif not isinstance(scenario_amv_overrides_raw, dict):
+        raise TypeError(
+            "scenario_amv_overrides must be a mapping of scenario names to AMV mappings"
+        )
+    else:
+        scenario_amv_overrides = {}
+        for raw_scenario_name, raw_taxonomy in scenario_amv_overrides_raw.items():
+            scenario_name = str(raw_scenario_name).strip()
+            if not scenario_name:
+                raise ValueError("scenario_amv_overrides keys must be non-empty scenario names")
+            if not isinstance(raw_taxonomy, dict):
+                raise TypeError(
+                    "scenario_amv_overrides entries must be mappings keyed by AMV dimension"
+                )
+            taxonomy: dict[str, str] = {}
+            for raw_dimension, raw_value in raw_taxonomy.items():
+                dimension = str(raw_dimension).strip()
+                if dimension not in _AMV_DIMENSIONS:
+                    known = ", ".join(_AMV_DIMENSIONS)
+                    raise ValueError(
+                        f"Unsupported scenario_amv_overrides dimension '{dimension}'. "
+                        f"Expected: {known}"
+                    )
+                value = str(raw_value).strip()
+                if not value:
+                    raise ValueError(
+                        "scenario_amv_overrides values must be non-empty strings when provided"
+                    )
+                taxonomy[dimension] = value
+            if not taxonomy:
+                raise ValueError(
+                    "scenario_amv_overrides entries must include at least one AMV taxonomy dimension"
+                )
+            scenario_amv_overrides[scenario_name] = taxonomy
     synthetic_actuation_raw = payload.get("synthetic_actuation_profile")
     if synthetic_actuation_raw is not None and not isinstance(synthetic_actuation_raw, dict):
         raise TypeError("synthetic_actuation_profile must be a mapping when provided")
@@ -1461,6 +1579,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         scenario_matrix_path=scenario_matrix_path,
         planners=tuple(planner_specs),
         scenario_candidates=ScenarioCandidateSelection(names=scenario_candidates),
+        scenario_amv_overrides=scenario_amv_overrides,
         scenario_horizons_path=scenario_horizons,
         seed_policy=SeedPolicy(
             mode=mode,
@@ -1996,6 +2115,7 @@ def _build_actuation_envelope_summary(
     generated_at_utc: str,
     profile: SyntheticActuationProfile,
     planner_rows: list[dict[str, Any]],
+    amv_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a synthetic actuation-envelope diagnostic summary payload.
 
@@ -2004,6 +2124,9 @@ def _build_actuation_envelope_summary(
     """
     rows: list[dict[str, Any]] = []
     for planner_row in planner_rows:
+        planner_command_space = str(planner_row.get("planner_command_space", "unknown"))
+        benchmark_command_space = str(planner_row.get("benchmark_command_space", "unknown"))
+        projection_policy = str(planner_row.get("projection_policy", "unknown"))
         saturation = {
             "command_clip_fraction": str(
                 planner_row.get("command_clip_fraction_mean", "not_available")
@@ -2023,7 +2146,25 @@ def _build_actuation_envelope_summary(
                 "kinematics": str(planner_row.get("kinematics", "")),
                 "status": str(planner_row.get("status", "")),
                 "readiness_status": str(planner_row.get("readiness_status", "")),
+                "availability_status": str(planner_row.get("availability_status", "")),
                 "benchmark_success": str(planner_row.get("benchmark_success", "")),
+                "execution_mode": str(planner_row.get("execution_mode", "unknown")),
+                "execution_detail": str(planner_row.get("execution_detail", "unspecified")),
+                "planner_command_space": planner_command_space,
+                "benchmark_command_space": benchmark_command_space,
+                "projection_policy": projection_policy,
+                "projection_metadata_status": (
+                    "explicit"
+                    if all(
+                        value and value != "unknown"
+                        for value in (
+                            planner_command_space,
+                            benchmark_command_space,
+                            projection_policy,
+                        )
+                    )
+                    else "unknown"
+                ),
                 "metric_means": {
                     metric: str(planner_row.get(f"{metric}_mean", "nan"))
                     for metric in _ACTUATION_REPORT_METRICS
@@ -2032,6 +2173,23 @@ def _build_actuation_envelope_summary(
                 "saturation_metrics": saturation,
             }
         )
+    scenario_amv_rows: list[dict[str, Any]] = []
+    amv_coverage_status = "unknown"
+    if isinstance(amv_summary, dict):
+        amv_coverage_status = str(amv_summary.get("status", "unknown"))
+        raw_rows = amv_summary.get("scenario_rows")
+        if isinstance(raw_rows, list):
+            for row in raw_rows:
+                if not isinstance(row, dict):
+                    continue
+                amv = row.get("amv")
+                scenario_amv_rows.append(
+                    {
+                        "name": str(row.get("name", "")),
+                        "scenario_family": str(row.get("scenario_family", "")),
+                        "amv": dict(amv) if isinstance(amv, dict) else {},
+                    }
+                )
     return {
         "schema_version": "benchmark-actuation-envelope-summary.v1",
         "campaign_id": campaign_id,
@@ -2041,6 +2199,8 @@ def _build_actuation_envelope_summary(
             "Synthetic diagnostic only; not a hardware-calibrated or paper-facing AMV claim."
         ),
         "synthetic_actuation_profile": profile.to_metadata(),
+        "amv_coverage_status": amv_coverage_status,
+        "scenario_amv_rows": scenario_amv_rows,
         "row_count": len(rows),
         "rows": rows,
     }
@@ -2071,6 +2231,18 @@ def _write_actuation_envelope_artifacts(
     if isinstance(profile, dict):
         for key, value in profile.items():
             lines.append(f"- {key}: `{value}`")
+    lines.append(f"- AMV coverage status: `{payload.get('amv_coverage_status', 'unknown')}`")
+    scenario_rows = payload.get("scenario_amv_rows")
+    if isinstance(scenario_rows, list) and scenario_rows:
+        lines.extend(["", "## Scenario AMV Rows", ""])
+        for row in scenario_rows:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                "- "
+                f"{row.get('name', 'unknown')} ({row.get('scenario_family', 'unknown')}): "
+                f"{json.dumps(row.get('amv', {}), sort_keys=True)}"
+            )
     rows = payload.get("rows")
     if isinstance(rows, list) and rows:
         lines.extend(["", "## Planner Rows", ""])
@@ -2084,6 +2256,9 @@ def _write_actuation_envelope_artifacts(
                 "- "
                 f"{row.get('planner_key', 'unknown')} ({row.get('algo', 'unknown')}, "
                 f"{row.get('kinematics', 'unknown')}): status={row.get('status', 'unknown')}, "
+                f"projection={row.get('projection_policy', 'unknown')}, "
+                f"planner_cmd={row.get('planner_command_space', 'unknown')}, "
+                f"benchmark_cmd={row.get('benchmark_command_space', 'unknown')}, "
                 f"clip={saturation.get('command_clip_fraction', 'not_available')}, "
                 f"yaw_sat={saturation.get('yaw_rate_saturation_fraction', 'not_available')}, "
                 f"braking_peak={saturation.get('signed_braking_peak_m_s2', 'not_available')}"
@@ -2546,6 +2721,10 @@ def prepare_campaign_preflight(
                 for scenario in scenarios
             ],
         },
+        "scenario_amv_overrides": {
+            scenario_name: dict(values)
+            for scenario_name, values in sorted(cfg.scenario_amv_overrides.items())
+        },
         "planner_count": len([planner for planner in cfg.planners if planner.enabled]),
         "workers": cfg.workers,
         "horizon": cfg.horizon,
@@ -2709,6 +2888,10 @@ def prepare_campaign_preflight(
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
         "scenario_candidates": list(cfg.scenario_candidates.names),
+        "scenario_amv_overrides": {
+            scenario_name: dict(values)
+            for scenario_name, values in sorted(cfg.scenario_amv_overrides.items())
+        },
         "seed_policy": {
             "mode": cfg.seed_policy.mode,
             "seed_set": cfg.seed_policy.seed_set,
@@ -2813,6 +2996,7 @@ def prepare_campaign_preflight(
         "matrix_summary_csv_path": matrix_summary_csv_path,
         "amv_coverage_json_path": amv_coverage_json_path,
         "amv_coverage_md_path": amv_coverage_md_path,
+        "amv_summary": amv_summary,
         "comparability_json_path": comparability_json_path,
         "comparability_md_path": comparability_md_path,
         "manifest_payload": manifest_payload,
@@ -3490,6 +3674,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     )
     comparability_md_path = Path(path) if (path := prepared.get("comparability_md_path")) else None
     manifest_payload = dict(prepared["manifest_payload"])
+    amv_summary = dict(prepared["amv_summary"])
     campaign_started_at_utc = str(prepared["created_at_utc"])
     scenarios = list(prepared["scenarios"])
     resolved_seeds = list(prepared["resolved_seeds"])
@@ -4066,6 +4251,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             generated_at_utc=campaign_finished_at_utc,
             profile=cfg.synthetic_actuation_profile,
             planner_rows=planner_rows,
+            amv_summary=amv_summary,
         )
         actuation_envelope_json_path, actuation_envelope_md_path = (
             _write_actuation_envelope_artifacts(reports_dir, actuation_envelope_payload)
@@ -4265,6 +4451,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "amv_coverage_status": str(
                 (manifest_payload or {}).get("amv_coverage_status", "unknown")
             ),
+            "scenario_amv_overrides": {
+                scenario_name: dict(values)
+                for scenario_name, values in sorted(cfg.scenario_amv_overrides.items())
+            },
             "scenario_candidates": list(cfg.scenario_candidates.names),
             "scenario_candidates_selection_name": cfg.scenario_candidates.selection_name,
             "synthetic_actuation_profile": _synthetic_actuation_metadata(

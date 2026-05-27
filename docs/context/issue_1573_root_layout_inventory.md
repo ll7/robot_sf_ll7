@@ -1,4 +1,4 @@
-# Issue #1573 Root-Layout Inventory (2026-05-27)
+# Issue #1573 Root-Layout Inventory - 2026-05-27
 
 Issue: [#1573](https://github.com/ll7/robot_sf_ll7/issues/1573)
 

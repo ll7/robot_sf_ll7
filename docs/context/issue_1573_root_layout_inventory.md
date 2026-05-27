@@ -62,6 +62,6 @@ If #1573 later needs actual path changes, the safest order is:
 1. remove the stale root `.coverage` artifact first and add a `.gitignore` rule for root
    `.coverage` so it does not reappear,
 2. decide whether `class_diagram/` and `svg_conv/` should move under docs/tooling: completed in
-   #1579 (now at `docs/tooling/class_diagram/` and `docs/tooling/svg_conv/`),
+   PR #1579 (now at `docs/tooling/class_diagram/` and `docs/tooling/svg_conv/`),
 3. handle any `hooks/`, `specs/`, `test_scenarios/`, or `utilities/` relocation only in dedicated
    PRs that update every exact-path reference together.

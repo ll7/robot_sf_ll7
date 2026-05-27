@@ -1559,6 +1559,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                         f"Unsupported scenario_amv_overrides dimension '{dimension}'. "
                         f"Expected: {known}"
                     )
+                if raw_value is None:
+                    raise ValueError(
+                        "scenario_amv_overrides values must be non-empty strings when provided"
+                    )
                 value = str(raw_value).strip()
                 if not value:
                     raise ValueError(

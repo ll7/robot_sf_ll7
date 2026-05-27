@@ -206,6 +206,27 @@ def test_load_campaign_config_rejects_malformed_scenario_amv_overrides(tmp_path:
         load_campaign_config(config_path)
 
 
+def test_load_campaign_config_rejects_null_scenario_amv_override_values(
+    tmp_path: Path,
+) -> None:
+    """Scenario AMV override values must not coerce YAML null to the string ``None``."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_scenario_amv_null",
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "scenario_amv_overrides": {"francis2023_blind_corner": {"use_case": None}},
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="scenario_amv_overrides values must be non-empty"):
+        load_campaign_config(config_path)
+
+
 def test_load_campaign_config_rejects_malformed_synthetic_actuation_profile(
     tmp_path: Path,
 ) -> None:
@@ -386,7 +407,9 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
         "francis2023_intersection_wait",
     ]
 
-    manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
+    manifest = json.loads(
+        (Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text(encoding="utf-8")
+    )
     validate_payload = json.loads(
         Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
     )
@@ -490,7 +513,9 @@ def test_prepare_campaign_preflight_applies_scenario_amv_overrides(tmp_path: Pat
     assert amv_payload["scenario_rows"][0]["amv"]["use_case"] == "delivery_robot"
     assert amv_payload["scenario_rows"][1]["amv"]["use_case"] == "shared_space_micromobility"
 
-    manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
+    manifest = json.loads(
+        (Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text(encoding="utf-8")
+    )
     assert manifest["amv_coverage_status"] == "pass"
     assert manifest["scenario_amv_overrides"]["classic_overtaking_medium"]["maneuver_type"] == (
         "overtake"
@@ -774,8 +799,12 @@ def test_preflight_reports_scenario_horizon_schedule_summary(tmp_path: Path) -> 
         output_root=tmp_path / "out",
         campaign_id="scheduled_preflight",
     )
-    validate_payload = json.loads(Path(prepared["validate_config_path"]).read_text())
-    matrix_payload = json.loads(Path(prepared["matrix_summary_json_path"]).read_text())
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+    matrix_payload = json.loads(
+        Path(prepared["matrix_summary_json_path"]).read_text(encoding="utf-8")
+    )
 
     assert validate_payload["scenario_horizons"] == {
         "path": str(schedule_path.resolve()),

@@ -1,4 +1,4 @@
-# Issue #1569 AMV actuation smoke evidence
+# Issue #1569 AMV Actuation Smoke Evidence
 
 This bundle preserves a **small tracked summary** of the local 2026-05-27 review run for the
 synthetic AMV actuation-envelope stress slice from `issue_1556_amv_actuation_stress_slice_v0`.
@@ -28,13 +28,13 @@ synthetic AMV actuation-envelope stress slice from `issue_1556_amv_actuation_str
 - `docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/checksums.txt`:
   `tracked-compact-evidence`
 
-## Why this bundle is durable enough
+## Why This Bundle Is Durable Enough
 
 The local smoke produced a valid camera-ready campaign plus analyzer output, but the raw campaign
 tree remains under `output/`. This bundle keeps only the compact review summary and checksums needed
 for issue-facing handoff without mirroring the generated campaign artifacts into git.
 
-## Key takeaways
+## Key Takeaways
 
 1. All three planner rows were executable benchmark-success rows by contract (`successful_evidence`)
    with no fallback, degraded, unavailable, or failed rows.

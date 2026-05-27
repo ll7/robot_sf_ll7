@@ -1,4 +1,4 @@
-# Issue #1556 synthetic AMV actuation stress slice
+# Issue #1556 Synthetic AMV Actuation Stress Slice
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1556>
 
@@ -11,7 +11,7 @@ Reference design note:
 Implement the first compact synthetic AMV actuation-envelope diagnostic slice without changing
 benchmark gates or making paper-facing or hardware-calibration claims.
 
-## Implemented boundary
+## Implemented Boundary
 
 - The benchmark config is `paper_facing: false` and `kinematics_matrix: [differential_drive]`.
 - The slice uses the compact scenario candidate set from `#1546`:
@@ -26,7 +26,7 @@ benchmark gates or making paper-facing or hardware-calibration claims.
 - If the synthetic profile cannot be applied, the runner fails closed instead of silently dropping
   the profile.
 
-## Claim boundary
+## Claim Boundary
 
 - This is a synthetic software stress slice only.
 - The profile values are not a real AMV hardware specification and are not a calibration claim.
@@ -34,7 +34,7 @@ benchmark gates or making paper-facing or hardware-calibration claims.
 - Fallback, degraded, unavailable, skipped, and failed rows remain non-success evidence under
   [`docs/context/issue_691_benchmark_fallback_policy.md`](issue_691_benchmark_fallback_policy.md).
 
-## Validation path
+## Validation Path
 
 Use focused proof instead of a broad campaign:
 
@@ -61,7 +61,7 @@ The key contract checks are:
 5. config-loader fail-closed behavior for malformed scenario candidate and synthetic profile
    payloads.
 
-## Issue #1569 local smoke result (2026-05-27)
+## Issue #1569 Local Smoke Result (2026-05-27)
 
 - **Verdict:** `compact smoke run`
 - **Evidence bundle:** [`docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/`](evidence/issue_1569_amv_actuation_smoke_2026-05-27/README.md)
@@ -81,7 +81,7 @@ Observed local outcome:
 4. Episode-level performance was still poor: `success_mean=0.0000` for all three planners, and the
    consensus hardest scenario was `classic_cross_trap_high`.
 
-Interpretation boundary:
+Interpretation Boundary:
 
 - `benchmark_success=true` in this local smoke means the three planner rows satisfied the executable
   benchmark contract (`native` or accepted `adapter` execution with valid artifacts). It does **not**

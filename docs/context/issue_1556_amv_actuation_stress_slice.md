@@ -60,3 +60,40 @@ The key contract checks are:
 4. map-runner episode metrics and fail-closed behavior for non-differential-drive scenarios.
 5. config-loader fail-closed behavior for malformed scenario candidate and synthetic profile
    payloads.
+
+## Issue #1569 local smoke result (2026-05-27)
+
+- **Verdict:** `compact smoke run`
+- **Evidence bundle:** [`docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/`](evidence/issue_1569_amv_actuation_smoke_2026-05-27/README.md)
+- **Commands:** preflight, compact smoke, and analyzer runs used the checked-in config
+  `configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml` with local labels
+  `issue1569-local` and `issue1569-smoke`.
+
+Observed local outcome:
+
+1. The compact 45-episode smoke completed with `campaign_execution_status=completed`,
+   `evidence_status=valid`, and `row_status_summary={successful_evidence_rows: 3,
+   accepted_unavailable_rows: 0, unexpected_failed_rows: 0, fallback_or_degraded_rows: 0}`.
+2. The analyzer reported no internal consistency findings for the generated campaign artifacts.
+3. The synthetic actuation report emitted non-zero clip fractions for all three planner rows
+   (`goal=0.0407`, `orca=0.1047`, `social_force=0.2346`) while `yaw_rate_saturation_fraction`
+   stayed `0.0000` for all rows.
+4. Episode-level performance was still poor: `success_mean=0.0000` for all three planners, and the
+   consensus hardest scenario was `classic_cross_trap_high`.
+
+Interpretation boundary:
+
+- `benchmark_success=true` in this local smoke means the three planner rows satisfied the executable
+  benchmark contract (`native` or accepted `adapter` execution with valid artifacts). It does **not**
+  mean any planner solved the slice.
+- This result is still **synthetic diagnostic only**. It does not promote the slice to a
+  paper-facing claim, and it does not support hardware-calibration language.
+- The AMV claim map is **unchanged**. The smoke confirms that the issue-1556 slice is runnable and
+  emits the intended actuation diagnostics locally, but it does not strengthen any AMV performance
+  claim.
+- `amv_coverage_status` remained `warn` because the resolved scenario rows in
+  `configs/scenarios/classic_interactions_francis2023.yaml` still expose empty `amv` metadata
+  blocks for this slice.
+- Adapter diagnostics remain part of the caveat surface: ORCA reported a high command projection
+  rate (`0.8018`), and the smoke evidence records this without downgrading the row from accepted
+  adapter execution. Follow-up issue #1572 owns the remaining scenario and adapter metadata gaps.

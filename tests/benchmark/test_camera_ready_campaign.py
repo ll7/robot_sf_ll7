@@ -22,6 +22,9 @@ from robot_sf.benchmark.camera_ready_campaign import (
     PlannerSpec,
     SeedPolicy,
     _build_actuation_envelope_summary,
+    _build_breakdown_rows,
+    _build_scenario_amv_lookup,
+    _extract_amv_taxonomy,
     _jsonable_repo_relative,
     _load_campaign_scenarios,
     _load_route_clearance_certifications,
@@ -4330,3 +4333,229 @@ def test_prepare_campaign_preflight_rejects_missing_planner_key_mapping_for_pape
     cfg = load_campaign_config(config_path)
     with pytest.raises(ValueError, match="prediction_planner_v2_xl_ego"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="missing_planner")
+
+
+class TestBuildScenarioAmvLookup:
+    """Tests for _build_scenario_amv_lookup and AMV taxonomy in breakdown rows."""
+
+    def test_build_scenario_amv_lookup_extracts_amv_from_scenario(self) -> None:
+        """Lookup maps scenario names to their AMV taxonomy dimensions."""
+        scenarios = [
+            {"name": "corridor_low", "amv": {"use_case": "corridor", "context": "low_density"}},
+            {
+                "name": "crossing_high",
+                "amv": {"use_case": "crossing", "speed_regime": "high_speed"},
+            },
+            {"name": "no_amv"},
+        ]
+        lookup = _build_scenario_amv_lookup(scenarios)
+        assert lookup["corridor_low"] == {"use_case": "corridor", "context": "low_density"}
+        assert lookup["crossing_high"] == {"use_case": "crossing", "speed_regime": "high_speed"}
+        assert lookup["no_amv"] == {}
+
+    def test_build_scenario_amv_lookup_from_metadata_amv(self) -> None:
+        """Lookup falls back to metadata.amv when top-level amv is absent."""
+        scenarios = [
+            {
+                "name": "meta_amv",
+                "metadata": {"amv": {"use_case": "hallway", "maneuver_type": "turn"}},
+            }
+        ]
+        lookup = _build_scenario_amv_lookup(scenarios)
+        assert lookup["meta_amv"] == {"use_case": "hallway", "maneuver_type": "turn"}
+
+    def test_extract_amv_taxonomy_prefers_top_level_over_metadata(self) -> None:
+        """Top-level amv takes precedence over metadata.amv for overlapping keys."""
+        scenario = {
+            "name": "both",
+            "amv": {"use_case": "top_level"},
+            "metadata": {"amv": {"use_case": "metadata_level"}},
+        }
+        result = _extract_amv_taxonomy(scenario)
+        assert result["use_case"] == "top_level"
+
+    def test_extract_amv_taxonomy_ignores_empty_values(self) -> None:
+        """Empty or whitespace-only AMV dimension values are excluded."""
+        scenario = {
+            "name": "sparse",
+            "amv": {"use_case": "corridor", "context": "", "speed_regime": "   "},
+        }
+        result = _extract_amv_taxonomy(scenario)
+        assert result == {"use_case": "corridor"}
+
+    def test_extract_amv_taxonomy_returns_empty_when_no_amv(self) -> None:
+        """Scenarios without any AMV block produce an empty taxonomy."""
+        result = _extract_amv_taxonomy({"name": "no_amv_at_all"})
+        assert result == {}
+
+    def test_build_breakdown_rows_without_amv_lookup_preserves_existing_columns(self) -> None:
+        """Empty input produces empty scenario and family rows."""
+        scenario_rows, family_rows = _build_breakdown_rows([])
+        assert scenario_rows == []
+        assert family_rows == []
+
+    def test_build_breakdown_rows_includes_amv_columns(self, tmp_path: Path) -> None:
+        """AMV taxonomy columns appear in scenario and family breakdown rows."""
+        episodes_path = tmp_path / "episodes.jsonl"
+        episodes_path.write_text(
+            json.dumps({"scenario_id": "corridor_low", "ped_collision_count": 0}) + "\n",
+            encoding="utf-8",
+        )
+        run_entries = [
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": str(episodes_path),
+            }
+        ]
+        scenario_amv_lookup = {
+            "corridor_low": {"use_case": "corridor", "context": "low_density"},
+        }
+        scenario_rows, family_rows = _build_breakdown_rows(
+            run_entries,
+            scenario_amv_lookup=scenario_amv_lookup,
+        )
+        assert len(scenario_rows) == 1
+        row = scenario_rows[0]
+        assert row["scenario_id"] == "corridor_low"
+        assert row["use_case"] == "corridor"
+        assert row["context"] == "low_density"
+        assert row["speed_regime"] == ""
+        assert row["maneuver_type"] == ""
+        assert len(family_rows) == 1
+        fam = family_rows[0]
+        assert fam["use_case"] == "corridor"
+        assert fam["context"] == "low_density"
+        assert fam["speed_regime"] == ""
+        assert fam["maneuver_type"] == ""
+
+    def test_build_breakdown_rows_family_aggregates_multiple_amv_values(
+        self, tmp_path: Path
+    ) -> None:
+        """Family rows aggregate distinct AMV dimension values with semicolons."""
+        ep1_path = tmp_path / "ep1.jsonl"
+        ep1_path.write_text(
+            "\n".join(
+                [
+                    json.dumps({"scenario_id": "sc_a", "ped_collision_count": 0}),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        ep2_path = tmp_path / "ep2.jsonl"
+        ep2_path.write_text(
+            "\n".join(
+                [
+                    json.dumps({"scenario_id": "sc_b", "ped_collision_count": 0}),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        run_entries = [
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": str(ep1_path),
+            },
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": str(ep2_path),
+            },
+        ]
+        scenario_amv_lookup = {
+            "sc_a": {"use_case": "corridor", "context": "low_density"},
+            "sc_b": {"use_case": "corridor", "context": "high_density"},
+        }
+        scenario_rows, family_rows = _build_breakdown_rows(
+            run_entries,
+            scenario_amv_lookup=scenario_amv_lookup,
+        )
+        assert len(scenario_rows) == 2
+        corridor_scenarios_ids = {r["scenario_id"] for r in scenario_rows}
+        assert "sc_a" in corridor_scenarios_ids
+        assert "sc_b" in corridor_scenarios_ids
+        for row in scenario_rows:
+            assert row["use_case"] == "corridor"
+            assert row["context"] in ("low_density", "high_density")
+        assert len(family_rows) == 1
+        assert family_rows[0]["use_case"] == "corridor"
+        assert family_rows[0]["context"] == "high_density;low_density"
+
+    def test_build_breakdown_rows_without_lookup_produces_empty_amv_columns(
+        self, tmp_path: Path
+    ) -> None:
+        """Without a lookup, AMV columns exist but contain empty strings."""
+        episodes_path = tmp_path / "episodes.jsonl"
+        episodes_path.write_text(
+            json.dumps({"scenario_id": "s1", "ped_collision_count": 0}) + "\n",
+            encoding="utf-8",
+        )
+        run_entries = [
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": str(episodes_path),
+            }
+        ]
+        scenario_rows, _family_rows = _build_breakdown_rows(run_entries)
+        assert len(scenario_rows) == 1
+        row = scenario_rows[0]
+        for dimension in ("use_case", "context", "speed_regime", "maneuver_type"):
+            assert dimension in row, f"AMV dimension '{dimension}' missing from scenario row"
+            assert row[dimension] == "", f"Expected empty string for {dimension} without AMV lookup"
+
+    def test_scenario_breakdown_csv_contains_amv_headers_in_campaign(self, tmp_path: Path) -> None:
+        """End-to-end: AMV columns flow from scenario definitions through the campaign config."""
+        scenario_path = tmp_path / "scenarios.yaml"
+        scenario_content = (
+            "scenarios:\n"
+            "  - name: corridor_amv\n"
+            "    map_file: maps/svg_maps/francis2023_blind_corner.svg\n"
+            "    robot_config:\n"
+            "      type: differential_drive\n"
+            "      radius: 0.3\n"
+            "    ped_config:\n"
+            "      robot_visible: false\n"
+            "    amv:\n"
+            "      use_case: corridor\n"
+            "      context: low_density\n"
+            "    simulation_config:\n"
+            "      max_episode_steps: 200\n"
+            "      steps_per_action: 4\n"
+            "    robot_spawn_id: 0\n"
+            "    robot_goal_id: 0\n"
+        )
+        scenario_path.write_text(scenario_content, encoding="utf-8")
+        config_path = tmp_path / "campaign.yaml"
+        config_content = (
+            "\n".join(
+                [
+                    "name: amv_breakdown_test",
+                    f"scenario_matrix: {scenario_path.as_posix()}",
+                    "planners:",
+                    "  - key: social_force",
+                    "    algo: social_force",
+                    "    planner_group: core",
+                    "paper_facing: true",
+                    "paper_profile_version: paper-seed-variability-v1",
+                    f"comparability_mapping: {_get_comparability_path()}",
+                ]
+            )
+            + "\n"
+        )
+        config_path.write_text(config_content, encoding="utf-8")
+        cfg = load_campaign_config(config_path)
+        scenarios = _load_campaign_scenarios(cfg)
+        lookup = _build_scenario_amv_lookup(scenarios)
+        assert "corridor_amv" in lookup
+        assert lookup["corridor_amv"]["use_case"] == "corridor"
+        assert lookup["corridor_amv"]["context"] == "low_density"
+
+
+def _get_comparability_path() -> str:
+    repo_root = get_repository_root()
+    path = repo_root / "configs" / "benchmarks" / "alyassi_comparability_map_v1.yaml"
+    return path.as_posix()

@@ -33,7 +33,7 @@ new benchmark evidence, or promote local `output/` artifacts into git.
 
 ## Packet Decision For #1501
 
-### 1. What #1501 should run first
+### 1. What #1501 Should Run First
 
 Run the `crossing_ttc` family only.
 
@@ -47,7 +47,7 @@ Run the `crossing_ttc` family only.
 `generate_adversarial_routes.py` remains the command surface for the separate
 `classic_head_on_corridor` route-search lane, but that is **not** the first smoke for #1501.
 
-### 2. How to handle `guided_route_search`
+### 2. How to Handle `guided_route_search`
 
 For a one-family `crossing_ttc` smoke, `guided_route_search` must be recorded as an explicit
 `not_available` design-exclusion row, not executed and not silently dropped.
@@ -58,7 +58,7 @@ because the route-override search paradigm does not map to the parametric Candid
 This preserves the original #1501 intent ("all engines are accounted for") without pretending the
 route-search surface is runnable on the crossing/TTC family.
 
-### 3. Budget normalization rule
+### 3. Budget Normalization Rule
 
 Do **not** invent a new cross-paradigm normalization rule inside #1501.
 
@@ -72,7 +72,7 @@ Use the frozen manifest budget for the one-family smoke:
 `classic_head_on_corridor` lane, but that belongs to the later two-family comparison issue rather
 than this one-family smoke.
 
-### 4. Row-status accounting
+### 4. Row-Status Accounting
 
 Issue #1501 must count the following campaign row types separately:
 

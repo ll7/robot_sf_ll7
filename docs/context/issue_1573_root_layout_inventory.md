@@ -1,4 +1,4 @@
-# Issue #1573 root-layout inventory
+# Issue #1573 Root-Layout Inventory (2026-05-27)
 
 Issue: [#1573](https://github.com/ll7/robot_sf_ll7/issues/1573)
 
@@ -43,7 +43,7 @@ Action meanings:
 | `.pre-commit-config.yaml` | Canonical pre-commit entrypoint; directly references `hooks/prevent_schema_duplicates.py`. | `keep` | User boundary forbids moving it here, and repo tooling expects it at root. |
 | `CITATION.cff` | `docs/RELEASE.md` and `docs/benchmark_release_reproducibility.md` explicitly require `CITATION.cff`. | `keep` | Publication/citation metadata must remain root-visible and untouched in this PR. |
 
-## Validation path used for this inventory
+## Validation Path Used For This Inventory
 
 - `git status --short`
 - `git ls-files --error-unmatch <path>` / `git check-ignore <path>` for candidate-path state
@@ -54,7 +54,7 @@ Action meanings:
   `svg_conv/README.md`, `test_pygame/README.md`, `output/repos/README.md`, `.cursorrules`,
   `.git-blame-ignore-revs`, and `CITATION.cff`
 
-## Follow-up boundary
+## Follow-Up Boundary
 
 If #1573 later needs actual path changes, the safest order is:
 

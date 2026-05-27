@@ -52,6 +52,9 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   probe reaches `oracle-replay` without adaptation.
 - `issue_1344_paired_amv_primary_2026-05-20/`: compact paired nominal/stress AMV primary-row
   campaign summaries and tables.
+- `issue_1569_amv_actuation_smoke_2026-05-27/`: compact local smoke summary for the synthetic AMV
+  actuation-envelope stress slice, including row-status classification, actuation diagnostics, and
+  the explicit non-paper-facing claim boundary.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and

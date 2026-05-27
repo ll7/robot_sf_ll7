@@ -349,7 +349,7 @@ max-statements = 60
 "SLURM/**/*.py" = ["D417", "DOC201"]
 "hooks/**/*.py" = ["D417", "DOC201"]
 "utilities/**/*.py" = ["D417", "DOC201"]
-"svg_conv/**/*.py" = ["D417", "DOC201"]
+"docs/tooling/svg_conv/**/*.py" = ["D417", "DOC201"]
 "setup.py" = ["D417", "DOC201"]
 # CLI tools: allow prints to stdout
 "robot_sf/benchmark/cli.py" = ["T201"]

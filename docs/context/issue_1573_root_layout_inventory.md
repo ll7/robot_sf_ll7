@@ -21,19 +21,20 @@ Action meanings:
   path churn.
 - `delete candidate`: looks like stale/generated root clutter and already conflicts with current
   repo policy.
+- `moved`: relocated to a new path (e.g. `docs/tooling/` subtree); cross-reference the PR number.
 - `deferred follow-up`: plausible cleanup target, but current references or workflow coupling make a
   move too risky for this foundation PR.
 
 | Path | Local evidence checked | Action | Why this is the conservative call |
 | --- | --- | --- | --- |
 | `.agent/` | `AGENTS.md` points to `.agent/PLANS.md` as the repo plan-writing convention. | `keep` | This is already part of the agent-context contract, so moving it would ripple through agent instructions. |
-| `class_diagram/` | No repo-wide references found outside the directory itself; contents are generated SVGs plus `class_diagram/generate_uml.sh`. | `low-risk move candidate` | Self-contained docs/tooling asset; a later PR could move it under a docs/tooling subtree with limited breakage. |
+| `class_diagram/` | No repo-wide references found outside the directory itself; contents are generated SVGs plus `class_diagram/generate_uml.sh`. | `moved` (#1579) | Relocated to `docs/tooling/class_diagram/`. |
 | `experiments/` | `docs/dev_guide.md` and `docs/README.md` explicitly describe `experiments/registry.yaml` and `experiments/README.md` as the question-first experiment registry. | `keep` | This path is already documented as a canonical workflow surface. |
 | `hooks/` | `.pre-commit-config.yaml` invokes `hooks/prevent_schema_duplicates.py`; tests also cover the hook contract/API surface under `tests/contract/` and related integration checks. | `deferred follow-up` | Cleanup is possible later, but this path is wired into pre-commit and test hook contracts, so any relocation still needs coordinated updates if the entrypoint or module path changes. |
 | `model_ped/` | Multiple scripts and tests resolve checkpoints from `model_ped/`. | `keep` | Direct runtime and test references make this a high-blast-radius path; keep unchanged in the foundation PR. |
 | `output/` | `AGENTS.md`, `docs/README.md`, `docs/dev_guide.md`, `.gitignore`, and coverage docs all treat `output/` as the canonical artifact root. | `keep` | Root-level artifact policy is intentional and already documented. |
 | `specs/` | `docs/README.md`, `docs/dev_guide.md`, and multiple docs deep-link into `specs/...` quickstarts, plans, tasks, and contracts. | `deferred follow-up` | A future relocation would require broad doc-link migration; that is outside a conservative foundation PR. |
-| `svg_conv/` | Only lightweight config/docs references were found; `svg_conv/README.md` itself says to prefer `robot_sf/nav/svg_map_parser.py`. | `low-risk move candidate` | Looks like legacy single-purpose tooling rather than a current root contract. |
+| `svg_conv/` | Only lightweight config/docs references were found; `svg_conv/README.md` itself says to prefer `robot_sf/nav/svg_map_parser.py`. | `moved` (#1579) | Relocated to `docs/tooling/svg_conv/`. |
 | `test_pygame/` | `docs/dev_guide.md`, `pyproject.toml`, tests, and helper scripts all reference `test_pygame/` explicitly. | `keep` | This is a documented, active test surface with exact path references. |
 | `test_scenarios/` | Tests load fixtures from `test_scenarios/osm_fixtures/...`; root fixtures are also part of current local test inputs. | `deferred follow-up` | Possible future consolidation into a test-fixture subtree, but not without updating multiple tests and docs. |
 | `utilities/` | Refactoring docs and example commands explicitly reference `utilities/migrate_environments.py`; `pyproject.toml` also has per-path lint rules for `utilities/**/*.py`. No confirmed doc references to `utilities/n.py` were found in this check. | `deferred follow-up` | This is not a core runtime package, but current docs/tooling still point to a root `utilities/` path, so moving it needs a conservative dedicated cleanup PR. |
@@ -60,6 +61,7 @@ If #1573 later needs actual path changes, the safest order is:
 
 1. remove the stale root `.coverage` artifact first and add a `.gitignore` rule for root
    `.coverage` so it does not reappear,
-2. decide whether `class_diagram/` and `svg_conv/` should move under docs/tooling,
+2. decide whether `class_diagram/` and `svg_conv/` should move under docs/tooling: completed in
+   #1579 (now at `docs/tooling/class_diagram/` and `docs/tooling/svg_conv/`),
 3. handle any `hooks/`, `specs/`, `test_scenarios/`, or `utilities/` relocation only in dedicated
    PRs that update every exact-path reference together.

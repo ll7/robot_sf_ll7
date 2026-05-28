@@ -3,8 +3,8 @@
   "budget_per_sampler": 32,
   "commit": "4bd5fb412d2bf023d26f674833dd379aedf8c17e",
   "counts": {
+    "invalid_candidate": 66,
     "not_available": 1,
-    "simulation_error": 66,
     "success": 47,
     "valid_behavioral_failure": 15
   },
@@ -30,7 +30,8 @@
   "non_success_evidence": {
     "degraded": false,
     "fallback": false,
-    "not_available": false,
+    "invalid_candidate": true,
+    "not_available": true,
     "simulation_error": false
   },
   "parent_issue": 1488,
@@ -38,7 +39,7 @@
     {
       "availability_status": "available",
       "counts": {
-        "simulation_error": 11,
+        "invalid_candidate": 11,
         "success": 18,
         "valid_behavioral_failure": 3
       },
@@ -50,7 +51,7 @@
     {
       "availability_status": "available",
       "counts": {
-        "simulation_error": 22,
+        "invalid_candidate": 22,
         "success": 5,
         "valid_behavioral_failure": 5
       },
@@ -62,7 +63,7 @@
     {
       "availability_status": "available",
       "counts": {
-        "simulation_error": 11,
+        "invalid_candidate": 11,
         "success": 19,
         "valid_behavioral_failure": 2
       },
@@ -74,7 +75,7 @@
     {
       "availability_status": "available",
       "counts": {
-        "simulation_error": 22,
+        "invalid_candidate": 22,
         "success": 5,
         "valid_behavioral_failure": 5
       },

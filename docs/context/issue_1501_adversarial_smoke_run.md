@@ -72,22 +72,23 @@ Raw candidate bundles, trajectories, episode records, and the full SLURM log rem
 
 The run produced four executed rows plus one design-exclusion row.
 
-| Policy | Sampler | Status | Success | Valid Behavioral Failure | Simulation Error | Not Available |
+| Policy | Sampler | Status | Success | Valid Behavioral Failure | Invalid Candidate | Simulation Error | Not Available |
 |---|---|---|---:|---:|---:|---:|
-| `goal` | `random` | available | 18 | 3 | 11 | 0 |
-| `goal` | `optuna` | available | 5 | 5 | 22 | 0 |
-| `orca` | `random` | available | 19 | 2 | 11 | 0 |
-| `orca` | `optuna` | available | 5 | 5 | 22 | 0 |
-| `all` | `guided_route_search` | not_available | 0 | 0 | 0 | 1 |
+| `goal` | `random` | available | 18 | 3 | 11 | 0 | 0 |
+| `goal` | `optuna` | available | 5 | 5 | 22 | 0 | 0 |
+| `orca` | `random` | available | 19 | 2 | 11 | 0 | 0 |
+| `orca` | `optuna` | available | 5 | 5 | 22 | 0 | 0 |
+| `all` | `guided_route_search` | not_available | 0 | 0 | 0 | 0 | 1 |
 
 Aggregate counts:
 
 - `success`: 47
 - `valid_behavioral_failure`: 15
-- `simulation_error`: 66
+- `invalid_candidate`: 66
+- `simulation_error`: 0
 - `not_available`: 1
 
-`simulation_error` and `not_available` rows do not count as success evidence.
+`invalid_candidate`, `simulation_error`, and `not_available` rows do not count as success evidence.
 
 ## Sampler Comparison
 

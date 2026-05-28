@@ -204,21 +204,26 @@ manifest_paths: list[str] = []
 rows: list[dict[str, object]] = []
 
 def classify(candidate: dict[str, object]) -> str:
+    attribution = candidate.get("failure_attribution")
+    if isinstance(attribution, dict):
+        primary = str(attribution.get("primary_failure") or "")
+        status = str(attribution.get("status") or "")
+        if primary == "invalid_candidate" or status == "not_evaluated":
+            return "invalid_candidate"
+        if primary == "success":
+            return "success"
+        if primary in {"collision", "near_miss", "timeout", "comfort_violation", "incomplete"}:
+            return "valid_behavioral_failure"
+        if primary in {"evaluation_error", "simulation_error"}:
+            return "simulation_error"
+
+    certification = candidate.get("certification_status")
+    if isinstance(certification, dict) and str(certification.get("status") or "") != "passed":
+        return "invalid_candidate"
+
     if candidate.get("error"):
         return "simulation_error"
-    attribution = candidate.get("failure_attribution")
-    if not isinstance(attribution, dict):
-        return "simulation_error"
-    primary = str(attribution.get("primary_failure") or "")
-    status = str(attribution.get("status") or "")
-    if primary == "invalid_candidate" or status == "not_evaluated":
-        return "invalid_candidate"
-    if primary == "success":
-        return "success"
-    if primary in {"collision", "near_miss", "timeout", "comfort_violation", "incomplete"}:
-        return "valid_behavioral_failure"
-    if primary == "evaluation_error":
-        return "simulation_error"
+
     return "simulation_error"
 
 for policy in policies:
@@ -276,8 +281,9 @@ payload = {
     "non_success_evidence": {
         "fallback": False,
         "degraded": False,
-        "simulation_error": False,
-        "not_available": False,
+        "invalid_candidate": total_counts["invalid_candidate"] > 0,
+        "simulation_error": executed_counts["simulation_error"] > 0,
+        "not_available": total_counts["not_available"] > 0,
     },
 }
 (campaign_root / "crossing_ttc" / "row_status_summary.json").write_text(

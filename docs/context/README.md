@@ -144,6 +144,8 @@ knowledge, not every transient iteration detail.
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):
   [issue_1500_adversarial_manifest.md](issue_1500_adversarial_manifest.md)
+* Issue #1571 Adversarial Smoke Packet Sharpening (2026-05-27):
+  [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1342 GH-Act Runtime Requirements:

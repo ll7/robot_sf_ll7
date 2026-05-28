@@ -1,0 +1,103 @@
+{
+  "schema_version": "issue1569-amv-actuation-smoke-summary.v1",
+  "issue": 1569,
+  "verdict": "compact smoke run",
+  "paper_facing": false,
+  "claim_map_effect": "unchanged",
+  "source_campaign": {
+    "campaign_id": "issue_1556_amv_actuation_stress_slice_v0_issue1569-smoke_20260527_092250",
+    "campaign_root_policy": "local camera-ready issue1569 smoke campaign root; kept out of tracked evidence",
+    "config": "configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml",
+    "git_hash": "51eb075d0bd7208efa8eede9fcbcd9a9aa908b68",
+    "smoke_command": "source .venv/bin/activate && uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml --label issue1569-smoke --output-root <local camera-ready output root> --log-level WARNING",
+    "analysis_command": "source .venv/bin/activate && uv run python scripts/tools/analyze_camera_ready_campaign.py --campaign-root <local issue1569 smoke campaign root>"
+  },
+  "campaign_status": {
+    "campaign_execution_status": "completed",
+    "evidence_status": "valid",
+    "benchmark_success": true,
+    "benchmark_success_basis": "core",
+    "row_status_summary": {
+      "successful_evidence_rows": 3,
+      "accepted_unavailable_rows": 0,
+      "unexpected_failed_rows": 0,
+      "fallback_or_degraded_rows": 0
+    },
+    "amv_coverage_status": "warn",
+    "analysis_findings": []
+  },
+  "interpretation_boundary": {
+    "summary": "Row benchmark_success means the planner rows satisfied the executable benchmark contract; it does not imply episode-level task success or any paper-facing AMV claim.",
+    "notes": [
+      "Local synthetic diagnostic smoke only.",
+      "Fallback, degraded, unavailable, skipped, and failed rows remain non-success evidence; none occurred in this smoke.",
+      "AMV coverage remains warn because the resolved scenario rows still expose empty amv metadata blocks in the scenario matrix.",
+      "Adapter diagnostics remain caveated: ORCA required high command projection in this smoke, and social_force command-space/projection-policy metadata remains unknown in the underlying campaign output. Follow-up issue #1572 tracks that metadata cleanup."
+    ]
+  },
+  "planner_rows": [
+    {
+      "planner_key": "goal",
+      "execution_mode": "native",
+      "readiness_status": "native",
+      "row_status": "successful_evidence",
+      "counts_as_success_evidence": true,
+      "episodes": 15,
+      "success_mean": 0.0,
+      "total_collision_count_mean": 0.2,
+      "near_misses_mean": 1.0,
+      "snqi_mean": -0.1922,
+      "command_clip_fraction_mean": 0.0407,
+      "yaw_rate_saturation_fraction_mean": 0.0,
+      "signed_braking_peak_m_s2_mean": -0.7551,
+      "runtime_sec": 13.4813
+    },
+    {
+      "planner_key": "orca",
+      "execution_mode": "adapter",
+      "readiness_status": "adapter",
+      "row_status": "successful_evidence",
+      "counts_as_success_evidence": true,
+      "episodes": 15,
+      "success_mean": 0.0,
+      "total_collision_count_mean": 0.1333,
+      "near_misses_mean": 3.4667,
+      "snqi_mean": -0.2113,
+      "command_clip_fraction_mean": 0.1047,
+      "yaw_rate_saturation_fraction_mean": 0.0,
+      "signed_braking_peak_m_s2_mean": -0.8333,
+      "projection_rate": 0.8018,
+      "infeasible_rate": 0.8018,
+      "runtime_sec": 7.9955
+    },
+    {
+      "planner_key": "social_force",
+      "execution_mode": "adapter",
+      "readiness_status": "adapter",
+      "row_status": "successful_evidence",
+      "counts_as_success_evidence": true,
+      "episodes": 15,
+      "success_mean": 0.0,
+      "total_collision_count_mean": 0.2667,
+      "near_misses_mean": 1.0,
+      "snqi_mean": -0.876,
+      "command_clip_fraction_mean": 0.2346,
+      "yaw_rate_saturation_fraction_mean": 0.0,
+      "signed_braking_peak_m_s2_mean": -2.1667,
+      "projection_rate": 0.2267,
+      "infeasible_rate": 0.2267,
+      "runtime_sec": 6.4261
+    }
+  ],
+  "runtime_and_difficulty": {
+    "slowest_planner": {
+      "planner_key": "goal",
+      "runtime_sec": 13.4813,
+      "top_scenario": "classic_bottleneck_high"
+    },
+    "hardest_scenario": {
+      "scenario_id": "classic_cross_trap_high",
+      "difficulty_score": 0.7
+    }
+  }
+}

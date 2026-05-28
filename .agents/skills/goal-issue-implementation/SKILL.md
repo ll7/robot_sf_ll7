@@ -124,6 +124,19 @@ Prioritize by:
 - less semantic risk,
 - older queue age.
 
+## Queue Exhaustion Audit
+
+Before declaring the implementation queue exhausted, run one final read-only implementability audit
+over:
+- open issues labeled `state:ready`,
+- open issues that lack any `state:*` label.
+
+The audit should classify whether each remaining issue is actually implementable on the current
+machine and with the available durable artifacts. If a supposedly ready issue needs unavailable
+hardware, SLURM, CARLA, private artifacts, checkpoint aliases, datasets, or a clearer proof path,
+mark it blocked or send it to issue clarification instead of counting the queue as empty. Keep this
+audit read-only until the orchestrator has reviewed the proposed label/body changes.
+
 ## Process
 
 1. Select one issue (`gh-issue-sequencer` output or explicit user target).
@@ -194,6 +207,11 @@ For each issue completed or stopped, report:
 - PR URL when opened,
 - follow-up issues,
 - blocker and next action.
+
+When the queue exhausts, also report the final implementability audit result: remaining ready
+issues, remaining open issues missing `state:*`, any labels/body updates applied after review, and
+the command or query used to confirm the queue state.
+
 ## When to use
 
 Use this skill for the scope named in its frontmatter description and registry metadata.

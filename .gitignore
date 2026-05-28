@@ -4,6 +4,7 @@
 *.so
 *training*.zip
 *.pyc
+/.coverage
 .pytest_cache
 .scannerwork
 .github/cache/

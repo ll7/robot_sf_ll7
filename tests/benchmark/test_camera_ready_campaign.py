@@ -513,6 +513,16 @@ def test_prepare_campaign_preflight_applies_scenario_amv_overrides(tmp_path: Pat
     assert amv_payload["scenario_rows"][0]["amv"]["use_case"] == "delivery_robot"
     assert amv_payload["scenario_rows"][1]["amv"]["use_case"] == "shared_space_micromobility"
 
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+    assert validate_payload["scenario_amv_overrides"][
+        "classic_overtaking_medium"
+    ]["maneuver_type"] == "overtake"
+    assert validate_payload["scenario_amv_overrides"][
+        "francis2023_intersection_wait"
+    ]["speed_regime"] == "scooter_speed"
+
     manifest = json.loads(
         (Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text(encoding="utf-8")
     )
@@ -2547,6 +2557,8 @@ def test_build_actuation_envelope_summary_carries_amv_and_projection_metadata() 
 
     assert payload["amv_coverage_status"] == "pass"
     assert payload["scenario_amv_rows"][0]["amv"]["maneuver_type"] == "overtake"
+    assert payload["rows"][0]["planner_command_space"] == "unicycle_vw"
+    assert payload["rows"][0]["benchmark_command_space"] == "unicycle_vw"
     assert payload["rows"][0]["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
     assert payload["rows"][0]["projection_metadata_status"] == "explicit"
 

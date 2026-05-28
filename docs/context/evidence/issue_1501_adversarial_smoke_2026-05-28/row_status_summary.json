@@ -1,12 +1,12 @@
 {
-  "archive_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/archive.json",
+  "archive_path": "crossing_ttc/archive.json",
   "budget_per_sampler": 32,
   "commit": "4bd5fb412d2bf023d26f674833dd379aedf8c17e",
   "counts": {
     "invalid_candidate": 66,
     "not_available": 1,
-    "success": 47,
-    "valid_behavioral_failure": 15
+    "valid_non_failure": 47,
+    "valid_failure": 15
   },
   "design_exclusion_samplers": [
     "guided_route_search"
@@ -22,17 +22,18 @@
   "family": "crossing_ttc",
   "issue": 1501,
   "manifest_paths": [
-    "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
-    "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
-    "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json",
-    "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json"
+    "crossing_ttc/goal/random/manifest.json",
+    "crossing_ttc/goal/optuna/manifest.json",
+    "crossing_ttc/orca/random/manifest.json",
+    "crossing_ttc/orca/optuna/manifest.json"
   ],
   "non_success_evidence": {
     "degraded": false,
     "fallback": false,
     "invalid_candidate": true,
     "not_available": true,
-    "simulation_error": false
+    "simulation_error": false,
+    "valid_failure": true
   },
   "parent_issue": 1488,
   "rows": [
@@ -40,11 +41,11 @@
       "availability_status": "available",
       "counts": {
         "invalid_candidate": 11,
-        "success": 18,
-        "valid_behavioral_failure": 3
+        "valid_non_failure": 18,
+        "valid_failure": 3
       },
       "family": "crossing_ttc",
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
+      "manifest_path": "crossing_ttc/goal/random/manifest.json",
       "policy": "goal",
       "sampler": "random"
     },
@@ -52,11 +53,11 @@
       "availability_status": "available",
       "counts": {
         "invalid_candidate": 22,
-        "success": 5,
-        "valid_behavioral_failure": 5
+        "valid_non_failure": 5,
+        "valid_failure": 5
       },
       "family": "crossing_ttc",
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "manifest_path": "crossing_ttc/goal/optuna/manifest.json",
       "policy": "goal",
       "sampler": "optuna"
     },
@@ -64,11 +65,11 @@
       "availability_status": "available",
       "counts": {
         "invalid_candidate": 11,
-        "success": 19,
-        "valid_behavioral_failure": 2
+        "valid_non_failure": 19,
+        "valid_failure": 2
       },
       "family": "crossing_ttc",
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json",
+      "manifest_path": "crossing_ttc/orca/random/manifest.json",
       "policy": "orca",
       "sampler": "random"
     },
@@ -76,11 +77,11 @@
       "availability_status": "available",
       "counts": {
         "invalid_candidate": 22,
-        "success": 5,
-        "valid_behavioral_failure": 5
+        "valid_non_failure": 5,
+        "valid_failure": 5
       },
       "family": "crossing_ttc",
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
+      "manifest_path": "crossing_ttc/orca/optuna/manifest.json",
       "policy": "orca",
       "sampler": "optuna"
     },

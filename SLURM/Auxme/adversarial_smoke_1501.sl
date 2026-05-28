@@ -211,9 +211,9 @@ def classify(candidate: dict[str, object]) -> str:
         if primary == "invalid_candidate" or status == "not_evaluated":
             return "invalid_candidate"
         if primary == "success":
-            return "success"
+            return "valid_non_failure"
         if primary in {"collision", "near_miss", "timeout", "comfort_violation", "incomplete"}:
-            return "valid_behavioral_failure"
+            return "valid_failure"
         if primary in {"evaluation_error", "simulation_error"}:
             return "simulation_error"
 
@@ -229,7 +229,7 @@ def classify(candidate: dict[str, object]) -> str:
 for policy in policies:
     for sampler in ("random", "optuna"):
         manifest_path = campaign_root / "crossing_ttc" / policy / sampler / "manifest.json"
-        manifest_paths.append(manifest_path.as_posix())
+        manifest_paths.append(manifest_path.relative_to(campaign_root).as_posix())
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         counts: Counter[str] = Counter()
         for candidate in manifest.get("candidates", []):
@@ -242,7 +242,7 @@ for policy in policies:
                 "policy": policy,
                 "sampler": sampler,
                 "availability_status": "available",
-                "manifest_path": manifest_path.as_posix(),
+                "manifest_path": manifest_path.relative_to(campaign_root).as_posix(),
                 "counts": dict(sorted(counts.items())),
             }
         )
@@ -275,12 +275,15 @@ payload = {
     "executed_samplers": ["random", "optuna"],
     "design_exclusion_samplers": ["guided_route_search"],
     "manifest_paths": manifest_paths,
-    "archive_path": (campaign_root / "crossing_ttc" / "archive.json").as_posix(),
+    "archive_path": (campaign_root / "crossing_ttc" / "archive.json")
+    .relative_to(campaign_root)
+    .as_posix(),
     "counts": dict(sorted(total_counts.items())),
     "rows": rows,
     "non_success_evidence": {
-        "fallback": False,
-        "degraded": False,
+        "fallback": total_counts["fallback"] > 0,
+        "degraded": total_counts["degraded"] > 0,
+        "valid_failure": total_counts["valid_failure"] > 0,
         "invalid_candidate": total_counts["invalid_candidate"] > 0,
         "simulation_error": executed_counts["simulation_error"] > 0,
         "not_available": total_counts["not_available"] > 0,

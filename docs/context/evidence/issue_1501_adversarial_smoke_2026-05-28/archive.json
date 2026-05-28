@@ -62,17 +62,17 @@
       "failure_attribution.primary_failure": "not null, not empty, status is not not_evaluated, and primary_failure is not one of invalid_candidate, simulation_error, success"
     },
     "source_manifests": [
-      "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
-      "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
-      "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
-      "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json"
+      "crossing_ttc/goal/optuna/manifest.json",
+      "crossing_ttc/goal/random/manifest.json",
+      "crossing_ttc/orca/optuna/manifest.json",
+      "crossing_ttc/orca/random/manifest.json"
     ]
   },
   "created_at": "2026-05-28T15:11:26.622012+00:00",
   "entries": [
     {
       "archive_id": "failure_0000",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005",
+      "bundle_path": "crossing_ttc/goal/optuna/candidate_0005",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -95,7 +95,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/goal/optuna/candidate_0005/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -114,15 +114,15 @@
       },
       "normalized_perturbation": 1.828256,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/episode_records_replay.jsonl --algo goal --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/optuna/candidate_0005/scenario.yaml --out crossing_ttc/goal/optuna/candidate_0005/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "crossing_ttc/goal/optuna/candidate_0005/scenario.yaml",
       "source_candidate_index": 5,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/trajectory.csv"
+      "source_manifest": "crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/goal/optuna/candidate_0005/trajectory.csv"
     },
     {
       "archive_id": "failure_0001",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007",
+      "bundle_path": "crossing_ttc/goal/optuna/candidate_0007",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -145,7 +145,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/goal/optuna/candidate_0007/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -164,15 +164,15 @@
       },
       "normalized_perturbation": 1.414951,
       "objective_value": 11.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/episode_records_replay.jsonl --algo goal --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/optuna/candidate_0007/scenario.yaml --out crossing_ttc/goal/optuna/candidate_0007/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "crossing_ttc/goal/optuna/candidate_0007/scenario.yaml",
       "source_candidate_index": 7,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/trajectory.csv"
+      "source_manifest": "crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/goal/optuna/candidate_0007/trajectory.csv"
     },
     {
       "archive_id": "failure_0002",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008",
+      "bundle_path": "crossing_ttc/goal/optuna/candidate_0008",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -195,7 +195,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/goal/optuna/candidate_0008/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -214,15 +214,15 @@
       },
       "normalized_perturbation": 1.342348,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/episode_records_replay.jsonl --algo goal --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/optuna/candidate_0008/scenario.yaml --out crossing_ttc/goal/optuna/candidate_0008/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "crossing_ttc/goal/optuna/candidate_0008/scenario.yaml",
       "source_candidate_index": 8,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/trajectory.csv"
+      "source_manifest": "crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/goal/optuna/candidate_0008/trajectory.csv"
     },
     {
       "archive_id": "failure_0003",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009",
+      "bundle_path": "crossing_ttc/goal/optuna/candidate_0009",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -245,7 +245,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/goal/optuna/candidate_0009/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -264,15 +264,15 @@
       },
       "normalized_perturbation": 1.907091,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/episode_records_replay.jsonl --algo goal --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/optuna/candidate_0009/scenario.yaml --out crossing_ttc/goal/optuna/candidate_0009/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "crossing_ttc/goal/optuna/candidate_0009/scenario.yaml",
       "source_candidate_index": 9,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/trajectory.csv"
+      "source_manifest": "crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/goal/optuna/candidate_0009/trajectory.csv"
     },
     {
       "archive_id": "failure_0004",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015",
+      "bundle_path": "crossing_ttc/goal/optuna/candidate_0015",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -295,7 +295,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/goal/optuna/candidate_0015/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -314,15 +314,15 @@
       },
       "normalized_perturbation": 2.206461,
       "objective_value": 21.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/episode_records_replay.jsonl --algo goal --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/optuna/candidate_0015/scenario.yaml --out crossing_ttc/goal/optuna/candidate_0015/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "crossing_ttc/goal/optuna/candidate_0015/scenario.yaml",
       "source_candidate_index": 15,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/trajectory.csv"
+      "source_manifest": "crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/goal/optuna/candidate_0015/trajectory.csv"
     },
     {
       "archive_id": "failure_0005",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019",
+      "bundle_path": "crossing_ttc/goal/random/candidate_0019",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -345,7 +345,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/goal/random/candidate_0019/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -364,15 +364,15 @@
       },
       "normalized_perturbation": 1.493857,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/episode_records_replay.jsonl --algo goal --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/random/candidate_0019/scenario.yaml --out crossing_ttc/goal/random/candidate_0019/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "crossing_ttc/goal/random/candidate_0019/scenario.yaml",
       "source_candidate_index": 19,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/trajectory.csv"
+      "source_manifest": "crossing_ttc/goal/random/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/goal/random/candidate_0019/trajectory.csv"
     },
     {
       "archive_id": "failure_0006",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025",
+      "bundle_path": "crossing_ttc/goal/random/candidate_0025",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -395,7 +395,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/goal/random/candidate_0025/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -414,15 +414,15 @@
       },
       "normalized_perturbation": 1.857111,
       "objective_value": 15.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/episode_records_replay.jsonl --algo goal --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/random/candidate_0025/scenario.yaml --out crossing_ttc/goal/random/candidate_0025/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "crossing_ttc/goal/random/candidate_0025/scenario.yaml",
       "source_candidate_index": 25,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/trajectory.csv"
+      "source_manifest": "crossing_ttc/goal/random/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/goal/random/candidate_0025/trajectory.csv"
     },
     {
       "archive_id": "failure_0007",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030",
+      "bundle_path": "crossing_ttc/goal/random/candidate_0030",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -445,7 +445,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/goal/random/candidate_0030/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -464,15 +464,15 @@
       },
       "normalized_perturbation": 2.116323,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/episode_records_replay.jsonl --algo goal --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/goal/random/candidate_0030/scenario.yaml --out crossing_ttc/goal/random/candidate_0030/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "crossing_ttc/goal/random/candidate_0030/scenario.yaml",
       "source_candidate_index": 30,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/trajectory.csv"
+      "source_manifest": "crossing_ttc/goal/random/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/goal/random/candidate_0030/trajectory.csv"
     },
     {
       "archive_id": "failure_0008",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005",
+      "bundle_path": "crossing_ttc/orca/optuna/candidate_0005",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -495,7 +495,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/orca/optuna/candidate_0005/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -514,15 +514,15 @@
       },
       "normalized_perturbation": 1.828256,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/episode_records_replay.jsonl --algo orca --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/orca/optuna/candidate_0005/scenario.yaml --out crossing_ttc/orca/optuna/candidate_0005/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "crossing_ttc/orca/optuna/candidate_0005/scenario.yaml",
       "source_candidate_index": 5,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/trajectory.csv"
+      "source_manifest": "crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/orca/optuna/candidate_0005/trajectory.csv"
     },
     {
       "archive_id": "failure_0009",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007",
+      "bundle_path": "crossing_ttc/orca/optuna/candidate_0007",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -545,7 +545,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/orca/optuna/candidate_0007/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -564,15 +564,15 @@
       },
       "normalized_perturbation": 1.414951,
       "objective_value": 11.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/episode_records_replay.jsonl --algo orca --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/orca/optuna/candidate_0007/scenario.yaml --out crossing_ttc/orca/optuna/candidate_0007/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "crossing_ttc/orca/optuna/candidate_0007/scenario.yaml",
       "source_candidate_index": 7,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/trajectory.csv"
+      "source_manifest": "crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/orca/optuna/candidate_0007/trajectory.csv"
     },
     {
       "archive_id": "failure_0010",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008",
+      "bundle_path": "crossing_ttc/orca/optuna/candidate_0008",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -595,7 +595,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/orca/optuna/candidate_0008/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -614,15 +614,15 @@
       },
       "normalized_perturbation": 1.342348,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/episode_records_replay.jsonl --algo orca --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/orca/optuna/candidate_0008/scenario.yaml --out crossing_ttc/orca/optuna/candidate_0008/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "crossing_ttc/orca/optuna/candidate_0008/scenario.yaml",
       "source_candidate_index": 8,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/trajectory.csv"
+      "source_manifest": "crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/orca/optuna/candidate_0008/trajectory.csv"
     },
     {
       "archive_id": "failure_0011",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009",
+      "bundle_path": "crossing_ttc/orca/optuna/candidate_0009",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -645,7 +645,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/orca/optuna/candidate_0009/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -664,15 +664,15 @@
       },
       "normalized_perturbation": 1.907091,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/episode_records_replay.jsonl --algo orca --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/orca/optuna/candidate_0009/scenario.yaml --out crossing_ttc/orca/optuna/candidate_0009/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "crossing_ttc/orca/optuna/candidate_0009/scenario.yaml",
       "source_candidate_index": 9,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/trajectory.csv"
+      "source_manifest": "crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/orca/optuna/candidate_0009/trajectory.csv"
     },
     {
       "archive_id": "failure_0012",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015",
+      "bundle_path": "crossing_ttc/orca/optuna/candidate_0015",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -695,7 +695,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/orca/optuna/candidate_0015/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -714,15 +714,15 @@
       },
       "normalized_perturbation": 2.206461,
       "objective_value": 13.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/episode_records_replay.jsonl --algo orca --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/orca/optuna/candidate_0015/scenario.yaml --out crossing_ttc/orca/optuna/candidate_0015/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "crossing_ttc/orca/optuna/candidate_0015/scenario.yaml",
       "source_candidate_index": 15,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/trajectory.csv"
+      "source_manifest": "crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/orca/optuna/candidate_0015/trajectory.csv"
     },
     {
       "archive_id": "failure_0013",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025",
+      "bundle_path": "crossing_ttc/orca/random/candidate_0025",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -745,7 +745,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/orca/random/candidate_0025/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -764,15 +764,15 @@
       },
       "normalized_perturbation": 1.857111,
       "objective_value": 12.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/episode_records_replay.jsonl --algo orca --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/orca/random/candidate_0025/scenario.yaml --out crossing_ttc/orca/random/candidate_0025/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "crossing_ttc/orca/random/candidate_0025/scenario.yaml",
       "source_candidate_index": 25,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/trajectory.csv"
+      "source_manifest": "crossing_ttc/orca/random/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/orca/random/candidate_0025/trajectory.csv"
     },
     {
       "archive_id": "failure_0014",
-      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030",
+      "bundle_path": "crossing_ttc/orca/random/candidate_0030",
       "candidate": {
         "goal": {
           "theta": 0.0,
@@ -795,7 +795,7 @@
         "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
         "termination_reason": "collision"
       },
-      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/episode_records.jsonl",
+      "episode_record_path": "crossing_ttc/orca/random/candidate_0030/episode_records.jsonl",
       "failure_attribution": {
         "details": {
           "outcome": {
@@ -814,11 +814,11 @@
       },
       "normalized_perturbation": 2.116323,
       "objective_value": 10.0,
-      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/episode_records_replay.jsonl --algo orca --no-video",
-      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/scenario.yaml",
+      "replay_command": "uv run robot_sf_bench run --matrix crossing_ttc/orca/random/candidate_0030/scenario.yaml --out crossing_ttc/orca/random/candidate_0030/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "crossing_ttc/orca/random/candidate_0030/scenario.yaml",
       "source_candidate_index": 30,
-      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json",
-      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/trajectory.csv"
+      "source_manifest": "crossing_ttc/orca/random/manifest.json",
+      "trajectory_csv_path": "crossing_ttc/orca/random/candidate_0030/trajectory.csv"
     }
   ],
   "schema_version": "adversarial_failure_archive.v1",

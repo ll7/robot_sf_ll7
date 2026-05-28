@@ -72,8 +72,8 @@ Raw candidate bundles, trajectories, episode records, and the full SLURM log rem
 
 The run produced four executed rows plus one design-exclusion row.
 
-| Policy | Sampler | Status | Success | Valid Behavioral Failure | Invalid Candidate | Simulation Error | Not Available |
-|---|---|---|---:|---:|---:|---:|
+| Policy | Sampler | Status | Valid Non-Failure | Valid Failure | Invalid Candidate | Simulation Error | Not Available |
+|---|---|---|---:|---:|---:|---:|---:|
 | `goal` | `random` | available | 18 | 3 | 11 | 0 | 0 |
 | `goal` | `optuna` | available | 5 | 5 | 22 | 0 | 0 |
 | `orca` | `random` | available | 19 | 2 | 11 | 0 | 0 |
@@ -82,13 +82,13 @@ The run produced four executed rows plus one design-exclusion row.
 
 Aggregate counts:
 
-- `success`: 47
-- `valid_behavioral_failure`: 15
+- `valid_non_failure`: 47
+- `valid_failure`: 15
 - `invalid_candidate`: 66
 - `simulation_error`: 0
 - `not_available`: 1
 
-`invalid_candidate`, `simulation_error`, and `not_available` rows do not count as success evidence.
+`valid_failure`, `invalid_candidate`, `simulation_error`, `fallback`, `degraded`, and `not_available` rows do not count as success evidence.
 
 ## Sampler Comparison
 
@@ -102,7 +102,7 @@ Best objective values reported by `scripts/tools/compare_adversarial_samplers.py
 | `orca` | `optuna` | 13 | 10 | 22 | 0 |
 
 The Optuna rows found the highest objective values for both policies, but also produced more
-simulation-error rows in this bounded smoke.
+invalid-candidate rows in this bounded smoke.
 
 ## Failure Archive
 
@@ -141,5 +141,5 @@ Limitations:
 - This is a smoke/execution packet, not paper-facing benchmark evidence.
 - Replay determinism checks are represented by replay commands in the archive entries, but were not
   run as a separate verification sweep in this job.
-- The high simulation-error count is part of the row-status evidence and should be interpreted as a
-  candidate-generation/runtime quality signal, not successful stress evidence.
+- The high invalid-candidate count is part of the row-status evidence and should be interpreted as a
+  candidate-generation quality signal, not successful stress evidence.

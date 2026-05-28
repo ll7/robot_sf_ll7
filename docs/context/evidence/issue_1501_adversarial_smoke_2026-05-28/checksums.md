@@ -6,7 +6,7 @@ These checksums identify the compact evidence copied from SLURM job `12656`.
 
 | SHA256 | Path |
 |---|---|
-| `6beb6ca4c82b51613b79e23c89b6d5b1c21f03a2b14e23f58cda5bc7fb28cee1` | `docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json` |
-| `7f9cc9b00df845bc398ef69aa730f92827b8707819909c0915e82a1225954abd` | `docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/goal_sampler_comparison.json` |
-| `257651f0be993eb951bc861fe9dcd127a7f409c940e400bb8cf26e3cb95d162c` | `docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/orca_sampler_comparison.json` |
-| `b0cdf3be054cea6637f0907075d55d6ab6b67a65831f6c313a2c1cf5db124f83` | `docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/row_status_summary.json` |
+| `a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393` | `docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json` |
+| `27e48513763c55c869773a0aab9cae23cf85560418d653cd85ab4d4a1da577c5` | `docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/goal_sampler_comparison.json` |
+| `67b615db355274298a63797c7ae5908eca910b2a114dbefc95b14d17fd4b895b` | `docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/orca_sampler_comparison.json` |
+| `c824896ba538c843be3168cf19d4bfba6ea37e8e0bde574dad2b0cf1a077ac84` | `docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/row_status_summary.json` |

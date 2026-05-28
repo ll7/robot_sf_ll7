@@ -14,6 +14,7 @@ import math
 import re
 import subprocess
 import time
+from collections import defaultdict
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
@@ -3252,16 +3253,50 @@ def _scenario_family(record: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _build_scenario_amv_lookup(
+    scenarios: list[dict[str, Any]],
+) -> dict[str, dict[str, str]]:
+    """Build a lookup from scenario identifier to AMV taxonomy dimensions.
+
+    Returns:
+        dict[str, dict[str, str]]: Mapping from scenario name/id to AMV taxonomy
+        values keyed by dimension name. Scenarios without AMV data map to empty
+        dicts so downstream code can distinguish absent from empty.
+    """
+    lookup: dict[str, dict[str, str]] = {}
+    for scenario in scenarios:
+        scenario_id = _campaign_scenario_id(scenario)
+        taxonomy = _extract_amv_taxonomy(scenario)
+        lookup[scenario_id] = taxonomy
+    return lookup
+
+
 def _build_breakdown_rows(  # noqa: C901
     run_entries: list[dict[str, Any]],
+    *,
+    scenario_amv_lookup: dict[str, dict[str, str]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Build per-scenario and per-family campaign diagnostic rows.
+
+    When ``scenario_amv_lookup`` is provided, AMV taxonomy columns
+    (``use_case``, ``context``, ``speed_regime``, ``maneuver_type``) are
+    merged into per-scenario rows from the matching scenario identifier.
+    Per-family rows receive the union of AMV dimension values observed
+    across contributing scenarios, joined by semicolons. Scenarios or
+    families without AMV data emit empty-string placeholders rather than
+    absent columns, so downstream consumers never mistake a missing column
+    for an unavailable taxonomy dimension.
 
     Returns:
         Tuple of per-scenario rows and per-family rows.
     """
+    amv_lookup = scenario_amv_lookup if scenario_amv_lookup is not None else {}
     per_scenario: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     per_family: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    family_amv_values: defaultdict[tuple[str, str, str], defaultdict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
 
     def _add_metric(bucket: dict[str, Any], metric: str, value: float | None) -> None:
         """Append one finite metric sample to an aggregation bucket."""
@@ -3326,6 +3361,15 @@ def _build_breakdown_rows(  # noqa: C901
                 _add_metric(scenario_bucket, metric, value)
                 _add_metric(family_bucket, metric, value)
 
+            scenario_amv = amv_lookup.get(scenario_id, {})
+            for dimension in _AMV_DIMENSIONS:
+                scenario_bucket.setdefault(dimension, scenario_amv.get(dimension, ""))
+
+            for dimension in _AMV_DIMENSIONS:
+                dim_value = scenario_amv.get(dimension, "")
+                if dim_value:
+                    family_amv_values[family_key][dimension].add(dim_value)
+
     def _finalize(row: dict[str, Any]) -> dict[str, Any]:
         """Replace metric sample lists with report-ready mean fields.
 
@@ -3348,14 +3392,25 @@ def _build_breakdown_rows(  # noqa: C901
             row.get("scenario_family", ""),
         ),
     )
-    family_rows = sorted(
-        (_finalize(row) for row in per_family.values()),
+    family_rows_data: list[dict[str, Any]] = []
+    for family_key, family_row in per_family.items():
+        finalized = _finalize(family_row)
+        family_dims = family_amv_values.get(family_key, {})
+        for dimension in _AMV_DIMENSIONS:
+            values = family_dims.get(dimension)
+            if values:
+                finalized[dimension] = ";".join(sorted(values))
+            else:
+                finalized[dimension] = ""
+        family_rows_data.append(finalized)
+
+    family_rows_data.sort(
         key=lambda row: (
             row.get("planner_key", ""),
             row.get("scenario_family", ""),
         ),
     )
-    return scenario_rows, family_rows
+    return scenario_rows, family_rows_data
 
 
 def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
@@ -4024,7 +4079,11 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "snqi_mean",
         ),
     )
-    scenario_rows, family_rows = _build_breakdown_rows(run_entries)
+    scenario_amv_lookup = _build_scenario_amv_lookup(scenarios)
+    scenario_rows, family_rows = _build_breakdown_rows(
+        run_entries,
+        scenario_amv_lookup=scenario_amv_lookup,
+    )
     scenario_csv_path, scenario_md_path = _write_table_artifacts(
         reports_dir,
         "scenario_breakdown",
@@ -4034,6 +4093,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "algo",
             "scenario_family",
             "scenario_id",
+            "use_case",
+            "context",
+            "speed_regime",
+            "maneuver_type",
             "episodes",
             "success_mean",
             "collisions_mean",
@@ -4056,6 +4119,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "planner_key",
             "algo",
             "scenario_family",
+            "use_case",
+            "context",
+            "speed_regime",
+            "maneuver_type",
             "episodes",
             "success_mean",
             "collisions_mean",

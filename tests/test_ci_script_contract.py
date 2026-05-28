@@ -81,7 +81,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     for gate in expected_gates:
         assert gate in script_text
 
-    freshness_call = 'uv run --active python "$SCRIPT_DIR/pr_ready_freshness.py" write'
+    freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" write'
     assert freshness_call in script_text
     assert script_text.rfind(freshness_call) > max(
         script_text.rfind(gate) for gate in expected_gates

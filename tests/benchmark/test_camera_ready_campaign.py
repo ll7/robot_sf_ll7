@@ -4202,7 +4202,9 @@ def test_prepare_campaign_preflight_writes_amv_and_comparability_artifacts(tmp_p
     assert Path(prepared["comparability_json_path"]).exists()
     assert Path(prepared["comparability_md_path"]).exists()
 
-    manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
+    manifest = json.loads(
+        (Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text(encoding="utf-8")
+    )
     assert manifest["amv_coverage_status"] == "pass"
     assert manifest["comparability_mapping_version"] == "alyassi-comparability-v1"
     assert manifest["artifacts"]["amv_coverage_json"].endswith("reports/amv_coverage_summary.json")

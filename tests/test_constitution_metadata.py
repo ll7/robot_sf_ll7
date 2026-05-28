@@ -17,7 +17,11 @@ def test_constitution_has_one_footer_matching_sync_report() -> None:
     """
 
     text = CONSTITUTION.read_text(encoding="utf-8")
-    sync_match = re.search(r"New Version:\s*([0-9]+\.[0-9]+\.[0-9]+)", text)
+    sync_match = re.search(
+        r"Previous Version:\s*[0-9]+\.[0-9]+\.[0-9]+\s*->\s*"
+        r"New Version:\s*([0-9]+\.[0-9]+\.[0-9]+)",
+        text,
+    )
     footer_matches = re.findall(
         r"\*\*Version\*\*:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*\|\s*"
         r"\*\*Ratified\*\*:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})\s*\|\s*"

@@ -28,7 +28,8 @@ classified.
 
 Freshness check:
 - `uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main`
-- If stale/failing, rerun `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` and write freshness.
+- If stale/failing, rerun `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`; the wrapper
+  records freshness after all gates pass.
 
 ## Workflow
 

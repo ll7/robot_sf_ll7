@@ -628,8 +628,18 @@ Additional diagnostics generated per campaign:
 
 * `reports/scenario_breakdown.csv` and `reports/scenario_breakdown.md`
   + per-planner, per-scenario metric means
+  + AMV taxonomy columns (`use_case`, `context`, `speed_regime`, `maneuver_type`)
+    carry the direct source scenario metadata when present
 * `reports/scenario_family_breakdown.csv` and `reports/scenario_family_breakdown.md`
   + per-planner, per-family (archetype) metric means
+  + AMV taxonomy columns aggregate the distinct non-empty values from contributing
+    scenarios per dimension, sorted and joined with semicolons
+
+Empty AMV taxonomy cells mean the source scenario had no AMV metadata for that
+dimension. They are descriptors only: they do not encode planner success,
+failure, fallback, degraded execution, or availability. Continue to interpret
+benchmark evidence through `availability_status`, `benchmark_success`, and the
+fail-closed fallback policy above.
 
 ## Notes on Experimental Planners
 

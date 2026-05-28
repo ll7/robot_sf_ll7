@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025",
+      "best_objective_value": 15.0,
+      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
+      "num_candidates": 32,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 11,
+      "num_valid_candidates": 21,
+      "sampler": "random"
+    },
+    {
+      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015",
+      "best_objective_value": 21.0,
+      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "num_candidates": 32,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 22,
+      "num_valid_candidates": 10,
+      "sampler": "optuna"
+    }
+  ],
+  "schema_version": "adversarial-sampler-comparison.v1"
+}

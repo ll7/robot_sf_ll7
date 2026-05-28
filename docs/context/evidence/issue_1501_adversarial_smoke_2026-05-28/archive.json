@@ -1,0 +1,831 @@
+{
+  "clusters": [
+    {
+      "cluster_id": "cluster_0000",
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "mechanism": {
+        "primary_failure": "collision",
+        "termination_reason": "collision"
+      },
+      "member_archive_ids": [
+        "failure_0000",
+        "failure_0001",
+        "failure_0002",
+        "failure_0003",
+        "failure_0004",
+        "failure_0005",
+        "failure_0006",
+        "failure_0007"
+      ],
+      "member_count": 8,
+      "representative_archive_id": "failure_0002"
+    },
+    {
+      "cluster_id": "cluster_0001",
+      "cluster_key": {
+        "policy": "orca",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "mechanism": {
+        "primary_failure": "collision",
+        "termination_reason": "collision"
+      },
+      "member_archive_ids": [
+        "failure_0008",
+        "failure_0009",
+        "failure_0010",
+        "failure_0011",
+        "failure_0012",
+        "failure_0013",
+        "failure_0014"
+      ],
+      "member_count": 7,
+      "representative_archive_id": "failure_0010"
+    }
+  ],
+  "config": {
+    "grouping": [
+      "config.policy",
+      "config.scenario_template",
+      "failure_attribution.primary_failure",
+      "failure_attribution.details.termination_reason"
+    ],
+    "representative": "smallest normalized perturbation, then highest objective",
+    "selection": {
+      "failure_attribution.primary_failure": "not null, not empty, status is not not_evaluated, and primary_failure is not one of invalid_candidate, simulation_error, success"
+    },
+    "source_manifests": [
+      "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
+      "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
+      "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json"
+    ]
+  },
+  "created_at": "2026-05-28T15:11:26.622012+00:00",
+  "entries": [
+    {
+      "archive_id": "failure_0000",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.730034241214364,
+          "y": 3.344354558952352
+        },
+        "pedestrian_delay_s": 1.7934945394817252,
+        "pedestrian_speed_mps": 0.9653352659893712,
+        "scenario_seed": 286,
+        "spawn_time_s": 1.2575715917643224,
+        "start": {
+          "theta": 0.0,
+          "x": 2.906080441973483,
+          "y": 2.8239059667727173
+        }
+      },
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.828256,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/scenario.yaml",
+      "source_candidate_index": 5,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0005/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0001",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.219119742518092,
+          "y": 3.0800689283633123
+        },
+        "pedestrian_delay_s": 1.5914777296320883,
+        "pedestrian_speed_mps": 0.9194968859736211,
+        "scenario_seed": 361,
+        "spawn_time_s": 0.41216370182660356,
+        "start": {
+          "theta": 0.0,
+          "x": 2.3402903294047634,
+          "y": 3.409431215761083
+        }
+      },
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.414951,
+      "objective_value": 11.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/scenario.yaml",
+      "source_candidate_index": 7,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0007/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0002",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.288956756845657,
+          "y": 2.807913333960939
+        },
+        "pedestrian_delay_s": 1.1762080853167522,
+        "pedestrian_speed_mps": 0.9460388097685773,
+        "scenario_seed": 320,
+        "spawn_time_s": 0.6205390536891795,
+        "start": {
+          "theta": 0.0,
+          "x": 2.3119256556477077,
+          "y": 2.5992335516140495
+        }
+      },
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.342348,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/scenario.yaml",
+      "source_candidate_index": 8,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0008/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0003",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.390521733910186,
+          "y": 2.2054855571464236
+        },
+        "pedestrian_delay_s": 1.7993472387348255,
+        "pedestrian_speed_mps": 1.1020037797356692,
+        "scenario_seed": 278,
+        "spawn_time_s": 1.8872848563685822,
+        "start": {
+          "theta": 0.0,
+          "x": 2.495541223585726,
+          "y": 3.4402932957084458
+        }
+      },
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.907091,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/scenario.yaml",
+      "source_candidate_index": 9,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0009/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0004",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.489914251064459,
+          "y": 2.2112344128051653
+        },
+        "pedestrian_delay_s": 1.9385110076621117,
+        "pedestrian_speed_mps": 1.0006933949317594,
+        "scenario_seed": 730,
+        "spawn_time_s": 0.014618987447849507,
+        "start": {
+          "theta": 0.0,
+          "x": 2.288740993227627,
+          "y": 2.4094124323413104
+        }
+      },
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 2.206461,
+      "objective_value": 21.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/scenario.yaml",
+      "source_candidate_index": 15,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/candidate_0015/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0005",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.423596410884164,
+          "y": 3.0785921775589165
+        },
+        "pedestrian_delay_s": 0.6234325826017899,
+        "pedestrian_speed_mps": 0.9206906380338176,
+        "scenario_seed": 787,
+        "spawn_time_s": 1.4598621381799524,
+        "start": {
+          "theta": 0.0,
+          "x": 2.744866082170515,
+          "y": 2.846275880401774
+        }
+      },
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.493857,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/scenario.yaml",
+      "source_candidate_index": 19,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0019/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0006",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.3669760715744665,
+          "y": 2.9252561368019347
+        },
+        "pedestrian_delay_s": 1.6160444894634052,
+        "pedestrian_speed_mps": 0.8452309330245736,
+        "scenario_seed": 976,
+        "spawn_time_s": 1.7489719081411599,
+        "start": {
+          "theta": 0.0,
+          "x": 2.0725715078206886,
+          "y": 2.2803645941895487
+        }
+      },
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.857111,
+      "objective_value": 15.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/scenario.yaml",
+      "source_candidate_index": 25,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0025/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0007",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.113759159457369,
+          "y": 3.0156569939868367
+        },
+        "pedestrian_delay_s": 0.13592172675151448,
+        "pedestrian_speed_mps": 0.8411127996222755,
+        "scenario_seed": 982,
+        "spawn_time_s": 1.702685090688243,
+        "start": {
+          "theta": 0.0,
+          "x": 2.8387742616641507,
+          "y": 3.062252270541083
+        }
+      },
+      "cluster_key": {
+        "policy": "goal",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 2.116323,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/episode_records_replay.jsonl --algo goal --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/scenario.yaml",
+      "source_candidate_index": 30,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/candidate_0030/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0008",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.730034241214364,
+          "y": 3.344354558952352
+        },
+        "pedestrian_delay_s": 1.7934945394817252,
+        "pedestrian_speed_mps": 0.9653352659893712,
+        "scenario_seed": 286,
+        "spawn_time_s": 1.2575715917643224,
+        "start": {
+          "theta": 0.0,
+          "x": 2.906080441973483,
+          "y": 2.8239059667727173
+        }
+      },
+      "cluster_key": {
+        "policy": "orca",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.828256,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/scenario.yaml",
+      "source_candidate_index": 5,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0005/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0009",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.219119742518092,
+          "y": 3.0800689283633123
+        },
+        "pedestrian_delay_s": 1.5914777296320883,
+        "pedestrian_speed_mps": 0.9194968859736211,
+        "scenario_seed": 361,
+        "spawn_time_s": 0.41216370182660356,
+        "start": {
+          "theta": 0.0,
+          "x": 2.3402903294047634,
+          "y": 3.409431215761083
+        }
+      },
+      "cluster_key": {
+        "policy": "orca",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.414951,
+      "objective_value": 11.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/scenario.yaml",
+      "source_candidate_index": 7,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0007/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0010",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.288956756845657,
+          "y": 2.807913333960939
+        },
+        "pedestrian_delay_s": 1.1762080853167522,
+        "pedestrian_speed_mps": 0.9460388097685773,
+        "scenario_seed": 320,
+        "spawn_time_s": 0.6205390536891795,
+        "start": {
+          "theta": 0.0,
+          "x": 2.3119256556477077,
+          "y": 2.5992335516140495
+        }
+      },
+      "cluster_key": {
+        "policy": "orca",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.342348,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/scenario.yaml",
+      "source_candidate_index": 8,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0008/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0011",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.390521733910186,
+          "y": 2.2054855571464236
+        },
+        "pedestrian_delay_s": 1.7993472387348255,
+        "pedestrian_speed_mps": 1.1020037797356692,
+        "scenario_seed": 278,
+        "spawn_time_s": 1.8872848563685822,
+        "start": {
+          "theta": 0.0,
+          "x": 2.495541223585726,
+          "y": 3.4402932957084458
+        }
+      },
+      "cluster_key": {
+        "policy": "orca",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.907091,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/scenario.yaml",
+      "source_candidate_index": 9,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0009/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0012",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.489914251064459,
+          "y": 2.2112344128051653
+        },
+        "pedestrian_delay_s": 1.9385110076621117,
+        "pedestrian_speed_mps": 1.0006933949317594,
+        "scenario_seed": 730,
+        "spawn_time_s": 0.014618987447849507,
+        "start": {
+          "theta": 0.0,
+          "x": 2.288740993227627,
+          "y": 2.4094124323413104
+        }
+      },
+      "cluster_key": {
+        "policy": "orca",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 2.206461,
+      "objective_value": 13.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/scenario.yaml",
+      "source_candidate_index": 15,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/candidate_0015/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0013",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.3669760715744665,
+          "y": 2.9252561368019347
+        },
+        "pedestrian_delay_s": 1.6160444894634052,
+        "pedestrian_speed_mps": 0.8452309330245736,
+        "scenario_seed": 976,
+        "spawn_time_s": 1.7489719081411599,
+        "start": {
+          "theta": 0.0,
+          "x": 2.0725715078206886,
+          "y": 2.2803645941895487
+        }
+      },
+      "cluster_key": {
+        "policy": "orca",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 1.857111,
+      "objective_value": 12.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/scenario.yaml",
+      "source_candidate_index": 25,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0025/trajectory.csv"
+    },
+    {
+      "archive_id": "failure_0014",
+      "bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.113759159457369,
+          "y": 3.0156569939868367
+        },
+        "pedestrian_delay_s": 0.13592172675151448,
+        "pedestrian_speed_mps": 0.8411127996222755,
+        "scenario_seed": 982,
+        "spawn_time_s": 1.702685090688243,
+        "start": {
+          "theta": 0.0,
+          "x": 2.8387742616641507,
+          "y": 3.062252270541083
+        }
+      },
+      "cluster_key": {
+        "policy": "orca",
+        "primary_failure": "collision",
+        "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+        "termination_reason": "collision"
+      },
+      "episode_record_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/episode_records.jsonl",
+      "failure_attribution": {
+        "details": {
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "normalized_perturbation": 2.116323,
+      "objective_value": 10.0,
+      "replay_command": "uv run robot_sf_bench run --matrix /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/scenario.yaml --out /home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/episode_records_replay.jsonl --algo orca --no-video",
+      "scenario_yaml_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/scenario.yaml",
+      "source_candidate_index": 30,
+      "source_manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json",
+      "trajectory_csv_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/candidate_0030/trajectory.csv"
+    }
+  ],
+  "schema_version": "adversarial_failure_archive.v1",
+  "summary": {
+    "archived_failure_count": 15,
+    "cluster_count": 2,
+    "source_candidate_count": 128,
+    "source_manifest_count": 4
+  }
+}

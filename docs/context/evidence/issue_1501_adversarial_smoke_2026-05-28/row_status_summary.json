@@ -1,0 +1,100 @@
+{
+  "archive_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/archive.json",
+  "budget_per_sampler": 32,
+  "commit": "4bd5fb412d2bf023d26f674833dd379aedf8c17e",
+  "counts": {
+    "not_available": 1,
+    "simulation_error": 66,
+    "success": 47,
+    "valid_behavioral_failure": 15
+  },
+  "design_exclusion_samplers": [
+    "guided_route_search"
+  ],
+  "executed_policies": [
+    "goal",
+    "orca"
+  ],
+  "executed_samplers": [
+    "random",
+    "optuna"
+  ],
+  "family": "crossing_ttc",
+  "issue": 1501,
+  "manifest_paths": [
+    "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
+    "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+    "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json",
+    "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json"
+  ],
+  "non_success_evidence": {
+    "degraded": false,
+    "fallback": false,
+    "not_available": false,
+    "simulation_error": false
+  },
+  "parent_issue": 1488,
+  "rows": [
+    {
+      "availability_status": "available",
+      "counts": {
+        "simulation_error": 11,
+        "success": 18,
+        "valid_behavioral_failure": 3
+      },
+      "family": "crossing_ttc",
+      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/random/manifest.json",
+      "policy": "goal",
+      "sampler": "random"
+    },
+    {
+      "availability_status": "available",
+      "counts": {
+        "simulation_error": 22,
+        "success": 5,
+        "valid_behavioral_failure": 5
+      },
+      "family": "crossing_ttc",
+      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/goal/optuna/manifest.json",
+      "policy": "goal",
+      "sampler": "optuna"
+    },
+    {
+      "availability_status": "available",
+      "counts": {
+        "simulation_error": 11,
+        "success": 19,
+        "valid_behavioral_failure": 2
+      },
+      "family": "crossing_ttc",
+      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/random/manifest.json",
+      "policy": "orca",
+      "sampler": "random"
+    },
+    {
+      "availability_status": "available",
+      "counts": {
+        "simulation_error": 22,
+        "success": 5,
+        "valid_behavioral_failure": 5
+      },
+      "family": "crossing_ttc",
+      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1501-adversarial-smoke/output/adversarial/issue_1501/issue1501-crossing-ttc-20260528-g4bd5fb41/crossing_ttc/orca/optuna/manifest.json",
+      "policy": "orca",
+      "sampler": "optuna"
+    },
+    {
+      "availability_status": "not_available",
+      "counts": {
+        "not_available": 1
+      },
+      "family": "crossing_ttc",
+      "policy": "all",
+      "reason": "guided_route_search is route-optimization based and is a design exclusion for the parametric crossing_ttc CandidateSpec family",
+      "sampler": "guided_route_search"
+    }
+  ],
+  "schema_version": "issue-1501-adversarial-smoke-summary.v1",
+  "seed": 42,
+  "synthetic": false
+}

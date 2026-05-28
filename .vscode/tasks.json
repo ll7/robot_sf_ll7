@@ -58,7 +58,7 @@
 		{
 			"label": "Generate UML",
 			"type": "shell",
-			"command": "./class_diagram/generate_uml.sh",
+			"command": "./docs/tooling/class_diagram/generate_uml.sh",
 			"problemMatcher": [],
 			"group": {
 				"kind": "build",

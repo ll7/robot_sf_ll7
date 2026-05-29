@@ -1,4 +1,4 @@
-# Issue #1634 SocNav Module Split Plan
+# Issue #1634 SocNav Module Split Plan (2026-05-28)
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1634>
 

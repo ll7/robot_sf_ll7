@@ -21,8 +21,10 @@ dedicated follow-up issues with compatibility plans and targeted validation.
 
 ## Follow-Up Split
 
-- Issue #1599 owns the `specs/` compatibility plan.
-- Issue #1598 owns the `test_scenarios/` fixture relocation boundary.
+- Issue #1599 owns the `specs/` compatibility plan and is resolved by
+  [issue_1598_1599_root_compatibility_decisions.md](issue_1598_1599_root_compatibility_decisions.md).
+- Issue #1598 owns the `test_scenarios/` fixture relocation boundary and is resolved by
+  [issue_1598_1599_root_compatibility_decisions.md](issue_1598_1599_root_compatibility_decisions.md).
 - No follow-up issue is needed for `.agent/`, `model_ped/`, `test_pygame/`, or `CITATION.cff`
   unless a maintainer later requests a migration despite the current keep decision.
 

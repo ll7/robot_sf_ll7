@@ -39,9 +39,10 @@ per_step_logging:
   action_bounds: active Robot SF action bounds
   action_projection_metadata: clip/projection details and whether clipping occurred
 candidate_registry:
-  entry_planned: true
-  candidate_config_path: configs/policy_search/candidates/lidar_ppo_mlp_issue_1615.yaml
-  adapter_path: robot_sf/planner/learned_lidar_policy.py
+  entry_planned: false
+  planning_status: deferred to follow-up issue 1662; this PR is a launch packet only
+  planned_candidate_config_path: configs/policy_search/candidates/lidar_ppo_mlp_issue_1615.yaml
+  planned_adapter_path: robot_sf/planner/learned_lidar_policy.py
   smoke_or_validation_command: uv run python scripts/validation/check_learned_policy_eligibility.py configs/training/lidar/lidar_ppo_mlp_eligibility_issue_1615.yaml
   missing_checkpoint_policy: fail closed with not_available before benchmark episodes are written
   unsupported_observation_policy: fail closed unless observation level is lidar_2d and keys are drive_state+rays

@@ -211,6 +211,16 @@ examples:
     ci_reason: "Interactive pygame debug demo with offline checkpoints."
     doc_reference: docs/dev_guide.md#advanced-feature-demos
     tags: [pedestrian, policy, debug, ppo]
+  - path: advanced/33_threejs_recording_viewer.py
+    name: "33 Three.js Recording Viewer"
+    summary: "Export a JSONL or pickle recording to a static browser viewer."
+    category_slug: advanced
+    prerequisites:
+      - recordings/<file>.jsonl
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev_guide.md#advanced-feature-demos
+    tags: [visualization, recording, threejs]
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."

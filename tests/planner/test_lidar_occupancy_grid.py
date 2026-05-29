@@ -7,6 +7,7 @@ import numpy as np
 from robot_sf.planner.lidar_occupancy_grid import (
     LidarOccupancyGridConfig,
     LidarOccupancyGridRouteAdapter,
+    build_lidar_grid_route_config,
     lidar_ray_angles,
     lidar_rays_to_ego_occupancy_grid,
     sensor_fusion_to_grid_route_observation,
@@ -101,3 +102,46 @@ def test_lidar_grid_route_adapter_fails_closed_without_rays() -> None:
     diagnostics = adapter.diagnostics()
     assert diagnostics["status"] == "not_available"
     assert "drive_state and rays" in str(diagnostics["error"])
+
+
+def test_lidar_grid_route_adapter_fails_closed_on_unexpected_planner_error() -> None:
+    """Unexpected wrapped-planner errors should not escape the LiDAR adapter."""
+
+    class _ExplodingGridRoute:
+        def plan(self, observation):
+            del observation
+            raise RuntimeError("planner exploded")
+
+    adapter = LidarOccupancyGridRouteAdapter(grid_route=_ExplodingGridRoute())
+    observation = {
+        "drive_state": np.array([[0.0, 0.0, 3.0 / 50.0, 0.0, 0.0]], dtype=np.float32),
+        "rays": np.ones((1, 16), dtype=np.float32),
+    }
+
+    assert adapter.plan(observation) == (0.0, 0.0)
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["status"] == "not_available"
+    assert diagnostics["error"] == "planner exploded"
+
+
+def test_lidar_grid_route_config_treats_yaml_nulls_as_defaults() -> None:
+    """Explicit null config values should not crash numeric parsing."""
+    parsed = build_lidar_grid_route_config(
+        {
+            "lidar_occupancy": {
+                "resolution": None,
+                "width": None,
+                "height": None,
+                "max_scan_dist": None,
+                "visual_angle_portion": None,
+                "obstacle_thickness_cells": None,
+                "normalized_observation": None,
+                "target_distance_scale": None,
+                "linear_speed_scale": None,
+                "angular_speed_scale": None,
+                "robot_radius": None,
+            }
+        }
+    )
+
+    assert parsed.lidar_occupancy == LidarOccupancyGridConfig()

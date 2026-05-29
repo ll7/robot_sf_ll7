@@ -257,7 +257,7 @@ class LidarOccupancyGridRouteAdapter:
             grid = np.asarray(adapted["occupancy_grid"], dtype=float)
             self._last_occupied_cells = int(np.count_nonzero(grid[2] >= 0.5))
             linear, angular = self.grid_route.plan(adapted)
-        except (TypeError, ValueError, KeyError, IndexError) as exc:
+        except Exception as exc:  # noqa: BLE001 - benchmark adapter must fail closed.
             self._last_status = "not_available"
             self._last_error = str(exc)
             self._last_occupied_cells = 0
@@ -307,21 +307,27 @@ def build_lidar_grid_route_config(cfg: dict[str, Any] | None) -> LidarGridRouteB
     grid_payload = payload.get("grid_route")
     if not isinstance(grid_payload, dict):
         grid_payload = payload
+
+    def _get(mapping: dict[str, Any], key: str, default: Any) -> Any:
+        """Return a config value, treating explicit YAML null as absent."""
+        value = mapping.get(key, default)
+        return default if value is None else value
+
     return LidarGridRouteBuildConfig(
         lidar_occupancy=LidarOccupancyGridConfig(
-            resolution=float(lidar_payload.get("resolution", 0.2)),
-            width=float(lidar_payload.get("width", 4.2)),
-            height=float(lidar_payload.get("height", 4.2)),
-            max_scan_dist=float(lidar_payload.get("max_scan_dist", 10.0)),
-            visual_angle_portion=float(lidar_payload.get("visual_angle_portion", 1.0)),
-            obstacle_thickness_cells=int(lidar_payload.get("obstacle_thickness_cells", 1)),
-            normalized_observation=bool(lidar_payload.get("normalized_observation", True)),
+            resolution=float(_get(lidar_payload, "resolution", 0.2)),
+            width=float(_get(lidar_payload, "width", 4.2)),
+            height=float(_get(lidar_payload, "height", 4.2)),
+            max_scan_dist=float(_get(lidar_payload, "max_scan_dist", 10.0)),
+            visual_angle_portion=float(_get(lidar_payload, "visual_angle_portion", 1.0)),
+            obstacle_thickness_cells=int(_get(lidar_payload, "obstacle_thickness_cells", 1)),
+            normalized_observation=bool(_get(lidar_payload, "normalized_observation", True)),
             target_distance_scale=float(
-                lidar_payload.get("target_distance_scale", TARGET_DISTANCE_CAP_M)
+                _get(lidar_payload, "target_distance_scale", TARGET_DISTANCE_CAP_M)
             ),
-            linear_speed_scale=float(lidar_payload.get("linear_speed_scale", 2.0)),
-            angular_speed_scale=float(lidar_payload.get("angular_speed_scale", 1.0)),
-            robot_radius=float(lidar_payload.get("robot_radius", 0.3)),
+            linear_speed_scale=float(_get(lidar_payload, "linear_speed_scale", 2.0)),
+            angular_speed_scale=float(_get(lidar_payload, "angular_speed_scale", 1.0)),
+            robot_radius=float(_get(lidar_payload, "robot_radius", 0.3)),
         ),
         grid_route=build_grid_route_config(grid_payload),
     )

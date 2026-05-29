@@ -39,9 +39,9 @@ class StepSNQIProxy:
     def prime(self, simulator: Any) -> None:
         """Reset state and seed previous robot position from ``simulator`` when available."""
         self.state = StepSNQIProxyState()
-        robot_poses = getattr(simulator, "robot_poses", [])
-        if isinstance(robot_poses, list) and robot_poses:
-            self.state.prev_robot_pos = extract_robot_xy(robot_poses[0])
+        robot_pose = first_robot_pose(getattr(simulator, "robot_poses", []))
+        if robot_pose is not None:
+            self.state.prev_robot_pos = extract_robot_xy(robot_pose)
 
     def compute_step_metrics(self, simulator: Any, *, dt: float) -> dict[str, float]:
         """Compute SNQI-aligned proxy metrics and update running state.
@@ -65,11 +65,25 @@ def extract_robot_xy(robot_pose: Any) -> np.ndarray:
     Returns:
         np.ndarray: ``[x, y]`` position vector, or zeros for invalid payloads.
     """
+    if robot_pose is None:
+        return np.zeros(2, dtype=float)
     source = robot_pose[0] if isinstance(robot_pose, (tuple, list)) else robot_pose
-    flattened = np.asarray(source, dtype=float).reshape(-1)
+    try:
+        flattened = np.asarray(source, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        return np.zeros(2, dtype=float)
     if flattened.size >= 2:
         return flattened[:2]
     return np.zeros(2, dtype=float)
+
+
+def first_robot_pose(robot_poses: Any) -> Any | None:
+    """Return the first robot pose from common sequence or array payloads."""
+    if isinstance(robot_poses, (list, tuple)):
+        return robot_poses[0] if robot_poses else None
+    if isinstance(robot_poses, np.ndarray) and robot_poses.size > 0:
+        return robot_poses if robot_poses.ndim == 1 else robot_poses[0]
+    return None
 
 
 def coerce_xy_rows(data: Any) -> np.ndarray:
@@ -78,7 +92,12 @@ def coerce_xy_rows(data: Any) -> np.ndarray:
     Returns:
         np.ndarray: Array with shape ``(N, 2)``; invalid layouts produce an empty array.
     """
-    values = np.asarray(data, dtype=float)
+    if data is None:
+        return np.zeros((0, 2), dtype=float)
+    try:
+        values = np.asarray(data, dtype=float)
+    except (TypeError, ValueError, KeyError, IndexError):
+        return np.zeros((0, 2), dtype=float)
     if values.ndim == 1:
         return values.reshape(-1, 2) if values.size % 2 == 0 else np.zeros((0, 2), dtype=float)
     if values.ndim == 2 and values.shape[-1] >= 2:
@@ -138,12 +157,7 @@ def compute_snqi_step_proxies(
         dict[str, float]: Step-level SNQI-aligned metadata terms.
     """
     d_coll, d_near, comfort_force_threshold = resolve_snqi_thresholds()
-    robot_poses = getattr(simulator, "robot_poses", [])
-    robot_pos = (
-        extract_robot_xy(robot_poses[0])
-        if isinstance(robot_poses, list) and robot_poses
-        else np.zeros(2)
-    )
+    robot_pos = extract_robot_xy(first_robot_pose(getattr(simulator, "robot_poses", [])))
 
     ped_pos = coerce_xy_rows(getattr(simulator, "ped_pos", np.zeros((0, 2), dtype=float)))
 

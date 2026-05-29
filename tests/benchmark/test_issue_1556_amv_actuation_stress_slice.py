@@ -31,6 +31,38 @@ def test_issue_1556_config_declares_synthetic_differential_drive_slice() -> None
         "francis2023_blind_corner",
         "francis2023_intersection_wait",
     ]
+    assert payload["scenario_amv_overrides"] == {
+        "classic_overtaking_medium": {
+            "use_case": "delivery_robot",
+            "context": "sidewalk",
+            "speed_regime": "walking_speed",
+            "maneuver_type": "overtake",
+        },
+        "classic_bottleneck_high": {
+            "use_case": "delivery_robot",
+            "context": "sidewalk",
+            "speed_regime": "walking_speed",
+            "maneuver_type": "bottleneck",
+        },
+        "classic_cross_trap_high": {
+            "use_case": "shared_space_micromobility",
+            "context": "shared_space",
+            "speed_regime": "scooter_speed",
+            "maneuver_type": "crossing",
+        },
+        "francis2023_blind_corner": {
+            "use_case": "delivery_robot",
+            "context": "sidewalk",
+            "speed_regime": "walking_speed",
+            "maneuver_type": "crossing",
+        },
+        "francis2023_intersection_wait": {
+            "use_case": "shared_space_micromobility",
+            "context": "shared_space",
+            "speed_regime": "scooter_speed",
+            "maneuver_type": "bottleneck",
+        },
+    }
 
     profile = payload["synthetic_actuation_profile"]
     assert profile == {

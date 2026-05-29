@@ -470,6 +470,10 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "SocialForcePlannerAdapter",
+        "upstream_command_space": "velocity_vector_xy",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "projection_documented": True,
     },
     "orca": {
         "planner_command_space": "unicycle_vw",

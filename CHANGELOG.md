@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Filled the issue-1572 AMV actuation metadata gaps so the issue-1556 synthetic slice can carry
+  slice-local scenario AMV taxonomy without editing global scenario files, local `social_force`
+  rows now expose explicit command-space/projection-policy metadata, and compact actuation summary
+  artifacts distinguish AMV coverage status from adapter projection metadata without weakening
+  fail-closed unavailable/fallback semantics.
 * Fixed the issue-1527 ORCA benchmark preflight gap by moving the `rvo2` fail-fast check into the
   shared camera-ready campaign layer, so direct `prepare_campaign_preflight(...)`,
   `run_campaign(...)`, and wrapper entrypoints such as `scripts/tools/run_benchmark_release.py`

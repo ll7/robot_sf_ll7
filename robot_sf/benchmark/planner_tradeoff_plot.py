@@ -16,7 +16,6 @@ from __future__ import annotations
 import csv
 import json
 import math
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -139,7 +138,7 @@ def find_planner_episodes_path(bundle_path: Path, planner_key: str) -> Path | No
     return None
 
 
-def _episode_metric_value(episode: Mapping[str, Any], metric: str) -> float | None:
+def _episode_metric_value(episode: dict[str, Any], metric: str) -> float | None:
     """Extract a supported logical metric from an episode record.
 
     Returns:
@@ -308,7 +307,7 @@ def plot_planner_tradeoff(
     Returns:
         Matplotlib figure with the plotted planner tradeoff.
     """
-    os.environ.setdefault("MPLBACKEND", "Agg")
+    plt.switch_backend("Agg")
     apply_latex_style(
         {
             "figure.figsize": (5.2, 3.6),

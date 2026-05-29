@@ -883,7 +883,8 @@ def _handle_plot_planner_tradeoff(args) -> int:
             metadata_path.parent.mkdir(parents=True, exist_ok=True)
             metadata_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
         return 0
-    except Exception:  # pragma: no cover - error path
+    except Exception as exc:  # pragma: no cover - error path
+        logging.exception("Planner tradeoff plot failed: %s", exc)
         return 2
 
 

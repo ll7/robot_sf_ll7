@@ -1127,9 +1127,9 @@ Success criteria:
 
 ### Performance benchmarking (optional)
 ```bash
-# Run benchmark when performance impact is suspected
-DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
-# Expected: ~22 steps/second, ~45ms per step
+# Run maintained performance smoke when performance impact is suspected
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+uv run python scripts/validation/performance_smoke_test.py
 ```
 
 ### Performance expectations
@@ -1256,7 +1256,7 @@ uv run python examples/demo_refactored_environments.py
 ### Training scripts
 ```bash
 uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
-uv run python scripts/hparam_opt.py
+uv run python scripts/training/launch_optuna_expert_ppo.py --config configs/training/ppo_imitation/optuna_expert_ppo.yaml
 uv run python scripts/evaluate.py
 ```
 
@@ -1421,8 +1421,9 @@ uv run ruff check . && uv run ruff format . && uvx ty check . --exit-zero && uv 
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
 uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; env = make_robot_env(); env.reset(); print('OK')"
 
-# Optional perf benchmark
-DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
+# Optional perf smoke
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+uv run python scripts/validation/performance_smoke_test.py
 
 # If running commands outside of `uv run`, activate the virtual environment:
 source .venv/bin/activate

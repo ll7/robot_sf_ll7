@@ -130,6 +130,8 @@ def _positive_float_or_default(value: Any, default: float) -> float:
 
 def _nested_value(mapping: dict[str, Any], parent_key: str, child_key: str) -> Any:
     """Return a nested mapping value when present."""
+    if not isinstance(mapping, dict):
+        return None
     parent = mapping.get(parent_key)
     if isinstance(parent, dict):
         return parent.get(child_key)
@@ -142,6 +144,8 @@ def _scenario_robot_radius_m(scenario_params: dict[str, Any]) -> float:
     Returns:
         Positive robot radius in meters.
     """
+    if not isinstance(scenario_params, dict):
+        return DEFAULT_BENCHMARK_ROBOT_RADIUS_M
     for value in (
         scenario_params.get("robot_radius"),
         _nested_value(scenario_params, "robot_config", "radius"),
@@ -160,6 +164,8 @@ def _scenario_ped_radius_m(scenario_params: dict[str, Any]) -> float:
     Returns:
         Positive pedestrian radius in meters.
     """
+    if not isinstance(scenario_params, dict):
+        return DEFAULT_BENCHMARK_PED_RADIUS_M
     for value in (
         scenario_params.get("ped_radius"),
         scenario_params.get("pedestrian_radius"),

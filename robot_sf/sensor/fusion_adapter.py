@@ -233,7 +233,8 @@ class MergedObservationFusion:
         Raises
         ------
         ValueError
-            If ``sensors`` and ``sensor_names`` have different lengths.
+            If ``sensors`` and ``sensor_names`` have different lengths, or if
+            custom sensor names collide case-insensitively.
         """
         if len(sensors) != len(sensor_names):
             msg = (
@@ -241,6 +242,17 @@ class MergedObservationFusion:
                 f"(got {len(sensors)} sensors and {len(sensor_names)} names)"
             )
             raise ValueError(msg)
+        seen_names: dict[str, str] = {}
+        for name in sensor_names:
+            normalized_name = name.casefold()
+            if normalized_name in seen_names:
+                msg = (
+                    "MergedObservationFusion requires unique sensor names "
+                    f"(duplicate custom observation name '{name}' conflicts with "
+                    f"'{seen_names[normalized_name]}')."
+                )
+                raise ValueError(msg)
+            seen_names[normalized_name] = name
 
         self._base = base_fusion
         self._sensors = sensors

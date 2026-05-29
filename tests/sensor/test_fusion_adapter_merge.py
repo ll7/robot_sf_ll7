@@ -98,3 +98,28 @@ def test_merged_observation_fusion_rejects_name_count_mismatch():
 
     with pytest.raises(ValueError, match="same length"):
         MergedObservationFusion(_BaseFusionStub(), [sensor], [])
+
+
+def test_merged_observation_fusion_rejects_case_insensitive_duplicate_names():
+    """Custom sensor names must not silently collide after normalization."""
+    sensors = [
+        DummyConstantSensor(
+            {
+                "type": "dummy_constant",
+                "value": 1.0,
+                "shape": [],
+                "dtype": "float32",
+            }
+        ),
+        DummyConstantSensor(
+            {
+                "type": "dummy_constant",
+                "value": 2.0,
+                "shape": [],
+                "dtype": "float32",
+            }
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="unique sensor names"):
+        MergedObservationFusion(_BaseFusionStub(), sensors, ["Bias", "bias"])

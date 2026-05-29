@@ -90,7 +90,7 @@ class RandomPlanner:
         Returns:
             Action dict in configured action space.
         """
-        normalize_observation(obs)
+        obs = normalize_observation(obs)
 
         if self.config.mode == "velocity":
             # Sample vx, vy uniformly in a disk scaled to v_max

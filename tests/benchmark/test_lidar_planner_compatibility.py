@@ -39,6 +39,10 @@ def _planners_with_status(status: str) -> list[str]:
     return [str(row["planner"]) for row in rows if row["current_contract_status"] == status]
 
 
+_NATIVE_CANDIDATES = _planners_with_status("passes_lidar_2d_gate")
+_BLOCKED_PLANNERS = _planners_with_status("blocked_by_current_contract")
+
+
 def test_lidar_matrix_records_required_runtime_boundary() -> None:
     """The audit should make privileged runtime inputs explicit."""
     contract = _load_matrix()["observation_contract"]
@@ -49,19 +53,19 @@ def test_lidar_matrix_records_required_runtime_boundary() -> None:
     assert "full_map_occupancy" in contract["excluded_runtime_inputs"]
 
 
-def test_current_lidar_native_candidates_match_contract_gate() -> None:
+@pytest.mark.parametrize("planner", _NATIVE_CANDIDATES)
+def test_current_lidar_native_candidates_match_contract_gate(planner: str) -> None:
     """Only current sensor-fusion learned-policy contracts should pass the LiDAR gate."""
-    for planner in ("ppo", "guarded_ppo"):
-        row = _planner_row(planner)
-        contract = planner_contract_for_algorithm(planner, observation_level="lidar_2d")
+    row = _planner_row(planner)
+    contract = planner_contract_for_algorithm(planner, observation_level="lidar_2d")
 
-        assert row["current_contract_status"] == "passes_lidar_2d_gate"
-        assert contract.observation_contract.observation_level == "lidar_2d"
-        assert contract.observation_contract.active_mode == "sensor_fusion_state"
-        assert "lidar_rays" in contract.observation_contract.required_inputs
+    assert row["current_contract_status"] == "passes_lidar_2d_gate"
+    assert contract.observation_contract.observation_level == "lidar_2d"
+    assert contract.observation_contract.active_mode == "sensor_fusion_state"
+    assert "lidar_rays" in contract.observation_contract.required_inputs
 
 
-@pytest.mark.parametrize("planner", _planners_with_status("blocked_by_current_contract"))
+@pytest.mark.parametrize("planner", _BLOCKED_PLANNERS)
 def test_current_structured_or_grid_planners_fail_closed_for_lidar_level(planner: str) -> None:
     """Existing structured/grid planners should not silently run as LiDAR evidence."""
     row = _planner_row(planner)

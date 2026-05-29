@@ -1,4 +1,4 @@
-# Issue #1584 SocNavBench Unavailable Row Policy
+# Issue #1584 SocNavBench Unavailable Row Policy - 2026-05-28
 
 Date: 2026-05-28
 

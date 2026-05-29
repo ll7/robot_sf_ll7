@@ -75,7 +75,7 @@ def _latest_row(values: Any, *, key: str) -> np.ndarray:
         arr = arr.reshape(1)
     if arr.ndim > 1:
         arr = arr.reshape(-1, arr.shape[-1])[-1]
-    return np.asarray(arr, dtype=float).reshape(-1)
+    return arr.reshape(-1)
 
 
 def _extract_lidar_rays(
@@ -94,7 +94,6 @@ def _extract_lidar_rays(
         raise LidarOccupancyAdapterError("LiDAR occupancy adapter requires rays")
     if config.normalized_rays:
         rays = rays * float(config.max_range)
-    rays = np.asarray(rays, dtype=float)
     rays = np.where(np.isfinite(rays), rays, float(config.max_range))
     return np.clip(rays, 0.0, float(config.max_range))
 

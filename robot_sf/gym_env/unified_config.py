@@ -35,6 +35,47 @@ from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
+PED_OBSTACLE_FORCE_ALIAS_WARNING = (
+    "peds_have_obstacle_forces is deprecated; use peds_have_static_obstacle_forces instead."
+)
+
+
+def sync_pedestrian_obstacle_force_alias(
+    config: object,
+    override: bool | None = None,
+    *,
+    warn: bool = True,
+) -> bool:
+    """Synchronize the deprecated pedestrian obstacle-force alias on a config object.
+
+    Args:
+        config: Environment config that may expose ``peds_have_static_obstacle_forces``
+            and/or the deprecated ``peds_have_obstacle_forces`` alias.
+        override: Optional legacy kwarg value. When provided, it wins for backwards
+            compatibility and is copied into the canonical static-obstacle field.
+        warn: Emit the deprecation warning when a legacy value changes the canonical value.
+
+    Returns:
+        bool: Effective static-obstacle force setting to pass to simulator construction.
+    """
+    static_value = bool(getattr(config, "peds_have_static_obstacle_forces", True))
+    alias_value = override
+    if alias_value is None:
+        alias_value = getattr(config, "peds_have_obstacle_forces", None)
+
+    if alias_value is not None:
+        alias_bool = bool(alias_value)
+        if warn and alias_bool != static_value:
+            logger.warning(PED_OBSTACLE_FORCE_ALIAS_WARNING)
+        static_value = alias_bool
+        if hasattr(config, "peds_have_static_obstacle_forces"):
+            config.peds_have_static_obstacle_forces = static_value  # type: ignore[attr-defined]
+
+    if hasattr(config, "peds_have_obstacle_forces"):
+        config.peds_have_obstacle_forces = static_value  # type: ignore[attr-defined]
+
+    return static_value
+
 
 @dataclass
 class ObservationVisibilitySettings:
@@ -253,21 +294,12 @@ class RobotSimulationConfig(BaseSimulationConfig):
 
     def _sync_force_flags(self) -> None:
         """Sync deprecated force flags and prf_config for backwards compatibility."""
-        if self.peds_have_obstacle_forces is not None:
-            if self.peds_have_obstacle_forces != self.peds_have_static_obstacle_forces:
-                logger.warning(
-                    "peds_have_obstacle_forces is deprecated; use "
-                    "peds_have_static_obstacle_forces instead.",
-                )
-            self.peds_have_static_obstacle_forces = bool(self.peds_have_obstacle_forces)
+        sync_pedestrian_obstacle_force_alias(self)
 
         if self.peds_have_robot_repulsion is not None:
             self.sim_config.prf_config.is_active = bool(self.peds_have_robot_repulsion)
         else:
             self.peds_have_robot_repulsion = bool(self.sim_config.prf_config.is_active)
-
-        # Keep deprecated alias in sync for external consumers.
-        self.peds_have_obstacle_forces = self.peds_have_static_obstacle_forces
 
     def _validate_global_sampling(self) -> None:
         """Ensure global sampling is only enabled when planner-based routing is active."""

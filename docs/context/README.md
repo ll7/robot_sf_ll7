@@ -190,10 +190,14 @@ knowledge, not every transient iteration detail.
   [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
+* Learned local-navigation policy registry:
+  [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
   [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
 * Issue #1677 SiT Dataset Terms Audit (2026-05-29):
   [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
+* Issue #1662 LiDAR PPO MLP Smoke (2026-05-29):
+  [issue_1662_lidar_ppo_smoke.md](issue_1662_lidar_ppo_smoke.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Issue archetypes and evidence tiers:
@@ -377,6 +381,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1168 Multi-AMV Planner Support Classification](issue_1168_multi_amv_planner_support.md)
   records the current planner-family inventory, fail-closed support gate, and the boundary between
   goal-controller smoke execution and real multi-AMV planner support.
+* [Issue #1659 LiDAR Ego Occupancy Adapter](issue_1659_lidar_ego_occupancy_adapter.md)
+  records the testing-only `lidar_grid_route` adapter contract, opt-in gate, and fail-closed
+  boundary between LiDAR-derived ego occupancy and privileged map/SocNav state.
 * [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
   records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
   importer outputs, and deferred generalization scope.

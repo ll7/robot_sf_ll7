@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.algorithm_metadata import planner_contract_for_algorithm
+from robot_sf.benchmark.map_runner import _validate_sensor_fusion_adapter_config
 from robot_sf.benchmark.planner_command_contract import (
     PlannerContractValidationError,
     validate_planner_contract,
@@ -40,6 +41,9 @@ def _planners_with_status(status: str) -> list[str]:
 
 
 _NATIVE_CANDIDATES = _planners_with_status("passes_lidar_2d_gate")
+_ADAPTER_GATED_CANDIDATES = _planners_with_status(
+    "passes_lidar_2d_gate_requires_explicit_adapter_config"
+)
 _BLOCKED_PLANNERS = _planners_with_status("blocked_by_current_contract")
 
 
@@ -79,6 +83,26 @@ def test_current_structured_or_grid_planners_fail_closed_for_lidar_level(planner
         )
 
     assert row["current_contract_status"] == "blocked_by_current_contract"
+
+
+@pytest.mark.parametrize("planner", _ADAPTER_GATED_CANDIDATES)
+def test_current_adapter_gated_planners_require_explicit_config(planner: str) -> None:
+    """A metadata-level LiDAR gate is not enough to run adapter-only planners."""
+    row = _planner_row(planner)
+    contract = planner_contract_for_algorithm(planner, observation_level="lidar_2d")
+
+    assert row["current_contract_status"] == (
+        "passes_lidar_2d_gate_requires_explicit_adapter_config"
+    )
+    assert contract.observation_contract.observation_level == "lidar_2d"
+    assert contract.observation_contract.active_mode == "sensor_fusion_state"
+
+    with pytest.raises(ValueError, match="requires .*lidar_occupancy_adapter"):
+        _validate_sensor_fusion_adapter_config(
+            algo=planner,
+            active_observation_mode="sensor_fusion_state",
+            algo_config={},
+        )
 
 
 def test_crowdnav_height_lidar_gate_keeps_human_field_caveat_visible() -> None:

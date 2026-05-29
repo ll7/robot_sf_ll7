@@ -110,8 +110,8 @@ from robot_sf.planner.lidar_occupancy import (
     LidarOccupancyPlannerAdapter,
     build_lidar_occupancy_config,
 )
-from robot_sf.planner.lidar_tracked_agents import build_lidar_tracked_social_force_adapter
 from robot_sf.planner.lidar_occupancy_grid import build_lidar_grid_route_adapter
+from robot_sf.planner.lidar_tracked_agents import build_lidar_tracked_social_force_adapter
 from robot_sf.planner.mppi_social import (
     MPPISocialPlannerAdapter,
     build_mppi_social_config,

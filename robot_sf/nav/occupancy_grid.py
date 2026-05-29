@@ -112,7 +112,7 @@ def _load_pygame():
 
 def _require_finite(name: str, value: float) -> None:
     """Raise a clear error when a numeric grid parameter is not finite."""
-    if not np.isfinite(value):
+    if not math.isfinite(value):
         raise ValueError(f"{name} must be finite, got {value}")
 
 
@@ -163,12 +163,13 @@ class GridConfig:
             grids translate to keep the robot near center without rotating axes.
 
     Invariants:
-        - resolution > 0
-        - width > 0
-        - height > 0
+        - resolution is finite and > 0
+        - width is finite and > 0
+        - height is finite and > 0
+        - max_distance is finite
         - len(channels) > 0
         - dtype in (float16, float32, float64, uint8)
-        - robot_radius > 0
+        - robot_radius is finite and > 0
     """
 
     resolution: float = 0.1

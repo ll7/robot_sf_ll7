@@ -106,6 +106,7 @@ from robot_sf.planner.kinematics_model import (
     KinematicsModel,
     resolve_benchmark_kinematics_model,
 )
+from robot_sf.planner.lidar_occupancy_grid import build_lidar_grid_route_adapter
 from robot_sf.planner.mppi_social import (
     MPPISocialPlannerAdapter,
     build_mppi_social_config,
@@ -1430,6 +1431,19 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
             limitations="static_obstacle_first_testing_only",
+        )
+
+    if algo_key in {"lidar_grid_route", "lidar_occupancy_grid_route"}:
+        adapter = build_lidar_grid_route_adapter(algo_config)
+        return _build_adapter_policy(
+            algo_key="lidar_grid_route",
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="LidarOccupancyGridRouteAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="lidar_ego_occupancy_grid_route_testing_only",
         )
 
     if algo_key == "stream_gap":

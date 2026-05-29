@@ -47,6 +47,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "hybrid_rule_local_planner": "classical",
     "safety_barrier": "classical",
     "grid_route": "classical",
+    "lidar_grid_route": "classical",
     "trivial_reference": "diagnostic",
     "mppi_social": "classical",
     "hybrid_portfolio": "classical",
@@ -96,6 +97,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "hybrid_rule_local_planner": "hybrid_rule_deterministic_local_planner",
     "safety_barrier": "native_barrier_style_safety_filter",
     "grid_route": "occupancy_grid_route_tracking",
+    "lidar_grid_route": "lidar_ego_occupancy_grid_route_tracking",
     "trivial_reference": "diagnostic_adapter_template",
     "mppi_social": "sampled_sequence_optimizer",
     "hybrid_portfolio": "risk_regime_hybrid_switcher",
@@ -185,6 +187,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supported_modes": ("lidar_human_state",),
         "inputs": ("robot_state", "goal", "lidar_rays", "humans"),
         "notes": "CrowdNav HEIGHT wrapper reconstructs the upstream lidar-plus-human dict input.",
+    },
+    "lidar_grid_route": {
+        "default_mode": "sensor_fusion_state",
+        "supported_modes": ("sensor_fusion_state",),
+        "inputs": ("robot_state", "goal", "lidar_rays"),
+        "notes": (
+            "Testing-only adapter derives an ego-frame occupancy grid from LiDAR ray endpoints "
+            "and does not consume privileged map, pedestrian, or simulator state."
+        ),
     },
     "sonic_crowdnav": {
         "default_mode": "gst_human_state",
@@ -761,6 +772,17 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "GridRoutePlannerAdapter",
+    },
+    "lidar_grid_route": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "LidarOccupancyGridRouteAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "lidar_ray_endpoint_ego_grid_to_grid_route_unicycle_vw",
+        "projection_documented": True,
+        "testing_only_adapter": True,
     },
     "trivial_reference": {
         "planner_command_space": "unicycle_vw",

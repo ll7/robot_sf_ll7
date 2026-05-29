@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from robot_sf.baselines import get_baseline, list_baselines
-from robot_sf.baselines.dr_mpc import DRMPCPlanner, build_dr_mpc_config
+from robot_sf.baselines.dr_mpc import DRMPCPlanner, Observation, build_dr_mpc_config
+from robot_sf.baselines.interface import Observation as SharedObservation
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 
 
@@ -141,6 +142,86 @@ def test_dr_mpc_planner_uses_external_policy(monkeypatch: pytest.MonkeyPatch) ->
     action = planner.step(_make_robot_observation())
     assert action == {"v": 0.25, "omega": -0.05}
     assert planner.get_metadata()["status"] == "ok"
+
+
+def test_dr_mpc_observation_alias_uses_shared_container() -> None:
+    """The DR-MPC public Observation alias should use the shared baseline container."""
+    assert Observation is SharedObservation
+
+
+def test_dr_mpc_step_accepts_dict_observation_without_obstacles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dict observations should normalize with default obstacles before policy selection."""
+    fake_module = types.ModuleType("dr_mpc")
+
+    class FakePolicy:
+        """External policy stub verifying normalized observation shape."""
+
+        def __init__(self, checkpoint_path=None, device=None):
+            self.checkpoint_path = checkpoint_path
+            self.device = device
+
+        def select_action(self, obs):
+            """Return a valid unicycle action after checking defaulted obstacles."""
+            assert isinstance(obs, SharedObservation)
+            assert obs.obstacles == []
+            return {"v": 0.25, "omega": -0.05}
+
+    fake_module.DRMPCPolicy = FakePolicy
+    monkeypatch.setitem(sys.modules, "dr_mpc", fake_module)
+    planner = DRMPCPlanner({"checkpoint_path": "dummy.pt"}, seed=1)
+    obs = _make_robot_observation()
+    obs.pop("obstacles")
+
+    assert planner.step(obs) == {"v": 0.25, "omega": -0.05}
+
+
+def test_dr_mpc_load_policy_factory_and_velocity_clamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DR-MPC should support load_policy modules and clamp over-speed velocity actions."""
+    fake_module = types.ModuleType("dr_mpc")
+
+    class FakePolicy:
+        """External policy stub returning an over-limit velocity vector."""
+
+        def select_action(self, obs):
+            """Return a vector that requires safety clamping."""
+            assert isinstance(obs, SharedObservation)
+            return {"vx": 3.0, "vy": 4.0}
+
+    def load_policy(checkpoint_path=None, device=None):
+        assert checkpoint_path == "dummy.pt"
+        assert device == "cpu"
+        return FakePolicy()
+
+    fake_module.load_policy = load_policy
+    monkeypatch.setitem(sys.modules, "dr_mpc", fake_module)
+    planner = DRMPCPlanner({"checkpoint_path": "dummy.pt", "v_max": 2.0}, seed=1)
+
+    action = planner.step(_make_robot_observation())
+
+    assert action == pytest.approx({"vx": 1.2, "vy": 1.6})
+
+
+def test_dr_mpc_rejects_invalid_policy_action(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid external policy payloads should fail clearly."""
+    fake_module = types.ModuleType("dr_mpc")
+
+    class FakePolicy:
+        """External policy stub returning an invalid payload."""
+
+        def select_action(self, obs):
+            """Return a non-dict action to exercise validation."""
+            return [0.0, 0.0]
+
+    fake_module.DRMPCPolicy = lambda checkpoint_path=None, device=None: FakePolicy()
+    monkeypatch.setitem(sys.modules, "dr_mpc", fake_module)
+    planner = DRMPCPlanner({"checkpoint_path": "dummy.pt"}, seed=1)
+
+    with pytest.raises(ValueError, match="invalid action payload"):
+        planner.step(_make_robot_observation())
 
 
 def test_dr_mpc_config_builder_preserves_provenance_defaults() -> None:

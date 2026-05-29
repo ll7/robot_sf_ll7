@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from math import atan2
 from typing import TYPE_CHECKING, Any
 
@@ -27,6 +27,7 @@ from pysocialforce.config import (
 )
 from pysocialforce.config import SocialForceConfig as PySFSocialForceConfig
 
+from robot_sf.baselines.interface import Observation, normalize_observation
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 if TYPE_CHECKING:
@@ -77,16 +78,6 @@ class SFPlannerConfig:
     # Adaptive behavior (tuning aids)
     speed_scale_to_vmax: bool = True  # Scale desired speed up to v_max (aggressive)
     interaction_weight: float = 3.0  # Stronger repulsion to maintain clearance
-
-
-@dataclass
-class Observation:
-    """Baseline observation container (robot + agents + obstacles)."""
-
-    dt: float
-    robot: dict[str, Any]
-    agents: list[dict[str, Any]]
-    obstacles: list[Any] = field(default_factory=list)
 
 
 class BasePolicy:
@@ -254,9 +245,7 @@ class SocialForcePlanner(BasePolicy):
         Returns:
             Action dict in configured action space.
         """
-        if isinstance(obs, dict):
-            obs = Observation(**obs)  # type: ignore[arg-type]
-        assert isinstance(obs, Observation)
+        obs = normalize_observation(obs)
 
         robot_pos = np.asarray(obs.robot["position"], dtype=float)
         robot_vel = np.asarray(obs.robot["velocity"], dtype=float)

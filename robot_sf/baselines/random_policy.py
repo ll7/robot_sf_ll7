@@ -13,6 +13,8 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.baselines.interface import Observation, normalize_observation
+
 
 @dataclass
 class RandomPlannerConfig:
@@ -24,16 +26,6 @@ class RandomPlannerConfig:
     dt: float = 0.1
     safety_clamp: bool = True
     noise_std: float = 0.0  # Optional Gaussian jitter applied to sampled actions
-
-
-@dataclass
-class Observation:
-    """Minimal observation container for baseline compatibility."""
-
-    dt: float
-    robot: dict[str, Any]
-    agents: list[dict[str, Any]]
-    obstacles: list[Any]
 
 
 class RandomPlanner:
@@ -90,7 +82,6 @@ class RandomPlanner:
         self.config = self._parse_config(config)
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
-        # Support dict-style Observation
         """Return a random action for the given observation.
 
         Args:
@@ -99,8 +90,7 @@ class RandomPlanner:
         Returns:
             Action dict in configured action space.
         """
-        if isinstance(obs, dict):
-            obs = Observation(**obs)  # type: ignore[arg-type]
+        normalize_observation(obs)
 
         if self.config.mode == "velocity":
             # Sample vx, vy uniformly in a disk scaled to v_max

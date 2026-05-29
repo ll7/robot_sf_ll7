@@ -11,6 +11,29 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 
+@dataclass
+class Observation:
+    """Shared planner-facing observation container for baseline adapters."""
+
+    dt: float
+    robot: dict[str, Any]
+    agents: list[dict[str, Any]]
+    obstacles: list[Any] = field(default_factory=list)
+
+
+def normalize_observation(obs: Observation | dict[str, Any]) -> Observation:
+    """Normalize dict payloads into the shared baseline observation dataclass.
+
+    Returns:
+        Shared Observation instance for baseline planners.
+    """
+    if isinstance(obs, Observation):
+        return obs
+    if isinstance(obs, dict):
+        return Observation(**obs)
+    raise TypeError(f"Expected Observation or dict input, got {type(obs).__name__}")
+
+
 @dataclass(frozen=True)
 class ObservationContract:
     """Planner-facing observation assumptions declared as lightweight metadata."""
@@ -156,7 +179,9 @@ class PlannerProtocol(Protocol):
 
 __all__ = [
     "ActionContract",
+    "Observation",
     "ObservationContract",
     "PlannerMetadata",
     "PlannerProtocol",
+    "normalize_observation",
 ]

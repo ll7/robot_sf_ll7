@@ -6,6 +6,7 @@ import math
 import numpy as np
 import pytest
 
+from robot_sf.baselines.interface import Observation as SharedObservation
 from robot_sf.baselines.social_force import Observation, SFPlannerConfig, SocialForcePlanner
 
 
@@ -121,6 +122,24 @@ class TestSocialForcePlanner:
         # Should move toward goal (positive x direction)
         assert action["vx"] > 0
         assert abs(action["vy"]) < 0.1  # Should be close to zero for straight line
+
+    def test_step_accepts_dict_observation_without_obstacles(self, planner):
+        """Dict observations should normalize while preserving default obstacles."""
+        obs = {
+            "dt": 0.1,
+            "robot": {
+                "position": [0.0, 0.0],
+                "velocity": [0.0, 0.0],
+                "goal": [1.0, 0.0],
+                "radius": 0.3,
+            },
+            "agents": [],
+        }
+
+        action = planner.step(obs)
+
+        assert action["vx"] > 0
+        assert abs(action["vy"]) < 0.1
 
     def test_single_pedestrian_repulsion(self, planner):
         """Test repulsive force from single pedestrian."""
@@ -301,6 +320,10 @@ class TestSocialForcePlanner:
 
 class TestObservation:
     """Tests for the Observation dataclass."""
+
+    def test_observation_uses_shared_baseline_container(self):
+        """Social-force's public Observation alias should be the shared baseline class."""
+        assert Observation is SharedObservation
 
     def test_observation_creation(self):
         """Test observation can be created with required fields."""

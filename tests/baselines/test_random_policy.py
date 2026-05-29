@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from robot_sf.baselines.interface import Observation as SharedObservation
 from robot_sf.baselines.random_policy import Observation, RandomPlanner
 
 
@@ -49,3 +50,27 @@ def test_random_planner_unicycle_actions_respect_limits() -> None:
         action = planner.step(_obs())
         assert 0.0 <= float(action["v"]) <= 1.0 + 1e-6
         assert -0.7 - 1e-6 <= float(action["omega"]) <= 0.7 + 1e-6
+
+
+def test_random_planner_uses_shared_observation_alias() -> None:
+    """The random baseline should expose the shared baseline observation container."""
+    assert Observation is SharedObservation
+
+
+def test_random_planner_accepts_dict_observation_without_obstacles() -> None:
+    """Dict observations should normalize through the shared observation container."""
+    planner = RandomPlanner({"mode": "velocity", "v_max": 1.0}, seed=0)
+    obs = {
+        "dt": 0.1,
+        "robot": {
+            "position": [0.0, 0.0],
+            "velocity": [0.0, 0.0],
+            "goal": [1.0, 0.0],
+            "radius": 0.3,
+        },
+        "agents": [],
+    }
+
+    action = planner.step(obs)
+
+    assert set(action) == {"vx", "vy"}

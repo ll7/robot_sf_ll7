@@ -158,6 +158,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "hybrid_portfolio": _DEFAULT_OBSERVATION_SPEC,
     "hybrid_orca_sampler": _DEFAULT_OBSERVATION_SPEC,
     "policy_stack_v1": _DEFAULT_OBSERVATION_SPEC,
+    "safety_barrier": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state", "sensor_fusion_state"),
+        "inputs": ("robot_state", "goal", "occupancy_grid", "lidar_rays"),
+        "notes": (
+            "Safety-barrier planner consumes SocNav occupancy by default; sensor_fusion_state "
+            "is valid only through the explicit LiDAR-to-ego-occupancy adapter."
+        ),
+    },
     "prediction_planner": {
         "default_mode": "socnav_state",
         "supported_modes": ("socnav_state",),

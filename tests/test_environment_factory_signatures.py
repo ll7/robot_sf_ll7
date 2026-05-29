@@ -17,6 +17,7 @@ from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.crowd_sim_env import CrowdSimEnv, CrowdSimulationConfig
 from robot_sf.gym_env.env_config import SimulationSettings
 from robot_sf.gym_env.environment_factory import (
+    EnvironmentFactory,
     make_crowd_sim_env,
     make_image_robot_env,
     make_multi_robot_env,
@@ -26,6 +27,7 @@ from robot_sf.gym_env.environment_factory import (
 from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.robot_env_with_image import RobotEnvWithImage
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 
 def _param_names(func):
@@ -81,6 +83,37 @@ def test_public_factories_reject_retired_legacy_kwargs(factory, kwargs):
     """Retired catch-all factory kwargs should fail at the Python signature boundary."""
     with pytest.raises(TypeError, match="unexpected keyword argument"):
         factory(**kwargs)
+
+
+def test_robot_factory_normalizes_deprecated_force_flag_once(monkeypatch):
+    """Internal factory should sync the legacy kwarg through the shared config helper."""
+    captured = {}
+
+    class FakeRobotEnv:
+        """Minimal robot env stub for factory normalization assertions."""
+
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(environment_factory_module, "RobotEnv", FakeRobotEnv)
+    config = RobotSimulationConfig()
+
+    env = EnvironmentFactory.create_robot_env(
+        config=config,
+        use_image_obs=False,
+        peds_have_obstacle_forces=False,
+        reward_func=None,
+        debug=False,
+        recording_enabled=False,
+        record_video=False,
+        video_path=None,
+        video_fps=None,
+    )
+
+    assert isinstance(env, FakeRobotEnv)
+    assert config.peds_have_static_obstacle_forces is False
+    assert config.peds_have_obstacle_forces is False
+    assert captured["peds_have_obstacle_forces"] is False
 
 
 def test_make_multi_robot_env_signature_explicit():

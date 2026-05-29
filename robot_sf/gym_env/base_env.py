@@ -13,6 +13,7 @@ from loguru import logger
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.unified_config import sync_pedestrian_obstacle_force_alias
 from robot_sf.planner import (
     ClassicPlannerConfig,
     GlobalPlanner,
@@ -127,16 +128,18 @@ class BaseEnv(Env):
                 seed=seed,
             )
 
-        # Resolve obstacle-force flag with backwards compatibility.
-        static_obstacle_forces = getattr(
-            env_config,
-            "peds_have_static_obstacle_forces",
-            None,
+        # Resolve obstacle-force flag with backwards compatibility. Unified configs already
+        # carry the canonical value, while legacy env_config classes still use the kwarg.
+        legacy_override = (
+            None
+            if hasattr(env_config, "peds_have_static_obstacle_forces")
+            else peds_have_obstacle_forces
         )
-        if static_obstacle_forces is None:
-            static_obstacle_forces = peds_have_obstacle_forces
-            if hasattr(env_config, "peds_have_static_obstacle_forces"):
-                env_config.peds_have_static_obstacle_forces = static_obstacle_forces
+        static_obstacle_forces = sync_pedestrian_obstacle_force_alias(
+            env_config,
+            legacy_override,
+            warn=False,
+        )
 
         # Initialize simulator via backend registry (falls back to legacy init on error)
         backend_key = getattr(env_config, "backend", "fast-pysf")

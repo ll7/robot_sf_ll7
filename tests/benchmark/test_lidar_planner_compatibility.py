@@ -81,6 +81,27 @@ def test_current_structured_or_grid_planners_fail_closed_for_lidar_level(planner
     assert row["current_contract_status"] == "blocked_by_current_contract"
 
 
+def test_safety_barrier_lidar_level_requires_explicit_occupancy_adapter() -> None:
+    """Safety-barrier LiDAR evidence must go through the ray-derived occupancy adapter."""
+    with pytest.raises(PlannerContractValidationError, match="lidar_occupancy_adapter"):
+        validate_planner_contract(
+            algo="safety_barrier",
+            robot_kinematics="differential_drive",
+            algo_config={},
+            observation_level="lidar_2d",
+        )
+
+    contract = validate_planner_contract(
+        algo="safety_barrier",
+        robot_kinematics="differential_drive",
+        algo_config={"lidar_occupancy_adapter": {"lidar_grid_resolution": 0.5}},
+        observation_level="lidar_2d",
+    )
+
+    assert contract["observation_contract"]["active_mode"] == "sensor_fusion_state"
+    assert contract["observation_contract"]["observation_level"] == "lidar_2d"
+
+
 def test_crowdnav_height_lidar_gate_keeps_human_field_caveat_visible() -> None:
     """HEIGHT may pass the named LiDAR level but still requires human-state provenance."""
     row = _planner_row("crowdnav_height")

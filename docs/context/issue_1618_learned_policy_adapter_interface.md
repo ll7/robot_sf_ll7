@@ -190,3 +190,15 @@ git diff --check origin/main...HEAD
 Code changes that implement this contract must add targeted tests around schema validation,
 unsupported observation/kinematics failure, missing checkpoint failure, deterministic inference, and
 per-step diagnostic emission before using PR readiness as proof.
+
+This branch also fixed a readiness regression exposed by that rule: `safety_barrier` metadata can
+describe a LiDAR occupancy adapter path, but `validate_planner_contract(...)` now still fails closed
+for bare `safety_barrier` + `lidar_2d` requests unless `algo_config["lidar_occupancy_adapter"]` is
+explicitly present. Targeted validation:
+
+```bash
+PYTHONPATH=$PWD UV_PROJECT_ENVIRONMENT=/home/luttkule/git/robot_sf_ll7/.venv UV_NO_SYNC=1 \
+  uv run pytest -q tests/benchmark/test_lidar_planner_compatibility.py \
+    tests/benchmark/test_lidar_occupancy_adapter.py \
+    tests/benchmark/test_algorithm_metadata_contract.py::test_safety_barrier_accepts_lidar_level_through_sensor_fusion_contract
+```

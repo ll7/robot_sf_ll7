@@ -56,3 +56,24 @@ scripts/dev/sbatch_use_max_time.sh --time 04:00:00 --partition a30 --qos a30-gpu
 This campaign is a broader compatibility/evidence run. It is not paper-facing evidence by itself.
 Unsupported, unavailable, fallback, degraded, or failed experimental rows must remain separated from
 successful core benchmark evidence.
+
+## Completed Run 2026-05-28
+
+SLURM job `12658` completed successfully:
+
+- result: `COMPLETED 0:0`
+- partition: `a30`
+- elapsed: `00:02:04`
+- campaign id:
+  `issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441`
+- total runs: `21`
+- successful runs: `21`
+- total episodes: `21`
+- benchmark success: `true`, basis `core`
+- core rows: `9/9`
+- AMV coverage: `pass`
+- SNQI contract: `warn`
+
+`scripts/tools/analyze_camera_ready_campaign.py` reported no consistency findings. Compact evidence
+is preserved under `docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/`; raw
+episode/run output remains under ignored `output/`.

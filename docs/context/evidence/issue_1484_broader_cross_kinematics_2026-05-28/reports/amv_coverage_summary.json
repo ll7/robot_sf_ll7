@@ -1,0 +1,35 @@
+{
+  "schema_version": "benchmark-amv-coverage-summary.v1",
+  "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+  "generated_at_utc": "2026-05-28T15:24:41.783271Z",
+  "profile_name": "amv-paper-v1",
+  "contract_version": "1",
+  "coverage_enforcement": "warn",
+  "status": "pass",
+  "required_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "observed_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "missing_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "scenario_count": 1,
+  "scenario_rows": [
+    {
+      "name": "classic_cross_trap_low",
+      "scenario_family": "cross_trap",
+      "amv": {}
+    }
+  ]
+}

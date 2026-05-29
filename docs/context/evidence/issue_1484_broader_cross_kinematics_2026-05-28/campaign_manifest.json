@@ -1,0 +1,207 @@
+{
+  "schema_version": "benchmark-camera-ready-campaign.v1",
+  "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+  "name": "issue_1484_broader_cross_kinematics",
+  "created_at_utc": "2026-05-28T15:24:41.783271Z",
+  "started_at_utc": "2026-05-28T15:24:41.783271Z",
+  "scenario_matrix": "configs/scenarios/sets/cross_kinematics_v1.yaml",
+  "scenario_matrix_hash": "ab8352ea8083",
+  "scenario_candidates": [],
+  "seed_policy": {
+    "mode": "fixed-list",
+    "seed_set": null,
+    "seeds": [
+      111
+    ],
+    "resolved_seeds": [
+      111
+    ],
+    "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml"
+  },
+  "git": {
+    "commit": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+    "branch": "issue-1484-broader-cross-kinematics",
+    "remote": "https://github.com/ll7/robot_sf_ll7"
+  },
+  "config_hash": "f1c0cdc42134a4f9",
+  "invoked_command": "/home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/.venv/bin/python /home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/scripts/tools/run_camera_ready_benchmark.py --config /home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/configs/benchmarks/issue_1484_broader_cross_kinematics.yaml --output-root output/benchmarks/issue_1484 --mode run --log-level INFO --label issue1484-broader-cross-kinematics-20260528-gf35fb3b5 --skip-publication-bundle",
+  "paper_facing": false,
+  "paper_profile_version": null,
+  "amv_profile_name": "amv-paper-v1",
+  "amv_contract_version": "1",
+  "amv_coverage_enforcement": "warn",
+  "amv_coverage_status": "pass",
+  "synthetic_actuation_profile": null,
+  "comparability_mapping_path": "configs/benchmarks/alyassi_comparability_map_v1.yaml",
+  "comparability_mapping_version": "alyassi-comparability-v1",
+  "comparability_mapping_hash": "6f349046993d",
+  "route_clearance_warnings": [
+    {
+      "scenario": "classic_cross_trap_low",
+      "map_file": "maps/svg_maps/classic_crossing.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.013277,
+      "min_clearance_margin_m": 0.013277,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    }
+  ],
+  "route_clearance_warning_count": 1,
+  "route_clearance_warning_summary": {
+    "warning_count": 1,
+    "certified_warning_count": 0,
+    "unresolved_warning_count": 1,
+    "status_counts": {},
+    "unresolved_scenarios": [
+      "classic_cross_trap_low"
+    ]
+  },
+  "route_clearance_certifications_path": null,
+  "scenario_horizons": null,
+  "observation_noise": {
+    "enabled": false,
+    "profile": "none",
+    "seed": null,
+    "pose_noise_std_m": 0.0,
+    "heading_noise_std_rad": 0.0,
+    "lidar_dropout_prob": 0.0,
+    "lidar_dropout_value": 0.0,
+    "pedestrian_false_negative_prob": 0.0,
+    "pedestrian_false_positive_prob": 0.0,
+    "pedestrian_false_positive_radius_m": 4.0,
+    "pedestrian_false_positive_radius": 0.35,
+    "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+  },
+  "observation_noise_hash": "c71dd80adab5",
+  "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+  "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+  "snqi_contract_enabled": true,
+  "snqi_contract_enforcement": "warn",
+  "snqi_contract_status": "warn",
+  "snqi_positioning_recommendation": "strengthen_as_operational_multi_objective_aggregation",
+  "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility",
+  "planners": [
+    {
+      "key": "goal",
+      "algo": "goal",
+      "human_model_variant": null,
+      "human_model_source": null,
+      "planner_group": "core",
+      "benchmark_profile": "baseline-safe",
+      "algo_config_path": null,
+      "observation_mode": null,
+      "enabled": true
+    },
+    {
+      "key": "social_force",
+      "algo": "social_force",
+      "human_model_variant": null,
+      "human_model_source": null,
+      "planner_group": "core",
+      "benchmark_profile": "baseline-safe",
+      "algo_config_path": null,
+      "observation_mode": null,
+      "enabled": true
+    },
+    {
+      "key": "orca",
+      "algo": "orca",
+      "human_model_variant": null,
+      "human_model_source": null,
+      "planner_group": "core",
+      "benchmark_profile": "baseline-safe",
+      "algo_config_path": null,
+      "observation_mode": null,
+      "enabled": true
+    },
+    {
+      "key": "ppo",
+      "algo": "ppo",
+      "human_model_variant": null,
+      "human_model_source": null,
+      "planner_group": "experimental",
+      "benchmark_profile": "experimental",
+      "algo_config_path": "configs/baselines/ppo_15m_grid_socnav.yaml",
+      "observation_mode": null,
+      "enabled": true
+    },
+    {
+      "key": "prediction_planner",
+      "algo": "prediction_planner",
+      "human_model_variant": null,
+      "human_model_source": null,
+      "planner_group": "experimental",
+      "benchmark_profile": "experimental",
+      "algo_config_path": "configs/algos/prediction_planner_camera_ready.yaml",
+      "observation_mode": null,
+      "enabled": true
+    },
+    {
+      "key": "sacadrl",
+      "algo": "sacadrl",
+      "human_model_variant": null,
+      "human_model_source": null,
+      "planner_group": "experimental",
+      "benchmark_profile": "experimental",
+      "algo_config_path": null,
+      "observation_mode": null,
+      "enabled": true
+    },
+    {
+      "key": "socnav_sampling",
+      "algo": "socnav_sampling",
+      "human_model_variant": null,
+      "human_model_source": null,
+      "planner_group": "experimental",
+      "benchmark_profile": "experimental",
+      "algo_config_path": null,
+      "observation_mode": null,
+      "enabled": true
+    }
+  ],
+  "kinematics_matrix": [
+    "differential_drive",
+    "bicycle_drive",
+    "holonomic"
+  ],
+  "holonomic_command_mode": "vx_vy",
+  "observation_mode": null,
+  "repository_url": "https://github.com/ll7/robot_sf_ll7",
+  "release_tag": "{release_tag}",
+  "doi": "10.5281/zenodo.<record-id>",
+  "artifacts": {
+    "preflight_validate_config": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/preflight/validate_config.json",
+    "preflight_preview_scenarios": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/preflight/preview_scenarios.json",
+    "matrix_summary_json": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/matrix_summary.json",
+    "matrix_summary_csv": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/matrix_summary.csv",
+    "amv_coverage_json": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/amv_coverage_summary.json",
+    "amv_coverage_md": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/amv_coverage_summary.md",
+    "comparability_json": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/comparability_matrix.json",
+    "comparability_md": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/comparability_matrix.md",
+    "snqi_diagnostics_json": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_diagnostics.json",
+    "snqi_diagnostics_md": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_diagnostics.md",
+    "snqi_sensitivity_csv": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_sensitivity.csv",
+    "seed_variability_json": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/seed_variability_by_scenario.json",
+    "seed_variability_csv": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/statistical_sufficiency.json",
+    "actuation_envelope_json": null,
+    "actuation_envelope_md": null
+  },
+  "runtime_sec": 86.0142236140091,
+  "finished_at_utc": "2026-05-28T15:26:07.794149Z",
+  "seed_variability": {
+    "metrics": [
+      "success",
+      "collisions",
+      "near_misses",
+      "time_to_goal_norm",
+      "snqi"
+    ],
+    "row_count": 21,
+    "bootstrap_method": "bootstrap_mean_over_seed_means",
+    "bootstrap_level": 0.95,
+    "bootstrap_samples": 100,
+    "seed": 123
+  }
+}

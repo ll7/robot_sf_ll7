@@ -1,0 +1,143 @@
+schema_version: lidar-learned-policy-launch-packet.v1
+campaign_id: issue_1615_lidar_learned_policy_plan_v1
+generating_commit: 4ee6eb7b3faceb25b7baa6ab8b615cb3c5be4512
+parent_issue: 1611
+issue: 1615
+observation_contract:
+  observation_mode: DEFAULT_GYM
+  benchmark_observation_level: lidar_2d
+  deployment_observable:
+    - drive_state
+    - rays
+  required_keys:
+    drive_state:
+      shape: [stack_steps, 5]
+      fields:
+        - speed_x
+        - speed_rot
+        - target_distance
+        - target_angle
+        - next_target_angle
+    rays:
+      shape: [stack_steps, num_rays]
+      fields:
+        - lidar_range_m
+  normalization:
+    source: docs/dev/observation_contract.md
+    rule: divide drive_state and rays by orig_obs_space.high
+    fit_scope: training split only for learned normalizers beyond environment bounds
+  forbidden_runtime_fields:
+    - occupancy_grid
+    - socnav_struct_robot_position
+    - socnav_struct_pedestrian_positions
+    - socnav_struct_pedestrian_velocities
+    - future_pedestrian_trajectories
+    - simulator_collision_labels
+    - route_outcome_labels
+model_registry_metadata:
+  required_fields_for_future_checkpoint:
+    - model_id
+    - observation_level
+    - observation_mode
+    - observation_keys
+    - ray_count
+    - stack_steps
+    - goal_encoding
+    - feature_extractor
+    - action_contract
+    - training_config
+    - checkpoint_artifact_uri
+    - evaluation_config
+    - no_privileged_runtime_inputs
+  observation_level: lidar_2d
+  observation_mode: DEFAULT_GYM
+  observation_keys: [drive_state, rays]
+  action_contract: velocity_command
+candidate_baselines:
+  - candidate_id: ppo_lidar_mlp_gate_v1
+    role: simple_baseline
+    algorithm: sb3_ppo
+    base_config: configs/training/ppo/feature_extractor_sweep_base.yaml
+    feature_extractor: mlp
+    feature_extractor_preset: mlp_small
+    eligibility_spec: configs/training/lidar/lidar_ppo_mlp_eligibility_issue_1615.yaml
+    launch_command_shape: >
+      uv run python scripts/training/optuna_feature_extractor.py --config
+      configs/training/ppo/feature_extractor_sweep_base.yaml --trials 1
+      --trial-timesteps 32000 --disable-wandb
+    smoke_validation:
+      - uv run python scripts/validation/check_learned_policy_eligibility.py configs/training/lidar/lidar_ppo_mlp_eligibility_issue_1615.yaml
+      - uv run pytest -q tests/test_feature_extractors.py tests/training/test_lidar_learned_policy_launch_packet.py
+  - candidate_id: ppo_lidar_attention_gate_v1
+    role: richer_perception_variant
+    algorithm: sb3_ppo
+    base_config: configs/training/ppo/feature_extractor_sweep_base.yaml
+    feature_extractor: attention
+    feature_extractor_preset: attention_large
+    eligibility_spec: configs/training/lidar/lidar_perception_adapter_eligibility_issue_1615.yaml
+    launch_command_shape: >
+      uv run python scripts/training/optuna_feature_extractor.py --config
+      configs/training/ppo/feature_extractor_sweep_base.yaml --trials 1
+      --trial-timesteps 32000 --disable-wandb
+    smoke_validation:
+      - uv run python scripts/validation/check_learned_policy_eligibility.py configs/training/lidar/lidar_perception_adapter_eligibility_issue_1615.yaml
+      - uv run pytest -q tests/test_feature_extractors.py tests/training/test_lidar_learned_policy_launch_packet.py
+  - candidate_id: ppo_lidar_lstm_history_v1
+    role: history_variant
+    algorithm: sb3_ppo
+    base_config: configs/training/ppo/feature_extractor_sweep_base.yaml
+    feature_extractor: lstm
+    feature_extractor_preset: lstm_medium
+    eligibility_spec: configs/training/lidar/lidar_perception_adapter_eligibility_issue_1615.yaml
+    launch_command_shape: >
+      Use the existing feature-extractor sweep base with a fixed LSTM candidate in a follow-up
+      config before any long run; keep runtime observation keys limited to drive_state and rays.
+  - candidate_id: dreamerv3_lidar_world_model_gate_v1
+    role: research_variant
+    algorithm: rllib_dreamerv3
+    base_config: configs/training/rllib_dreamerv3/drive_state_rays.yaml
+    feature_extractor: world_model
+    verdict_boundary: research_only_until_adapter_and_checkpoint_exist
+    launch_command_shape: >
+      Use configs/training/rllib_dreamerv3/drive_state_rays.yaml for a follow-up DreamerV3
+      smoke; flatten_observation must keep flatten_keys=[drive_state, rays] and
+      include_grid=false.
+training_stages:
+  metadata_preflight:
+    required_before_training: true
+    commands:
+      - uv run python scripts/validation/check_learned_policy_eligibility.py configs/training/lidar/lidar_ppo_mlp_eligibility_issue_1615.yaml configs/training/lidar/lidar_perception_adapter_eligibility_issue_1615.yaml
+      - uv run pytest -q tests/training/test_lidar_learned_policy_launch_packet.py tests/validation/test_check_learned_policy_eligibility.py tests/test_feature_extractors.py
+  local_ppo_smoke:
+    submit_from_this_issue: false
+    command_shape: >
+      uv run python scripts/training/optuna_feature_extractor.py --config
+      configs/training/ppo/feature_extractor_sweep_base.yaml --trials 1
+      --trial-timesteps 32000 --disable-wandb
+    promotion_gate: completes without privileged observation keys and writes a compact summary
+  durable_training:
+    submit_from_this_issue: false
+    expected_follow_up_issue: true
+    command_shape: >
+      Submit a dedicated SLURM or training issue after metadata preflight lands. Use a tracked
+      config derived from this packet, record exact commit/config/checkpoint lineage, and publish
+      checkpoints through W&B artifacts or another durable store before registry promotion.
+artifact_policy:
+  checkpoints_in_git: false
+  raw_training_logs_in_git: false
+  output_root: output/training/lidar_learned_policy/issue_1615
+  durable_checkpoint_source_required: true
+  tracked_manifest_required_before_registry_promotion: true
+  required_before_training:
+    - Record exact training config, git commit, seeds, ray count, stack steps, and feature extractor.
+    - Keep runtime observations limited to DEFAULT_GYM drive_state and rays.
+    - Publish checkpoints and full summaries outside git; track only compact manifests or reports.
+follow_up_boundaries:
+  full_training_in_this_issue: false
+  submit_slurm_from_this_issue: false
+  benchmark_promotion_in_this_issue: false
+  create_dedicated_issue_for:
+    - ppo_lidar_mlp_smoke_and_short_train
+    - ppo_lidar_attention_or_lstm_perception_variant
+    - dreamerv3_lidar_world_model_smoke
+    - model_registry_entry_after_checkpoint_promotion

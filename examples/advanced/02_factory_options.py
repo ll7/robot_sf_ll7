@@ -24,8 +24,10 @@ from loguru import logger
 
 from robot_sf.benchmark.helper_catalog import prepare_classic_env
 from robot_sf.gym_env.environment_factory import (
+    JsonlRecordingOptions,
     RecordingOptions,
     RenderOptions,
+    TelemetryOptions,
     make_image_robot_env,
     make_robot_env,
 )
@@ -61,7 +63,21 @@ def demo_structured():
     output_dir = ensure_output_dir(Path("output/results"))
     render_opts = RenderOptions(max_fps_override=20)
     rec_opts = RecordingOptions(record=True, video_path=f"{output_dir}/structured_episode.mp4")
-    env = make_robot_env(render_options=render_opts, recording_options=rec_opts, debug=True)
+    jsonl_opts = JsonlRecordingOptions(
+        enabled=True,
+        recording_dir=str(output_dir / "episodes"),
+        suite_name="factory_options",
+        scenario_name="structured_demo",
+        algorithm_name="manual",
+    )
+    telemetry_opts = TelemetryOptions(enable_panel=True, metrics=["reward", "collisions"])
+    env = make_robot_env(
+        render_options=render_opts,
+        recording_options=rec_opts,
+        jsonl_recording_options=jsonl_opts,
+        telemetry_options=telemetry_opts,
+        debug=True,
+    )
     env.reset()
     env.close()
     logger.info(f"Structured options env created with managed output dir: {output_dir}")

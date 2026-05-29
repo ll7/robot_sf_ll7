@@ -202,6 +202,15 @@ git_commit = sys.argv[6]
 executed_counts: Counter[str] = Counter()
 manifest_paths: list[str] = []
 rows: list[dict[str, object]] = []
+row_status_keys = [
+    "valid_non_failure",
+    "valid_failure",
+    "invalid_candidate",
+    "simulation_error",
+    "fallback",
+    "degraded",
+    "not_available",
+]
 
 def classify(candidate: dict[str, object]) -> str:
     attribution = candidate.get("failure_attribution")
@@ -210,6 +219,8 @@ def classify(candidate: dict[str, object]) -> str:
         status = str(attribution.get("status") or "")
         if primary == "invalid_candidate" or status == "not_evaluated":
             return "invalid_candidate"
+        if primary in {"fallback", "degraded"}:
+            return primary
         if primary == "success":
             return "valid_non_failure"
         if primary in {"collision", "near_miss", "timeout", "comfort_violation", "incomplete"}:
@@ -243,7 +254,7 @@ for policy in policies:
                 "sampler": sampler,
                 "availability_status": "available",
                 "manifest_path": manifest_path.relative_to(campaign_root).as_posix(),
-                "counts": dict(sorted(counts.items())),
+                "counts": {key: counts[key] for key in row_status_keys},
             }
         )
 
@@ -256,7 +267,7 @@ not_available_row = {
         "guided_route_search is route-optimization based and is a design exclusion "
         "for the parametric crossing_ttc CandidateSpec family"
     ),
-    "counts": {"not_available": 1},
+    "counts": {key: 1 if key == "not_available" else 0 for key in row_status_keys},
 }
 rows.append(not_available_row)
 total_counts = Counter(executed_counts)
@@ -278,7 +289,7 @@ payload = {
     "archive_path": (campaign_root / "crossing_ttc" / "archive.json")
     .relative_to(campaign_root)
     .as_posix(),
-    "counts": dict(sorted(total_counts.items())),
+    "counts": {key: total_counts[key] for key in row_status_keys},
     "rows": rows,
     "non_success_evidence": {
         "fallback": total_counts["fallback"] > 0,

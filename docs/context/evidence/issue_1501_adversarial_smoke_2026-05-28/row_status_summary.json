@@ -3,10 +3,13 @@
   "budget_per_sampler": 32,
   "commit": "4bd5fb412d2bf023d26f674833dd379aedf8c17e",
   "counts": {
+    "degraded": 0,
+    "fallback": 0,
     "invalid_candidate": 66,
     "not_available": 1,
-    "valid_non_failure": 47,
-    "valid_failure": 15
+    "simulation_error": 0,
+    "valid_failure": 15,
+    "valid_non_failure": 47
   },
   "design_exclusion_samplers": [
     "guided_route_search"
@@ -40,9 +43,13 @@
     {
       "availability_status": "available",
       "counts": {
+        "degraded": 0,
+        "fallback": 0,
         "invalid_candidate": 11,
-        "valid_non_failure": 18,
-        "valid_failure": 3
+        "not_available": 0,
+        "simulation_error": 0,
+        "valid_failure": 3,
+        "valid_non_failure": 18
       },
       "family": "crossing_ttc",
       "manifest_path": "crossing_ttc/goal/random/manifest.json",
@@ -52,9 +59,13 @@
     {
       "availability_status": "available",
       "counts": {
+        "degraded": 0,
+        "fallback": 0,
         "invalid_candidate": 22,
-        "valid_non_failure": 5,
-        "valid_failure": 5
+        "not_available": 0,
+        "simulation_error": 0,
+        "valid_failure": 5,
+        "valid_non_failure": 5
       },
       "family": "crossing_ttc",
       "manifest_path": "crossing_ttc/goal/optuna/manifest.json",
@@ -64,9 +75,13 @@
     {
       "availability_status": "available",
       "counts": {
+        "degraded": 0,
+        "fallback": 0,
         "invalid_candidate": 11,
-        "valid_non_failure": 19,
-        "valid_failure": 2
+        "not_available": 0,
+        "simulation_error": 0,
+        "valid_failure": 2,
+        "valid_non_failure": 19
       },
       "family": "crossing_ttc",
       "manifest_path": "crossing_ttc/orca/random/manifest.json",
@@ -76,9 +91,13 @@
     {
       "availability_status": "available",
       "counts": {
+        "degraded": 0,
+        "fallback": 0,
         "invalid_candidate": 22,
-        "valid_non_failure": 5,
-        "valid_failure": 5
+        "not_available": 0,
+        "simulation_error": 0,
+        "valid_failure": 5,
+        "valid_non_failure": 5
       },
       "family": "crossing_ttc",
       "manifest_path": "crossing_ttc/orca/optuna/manifest.json",
@@ -88,7 +107,13 @@
     {
       "availability_status": "not_available",
       "counts": {
-        "not_available": 1
+        "degraded": 0,
+        "fallback": 0,
+        "invalid_candidate": 0,
+        "not_available": 1,
+        "simulation_error": 0,
+        "valid_failure": 0,
+        "valid_non_failure": 0
       },
       "family": "crossing_ttc",
       "policy": "all",

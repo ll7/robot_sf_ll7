@@ -104,7 +104,7 @@ knowledge, not every transient iteration detail.
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Issue #1583 high-risk root path boundaries:
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
-* Issues #1598/#1599 root compatibility decisions:
+* Issues #1598/#1599 Root Compatibility Decisions (2026-05-28):
   [issue_1598_1599_root_compatibility_decisions.md](issue_1598_1599_root_compatibility_decisions.md)
 * Issue #1504 ego-conditioned feature contract:
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)

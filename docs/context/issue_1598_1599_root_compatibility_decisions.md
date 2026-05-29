@@ -1,4 +1,4 @@
-# Issues #1598 And #1599 Root Compatibility Decisions
+# Issues #1598 and #1599 Root Compatibility Decisions (2026-05-28)
 
 Date: 2026-05-28
 

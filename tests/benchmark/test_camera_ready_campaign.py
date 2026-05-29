@@ -21,6 +21,10 @@ from robot_sf.benchmark.camera_ready_campaign import (
     CampaignConfig,
     PlannerSpec,
     SeedPolicy,
+    _build_actuation_envelope_summary,
+    _build_breakdown_rows,
+    _build_scenario_amv_lookup,
+    _extract_amv_taxonomy,
     _jsonable_repo_relative,
     _load_campaign_scenarios,
     _load_route_clearance_certifications,
@@ -36,6 +40,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     write_campaign_report,
 )
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
+from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
 from robot_sf.common.artifact_paths import get_repository_root
 
 
@@ -182,6 +187,46 @@ def test_load_campaign_config_rejects_malformed_scenario_candidates(
     )
 
     with pytest.raises(TypeError, match="scenario_candidates must be"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_malformed_scenario_amv_overrides(tmp_path: Path) -> None:
+    """Scenario AMV overrides must stay a mapping of scenario names to AMV mappings."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_scenario_amv",
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "scenario_amv_overrides": {"francis2023_blind_corner": ["delivery_robot"]},
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TypeError, match="scenario_amv_overrides entries must be mappings"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_null_scenario_amv_override_values(
+    tmp_path: Path,
+) -> None:
+    """Scenario AMV override values must not coerce YAML null to the string ``None``."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_scenario_amv_null",
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "scenario_amv_overrides": {"francis2023_blind_corner": {"use_case": None}},
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="scenario_amv_overrides values must be non-empty"):
         load_campaign_config(config_path)
 
 
@@ -365,7 +410,9 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
         "francis2023_intersection_wait",
     ]
 
-    manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
+    manifest = json.loads(
+        (Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text(encoding="utf-8")
+    )
     validate_payload = json.loads(
         Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
     )
@@ -392,6 +439,150 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
     ]
     assert manifest["synthetic_actuation_profile"]["name"] == "amv-actuation-stress-v0"
     assert manifest["seed_policy"]["seed_set"] == "eval"
+
+
+def test_prepare_campaign_preflight_applies_scenario_amv_overrides(tmp_path: Path) -> None:
+    """Slice-local scenario AMV overrides should populate preview and coverage artifacts."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "classic_overtaking_medium",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "metadata": {"archetype": "classic_crossing"},
+                },
+                {
+                    "name": "francis2023_intersection_wait",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "metadata": {"archetype": "francis2023"},
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "issue_1572_preflight",
+                "paper_facing": False,
+                "scenario_matrix": str(scenario_path),
+                "kinematics_matrix": ["differential_drive"],
+                "scenario_candidates": [
+                    "classic_overtaking_medium",
+                    "francis2023_intersection_wait",
+                ],
+                "scenario_amv_overrides": {
+                    "classic_overtaking_medium": {
+                        "use_case": "delivery_robot",
+                        "context": "sidewalk",
+                        "speed_regime": "walking_speed",
+                        "maneuver_type": "overtake",
+                    },
+                    "francis2023_intersection_wait": {
+                        "use_case": "shared_space_micromobility",
+                        "context": "shared_space",
+                        "speed_regime": "scooter_speed",
+                        "maneuver_type": "bottleneck",
+                    },
+                },
+                "amv_profile": {
+                    "coverage_enforcement": "warn",
+                    "required_dimensions": {
+                        "use_case": ["delivery_robot", "shared_space_micromobility"],
+                        "context": ["sidewalk", "shared_space"],
+                        "speed_regime": ["walking_speed", "scooter_speed"],
+                        "maneuver_type": ["overtake", "bottleneck"],
+                    },
+                },
+                "planners": [{"key": "goal", "algo": "goal", "planner_group": "core"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+    prepared = prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="issue1572")
+
+    preview_payload = json.loads(
+        Path(prepared["preview_scenarios_path"]).read_text(encoding="utf-8")
+    )
+    assert preview_payload["scenarios"][0]["amv"]["maneuver_type"] == "overtake"
+    assert preview_payload["scenarios"][1]["amv"]["speed_regime"] == "scooter_speed"
+
+    amv_payload = json.loads(Path(prepared["amv_coverage_json_path"]).read_text(encoding="utf-8"))
+    assert amv_payload["status"] == "pass"
+    assert amv_payload["scenario_rows"][0]["amv"]["use_case"] == "delivery_robot"
+    assert amv_payload["scenario_rows"][1]["amv"]["use_case"] == "shared_space_micromobility"
+
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+    assert (
+        validate_payload["scenario_amv_overrides"]["classic_overtaking_medium"]["maneuver_type"]
+        == "overtake"
+    )
+    assert (
+        validate_payload["scenario_amv_overrides"]["francis2023_intersection_wait"]["speed_regime"]
+        == "scooter_speed"
+    )
+
+    manifest = json.loads(
+        (Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["amv_coverage_status"] == "pass"
+    assert manifest["scenario_amv_overrides"]["classic_overtaking_medium"]["maneuver_type"] == (
+        "overtake"
+    )
+
+
+def test_load_campaign_scenarios_rejects_unmatched_scenario_amv_overrides(tmp_path: Path) -> None:
+    """AMV overrides should fail closed when they target scenarios outside the loaded slice."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "classic_overtaking_medium",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                },
+                {
+                    "name": "francis2023_intersection_wait",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "issue_1572_unmatched_override",
+                "scenario_matrix": str(scenario_path),
+                "scenario_candidates": ["classic_overtaking_medium"],
+                "scenario_amv_overrides": {
+                    "francis2023_intersection_wait": {
+                        "use_case": "shared_space_micromobility",
+                        "context": "shared_space",
+                        "speed_regime": "scooter_speed",
+                        "maneuver_type": "bottleneck",
+                    }
+                },
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+
+    with pytest.raises(
+        ValueError,
+        match=r"scenario_amv_overrides did not resolve .*francis2023_intersection_wait",
+    ):
+        _load_campaign_scenarios(cfg)
 
 
 def test_load_campaign_config_parses_observation_mode_overrides(tmp_path: Path) -> None:
@@ -623,8 +814,12 @@ def test_preflight_reports_scenario_horizon_schedule_summary(tmp_path: Path) -> 
         output_root=tmp_path / "out",
         campaign_id="scheduled_preflight",
     )
-    validate_payload = json.loads(Path(prepared["validate_config_path"]).read_text())
-    matrix_payload = json.loads(Path(prepared["matrix_summary_json_path"]).read_text())
+    validate_payload = json.loads(
+        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+    matrix_payload = json.loads(
+        Path(prepared["matrix_summary_json_path"]).read_text(encoding="utf-8")
+    )
 
     assert validate_payload["scenario_horizons"] == {
         "path": str(schedule_path.resolve()),
@@ -2311,6 +2506,68 @@ def test_planner_report_row_exposes_execution_detail_and_command_spaces() -> Non
     assert row["projection_policy"] == "world_velocity_passthrough"
 
 
+def test_build_actuation_envelope_summary_carries_amv_and_projection_metadata() -> None:
+    """Compact actuation summaries should carry scenario AMV and planner projection metadata."""
+    payload = _build_actuation_envelope_summary(
+        campaign_id="issue1572",
+        generated_at_utc="2026-05-27T09:00:00Z",
+        profile=SyntheticActuationProfile(
+            name="amv-actuation-stress-v0",
+            profile_version="v0",
+            claim_scope="synthetic-only",
+            max_linear_accel_m_s2=2.0,
+            max_linear_decel_m_s2=2.5,
+            max_yaw_rate_rad_s=1.2,
+            max_angular_accel_rad_s2=4.0,
+            latency_mode="one-step-delay",
+            update_mode="5hz-hold",
+        ),
+        planner_rows=[
+            {
+                "planner_key": "social_force",
+                "algo": "social_force",
+                "planner_group": "core",
+                "kinematics": "differential_drive",
+                "status": "ok",
+                "readiness_status": "adapter",
+                "availability_status": "available",
+                "benchmark_success": "true",
+                "execution_mode": "adapter",
+                "execution_detail": "adapter_projected_unicycle_vw",
+                "planner_command_space": "unicycle_vw",
+                "benchmark_command_space": "unicycle_vw",
+                "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+                "success_mean": "1.0000",
+                "command_clip_fraction_mean": "0.2500",
+                "yaw_rate_saturation_fraction_mean": "0.5000",
+                "signed_braking_peak_m_s2_mean": "-1.5000",
+            }
+        ],
+        amv_summary={
+            "status": "pass",
+            "scenario_rows": [
+                {
+                    "name": "classic_overtaking_medium",
+                    "scenario_family": "classic_crossing",
+                    "amv": {
+                        "use_case": "delivery_robot",
+                        "context": "sidewalk",
+                        "speed_regime": "walking_speed",
+                        "maneuver_type": "overtake",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert payload["amv_coverage_status"] == "pass"
+    assert payload["scenario_amv_rows"][0]["amv"]["maneuver_type"] == "overtake"
+    assert payload["rows"][0]["planner_command_space"] == "unicycle_vw"
+    assert payload["rows"][0]["benchmark_command_space"] == "unicycle_vw"
+    assert payload["rows"][0]["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+    assert payload["rows"][0]["projection_metadata_status"] == "explicit"
+
+
 def test_planner_report_row_backfills_collision_means_from_termination_reason() -> None:
     """Row builder should not zero out collisions when aggregate metrics are sparse."""
     planner = PlannerSpec(key="ppo", algo="ppo")
@@ -3959,7 +4216,9 @@ def test_prepare_campaign_preflight_writes_amv_and_comparability_artifacts(tmp_p
     assert Path(prepared["comparability_json_path"]).exists()
     assert Path(prepared["comparability_md_path"]).exists()
 
-    manifest = json.loads((Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text())
+    manifest = json.loads(
+        (Path(prepared["campaign_root"]) / "campaign_manifest.json").read_text(encoding="utf-8")
+    )
     assert manifest["amv_coverage_status"] == "pass"
     assert manifest["comparability_mapping_version"] == "alyassi-comparability-v1"
     assert manifest["artifacts"]["amv_coverage_json"].endswith("reports/amv_coverage_summary.json")
@@ -4119,3 +4378,229 @@ def test_prepare_campaign_preflight_rejects_missing_planner_key_mapping_for_pape
     cfg = load_campaign_config(config_path)
     with pytest.raises(ValueError, match="prediction_planner_v2_xl_ego"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="missing_planner")
+
+
+class TestBuildScenarioAmvLookup:
+    """Tests for _build_scenario_amv_lookup and AMV taxonomy in breakdown rows."""
+
+    def test_build_scenario_amv_lookup_extracts_amv_from_scenario(self) -> None:
+        """Lookup maps scenario names to their AMV taxonomy dimensions."""
+        scenarios = [
+            {"name": "corridor_low", "amv": {"use_case": "corridor", "context": "low_density"}},
+            {
+                "name": "crossing_high",
+                "amv": {"use_case": "crossing", "speed_regime": "high_speed"},
+            },
+            {"name": "no_amv"},
+        ]
+        lookup = _build_scenario_amv_lookup(scenarios)
+        assert lookup["corridor_low"] == {"use_case": "corridor", "context": "low_density"}
+        assert lookup["crossing_high"] == {"use_case": "crossing", "speed_regime": "high_speed"}
+        assert lookup["no_amv"] == {}
+
+    def test_build_scenario_amv_lookup_from_metadata_amv(self) -> None:
+        """Lookup falls back to metadata.amv when top-level amv is absent."""
+        scenarios = [
+            {
+                "name": "meta_amv",
+                "metadata": {"amv": {"use_case": "hallway", "maneuver_type": "turn"}},
+            }
+        ]
+        lookup = _build_scenario_amv_lookup(scenarios)
+        assert lookup["meta_amv"] == {"use_case": "hallway", "maneuver_type": "turn"}
+
+    def test_extract_amv_taxonomy_prefers_top_level_over_metadata(self) -> None:
+        """Top-level amv takes precedence over metadata.amv for overlapping keys."""
+        scenario = {
+            "name": "both",
+            "amv": {"use_case": "top_level"},
+            "metadata": {"amv": {"use_case": "metadata_level"}},
+        }
+        result = _extract_amv_taxonomy(scenario)
+        assert result["use_case"] == "top_level"
+
+    def test_extract_amv_taxonomy_ignores_empty_values(self) -> None:
+        """Empty or whitespace-only AMV dimension values are excluded."""
+        scenario = {
+            "name": "sparse",
+            "amv": {"use_case": "corridor", "context": "", "speed_regime": "   "},
+        }
+        result = _extract_amv_taxonomy(scenario)
+        assert result == {"use_case": "corridor"}
+
+    def test_extract_amv_taxonomy_returns_empty_when_no_amv(self) -> None:
+        """Scenarios without any AMV block produce an empty taxonomy."""
+        result = _extract_amv_taxonomy({"name": "no_amv_at_all"})
+        assert result == {}
+
+    def test_build_breakdown_rows_without_amv_lookup_preserves_existing_columns(self) -> None:
+        """Empty input produces empty scenario and family rows."""
+        scenario_rows, family_rows = _build_breakdown_rows([])
+        assert scenario_rows == []
+        assert family_rows == []
+
+    def test_build_breakdown_rows_includes_amv_columns(self, tmp_path: Path) -> None:
+        """AMV taxonomy columns appear in scenario and family breakdown rows."""
+        episodes_path = tmp_path / "episodes.jsonl"
+        episodes_path.write_text(
+            json.dumps({"scenario_id": "corridor_low", "ped_collision_count": 0}) + "\n",
+            encoding="utf-8",
+        )
+        run_entries = [
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": str(episodes_path),
+            }
+        ]
+        scenario_amv_lookup = {
+            "corridor_low": {"use_case": "corridor", "context": "low_density"},
+        }
+        scenario_rows, family_rows = _build_breakdown_rows(
+            run_entries,
+            scenario_amv_lookup=scenario_amv_lookup,
+        )
+        assert len(scenario_rows) == 1
+        row = scenario_rows[0]
+        assert row["scenario_id"] == "corridor_low"
+        assert row["use_case"] == "corridor"
+        assert row["context"] == "low_density"
+        assert row["speed_regime"] == ""
+        assert row["maneuver_type"] == ""
+        assert len(family_rows) == 1
+        fam = family_rows[0]
+        assert fam["use_case"] == "corridor"
+        assert fam["context"] == "low_density"
+        assert fam["speed_regime"] == ""
+        assert fam["maneuver_type"] == ""
+
+    def test_build_breakdown_rows_family_aggregates_multiple_amv_values(
+        self, tmp_path: Path
+    ) -> None:
+        """Family rows aggregate distinct AMV dimension values with semicolons."""
+        ep1_path = tmp_path / "ep1.jsonl"
+        ep1_path.write_text(
+            "\n".join(
+                [
+                    json.dumps({"scenario_id": "sc_a", "ped_collision_count": 0}),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        ep2_path = tmp_path / "ep2.jsonl"
+        ep2_path.write_text(
+            "\n".join(
+                [
+                    json.dumps({"scenario_id": "sc_b", "ped_collision_count": 0}),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        run_entries = [
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": str(ep1_path),
+            },
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": str(ep2_path),
+            },
+        ]
+        scenario_amv_lookup = {
+            "sc_a": {"use_case": "corridor", "context": "low_density"},
+            "sc_b": {"use_case": "corridor", "context": "high_density"},
+        }
+        scenario_rows, family_rows = _build_breakdown_rows(
+            run_entries,
+            scenario_amv_lookup=scenario_amv_lookup,
+        )
+        assert len(scenario_rows) == 2
+        corridor_scenarios_ids = {r["scenario_id"] for r in scenario_rows}
+        assert "sc_a" in corridor_scenarios_ids
+        assert "sc_b" in corridor_scenarios_ids
+        for row in scenario_rows:
+            assert row["use_case"] == "corridor"
+            assert row["context"] in ("low_density", "high_density")
+        assert len(family_rows) == 1
+        assert family_rows[0]["use_case"] == "corridor"
+        assert family_rows[0]["context"] == "high_density;low_density"
+
+    def test_build_breakdown_rows_without_lookup_produces_empty_amv_columns(
+        self, tmp_path: Path
+    ) -> None:
+        """Without a lookup, AMV columns exist but contain empty strings."""
+        episodes_path = tmp_path / "episodes.jsonl"
+        episodes_path.write_text(
+            json.dumps({"scenario_id": "s1", "ped_collision_count": 0}) + "\n",
+            encoding="utf-8",
+        )
+        run_entries = [
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": str(episodes_path),
+            }
+        ]
+        scenario_rows, _family_rows = _build_breakdown_rows(run_entries)
+        assert len(scenario_rows) == 1
+        row = scenario_rows[0]
+        for dimension in ("use_case", "context", "speed_regime", "maneuver_type"):
+            assert dimension in row, f"AMV dimension '{dimension}' missing from scenario row"
+            assert row[dimension] == "", f"Expected empty string for {dimension} without AMV lookup"
+
+    def test_scenario_breakdown_csv_contains_amv_headers_in_campaign(self, tmp_path: Path) -> None:
+        """End-to-end: AMV columns flow from scenario definitions through the campaign config."""
+        scenario_path = tmp_path / "scenarios.yaml"
+        scenario_content = (
+            "scenarios:\n"
+            "  - name: corridor_amv\n"
+            "    map_file: maps/svg_maps/francis2023_blind_corner.svg\n"
+            "    robot_config:\n"
+            "      type: differential_drive\n"
+            "      radius: 0.3\n"
+            "    ped_config:\n"
+            "      robot_visible: false\n"
+            "    amv:\n"
+            "      use_case: corridor\n"
+            "      context: low_density\n"
+            "    simulation_config:\n"
+            "      max_episode_steps: 200\n"
+            "      steps_per_action: 4\n"
+            "    robot_spawn_id: 0\n"
+            "    robot_goal_id: 0\n"
+        )
+        scenario_path.write_text(scenario_content, encoding="utf-8")
+        config_path = tmp_path / "campaign.yaml"
+        config_content = (
+            "\n".join(
+                [
+                    "name: amv_breakdown_test",
+                    f"scenario_matrix: {scenario_path.as_posix()}",
+                    "planners:",
+                    "  - key: social_force",
+                    "    algo: social_force",
+                    "    planner_group: core",
+                    "paper_facing: true",
+                    "paper_profile_version: paper-seed-variability-v1",
+                    f"comparability_mapping: {_get_comparability_path()}",
+                ]
+            )
+            + "\n"
+        )
+        config_path.write_text(config_content, encoding="utf-8")
+        cfg = load_campaign_config(config_path)
+        scenarios = _load_campaign_scenarios(cfg)
+        lookup = _build_scenario_amv_lookup(scenarios)
+        assert "corridor_amv" in lookup
+        assert lookup["corridor_amv"]["use_case"] == "corridor"
+        assert lookup["corridor_amv"]["context"] == "low_density"
+
+
+def _get_comparability_path() -> str:
+    repo_root = get_repository_root()
+    path = repo_root / "configs" / "benchmarks" / "alyassi_comparability_map_v1.yaml"
+    return path.as_posix()

@@ -10,11 +10,13 @@ import numpy as np
 import pytest
 
 from robot_sf.planner.socnav import (
+    OccupancyAwarePlannerMixin,
     PredictionPlannerAdapter,
     SamplingPlannerAdapter,
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin as ExtractedOccupancyMixin
 
 
 def _base_observation() -> dict:
@@ -51,6 +53,11 @@ def _with_grid(observation: dict, grid: np.ndarray) -> dict:
     obs = dict(observation)
     obs["occupancy_grid"] = grid
     return obs
+
+
+def test_occupancy_mixin_is_reexported_from_socnav():
+    """The extracted helper module should preserve the legacy SocNav import path."""
+    assert OccupancyAwarePlannerMixin is ExtractedOccupancyMixin
 
 
 def test_extract_grid_payload_handles_flattened_meta():

@@ -8,6 +8,9 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import numpy as np
+
+from robot_sf.benchmark import runner as runner_mod
 from robot_sf.benchmark.runner import run_batch, run_episode, validate_and_write
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 
@@ -15,6 +18,51 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
+
+
+class _ObservationCapture:
+    """Minimal Observation stand-in used to inspect runner payload radii."""
+
+    def __init__(self, **payload):
+        self.payload = payload
+
+
+def test_runner_observation_and_episode_data_share_resolved_radii():
+    """Synthetic runner helpers should use the same radii for planners and metrics."""
+    scenario = {
+        "robot_config": {"radius": 0.42},
+        "simulation_config": {"ped_radius": 0.24},
+    }
+    robot_radius = runner_mod._scenario_robot_radius_m(scenario)
+    ped_radius = runner_mod._scenario_ped_radius_m(scenario)
+    obs = runner_mod._build_observation(
+        _ObservationCapture,
+        np.zeros(2),
+        np.zeros(2),
+        np.ones(2),
+        np.array([[1.0, 0.0], [2.0, 0.0]], dtype=float),
+        0.1,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+    )
+    ep = runner_mod._build_episode_data(
+        [np.zeros(2)],
+        [np.zeros(2)],
+        [np.zeros(2)],
+        [np.array([[1.0, 0.0], [2.0, 0.0]], dtype=float)],
+        [np.zeros((2, 2), dtype=float)],
+        obstacles=None,
+        goal=np.ones(2),
+        dt=0.1,
+        reached_goal_step=None,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+    )
+
+    assert obs.payload["robot"]["radius"] == 0.42
+    assert [agent["radius"] for agent in obs.payload["agents"]] == [0.24, 0.24]
+    assert ep.robot_radius == 0.42
+    assert ep.ped_radius == 0.24
 
 
 def test_runner_single_episode_tmp(tmp_path: Path):

@@ -1,0 +1,211 @@
+schema_version: lidar-planner-compatibility-audit.v1
+issue: 1614
+parent_issue: 1611
+generated_from_commit: 4ee6eb7b3faceb25b7baa6ab8b615cb3c5be4512
+observation_contract:
+  benchmark_observation_level: lidar_2d
+  compatible_observation_modes:
+    - sensor_fusion_state
+    - lidar_human_state
+  required_runtime_inputs:
+    - robot_state
+    - goal
+    - lidar_rays
+  excluded_runtime_inputs:
+    - full_map_occupancy
+    - simulator_backed_grid
+    - socnav_state_pedestrian_positions
+    - socnav_state_pedestrian_velocities
+    - future_pedestrian_trajectories
+    - collision_or_success_labels
+classification_legend:
+  native_lidar_compatible: Runs through the current benchmark contract with observation_level=lidar_2d.
+  adapter_required: Needs a new LiDAR-derived adapter before benchmark rows may be written.
+  training_required: Runtime contract is plausible but a compatible checkpoint/config must be trained.
+  excluded_or_blocked: Current planner would use unavailable privileged inputs or lacks provenance.
+  diagnostic_only: Useful for smoke or contract debugging, not benchmark evidence.
+planner_classifications:
+  - planner: ppo
+    family: learned_policy
+    classification: training_required
+    current_contract_status: passes_lidar_2d_gate
+    active_observation_mode: sensor_fusion_state
+    required_inputs:
+      - robot_state
+      - goal
+      - lidar_rays
+      - history
+    claim_boundary: Needs a LiDAR-trained checkpoint and registry provenance before benchmark use.
+    selected_follow_up: 1662
+  - planner: guarded_ppo
+    family: learned_policy
+    classification: training_required
+    current_contract_status: passes_lidar_2d_gate
+    active_observation_mode: sensor_fusion_state
+    required_inputs:
+      - robot_state
+      - goal
+      - lidar_rays
+      - history
+      - safety_guard
+    claim_boundary: Guard activation must be reported as a caveat; LiDAR-trained checkpoint still required.
+    selected_follow_up: 1662
+  - planner: sac
+    family: learned_policy
+    classification: training_required
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - lidar_rays
+    claim_boundary: Training config exists, but benchmark metadata currently defaults SAC to socnav_state.
+    selected_follow_up: 1662
+  - planner: crowdnav_height
+    family: learned_social_state_policy
+    classification: adapter_required
+    current_contract_status: passes_lidar_2d_gate_but_requires_human_fields
+    active_observation_mode: lidar_human_state
+    required_inputs:
+      - robot_state
+      - goal
+      - lidar_rays
+      - humans
+    claim_boundary: Do not count as LiDAR-only until humans are reconstructed from LiDAR-derived tracks.
+    selected_follow_up: 1660
+  - planner: goal
+    family: diagnostic_goal_baseline
+    classification: diagnostic_only
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+    claim_boundary: In principle ignores pedestrians, but current observation-level gate does not expose a lidar goal-only mode.
+  - planner: grid_route
+    family: occupancy_classical
+    classification: adapter_required
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - occupancy_grid
+    claim_boundary: Must consume ego occupancy derived from rays, not simulator/global occupancy.
+    selected_follow_up: 1659
+  - planner: teb
+    family: occupancy_classical
+    classification: adapter_required
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - short_horizon_occupancy
+    claim_boundary: Testing-only until local occupancy probes are derived from rays and metadata records adapter mode.
+    selected_follow_up: 1659
+  - planner: safety_barrier
+    family: occupancy_classical
+    classification: adapter_required
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - local_obstacle_clearance
+    claim_boundary: Testing-only; barrier inputs must be ray-derived and must not read hidden obstacles.
+    selected_follow_up: 1659
+  - planner: orca
+    family: tracked_agent_classical
+    classification: adapter_required
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - tracked_agents
+    claim_boundary: Needs LiDAR-derived tracked agents with explicit noise, occlusion, and history assumptions.
+    selected_follow_up: 1660
+  - planner: social_force
+    family: tracked_agent_classical
+    classification: adapter_required
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - tracked_agents
+    claim_boundary: Needs LiDAR-derived tracked agents; direct socnav pedestrian state is privileged.
+    selected_follow_up: 1660
+  - planner: risk_dwa
+    family: tracked_agent_or_local_risk_classical
+    classification: adapter_required
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - tracked_agents
+      - local_risk_features
+    claim_boundary: Candidate for ray-derived tracks or occupancy, but current structured-state path is not LiDAR-only.
+    selected_follow_up: 1660
+  - planner: prediction_planner
+    family: prediction_aware
+    classification: excluded_or_blocked
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - pedestrians
+      - history
+      - prediction_model
+    claim_boundary: Exclude until prediction inputs can be derived from LiDAR observations without privileged future/state leakage.
+  - planner: predictive_mppi
+    family: prediction_aware
+    classification: excluded_or_blocked
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - pedestrians
+      - prediction_model
+    claim_boundary: Exclude from first LiDAR track; current path is structured/predictive, not ray-derived.
+  - planner: socnav_bench
+    family: upstream_adapter
+    classification: excluded_or_blocked
+    current_contract_status: blocked_by_current_contract
+    active_observation_mode: none
+    required_inputs:
+      - robot_state
+      - goal
+      - pedestrians
+    claim_boundary: External adapter remains privileged structured-state unless a LiDAR-derived wrapper is implemented.
+selected_adapter_paths:
+  - issue: 1659
+    adapter_contract: lidar_rays_to_ego_occupancy_grid
+    candidate_planners:
+      - grid_route
+      - teb
+      - safety_barrier
+    first_validation: smoke one planner with observation_level=lidar_2d and adapter execution metadata.
+  - issue: 1660
+    adapter_contract: lidar_rays_to_tracked_agents
+    candidate_planners:
+      - orca
+      - social_force
+      - risk_dwa
+      - crowdnav_height
+    first_validation: smoke one planner from reconstructed tracks and prove direct socnav pedestrian state is not read.
+  - issue: 1662
+    adapter_contract: train_lidar_learned_policy
+    candidate_planners:
+      - ppo
+      - guarded_ppo
+      - sac
+    first_validation: run metadata preflight and bounded smoke training from the #1615 launch packet.
+validation:
+  contract_gate_smoke: uv run pytest -q tests/benchmark/test_lidar_planner_compatibility.py
+  fallback_policy: docs/context/issue_691_benchmark_fallback_policy.md
+  result_rule: fallback_or_degraded_rows_are_caveats_not_lidar_success_evidence

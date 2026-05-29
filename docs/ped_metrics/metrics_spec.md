@@ -29,13 +29,15 @@ Threshold provenance and reproducibility contract:
 ### Safety Metrics
 
 #### Collisions
-- **Definition**: Number of timesteps where minimum pedestrian distance < 0.25m
+- **Definition**: Number of timesteps where robot-pedestrian footprint clearance < 0m.
+  Legacy records without `metric_parameters.threshold_profile` used center distance < 0.25m.
 - **Type**: Integer count
 - **Range**: [0, episode_length]
 - **Purpose**: Direct safety measure
 
-#### Near Misses  
-- **Definition**: Number of timesteps where distance ∈ [0.25m, 0.50m)
+#### Near Misses
+- **Definition**: Number of timesteps where robot-pedestrian footprint clearance ∈ [0m, 0.50m).
+  Legacy records without `metric_parameters.threshold_profile` used center distance ∈ [0.25m, 0.50m).
 - **Type**: Integer count
 - **Range**: [0, episode_length]
 - **Purpose**: Proximity safety measure

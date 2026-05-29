@@ -15,6 +15,7 @@ from robot_sf.benchmark.constants import COLLISION_DIST, COMFORT_FORCE_THRESHOLD
 from robot_sf.benchmark.errors import AggregationMetadataError
 
 THRESHOLD_PROFILE_ID = "social_nav_thresholds_v1"
+LEGACY_MISSING_THRESHOLD_PROFILE_ID = "legacy_missing_threshold_profile_v0"
 
 
 def default_threshold_profile() -> dict[str, Any]:
@@ -24,12 +25,34 @@ def default_threshold_profile() -> dict[str, Any]:
         "collision_distance_m": float(COLLISION_DIST),
         "near_miss_distance_m": float(NEAR_MISS_DIST),
         "comfort_force_threshold": float(COMFORT_FORCE_THRESHOLD),
-        "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+        "pedestrian_collision_definition": "min_clearance_m < 0",
+        "wall_agent_collision_definition": "center_distance_m < collision_distance_m",
+        "near_miss_definition": "0 <= min_clearance_m < near_miss_distance_m",
         "near_miss_speed_dependence": "disabled_distance_only",
         "candidate_speed_dependent_variants": [
             "relative_speed_weighted",
             "ttc_gated",
         ],
+        "sources": {
+            "constants": "robot_sf/benchmark/constants.py",
+            "metrics": "robot_sf/benchmark/metrics.py",
+            "spec": "docs/benchmark_spec.md",
+        },
+    }
+
+
+def legacy_missing_threshold_profile() -> dict[str, Any]:
+    """Return the inferred threshold profile for legacy records without metadata."""
+    return {
+        "profile_id": LEGACY_MISSING_THRESHOLD_PROFILE_ID,
+        "collision_distance_m": float(COLLISION_DIST),
+        "near_miss_distance_m": float(NEAR_MISS_DIST),
+        "comfort_force_threshold": float(COMFORT_FORCE_THRESHOLD),
+        "pedestrian_collision_definition": "center_distance_m < collision_distance_m",
+        "wall_agent_collision_definition": "center_distance_m < collision_distance_m",
+        "near_miss_definition": "collision_distance_m <= center_distance_m < near_miss_distance_m",
+        "near_miss_speed_dependence": "disabled_distance_only",
+        "inferred_for_missing_metric_parameters": True,
         "sources": {
             "constants": "robot_sf/benchmark/constants.py",
             "metrics": "robot_sf/benchmark/metrics.py",
@@ -81,7 +104,7 @@ def _extract_threshold_profile(record: dict[str, Any]) -> tuple[dict[str, Any], 
         profile = params.get("threshold_profile")
         if isinstance(profile, dict):
             return deepcopy(profile), False
-    return deepcopy(default_threshold_profile()), True
+    return deepcopy(legacy_missing_threshold_profile()), True
 
 
 def validate_threshold_parameter_consistency(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -145,6 +168,7 @@ __all__ = [
     "build_metric_parameters",
     "default_threshold_profile",
     "ensure_metric_parameters",
+    "legacy_missing_threshold_profile",
     "threshold_profile_signature",
     "validate_threshold_parameter_consistency",
 ]

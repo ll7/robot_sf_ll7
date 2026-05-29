@@ -255,6 +255,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="lidar_social_force",
+        tier="experimental",
+        aliases=("lidar_social_force", "lidar_tracked_social_force"),
+        note=(
+            "Testing-only LiDAR endpoint-cluster tracked-agent adapter wrapped around "
+            "SocialForce; not benchmark evidence without explicit opt-in."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="trivial_reference",
         tier="experimental",
         aliases=("trivial_reference", "reference_adapter"),

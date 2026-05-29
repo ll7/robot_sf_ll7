@@ -11,8 +11,8 @@ Key Features
 * Explicit signatures: discoverable parameters; no ``**kwargs`` reliance for
     new behavior.
 * Option normalization: boolean convenience flags (``record_video``,
-    ``video_path``, ``video_fps``) map into :class:`RecordingOptions` and
-    :class:`RenderOptions` with documented precedence rules.
+    ``video_path``, ``video_fps``), JSONL metadata kwargs, and telemetry kwargs
+    map into focused option objects with documented precedence rules.
 * Determinism: optional ``seed`` seeds Python ``random``, NumPy, and PyTorch
     (if available) plus ``PYTHONHASHSEED``; applied before environment class
     construction. The applied seed is attached to the returned environment as
@@ -43,6 +43,7 @@ import importlib
 import os
 import random
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -59,7 +60,12 @@ except (ImportError, ModuleNotFoundError):
     RobotEnvWithImage = None  # type: ignore
 
 from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
-from robot_sf.gym_env.options import RecordingOptions, RenderOptions
+from robot_sf.gym_env.options import (
+    JsonlRecordingOptions,
+    RecordingOptions,
+    RenderOptions,
+    TelemetryOptions,
+)
 from robot_sf.gym_env.reward import (
     build_reward_curriculum_function,
     build_reward_function,
@@ -184,18 +190,8 @@ class EnvironmentFactory:
         record_video: bool,
         video_path: str | None,
         video_fps: float | None,
-        use_jsonl_recording: bool = False,
-        recording_dir: str = "recordings",
-        suite_name: str = "robot_sim",
-        scenario_name: str = "default",
-        algorithm_name: str = "manual",
-        recording_seed: int | None = None,
-        enable_telemetry_panel: bool = False,
-        telemetry_metrics: list[str] | None = None,
-        telemetry_record: bool = False,
-        telemetry_refresh_hz: float = 1.0,
-        telemetry_pane_layout: str = "vertical_split",
-        telemetry_decimation: int = 1,
+        jsonl_recording_options: JsonlRecordingOptions | None = None,
+        telemetry_options: TelemetryOptions | None = None,
         asymmetric_critic: bool = False,
     ) -> SingleAgentEnv:
         """Construct a robot environment with specified observation and recording configuration.
@@ -214,18 +210,8 @@ class EnvironmentFactory:
             record_video: Enable video recording to disk.
             video_path: Output path for recorded video files.
             video_fps: Target frames-per-second for video output.
-            use_jsonl_recording: Enable per-episode JSONL metadata recording.
-            recording_dir: Directory for JSONL episode outputs.
-            suite_name: Metadata identifier for episode grouping.
-            scenario_name: Scenario identifier for episode metadata.
-            algorithm_name: Algorithm identifier for episode metadata.
-            recording_seed: Deterministic seed for recorder's episode naming.
-            enable_telemetry_panel: Enable docked telemetry visualization panel.
-            telemetry_metrics: Metrics to display in the pane; defaults if None.
-            telemetry_record: Persist telemetry to JSONL under artifact root.
-            telemetry_refresh_hz: Target refresh rate for telemetry (Hz).
-            telemetry_pane_layout: Pane docking layout (vertical_split or horizontal_split).
-            telemetry_decimation: Decimation factor for telemetry persistence (>=1).
+            jsonl_recording_options: Per-episode JSONL recording metadata.
+            telemetry_options: Live telemetry panel and telemetry recording options.
             asymmetric_critic: When True, add a critic-only privileged state vector to the
                 observation space for asymmetric actor-critic training.
 
@@ -240,13 +226,19 @@ class EnvironmentFactory:
         config.use_image_obs = use_image_obs
         legacy_override = None if peds_have_obstacle_forces is True else peds_have_obstacle_forces
         sync_pedestrian_obstacle_force_alias(config, legacy_override)
-        config.enable_telemetry_panel = enable_telemetry_panel
-        config.telemetry_record = telemetry_record
-        config.telemetry_refresh_hz = telemetry_refresh_hz
-        config.telemetry_pane_layout = telemetry_pane_layout
-        config.telemetry_decimation = telemetry_decimation
-        if telemetry_metrics is not None:
-            config.telemetry_metrics = list(telemetry_metrics)
+        jsonl_recording_options = jsonl_recording_options or JsonlRecordingOptions()
+        jsonl_recording_options.validate()
+        if telemetry_options is None:
+            telemetry_options = TelemetryOptions()
+        else:
+            telemetry_options = _copy_telemetry_options(telemetry_options)
+        telemetry_options.validate()
+        config.enable_telemetry_panel = telemetry_options.enable_panel
+        config.telemetry_record = telemetry_options.record
+        config.telemetry_refresh_hz = telemetry_options.refresh_hz
+        config.telemetry_pane_layout = telemetry_options.pane_layout
+        config.telemetry_decimation = telemetry_options.decimation
+        config.telemetry_metrics = list(telemetry_options.metrics)
         if use_image_obs:
             EnvCls = _load_robot_env_with_image()
         else:
@@ -262,12 +254,12 @@ class EnvironmentFactory:
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
-            use_jsonl_recording=use_jsonl_recording,
-            recording_dir=recording_dir,
-            suite_name=suite_name,
-            scenario_name=scenario_name,
-            algorithm_name=algorithm_name,
-            recording_seed=recording_seed,
+            use_jsonl_recording=jsonl_recording_options.enabled,
+            recording_dir=jsonl_recording_options.recording_dir,
+            suite_name=jsonl_recording_options.suite_name,
+            scenario_name=jsonl_recording_options.scenario_name,
+            algorithm_name=jsonl_recording_options.algorithm_name,
+            recording_seed=jsonl_recording_options.recording_seed,
             asymmetric_critic=asymmetric_critic,
         )  # type: ignore[return-value]
 
@@ -435,6 +427,61 @@ def _normalize_factory_inputs(
     return render_options, recording_options, eff_record, eff_path, eff_fps
 
 
+def _normalize_jsonl_recording_options(
+    *,
+    jsonl_recording_options: JsonlRecordingOptions | None,
+    use_jsonl_recording: bool,
+    recording_dir: str,
+    suite_name: str,
+    scenario_name: str,
+    algorithm_name: str,
+    recording_seed: int | None,
+) -> JsonlRecordingOptions:
+    """Return canonical JSONL recording options from object or compatibility kwargs."""
+    if jsonl_recording_options is None:
+        jsonl_recording_options = JsonlRecordingOptions(
+            enabled=use_jsonl_recording,
+            recording_dir=recording_dir,
+            suite_name=suite_name,
+            scenario_name=scenario_name,
+            algorithm_name=algorithm_name,
+            recording_seed=recording_seed,
+        )
+    jsonl_recording_options.validate()
+    return jsonl_recording_options
+
+
+def _copy_telemetry_options(telemetry_options: TelemetryOptions) -> TelemetryOptions:
+    """Return a shallow telemetry option copy with caller-owned metrics detached."""
+    return replace(telemetry_options, metrics=list(telemetry_options.metrics or []))
+
+
+def _normalize_telemetry_options(
+    *,
+    telemetry_options: TelemetryOptions | None,
+    enable_telemetry_panel: bool,
+    telemetry_metrics: list[str] | None,
+    telemetry_record: bool,
+    telemetry_refresh_hz: float,
+    telemetry_pane_layout: str,
+    telemetry_decimation: int,
+) -> TelemetryOptions:
+    """Return canonical telemetry options from object or compatibility kwargs."""
+    if telemetry_options is None:
+        telemetry_options = TelemetryOptions(
+            enable_panel=enable_telemetry_panel,
+            metrics=list(telemetry_metrics) if telemetry_metrics is not None else [],
+            record=telemetry_record,
+            refresh_hz=telemetry_refresh_hz,
+            pane_layout=telemetry_pane_layout,
+            decimation=telemetry_decimation,
+        )
+    else:
+        telemetry_options = _copy_telemetry_options(telemetry_options)
+    telemetry_options.validate()
+    return telemetry_options
+
+
 def make_robot_env(  # noqa: PLR0913
     config: RobotSimulationConfig | None = None,
     *,
@@ -451,12 +498,14 @@ def make_robot_env(  # noqa: PLR0913
     video_fps: float | None = None,
     render_options: RenderOptions | None = None,
     recording_options: RecordingOptions | None = None,
+    jsonl_recording_options: JsonlRecordingOptions | None = None,
     use_jsonl_recording: bool = False,
     recording_dir: str = "recordings",
     suite_name: str = "robot_sim",
     scenario_name: str = "default",
     algorithm_name: str = "manual",
     recording_seed: int | None = None,
+    telemetry_options: TelemetryOptions | None = None,
     enable_telemetry_panel: bool = False,
     telemetry_metrics: list[str] | None = None,
     telemetry_record: bool = False,
@@ -496,6 +545,8 @@ def make_robot_env(  # noqa: PLR0913
         render_options: Advanced rendering options; takes precedence over convenience flags.
         recording_options: Advanced recording options. For robot/image factories, convenience
             flag may upgrade ``record`` to True if conflicting (precedence rule #3).
+        jsonl_recording_options: Advanced per-episode JSONL recording metadata; when provided,
+            it takes precedence over the flat JSONL compatibility kwargs below.
         use_jsonl_recording: Enable JSONL episode recording (per-episode JSONL + metadata
             outputs) when recording is on.
         recording_dir: Directory where JSONL recorder stores per-episode files if enabled.
@@ -504,6 +555,8 @@ def make_robot_env(  # noqa: PLR0913
         algorithm_name: Algorithm identifier stored in JSONL metadata.
         recording_seed: Optional stable seed used by the recorder to derive deterministic
             episode names.
+        telemetry_options: Advanced telemetry panel/recording options; when provided, it takes
+            precedence over the flat telemetry compatibility kwargs below.
         enable_telemetry_panel: When True, initialize docked telemetry pane configuration
             (charts blitted into SDL).
         telemetry_metrics: Metrics to render in the telemetry pane; defaults to core metrics
@@ -554,6 +607,24 @@ def make_robot_env(  # noqa: PLR0913
         render_options=render_options,
         recording_options=recording_options,
     )
+    jsonl_recording_options = _normalize_jsonl_recording_options(
+        jsonl_recording_options=jsonl_recording_options,
+        use_jsonl_recording=use_jsonl_recording,
+        recording_dir=recording_dir,
+        suite_name=suite_name,
+        scenario_name=scenario_name,
+        algorithm_name=algorithm_name,
+        recording_seed=recording_seed,
+    )
+    telemetry_options = _normalize_telemetry_options(
+        telemetry_options=telemetry_options,
+        enable_telemetry_panel=enable_telemetry_panel,
+        telemetry_metrics=telemetry_metrics,
+        telemetry_record=telemetry_record,
+        telemetry_refresh_hz=telemetry_refresh_hz,
+        telemetry_pane_layout=telemetry_pane_layout,
+        telemetry_decimation=telemetry_decimation,
+    )
     logger.debug(
         "Creating robot env debug={debug} record_video={record} video_path={path} fps={fps}",
         debug=debug,
@@ -571,18 +642,8 @@ def make_robot_env(  # noqa: PLR0913
         record_video=eff_record_video,
         video_path=eff_video_path,
         video_fps=eff_video_fps,
-        use_jsonl_recording=use_jsonl_recording,
-        recording_dir=recording_dir,
-        suite_name=suite_name,
-        scenario_name=scenario_name,
-        algorithm_name=algorithm_name,
-        recording_seed=recording_seed,
-        enable_telemetry_panel=enable_telemetry_panel,
-        telemetry_metrics=telemetry_metrics,
-        telemetry_record=telemetry_record,
-        telemetry_refresh_hz=telemetry_refresh_hz,
-        telemetry_pane_layout=telemetry_pane_layout,
-        telemetry_decimation=telemetry_decimation,
+        jsonl_recording_options=jsonl_recording_options,
+        telemetry_options=telemetry_options,
         asymmetric_critic=asymmetric_critic,
     )
     env.applied_seed = seed
@@ -605,6 +666,7 @@ def make_image_robot_env(  # noqa: PLR0913
     video_fps: float | None = None,
     render_options: RenderOptions | None = None,
     recording_options: RecordingOptions | None = None,
+    jsonl_recording_options: JsonlRecordingOptions | None = None,
     use_jsonl_recording: bool = False,
     recording_dir: str = "recordings",
     suite_name: str = "robot_sim",
@@ -650,6 +712,15 @@ def make_image_robot_env(  # noqa: PLR0913
         render_options=render_options,
         recording_options=recording_options,
     )
+    jsonl_recording_options = _normalize_jsonl_recording_options(
+        jsonl_recording_options=jsonl_recording_options,
+        use_jsonl_recording=use_jsonl_recording,
+        recording_dir=recording_dir,
+        suite_name=suite_name,
+        scenario_name=scenario_name,
+        algorithm_name=algorithm_name,
+        recording_seed=recording_seed,
+    )
     logger.info(
         "Creating image robot env debug={debug} record_video={record} video_path={path} fps={fps}",
         debug=debug,
@@ -667,12 +738,7 @@ def make_image_robot_env(  # noqa: PLR0913
         record_video=eff_record_video,
         video_path=eff_video_path,
         video_fps=eff_video_fps,
-        use_jsonl_recording=use_jsonl_recording,
-        recording_dir=recording_dir,
-        suite_name=suite_name,
-        scenario_name=scenario_name,
-        algorithm_name=algorithm_name,
-        recording_seed=recording_seed,
+        jsonl_recording_options=jsonl_recording_options,
         asymmetric_critic=asymmetric_critic,
     )
     env.applied_seed = seed

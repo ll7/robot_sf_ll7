@@ -11,6 +11,21 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 
+@dataclass
+class Observation:
+    """Canonical baseline planner observation container.
+
+    The classic baseline planners consume a small world-frame payload with
+    timestep, robot state, nearby agents, and optional obstacle geometry.
+    Learned-policy dict observations intentionally remain outside this type.
+    """
+
+    dt: float
+    robot: dict[str, Any]
+    agents: list[dict[str, Any]]
+    obstacles: list[Any] = field(default_factory=list)
+
+
 @dataclass(frozen=True)
 class ObservationContract:
     """Planner-facing observation assumptions declared as lightweight metadata."""
@@ -156,6 +171,7 @@ class PlannerProtocol(Protocol):
 
 __all__ = [
     "ActionContract",
+    "Observation",
     "ObservationContract",
     "PlannerMetadata",
     "PlannerProtocol",

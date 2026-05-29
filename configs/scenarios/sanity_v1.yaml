@@ -4,6 +4,7 @@
 # route-following and sparse-interaction cases so baseline competence can be checked separately
 # from stress-test robustness.
 
+schema_version: robot_sf.scenario_matrix.v1
 includes:
   - single/planner_sanity_simple.yaml
   - sets/verified_simple_subset_v1.yaml

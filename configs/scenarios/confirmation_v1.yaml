@@ -11,6 +11,7 @@
 #   robot_sf_bench validate-config --matrix configs/scenarios/confirmation_v1.yaml
 #   robot_sf_bench preview-scenarios --matrix configs/scenarios/confirmation_v1.yaml
 
+schema_version: robot_sf.scenario_matrix.v1
 includes:
   - archetypes/issue_596_frame_consistency.yaml
   - archetypes/issue_596_static_obstacles.yaml

@@ -79,6 +79,62 @@ def test_cli_validate_config_manifest_source(tmp_path: Path, capsys):
     assert "include.yaml" in report["source"]["includes"]
 
 
+def test_cli_validate_config_reports_manifest_schema_version(tmp_path: Path, capsys):
+    """Ensure scenario manifests expose supported schema metadata in validation reports."""
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        "schema_version: robot_sf.scenario_matrix.v1\n"
+        "scenarios:\n"
+        "  - id: ok\n"
+        "    density: low\n"
+        "    flow: uni\n"
+        "    obstacle: open\n"
+        "    repeats: 1\n",
+        encoding="utf-8",
+    )
+
+    rc = cli_main(["validate-config", "--matrix", str(matrix_path)])
+    out = capsys.readouterr().out
+    report = json.loads(out)
+
+    assert rc == 0
+    assert report["source"]["schema_version"] == "robot_sf.scenario_matrix.v1"
+    assert report["errors"] == []
+
+
+def test_cli_validate_config_rejects_unsupported_manifest_schema_version(tmp_path: Path, capsys):
+    """Ensure unsupported scenario manifest versions fail with actionable JSON errors."""
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        "schema_version: robot_sf.scenario_matrix.v0\n"
+        "scenarios:\n"
+        "  - id: ok\n"
+        "    density: low\n"
+        "    flow: uni\n"
+        "    obstacle: open\n"
+        "    repeats: 1\n",
+        encoding="utf-8",
+    )
+
+    rc = cli_main(["validate-config", "--matrix", str(matrix_path)])
+    out = capsys.readouterr().out
+    report = json.loads(out)
+
+    assert rc == 2
+    assert report["num_scenarios"] == 1
+    assert report["errors"] == [
+        {
+            "index": None,
+            "id": None,
+            "error": (
+                "unsupported scenario matrix schema_version "
+                "'robot_sf.scenario_matrix.v0'; expected 'robot_sf.scenario_matrix.v1'"
+            ),
+            "path": "/schema_version",
+        }
+    ]
+
+
 def test_cli_validate_config_task_bundle_source(capsys):
     """Ensure validate-config reports task-bundle provenance when using bundle:<name>."""
     rc = cli_main(["validate-config", "--matrix", "bundle:sanity-smoke-v1"])

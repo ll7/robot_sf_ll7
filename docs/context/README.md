@@ -108,6 +108,8 @@ knowledge, not every transient iteration detail.
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
 * Issue #1636 benchmark metric semantics:
   [issue_1636_benchmark_metric_semantics.md](issue_1636_benchmark_metric_semantics.md)
+* Issue #1634 SocNav Module Split Plan (2026-05-28):
+  [issue_1634_socnav_split_plan.md](issue_1634_socnav_split_plan.md)
 * Issues #1598/#1599 Root Compatibility Decisions (2026-05-28):
   [issue_1598_1599_root_compatibility_decisions.md](issue_1598_1599_root_compatibility_decisions.md)
 * Issue #1504 ego-conditioned feature contract:

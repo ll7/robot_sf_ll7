@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from robot_sf.baselines.interface import Observation as InterfaceObservation
 from robot_sf.baselines.random_policy import Observation, RandomPlanner
 
 
@@ -49,3 +50,27 @@ def test_random_planner_unicycle_actions_respect_limits() -> None:
         action = planner.step(_obs())
         assert 0.0 <= float(action["v"]) <= 1.0 + 1e-6
         assert -0.7 - 1e-6 <= float(action["omega"]) <= 0.7 + 1e-6
+
+
+def test_random_planner_reexports_shared_observation_type() -> None:
+    """Random planner should use the canonical baseline Observation container."""
+    assert Observation is InterfaceObservation
+
+
+def test_random_planner_accepts_dict_observation_without_obstacles() -> None:
+    """Dict observations should normalize through the shared default-obstacle path."""
+    planner = RandomPlanner({"mode": "velocity", "v_max": 1.0}, seed=123)
+    obs = {
+        "dt": 0.1,
+        "robot": {
+            "position": [0.0, 0.0],
+            "velocity": [0.0, 0.0],
+            "goal": [1.0, 0.0],
+            "radius": 0.3,
+        },
+        "agents": [],
+    }
+
+    action = planner.step(obs)
+
+    assert set(action) == {"vx", "vy"}

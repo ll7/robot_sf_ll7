@@ -119,7 +119,13 @@ def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: 
 
 @dataclass
 class LidarScannerSettings:
-    """Representing LiDAR sensor configuration settings."""
+    """Configuration for the range scanner used by ``lidar_ray_scan``.
+
+    Distances use the same world-coordinate units as the occupancy object
+    passed to ``lidar_ray_scan``. Angles are radians. ``num_rays`` controls the
+    one-dimensional observation length, and ``scan_noise`` contains two
+    probabilities: scan loss and scan corruption.
+    """
 
     max_scan_dist: float = 10.0
     visual_angle_portion: float = 1.0
@@ -178,15 +184,18 @@ def raycast_pedestrians(
     ped_radius: float,
     ray_angles: np.ndarray,
 ):
-    """Perform raycasts to detect pedestrians within the scanner's range.
+    """Update ray ranges with pedestrian-circle intersections.
 
     Args:
         out_ranges: Output array modified in-place with the detected range per ray.
         scanner_pos: Position of the LiDAR sensor in world coordinates.
         max_scan_range: Maximum detection distance for each ray.
-        ped_positions: Pedestrian positions to test against the rays.
-        ped_radius: Radius used to approximate pedestrians as discs.
-        ray_angles: Ray directions in radians.
+        ped_positions: Pedestrian centers as an ``(N, 2)`` array of ``x, y``
+            world coordinates. Empty arrays are valid. Arrays with any other
+            shape are treated as no detections.
+        ped_radius: Radius, in world units, used to approximate pedestrians as discs.
+        ray_angles: Absolute ray directions in radians, one per ``out_ranges``
+            entry.
 
     Notes:
         ``out_ranges`` is modified in place and no value is returned.
@@ -209,7 +218,19 @@ def raycast_circles(
     circles: np.ndarray,
     ray_angles: np.ndarray,
 ):
-    """Perform raycasts to detect generic circular obstacles."""
+    """Update ray ranges with generic circle intersections.
+
+    Args:
+        out_ranges: Mutable per-ray distances, updated in place with nearer
+            circle hits.
+        scanner_pos: Scanner origin in world coordinates.
+        max_scan_range: Maximum distance used to prefilter candidate circles.
+        circles: Circle rows as an ``(N, 3)`` array of ``x, y, radius`` values
+            in world units. Empty arrays, malformed arrays, and ``None`` callers
+            handled by ``raycast`` are treated as no detections.
+        ray_angles: Absolute ray directions in radians, one per ``out_ranges``
+            entry.
+    """
     if len(circles.shape) != 2 or circles.shape[0] == 0 or circles.shape[1] != 3:
         return
 
@@ -253,6 +274,10 @@ def raycast_obstacles(
             ``start_x, start_y, end_x, end_y`` rows.
         ray_angles: Absolute ray directions in radians, one per ``out_ranges``
             entry.
+
+    Notes:
+        Malformed or empty obstacle arrays are treated as no detections. The
+        function mutates ``out_ranges`` and returns ``None``.
     """
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
@@ -279,12 +304,20 @@ def raycast(  # noqa: PLR0913
 ) -> np.ndarray:
     """Cast rays to compute minimal collision distances along given angles.
 
-    The scan originates from the scanner's position and considers pedestrians,
-    obstacles, and optionally an enemy agent. When no collision occurs, the
-    maximum scan range is returned for that ray.
+    The scan originates from ``scanner_pos`` and considers static obstacle
+    segments, pedestrian discs, an optional enemy disc, and optional dynamic
+    robot discs. ``scanner_pos`` is ``(x, y)`` in world coordinates, obstacles
+    are ``(N, 4)`` rows of ``start_x, start_y, end_x, end_y``, pedestrian and
+    enemy positions are ``(N, 2)`` arrays, and ``other_robot_circles`` is an
+    ``(N, 3)`` array of ``x, y, radius`` rows.
+
+    ``max_scan_range`` is used to prefilter circular objects. No-hit rays remain
+    ``np.inf`` here; ``lidar_ray_scan`` clamps them to ``max_scan_dist`` during
+    postprocessing.
 
     Returns:
-        numpy.ndarray: Per-ray distances with shape ``(num_rays,)``.
+        numpy.ndarray: Per-ray distances with shape ``(len(ray_angles),)`` in
+        world units. The returned array is newly allocated.
     """
     out_ranges = np.full((ray_angles.shape[0]), np.inf)
     raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
@@ -341,7 +374,21 @@ def _dynamic_objects_to_circle_array(occ: ContinuousOccupancy) -> np.ndarray | N
 
 @numba.njit(fastmath=True)
 def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_scan_dist: float):
-    """Postprocess the raycast results to simulate a noisy scan result."""
+    """Clamp and noise raycast results in place.
+
+    Args:
+        out_ranges: Mutable per-ray distances. Values above ``max_scan_dist``
+            and ``np.inf`` no-hit sentinels are clipped to ``max_scan_dist``.
+        scan_noise: Two probabilities ``[scan_loss, scan_corruption]``. Loss
+            replaces the ray with ``max_scan_dist``; corruption scales the
+            current distance by a random factor in ``[0, 1)``.
+        max_scan_dist: Inclusive maximum scanner range in world units.
+
+    Notes:
+        This function mutates ``out_ranges`` and returns ``None``. Settings
+        validation is performed by ``LidarScannerSettings`` before normal use;
+        direct callers are expected to pass two probabilities.
+    """
     prob_scan_loss, prob_scan_corruption = scan_noise
     for i in range(out_ranges.shape[0]):
         out_ranges[i] = min(out_ranges[i], max_scan_dist)
@@ -358,12 +405,30 @@ def lidar_ray_scan(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Simulate a radial LiDAR scan on a continuous occupancy with objects.
 
-    The occupancy contains the robot (as circle), a set of pedestrians
-    (as circles) and a set of static obstacles (as 2D lines).
+    Args:
+        pose: Robot pose as ``((x, y), heading)`` in world coordinates and
+            radians.
+        occ: Occupancy provider exposing ``pedestrian_coords``,
+            ``obstacle_coords``, and ``ped_radius``. ``obstacle_coords`` must be
+            an ``(N, 4)`` array of segment endpoints, and ``pedestrian_coords``
+            must be an ``(N, 2)`` array. ``EgoPedContinuousOccupancy`` also
+            contributes its enemy circle. When ``settings.detect_other_robots``
+            is true, an optional ``get_dynamic_objects()`` callback may return
+            ``[((x, y), radius), ...]`` circles.
+        settings: Scanner configuration. Distances use world units and angles
+            use radians.
 
     Returns:
         tuple[numpy.ndarray, numpy.ndarray]: A pair ``(ranges, ray_angles)`` where
-        ``ranges`` are per-ray distances and ``ray_angles`` are absolute ray angles.
+        ``ranges`` are per-ray distances with shape ``(settings.num_rays,)`` and
+        bounds ``[0, settings.max_scan_dist]`` after postprocessing.
+        ``ray_angles`` has the same shape and contains absolute angles in
+        ``[0, 2*pi)`` radians.
+
+    Notes:
+        The occupancy object is read but not mutated. Malformed dynamic object
+        entries are ignored by the conversion helper; malformed pedestrian or
+        obstacle arrays are treated as empty detections by the raycast helpers.
     """
 
     (pos_x, pos_y), robot_orient = pose

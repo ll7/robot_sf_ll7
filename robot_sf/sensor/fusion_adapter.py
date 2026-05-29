@@ -60,7 +60,11 @@ if TYPE_CHECKING:
 
 
 def create_sensors_from_config(sensor_configs: list[dict[str, Any]]) -> list[Sensor]:
-    """Create sensor instances from configuration list.
+    """Create registry-backed sensor instances from configuration dictionaries.
+
+    The input list is read in order and is not mutated. Each configuration is
+    passed unchanged to its registered factory, so sensor-specific keys and
+    value types are owned by that sensor implementation.
 
     Parameters
     ----------
@@ -80,6 +84,9 @@ def create_sensors_from_config(sensor_configs: list[dict[str, Any]]) -> list[Sen
         If a sensor config is missing the "type" key.
     KeyError
         If a sensor type is not registered. Includes list of available types.
+    RuntimeError
+        If the registered factory raises during sensor construction; the
+        original exception is chained as ``__cause__``.
 
     Examples
     --------
@@ -135,7 +142,11 @@ def create_sensors_from_config(sensor_configs: list[dict[str, Any]]) -> list[Sen
 
 
 def validate_sensor_configs(sensor_configs: list[dict[str, Any]]) -> list[str]:
-    """Validate sensor configurations without instantiation.
+    """Validate sensor configuration dictionaries without instantiating sensors.
+
+    This only checks adapter-owned fields: every config must contain ``"type"``
+    and the referenced type must be registered. Sensor-specific schemas are not
+    evaluated here because factories own those contracts.
 
     Parameters
     ----------
@@ -145,7 +156,8 @@ def validate_sensor_configs(sensor_configs: list[dict[str, Any]]) -> list[str]:
     Returns
     -------
     list[str]
-        List of validation errors. Empty if all configs are valid.
+        List of human-readable validation errors. Empty if all adapter-owned
+        checks pass. The input list and config dictionaries are not mutated.
 
     Examples
     --------
@@ -179,11 +191,14 @@ class MergedObservationFusion:
     """Wrapper that merges base SensorFusion observations with registry sensors.
 
     This wrapper does not modify SensorFusion internals. It calls the base
-    fusion's next_obs() and then augments the dict with additional sensor
-    observations under keys of the form "custom.<name>".
+    fusion's ``next_obs()`` and then augments the returned dictionary with
+    additional sensor observations under keys of the form ``"custom.<name>"``.
+    The returned dictionary is mutated in place; callers that need a pristine
+    base observation should copy it before wrapping.
 
     Sensors are stepped with a lightweight state dict containing the simulator
-    and robot_id for potential future use by sensor implementations.
+    and robot_id for potential future use by sensor implementations. The state
+    shape is ``{"sim": sim, "robot_id": robot_id}``; values may be ``None``.
     """
 
     def __init__(
@@ -214,7 +229,19 @@ class MergedObservationFusion:
         robot_id : int | None
             Optional robot identifier passed to custom sensors in their
             lightweight state dict.
+
+        Raises
+        ------
+        ValueError
+            If ``sensors`` and ``sensor_names`` have different lengths.
         """
+        if len(sensors) != len(sensor_names):
+            msg = (
+                "sensors and sensor_names must have the same length "
+                f"(got {len(sensors)} sensors and {len(sensor_names)} names)"
+            )
+            raise ValueError(msg)
+
         self._base = base_fusion
         self._sensors = sensors
         self._names = sensor_names
@@ -226,13 +253,23 @@ class MergedObservationFusion:
 
         Each custom sensor receives a state dict containing ``sim`` and
         ``robot_id`` before its observation is read. Sensor failures are logged
-        with the configured sensor name and then re-raised.
+        with the configured sensor name and then re-raised. Custom observations
+        are stored without copying, preserving the object returned by
+        ``sensor.get_observation()``.
 
         Returns
         -------
         dict[str, Any]
-            Observation dictionary from the base fusion plus ``custom.<name>``
-            entries for every configured registry sensor.
+            Observation dictionary returned by the base fusion plus
+            ``custom.<name>`` entries for every configured registry sensor.
+
+        Raises
+        ------
+        AttributeError
+            If the base object does not provide ``next_obs``.
+        Exception
+            Any exception raised by ``base_fusion.next_obs()``, ``sensor.step()``,
+            or ``sensor.get_observation()`` is propagated.
         """
         obs = self._base.next_obs()
         state = {"sim": self._sim, "robot_id": self._robot_id}
@@ -247,7 +284,14 @@ class MergedObservationFusion:
 
     # Pass-through API used by RobotState
     def reset_cache(self) -> None:
-        """Reset cached base-fusion state and custom sensors when supported."""
+        """Reset cached base-fusion state and custom sensors when supported.
+
+        The base object's ``reset_cache`` method is optional and called first
+        when present. Custom sensor ``reset`` methods are also optional at
+        runtime for compatibility with older duck-typed test doubles, even
+        though registry sensors are expected to follow the ``Sensor`` protocol.
+        Exceptions raised by either reset path are propagated.
+        """
         if hasattr(self._base, "reset_cache"):
             self._base.reset_cache()
         for sensor in self._sensors:

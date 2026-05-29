@@ -83,3 +83,18 @@ def test_merged_observation_fusion_adds_custom_keys(_clean_registry):
     fusion.reset_cache()
     # Validate that reset propagated to base (introspective check in stub)
     assert getattr(base, "_reset_called", False) is True
+
+
+def test_merged_observation_fusion_rejects_name_count_mismatch():
+    """Sensor/name count mismatches fail before base observations are read."""
+    sensor = DummyConstantSensor(
+        {
+            "type": "dummy_constant",
+            "value": 1.0,
+            "shape": [],
+            "dtype": "float32",
+        }
+    )
+
+    with pytest.raises(ValueError, match="same length"):
+        MergedObservationFusion(_BaseFusionStub(), [sensor], [])

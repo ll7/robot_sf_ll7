@@ -11,7 +11,6 @@ It also defines the action and observation spaces for the robot.
 """
 
 import hashlib
-import importlib
 import json
 import random
 import time
@@ -19,7 +18,7 @@ import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +38,7 @@ from robot_sf.gym_env.env_util import (
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reward import route_completion_v2_reward
+from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.render.lidar_visual import render_lidar
@@ -60,10 +60,6 @@ DEFAULT_PANE_WIDTH = 320
 DEFAULT_PANE_HEIGHT = 240
 MIN_PANE_WIDTH = 200
 MIN_PANE_HEIGHT = 160
-_DEFAULT_COLLISION_DIST = 0.25
-_DEFAULT_NEAR_MISS_DIST = 0.50
-_DEFAULT_COMFORT_FORCE_THRESHOLD = 2.0
-_SNQI_THRESHOLD_CACHE: tuple[float, float, float] | None = None
 _TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
     "near_misses",
     "force_exceed_events",
@@ -95,21 +91,6 @@ def _temporary_global_reset_seed(seed: int | None):
     finally:
         random.setstate(random_state)
         np.random.set_state(numpy_state)
-
-
-@dataclass(slots=True)
-class _StepSNQIProxyState:
-    """Running state for SNQI step-level proxy computation.
-
-    The benchmark ``jerk_mean`` is an episodic quantity. For per-step reward metadata we
-    maintain a running proxy from finite differences of robot position.
-    """
-
-    prev_robot_pos: np.ndarray | None = None
-    prev_robot_vel: np.ndarray | None = None
-    prev_robot_acc: np.ndarray | None = None
-    jerk_sum: float = 0.0
-    jerk_count: int = 0
 
 
 # Helper to compute a stable, short hash for env_config
@@ -407,143 +388,12 @@ def _extract_step_metrics(meta: dict[str, Any]) -> dict[str, float]:
     return extracted
 
 
-def _extract_robot_xy(robot_pose: Any) -> np.ndarray:
-    """Extract a 2D robot position from heterogeneous simulator pose payloads.
-
-    Args:
-        robot_pose: Backend-dependent pose object; typically ``((x, y), theta)``.
-
-    Returns:
-        np.ndarray: ``[x, y]`` position vector.
-    """
-    source = robot_pose[0] if isinstance(robot_pose, (tuple, list)) else robot_pose
-    flattened = np.asarray(source, dtype=float).reshape(-1)
-    if flattened.size >= 2:
-        return flattened[:2]
-    return np.zeros(2, dtype=float)
-
-
-def _coerce_xy_rows(data: Any) -> np.ndarray:
-    """Coerce simulator arrays into ``(N, 2)`` float rows.
-
-    Returns:
-        np.ndarray: Array with shape ``(N, 2)``; invalid layouts produce an empty array.
-    """
-    values = np.asarray(data, dtype=float)
-    if values.ndim == 1:
-        return values.reshape(-1, 2) if values.size % 2 == 0 else np.zeros((0, 2), dtype=float)
-    if values.ndim == 2 and values.shape[-1] >= 2:
-        return values[:, :2]
-    return np.zeros((0, 2), dtype=float)
-
-
-def _resolve_snqi_thresholds() -> tuple[float, float, float]:
-    """Resolve SNQI threshold constants lazily to avoid import cycles.
-
-    Returns:
-        tuple[float, float, float]: ``(collision_dist, near_miss_dist, comfort_force_threshold)``.
-    """
-    global _SNQI_THRESHOLD_CACHE
-    if _SNQI_THRESHOLD_CACHE is not None:
-        return _SNQI_THRESHOLD_CACHE
-    try:
-        constants_module = importlib.import_module("robot_sf.benchmark.constants")
-        collision_dist = float(constants_module.COLLISION_DIST)
-        near_miss_dist = float(constants_module.NEAR_MISS_DIST)
-        comfort_force_threshold = float(constants_module.COMFORT_FORCE_THRESHOLD)
-
-        _SNQI_THRESHOLD_CACHE = (
-            collision_dist,
-            near_miss_dist,
-            comfort_force_threshold,
-        )
-    except (ImportError, ModuleNotFoundError, AttributeError):
-        _SNQI_THRESHOLD_CACHE = (
-            _DEFAULT_COLLISION_DIST,
-            _DEFAULT_NEAR_MISS_DIST,
-            _DEFAULT_COMFORT_FORCE_THRESHOLD,
-        )
-    return _SNQI_THRESHOLD_CACHE
-
-
-def _compute_snqi_step_proxies(
-    *,
-    simulator: Any,
-    dt: float,
-    proxy_state: _StepSNQIProxyState,
-) -> dict[str, float]:
-    """Compute per-step SNQI proxy terms from simulator state.
-
-    The generated values are intentionally lightweight proxies:
-    - ``near_misses``: exact per-step threshold event for robot-ped min distance.
-    - ``force_exceed_events``: exact per-step count above comfort threshold.
-    - ``comfort_exposure``: per-step normalized force exceed ratio.
-    - ``jerk_mean``: running mean of finite-difference jerk magnitude proxy.
-
-    Args:
-        simulator: Active simulator backend for the environment.
-        dt: Simulation timestep in seconds.
-        proxy_state: Running state used to estimate jerk proxy over steps.
-
-    Returns:
-        dict[str, float]: Step-level SNQI-aligned metadata terms.
-    """
-    d_coll, d_near, comfort_force_threshold = _resolve_snqi_thresholds()
-    robot_poses = getattr(simulator, "robot_poses", [])
-    robot_pos = (
-        _extract_robot_xy(robot_poses[0])
-        if isinstance(robot_poses, list) and robot_poses
-        else np.zeros(2)
-    )
-
-    ped_pos = _coerce_xy_rows(getattr(simulator, "ped_pos", np.zeros((0, 2), dtype=float)))
-
-    near_misses = 0.0
-    if ped_pos.size > 0:
-        deltas = ped_pos[:, :2] - robot_pos
-        min_dist = float(np.linalg.norm(deltas, axis=1).min())
-        near_misses = 1.0 if d_coll <= min_dist < d_near else 0.0
-
-    ped_forces = _coerce_xy_rows(
-        getattr(simulator, "last_ped_forces", np.zeros((0, 2), dtype=float))
-    )
-    force_magnitudes = np.linalg.norm(ped_forces, axis=1) if ped_forces.size > 0 else np.zeros((0,))
-    force_exceed_events = float(np.count_nonzero(force_magnitudes > comfort_force_threshold))
-    # Some backends can transiently report different lengths for ped positions/forces between ticks.
-    ped_count = max(int(ped_pos.shape[0]), int(force_magnitudes.shape[0]))
-    comfort_exposure = force_exceed_events / float(max(1, ped_count))
-
-    # Running jerk proxy from robot position finite differences.
-    if dt > 1e-9:
-        if proxy_state.prev_robot_pos is not None:
-            vel = (robot_pos - proxy_state.prev_robot_pos) / dt
-            if proxy_state.prev_robot_vel is not None:
-                acc = (vel - proxy_state.prev_robot_vel) / dt
-                if proxy_state.prev_robot_acc is not None:
-                    jerk = (acc - proxy_state.prev_robot_acc) / dt
-                    jerk_mag = float(np.linalg.norm(jerk))
-                    if np.isfinite(jerk_mag):
-                        proxy_state.jerk_sum += jerk_mag
-                        proxy_state.jerk_count += 1
-                proxy_state.prev_robot_acc = acc
-            proxy_state.prev_robot_vel = vel
-        proxy_state.prev_robot_pos = robot_pos
-    jerk_mean = (
-        proxy_state.jerk_sum / float(proxy_state.jerk_count) if proxy_state.jerk_count > 0 else 0.0
-    )
-
-    return {
-        "near_misses": float(near_misses),
-        "force_exceed_events": float(force_exceed_events),
-        "comfort_exposure": float(comfort_exposure),
-        "jerk_mean": float(jerk_mean),
-    }
-
-
 class RobotEnv(BaseEnv):
-    """
-    Representing a Gymnasium environment for training a self-driving robot
-    with reinforcement learning.
+    """Gymnasium environment facade for Robot SF simulation episodes.
+
+    ``RobotEnv`` remains the public environment API. Focused runtime collaborators own
+    extractable concerns such as step-level SNQI proxy metadata, while this class coordinates
+    simulator lifecycle, observation assembly, reward evaluation, recording, and rendering.
     """
 
     def __init__(  # noqa: PLR0913
@@ -671,17 +521,14 @@ class RobotEnv(BaseEnv):
         self._last_wall_time = time.perf_counter()
         self._frame_idx = 0
         self._telemetry_episode_id = -1
-        self._snqi_proxy_state = _StepSNQIProxyState()
+        self._snqi_proxy = StepSNQIProxy()
         self._grid_obstacle_cache_key: _GridObstacleCacheKey | None = None
         self._grid_obstacle_cache_value: _GridObstacleCacheValue | None = None
         self._prime_snqi_proxy_state()
 
     def _prime_snqi_proxy_state(self) -> None:
         """Reset and prime step-level SNQI proxy state for a fresh episode."""
-        self._snqi_proxy_state = _StepSNQIProxyState()
-        robot_poses = getattr(self.simulator, "robot_poses", [])
-        if isinstance(robot_poses, list) and robot_poses:
-            self._snqi_proxy_state.prev_robot_pos = _extract_robot_xy(robot_poses[0])
+        self._snqi_proxy.prime(self.simulator)
 
     def _build_occupancy_grid(self, env_config: EnvSettings) -> OccupancyGrid | None:
         """Initialize occupancy grid if configured and return the instance.
@@ -983,10 +830,9 @@ class RobotEnv(BaseEnv):
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
         reward_dict.update(
-            _compute_snqi_step_proxies(
-                simulator=self.simulator,
+            self._snqi_proxy.compute_step_metrics(
+                self.simulator,
                 dt=float(self.state.d_t),
-                proxy_state=self._snqi_proxy_state,
             )
         )
         # add the action space to dict

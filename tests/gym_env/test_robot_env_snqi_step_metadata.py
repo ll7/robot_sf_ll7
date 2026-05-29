@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.gym_env.robot_env import _compute_snqi_step_proxies, _StepSNQIProxyState
+from robot_sf.gym_env.snqi_proxy import StepSNQIProxy, compute_snqi_step_proxies
 
 
 class _FakeSimulator:
@@ -33,12 +33,12 @@ def test_compute_snqi_step_proxies_emits_non_default_terms(
         dtype=float,
     )
     monkeypatch.setattr(
-        "robot_sf.gym_env.robot_env._resolve_snqi_thresholds",
+        "robot_sf.gym_env.snqi_proxy.resolve_snqi_thresholds",
         lambda: (d_coll, d_near, comfort_threshold),
     )
-    state = _StepSNQIProxyState()
+    proxy = StepSNQIProxy()
 
-    first = _compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=state)
+    first = compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=proxy.state)
     assert first["near_misses"] == 1.0
     assert first["force_exceed_events"] == 1.0
     assert first["comfort_exposure"] == 0.5
@@ -46,11 +46,11 @@ def test_compute_snqi_step_proxies_emits_non_default_terms(
 
     # Drive a non-linear position profile so finite-difference jerk becomes non-zero.
     sim.robot_poses = [((0.1, 0.0), 0.0)]
-    _compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=state)
+    compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=proxy.state)
     sim.robot_poses = [((0.3, 0.0), 0.0)]
-    _compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=state)
+    compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=proxy.state)
     sim.robot_poses = [((0.5, 0.0), 0.0)]
-    fourth = _compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=state)
+    fourth = compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=proxy.state)
     assert fourth["jerk_mean"] > 0.0
 
 

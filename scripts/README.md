@@ -20,7 +20,7 @@ This directory contains all executable scripts for the Robot SF project, organiz
 
 * **Train a robot policy** → [`training/train_ppo.py`](#training-directory)
 * **Train/evaluate predictive planner** → [`scripts/training/train_predictive_planner.py`](#predictive-planner-workflow) and [`scripts/validation/run_predictive_success_campaign.py`](#predictive-planner-workflow)
-* **Run benchmarks** → [`classic_benchmark_full.py`](#classic_benchmark_fullpy) or [`benchmark02.py`](#benchmark02py)
+* **Run benchmarks** → [`classic_benchmark_full.py`](#classic_benchmark_fullpy) or [`benchmark_workers.py`](#benchmark_workerspy)
 * **Search policy candidates** → [`scripts/validation/run_policy_search_candidate.py`](#validation-directory) plus the comparison and failure-report tools under [`tools/`](#tools--utilities)
 * **Analyze results** → [`research/`](#research-directory) or [`generate_figures.py`](#generate_figurespy)
 * **Validate changes** → [`validation/`](#validation-directory)
@@ -53,6 +53,7 @@ scripts/
 │
 ├── research/                          # Research & analysis
 │   ├── generate_report.py            # Research report generation
+│   ├── generate_extractor_report.py  # Multi-extractor report generation
 │   └── compare_ablations.py          # Ablation study comparison
 │
 ├── validation/                        # Testing & validation
@@ -93,6 +94,61 @@ scripts/
 ```
 
 ## Core Scripts
+
+## Root-Level Entry Point Status
+
+Prefer maintained subdirectories (`training/`, `validation/`, `tools/`, `dev/`, `coverage/`,
+`manual_control/`) for new workflows. Root-level scripts are kept only when they are still a
+reviewed public command, a compatibility shim, or a bounded debug utility.
+
+| Script | Status | Canonical path or action |
+| --- | --- | --- |
+| `__init__.py` | canonical | Import support for tested script modules. |
+| `analyze_feature_extractors.py` | compatibility | Prefer `research/generate_extractor_report.py` for multi-extractor report generation. |
+| `benchmark.py` | archive candidate | Old profiling helper; prefer `scripts/validation/performance_smoke_test.py`. |
+| `benchmark02.py` | compatibility | Fails closed; use `scripts/benchmark_workers.py` or `scripts/validation/performance_smoke_test.py`. |
+| `benchmark_ped_apf_models.py` | debug-only | Narrow APF comparison helper. |
+| `benchmark_ped_policy_collisions.py` | debug-only | Narrow pedestrian-policy collision analysis helper. |
+| `benchmark_planner.py` | debug-only | Local planner timing probe. |
+| `benchmark_repro_check.py` | compatibility | Prefer benchmark release and validation tools under `scripts/tools/`. |
+| `benchmark_threshold_sensitivity.py` | canonical | Threshold sensitivity analysis for replay-rich benchmark rows. |
+| `benchmark_workers.py` | canonical | Maintained worker-throughput benchmark helper. |
+| `classic_benchmark_full.py` | canonical | Full classic interaction benchmark CLI. |
+| `collect_slow_tests.py` | canonical | Slow-test duration parser. |
+| `compare_slow_tests.py` | canonical | Slow-test before/after comparison. |
+| `convert_pickle_to_jsonl.py` | compatibility | Legacy recording migration helper. |
+| `debug_ped_apf.py` | debug-only | Interactive APF debugging. |
+| `debug_ped_discrete.py` | debug-only | Pedestrian discrete-action debugging. |
+| `debug_ped_forces.py` | debug-only | Pedestrian force debugging. |
+| `debug_ped_policy.py` | debug-only | Pedestrian policy debugging. |
+| `debug_ped_policy_differential_drive.py` | debug-only | Differential-drive pedestrian policy debugging. |
+| `debug_random_policy.py` | debug-only | Manual/random-policy visual debug helper. |
+| `debug_trained_policy.py` | archive candidate | Old trained-policy debug helper; prefer examples and factory-based smoke tests. |
+| `demo_jsonl_recording.py` | compatibility | JSONL recording demo; prefer examples and render docs for new docs. |
+| `evaluate.py` | compatibility | Legacy policy evaluation helper; prefer benchmark runner configs. |
+| `example_snqi_workflow.py` | canonical | SNQI workflow example. |
+| `failure_extractor.py` | canonical | Failure-row extraction helper. |
+| `generate_figures.py` | canonical | Benchmark figure generation. |
+| `generate_video_contact_sheet.py` | canonical | Episode-frame contact sheet generation. |
+| `hparam_opt.py` | compatibility | Fails closed; use `scripts/training/launch_optuna_expert_ppo.py`. |
+| `multi_extractor_training.py` | compatibility | Prefer feature-extractor report/training tools under `scripts/research/` and `scripts/training/`. |
+| `play_recordings.py` | compatibility | Legacy playback helper; prefer `robot_sf.render` playback modules. |
+| `ranking_table.py` | canonical | Ranking table generation from episode JSONL. |
+| `recompute_snqi_weights.py` | canonical | SNQI weight recomputation. |
+| `run_classic_interactions.py` | canonical | Classic interaction scenario matrix runner. |
+| `run_social_navigation_benchmark.py` | compatibility | Older all-in-one benchmark runner; prefer config-driven benchmark tools. |
+| `scale_svgs_to_50m.py` | debug-only | One-off SVG scaling utility. |
+| `seed_variance.py` | canonical | SNQI seed variance analysis. |
+| `snqi_sensitivity_analysis.py` | canonical | SNQI sensitivity analysis. |
+| `snqi_weight_optimization.py` | canonical | SNQI weight optimization. |
+| `test_planner_collision.py` | debug-only | Planner collision debug probe, not pytest. |
+| `training_a2c.py` | compatibility | Fails closed; no maintained A2C config-first launcher exists. |
+| `training_ped_ppo.py` | compatibility | Legacy pedestrian PPO entrypoint retained for tests; prefer config-first training additions under `scripts/training/`. |
+| `training_ped_ppo_differential_drive.py` | compatibility | Legacy pedestrian PPO variant; prefer config-first training additions under `scripts/training/`. |
+| `training_ppo.py` | compatibility | Fails closed; use `scripts/training/train_ppo.py --config <config.yaml>`. |
+| `update_svg_viewbox.py` | debug-only | One-off SVG viewBox utility. |
+| `validate_snqi_scripts.py` | canonical | SNQI script smoke validator. |
+| `wandb_ppo_training.py` | compatibility | Fails closed; use `scripts/training/train_ppo.py` with W&B enabled in config. |
 
 ### Training Scripts
 
@@ -136,14 +192,14 @@ Run one policy-search candidate through the staged `smoke` / `nominal_sanity` / 
 
 #### `training_a2c.py`
 
-**Purpose**: A2C algorithm training  
-**Usage**:
+**Purpose**: Retired A2C root entrypoint. Fails closed with migration guidance.
+**Replacement**:
 
 ```bash
-uv run python scripts/training_a2c.py
+uv run python scripts/training/train_ppo.py --config <config.yaml>
 ```
 
-**Details**: Alternative training algorithm (A2C)
+**Details**: Add a reviewed config-first launcher under `scripts/training/` if A2C support is needed.
 
 #### `training_ped_ppo.py`
 
@@ -156,14 +212,14 @@ uv run python scripts/training_ped_ppo.py
 
 #### `wandb_ppo_training.py`
 
-**Purpose**: PPO training with Weights & Biases logging  
-**Usage**:
+**Purpose**: Retired root W&B PPO entrypoint. Fails closed with migration guidance.
+**Replacement**:
 
 ```bash
-uv run python scripts/wandb_ppo_training.py
+uv run python scripts/training/train_ppo.py --config <config.yaml>
 ```
 
-**Details**: See `docs/wandb.md` for setup
+**Details**: Use `scripts/training/train_ppo.py --config <config.yaml>` and enable W&B in config.
 
 #### `multi_extractor_training.py`
 
@@ -191,14 +247,16 @@ uv run python scripts/classic_benchmark_full.py
 
 #### `benchmark02.py`
 
-**Purpose**: Performance benchmarking with metrics collection  
-**Usage**:
+**Purpose**: Retired root performance benchmark. Fails closed with migration guidance.
+**Replacement**:
 
 ```bash
-DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+uv run python scripts/validation/performance_smoke_test.py
 ```
 
-**Expected**: ~22 steps/second, ~45ms per step
+**Details**: Use `scripts/benchmark_workers.py` for worker throughput or
+`scripts/validation/performance_smoke_test.py` for a maintained smoke.
 
 #### `benchmark_workers.py`
 
@@ -206,7 +264,7 @@ DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 **Usage**:
 
 ```bash
-uv run python scripts/benchmark_workers.py
+uv run python scripts/benchmark_workers.py --out output/benchmarks/bench_workers
 ```
 
 #### `run_social_navigation_benchmark.py`
@@ -772,12 +830,14 @@ uv run python scripts/evaluate.py
 
 #### `hparam_opt.py`
 
-**Purpose**: Hyperparameter optimization with Optuna  
-**Usage**:
+**Purpose**: Retired root Optuna entrypoint. Fails closed with migration guidance.
+**Replacement**:
 
 ```bash
-uv run python scripts/hparam_opt.py
+uv run python scripts/training/launch_optuna_expert_ppo.py --config configs/training/ppo_imitation/optuna_expert_ppo.yaml
 ```
+
+**Details**: Use `scripts/training/launch_optuna_expert_ppo.py --config <config.yaml>`.
 
 #### `tools/inspect_optuna_db.py`
 
@@ -961,7 +1021,8 @@ uv run python examples/advanced/16_imitation_learning_pipeline.py
 uv run python scripts/classic_benchmark_full.py
 
 # Or quick performance check
-DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python scripts/validation/performance_smoke_test.py
 ```
 
 ### 3. Analyze Results

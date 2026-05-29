@@ -1,0 +1,53 @@
+{
+  "schema_version": "benchmark-comparability-summary.v1",
+  "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+  "generated_at_utc": "2026-05-28T15:24:41.783271Z",
+  "mapping_path": "configs/benchmarks/alyassi_comparability_map_v1.yaml",
+  "mapping_version": "alyassi-comparability-v1",
+  "mapping_hash": "6f349046993d",
+  "coverage_overlap_rows": [
+    {
+      "robot_sf_family": "cross_trap",
+      "scenario_count": 1,
+      "alyassi_category": "unmapped",
+      "overlap": "amv_extension"
+    }
+  ],
+  "amv_specific_extensions": [
+    "shared-space micromobility interactions",
+    "delivery robot curb-side handoff approach",
+    "mixed sidewalk and bike-lane transitions"
+  ],
+  "metric_comparability_rows": [
+    {
+      "metric": "collisions",
+      "classification": "comparable",
+      "alyassi_metric": "collision_rate",
+      "rationale": "Collision rate is directly comparable at episode granularity."
+    },
+    {
+      "metric": "comfort_exposure",
+      "classification": "proxy",
+      "alyassi_metric": "comfort/smoothness terms",
+      "rationale": "Comfort exposure overlaps with smoothness-focused safety comfort metrics."
+    },
+    {
+      "metric": "near_misses",
+      "classification": "proxy",
+      "alyassi_metric": "safety-distance violations",
+      "rationale": "Near misses approximate low-clearance safety stress but are not identical."
+    },
+    {
+      "metric": "snqi",
+      "classification": "amv_specific",
+      "alyassi_metric": "n/a",
+      "rationale": "SNQI is a robot_sf composite quality index used as an AMV extension metric."
+    },
+    {
+      "metric": "success",
+      "classification": "comparable",
+      "alyassi_metric": "success_rate",
+      "rationale": "Both benchmarks report episode-level success completion."
+    }
+  ]
+}

@@ -72,13 +72,43 @@ def test_map_definition_to_motion_planning_grid_marks_obstacles() -> None:
     """Verify rasterization marks obstacle cells and preserves scale metadata."""
     grid = map_definition_to_motion_planning_grid(
         _map_def_with_obstacle(),
-        MotionPlanningGridConfig(cells_per_meter=1.0, inflate_radius_cells=None),
+        MotionPlanningGridConfig(
+            cells_per_meter=1.0,
+            add_boundary_obstacles=False,
+            inflate_radius_cells=None,
+        ),
     )
     assert grid.cells_per_meter == 1.0
     obstacle_count = count_obstacle_cells(grid)
+    assert obstacle_count == 4
     assert isinstance(obstacle_count, (int, np.integer))
     stats = get_obstacle_statistics(grid)
-    assert stats["total_cells"] > 0
+    assert stats == {
+        "obstacle_count": 4,
+        "total_cells": 16,
+        "obstacle_percentage": 25.0,
+    }
+
+
+def test_obstacle_statistics_exclude_inflated_clearance_cells() -> None:
+    """Obstacle occupancy reports physical obstacles separately from inflation."""
+    grid = map_definition_to_motion_planning_grid(
+        _map_def_with_obstacle(),
+        MotionPlanningGridConfig(
+            cells_per_meter=1.0,
+            add_boundary_obstacles=False,
+            inflate_radius_cells=1,
+        ),
+    )
+
+    assert count_obstacle_cells(grid) == 4
+    type_map = np.asarray(getattr(grid.type_map, "array", grid.type_map))
+    assert np.count_nonzero(type_map == TYPES.INFLATION) == 8
+    assert get_obstacle_statistics(grid) == {
+        "obstacle_count": 4,
+        "total_cells": 16,
+        "obstacle_percentage": 25.0,
+    }
 
 
 def test_set_start_goal_on_grid_marks_cells() -> None:

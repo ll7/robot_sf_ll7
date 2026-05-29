@@ -102,6 +102,8 @@ knowledge, not every transient iteration detail.
   [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
+* Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):
+  [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
 * Issue #1583 high-risk root path boundaries:
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
 * Issues #1598/#1599 Root Compatibility Decisions (2026-05-28):
@@ -164,6 +166,8 @@ knowledge, not every transient iteration detail.
   [issue_1397_oracle_imitation_launch_packet.md](issue_1397_oracle_imitation_launch_packet.md)
 * Issue #1353 Broader AMV Baseline Preflight:
   [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
+* Issue #1484 Broader Cross-Kinematics Launch Packet:
+  [issue_1484_broader_cross_kinematics_launch.md](issue_1484_broader_cross_kinematics_launch.md)
 * Issue #1546 AMV actuation-envelope stress slice:
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
 * Issue #1556 synthetic AMV actuation stress slice:

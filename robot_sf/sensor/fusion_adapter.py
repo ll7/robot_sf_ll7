@@ -195,14 +195,25 @@ class MergedObservationFusion:
         sim: Any | None = None,
         robot_id: int | None = None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Store the base fusion object and registry-backed sensor instances.
 
-        Args:
-            base_fusion: TODO docstring.
-            sensors: TODO docstring.
-            sensor_names: TODO docstring.
-            sim: TODO docstring.
-            robot_id: TODO docstring.
+        Parameters
+        ----------
+        base_fusion : Any
+            Existing fusion object that provides ``next_obs`` and optionally
+            ``reset_cache``.
+        sensors : list[Sensor]
+            Additional registry-created sensors to step after the base
+            observation is produced.
+        sensor_names : list[str]
+            Names used to place sensor observations under ``custom.<name>``
+            keys. Must align with ``sensors`` order.
+        sim : Any | None
+            Optional simulator handle passed to custom sensors in their
+            lightweight state dict.
+        robot_id : int | None
+            Optional robot identifier passed to custom sensors in their
+            lightweight state dict.
         """
         self._base = base_fusion
         self._sensors = sensors
@@ -211,11 +222,17 @@ class MergedObservationFusion:
         self._robot_id = robot_id
 
     def next_obs(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
+        """Return base observations augmented with registry sensor outputs.
 
+        Each custom sensor receives a state dict containing ``sim`` and
+        ``robot_id`` before its observation is read. Sensor failures are logged
+        with the configured sensor name and then re-raised.
 
-        Returns:
-            TODO docstring.
+        Returns
+        -------
+        dict[str, Any]
+            Observation dictionary from the base fusion plus ``custom.<name>``
+            entries for every configured registry sensor.
         """
         obs = self._base.next_obs()
         state = {"sim": self._sim, "robot_id": self._robot_id}
@@ -230,7 +247,7 @@ class MergedObservationFusion:
 
     # Pass-through API used by RobotState
     def reset_cache(self) -> None:
-        """TODO docstring. Document this function."""
+        """Reset cached base-fusion state and custom sensors when supported."""
         if hasattr(self._base, "reset_cache"):
             self._base.reset_cache()
         for sensor in self._sensors:

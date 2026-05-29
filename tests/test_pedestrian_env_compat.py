@@ -15,7 +15,11 @@ from robot_sf.gym_env.env_config import PedEnvSettings as LegacyPedEnvSettings
 from robot_sf.gym_env.environment_factory import make_pedestrian_env
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv, _reward_function_name
 from robot_sf.gym_env.reward import simple_ped_reward
-from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
+from robot_sf.gym_env.unified_config import (
+    PedestrianSimulationConfig,
+    RobotSimulationConfig,
+    sync_pedestrian_obstacle_force_alias,
+)
 
 
 def test_pedestrian_env_uses_stub_robot_model() -> None:
@@ -74,6 +78,28 @@ def test_pedestrian_env_does_not_mutate_input_config_for_deprecated_force_flag()
         assert env.config.peds_have_static_obstacle_forces is False
     finally:
         env.exit()
+
+
+def test_deprecated_force_alias_helper_syncs_override_to_canonical_field() -> None:
+    """The shared helper keeps legacy and canonical force fields consistent."""
+    config = RobotSimulationConfig()
+
+    effective = sync_pedestrian_obstacle_force_alias(config, False)
+
+    assert effective is False
+    assert config.peds_have_static_obstacle_forces is False
+    assert config.peds_have_obstacle_forces is False
+
+
+def test_deprecated_force_alias_helper_preserves_canonical_field_without_override() -> None:
+    """No legacy override should leave the canonical config field in charge."""
+    config = RobotSimulationConfig(peds_have_static_obstacle_forces=False)
+
+    effective = sync_pedestrian_obstacle_force_alias(config)
+
+    assert effective is False
+    assert config.peds_have_static_obstacle_forces is False
+    assert config.peds_have_obstacle_forces is False
 
 
 def test_pedestrian_env_avoids_deepcopy_for_default_deprecated_force_flag(monkeypatch) -> None:

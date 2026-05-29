@@ -27,7 +27,10 @@ from robot_sf.gym_env.env_util import (
 )
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.robot_env import _build_step_info
-from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
+from robot_sf.gym_env.unified_config import (
+    PedestrianSimulationConfig,
+    sync_pedestrian_obstacle_force_alias,
+)
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_ego.pedestrian_state import PedestrianState
 from robot_sf.render.lidar_visual import render_lidar
@@ -133,7 +136,7 @@ class PedestrianEnv(SingleAgentEnv):
         if peds_have_obstacle_forces is not None:
             if env_config is original_env_config:
                 env_config = deepcopy(env_config)
-            env_config.peds_have_static_obstacle_forces = peds_have_obstacle_forces
+            sync_pedestrian_obstacle_force_alias(env_config, peds_have_obstacle_forces)
 
         # Store robot model
         if robot_model is None:

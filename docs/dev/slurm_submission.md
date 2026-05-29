@@ -48,6 +48,14 @@ scripts/dev/sbatch_use_max_time.sh --time 08:00:00 SLURM/Auxme/auxme_gpu.sl
 - Prefer the wrapper for long-running training jobs.
 - Keep explicit short limits only for intentionally bounded jobs such as setup or quick
   interactive sessions.
+- Before submitting, estimate the intended runtime from the config or preflight output: rows,
+  scenarios, seeds, episodes, horizon, workers, GPU need, and expected artifacts. A benchmark or
+  training run expected to finish in under 1 hour should default to local execution, not SLURM.
+- Submit a sub-1-hour run to SLURM only when the point is compute-node proof: GPU-only execution,
+  cluster-only dependencies, queue/runtime parity, or a maintainer-approved smoke. Label that job
+  and any issue/PR follow-up as `smoke` or `probe`, not as completed campaign evidence.
+- Do not let a GitHub `slurm` label alone justify submission. The label means cluster execution may
+  be required; the config still needs a suitability check.
 - When adding a new batch script, include `#SBATCH --partition` and `#SBATCH --qos` so
   the wrapper can resolve the correct limit without extra flags.
 - If Slurm tools are unavailable in the current shell, fall back to a manual `sbatch`

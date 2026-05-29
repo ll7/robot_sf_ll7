@@ -10,7 +10,7 @@ Related issues:
 
 ## Scope
 
-Issue #1484 follows the closed #1353 and #1354 evidence bundles by running the broader #1353
+Issue #1484 follows the closed #1353 and #1354 evidence bundles by probing the broader #1353
 runnable planner rows over the compact cross-kinematics scenario surface.
 
 Config:
@@ -53,11 +53,11 @@ scripts/dev/sbatch_use_max_time.sh --time 04:00:00 --partition a30 --qos a30-gpu
 
 ## Interpretation Boundary
 
-This campaign is a broader compatibility/evidence run. It is not paper-facing evidence by itself.
-Unsupported, unavailable, fallback, degraded, or failed experimental rows must remain separated from
-successful core benchmark evidence.
+This run is a broader compatibility smoke/probe. It is not paper-facing evidence by itself and is
+not campaign-sized #1484 evidence. Unsupported, unavailable, fallback, degraded, or failed
+experimental rows must remain separated from successful core benchmark evidence.
 
-## Completed Run 2026-05-28
+## Completed Smoke Run 2026-05-28
 
 SLURM job `12658` completed successfully:
 
@@ -73,6 +73,12 @@ SLURM job `12658` completed successfully:
 - core rows: `9/9`
 - AMV coverage: `pass`
 - SNQI contract: `warn`
+
+This completed in about two minutes because the config intentionally used one scenario, one seed,
+three kinematics modes, seven planner rows, and horizon `80`, yielding 21 short episodes. Treat it
+as proof that the matrix executes and reports cleanly. Do not use it to close #1484's original
+broader-campaign objective without a larger scenario/seed/runtime surface or an explicit maintainer
+scope decision.
 
 `scripts/tools/analyze_camera_ready_campaign.py` reported no consistency findings. Compact evidence
 is preserved under `docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/`; raw

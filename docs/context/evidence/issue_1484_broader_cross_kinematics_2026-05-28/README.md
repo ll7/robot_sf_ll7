@@ -8,8 +8,8 @@ Related issues:
 
 ## Scope
 
-This directory preserves compact, reviewable evidence for the #1484 broader
-cross-kinematics campaign. Raw run bundles remain under ignored `output/`.
+This directory preserves compact, reviewable smoke/probe evidence for the #1484 broader
+cross-kinematics matrix. Raw run bundles remain under ignored `output/`.
 
 ## Campaign
 
@@ -41,10 +41,18 @@ The executed matrix is seven planners across three kinematics modes:
 - experimental: `ppo`, `prediction_planner`, `sacadrl`, `socnav_sampling`
 - kinematics: `differential_drive`, `bicycle_drive`, `holonomic`
 
+## Interpretation Boundary
+
+This is a compatibility smoke/probe, not campaign-sized #1484 evidence. The executed surface is one
+scenario, one seed, three kinematics modes, seven planner rows, and horizon `80`, producing 21 short
+episodes and an observed SLURM runtime of about two minutes. It proves that the broader matrix
+executes and reports cleanly; it does not close the original broader-campaign objective without a
+larger scenario/seed/runtime surface or an explicit maintainer scope decision.
+
 ## Caveats
 
-- This is broader compatibility evidence, not paper-facing evidence by itself.
-- The campaign is a one-scenario, one-seed smoke-style matrix.
+- This is broader compatibility smoke/probe evidence, not paper-facing evidence by itself.
+- The run is a one-scenario, one-seed smoke-style matrix.
 - `ppo` on `holonomic` reported learned-policy contract `warn`.
 - `socnav_sampling` is still an experimental SocNav-family row and logged heuristic-fallback
   warnings during runtime.

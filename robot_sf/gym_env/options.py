@@ -24,7 +24,9 @@ See also: :mod:`robot_sf.gym_env.environment_factory` for detailed precedence na
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+
+from robot_sf.telemetry import DEFAULT_TELEMETRY_METRICS
 
 
 @dataclass(slots=True)
@@ -137,3 +139,59 @@ class RecordingOptions:
         if record_video:
             return cls(record=True, video_path=video_path)
         return cls()
+
+
+@dataclass(slots=True)
+class JsonlRecordingOptions:
+    """Per-episode JSONL recording metadata for environment factories.
+
+    This option object groups the JSONL recorder settings that used to travel
+    through the robot factory as separate keyword arguments. It intentionally
+    does not replace ``recording_enabled`` or :class:`RecordingOptions`:
+    ``recording_enabled`` remains the runtime master gate and
+    :class:`RecordingOptions` remains the video/frame capture intent.
+    """
+
+    enabled: bool = False
+    recording_dir: str = "recordings"
+    suite_name: str = "robot_sim"
+    scenario_name: str = "default"
+    algorithm_name: str = "manual"
+    recording_seed: int | None = None
+
+    def validate(self) -> None:
+        """Validate JSONL metadata fields before passing them to the recorder."""
+        if not self.recording_dir:
+            raise ValueError("recording_dir must be non-empty")
+        if not self.suite_name:
+            raise ValueError("suite_name must be non-empty")
+        if not self.scenario_name:
+            raise ValueError("scenario_name must be non-empty")
+        if not self.algorithm_name:
+            raise ValueError("algorithm_name must be non-empty")
+
+
+@dataclass(slots=True)
+class TelemetryOptions:
+    """Live telemetry panel and recording options for robot factories."""
+
+    enable_panel: bool = False
+    metrics: list[str] = field(default_factory=lambda: list(DEFAULT_TELEMETRY_METRICS))
+    record: bool = False
+    refresh_hz: float = 1.0
+    pane_layout: str = "vertical_split"
+    decimation: int = 1
+
+    def validate(self) -> None:
+        """Validate telemetry options using the same rules as environment configs."""
+        if self.refresh_hz <= 0:
+            raise ValueError("refresh_hz must be > 0")
+        if self.decimation <= 0:
+            raise ValueError("decimation must be >= 1")
+        if self.pane_layout not in {"vertical_split", "horizontal_split"}:
+            raise ValueError("pane_layout must be 'vertical_split' or 'horizontal_split'")
+        self.metrics = [
+            metric for metric in (self.metrics or []) if isinstance(metric, str) and metric.strip()
+        ]
+        if not self.metrics:
+            self.metrics = list(DEFAULT_TELEMETRY_METRICS)

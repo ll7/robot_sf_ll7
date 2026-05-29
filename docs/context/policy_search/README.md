@@ -82,6 +82,9 @@ Use it for three things only:
   reuse.
 - `contracts/learned_local_policy_eligibility.md`: learned-policy eligibility checklist for
   observation/action leakage, registry entry, and required raw/adapted/guarded action logging.
+- `../issue_1618_learned_policy_adapter_interface.md`: adapter-interface contract that turns the
+  learned-policy eligibility checklist into runtime loading, inference, action-adaptation,
+  diagnostics, and fail-closed status requirements.
 - `reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md`: issue #1358 ORCA-residual guarded
   PPO benchmark-surface smoke; validates the bounded residual action path for unsafe PPO proposals
   before the deferred training campaign.

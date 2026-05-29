@@ -27,7 +27,7 @@ from robot_sf.gym_env.environment_factory import (
 from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.robot_env_with_image import RobotEnvWithImage
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
 
 
 def _param_names(func):
@@ -114,6 +114,49 @@ def test_robot_factory_normalizes_deprecated_force_flag_once(monkeypatch):
     assert config.peds_have_static_obstacle_forces is False
     assert config.peds_have_obstacle_forces is False
     assert captured["peds_have_obstacle_forces"] is False
+
+    explicit_false_config = RobotSimulationConfig(peds_have_static_obstacle_forces=False)
+    EnvironmentFactory.create_robot_env(
+        config=explicit_false_config,
+        use_image_obs=False,
+        peds_have_obstacle_forces=True,
+        reward_func=None,
+        debug=False,
+        recording_enabled=False,
+        record_video=False,
+        video_path=None,
+        video_fps=None,
+    )
+
+    assert explicit_false_config.peds_have_static_obstacle_forces is False
+    assert explicit_false_config.peds_have_obstacle_forces is False
+
+
+def test_pedestrian_factory_preserves_explicit_static_force_config(monkeypatch):
+    """Default legacy kwarg should not override an explicit canonical false value."""
+    captured = {}
+
+    class FakePedestrianEnv:
+        """Minimal pedestrian env stub for factory normalization assertions."""
+
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        environment_factory_module, "_load_pedestrian_env", lambda: FakePedestrianEnv
+    )
+    config = PedestrianSimulationConfig(peds_have_static_obstacle_forces=False)
+
+    env = EnvironmentFactory.create_pedestrian_env(
+        robot_model=None,
+        config=config,
+        peds_have_obstacle_forces=True,
+    )
+
+    assert isinstance(env, FakePedestrianEnv)
+    assert config.peds_have_static_obstacle_forces is False
+    assert config.peds_have_obstacle_forces is False
+    assert captured["peds_have_obstacle_forces"] is True
 
 
 def test_make_multi_robot_env_signature_explicit():

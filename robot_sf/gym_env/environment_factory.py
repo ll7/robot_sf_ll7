@@ -238,7 +238,8 @@ class EnvironmentFactory:
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         config.use_image_obs = use_image_obs
-        sync_pedestrian_obstacle_force_alias(config, peds_have_obstacle_forces)
+        legacy_override = None if peds_have_obstacle_forces is True else peds_have_obstacle_forces
+        sync_pedestrian_obstacle_force_alias(config, legacy_override)
         config.enable_telemetry_panel = enable_telemetry_panel
         config.telemetry_record = telemetry_record
         config.telemetry_refresh_hz = telemetry_refresh_hz
@@ -311,7 +312,8 @@ class EnvironmentFactory:
         if reward_func is None:
             reward_func = simple_ped_reward
 
-        sync_pedestrian_obstacle_force_alias(config, peds_have_obstacle_forces)
+        legacy_override = None if peds_have_obstacle_forces is True else peds_have_obstacle_forces
+        sync_pedestrian_obstacle_force_alias(config, legacy_override)
 
         return PedestrianEnv(
             env_config=config,  # type: ignore[arg-type]

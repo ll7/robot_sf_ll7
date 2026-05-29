@@ -43,6 +43,7 @@ import importlib
 import os
 import random
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -227,7 +228,10 @@ class EnvironmentFactory:
         sync_pedestrian_obstacle_force_alias(config, legacy_override)
         jsonl_recording_options = jsonl_recording_options or JsonlRecordingOptions()
         jsonl_recording_options.validate()
-        telemetry_options = telemetry_options or TelemetryOptions()
+        if telemetry_options is None:
+            telemetry_options = TelemetryOptions()
+        else:
+            telemetry_options = _copy_telemetry_options(telemetry_options)
         telemetry_options.validate()
         config.enable_telemetry_panel = telemetry_options.enable_panel
         config.telemetry_record = telemetry_options.record
@@ -447,6 +451,11 @@ def _normalize_jsonl_recording_options(
     return jsonl_recording_options
 
 
+def _copy_telemetry_options(telemetry_options: TelemetryOptions) -> TelemetryOptions:
+    """Return a shallow telemetry option copy with caller-owned metrics detached."""
+    return replace(telemetry_options, metrics=list(telemetry_options.metrics or []))
+
+
 def _normalize_telemetry_options(
     *,
     telemetry_options: TelemetryOptions | None,
@@ -467,6 +476,8 @@ def _normalize_telemetry_options(
             pane_layout=telemetry_pane_layout,
             decimation=telemetry_decimation,
         )
+    else:
+        telemetry_options = _copy_telemetry_options(telemetry_options)
     telemetry_options.validate()
     return telemetry_options
 

@@ -198,6 +198,31 @@ def test_robot_factory_option_objects_override_flat_recording_and_telemetry(
     assert captured["jsonl_recording_options"].recording_seed == 17
 
 
+def test_make_robot_env_copies_user_telemetry_options_before_validation(
+    monkeypatch,
+) -> None:
+    """Public telemetry normalization should not mutate caller-owned option objects."""
+    captured = {}
+
+    def fake_create_robot_env(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        EnvironmentFactory,
+        "create_robot_env",
+        staticmethod(fake_create_robot_env),
+    )
+    telemetry_options = TelemetryOptions(metrics=["", "speed", "  "])
+
+    env = make_robot_env(config=RobotSimulationConfig(), telemetry_options=telemetry_options)
+
+    assert env.applied_seed is None
+    assert captured["telemetry_options"] is not telemetry_options
+    assert captured["telemetry_options"].metrics == ["speed"]
+    assert telemetry_options.metrics == ["", "speed", "  "]
+
+
 def test_internal_robot_factory_applies_option_objects(monkeypatch) -> None:
     """Internal factory consumes grouped JSONL and telemetry options."""
     captured = {}
@@ -252,6 +277,40 @@ def test_internal_robot_factory_applies_option_objects(monkeypatch) -> None:
     assert captured["scenario_name"] == "scenario"
     assert captured["algorithm_name"] == "algo"
     assert captured["recording_seed"] == 5
+
+
+def test_internal_robot_factory_copies_user_telemetry_options_before_validation(
+    monkeypatch,
+) -> None:
+    """Internal telemetry validation should not mutate caller-owned option objects."""
+    captured = {}
+
+    class FakeRobotEnv:
+        """Minimal env that records constructor kwargs."""
+
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(environment_factory_module, "RobotEnv", FakeRobotEnv)
+    config = RobotSimulationConfig()
+    telemetry_options = TelemetryOptions(metrics=["", "speed", "  "])
+
+    env = EnvironmentFactory.create_robot_env(
+        config=config,
+        use_image_obs=False,
+        peds_have_obstacle_forces=True,
+        reward_func=None,
+        debug=False,
+        recording_enabled=False,
+        record_video=False,
+        video_path=None,
+        video_fps=None,
+        telemetry_options=telemetry_options,
+    )
+
+    assert isinstance(env, FakeRobotEnv)
+    assert config.telemetry_metrics == ["speed"]
+    assert telemetry_options.metrics == ["", "speed", "  "]
 
 
 def test_image_factory_accepts_jsonl_recording_options(monkeypatch) -> None:

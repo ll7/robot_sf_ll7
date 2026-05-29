@@ -180,10 +180,14 @@ class MergedObservationFusion:
 
     This wrapper does not modify SensorFusion internals. It calls the base
     fusion's next_obs() and then augments the dict with additional sensor
-    observations under keys of the form "custom.<name>".
+    observations under keys of the form "custom.<name>". The returned dict is
+    the base observation mapping after in-place augmentation, so callers should
+    treat custom keys as part of the same observation payload.
 
-    Sensors are stepped with a lightweight state dict containing the simulator
-    and robot_id for potential future use by sensor implementations.
+    Sensors are stepped with a lightweight state dict containing exactly
+    ``{"sim": sim, "robot_id": robot_id}``. Sensor outputs may be any object
+    accepted by the surrounding observation-space declaration, though numpy
+    arrays are the common case.
     """
 
     def __init__(
@@ -214,7 +218,17 @@ class MergedObservationFusion:
         robot_id : int | None
             Optional robot identifier passed to custom sensors in their
             lightweight state dict.
+
+        Raises
+        ------
+        ValueError
+            If ``sensors`` and ``sensor_names`` have different lengths.
         """
+        if len(sensors) != len(sensor_names):
+            raise ValueError(
+                "MergedObservationFusion requires one sensor name per sensor "
+                f"(got {len(sensors)} sensors and {len(sensor_names)} names)."
+            )
         self._base = base_fusion
         self._sensors = sensors
         self._names = sensor_names
@@ -247,7 +261,13 @@ class MergedObservationFusion:
 
     # Pass-through API used by RobotState
     def reset_cache(self) -> None:
-        """Reset cached base-fusion state and custom sensors when supported."""
+        """Reset cached base-fusion state and custom sensors when supported.
+
+        The base fusion receives ``reset_cache`` only when it exposes that
+        method. Custom sensors receive ``reset`` when available. Missing reset
+        hooks are treated as no-ops so stateless sensors can participate without
+        extra adapter code.
+        """
         if hasattr(self._base, "reset_cache"):
             self._base.reset_cache()
         for sensor in self._sensors:

@@ -6,6 +6,7 @@ from robot_sf.benchmark.metrics import (
     EpisodeData,
     agent_collisions,
     human_collisions,
+    success,
     success_rate,
     wall_collisions,
 )
@@ -55,7 +56,7 @@ def test_success_without_collisions_reaches_goal():
 
 
 def test_failure_on_wall_collision():
-    """TODO docstring. Document this function."""
+    """Wall collisions should make both public success helpers fail."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(
         T, with_peds=False
@@ -79,10 +80,11 @@ def test_failure_on_wall_collision():
     # sanity: wall_collisions should be > 0
     assert wall_collisions(data) > 0
     assert success_rate(data, horizon=T) == 0.0
+    assert success(data, horizon=T) == success_rate(data, horizon=T)
 
 
 def test_failure_on_agent_collision():
-    """TODO docstring. Document this function."""
+    """Other-agent collisions should make both public success helpers fail."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(
         T, with_peds=False
@@ -106,6 +108,7 @@ def test_failure_on_agent_collision():
     )
     assert agent_collisions(data) > 0
     assert success_rate(data, horizon=T) == 0.0
+    assert success(data, horizon=T) == success_rate(data, horizon=T)
 
 
 def test_failure_on_human_collision():

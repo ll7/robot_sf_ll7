@@ -8,13 +8,40 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.runner import run_batch, run_episode, validate_and_write
+import numpy as np
+
+from robot_sf.benchmark.runner import (
+    BENCHMARK_RUNNER_PED_RADIUS_M,
+    BENCHMARK_RUNNER_ROBOT_RADIUS_M,
+    _build_episode_data,
+    run_batch,
+    run_episode,
+    validate_and_write,
+)
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
+
+
+def test_build_episode_data_uses_runner_observation_radii() -> None:
+    """The lightweight runner should pass its observation radii into metrics."""
+    ep = _build_episode_data(
+        robot_pos_traj=[np.array([0.0, 0.0])],
+        robot_vel_traj=[np.array([0.0, 0.0])],
+        robot_acc_traj=[np.array([0.0, 0.0])],
+        peds_pos_traj=[np.array([[1.0, 0.0]])],
+        ped_forces_traj=[np.zeros((1, 2))],
+        obstacles=None,
+        goal=np.array([1.0, 0.0]),
+        dt=0.1,
+        reached_goal_step=None,
+    )
+
+    assert ep.robot_radius == BENCHMARK_RUNNER_ROBOT_RADIUS_M
+    assert ep.ped_radius == BENCHMARK_RUNNER_PED_RADIUS_M
 
 
 def test_runner_single_episode_tmp(tmp_path: Path):

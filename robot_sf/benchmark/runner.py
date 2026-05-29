@@ -80,6 +80,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
 
+BENCHMARK_RUNNER_ROBOT_RADIUS_M = 0.3
+BENCHMARK_RUNNER_PED_RADIUS_M = 0.35
+
+
 def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
     """Load and construct a baseline planner from the registry.
 
@@ -128,7 +132,8 @@ def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_pos
         Observation instance with current state data.
     """
     agents = [
-        {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": 0.35} for pos in ped_positions
+        {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": BENCHMARK_RUNNER_PED_RADIUS_M}
+        for pos in ped_positions
     ]
     return ObservationCls(
         dt=dt,
@@ -136,7 +141,7 @@ def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_pos
             "position": robot_pos.tolist(),
             "velocity": robot_vel.tolist(),
             "goal": robot_goal.tolist(),
-            "radius": 0.3,
+            "radius": BENCHMARK_RUNNER_ROBOT_RADIUS_M,
         },
         agents=agents,
         obstacles=[],
@@ -372,11 +377,15 @@ def _build_episode_data(  # noqa: PLR0913
     goal: np.ndarray,
     dt: float,
     reached_goal_step: int | None,
+    *,
+    robot_radius: float = BENCHMARK_RUNNER_ROBOT_RADIUS_M,
+    ped_radius: float = BENCHMARK_RUNNER_PED_RADIUS_M,
 ) -> EpisodeData:
     """Assemble EpisodeData from trajectory buffers and metadata.
 
     Returns:
-        EpisodeData instance.
+        EpisodeData instance with metric radii matching the runner observation
+        payload unless explicit radii are provided.
     """
     robot_pos = _stack_or_zero(robot_pos_traj, stack_fn=np.vstack, empty_shape=(0, 2))
     robot_vel = _stack_or_zero(robot_vel_traj, stack_fn=np.vstack, empty_shape=(0, 2))
@@ -394,6 +403,8 @@ def _build_episode_data(  # noqa: PLR0913
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
+        robot_radius=float(robot_radius),
+        ped_radius=float(ped_radius),
     )
 
 

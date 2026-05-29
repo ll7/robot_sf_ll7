@@ -514,23 +514,18 @@ def experimental_social_acceptability_metrics(
     return metrics
 
 
-# --- Metric stub functions ---
 def success(data: EpisodeData, *, horizon: int) -> float:
-    """Return 1 if goal reached before horizon with zero collisions else 0.
+    """Return the benchmark-facing binary success indicator.
 
-    Uses `reached_goal_step` if provided; if absent returns 0 (unknown / not reached).
+    This compatibility helper intentionally mirrors ``success_rate`` so all
+    public success helpers treat wall, agent, and human collisions consistently.
+    Aggregate per-episode values from this function by averaging them.
 
     Returns:
-        1.0 if successful (goal reached without collisions), 0.0 otherwise.
+        1.0 if goal was reached before ``horizon`` with zero wall, agent, or
+        human collisions; 0.0 otherwise.
     """
-    if data.reached_goal_step is None:
-        return 0.0
-    if data.reached_goal_step >= horizon:
-        return 0.0
-    # treat any collision as failure
-    if collisions(data) > 0:
-        return 0.0
-    return 1.0
+    return success_rate(data, horizon=horizon)
 
 
 def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:

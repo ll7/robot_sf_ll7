@@ -7,8 +7,8 @@ same simple interface as other baselines:
 - step(Observation|dict) -> action dict
 - reset(), close(), get_metadata()
 
-Observation comes from `robot_sf.baselines.social_force.Observation` and is
-converted to the model's expected form. We support three modes:
+Observation comes from `robot_sf.baselines.interface.Observation` and is converted
+to the model's expected form. We support three modes:
 
 - vector: derive a compact vector from the Observation (relative goal, robot
           velocity, nearest-K pedestrian relative positions). If the loaded
@@ -39,7 +39,7 @@ try:  # Lazy import; not required for type-check only
 except ImportError:  # pragma: no cover - envs without SB3 installed
     PPO = None  # type: ignore
 
-from robot_sf.baselines.social_force import Observation
+from robot_sf.baselines.interface import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.predictive_foresight import (

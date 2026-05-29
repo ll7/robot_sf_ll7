@@ -9,6 +9,9 @@ import pytest
 
 from robot_sf.baselines import get_baseline, list_baselines
 from robot_sf.baselines.dr_mpc import DRMPCPlanner, build_dr_mpc_config
+from robot_sf.baselines.dr_mpc import Observation as DRMPCObservation
+from robot_sf.baselines.interface import Observation as InterfaceObservation
+from robot_sf.baselines.sicnav import Observation as SICNavObservation
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 
 
@@ -107,6 +110,42 @@ class SICNavPolicy:
         sys.modules.pop("sicnav", None)
 
 
+def test_external_mpc_wrappers_reexport_shared_observation_type() -> None:
+    """External MPC wrappers should expose the canonical baseline Observation."""
+    assert DRMPCObservation is InterfaceObservation
+    assert SICNavObservation is InterfaceObservation
+
+
+def test_sicnav_planner_accepts_shared_observation_defaults(tmp_path: Path) -> None:
+    """SICNav dict observations should use the shared default-obstacle container."""
+    repo_root = tmp_path / "sicnav_repo"
+    _write(
+        repo_root / "sicnav_diffusion" / "__init__.py",
+        """
+class SICNavPolicy:
+    def __init__(self, checkpoint_path=None, solver=None, device=None):
+        self.checkpoint_path = checkpoint_path
+        self.solver = solver
+        self.device = device
+
+    def select_action(self, obs):
+        assert obs.obstacles == []
+        return {"v": 0.5, "omega": 0.1}
+""",
+    )
+    _write(repo_root / "sicnav" / "__init__.py", "")
+
+    planner = SICNavPlanner(build_sicnav_config({"repo_root": str(repo_root)}), seed=1)
+    obs = _make_robot_observation()
+    obs.pop("obstacles")
+    try:
+        action = planner.step(obs)
+        assert action == {"v": 0.5, "omega": 0.1}
+    finally:
+        sys.modules.pop("sicnav_diffusion", None)
+        sys.modules.pop("sicnav", None)
+
+
 def test_sicnav_metadata_marks_incompatible_module_as_missing(tmp_path: Path) -> None:
     """SICNav metadata should fail closed when the import lacks a policy constructor."""
     repo_root = tmp_path / "sicnav_repo"
@@ -141,6 +180,35 @@ def test_dr_mpc_planner_uses_external_policy(monkeypatch: pytest.MonkeyPatch) ->
     action = planner.step(_make_robot_observation())
     assert action == {"v": 0.25, "omega": -0.05}
     assert planner.get_metadata()["status"] == "ok"
+
+
+def test_dr_mpc_planner_accepts_shared_observation_defaults_and_clamps_velocity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DR-MPC dict observations should use the shared default-obstacle container."""
+    fake_module = types.ModuleType("dr_mpc")
+
+    class FakePolicy:
+        """External DR-MPC policy stub returning an over-limit velocity action."""
+
+        def select_action(self, obs):
+            assert obs.obstacles == []
+            return {"vx": 3.0, "vy": 4.0}
+
+    def load_policy(checkpoint_path=None, device=None):
+        assert checkpoint_path == "dummy.pt"
+        assert device == "cpu"
+        return FakePolicy()
+
+    fake_module.load_policy = load_policy
+    monkeypatch.setitem(sys.modules, "dr_mpc", fake_module)
+    planner = DRMPCPlanner({"checkpoint_path": "dummy.pt", "v_max": 2.0}, seed=1)
+    obs = _make_robot_observation()
+    obs.pop("obstacles")
+
+    action = planner.step(obs)
+
+    assert action == {"vx": pytest.approx(1.2), "vy": pytest.approx(1.6)}
 
 
 def test_dr_mpc_config_builder_preserves_provenance_defaults() -> None:

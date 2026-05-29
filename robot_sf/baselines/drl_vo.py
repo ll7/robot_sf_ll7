@@ -24,7 +24,7 @@ try:
 except ImportError:  # pragma: no cover - envs without PyTorch
     torch = None  # type: ignore[assignment]
 
-from robot_sf.baselines.social_force import Observation
+from robot_sf.baselines.interface import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.models import resolve_model_path

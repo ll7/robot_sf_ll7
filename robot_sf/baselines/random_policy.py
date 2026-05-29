@@ -13,6 +13,8 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.baselines.interface import Observation
+
 
 @dataclass
 class RandomPlannerConfig:
@@ -24,16 +26,6 @@ class RandomPlannerConfig:
     dt: float = 0.1
     safety_clamp: bool = True
     noise_std: float = 0.0  # Optional Gaussian jitter applied to sampled actions
-
-
-@dataclass
-class Observation:
-    """Minimal observation container for baseline compatibility."""
-
-    dt: float
-    robot: dict[str, Any]
-    agents: list[dict[str, Any]]
-    obstacles: list[Any]
 
 
 class RandomPlanner:

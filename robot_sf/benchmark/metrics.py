@@ -84,9 +84,13 @@ class EpisodeData:
         Other robot positions for multi-agent scenarios (default: None).
         Used by agent_collisions (AC) metric.
     robot_radius : float
-        Robot footprint radius in meters for clearance-based robot-pedestrian metrics.
+        Robot footprint radius in meters for clearance-based robot-pedestrian metrics. Runners
+        should populate this from the episode configuration; the default is a compatibility
+        fallback for synthetic tests and legacy callers.
     ped_radius : float
-        Pedestrian footprint radius in meters for clearance-based robot-pedestrian metrics.
+        Pedestrian footprint radius in meters for clearance-based robot-pedestrian metrics. Runners
+        should populate this from the episode/simulation configuration; the default is a
+        compatibility fallback for synthetic tests and legacy callers.
     """
 
     robot_pos: np.ndarray
@@ -516,21 +520,16 @@ def experimental_social_acceptability_metrics(
 
 # --- Metric stub functions ---
 def success(data: EpisodeData, *, horizon: int) -> float:
-    """Return 1 if goal reached before horizon with zero collisions else 0.
+    """Return benchmark success using the same semantics as `success_rate`.
 
-    Uses `reached_goal_step` if provided; if absent returns 0 (unknown / not reached).
+    Success requires route completion before ``horizon`` and zero total collisions
+    (`wall_collisions + agent_collisions + human_collisions`). This function is kept as the
+    historical core-metric entry point; new benchmark-facing code may call `success_rate` directly.
 
     Returns:
-        1.0 if successful (goal reached without collisions), 0.0 otherwise.
+        1.0 if successful, 0.0 otherwise.
     """
-    if data.reached_goal_step is None:
-        return 0.0
-    if data.reached_goal_step >= horizon:
-        return 0.0
-    # treat any collision as failure
-    if collisions(data) > 0:
-        return 0.0
-    return 1.0
+    return success_rate(data, horizon=horizon)
 
 
 def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
@@ -625,18 +624,18 @@ def time_to_goal_ideal_ratio(
 
 
 def collisions(data: EpisodeData) -> float:
-    """Count timesteps with negative robot-pedestrian clearance.
+    """Count timesteps with pedestrian footprint overlap.
+
+    This legacy helper is pedestrian-only for compatibility with earlier core metrics. Benchmark
+    totals use `collision_count`, which sums wall, agent, and human collisions. The pedestrian
+    predicate matches `human_collisions()` with its default radius-aware threshold.
 
     If no pedestrians are present (K=0) returns 0.0.
 
     Returns:
-        Number of collision timesteps.
+        Number of timesteps with robot-pedestrian footprint overlap.
     """
-    if data.peds_pos.shape[1] == 0:
-        return 0.0
-    clearances = _compute_clearance_matrix(data)  # (T,K)
-    min_clearance = clearances.min(axis=1)
-    return float(np.count_nonzero(min_clearance < 0.0))
+    return human_collisions(data)
 
 
 def near_misses(data: EpisodeData) -> float:
@@ -1408,19 +1407,25 @@ def agent_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     return float(collision_count_val)
 
 
-def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
+def human_collisions(data: EpisodeData, *, threshold: float | None = None) -> float:
     """Count collisions with pedestrians/humans.
 
     From paper 2306.16740v4 Table 1: Human Collisions (HC) metric.
 
-    Formula: HC = sum_t I(min_k ||robot_pos[t] - peds_pos[t,k]|| < threshold)
+    Default formula:
+        HC = sum_t I(min_k clearance(robot, pedestrian_k) < 0)
+
+    where clearance is center distance minus ``robot_radius + ped_radius``. Passing
+    ``threshold`` opts into the legacy center-distance predicate:
+        HC = sum_t I(min_k ||robot_pos[t] - peds_pos[t,k]|| < threshold)
 
     Parameters
     ----------
     data : EpisodeData
         Episode trajectory container
-    threshold : float, optional
-        Collision distance threshold (default: D_COLL constant)
+    threshold : float | None, optional
+        Optional center-distance threshold. When omitted, the episode robot/pedestrian radii define
+        geometric contact.
 
     Returns
     -------
@@ -1441,7 +1446,10 @@ def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
         return 0.0
     clearances = _compute_clearance_matrix(data)
     min_clearance = clearances.min(axis=1)
-    clearance_threshold = float(threshold) - float(data.robot_radius + data.ped_radius)
+    if threshold is None:
+        clearance_threshold = 0.0
+    else:
+        clearance_threshold = float(threshold) - float(data.robot_radius + data.ped_radius)
     return float(np.count_nonzero(min_clearance < clearance_threshold))
 
 

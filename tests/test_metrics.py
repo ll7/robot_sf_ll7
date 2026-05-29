@@ -13,10 +13,14 @@ from robot_sf.benchmark import metrics as metrics_mod
 from robot_sf.benchmark.metrics import (
     METRIC_NAMES,
     EpisodeData,
+    collision_count,
+    collisions,
     compute_all_metrics,
     human_collisions,
     post_process_metrics,
     snqi,
+    success,
+    success_rate,
     time_to_goal,
 )
 
@@ -149,6 +153,45 @@ def test_human_collisions_honors_custom_threshold():
     ep.peds_pos[:, 0, 0] = 1.6
     assert human_collisions(ep) == 0.0
     assert human_collisions(ep, threshold=1.7) == 3.0
+
+
+def test_success_helper_fails_on_wall_collision_like_success_rate():
+    """Legacy success helper should use benchmark success semantics."""
+    ep = _make_episode(T=4, K=0)
+    ep.reached_goal_step = 2
+    ep.obstacles = np.array([[0.0, 0.0]], dtype=float)
+
+    assert collision_count(ep) == 4.0
+    assert success_rate(ep, horizon=10) == 0.0
+    assert success(ep, horizon=10) == 0.0
+
+
+def test_pedestrian_collision_defaults_to_episode_radius_clearance():
+    """Default pedestrian collisions should use episode footprint radii."""
+    ep = _make_episode(T=3, K=1)
+    radii_sum = ep.robot_radius + ep.ped_radius
+    ep.peds_pos[:, 0, 0] = radii_sum - 0.01
+
+    assert collisions(ep) == 3.0
+    assert human_collisions(ep) == 3.0
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["ped_collision_count"] == 3.0
+    assert vals["collisions"] == 3.0
+    assert vals["success"] == 0.0
+
+
+def test_radius_clearance_near_miss_is_not_collision():
+    """Positive clearance inside the near-miss band should not count as collision."""
+    ep = _make_episode(T=3, K=1)
+    ep.reached_goal_step = 2
+    radii_sum = ep.robot_radius + ep.ped_radius
+    ep.peds_pos[:, 0, 0] = radii_sum + 0.1
+
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["ped_collision_count"] == 0.0
+    assert vals["collisions"] == 0.0
+    assert vals["near_misses"] == 3.0
+    assert vals["success"] == 1.0
 
 
 def test_success_and_time_to_goal_norm_success_case():

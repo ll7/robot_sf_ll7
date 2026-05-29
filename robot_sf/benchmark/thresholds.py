@@ -24,7 +24,9 @@ def default_threshold_profile() -> dict[str, Any]:
         "collision_distance_m": float(COLLISION_DIST),
         "near_miss_distance_m": float(NEAR_MISS_DIST),
         "comfort_force_threshold": float(COMFORT_FORCE_THRESHOLD),
-        "near_miss_definition": "collision_distance_m <= min_distance < near_miss_distance_m",
+        "pedestrian_collision_definition": "min_clearance_m < 0",
+        "wall_agent_collision_definition": "center_distance_m < collision_distance_m",
+        "near_miss_definition": "0 <= min_clearance_m < near_miss_distance_m",
         "near_miss_speed_dependence": "disabled_distance_only",
         "candidate_speed_dependent_variants": [
             "relative_speed_weighted",

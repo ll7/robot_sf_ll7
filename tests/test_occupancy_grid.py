@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 
 from robot_sf.nav import occupancy_grid_rasterization as rasterization
-from robot_sf.nav.occupancy_grid import GridChannel, GridConfig, OccupancyGrid
+from robot_sf.nav.occupancy_grid import GridChannel, GridConfig, OccupancyGrid, POIQuery
 
 
 class TestGridInitialization:
@@ -111,8 +111,7 @@ class TestGridGeneration:
         )
 
         assert grid_data.shape == occupancy_grid.shape
-        # All cells should be unoccupied (0.0)
-        # TODO: Verify after implementation
+        assert np.all(grid_data == 0.0)
 
     def test_grid_generation_multiple_obstacles(
         self, occupancy_grid, complex_obstacles, robot_pose_center
@@ -298,21 +297,70 @@ class TestGridChannels:
 class TestGridBounds:
     """T004: Test grid bounds checking and coordinate validation."""
 
-    def test_coordinate_bounds_checking(self):
-        """Test that out-of-bounds coordinates raise errors.
+    def test_point_query_clamps_out_of_bounds_coordinates_to_edge_cells(self):
+        """Out-of-bounds point queries use the nearest valid grid cell."""
+        config = GridConfig(
+            resolution=1.0,
+            width=3.0,
+            height=3.0,
+            channels=[GridChannel.OBSTACLES],
+        )
+        grid = OccupancyGrid(config=config)
+        grid.generate(obstacles=[], pedestrians=[], robot_pose=((0.0, 0.0), 0.0))
+        grid._grid_data[0, 0, 0] = 0.25
+        grid._grid_data[0, 2, 2] = 0.75
 
-        TODO: Implement after generate() has bounds validation.
-        """
-        # TODO (Phase 2): Add bounds checking to generate()
-        pass
+        low = grid.query(POIQuery(x=-10.0, y=-10.0))
+        high = grid.query(POIQuery(x=99.0, y=99.0))
 
-    def test_grid_origin_offset(self):
-        """Test that grid origin offset works correctly.
+        assert low.num_cells == 1
+        assert low.occupancy == pytest.approx(0.25)
+        assert high.num_cells == 1
+        assert high.occupancy == pytest.approx(0.75)
 
-        TODO: Implement after coordinate transform functions are used.
-        """
-        # TODO (Phase 2): Test world coordinate transforms
-        pass
+    def test_centered_world_frame_origin_offsets_query_coordinates(self):
+        """World-frame grids centered on the robot apply the stored origin offset."""
+        config = GridConfig(
+            resolution=1.0,
+            width=4.0,
+            height=4.0,
+            channels=[GridChannel.OBSTACLES],
+            center_on_robot=True,
+        )
+        grid = OccupancyGrid(config=config)
+        grid.generate(obstacles=[], pedestrians=[], robot_pose=((10.0, 20.0), 0.0))
+        grid._grid_data[0, 0, 0] = 0.2
+        grid._grid_data[0, 3, 3] = 0.8
+
+        metadata = grid.metadata()
+        lower_left = grid.query(POIQuery(x=8.25, y=18.25))
+        upper_right = grid.query(POIQuery(x=11.25, y=21.25))
+
+        assert metadata["origin"] == pytest.approx((8.0, 18.0))
+        assert lower_left.occupancy == pytest.approx(0.2)
+        assert upper_right.occupancy == pytest.approx(0.8)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"resolution": np.nan}, "resolution must be finite"),
+            ({"width": np.inf}, "width must be finite"),
+            ({"height": np.inf}, "height must be finite"),
+            ({"max_distance": np.nan}, "max_distance must be finite"),
+            ({"robot_radius": np.inf}, "robot_radius must be finite"),
+        ],
+    )
+    def test_grid_config_rejects_non_finite_geometry_values(self, kwargs, message):
+        """Grid geometry must be finite so cell bounds stay well-defined."""
+        with pytest.raises(ValueError, match=message):
+            GridConfig(**kwargs)
+
+    def test_generate_rejects_non_finite_robot_pose(self):
+        """Robot pose validation fails before deriving grid origins from NaN values."""
+        grid = OccupancyGrid(config=GridConfig())
+
+        with pytest.raises(ValueError, match="robot_pose values must be finite"):
+            grid.generate(obstacles=[], pedestrians=[], robot_pose=((np.nan, 0.0), 0.0))
 
 
 class TestGridDataTypes:
@@ -387,9 +435,38 @@ class TestGridRepresentation:
         assert "initialized" in repr_str
 
 
-# TODO (Phase 3): Add edge case tests
-# - Very small grids (2x2, 1x1)
-# - Very large grids (1000x1000)
-# - Grids with floating-point coordinate misalignment
-# - Grids with NaN or inf values
-# - Memory usage validation for large grids
+class TestGridEdgeCases:
+    """T008: Test edge-case grid dimensions and coordinate alignment."""
+
+    def test_one_cell_grid_generation_and_query(self):
+        """A 1x1 grid remains queryable from any clamped world coordinate."""
+        config = GridConfig(
+            resolution=1.0,
+            width=1.0,
+            height=1.0,
+            channels=[GridChannel.OBSTACLES],
+        )
+        grid = OccupancyGrid(config=config)
+        grid.generate(obstacles=[], pedestrians=[], robot_pose=((0.0, 0.0), 0.0))
+        grid._grid_data[0, 0, 0] = 1.0
+
+        result = grid.query(POIQuery(x=100.0, y=-100.0))
+
+        assert result.num_cells == 1
+        assert result.occupancy == pytest.approx(1.0)
+
+    def test_fractional_world_coordinates_stay_in_expected_cells(self):
+        """Floating-point coordinate offsets map through floor-style cell indexing."""
+        config = GridConfig(
+            resolution=0.5,
+            width=2.0,
+            height=2.0,
+            channels=[GridChannel.OBSTACLES],
+        )
+        grid = OccupancyGrid(config=config)
+        grid.generate(obstacles=[], pedestrians=[], robot_pose=((0.0, 0.0), 0.0))
+        grid._grid_data[0, 1, 2] = 0.6
+
+        result = grid.query(POIQuery(x=1.01, y=0.51))
+
+        assert result.occupancy == pytest.approx(0.6)

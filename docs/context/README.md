@@ -102,7 +102,7 @@ knowledge, not every transient iteration detail.
   [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
-* Issue #1583 high-risk root path boundaries:
+* Issue #1583 High-Risk Root Path Boundaries:
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
 * Issue #1504 ego-conditioned feature contract:
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)

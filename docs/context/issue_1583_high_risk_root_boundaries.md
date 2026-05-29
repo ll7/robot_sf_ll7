@@ -1,4 +1,4 @@
-# Issue #1583 High-Risk Root Path Boundaries
+# Issue #1583 High-Risk Root Path Boundaries - 2026-05-28
 
 Date: 2026-05-28
 

@@ -194,6 +194,8 @@ knowledge, not every transient iteration detail.
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
   [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
+* Issue #1677 SiT Dataset Terms Audit (2026-05-29):
+  [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):
   [issue_1617_local_planner_repo_survey.md](issue_1617_local_planner_repo_survey.md)
 * Issue #1662 LiDAR PPO MLP Smoke (2026-05-29):

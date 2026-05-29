@@ -1,4 +1,10 @@
-"""TODO docstring. Document this module."""
+"""LiDAR-style range scanning utilities for continuous occupancy maps.
+
+The helpers in this module cast radial rays from a robot or ego pedestrian pose
+against line-segment obstacles and circular dynamic objects. Distances are
+reported in world units and clipped/noised to match the configured scanner
+settings before they are exposed as Gymnasium observation spaces.
+"""
 
 from dataclasses import dataclass, field
 from math import cos, sin
@@ -123,7 +129,12 @@ class LidarScannerSettings:
     angle_opening: Range = field(init=False)
 
     def __post_init__(self):
-        """TODO docstring. Document this function."""
+        """Validate scanner settings and derive the symmetric angular opening.
+
+        ``visual_angle_portion`` is a fraction of a full circle, so ``1.0``
+        scans 360 degrees and ``1 / 3`` scans 120 degrees. ``scan_noise`` stores
+        scan-loss and corruption probabilities, both constrained to ``[0, 1]``.
+        """
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
         if self.max_scan_dist <= 0:
@@ -232,13 +243,16 @@ def raycast_obstacles(
     obstacles: np.ndarray,
     ray_angles: np.ndarray,
 ):
-    """TODO docstring. Document this function.
+    """Update ray ranges with intersections against static obstacle segments.
 
     Args:
-        out_ranges: TODO docstring.
-        scanner_pos: TODO docstring.
-        obstacles: TODO docstring.
-        ray_angles: TODO docstring.
+        out_ranges: Mutable per-ray distances. Entries are replaced in place
+            when a nearer obstacle intersection is found.
+        scanner_pos: Scanner origin in world coordinates.
+        obstacles: Obstacle segments as an ``(N, 4)`` array of
+            ``start_x, start_y, end_x, end_y`` rows.
+        ray_angles: Absolute ray directions in radians, one per ``out_ranges``
+            entry.
     """
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
@@ -395,14 +409,16 @@ def lidar_ray_scan(
 
 
 def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:
-    """TODO docstring. Document this function.
+    """Build the Gymnasium observation space for LiDAR range readings.
 
     Args:
-        num_rays: TODO docstring.
-        max_scan_dist: TODO docstring.
+        num_rays: Number of scalar range readings in each scan.
+        max_scan_dist: Inclusive upper bound for each range reading, in world
+            distance units.
 
     Returns:
-        TODO docstring.
+        A float32 ``Box`` with shape ``(num_rays,)`` and bounds
+        ``[0, max_scan_dist]`` for every ray.
     """
     high = np.full((num_rays), max_scan_dist, dtype=np.float32)
     low = np.zeros((num_rays), dtype=np.float32)

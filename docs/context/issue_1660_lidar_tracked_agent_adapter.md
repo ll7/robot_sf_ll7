@@ -45,15 +45,23 @@ track positions. Track velocities are zero by construction.
 
 ## Validation
 
-Pending final branch validation.
-
-Targeted commands planned:
+Commands run before full branch-head readiness:
 
 ```bash
 uv run pytest tests/planner/test_lidar_tracked_agents.py tests/benchmark/test_lidar_social_force_contract.py tests/benchmark/test_algorithm_metadata_contract.py
-PYTEST_NUM_WORKERS=8 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
-uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main
+uv run ruff check robot_sf/planner/lidar_tracked_agents.py robot_sf/benchmark/algorithm_readiness.py robot_sf/benchmark/algorithm_metadata.py robot_sf/benchmark/map_runner.py tests/planner/test_lidar_tracked_agents.py tests/benchmark/test_lidar_social_force_contract.py
+codex-agent-worker --provider qwen --model Qwen3.6-27B --timeout 900 --slug issue-1660-qwen-scout --task-file /tmp/qwen_issue1660_scout.md
 ```
+
+Observed results:
+
+- Targeted adapter/metadata suite after merging `origin/main`: `38 passed`.
+- Ruff targeted check: passed.
+- Qwen read-only scout returned successfully and suggested `risk_dwa` as the smallest possible
+  second target, but this issue requires only one representative planner path; this slice keeps
+  the implementation scoped to `lidar_social_force`.
+
+Full branch-head readiness is run before PR creation and recorded in the PR body.
 
 ## Limitations
 

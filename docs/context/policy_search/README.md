@@ -13,6 +13,9 @@ Use it for three things only:
 
 - `candidate_registry.yaml`: canonical candidate list and config pointers for implemented or
   concrete runnable Robot SF candidates.
+- `learned_policy_registry.md`: compact learned local-navigation registry for implemented,
+  staged, monitor-only, and blocked learned-policy families. Use this before adding a learned
+  policy to the runnable candidate registry.
 - `reject_monitor_registry.md`: reusable negative/monitor trail for learned-policy families such as
   CrowdNav descendants, Dreamer/world-model approaches, diffusion/visual navigation, SAC/TD3/PPO
   variants, DRL-VO, and source-side-only candidates. Check this before proposing a new follow-up.

@@ -49,6 +49,8 @@ class LidarTrackedAgentsConfig:
         if self.target_distance_scale <= 0.0:
             raise ValueError("target_distance_scale must be > 0")
         self._validate_positive_shape_params()
+        if self.min_track_range >= self.max_scan_dist:
+            raise ValueError("min_track_range must be less than max_scan_dist")
         if self.max_track_range is not None and self.max_track_range <= self.min_track_range:
             raise ValueError("max_track_range must be greater than min_track_range")
         if self.cluster_gap_rays < 0:

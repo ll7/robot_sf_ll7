@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.lidar_tracked_agents import (
     LidarTrackedAgentsConfig,
@@ -56,6 +57,12 @@ def test_lidar_rays_to_tracked_agents_keeps_nearest_tracks_first() -> None:
 
     assert positions.shape == (1, 2)
     assert np.linalg.norm(positions[0]) == np.float32(2.0)
+
+
+def test_lidar_tracked_agents_config_rejects_min_range_at_scan_cap() -> None:
+    """The minimum track range must leave detectable scan space below the cap."""
+    with pytest.raises(ValueError, match="min_track_range must be less than max_scan_dist"):
+        LidarTrackedAgentsConfig(max_scan_dist=10.0, min_track_range=10.0)
 
 
 def test_sensor_fusion_adapter_ignores_privileged_socnav_decoys() -> None:

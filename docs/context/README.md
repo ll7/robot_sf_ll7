@@ -128,6 +128,8 @@ knowledge, not every transient iteration detail.
   [issue_1416_converted_map_cache_evaluation.md](issue_1416_converted_map_cache_evaluation.md)
 * Issue #1246 graded observation levels:
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
+* Issue #1659 LiDAR occupancy adapter:
+  [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:

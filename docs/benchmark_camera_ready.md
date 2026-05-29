@@ -635,8 +635,9 @@ Additional diagnostics generated per campaign:
   + AMV taxonomy columns aggregate the distinct non-empty values from contributing
     scenarios per dimension, sorted and joined with semicolons
 
-Empty AMV taxonomy cells mean the source scenario had no AMV metadata for that
-dimension. They are descriptors only: they do not encode planner success,
+Empty AMV taxonomy cells mean the source scenario, or all contributing scenarios
+for a family, had no AMV metadata for that dimension. They are descriptors only:
+they do not encode planner success,
 failure, fallback, degraded execution, or availability. Continue to interpret
 benchmark evidence through `availability_status`, `benchmark_success`, and the
 fail-closed fallback policy above.

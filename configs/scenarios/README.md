@@ -54,6 +54,7 @@ per-scenario and per-archetype YAMLs into a single scenario list.
 
 ```yaml
 # configs/scenarios/sets/classic_cross_trap_subset.yaml
+schema_version: robot_sf.scenario_matrix.v1
 includes:
   - ../archetypes/classic_cross_trap.yaml
 select_scenarios:
@@ -68,6 +69,10 @@ The loader expands includes relative to the manifest file and then applies
 order controls the final scenario order. Duplicate names in the expanded pool
 raise an error so subset manifests fail closed when the source data is
 ambiguous.
+
+The optional `schema_version` field is metadata for manifest validation. Use
+`robot_sf.scenario_matrix.v1`; `robot_sf_bench validate-config --matrix <manifest>` rejects
+unsupported values before a run starts.
 
 If `map_file` paths in included scenarios are not resolvable, you can set
 `map_search_paths` to help locate map files. Each manifest resolves its own

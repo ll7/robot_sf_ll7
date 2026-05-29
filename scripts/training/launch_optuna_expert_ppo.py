@@ -16,8 +16,10 @@ from sqlalchemy.engine import make_url
 _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc", "episodic_snqi")
 _CONSTRAINT_HANDLING_CHOICES = ("penalize", "prune")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
+OPTUNA_LAUNCHER_SCHEMA_VERSION = "robot_sf.optuna_expert_ppo_launcher.v1"
 
 _SUPPORTED_LAUNCH_KEYS = {
+    "schema_version",
     "base_config",
     "trials",
     "metric",
@@ -148,6 +150,12 @@ def load_launch_config(path: Path) -> dict[str, object]:
     unknown = sorted(set(payload) - _SUPPORTED_LAUNCH_KEYS)
     if unknown:
         raise ValueError(f"Unknown launcher config key(s): {', '.join(unknown)}")
+    schema_version = payload.get("schema_version")
+    if schema_version is not None and schema_version != OPTUNA_LAUNCHER_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported Optuna launcher schema_version {schema_version!r}; "
+            f"expected {OPTUNA_LAUNCHER_SCHEMA_VERSION!r}."
+        )
     if "base_config" not in payload:
         raise ValueError("Launcher config must define 'base_config'.")
     return payload

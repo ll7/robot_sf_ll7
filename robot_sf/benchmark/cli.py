@@ -57,7 +57,10 @@ from robot_sf.benchmark.report_table import format_latex_booktabs as _tbl_format
 from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
 from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario_schema import (
+    validate_scenario_list,
+    validate_scenario_matrix_metadata,
+)
 from robot_sf.benchmark.scenario_thumbnails import (
     resolve_scenario_label as _thumb_resolve_label,
 )
@@ -950,7 +953,9 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
             "select_scenarios": select_scenarios,
         }
     doc = docs[0]
+    schema_version: object = None
     if isinstance(doc, Mapping):
+        schema_version = doc.get("schema_version")
         raw_includes = doc.get("includes") or doc.get("include") or doc.get("scenario_files")
         if isinstance(raw_includes, list):
             includes = [str(entry) for entry in raw_includes]
@@ -971,7 +976,23 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
         "format": format_hint,
         "includes": includes,
         "select_scenarios": select_scenarios,
+        **({"schema_version": schema_version} if isinstance(schema_version, str) else {}),
     }
+
+
+def _load_matrix_metadata(matrix_path: str | Path) -> object:
+    """Load raw top-level YAML metadata for validation without expanding includes.
+
+    Returns:
+        object: First YAML document, or ``None`` when unavailable.
+    """
+    if is_task_bundle_reference(matrix_path):
+        return None
+    try:
+        with Path(matrix_path).open("r", encoding="utf-8") as handle:
+            return next(yaml.safe_load_all(handle), None)
+    except Exception:
+        return None
 
 
 def _summarize_scenarios(scenarios: list[dict[str, Any]]) -> dict[str, object]:
@@ -1190,7 +1211,8 @@ def _handle_validate_config(args) -> int:
     """
     try:
         scenarios = load_scenario_matrix(args.matrix)
-        errors = validate_scenario_list(scenarios)
+        metadata_errors = validate_scenario_matrix_metadata(_load_matrix_metadata(args.matrix))
+        errors = [*metadata_errors, *validate_scenario_list(scenarios)]
         warnings = _collect_scenario_warnings(scenarios, matrix_path=args.matrix)
         summary = _summarize_scenarios(scenarios)
         source = _extract_matrix_source(args.matrix)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MATRIX_PATH = _REPO_ROOT / "configs/benchmarks/lidar/planner_compatibility_issue_1614.yaml"
 
 
+@lru_cache(maxsize=1)
 def _load_matrix() -> dict[str, object]:
     payload = yaml.safe_load(_MATRIX_PATH.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
@@ -30,6 +32,11 @@ def _planner_row(planner: str) -> dict[str, object]:
         if row["planner"] == planner:
             return row
     raise AssertionError(f"Missing planner row: {planner}")
+
+
+def _planners_with_status(status: str) -> list[str]:
+    rows = _load_matrix()["planner_classifications"]
+    return [str(row["planner"]) for row in rows if row["current_contract_status"] == status]
 
 
 def test_lidar_matrix_records_required_runtime_boundary() -> None:
@@ -54,10 +61,7 @@ def test_current_lidar_native_candidates_match_contract_gate() -> None:
         assert "lidar_rays" in contract.observation_contract.required_inputs
 
 
-@pytest.mark.parametrize(
-    "planner",
-    ["goal", "orca", "social_force", "grid_route", "teb", "risk_dwa", "prediction_planner"],
-)
+@pytest.mark.parametrize("planner", _planners_with_status("blocked_by_current_contract"))
 def test_current_structured_or_grid_planners_fail_closed_for_lidar_level(planner: str) -> None:
     """Existing structured/grid planners should not silently run as LiDAR evidence."""
     row = _planner_row(planner)

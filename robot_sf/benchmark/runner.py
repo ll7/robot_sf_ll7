@@ -80,6 +80,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
 
+DEFAULT_BENCHMARK_ROBOT_RADIUS_M = 0.3
+DEFAULT_BENCHMARK_PED_RADIUS_M = 0.35
+
+
 def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
     """Load and construct a baseline planner from the registry.
 
@@ -113,7 +117,79 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
     return planner, Observation, config
 
 
-def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_positions, dt):
+def _positive_float_or_default(value: Any, default: float) -> float:
+    """Return a positive finite float or a fallback default."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not np.isfinite(parsed) or parsed <= 0.0:
+        return default
+    return parsed
+
+
+def _nested_value(mapping: dict[str, Any], parent_key: str, child_key: str) -> Any:
+    """Return a nested mapping value when present."""
+    if not isinstance(mapping, dict):
+        return None
+    parent = mapping.get(parent_key)
+    if isinstance(parent, dict):
+        return parent.get(child_key)
+    return None
+
+
+def _scenario_robot_radius_m(scenario_params: dict[str, Any]) -> float:
+    """Resolve robot radius from scenario metadata or benchmark defaults.
+
+    Returns:
+        Positive robot radius in meters.
+    """
+    if not isinstance(scenario_params, dict):
+        return DEFAULT_BENCHMARK_ROBOT_RADIUS_M
+    for value in (
+        scenario_params.get("robot_radius"),
+        _nested_value(scenario_params, "robot_config", "radius"),
+        _nested_value(scenario_params, "robot_config", "robot_radius"),
+        _nested_value(scenario_params, "robot", "radius"),
+    ):
+        radius = _positive_float_or_default(value, float("nan"))
+        if np.isfinite(radius):
+            return radius
+    return DEFAULT_BENCHMARK_ROBOT_RADIUS_M
+
+
+def _scenario_ped_radius_m(scenario_params: dict[str, Any]) -> float:
+    """Resolve pedestrian radius from scenario metadata or benchmark defaults.
+
+    Returns:
+        Positive pedestrian radius in meters.
+    """
+    if not isinstance(scenario_params, dict):
+        return DEFAULT_BENCHMARK_PED_RADIUS_M
+    for value in (
+        scenario_params.get("ped_radius"),
+        scenario_params.get("pedestrian_radius"),
+        _nested_value(scenario_params, "simulation_config", "ped_radius"),
+        _nested_value(scenario_params, "sim_config", "ped_radius"),
+        _nested_value(scenario_params, "pedestrians", "radius"),
+    ):
+        radius = _positive_float_or_default(value, float("nan"))
+        if np.isfinite(radius):
+            return radius
+    return DEFAULT_BENCHMARK_PED_RADIUS_M
+
+
+def _build_observation(
+    ObservationCls,
+    robot_pos,
+    robot_vel,
+    robot_goal,
+    ped_positions,
+    dt,
+    *,
+    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
+    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+):
     """Build an Observation instance from robot and pedestrian state.
 
     Args:
@@ -123,12 +199,15 @@ def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_pos
         robot_goal: Robot goal position array.
         ped_positions: Array of pedestrian positions.
         dt: Timestep duration.
+        robot_radius: Robot radius in meters.
+        ped_radius: Shared pedestrian radius in meters.
 
     Returns:
         Observation instance with current state data.
     """
     agents = [
-        {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": 0.35} for pos in ped_positions
+        {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": float(ped_radius)}
+        for pos in ped_positions
     ]
     return ObservationCls(
         dt=dt,
@@ -136,7 +215,7 @@ def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_pos
             "position": robot_pos.tolist(),
             "velocity": robot_vel.tolist(),
             "goal": robot_goal.tolist(),
-            "radius": 0.3,
+            "radius": float(robot_radius),
         },
         agents=agents,
         obstacles=[],
@@ -372,6 +451,8 @@ def _build_episode_data(  # noqa: PLR0913
     goal: np.ndarray,
     dt: float,
     reached_goal_step: int | None,
+    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
+    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
 ) -> EpisodeData:
     """Assemble EpisodeData from trajectory buffers and metadata.
 
@@ -394,10 +475,19 @@ def _build_episode_data(  # noqa: PLR0913
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
+        robot_radius=float(robot_radius),
+        ped_radius=float(ped_radius),
     )
 
 
-def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  # noqa: C901, PLR0915
+def _create_robot_policy(  # noqa: C901, PLR0915
+    algo: str,
+    algo_config_path: str | None,
+    seed: int,
+    *,
+    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
+    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+):
     """Create a robot policy function based on the specified algorithm.
 
     Returns:
@@ -529,7 +619,16 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         Returns:
             Velocity command as 2D array.
         """
-        obs = _build_observation(Observation, robot_pos, robot_vel, robot_goal, ped_positions, dt)
+        obs = _build_observation(
+            Observation,
+            robot_pos,
+            robot_vel,
+            robot_goal,
+            ped_positions,
+            dt,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+        )
 
         try:
             if step_runner is None:
@@ -1112,8 +1211,16 @@ def run_episode(  # noqa: PLR0913
     # Wall-clock start time for timestamps and perf accounting
     perf_start = time.perf_counter()
     ts_start = datetime.now(UTC).isoformat()
+    robot_radius = _scenario_robot_radius_m(scenario_params)
+    ped_radius = _scenario_ped_radius_m(scenario_params)
     # Create robot policy based on algorithm
-    robot_policy, algo_metadata = _create_robot_policy(algo, algo_config_path, seed)
+    robot_policy, algo_metadata = _create_robot_policy(
+        algo,
+        algo_config_path,
+        seed,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+    )
 
     # Simulate episode
     try:
@@ -1153,6 +1260,8 @@ def run_episode(  # noqa: PLR0913
         robot_goal_arr,
         dt,
         reached_goal_step,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
     )
 
     # Compute metrics

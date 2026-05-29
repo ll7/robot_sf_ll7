@@ -1,0 +1,1980 @@
+{
+  "schema_version": "benchmark-seed-variability-by-scenario.v1",
+  "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+  "generated_at_utc": "2026-05-28T15:26:07.794149Z",
+  "metrics": [
+    "success",
+    "collisions",
+    "near_misses",
+    "time_to_goal_norm",
+    "snqi"
+  ],
+  "confidence": {
+    "method": "bootstrap_mean_over_seed_means",
+    "confidence": 0.95,
+    "bootstrap_samples": 100,
+    "bootstrap_seed": 123
+  },
+  "source": {
+    "campaign_manifest_path": "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/campaign_manifest.json",
+    "run_meta_path": "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/run_meta.json",
+    "episodes_paths": [
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/goal__differential_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/goal__bicycle_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/goal__holonomic/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/social_force__differential_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/social_force__bicycle_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/social_force__holonomic/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/orca__differential_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/orca__bicycle_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/orca__holonomic/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/ppo__differential_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/ppo__bicycle_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/ppo__holonomic/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/prediction_planner__differential_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/prediction_planner__bicycle_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/prediction_planner__holonomic/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/sacadrl__differential_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/sacadrl__bicycle_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/sacadrl__holonomic/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/socnav_sampling__differential_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/socnav_sampling__bicycle_drive/episodes.jsonl",
+      "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/runs/socnav_sampling__holonomic/episodes.jsonl"
+    ]
+  },
+  "row_count": 21,
+  "rows": [
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "goal",
+      "algo": "goal",
+      "planner_group": "core",
+      "kinematics": "bicycle_drive",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 26.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.429660865607279
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 26.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 26.0,
+          "ci_high": 26.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.429660865607279,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.429660865607279,
+          "ci_high": -0.429660865607279,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "goal",
+      "algo": "goal",
+      "planner_group": "core",
+      "kinematics": "differential_drive",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 25.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.4126535486592599
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 25.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 25.0,
+          "ci_high": 25.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.4126535486592599,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.4126535486592599,
+          "ci_high": -0.4126535486592599,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "goal",
+      "algo": "goal",
+      "planner_group": "core",
+      "kinematics": "holonomic",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.10834588948566656
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.10834588948566656,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.10834588948566656,
+          "ci_high": -0.10834588948566656,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "orca",
+      "algo": "orca",
+      "planner_group": "core",
+      "kinematics": "bicycle_drive",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.11486736792187859
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.11486736792187859,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.11486736792187859,
+          "ci_high": -0.11486736792187859,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "orca",
+      "algo": "orca",
+      "planner_group": "core",
+      "kinematics": "differential_drive",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 5.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.17537249117335946
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 5.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 5.0,
+          "ci_high": 5.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.17537249117335946,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.17537249117335946,
+          "ci_high": -0.17537249117335946,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "orca",
+      "algo": "orca",
+      "planner_group": "core",
+      "kinematics": "holonomic",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 12.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.5054352687555362
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 12.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 12.0,
+          "ci_high": 12.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.5054352687555362,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.5054352687555362,
+          "ci_high": -0.5054352687555362,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "ppo",
+      "algo": "ppo",
+      "planner_group": "experimental",
+      "kinematics": "bicycle_drive",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.40168950119545055
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.40168950119545055,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.40168950119545055,
+          "ci_high": -0.40168950119545055,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "ppo",
+      "algo": "ppo",
+      "planner_group": "experimental",
+      "kinematics": "differential_drive",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 6.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.36489649272443586
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 6.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 6.0,
+          "ci_high": 6.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.36489649272443586,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.36489649272443586,
+          "ci_high": -0.36489649272443586,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "ppo",
+      "algo": "ppo",
+      "planner_group": "experimental",
+      "kinematics": "holonomic",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 8.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.29142105055583606
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 8.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 8.0,
+          "ci_high": 8.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.29142105055583606,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.29142105055583606,
+          "ci_high": -0.29142105055583606,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "prediction_planner",
+      "algo": "prediction_planner",
+      "planner_group": "experimental",
+      "kinematics": "bicycle_drive",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.10232213653698202
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.10232213653698202,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.10232213653698202,
+          "ci_high": -0.10232213653698202,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "prediction_planner",
+      "algo": "prediction_planner",
+      "planner_group": "experimental",
+      "kinematics": "differential_drive",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.09998383103973885
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.09998383103973885,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.09998383103973885,
+          "ci_high": -0.09998383103973885,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "prediction_planner",
+      "algo": "prediction_planner",
+      "planner_group": "experimental",
+      "kinematics": "holonomic",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.10039033325596686
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.10039033325596686,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.10039033325596686,
+          "ci_high": -0.10039033325596686,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "sacadrl",
+      "algo": "sacadrl",
+      "planner_group": "experimental",
+      "kinematics": "bicycle_drive",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 41.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.4925880178596274
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 41.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 41.0,
+          "ci_high": 41.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.4925880178596274,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.4925880178596274,
+          "ci_high": -0.4925880178596274,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "sacadrl",
+      "algo": "sacadrl",
+      "planner_group": "experimental",
+      "kinematics": "differential_drive",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 40.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.46226609684403575
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 40.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 40.0,
+          "ci_high": 40.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.46226609684403575,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.46226609684403575,
+          "ci_high": -0.46226609684403575,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "sacadrl",
+      "algo": "sacadrl",
+      "planner_group": "experimental",
+      "kinematics": "holonomic",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 31.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.40917822487994254
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 31.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 31.0,
+          "ci_high": 31.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.40917822487994254,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.40917822487994254,
+          "ci_high": -0.40917822487994254,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "planner_group": "core",
+      "kinematics": "bicycle_drive",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.12896830062809556
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.12896830062809556,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.12896830062809556,
+          "ci_high": -0.12896830062809556,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "planner_group": "core",
+      "kinematics": "differential_drive",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 10.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.2663483342611581
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 10.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 10.0,
+          "ci_high": 10.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.2663483342611581,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.2663483342611581,
+          "ci_high": -0.2663483342611581,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "social_force",
+      "algo": "social_force",
+      "planner_group": "core",
+      "kinematics": "holonomic",
+      "benchmark_profile": "baseline-safe",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 14.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.41206322959262204
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 14.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 14.0,
+          "ci_high": 14.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.41206322959262204,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.41206322959262204,
+          "ci_high": -0.41206322959262204,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "socnav_sampling",
+      "algo": "socnav_sampling",
+      "planner_group": "experimental",
+      "kinematics": "bicycle_drive",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.10853146985401904
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.10853146985401904,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.10853146985401904,
+          "ci_high": -0.10853146985401904,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "socnav_sampling",
+      "algo": "socnav_sampling",
+      "planner_group": "experimental",
+      "kinematics": "differential_drive",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 1.0,
+            "near_misses": 5.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.28103524279580777
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 5.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 5.0,
+          "ci_high": 5.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.28103524279580777,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.28103524279580777,
+          "ci_high": -0.28103524279580777,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "socnav_sampling",
+      "algo": "socnav_sampling",
+      "planner_group": "experimental",
+      "kinematics": "holonomic",
+      "benchmark_profile": "experimental",
+      "n": 1,
+      "seed_count": 1,
+      "episode_count": 1,
+      "seed_list": [
+        111
+      ],
+      "per_seed": [
+        {
+          "seed": 111,
+          "episode_count": 1,
+          "metrics": {
+            "success": 0.0,
+            "collisions": 0.0,
+            "near_misses": 0.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": -0.09998383103973885
+          }
+        }
+      ],
+      "summary": {
+        "success": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "collisions": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "near_misses": {
+          "mean": 0.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal_norm": {
+          "mean": 1.0,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": 1.0,
+          "ci_high": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "mean": -0.09998383103973885,
+          "std": 0.0,
+          "cv": NaN,
+          "count": 1.0,
+          "ci_low": -0.09998383103973885,
+          "ci_high": -0.09998383103973885,
+          "ci_half_width": 0.0
+        }
+      },
+      "provenance": {
+        "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+        "config_hash": "f1c0cdc42134a4f9",
+        "git_hash": "f35fb3b5d47c217594a7d6e923b14bc22772ab5f",
+        "seed_policy": {
+          "mode": "fixed-list",
+          "seed_set": null,
+          "resolved_seeds": [
+            111
+          ]
+        },
+        "confidence": {
+          "method": "bootstrap_mean_over_seed_means",
+          "confidence": 0.95,
+          "bootstrap_samples": 100,
+          "bootstrap_seed": 123
+        }
+      }
+    }
+  ]
+}

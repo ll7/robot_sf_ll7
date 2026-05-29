@@ -164,6 +164,8 @@ knowledge, not every transient iteration detail.
   [issue_1397_oracle_imitation_launch_packet.md](issue_1397_oracle_imitation_launch_packet.md)
 * Issue #1353 Broader AMV Baseline Preflight:
   [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
+* Issue #1484 Broader Cross-Kinematics Launch Packet:
+  [issue_1484_broader_cross_kinematics_launch.md](issue_1484_broader_cross_kinematics_launch.md)
 * Issue #1546 AMV actuation-envelope stress slice:
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
 * Issue #1556 synthetic AMV actuation stress slice:

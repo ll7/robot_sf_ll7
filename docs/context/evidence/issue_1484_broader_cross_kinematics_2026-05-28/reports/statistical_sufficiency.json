@@ -1,0 +1,812 @@
+{
+  "schema_version": "benchmark-seed-statistical-sufficiency.v1",
+  "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+  "generated_at_utc": "2026-05-28T15:26:07.794149Z",
+  "confidence": {
+    "method": "bootstrap_mean_over_seed_means",
+    "confidence": 0.95,
+    "bootstrap_samples": 100,
+    "bootstrap_seed": 123
+  },
+  "row_count": 21,
+  "rows": [
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "goal",
+      "kinematics": "bicycle_drive",
+      "algo": "goal",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "algo": "goal",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "goal",
+      "kinematics": "holonomic",
+      "algo": "goal",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "orca",
+      "kinematics": "bicycle_drive",
+      "algo": "orca",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "algo": "orca",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "orca",
+      "kinematics": "holonomic",
+      "algo": "orca",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "ppo",
+      "kinematics": "bicycle_drive",
+      "algo": "ppo",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "algo": "ppo",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "ppo",
+      "kinematics": "holonomic",
+      "algo": "ppo",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "prediction_planner",
+      "kinematics": "bicycle_drive",
+      "algo": "prediction_planner",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "algo": "prediction_planner",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "prediction_planner",
+      "kinematics": "holonomic",
+      "algo": "prediction_planner",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "sacadrl",
+      "kinematics": "bicycle_drive",
+      "algo": "sacadrl",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "algo": "sacadrl",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "sacadrl",
+      "kinematics": "holonomic",
+      "algo": "sacadrl",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "social_force",
+      "kinematics": "bicycle_drive",
+      "algo": "social_force",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "algo": "social_force",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "social_force",
+      "kinematics": "holonomic",
+      "algo": "social_force",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "socnav_sampling",
+      "kinematics": "bicycle_drive",
+      "algo": "socnav_sampling",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "algo": "socnav_sampling",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    },
+    {
+      "scenario_id": "classic_cross_trap_low",
+      "planner_key": "socnav_sampling",
+      "kinematics": "holonomic",
+      "algo": "socnav_sampling",
+      "seed_count": 1,
+      "episode_count": 1,
+      "sufficiency_status": "reported",
+      "metric_half_widths": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "time_to_goal": 0.0,
+        "snqi": 0.0
+      },
+      "metrics": {
+        "success": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "collision": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "near_miss": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "time_to_goal": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        },
+        "snqi": {
+          "n": 1.0,
+          "ci_half_width": 0.0
+        }
+      }
+    }
+  ]
+}

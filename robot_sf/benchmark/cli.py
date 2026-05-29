@@ -47,6 +47,9 @@ from robot_sf.benchmark.planner_inclusion import (
     run_planner_inclusion_check,
     to_jsonable_payload,
 )
+from robot_sf.benchmark.planner_tradeoff_plot import (
+    save_planner_tradeoff_figure as _save_planner_tradeoff_figure,
+)
 from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
 from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
@@ -854,6 +857,31 @@ def _handle_plot_distributions(args) -> int:
             ci_confidence=float(getattr(args, "ci_confidence", 0.95)),
             ci_seed=(int(args.ci_seed) if getattr(args, "ci_seed", None) is not None else None),
         )
+        return 0
+    except Exception:  # pragma: no cover - error path
+        return 2
+
+
+def _handle_plot_planner_tradeoff(args) -> int:
+    """Render the paper-style planner safety-efficiency tradeoff plot.
+
+    Returns:
+        Exit code (0 success, 2 failure).
+    """
+    try:
+        meta = _save_planner_tradeoff_figure(
+            Path(args.bundle_path),
+            out_png=Path(args.out),
+            out_pdf=(Path(args.out_pdf) if getattr(args, "out_pdf", None) else None),
+            bootstrap_samples=int(args.bootstrap_samples),
+            ci_confidence=float(args.ci_confidence),
+            bootstrap_seed=int(args.bootstrap_seed),
+            title=(str(args.title) if args.title is not None else None),
+        )
+        if getattr(args, "metadata_out", None):
+            metadata_path = Path(args.metadata_out)
+            metadata_path.parent.mkdir(parents=True, exist_ok=True)
+            metadata_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -2026,6 +2054,52 @@ def _add_plot_distributions_subparser(
     p.set_defaults(cmd="plot-distributions")
 
 
+def _add_plot_planner_tradeoff_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the plot-planner-tradeoff subcommand parser."""
+    p = subparsers.add_parser(
+        "plot-planner-tradeoff",
+        help="Plot planner collision-rate versus success-rate from a publication bundle",
+    )
+    p.add_argument(
+        "--bundle-path",
+        required=True,
+        help="Publication bundle root containing payload/reports and payload/runs.",
+    )
+    p.add_argument("--out", required=True, help="Output PNG path")
+    p.add_argument("--out-pdf", default=None, help="Optional path to also export vector PDF")
+    p.add_argument(
+        "--metadata-out",
+        default=None,
+        help="Optional JSON metadata path with plotted points and CI values",
+    )
+    p.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=400,
+        help="Bootstrap resamples over seed-level means. Default: 400",
+    )
+    p.add_argument(
+        "--ci-confidence",
+        type=float,
+        default=0.95,
+        help="Bootstrap confidence level. Default: 0.95",
+    )
+    p.add_argument(
+        "--bootstrap-seed",
+        type=int,
+        default=42,
+        help="Seed for deterministic bootstrap resampling. Default: 42",
+    )
+    p.add_argument(
+        "--title",
+        default="Preferred region: lower collision, higher success",
+        help="Optional plot title; pass an empty string for no title.",
+    )
+    p.set_defaults(cmd="plot-planner-tradeoff")
+
+
 def _add_plot_scenarios_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2112,6 +2186,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_debug_seeds_subparser(subparsers)
     _add_plot_pareto_subparser(subparsers)
     _add_plot_distributions_subparser(subparsers)
+    _add_plot_planner_tradeoff_subparser(subparsers)
     _add_plot_scenarios_subparser(subparsers)
     _add_list_subparser(subparsers)
     _add_planner_inclusion_subparser(subparsers)
@@ -2563,6 +2638,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "debug-seeds": _handle_debug_seeds,
         "plot-pareto": _handle_plot_pareto,
         "plot-distributions": _handle_plot_distributions,
+        "plot-planner-tradeoff": _handle_plot_planner_tradeoff,
         "plot-scenarios": _handle_plot_scenarios,
     }
     handler = handlers.get(args.cmd)

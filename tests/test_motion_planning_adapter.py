@@ -102,7 +102,8 @@ def test_obstacle_statistics_exclude_inflated_clearance_cells() -> None:
     )
 
     assert count_obstacle_cells(grid) == 4
-    assert np.count_nonzero(grid.type_map.array == TYPES.INFLATION) == 8
+    type_map = np.asarray(getattr(grid.type_map, "array", grid.type_map))
+    assert np.count_nonzero(type_map == TYPES.INFLATION) == 8
     assert get_obstacle_statistics(grid) == {
         "obstacle_count": 4,
         "total_cells": 16,

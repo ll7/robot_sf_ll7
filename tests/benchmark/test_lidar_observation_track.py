@@ -188,7 +188,7 @@ def test_stubbed_lidar_map_episode_records_track_metadata(
         snqi_baseline=None,
         algo="ppo",
         algo_config={},
-        scenario_path=Path("configs/scenarios/sanity_v1.yaml"),
+        scenario_path=_REPO_ROOT / "configs/scenarios/sanity_v1.yaml",
         observation_mode="sensor_fusion_state",
         observation_level="lidar_2d",
     )

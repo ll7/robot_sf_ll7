@@ -53,6 +53,7 @@ scripts/
 │
 ├── research/                          # Research & analysis
 │   ├── generate_report.py            # Research report generation
+│   ├── generate_extractor_report.py  # Multi-extractor report generation
 │   └── compare_ablations.py          # Ablation study comparison
 │
 ├── validation/                        # Testing & validation
@@ -103,7 +104,7 @@ reviewed public command, a compatibility shim, or a bounded debug utility.
 | Script | Status | Canonical path or action |
 | --- | --- | --- |
 | `__init__.py` | canonical | Import support for tested script modules. |
-| `analyze_feature_extractors.py` | compatibility | Prefer `scripts/research/generate_extractor_report.py` for report generation. |
+| `analyze_feature_extractors.py` | compatibility | Prefer `research/generate_extractor_report.py` for multi-extractor report generation. |
 | `benchmark.py` | archive candidate | Old profiling helper; prefer `scripts/validation/performance_smoke_test.py`. |
 | `benchmark02.py` | compatibility | Fails closed; use `scripts/benchmark_workers.py` or `scripts/validation/performance_smoke_test.py`. |
 | `benchmark_ped_apf_models.py` | debug-only | Narrow APF comparison helper. |
@@ -263,7 +264,7 @@ uv run python scripts/validation/performance_smoke_test.py
 **Usage**:
 
 ```bash
-uv run python scripts/benchmark_workers.py
+uv run python scripts/benchmark_workers.py --out output/benchmarks/bench_workers
 ```
 
 #### `run_social_navigation_benchmark.py`

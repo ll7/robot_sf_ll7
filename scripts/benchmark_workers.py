@@ -83,7 +83,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark run_batch with varying workers")
     parser.add_argument("--max-workers", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=10)
-    parser.add_argument("--out", type=Path, default=Path("results/bench_workers"))
+    parser.add_argument("--out", type=Path, default=Path("output/benchmarks/bench_workers"))
     args = parser.parse_args()
 
     results = []

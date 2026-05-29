@@ -8,7 +8,7 @@ _MIGRATION_MESSAGE = """\
 scripts/benchmark02.py is retired.
 
 Use one of the maintained benchmark or smoke entrypoints instead:
-  uv run python scripts/benchmark_workers.py
+  uv run python scripts/benchmark_workers.py --out output/benchmarks/bench_workers
   DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/validation/performance_smoke_test.py
 
 For benchmark campaigns, prefer config-driven tools under scripts/tools/ or

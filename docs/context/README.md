@@ -196,6 +196,10 @@ knowledge, not every transient iteration detail.
   [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
 * Issue #1618 learned local-policy adapter interface:
   [issue_1618_learned_policy_adapter_interface.md](issue_1618_learned_policy_adapter_interface.md)
+* Issue #1677 SiT Dataset Terms Audit (2026-05-29):
+  [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
+* Issue #1617 Local-Planner Repository Survey (2026-05-29):
+  [issue_1617_local_planner_repo_survey.md](issue_1617_local_planner_repo_survey.md)
 * Issue #1662 LiDAR PPO MLP Smoke (2026-05-29):
   [issue_1662_lidar_ppo_smoke.md](issue_1662_lidar_ppo_smoke.md)
 * Issue #1294 seed-sensitivity perturbations:

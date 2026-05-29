@@ -34,7 +34,14 @@ NEAR_MISS_DIST: float = 0.50
 # considered discomfort / high-exposure. Chosen empirically; see research.md.
 COMFORT_FORCE_THRESHOLD: float = 2.0
 
+# --- Lightweight benchmark runner geometry (meters) ---
+# Keep the synthetic runner observation payload and metric clearance calculation aligned.
+BENCHMARK_RUNNER_ROBOT_RADIUS_M: float = 0.3
+BENCHMARK_RUNNER_PED_RADIUS_M: float = 0.35
+
 __all__ = [
+    "BENCHMARK_RUNNER_PED_RADIUS_M",
+    "BENCHMARK_RUNNER_ROBOT_RADIUS_M",
     "COLLISION_DIST",
     "COMFORT_FORCE_THRESHOLD",
     "EPISODE_SCHEMA_VERSION",

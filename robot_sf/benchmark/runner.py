@@ -49,7 +49,11 @@ else:
     _BASELINE_IMPORT_ERROR = None
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
-from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
+from robot_sf.benchmark.constants import (
+    BENCHMARK_RUNNER_PED_RADIUS_M,
+    BENCHMARK_RUNNER_ROBOT_RADIUS_M,
+    EPISODE_SCHEMA_VERSION,
+)
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
@@ -78,10 +82,6 @@ from robot_sf.training.task_bundles import is_task_bundle_reference
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-
-
-BENCHMARK_RUNNER_ROBOT_RADIUS_M = 0.3
-BENCHMARK_RUNNER_PED_RADIUS_M = 0.35
 
 
 def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
@@ -403,8 +403,8 @@ def _build_episode_data(  # noqa: PLR0913
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
-        robot_radius=float(robot_radius),
-        ped_radius=float(ped_radius),
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
     )
 
 

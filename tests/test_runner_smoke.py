@@ -9,10 +9,13 @@ import json
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 
-from robot_sf.benchmark.runner import (
+from robot_sf.benchmark.constants import (
     BENCHMARK_RUNNER_PED_RADIUS_M,
     BENCHMARK_RUNNER_ROBOT_RADIUS_M,
+)
+from robot_sf.benchmark.runner import (
     _build_episode_data,
     run_batch,
     run_episode,
@@ -45,7 +48,7 @@ def test_build_episode_data_uses_runner_observation_radii() -> None:
 
 
 def test_runner_single_episode_tmp(tmp_path: Path):
-    """Run one benchmark episode and validate schema-compliant JSONL persistence.
+    """Run one episode and validate metric radii flow through JSONL persistence.
 
     Args:
         tmp_path: Temporary directory for writing the smoke output JSONL.
@@ -67,6 +70,13 @@ def test_runner_single_episode_tmp(tmp_path: Path):
     assert "metrics" in record
     assert "metric_parameters" in record
     assert "threshold_signature" in record["metric_parameters"]
+    radius_sum = BENCHMARK_RUNNER_ROBOT_RADIUS_M + BENCHMARK_RUNNER_PED_RADIUS_M
+    assert record["metrics"]["min_clearance"] == pytest.approx(
+        record["metrics"]["min_distance"] - radius_sum
+    )
+    assert record["metrics"]["mean_clearance"] == pytest.approx(
+        record["metrics"]["mean_distance"] - radius_sum
+    )
     # Validate schema
     schema = load_schema(SCHEMA_PATH)
     validate_episode(record, schema)

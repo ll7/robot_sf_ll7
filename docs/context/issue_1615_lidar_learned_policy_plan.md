@@ -5,7 +5,7 @@ Date: 2026-05-29
 ## Scope
 
 This note records the launch packet for LiDAR-based learned local policies requested by issue
-#1615. It plans candidate baselines, feature-extractor variants, registry metadata, smoke
+number 1615. It plans candidate baselines, feature-extractor variants, registry metadata, smoke
 validation, and artifact promotion. It does not launch training, submit SLURM jobs, promote a
 checkpoint, or claim benchmark performance.
 

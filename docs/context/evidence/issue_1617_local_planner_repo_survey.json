@@ -1,0 +1,290 @@
+{
+  "issue": 1617,
+  "created_utc": "2026-05-29",
+  "scope": "Recent local-planner, social-navigation, and dynamic-obstacle repositories surveyed for Robot SF-native follow-up ideas.",
+  "selection_policy": {
+    "included": [
+      "Active or recently updated repositories with planner, local-risk, social-navigation, or benchmark relevance.",
+      "Repositories with public URLs and enough README or release metadata to identify transferable ideas."
+    ],
+    "excluded": [
+      "Repositories that require code import before the idea can be evaluated.",
+      "Repositories whose only value is an upstream adapter without a clear Robot SF-native diagnostic or benchmark use."
+    ]
+  },
+  "repositories": [
+    {
+      "name": "tud-amr/mpc_planner",
+      "url": "https://github.com/tud-amr/mpc_planner",
+      "default_branch": "main",
+      "observed_head": "3002da6a5e43b3577f584381bbcad569c82a381b",
+      "head_commit_date": "2025-03-30",
+      "github_updated_at": "2026-05-26",
+      "license": "Apache-2.0",
+      "stars": 369,
+      "entry_points_sampled": [
+        "README.md",
+        "mpc_planner/include/mpc_planner/planner.h",
+        "mpc_planner/src/planner.cpp",
+        "mpc_planner_dingo/config/guidance_planner.yaml",
+        "mpc_planner_dingo/launch/ros2_simulator.launch"
+      ],
+      "transferable_idea": "Topology-aware MPC diagnostics for distinct route hypotheses around dynamic obstacles; chance-constrained handling of non-Gaussian obstacle uncertainty.",
+      "robot_sf_fit": "high",
+      "robot_sf_boundary": "Use as design inspiration for diagnostics only; do not import ROS/C++ planner code."
+    },
+    {
+      "name": "Zhefan-Xu/Intent-MPC",
+      "url": "https://github.com/Zhefan-Xu/Intent-MPC",
+      "default_branch": "main",
+      "observed_head": "f9d050c981a3b7b0ef8dc34f83fc4ede194c0fd0",
+      "head_commit_date": "2025-10-20",
+      "github_updated_at": "2026-05-27",
+      "license": "MIT",
+      "stars": 347,
+      "entry_points_sampled": [
+        "README.md",
+        "autonomous_flight/cfg/mpc_navigation/planner_param.yaml",
+        "autonomous_flight/cfg/mpc_navigation/predictor_param.yaml",
+        "autonomous_flight/include/autonomous_flight/mpcNavigation.cpp",
+        "autonomous_flight/launch/intent_mpc_demo.launch"
+      ],
+      "transferable_idea": "Intent-prediction-conditioned MPC for dynamic obstacle avoidance.",
+      "robot_sf_fit": "medium",
+      "robot_sf_boundary": "UAV framing is not directly portable; useful mainly for intent-conditioned risk interfaces."
+    },
+    {
+      "name": "TommasoVandermeer/social-jym",
+      "url": "https://github.com/TommasoVandermeer/social-jym",
+      "default_branch": "main",
+      "observed_head": "212ea7759f614ff646f39462c4f51dca67d01ed0",
+      "head_commit_date": "2026-03-06",
+      "github_updated_at": "2026-05-19",
+      "license": "Apache-2.0",
+      "stars": 6,
+      "entry_points_sampled": [
+        "README.md",
+        "notebooks/train_socialnav_policy.ipynb",
+        "scripts/vanilla_e2e_training.py",
+        "socialjym/envs/socialnav.py",
+        "socialjym/envs/lasernav.py",
+        "socialjym/policies/sarl_ppo.py",
+        "socialjym/policies/dwa.py"
+      ],
+      "transferable_idea": "JAX-vectorized social-navigation training environment with multiple social-navigation policies and human motion models.",
+      "robot_sf_fit": "medium",
+      "robot_sf_boundary": "Good performance and training-architecture reference; JAX stack is not a near-term Robot SF dependency."
+    },
+    {
+      "name": "sepsamavi/safe-interactive-crowdnav",
+      "url": "https://github.com/sepsamavi/safe-interactive-crowdnav",
+      "default_branch": "master",
+      "observed_head": "c702fb8ac9ba6439ca61da7dde68b8524bbc6a1f",
+      "head_commit_date": "2025-07-02",
+      "github_updated_at": "2026-05-13",
+      "license": "MIT",
+      "stars": 96,
+      "entry_points_sampled": [
+        "README.md",
+        "sicnav/configs/policy.config",
+        "sicnav/policy/campc.py",
+        "sicnav/policy/dwa.py",
+        "sicnav/utils/mpc_utils/mpc_env.py",
+        "crowd_sim_plus/envs/crowd_sim_plus.py",
+        "crowd_sim_plus/envs/policy/social_force.py"
+      ],
+      "transferable_idea": "Safe interactive crowd navigation combining MPC-style control, DWA comparison, and CrowdSimPlus social-force pedestrians.",
+      "robot_sf_fit": "high",
+      "robot_sf_boundary": "Use for planner-interface and scenario ideas; direct import would need dependency and benchmark-contract review."
+    },
+    {
+      "name": "HauserDong/HomoMPC",
+      "url": "https://github.com/HauserDong/HomoMPC",
+      "default_branch": "master",
+      "observed_head": "e31d7a72e3b1841a997ebf130dfad89f51a40e46",
+      "head_commit_date": "2025-07-29",
+      "github_updated_at": "2026-04-20",
+      "license": "MIT",
+      "stars": 7,
+      "entry_points_sampled": [
+        "Readme.md",
+        "src/global_planner/copath/include/Voronoi.hpp",
+        "src/global_planner/copath/scripts/HomoCoPath.py",
+        "src/global_planner/copath/src/generate_homotopic_path_binding.cpp",
+        "src/bring_up/launch/bring_up.launch"
+      ],
+      "transferable_idea": "Homotopy-aware distributed MPC framing for multi-agent navigation.",
+      "robot_sf_fit": "medium",
+      "robot_sf_boundary": "Supports the topology-diagnostic follow-up; multi-agent ROS stack is not directly portable."
+    },
+    {
+      "name": "CMU-TBD/SocNavBench",
+      "url": "https://github.com/CMU-TBD/SocNavBench",
+      "default_branch": "master",
+      "observed_head": "2724ea85ff22ca61a88ee95285dfc3fa056656c6",
+      "head_commit_date": "2022-03-09",
+      "github_updated_at": "2026-05-12",
+      "license": "MIT",
+      "stars": 53,
+      "entry_points_sampled": [
+        "README.md",
+        "docs/install.md",
+        "docs/usage.md",
+        "agents/humans/recorded_human.py",
+        "agents/humans/datasets/eth/world_coordinate_inter_eth.csv",
+        "metrics/cost_functions.py",
+        "socnav/socnav_renderer.py"
+      ],
+      "transferable_idea": "Grounded social-navigation benchmark structure with recorded pedestrian datasets and social-navigation metrics.",
+      "robot_sf_fit": "medium",
+      "robot_sf_boundary": "Scenario and metric reference only; any dataset reuse needs separate provenance and redistribution review."
+    },
+    {
+      "name": "CognitiveAISystems/Dynamic-Neural-Potential-Field",
+      "url": "https://github.com/CognitiveAISystems/Dynamic-Neural-Potential-Field",
+      "default_branch": "main",
+      "observed_head": "071f010ed780a84759d0ec65c6a57676727d65b9",
+      "head_commit_date": "2026-03-05",
+      "github_updated_at": "2026-05-21",
+      "license": "Apache-2.0",
+      "stars": 25,
+      "entry_points_sampled": [
+        "README.md",
+        "NPField/config/generate_MPC_config.py",
+        "NPField/script_d1/NPField_model.py",
+        "NPField/script_d1/mpc_params.py",
+        "NPField/script_d1/train_model.py",
+        "NPField/TransPath/train.py"
+      ],
+      "transferable_idea": "Learned differentiable local potential or risk surface injected into MPC.",
+      "robot_sf_fit": "high",
+      "robot_sf_boundary": "Prototype a Robot SF-native risk-surface contract before any planner integration."
+    },
+    {
+      "name": "Arena-Rosnav/arena-rosnav",
+      "url": "https://github.com/Arena-Rosnav/arena-rosnav",
+      "default_branch": "master",
+      "observed_head": "5de9d380d94e01963dc48f7a3f62c1b99c9c9556",
+      "head_commit_date": "2025-07-14",
+      "github_updated_at": "2026-05-27",
+      "license": "MIT",
+      "stars": 119,
+      "entry_points_sampled": [
+        "README.md",
+        "arena_bringup/configs/benchmark/config.yaml",
+        "arena_bringup/configs/benchmark/contests/allplanners.yaml",
+        "arena_bringup/configs/training/sb_training_config.yaml",
+        "arena_bringup/configs/training/reward_functions/default.yaml"
+      ],
+      "transferable_idea": "Navigation benchmark and DRL training workflow organization for ROS navigation stacks.",
+      "robot_sf_fit": "medium",
+      "robot_sf_boundary": "Benchmark structure may be useful; README metadata alone is not enough to claim concrete planner behavior."
+    },
+    {
+      "name": "nkuhzx/ssDRL",
+      "url": "https://github.com/nkuhzx/ssDRL",
+      "default_branch": "main",
+      "observed_head": "bfa988b467af89ce44fa0ffe366c468fb8d2063a",
+      "head_commit_date": "2022-03-10",
+      "github_updated_at": "2026-04-03",
+      "license": "Apache-2.0",
+      "stars": 11,
+      "entry_points_sampled": [
+        "README.md",
+        "crowd_nav/configs/env.config",
+        "crowd_nav/configs/policy.config",
+        "crowd_nav/configs/train.config",
+        "crowd_nav/policy/ssDRL.py",
+        "crowd_nav/train.py",
+        "crowd_sim/envs/crowd_sim.py"
+      ],
+      "transferable_idea": "Social-stress reward or metric framing for crowd-comfort navigation.",
+      "robot_sf_fit": "medium",
+      "robot_sf_boundary": "Older code; use concept only after Robot SF metric contract review."
+    },
+    {
+      "name": "FK-75/social-navigation-robot",
+      "url": "https://github.com/FK-75/social-navigation-robot",
+      "default_branch": "main",
+      "observed_head": "e84c1a540249d92e08e7cc4dc627acfd5178d0b8",
+      "head_commit_date": "2026-03-30",
+      "github_updated_at": "2026-04-19",
+      "license": "NOASSERTION",
+      "stars": 0,
+      "entry_points_sampled": [
+        "README.md",
+        "controllers/social_robot/lidar_module.py",
+        "controllers/social_robot/movement_module.py",
+        "controllers/social_robot/social_robot.py",
+        "controllers/social_robot/testing/compare_profiles.py",
+        "controllers/social_robot/testing/final_tradeoff_analysis.py",
+        "worlds/dementia_care_world.wbt"
+      ],
+      "transferable_idea": "Conservative, neutral, and open proxemic-profile comparison for social navigation.",
+      "robot_sf_fit": "medium",
+      "robot_sf_boundary": "No clear license in GitHub metadata; do not import code or assets."
+    },
+    {
+      "name": "SPALaboratory/SiT-Dataset",
+      "url": "https://github.com/SPALaboratory/SiT-Dataset",
+      "default_branch": "main",
+      "observed_head": "b5fa5ae795dc0041468d07b997b0d50c166fb76e",
+      "head_commit_date": "2024-10-17",
+      "github_updated_at": "2026-05-28",
+      "license": "Apache-2.0",
+      "stars": 82,
+      "entry_points_sampled": [
+        "README.md",
+        "detection/BEVDepth/configs/_base_/datasets/sit_3d.py",
+        "detection/BEVDepth/configs/_base_/models/centerpoint_01voxel_second_secfpn_nus.py"
+      ],
+      "transferable_idea": "Socially interactive pedestrian trajectory dataset and semantic-map references for scenario staging.",
+      "robot_sf_fit": "medium",
+      "robot_sf_boundary": "Audit download and redistribution terms before deriving fixtures."
+    },
+    {
+      "name": "rst-tu-dortmund/mpc_local_planner",
+      "url": "https://github.com/rst-tu-dortmund/mpc_local_planner",
+      "default_branch": "master",
+      "observed_head": "5b4e465fec718245484e8668e6dd45539ca37983",
+      "head_commit_date": "2021-01-04",
+      "github_updated_at": "2026-05-19",
+      "license": "GPL-3.0",
+      "stars": 653,
+      "entry_points_sampled": [
+        "README.md",
+        "mpc_local_planner/cfg/mpc_controller.cfg",
+        "mpc_local_planner/include/mpc_local_planner/controller.h",
+        "mpc_local_planner/include/mpc_local_planner/mpc_local_planner_ros.h",
+        "mpc_local_planner/include/mpc_local_planner/optimal_control/quadratic_cost_se2.h",
+        "mpc_local_planner/src/controller.cpp",
+        "mpc_local_planner/mpc_local_planner_plugin.xml"
+      ],
+      "transferable_idea": "Classic ROS base_local_planner MPC plugin structure and minimum-time/quadratic receding-horizon examples.",
+      "robot_sf_fit": "low",
+      "robot_sf_boundary": "GPL and older code make it reference-only; not a Robot SF dependency candidate."
+    }
+  ],
+  "opened_follow_ups": [
+    {
+      "issue": 1674,
+      "url": "https://github.com/ll7/robot_sf_ll7/issues/1674",
+      "theme": "Topology-hypothesis diagnostics"
+    },
+    {
+      "issue": 1675,
+      "url": "https://github.com/ll7/robot_sf_ll7/issues/1675",
+      "theme": "Learned local risk-surface planner interface"
+    },
+    {
+      "issue": 1676,
+      "url": "https://github.com/ll7/robot_sf_ll7/issues/1676",
+      "theme": "Proxemic-profile comfort scenario slice"
+    },
+    {
+      "issue": 1677,
+      "url": "https://github.com/ll7/robot_sf_ll7/issues/1677",
+      "theme": "SiT Dataset terms and staging audit"
+    }
+  ]
+}

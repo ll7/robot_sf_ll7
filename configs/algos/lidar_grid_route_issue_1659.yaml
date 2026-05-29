@@ -1,0 +1,29 @@
+# Testing-only LiDAR-derived ego occupancy adapter for grid_route.
+allow_testing_algorithms: true
+lidar_occupancy:
+  resolution: 0.2
+  width: 6.0
+  height: 6.0
+  max_scan_dist: 10.0
+  visual_angle_portion: 1.0
+  obstacle_thickness_cells: 1
+  normalized_observation: true
+  target_distance_scale: 50.0
+  linear_speed_scale: 2.0
+  angular_speed_scale: 1.0
+  robot_radius: 0.3
+grid_route:
+  max_linear_speed: 0.9
+  max_angular_speed: 1.2
+  goal_tolerance: 0.25
+  heading_gain: 1.8
+  turn_in_place_angle: 0.8
+  waypoint_lookahead_cells: 5
+  waypoint_reached_distance: 0.3
+  obstacle_threshold: 0.5
+  obstacle_inflation_cells: 1
+  clearance_search_cells: 5
+  clearance_penalty_weight: 0.5
+  stop_distance: 0.25
+  progress_weight: 1.0
+  heading_weight: 1.0

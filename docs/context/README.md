@@ -375,6 +375,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1168 Multi-AMV Planner Support Classification](issue_1168_multi_amv_planner_support.md)
   records the current planner-family inventory, fail-closed support gate, and the boundary between
   goal-controller smoke execution and real multi-AMV planner support.
+* [Issue #1659 LiDAR Ego Occupancy Adapter](issue_1659_lidar_ego_occupancy_adapter.md)
+  records the testing-only `lidar_grid_route` adapter contract, opt-in gate, and fail-closed
+  boundary between LiDAR-derived ego occupancy and privileged map/SocNav state.
 * [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
   records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
   importer outputs, and deferred generalization scope.

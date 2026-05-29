@@ -48,6 +48,54 @@ def test_lidar_rays_to_occupancy_marks_endpoint_without_pedestrian_state() -> No
     assert planner_obs["occupancy_grid_meta_channel_indices"].tolist() == [0, 1, -1, 2]
 
 
+def test_lidar_rays_to_occupancy_includes_limited_fov_endpoints() -> None:
+    """Limited-FOV scans should place the first and last rays at the configured bounds."""
+    planner_obs = lidar_rays_to_occupancy_observation(
+        {
+            "rays": np.asarray([1.0, 4.0, 1.0], dtype=np.float32),
+            "drive_state": np.asarray([0.0, 0.0, 2.0, 0.0, 0.0], dtype=np.float32),
+        },
+        LidarOccupancyGridConfig(
+            resolution=0.5,
+            width=4.0,
+            height=4.0,
+            max_range=4.0,
+            angle_min=-np.pi / 2.0,
+            angle_max=np.pi / 2.0,
+            obstacle_inflation_cells=0,
+            normalized_rays=False,
+            normalized_drive_state=False,
+        ),
+    )
+
+    grid = planner_obs["occupancy_grid"]
+
+    assert grid[0, 2, 4] == 1.0
+    assert grid[0, 6, 4] == 1.0
+
+
+def test_lidar_occupancy_wrapper_reset_tolerates_seedless_planners() -> None:
+    """Planner reset hooks without seed support should still be called."""
+
+    class _SeedlessPlanner:
+        def __init__(self) -> None:
+            self.reset_count = 0
+
+        def reset(self) -> None:
+            self.reset_count += 1
+
+        def plan(self, observation):
+            del observation
+            return 0.0, 0.0
+
+    planner = _SeedlessPlanner()
+    wrapper = LidarOccupancyPlannerAdapter(planner, _raw_lidar_config())
+
+    wrapper.reset(seed=123)
+
+    assert planner.reset_count == 1
+
+
 def test_lidar_occupancy_wrapper_drives_safety_barrier_from_rays_only() -> None:
     """The safety-barrier wrapper should slow down when the LiDAR grid blocks forward motion."""
     wrapper = LidarOccupancyPlannerAdapter(

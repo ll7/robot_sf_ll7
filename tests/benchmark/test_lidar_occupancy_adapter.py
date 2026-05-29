@@ -11,6 +11,9 @@ from robot_sf.benchmark.map_runner import _build_policy, _run_map_episode
 from robot_sf.gym_env.observation_mode import ObservationMode
 from tests.benchmark.test_map_runner_utils import _minimal_map_def
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCENARIO_PATH = _REPO_ROOT / "configs/scenarios/sanity_v1.yaml"
+
 
 def test_build_policy_wraps_safety_barrier_with_lidar_occupancy_adapter() -> None:
     """Explicit config should route safety_barrier through the LiDAR occupancy adapter."""
@@ -139,7 +142,7 @@ def test_lidar_occupancy_map_episode_uses_sensor_fusion_observation(
                 "lidar_max_range": 4.0,
             },
         },
-        scenario_path=Path("."),
+        scenario_path=_SCENARIO_PATH,
         observation_level="lidar_2d",
     )
 
@@ -177,6 +180,6 @@ def test_lidar_safety_barrier_requires_explicit_occupancy_adapter(monkeypatch) -
             snqi_baseline=None,
             algo="safety_barrier",
             algo_config={},
-            scenario_path=Path("."),
+            scenario_path=_SCENARIO_PATH,
             observation_level="lidar_2d",
         )

@@ -123,7 +123,11 @@ def _ray_angles(count: int, config: LidarOccupancyGridConfig) -> np.ndarray:
         raise LidarOccupancyAdapterError("at least one LiDAR ray is required")
     if count == 1:
         return np.asarray([float(config.angle_min)], dtype=float)
-    return np.linspace(float(config.angle_min), float(config.angle_max), count + 1)[:-1]
+    angle_min = float(config.angle_min)
+    angle_max = float(config.angle_max)
+    span = angle_max - angle_min
+    endpoint = not np.isclose(abs(span), 2.0 * np.pi)
+    return np.linspace(angle_min, angle_max, count, endpoint=endpoint)
 
 
 def _inflate_cell(channel: np.ndarray, row: int, col: int, radius: int) -> None:
@@ -219,7 +223,13 @@ class LidarOccupancyPlannerAdapter:
         self._last_error = None
         reset = getattr(self.planner, "reset", None)
         if callable(reset):
-            reset(seed=seed)
+            if seed is None:
+                reset()
+                return
+            try:
+                reset(seed=seed)
+            except TypeError:
+                reset()
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Convert rays to occupancy and delegate to the wrapped planner.

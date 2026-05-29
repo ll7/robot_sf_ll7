@@ -154,6 +154,8 @@ knowledge, not every transient iteration detail.
   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
+* Issue #1633 RobotEnv SNQI proxy extraction:
+  [issue_1633_robot_env_snqi_proxy.md](issue_1633_robot_env_snqi_proxy.md)
 * Issue #1342 GH-Act Runtime Requirements:
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
 * Issue #1387 Tentabot-style value scorer spike:

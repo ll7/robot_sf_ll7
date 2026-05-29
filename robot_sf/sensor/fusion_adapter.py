@@ -197,17 +197,23 @@ class MergedObservationFusion:
     ) -> None:
         """Store the base fusion object and registry-backed sensor instances.
 
-        Args:
-            base_fusion: Existing fusion object that provides ``next_obs`` and
-                optionally ``reset_cache``.
-            sensors: Additional registry-created sensors to step after the base
-                observation is produced.
-            sensor_names: Names used to place sensor observations under
-                ``custom.<name>`` keys. Must align with ``sensors`` order.
-            sim: Optional simulator handle passed to custom sensors in their
-                lightweight state dict.
-            robot_id: Optional robot identifier passed to custom sensors in
-                their lightweight state dict.
+        Parameters
+        ----------
+        base_fusion : Any
+            Existing fusion object that provides ``next_obs`` and optionally
+            ``reset_cache``.
+        sensors : list[Sensor]
+            Additional registry-created sensors to step after the base
+            observation is produced.
+        sensor_names : list[str]
+            Names used to place sensor observations under ``custom.<name>``
+            keys. Must align with ``sensors`` order.
+        sim : Any | None
+            Optional simulator handle passed to custom sensors in their
+            lightweight state dict.
+        robot_id : int | None
+            Optional robot identifier passed to custom sensors in their
+            lightweight state dict.
         """
         self._base = base_fusion
         self._sensors = sensors
@@ -222,7 +228,9 @@ class MergedObservationFusion:
         ``robot_id`` before its observation is read. Sensor failures are logged
         with the configured sensor name and then re-raised.
 
-        Returns:
+        Returns
+        -------
+        dict[str, Any]
             Observation dictionary from the base fusion plus ``custom.<name>``
             entries for every configured registry sensor.
         """

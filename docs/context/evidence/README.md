@@ -76,5 +76,7 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   classic-merging corridor-deadlock comparison summary for issue #1318.
 - `issue_1484_broader_cross_kinematics_2026-05-28/`: compact broader cross-kinematics campaign
   summaries, parity tables, analyzer output, and checksums for issue #1484.
+- `issue_1501_adversarial_smoke_2026-05-28/`: compact row-status, sampler-comparison, failure
+  archive, and checksum evidence for the first `crossing_ttc` adversarial smoke job.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and
   reports from the May 4 run.

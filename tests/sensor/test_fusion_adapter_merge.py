@@ -118,3 +118,11 @@ def test_merged_observation_fusion_rejects_name_count_mismatch() -> None:
     """A configuration error should fail before the first observation step."""
     with pytest.raises(ValueError, match="one sensor name per sensor"):
         MergedObservationFusion(_BaseFusionStub(), [_RecordingSensor()], [])
+
+
+def test_merged_observation_fusion_rejects_case_insensitive_duplicate_names() -> None:
+    """Custom sensor names must not silently collide after normalization."""
+    sensors = [_RecordingSensor(), _RecordingSensor()]
+
+    with pytest.raises(ValueError, match="unique sensor names"):
+        MergedObservationFusion(_BaseFusionStub(), sensors, ["Bias", "bias"])

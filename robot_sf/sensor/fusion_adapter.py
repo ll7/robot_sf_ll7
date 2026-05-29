@@ -229,6 +229,16 @@ class MergedObservationFusion:
                 "MergedObservationFusion requires one sensor name per sensor "
                 f"(got {len(sensors)} sensors and {len(sensor_names)} names)."
             )
+        seen_names: dict[str, str] = {}
+        for name in sensor_names:
+            normalized_name = name.casefold()
+            if normalized_name in seen_names:
+                raise ValueError(
+                    "MergedObservationFusion requires unique sensor names "
+                    f"(duplicate custom observation name '{name}' conflicts with "
+                    f"'{seen_names[normalized_name]}')."
+                )
+            seen_names[normalized_name] = name
         self._base = base_fusion
         self._sensors = sensors
         self._names = sensor_names

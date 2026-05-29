@@ -164,6 +164,8 @@ knowledge, not every transient iteration detail.
   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
+* Issue #1633 RobotEnv SNQI proxy extraction:
+  [issue_1633_robot_env_snqi_proxy.md](issue_1633_robot_env_snqi_proxy.md)
 * Issue #1342 GH-Act Runtime Requirements:
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
 * Issue #1387 Tentabot-style value scorer spike:
@@ -188,8 +190,12 @@ knowledge, not every transient iteration detail.
   [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
+* Learned local-navigation policy registry:
+  [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
   [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
+* Issue #1662 LiDAR PPO MLP Smoke (2026-05-29):
+  [issue_1662_lidar_ppo_smoke.md](issue_1662_lidar_ppo_smoke.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Issue archetypes and evidence tiers:
@@ -376,6 +382,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1660 LiDAR Tracked-Agent Adapter](issue_1660_lidar_tracked_agent_adapter.md)
   records the testing-only `lidar_social_force` adapter contract, endpoint-cluster tracking
   assumptions, and fail-closed boundary for LiDAR-derived social-state planner inputs.
+* [Issue #1659 LiDAR Ego Occupancy Adapter](issue_1659_lidar_ego_occupancy_adapter.md)
+  records the testing-only `lidar_grid_route` adapter contract, opt-in gate, and fail-closed
+  boundary between LiDAR-derived ego occupancy and privileged map/SocNav state.
 * [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
   records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
   importer outputs, and deferred generalization scope.

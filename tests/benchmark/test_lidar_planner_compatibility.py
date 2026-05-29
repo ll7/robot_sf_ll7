@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.algorithm_metadata import planner_contract_for_algorithm
+from robot_sf.benchmark.map_runner import _validate_sensor_fusion_adapter_config
 from robot_sf.benchmark.planner_command_contract import (
     PlannerContractValidationError,
     validate_planner_contract,
@@ -41,6 +42,7 @@ def _planners_with_status(status: str) -> list[str]:
 
 _NATIVE_CANDIDATES = _planners_with_status("passes_lidar_2d_gate")
 _BLOCKED_PLANNERS = _planners_with_status("blocked_by_current_contract")
+_ADAPTER_CONFIG_REQUIRED = _planners_with_status("requires_lidar_occupancy_adapter_config")
 
 
 def test_lidar_matrix_records_required_runtime_boundary() -> None:
@@ -79,6 +81,32 @@ def test_current_structured_or_grid_planners_fail_closed_for_lidar_level(planner
         )
 
     assert row["current_contract_status"] == "blocked_by_current_contract"
+
+
+@pytest.mark.parametrize("planner", _ADAPTER_CONFIG_REQUIRED)
+def test_lidar_adapter_config_required_planners_fail_closed_without_adapter(
+    planner: str,
+) -> None:
+    """Adapter-capable planners should still reject LiDAR rows without adapter config."""
+    row = _planner_row(planner)
+    contract = planner_contract_for_algorithm(planner, observation_level="lidar_2d")
+
+    validate_planner_contract(
+        algo=planner,
+        robot_kinematics="differential_drive",
+        algo_config={},
+        observation_level="lidar_2d",
+    )
+    with pytest.raises(ValueError, match="requires .*lidar_occupancy_adapter"):
+        _validate_sensor_fusion_adapter_config(
+            algo=planner,
+            active_observation_mode=contract.observation_contract.active_mode,
+            algo_config={},
+        )
+
+    assert row["classification"] == "adapter_required"
+    assert row["current_contract_status"] == "requires_lidar_occupancy_adapter_config"
+    assert contract.observation_contract.active_mode == "sensor_fusion_state"
 
 
 def test_crowdnav_height_lidar_gate_keeps_human_field_caveat_visible() -> None:

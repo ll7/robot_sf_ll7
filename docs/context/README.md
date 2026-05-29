@@ -383,6 +383,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1168 Multi-AMV Planner Support Classification](issue_1168_multi_amv_planner_support.md)
   records the current planner-family inventory, fail-closed support gate, and the boundary between
   goal-controller smoke execution and real multi-AMV planner support.
+* [Issue #1660 LiDAR Tracked-Agent Adapter](issue_1660_lidar_tracked_agent_adapter.md)
+  records the testing-only `lidar_social_force` adapter contract, endpoint-cluster tracking
+  assumptions, and fail-closed boundary for LiDAR-derived social-state planner inputs.
 * [Issue #1659 LiDAR Ego Occupancy Adapter](issue_1659_lidar_ego_occupancy_adapter.md)
   records the testing-only `lidar_grid_route` adapter contract, opt-in gate, and fail-closed
   boundary between LiDAR-derived ego occupancy and privileged map/SocNav state.

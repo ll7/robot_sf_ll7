@@ -111,6 +111,7 @@ from robot_sf.planner.lidar_occupancy import (
     build_lidar_occupancy_config,
 )
 from robot_sf.planner.lidar_occupancy_grid import build_lidar_grid_route_adapter
+from robot_sf.planner.lidar_tracked_agents import build_lidar_tracked_social_force_adapter
 from robot_sf.planner.mppi_social import (
     MPPISocialPlannerAdapter,
     build_mppi_social_config,
@@ -1363,6 +1364,19 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="RiskDWAPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key in {"lidar_social_force", "lidar_tracked_social_force"}:
+        adapter = build_lidar_tracked_social_force_adapter(algo_config)
+        return _build_adapter_policy(
+            algo_key="lidar_social_force",
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="LidarTrackedSocialForceAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="lidar_endpoint_tracked_social_force_testing_only",
         )
 
     if algo_key in {"trivial_reference", "reference_adapter"}:

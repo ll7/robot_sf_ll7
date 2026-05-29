@@ -110,6 +110,12 @@ def _load_pygame():
     return pygame
 
 
+def _require_finite(name: str, value: float) -> None:
+    """Raise a clear error when a numeric grid parameter is not finite."""
+    if not np.isfinite(value):
+        raise ValueError(f"{name} must be finite, got {value}")
+
+
 class GridChannel(Enum):
     """Occupancy grid channel identifiers."""
 
@@ -182,6 +188,11 @@ class GridConfig:
 
     def __post_init__(self):
         """Validate configuration parameters."""
+        _require_finite("resolution", self.resolution)
+        _require_finite("width", self.width)
+        _require_finite("height", self.height)
+        _require_finite("max_distance", self.max_distance)
+        _require_finite("robot_radius", self.robot_radius)
         if self.resolution <= 0:
             raise ValueError(f"resolution must be > 0, got {self.resolution}")
         if self.width <= 0:
@@ -409,7 +420,7 @@ class OccupancyGrid:
 
     @staticmethod
     def _parse_robot_pose(robot_pose: RobotPose) -> tuple[float, float, float]:
-        """Return (x, y, theta) as floats from a RobotPose tuple-like value."""
+        """Return finite ``(x, y, theta)`` values from a RobotPose tuple-like value."""
         try:
             position, theta = robot_pose
             x, y = position
@@ -418,7 +429,10 @@ class OccupancyGrid:
                 "robot_pose must be a tuple like ((x, y), theta) or (array, theta)"
             ) from exc
 
-        return float(x), float(y), float(theta)
+        pose = (float(x), float(y), float(theta))
+        if not all(np.isfinite(value) for value in pose):
+            raise ValueError(f"robot_pose values must be finite, got {pose}")
+        return pose
 
     @staticmethod
     def _line_cache_signature(obstacles: list[Line2D]) -> tuple[Any, ...]:
@@ -748,6 +762,12 @@ class OccupancyGrid:
 
     def query(self, query: POIQuery) -> POIResult:  # noqa: C901,PLR0912,PLR0915
         """Query occupancy at point(s) of interest.
+
+        Point queries map world or ego-frame coordinates into cells with
+        floor-style indexing. Coordinates outside the generated grid are
+        clamped to the nearest edge cell; region and line queries only include
+        cells that intersect the grid. Non-finite query coordinates are rejected
+        by :class:`POIQuery` before this method runs.
 
         Args:
             query: POI query specification

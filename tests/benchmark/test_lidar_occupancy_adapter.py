@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark.map_runner import _build_policy, _run_map_episode
+from robot_sf.benchmark.planner_command_contract import validate_planner_contract
 from robot_sf.gym_env.observation_mode import ObservationMode
 from tests.benchmark.test_map_runner_utils import _minimal_map_def
 
@@ -183,3 +184,15 @@ def test_lidar_safety_barrier_requires_explicit_occupancy_adapter(monkeypatch) -
             scenario_path=_SCENARIO_PATH,
             observation_level="lidar_2d",
         )
+
+
+def test_lidar_safety_barrier_contract_accepts_explicit_adapter_config() -> None:
+    """Contract validation should accept LiDAR safety_barrier only with the adapter enabled."""
+    contract = validate_planner_contract(
+        algo="safety_barrier",
+        robot_kinematics="differential_drive",
+        algo_config={"lidar_occupancy_adapter": {"enabled": True}},
+        observation_level="lidar_2d",
+    )
+
+    assert contract["observation_contract"]["active_mode"] == "sensor_fusion_state"

@@ -147,6 +147,16 @@ def validate_planner_contract(
         raise PlannerContractValidationError(
             f"Planner contract mismatch for planner '{algo_key}': {exc}"
         ) from exc
+    if (
+        algo_key == "safety_barrier"
+        and contract.observation_contract.active_mode == "sensor_fusion_state"
+        and not algo_config.get("lidar_occupancy_adapter")
+    ):
+        raise PlannerContractValidationError(
+            "Planner contract mismatch for planner 'safety_barrier': "
+            "sensor_fusion_state/lidar_2d requires explicit "
+            "algo_config['lidar_occupancy_adapter']."
+        )
 
     compatible, reason = planner_kinematics_compatibility(
         algo=algo_key,

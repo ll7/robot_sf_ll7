@@ -192,6 +192,8 @@ knowledge, not every transient iteration detail.
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
 * Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
   [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
+* Issue #1617 Local-Planner Repository Survey (2026-05-29):
+  [issue_1617_local_planner_repo_survey.md](issue_1617_local_planner_repo_survey.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Issue archetypes and evidence tiers:

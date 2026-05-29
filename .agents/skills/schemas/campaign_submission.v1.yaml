@@ -7,6 +7,11 @@ campaign_submission:
   stdout: path
   stderr: path
   output_root: path
+  slurm_suitability: local-smoke | compute-node-smoke | slurm-campaign | blocked-needs-scope
+  estimated_runtime_minutes: number
+  runtime_basis: string
+  local_default_overridden: boolean
+  evidence_claim: smoke | compatibility | campaign | blocked
   expected_artifacts:
   - manifest
   - checkpoint

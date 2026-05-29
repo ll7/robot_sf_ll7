@@ -56,7 +56,7 @@ Use `campaign_submission.v1`. Include:
 
 - `slurm_suitability`: one of `local-smoke`, `compute-node-smoke`, `slurm-campaign`, or
   `blocked-needs-scope`;
-- `estimated_runtime_minutes`;
+- `estimated_runtime_minutes`: the estimated runtime of the campaign in minutes;
 - `runtime_basis`: the rows/seeds/scenarios/horizon/workers calculation or preflight source;
 - `local_default_overridden`: `true` only when a sub-1-hour run still has a compute-node-only reason;
 - `evidence_claim`: `smoke`, `compatibility`, `campaign`, or `blocked`.

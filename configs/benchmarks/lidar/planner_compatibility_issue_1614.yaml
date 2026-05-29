@@ -107,12 +107,13 @@ planner_classifications:
   - planner: safety_barrier
     family: occupancy_classical
     classification: adapter_required
-    current_contract_status: blocked_by_current_contract
-    active_observation_mode: none
+    current_contract_status: requires_lidar_occupancy_adapter_config
+    active_observation_mode: sensor_fusion_state
     required_inputs:
       - robot_state
       - goal
       - local_obstacle_clearance
+      - lidar_rays
     claim_boundary: Testing-only; barrier inputs must be ray-derived and must not read hidden obstacles.
     selected_follow_up: 1659
   - planner: orca

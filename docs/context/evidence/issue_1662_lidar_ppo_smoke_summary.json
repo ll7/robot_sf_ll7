@@ -1,0 +1,61 @@
+{
+  "issue": 1662,
+  "artifact_role": "compact_local_smoke_summary",
+  "candidate_id": "ppo_lidar_mlp_gate_v1",
+  "policy_id": "ppo_lidar_mlp_gate_v1_issue_1662_smoke",
+  "run_id": "ppo_lidar_mlp_gate_v1_issue_1662_smoke_20260529T105828",
+  "source_config": "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml",
+  "source_launch_packet": "configs/training/lidar/lidar_learned_policy_launch_packet_issue_1615.yaml",
+  "git_base_commit_at_execution": "1c5ef199a1dba425141b43bfd62fd2cac2e6f349",
+  "executed_at_utc": "2026-05-29T10:58:28Z",
+  "total_timesteps": 32000,
+  "actual_total_timesteps": 32768,
+  "seed": 123,
+  "num_envs": 4,
+  "worker_mode": "subproc",
+  "feature_extractor": "mlp",
+  "feature_extractor_kwargs": {
+    "ray_hidden_dims": [64, 32],
+    "drive_hidden_dims": [16, 8],
+    "dropout_rate": 0.1
+  },
+  "policy_net_arch": [64, 64],
+  "observation_mode": "DEFAULT_GYM",
+  "benchmark_observation_level": "lidar_2d",
+  "runtime_observation_keys": ["drive_state", "rays"],
+  "status": "completed",
+  "total_wall_clock_sec": 59.7431793830001,
+  "startup_sec": 8.032628070999635,
+  "train_env_steps_per_sec_mean": 956.233980553855,
+  "eval_steps": [16000, 32000],
+  "evaluation_episodes_per_checkpoint": 3,
+  "best_checkpoint": {
+    "metric": "success_rate",
+    "value": 0.0,
+    "eval_step": 16000,
+    "meets_convergence": false
+  },
+  "final_metrics": {
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "path_efficiency": 0.0,
+    "snqi": -0.8000254535636234,
+    "eval_episode_return": -5.000514531471781,
+    "eval_avg_step_reward": -0.010001029062943563
+  },
+  "local_output_manifest": [
+    "output/benchmarks/expert_policies/ppo_lidar_mlp_gate_v1_issue_1662_smoke.zip",
+    "output/benchmarks/expert_policies/ppo_lidar_mlp_gate_v1_issue_1662_smoke.config.yaml",
+    "output/benchmarks/expert_policies/ppo_lidar_mlp_gate_v1_issue_1662_smoke.json",
+    "output/benchmarks/expert_policies/checkpoints/ppo_lidar_mlp_gate_v1_issue_1662_smoke/ppo_lidar_mlp_gate_v1_issue_1662_smoke_best.zip",
+    "output/benchmarks/expert_policies/checkpoints/ppo_lidar_mlp_gate_v1_issue_1662_smoke/ppo_lidar_mlp_gate_v1_issue_1662_smoke_best.summary.json",
+    "output/benchmarks/ppo_imitation/runs/ppo_lidar_mlp_gate_v1_issue_1662_smoke_20260529T105828.json",
+    "output/benchmarks/ppo_imitation/perf/ppo_lidar_mlp_gate_v1_issue_1662_smoke_20260529T105828.json",
+    "output/benchmarks/ppo_imitation/eval_timeline/ppo_lidar_mlp_gate_v1_issue_1662_smoke_20260529T105828.json",
+    "output/benchmarks/ppo_imitation/eval_by_scenario/ppo_lidar_mlp_gate_v1_issue_1662_smoke_20260529T105828.json",
+    "output/benchmarks/ppo_imitation/episodes/ppo_lidar_mlp_gate_v1_issue_1662_smoke_20260529T105828.jsonl",
+    "output/training/lidar_learned_policy/issue_1662/ppo_lidar_mlp_gate_v1_smoke.log"
+  ],
+  "artifact_decision": "All generated output paths are ignored worktree-local smoke artifacts; no checkpoint or raw episode log is promoted to git.",
+  "next_recommendation": "Do not open a longer training issue from this smoke alone. First add or identify a deployment adapter and rerun a slightly stronger local smoke or short train with durable checkpoint publication."
+}

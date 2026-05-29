@@ -102,6 +102,8 @@ knowledge, not every transient iteration detail.
   [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
+* Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):
+  [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
 * Issue #1583 high-risk root path boundaries:
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
 * Issues #1598/#1599 Root Compatibility Decisions (2026-05-28):

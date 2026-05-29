@@ -106,6 +106,10 @@ knowledge, not every transient iteration detail.
   [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
 * Issue #1583 high-risk root path boundaries:
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
+* Issue #1636 benchmark metric semantics:
+  [issue_1636_benchmark_metric_semantics.md](issue_1636_benchmark_metric_semantics.md)
+* Issue #1634 SocNav Module Split Plan (2026-05-28):
+  [issue_1634_socnav_split_plan.md](issue_1634_socnav_split_plan.md)
 * Issues #1598/#1599 Root Compatibility Decisions (2026-05-28):
   [issue_1598_1599_root_compatibility_decisions.md](issue_1598_1599_root_compatibility_decisions.md)
 * Issue #1504 ego-conditioned feature contract:
@@ -128,6 +132,12 @@ knowledge, not every transient iteration detail.
   [issue_1416_converted_map_cache_evaluation.md](issue_1416_converted_map_cache_evaluation.md)
 * Issue #1246 graded observation levels:
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
+* Issue #1659 LiDAR occupancy adapter:
+  [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
+* Issue #1613 LiDAR Observation Track Setup (2026-05-29):
+  [issue_1613_lidar_observation_track.md](issue_1613_lidar_observation_track.md)
+* Issue #1614 LiDAR Planner Compatibility Audit (2026-05-29):
+  [issue_1614_lidar_planner_compatibility.md](issue_1614_lidar_planner_compatibility.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:
@@ -178,6 +188,8 @@ knowledge, not every transient iteration detail.
   [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
+* Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
+  [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Issue archetypes and evidence tiers:

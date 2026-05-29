@@ -110,6 +110,21 @@ is useful for input-contract parity checks but is not a claim of pure planner-lo
 
 Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 
+## Success And Collision Semantics
+
+Episode-level `success` is true only when the route reaches the goal before the horizon and total
+collisions are zero. Total collisions are the sum of:
+
+* pedestrian collisions: robot-pedestrian footprint overlap, using the episode `robot_radius` and
+  `ped_radius`;
+* wall/obstacle collisions: robot center within `collision_distance_m` of a sampled obstacle point;
+* other-agent collisions: robot center within `collision_distance_m` of another robot/agent.
+
+Near misses use pedestrian surface clearance, not center distance:
+`0 <= min_clearance_m < near_miss_distance_m`. Synthetic benchmark-runner episodes resolve
+robot/pedestrian radii from scenario metadata when present and otherwise use the same defaults for
+planner observations and metric `EpisodeData`.
+
 ## Planner Inclusion Check
 
 Use the mechanical inclusion check before proposing that an experimental planner move into a

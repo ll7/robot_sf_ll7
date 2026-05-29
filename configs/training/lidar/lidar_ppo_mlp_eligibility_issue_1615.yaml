@@ -1,0 +1,49 @@
+verdict: eligible_for_research_only
+observation_t: decision step t before learned-policy action selection
+observation_fields:
+  deployment_observable:
+    - DEFAULT_GYM drive_state
+    - DEFAULT_GYM rays
+  training_only:
+    - training split episode returns
+    - PPO advantage estimates
+    - rollout rewards
+  forbidden_evaluation_time: []
+split_provenance:
+  training_data_source: Robot SF training environments using DEFAULT_GYM drive_state+rays
+  validation_split: held-out Robot SF validation maps and seeds, to be fixed in follow-up training config
+  test_split: benchmark test scenarios excluded from training and tuning
+  checkpoint_or_model_provenance: no checkpoint yet; launch packet only
+  privileged_training_inputs: none required for runtime policy; PPO uses rewards and advantages during training only
+  privileged_training_inputs_enter_evaluation: false
+  normalization_statistics: environment bounds from orig_obs_space.high; any learned normalizers fit on training split only
+  normalization_statistics_fit_on_training_only: true
+  evidence_source: configs/training/lidar/lidar_learned_policy_launch_packet_issue_1615.yaml
+action_contract:
+  output_family: velocity_command
+  frame: robot local frame
+  units: linear m/s and angular rad/s
+  bounds: clip to Robot SF differential-drive command bounds
+  kinematics_compatibility: differential-drive compatible
+  projection_policy: clip raw model output to configured Robot SF action bounds
+  raw_to_robot_sf_action: map learned action vector to linear and angular command
+  guard_or_projection_policy: report clipping, fallback, and guard status separately from policy success
+per_step_logging:
+  raw_model_action: candidate.raw_model_action
+  adapted_action: candidate.adapted_action
+  post_guard_action: candidate.post_guard_action
+  guard_applied: candidate.guard_applied
+  guard_or_fallback_reason: candidate.guard_or_fallback_reason
+  observation_level: lidar_2d
+  planner_observation_mode: DEFAULT_GYM
+  action_bounds: active Robot SF action bounds
+  action_projection_metadata: clip/projection details and whether clipping occurred
+candidate_registry:
+  entry_planned: false
+  planning_status: deferred to follow-up issue 1662; this PR is a launch packet only
+  planned_candidate_config_path: configs/policy_search/candidates/lidar_ppo_mlp_issue_1615.yaml
+  planned_adapter_path: robot_sf/planner/learned_lidar_policy.py
+  smoke_or_validation_command: uv run python scripts/validation/check_learned_policy_eligibility.py configs/training/lidar/lidar_ppo_mlp_eligibility_issue_1615.yaml
+  missing_checkpoint_policy: fail closed with not_available before benchmark episodes are written
+  unsupported_observation_policy: fail closed unless observation level is lidar_2d and keys are drive_state+rays
+  guard_activation_policy: report guard activation as a caveat, not benchmark success evidence

@@ -143,6 +143,23 @@ def test_grid_route_metadata_marks_testing_only_route_spike() -> None:
     assert planner["adapter_name"] == "GridRoutePlannerAdapter"
 
 
+def test_safety_barrier_accepts_lidar_level_through_sensor_fusion_contract() -> None:
+    """Safety-barrier LiDAR compatibility should be explicit adapter metadata, not fallback."""
+    meta = enrich_algorithm_metadata(
+        algo="safety_barrier",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        adapter_name="LidarOccupancySafetyBarrierAdapter",
+        observation_level="lidar_2d",
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["observation_level"]["key"] == "lidar_2d"
+    assert meta["observation_spec"]["active_mode"] == "sensor_fusion_state"
+    assert meta["planner_kinematics"]["adapter_name"] == "LidarOccupancySafetyBarrierAdapter"
+    assert meta["planner_contract"]["observation_contract"]["observation_level"] == "lidar_2d"
+
+
 def test_trivial_reference_metadata_marks_diagnostic_template() -> None:
     """Reference adapter metadata should prevent benchmark-evidence overclaiming."""
     meta = enrich_algorithm_metadata(

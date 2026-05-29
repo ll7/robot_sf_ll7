@@ -1,0 +1,71 @@
+schema_version: lidar-observation-track-smoke.v1
+name: issue_1613_lidar_observation_track_smoke
+parent_issue: 1611
+issue: 1613
+paper_facing: false
+scenario_matrix: configs/scenarios/sanity_v1.yaml
+scenario_reuse_policy:
+  source: configs/scenarios/sanity_v1.yaml
+  rationale: Reuse the existing sanity smoke scenarios while changing the planner observation track.
+  caveat: Scenario geometry is reused; results are LiDAR-track evidence only when rows carry lidar_2d metadata.
+seed_policy:
+  mode: fixed-list
+  seeds: [1613]
+workers: 1
+horizon: 80
+dt: 0.1
+record_forces: false
+resume: false
+stop_on_failure: false
+kinematics_matrix:
+  - differential_drive
+observation_track:
+  benchmark_observation_level: lidar_2d
+  active_observation_mode: sensor_fusion_state
+  runtime_inputs:
+    - robot_state
+    - goal
+    - lidar_rays
+  environment_observation_keys:
+    - drive_state
+    - rays
+  goal_encoding: drive_state target_distance, target_angle, and next_target_angle
+  lidar:
+    ray_source: robot_sf/sensor/sensor_fusion.py
+    range_key: rays
+    stack_key: observation_stack.stack_steps
+    normalization: divide drive_state and rays by orig_obs_space.high
+  excluded_runtime_inputs:
+    - occupancy_grid
+    - simulator_backed_global_map
+    - socnav_struct_pedestrian_positions
+    - socnav_struct_pedestrian_velocities
+    - future_pedestrian_trajectories
+    - collision_or_success_labels
+planners:
+  - key: ppo_lidar_contract_smoke
+    algo: ppo
+    planner_group: learned_contract_smoke
+    benchmark_profile: experimental
+    observation_level: lidar_2d
+    observation_mode: sensor_fusion_state
+    adapter_mode: native_or_mixed_policy_action
+    checkpoint_policy: not_required_for_stubbed_contract_smoke
+    claim_boundary: Contract smoke only; no benchmark-performance claim without a trained LiDAR checkpoint.
+validation:
+  environment_smoke: uv run pytest -q tests/benchmark/test_lidar_observation_track.py
+  expected_row_metadata:
+    observation_level: lidar_2d
+    observation_mode: sensor_fusion_state
+    algorithm_metadata.observation_level.key: lidar_2d
+    algorithm_metadata.observation_spec.active_mode: sensor_fusion_state
+  fallback_policy: docs/context/issue_691_benchmark_fallback_policy.md
+  fallback_or_degraded_rows_count_as_success: false
+execution_boundary:
+  full_benchmark_campaign_in_this_issue: false
+  train_or_promote_learned_policy_in_this_issue: false
+  adapt_classical_planners_in_this_issue: false
+  first_real_run_requires:
+    - A compatible LiDAR-trained checkpoint or explicit diagnostic/dummy policy path.
+    - Result rows with lidar_2d observation-level metadata.
+    - No fallback/degraded row counted as successful LiDAR evidence.

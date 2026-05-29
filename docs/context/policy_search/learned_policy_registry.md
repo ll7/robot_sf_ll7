@@ -23,7 +23,8 @@ agents do not recreate one-off learned-policy assessments without comparable met
 ```yaml
 policy_id: stable snake_case identifier
 policy_family: learned_baseline | guarded_policy | residual_policy | auxiliary_risk |
-  predictive_model | lidar_policy | external_graph_policy | external_visual_policy
+  predictive_model | lidar_policy | external_graph_policy | external_learned_policy |
+  external_visual_policy | external_world_model
 paper_or_source: paper, source repository, local issue, or local design anchor
 upstream_implementation: URL or local path when available
 license: known license, local-only, unknown, or not_applicable
@@ -35,10 +36,10 @@ checkpoint_availability: local_registry | wandb_artifact | pending | source_clai
 expected_dependencies: local_repo | slurm | external_legacy_env | source_harness |
   unknown
 reproducibility_status: smoke_proven | launch_packet | source_harness_required |
-  monitor_only | blocked | rejected
+  comparison_available | proposal | prototype_only | monitor_only | blocked | rejected
 integration_status: implemented | staged | adapter_needed | monitor_only | rejected
 benchmark_status: smoke_only | comparison_available | not_benchmark_evidence |
-  blocked | rejected
+  blocked | rejected | rejected_for_current_adapter
 evidence_boundary: short statement of what current evidence can and cannot support
 integration_effort: small | medium | large | slurm_campaign | not_currently_actionable
 local_anchors: local docs, configs, tests, issues, or model registry paths
@@ -50,19 +51,19 @@ metadata from Issue #1618, smoke proof, and fail-closed handling before benchmar
 
 ## Entries
 
-| `policy_id` | Family | Integration status | Evidence status | Benchmark status | Boundary |
+| `policy_id` | `policy_family` | `integration_status` | `reproducibility_status` | `benchmark_status` | Boundary |
 | --- | --- | --- | --- | --- | --- |
-| `ppo_issue791_best_v1` | learned baseline | `implemented` | `comparison_available` | `comparison_available` | Best current learned-only baseline for success-oriented comparison; not a safety promotion because paper-matrix collision rate is worse than ORCA. |
-| `guarded_ppo_orca_prior` | guarded policy | `implemented` | `smoke_proven` | `not_benchmark_evidence` | Inference-only guarded variants are exhausted as a tuning lane; further value requires training a residual or learned risk component. |
-| `orca_residual_guarded_ppo_v0` | residual policy | `staged` | `launch_packet` | `smoke_only` | Runtime residual surface exists, but learned residual training/checkpoint lineage is pending and fallback/degraded rows remain caveats. |
-| `learned_risk_model_v1` | auxiliary risk | `staged` | `launch_packet` | `not_benchmark_evidence` | Pre-SLURM launch packet only; hard guards remain authoritative and learned risk may only add auxiliary candidate cost. |
-| `predictive_planner_v1` | predictive model | `implemented` | `comparison_available` | `comparison_available` | Uses a learned pedestrian predictor inside a planner stack; evidence applies to the configured predictive planner, not a general learned local policy. |
-| `predictive_mppi` | predictive model | `implemented` | `comparison_available` | `comparison_available` | Learned prediction informs MPPI-style rollout scoring; integration depends on predictive model/config provenance. |
-| `lidar_ppo_mlp_gate_v1` | lidar policy | `adapter_needed` | `proposal` | `blocked` | Planned LiDAR learned-policy smoke from Issues #1615/#1662; not available on `main` until launch-packet work lands and smoke training runs. |
-| `crowdnav_height_igat_family` | external graph policy | `monitor_only` | `source_harness_required` | `blocked` | Source/checkpoint and graph-observation parity must be proven before a Robot SF adapter or benchmark row. |
-| `drl_vo_family` | external learned policy | `monitor_only` | `prototype_only` | `blocked` | Tracked-agent diagnostic/prototype boundary only; not main-table ready and not a leakage-free benchmark policy. |
-| `navdp_nomad_visual_family` | external visual policy | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | RGB-D/topomap/visual-goal assumptions do not reduce cleanly to the current 2D local-planner contract. |
-| `dreamerv3_navigation_family` | external visual/world model | `monitor_only` | `blocked` | `blocked` | Checkpoint import and Robot SF observation-contract boundaries remain fail-closed. |
+| `ppo_issue791_best_v1` | `learned_baseline` | `implemented` | `comparison_available` | `comparison_available` | Best current learned-only baseline for success-oriented comparison; not a safety promotion because paper-matrix collision rate is worse than ORCA. |
+| `guarded_ppo_orca_prior` | `guarded_policy` | `implemented` | `smoke_proven` | `not_benchmark_evidence` | Inference-only guarded variants are exhausted as a tuning lane; further value requires training a residual or learned risk component. |
+| `orca_residual_guarded_ppo_v0` | `residual_policy` | `staged` | `launch_packet` | `smoke_only` | Runtime residual surface exists, but learned residual training/checkpoint lineage is pending and fallback/degraded rows remain caveats. |
+| `learned_risk_model_v1` | `auxiliary_risk` | `staged` | `launch_packet` | `not_benchmark_evidence` | Pre-SLURM launch packet only; hard guards remain authoritative and learned risk may only add auxiliary candidate cost. |
+| `predictive_planner_v1` | `predictive_model` | `implemented` | `comparison_available` | `comparison_available` | Uses a learned pedestrian predictor inside a planner stack; evidence applies to the configured predictive planner, not a general learned local policy. |
+| `predictive_mppi` | `predictive_model` | `implemented` | `comparison_available` | `comparison_available` | Learned prediction informs MPPI-style rollout scoring; integration depends on predictive model/config provenance. |
+| `lidar_ppo_mlp_gate_v1` | `lidar_policy` | `adapter_needed` | `proposal` | `blocked` | Planned LiDAR learned-policy smoke from Issues #1615/#1662; not available on `main` until launch-packet work lands and smoke training runs. |
+| `crowdnav_height_igat_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | Source/checkpoint and graph-observation parity must be proven before a Robot SF adapter or benchmark row. |
+| `drl_vo_family` | `external_learned_policy` | `monitor_only` | `prototype_only` | `blocked` | Tracked-agent diagnostic/prototype boundary only; not main-table ready and not a leakage-free benchmark policy. |
+| `navdp_nomad_visual_family` | `external_visual_policy` | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | RGB-D/topomap/visual-goal assumptions do not reduce cleanly to the current 2D local-planner contract. |
+| `dreamerv3_navigation_family` | `external_world_model` | `monitor_only` | `blocked` | `blocked` | Checkpoint import and Robot SF observation-contract boundaries remain fail-closed. |
 
 ## Entry Details
 
@@ -169,7 +170,8 @@ metadata before entering the runnable candidate registry.
 2. Keep source-only, monitor-only, and blocked candidates in this registry or their family verdict
    notes until source/checkpoint/adapter proof exists.
 3. Every new learned-policy candidate should name its `observation_schema`, `action_interface`,
-   `checkpoint_availability`, `integration_status`, `evidence_status`, and `benchmark_status`.
+   `checkpoint_availability`, `integration_status`, `reproducibility_status`, and
+   `benchmark_status`.
 4. Fallback, degraded, or guard-dominated runs must be reported as caveats unless the issue is
    explicitly about measuring that mode.
 5. Any benchmark row must record raw model action, adapted action, post-guard action, guard/fallback

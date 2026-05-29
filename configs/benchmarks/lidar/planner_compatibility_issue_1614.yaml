@@ -107,14 +107,14 @@ planner_classifications:
   - planner: safety_barrier
     family: occupancy_classical
     classification: adapter_required
-    current_contract_status: passes_lidar_2d_gate_requires_explicit_adapter_config
+    current_contract_status: requires_lidar_occupancy_adapter_config
     active_observation_mode: sensor_fusion_state
     required_inputs:
       - robot_state
       - goal
       - local_obstacle_clearance
       - lidar_rays
-    claim_boundary: Testing-only; metadata gate passes only so the explicit LiDAR occupancy adapter can run. A lidar_2d safety_barrier episode without algo_config['lidar_occupancy_adapter'] must fail before writing episodes.
+    claim_boundary: Testing-only; barrier inputs must be ray-derived and must not read hidden obstacles.
     selected_follow_up: 1659
   - planner: orca
     family: tracked_agent_classical

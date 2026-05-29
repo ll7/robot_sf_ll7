@@ -255,6 +255,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="lidar_grid_route",
+        tier="experimental",
+        aliases=("lidar_grid_route", "lidar_occupancy_grid_route"),
+        note=(
+            "Testing-only LiDAR-derived ego occupancy adapter wrapped around grid_route; "
+            "not benchmark evidence without explicit opt-in."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="trivial_reference",
         tier="experimental",
         aliases=("trivial_reference", "reference_adapter"),

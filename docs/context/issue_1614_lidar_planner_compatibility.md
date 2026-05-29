@@ -50,8 +50,9 @@ uv run pytest -q tests/benchmark/test_lidar_planner_compatibility.py
 ```
 
 Expected result: current PPO and guarded-PPO metadata pass the `lidar_2d` gate through
-`sensor_fusion_state`; structured/grid planners fail closed; CrowdNav HEIGHT keeps its
-`humans`-field caveat visible; and selected follow-up issues are recorded.
+`sensor_fusion_state`; `safety_barrier` passes the sensor-fusion contract only when the explicit
+LiDAR occupancy adapter config is present; other structured/grid planners fail closed; CrowdNav
+HEIGHT keeps its `humans`-field caveat visible; and selected follow-up issues are recorded.
 
 ## Claim Boundary
 

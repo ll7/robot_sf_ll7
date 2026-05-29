@@ -1,10 +1,10 @@
 {
   "campaign": {
     "campaign_id": "issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
-    "campaign_root": "/home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
+    "campaign_root": "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441",
     "runtime_sec": 86.0142236140091,
     "episodes_per_second": 0.2441456670496499,
-    "summary_json": "/home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/campaign_summary.json"
+    "summary_json": "<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/campaign_summary.json"
   },
   "planners": [
     {
@@ -1078,7 +1078,7 @@
     ],
     "verified_simple_assessment": {
       "status": "rerun_required",
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/configs/scenarios/sets/verified_simple_subset_v1.yaml",
+      "manifest_path": "configs/scenarios/sets/verified_simple_subset_v1.yaml",
       "subset_size": 10,
       "matched_scenario_count": 0,
       "matched_scenarios": [],

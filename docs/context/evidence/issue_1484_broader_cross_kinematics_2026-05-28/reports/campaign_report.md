@@ -18,7 +18,7 @@
 - Unexpected failed rows: `0`
 - Row status summary: `{'successful_evidence_rows': 21, 'accepted_unavailable_rows': 0, 'unexpected_failed_rows': 0, 'fallback_or_degraded_rows': 0}`
 - Interpretation profile: `issue-1484-broader-cross-kinematics`
-- Command: `/home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/.venv/bin/python /home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/scripts/tools/run_camera_ready_benchmark.py --config /home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/configs/benchmarks/issue_1484_broader_cross_kinematics.yaml --output-root output/benchmarks/issue_1484 --mode run --log-level INFO --label issue1484-broader-cross-kinematics-20260528-gf35fb3b5 --skip-publication-bundle`
+- Command: `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_1484_broader_cross_kinematics.yaml --output-root <ignored-output-root>/benchmarks/issue_1484 --mode run --log-level INFO --label issue1484-broader-cross-kinematics-20260528-gf35fb3b5 --skip-publication-bundle`
 
 ## Planner Summary
 
@@ -104,24 +104,24 @@
 
 ## Scenario Diagnostics
 
-- Per-scenario breakdown: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/scenario_breakdown.csv`
-- Per-family breakdown: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/scenario_family_breakdown.csv`
+- Per-scenario breakdown: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/scenario_breakdown.csv`
+- Per-family breakdown: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/scenario_family_breakdown.csv`
 
 ## Kinematics Parity
 
-- Planner x kinematics parity table: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/kinematics_parity_table.csv`
-- Skipped planner/kinematics combinations: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/kinematics_skipped_combinations.csv`
+- Planner x kinematics parity table: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/kinematics_parity_table.csv`
+- Skipped planner/kinematics combinations: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/kinematics_skipped_combinations.csv`
 
 ## AMV Coverage Contract
 
-- Coverage JSON: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/amv_coverage_summary.json`
-- Coverage Markdown: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/amv_coverage_summary.md`
+- Coverage JSON: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/amv_coverage_summary.json`
+- Coverage Markdown: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/amv_coverage_summary.md`
 - Coverage status: `pass` (enforcement: `warn`)
 
 ## Alyassi Comparability
 
-- Comparability JSON: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/comparability_matrix.json`
-- Comparability Markdown: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/comparability_matrix.md`
+- Comparability JSON: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/comparability_matrix.json`
+- Comparability Markdown: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/comparability_matrix.md`
 - Mapping version: `alyassi-comparability-v1`
 
 ## SNQI Contract
@@ -132,9 +132,9 @@
 - Positioning recommendation: `strengthen_as_operational_multi_objective_aggregation`
 - Weights version: `snqi_weights_camera_ready_v3`
 - Baseline version: `snqi_baseline_camera_ready_v3`
-- Diagnostics JSON: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_diagnostics.json`
-- Diagnostics Markdown: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_diagnostics.md`
-- Sensitivity CSV: `output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_sensitivity.csv`
+- Diagnostics JSON: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_diagnostics.json`
+- Diagnostics Markdown: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_diagnostics.md`
+- Sensitivity CSV: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441/reports/snqi_sensitivity.csv`
 
 ## Accepted Unavailable/Excluded Planners
 

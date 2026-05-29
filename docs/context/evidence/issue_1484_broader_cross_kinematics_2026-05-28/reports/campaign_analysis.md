@@ -1,7 +1,7 @@
 # Camera-Ready Campaign Analysis
 
 - Campaign ID: `issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441`
-- Campaign root: `/home/luttkule/git/robot_sf_ll7.worktrees/1484-broader-cross-kinematics/output/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441`
+- Campaign root: `<ignored-output-root>/benchmarks/issue_1484/issue_1484_broader_cross_kinematics_issue1484-broader-cross-kinematics-20260528-gf35fb3b5_20260528_172441`
 - Runtime sec: `86.0142236140091`
 - Episodes/sec: `0.2441456670496499`
 

@@ -49,7 +49,7 @@ The executed matrix is seven planners across three kinematics modes:
 - `socnav_sampling` is still an experimental SocNav-family row and logged heuristic-fallback
   warnings during runtime.
 - `socnav_bench` is intentionally excluded in the config-level compatibility manifest because
-  #1353 preserved it as `not_available` due to missing SocNavBench control-pipeline assets.
+  Issue #1353 preserved it as `not_available` due to missing SocNavBench control-pipeline assets.
 
 ## Preserved Files
 

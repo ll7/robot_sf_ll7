@@ -91,12 +91,13 @@ def test_lidar_adapter_config_required_planners_fail_closed_without_adapter(
     row = _planner_row(planner)
     contract = planner_contract_for_algorithm(planner, observation_level="lidar_2d")
 
-    validate_planner_contract(
-        algo=planner,
-        robot_kinematics="differential_drive",
-        algo_config={},
-        observation_level="lidar_2d",
-    )
+    with pytest.raises(PlannerContractValidationError):
+        validate_planner_contract(
+            algo=planner,
+            robot_kinematics="differential_drive",
+            algo_config={},
+            observation_level="lidar_2d",
+        )
     with pytest.raises(ValueError, match="requires .*lidar_occupancy_adapter"):
         _validate_sensor_fusion_adapter_config(
             algo=planner,

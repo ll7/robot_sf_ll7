@@ -16,7 +16,7 @@ from sqlalchemy.engine import make_url
 _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc", "episodic_snqi")
 _CONSTRAINT_HANDLING_CHOICES = ("penalize", "prune")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
-OPTUNA_LAUNCHER_SCHEMA_VERSION = "robot_sf.optuna_expert_ppo_launcher.v1"
+OPTUNA_LAUNCHER_SCHEMA_VERSION: str = "robot_sf.optuna_expert_ppo_launcher.v1"
 
 _SUPPORTED_LAUNCH_KEYS = {
     "schema_version",

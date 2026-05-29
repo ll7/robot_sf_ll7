@@ -301,8 +301,15 @@ def count_obstacle_cells(grid: Grid) -> int:
         >>> obstacle_count = count_obstacle_cells(grid)
         >>> print(f"Grid has {obstacle_count} obstacle cells")
     """
-    type_map_np = np.asarray(grid.type_map)
+    type_map_np = _grid_type_map_array(grid)
     return np.count_nonzero(type_map_np == TYPES.OBSTACLE)
+
+
+def _grid_type_map_array(grid: Grid) -> np.ndarray:
+    """Return the concrete cell-type array from a python_motion_planning grid."""
+    type_map = grid.type_map
+    raw_array = getattr(type_map, "array", type_map)
+    return np.asarray(raw_array)
 
 
 def _sanitize_visualization_output_path(output_path: Path | str) -> Path:
@@ -480,8 +487,9 @@ def set_start_goal_on_grid(
 def get_obstacle_statistics(grid: Grid) -> dict[str, float]:
     """Calculate basic statistics about obstacle occupancy.
 
-    TODO: Percentage for obstacles is likely not calculated correctly.
-    `INFO   | 29_osm_global_planner_test.py:55 | Planning grid: (513, 393), 0 obstacle cells (0.00%)`
+    This diagnostic counts cells marked as ``TYPES.OBSTACLE``. Inflated
+    clearance cells remain separate ``TYPES.INFLATION`` cells and are not
+    included in the obstacle percentage.
 
     Args:
         grid: Grid to analyze.
@@ -496,13 +504,15 @@ def get_obstacle_statistics(grid: Grid) -> dict[str, float]:
         >>> stats = get_obstacle_statistics(grid)
         >>> print(f"Grid is {stats['obstacle_percentage']:.1f}% occupied")
     """
-    type_map_np = np.asarray(grid.type_map)
+    type_map_np = _grid_type_map_array(grid)
     obstacle_count = np.count_nonzero(type_map_np == TYPES.OBSTACLE)
     total_cells = type_map_np.size
     return {
-        "obstacle_count": obstacle_count,
-        "total_cells": total_cells,
-        "obstacle_percentage": (obstacle_count / total_cells * 100) if total_cells > 0 else 0.0,
+        "obstacle_count": int(obstacle_count),
+        "total_cells": int(total_cells),
+        "obstacle_percentage": float(obstacle_count / total_cells * 100)
+        if total_cells > 0
+        else 0.0,
     }
 
 

@@ -143,6 +143,35 @@ def test_dr_mpc_planner_uses_external_policy(monkeypatch: pytest.MonkeyPatch) ->
     assert planner.get_metadata()["status"] == "ok"
 
 
+def test_dr_mpc_planner_accepts_shared_observation_defaults_and_clamps_velocity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DR-MPC dict observations should use the shared default-obstacle container."""
+    fake_module = types.ModuleType("dr_mpc")
+
+    class FakePolicy:
+        """External DR-MPC policy stub returning an over-limit velocity action."""
+
+        def select_action(self, obs):
+            assert obs.obstacles == []
+            return {"vx": 3.0, "vy": 4.0}
+
+    def load_policy(checkpoint_path=None, device=None):
+        assert checkpoint_path == "dummy.pt"
+        assert device == "cpu"
+        return FakePolicy()
+
+    fake_module.load_policy = load_policy
+    monkeypatch.setitem(sys.modules, "dr_mpc", fake_module)
+    planner = DRMPCPlanner({"checkpoint_path": "dummy.pt", "v_max": 2.0}, seed=1)
+    obs = _make_robot_observation()
+    obs.pop("obstacles")
+
+    action = planner.step(obs)
+
+    assert action == {"vx": pytest.approx(1.2), "vy": pytest.approx(1.6)}
+
+
 def test_dr_mpc_config_builder_preserves_provenance_defaults() -> None:
     """DR-MPC config parsing should retain an explicit upstream repo root."""
     cfg = build_dr_mpc_config({})

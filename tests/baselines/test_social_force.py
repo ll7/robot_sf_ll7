@@ -6,6 +6,7 @@ import math
 import numpy as np
 import pytest
 
+from robot_sf.baselines.interface import Observation as InterfaceObservation
 from robot_sf.baselines.social_force import Observation, SFPlannerConfig, SocialForcePlanner
 
 
@@ -302,6 +303,10 @@ class TestSocialForcePlanner:
 class TestObservation:
     """Tests for the Observation dataclass."""
 
+    def test_social_force_reexports_shared_observation_type(self):
+        """Social-force planner should use the canonical baseline Observation container."""
+        assert Observation is InterfaceObservation
+
     def test_observation_creation(self):
         """Test observation can be created with required fields."""
         obs = Observation(
@@ -324,6 +329,24 @@ class TestObservation:
         )
 
         assert obs.obstacles == []
+
+    def test_social_force_planner_accepts_dict_observation_without_obstacles(self):
+        """Dict observations should normalize through the shared default-obstacle path."""
+        planner = SocialForcePlanner(SFPlannerConfig(noise_std=0.0), seed=42)
+        obs = {
+            "dt": 0.1,
+            "robot": {
+                "position": [0.0, 0.0],
+                "velocity": [0.0, 0.0],
+                "goal": [1.0, 0.0],
+                "radius": 0.3,
+            },
+            "agents": [],
+        }
+
+        action = planner.step(obs)
+
+        assert set(action) == {"vx", "vy"}
 
 
 if __name__ == "__main__":

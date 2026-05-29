@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from robot_sf.baselines.interface import Observation
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -44,16 +46,6 @@ class SICNavPlannerConfig:
     fallback_on_error: bool = False
     allow_testing_algorithms: bool = True
     include_in_paper: bool = False
-
-
-@dataclass
-class Observation:
-    """Observation payload for the SICNav baseline wrapper."""
-
-    dt: float
-    robot: dict[str, Any]
-    agents: list[dict[str, Any]]
-    obstacles: list[Any]
 
 
 class SICNavPlanner:

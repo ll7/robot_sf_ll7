@@ -1,0 +1,61 @@
+# Fixed LiDAR PPO MLP smoke derived from the issue #1615 launch packet.
+#
+# This config intentionally avoids the Optuna sweep path so issue #1662 always
+# exercises the `ppo_lidar_mlp_gate_v1` candidate instead of sampling another
+# extractor family.
+
+policy_id: ppo_lidar_mlp_gate_v1_issue_1662_smoke
+scenario_config: ../../scenarios/classic_interactions.yaml
+num_envs: 4
+worker_mode: subproc
+seeds:
+  - 123
+randomize_seeds: false
+total_timesteps: 32000
+
+feature_extractor: mlp
+feature_extractor_kwargs:
+  ray_hidden_dims: [64, 32]
+  drive_hidden_dims: [16, 8]
+  dropout_rate: 0.1
+
+policy_net_arch: [64, 64]
+best_checkpoint_metric: success_rate
+
+ppo_hyperparams:
+  learning_rate: 0.0001
+  batch_size: 256
+  n_epochs: 4
+  ent_coef: 0.01
+  clip_range: 0.1
+  target_kl: 0.02
+
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 2000
+
+evaluation:
+  frequency_episodes: 10
+  evaluation_episodes: 3
+  hold_out_scenarios: []
+  step_schedule:
+    - every_steps: 16000
+
+env_factory_kwargs:
+  reward_name: route_completion_v2
+  reward_kwargs:
+    weights:
+      progress: 2.5
+      living: -0.01
+      collision: -5.0
+      near_miss: -0.8
+      ttc_risk: -0.6
+      comfort: -0.4
+      smoothness: -0.15
+      terminal_bonus: 2.0
+
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: false

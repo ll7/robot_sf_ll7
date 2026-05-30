@@ -115,7 +115,12 @@ That note defines the proposed `benchmark_track` metadata, aggregation boundary,
 naming convention. Track-aware map benchmark runs now preserve `benchmark_track` and
 `track_schema_version` in episode rows, `scenario_params`, algorithm metadata, and resume identity.
 Keep incompatible observation contracts out of the same aggregate unless a report explicitly opts
-into cross-track diagnostics.
+into cross-track diagnostics. Aggregate and report CLIs (`aggregate`, `table`, `rank`,
+`plot-pareto`, `plot-distributions`, `snqi-ablate`, and `seed-variance`) fail closed by default
+when an input JSONL mixes tracks. Use
+`--observation-track-mode diagnostic-cross-track` only for explicitly caveated diagnostic
+comparisons; those reports namespace rows by `benchmark_track` and record that fallback, degraded,
+failed, or diagnostic-stub rows are caveats rather than benchmark-success evidence.
 
 Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 

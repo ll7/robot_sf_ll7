@@ -12,6 +12,12 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import numpy as np
 
+from robot_sf.benchmark.aggregate import (
+    ensure_observation_track_policy,
+    normalize_observation_track_mode,
+    observation_track_group_label,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -47,14 +53,24 @@ def _group_values(
     group_by: str,
     fallback_group_by: str,
     metric: str,
+    observation_track_mode: str = "strict",
+    *,
+    mode: str | None = None,
 ) -> dict[str, list[float]]:
     """Collect metric values grouped by a dotted key.
 
     Returns:
         Mapping of group id to list of metric values.
     """
+    record_list = [dict(record) for record in records]
+    if mode is None:
+        track_meta = ensure_observation_track_policy(
+            record_list,
+            observation_track_mode=observation_track_mode,
+        )
+        mode = normalize_observation_track_mode(str(track_meta["mode"]))
     out: dict[str, list[float]] = {}
-    for r in records:
+    for r in record_list:
         g = _get_dotted(r, group_by)
         if g is None:
             g = _get_dotted(r, fallback_group_by)
@@ -65,7 +81,8 @@ def _group_values(
             fv = float(val)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             continue
-        out.setdefault(str(g), []).append(fv)
+        key = observation_track_group_label(r, str(g), mode=mode)
+        out.setdefault(key, []).append(fv)
     return out
 
 
@@ -76,6 +93,7 @@ def compute_pareto_points(
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
     agg: str = "mean",
+    observation_track_mode: str = "strict",
 ) -> tuple[list[tuple[float, float]], list[str]]:
     """Compute per-group points (x, y) using agg over metric values.
 
@@ -83,8 +101,26 @@ def compute_pareto_points(
     - points: list of (x, y)
     - labels: matching list of group labels
     """
-    gx = _group_values(records, group_by, fallback_group_by, x_metric)
-    gy = _group_values(records, group_by, fallback_group_by, y_metric)
+    record_list = [dict(record) for record in records]
+    track_meta = ensure_observation_track_policy(
+        record_list,
+        observation_track_mode=observation_track_mode,
+    )
+    mode = normalize_observation_track_mode(str(track_meta["mode"]))
+    gx = _group_values(
+        record_list,
+        group_by,
+        fallback_group_by,
+        x_metric,
+        mode=mode,
+    )
+    gy = _group_values(
+        record_list,
+        group_by,
+        fallback_group_by,
+        y_metric,
+        mode=mode,
+    )
     labels: list[str] = []
     points: list[tuple[float, float]] = []
 
@@ -179,6 +215,7 @@ def save_pareto_png(  # noqa: PLR0913
     y_higher_better: bool = False,
     title: str | None = None,
     out_pdf: str | None = None,
+    observation_track_mode: str = "strict",
 ) -> dict[str, object]:
     """Render and save a Pareto scatter with non-dominated points highlighted.
 
@@ -197,6 +234,7 @@ def save_pareto_png(  # noqa: PLR0913
         group_by,
         fallback_group_by,
         agg,
+        observation_track_mode,
     )
     if not points:
         raise ValueError("No points available for Pareto plot (check metrics and grouping).")

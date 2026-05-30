@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -50,8 +49,7 @@ def test_simulation_trace_export_requires_monotonic_steps() -> None:
     """Workbench traces should expose ordered frames for deterministic playback."""
 
     payload = load_simulation_trace_export(FIXTURE_PATH).to_dict()
-    invalid = deepcopy(payload)
-    invalid["frames"][1]["step"] = 0
+    payload["frames"][1]["step"] = 0
 
     with pytest.raises(SimulationTraceExportValidationError, match="/frames/1/step"):
-        simulation_trace_export_from_dict(invalid, source=FIXTURE_PATH)
+        simulation_trace_export_from_dict(payload, source=FIXTURE_PATH)

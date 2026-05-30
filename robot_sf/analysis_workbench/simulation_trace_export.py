@@ -121,7 +121,10 @@ def _schema_validation_errors(payload: Mapping[str, Any]) -> list[str]:
     validator = Draft202012Validator(load_simulation_trace_export_schema())
     return [
         f"{_json_pointer(error.absolute_path)}: {error.message}"
-        for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
+        for error in sorted(
+            validator.iter_errors(payload),
+            key=lambda err: tuple(str(path_part) for path_part in err.absolute_path),
+        )
     ]
 
 

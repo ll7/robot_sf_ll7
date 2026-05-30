@@ -200,7 +200,7 @@ knowledge, not every transient iteration detail.
   [issue_1618_learned_policy_adapter_interface.md](issue_1618_learned_policy_adapter_interface.md)
 * Issue #1677 SiT Dataset Terms Audit (2026-05-29):
   [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
-* Issue #1689 simulation trace export schema:
+* Issue #1689 Simulation Trace Export Schema (2026-05-30):
   [issue_1689_simulation_trace_export_schema.md](issue_1689_simulation_trace_export_schema.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):
   [issue_1617_local_planner_repo_survey.md](issue_1617_local_planner_repo_survey.md)

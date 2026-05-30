@@ -232,6 +232,40 @@ run_phase() {
   esac
 }
 
+run_phase_with_timing() {
+  local phase="$1"
+  local event_name="$2"
+  local github_ref="$3"
+  local started_at
+  local completed_at
+  local duration
+  local status
+
+  started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "==> CI phase: $phase"
+  echo "ci_driver phase_start phase=$phase started_at=$started_at"
+
+  set +e
+  (set -euo pipefail; run_phase "$phase" "$event_name" "$github_ref")
+  status=$?
+  set -e
+
+  completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  duration="$(python3 - "$started_at" "$completed_at" <<'PY'
+from __future__ import annotations
+
+import sys
+from datetime import datetime, timezone
+
+started = datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+completed = datetime.strptime(sys.argv[2], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+print(max(int((completed - started).total_seconds()), 0))
+PY
+)"
+  echo "ci_driver phase_end phase=$phase status=$status duration_seconds=$duration completed_at=$completed_at"
+  return "$status"
+}
+
 if [[ $# -eq 0 ]]; then
   show_help >&2
   exit 2
@@ -252,6 +286,5 @@ github_ref="$(resolve_github_ref)"
 
 for phase in "$@"; do
   require_known_phase "$phase"
-  echo "==> CI phase: $phase"
-  run_phase "$phase" "$event_name" "$github_ref"
+  run_phase_with_timing "$phase" "$event_name" "$github_ref"
 done

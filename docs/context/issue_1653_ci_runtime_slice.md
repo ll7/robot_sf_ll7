@@ -1,11 +1,12 @@
 # Issue #1653 CI Runtime Slice
 
-Status: PR-ready implementation note
+Status: post-trim timing baseline
 
 ## Scope
 
-This note records a conservative first slice for #1653. It does not change test selection,
-benchmark semantics, branch-protection job names, or required validation phases.
+This note records the conservative #1653 timing slice after the initial artifact-upload trim landed
+on `main` in PR [#1681](https://github.com/ll7/robot_sf_ll7/pull/1681). It does not change test
+selection, benchmark semantics, branch-protection job names, or required validation phases.
 
 ## Baseline Timing
 
@@ -15,38 +16,65 @@ Recent successful `CI` workflow runs were summarized with:
 uv run python scripts/dev/ci_timing_summary.py --run-id <run-id> --top 8 --json
 ```
 
-| run id | title | event | total | job span | queue |
-| --- | --- | --- | ---: | ---: | ---: |
-| 26648705023 | feat: add optional Three.js recording viewer | pull_request | 997s | 992s | 4s |
-| 26638333993 | feat: add lidar tracked social-force adapter (#1669) | push | 926s | 901s | 24s |
-| 26637972460 | docs: define learned policy adapter interface | pull_request | 904s | 900s | 3s |
-| 26637835994 | docs: audit SiT Dataset terms | pull_request | 898s | 895s | 2s |
-| 26637057677 | docs: define learned policy adapter interface | pull_request | 928s | 924s | 3s |
-| 26637057815 | feat: add lidar tracked social-force adapter | pull_request | 926s | 921s | 4s |
-| 26636789637 | fix: align lidar compatibility safety barrier gate | pull_request | 921s | 918s | 2s |
-| 26636095246 | docs: survey local planner repositories | pull_request | 1351s | 1348s | 2s |
+The post-#1681 sample below covers ten successful runs from 2026-05-30 after
+`ci: report job timings and trim PR artifacts (#1681)` reached `main`.
 
-The observed successful-run median is about 927s total, with one longer documentation PR run at
-1351s. Queue time is small in this sample, so most elapsed time is inside CI jobs.
+| run id | title | event | total | job span | queue | fast-feedback | smoke-artifacts |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 26676909707 | docs: define learned policy artifact manifests (#1686) | pull_request | 832s | 829s | 2s | 813s | 263s |
+| 26676725258 | docs: add queue exhaustion audit example (#1688) | pull_request | 931s | 928s | 2s | 920s | 260s |
+| 26676578865 | docs: add root layout inventory (#1690) | pull_request | 935s | 931s | 3s | 927s | 228s |
+| 26676471223 | feat: add learned risk surface interface (#1675) | pull_request | 940s | 904s | 35s | 899s | 264s |
+| 26676440525 | docs: add proxemic comfort profile slice (#1676) | pull_request | 894s | 891s | 2s | 886s | 253s |
+| 26676440608 | docs: record open issue execution audit | pull_request | 925s | 901s | 24s | 897s | 249s |
+| 26676322034 | docs: add topology hypothesis diagnostic audit (#1674) | pull_request | 793s | 790s | 2s | 785s | 251s |
+| 26676034847 | feat: add learned risk surface interface (#1675) | pull_request | 882s | 881s | 1s | 875s | 244s |
+| 26675734525 | docs: add proxemic comfort profile slice (#1676) | pull_request | 916s | 913s | 2s | 906s | 253s |
+| 26675563950 | ci: report job timings and trim PR artifacts (#1681) | push | 974s | 897s | 76s | 891s | 279s |
+
+Observed post-trim sample medians:
+
+- Total wall time: 920s, with a 793s minimum and 974s maximum.
+- Job span: 899s median.
+- Queue time: usually low, except two runs at 24s and 76s.
+- `fast-feedback`: 894s median and 879.9s mean.
+- `smoke-artifacts`: 253s median and 254.4s mean.
+
+The current dominant critical-path cost is still `fast-feedback`. `smoke-artifacts` finishes in
+parallel and is not the wall-time limiter unless `fast-feedback` is shortened substantially.
+The sample is not enough to claim a statistically meaningful speedup from PR #1681; it is a
+post-change baseline for the next slice.
 
 ## Tooling Gap
 
 `gh run view --json jobs` returns job `startedAt` and `completedAt`, but the step objects observed
-for run `26648705023` do not include step timestamps. The timing helper therefore produced empty
+for sampled runs do not include step timestamps. The timing helper therefore produced empty
 `slowest_steps` output even when jobs and step names were present.
 
-This slice updates `scripts/dev/ci_timing_summary.py` to report slowest jobs as a fallback and to
-make missing step timestamps explicit in Markdown output.
+PR #1681 updated `scripts/dev/ci_timing_summary.py` to report slowest jobs as a fallback and to
+make missing step timestamps explicit in Markdown output. The post-trim sample still has no
+step-level durations, so this branch adds explicit phase timing emitted by
+`scripts/dev/ci_driver.sh` instead of relying on GitHub's step payload.
+
+`fast-feedback` and `smoke-artifacts` both repeat checkout, uv setup, Python setup, system package
+installation, dependency sync, and artifact migration. Because GitHub did not expose step durations
+for the sampled runs, the current evidence cannot yet quantify repeated setup or artifact-generation
+cost. The new phase timing covers the repository-owned `ci_driver.sh` phases first; setup-step
+timing should be added at workflow level only if the next CI logs show that repository phases are
+not the main cost.
 
 ## Local Slowest Tests
 
-The branch readiness run used:
+Recent local PR-readiness runs used:
 
 ```bash
 BASE_REF=origin/main PYTEST_NUM_WORKERS=8 scripts/dev/pr_ready_check.sh
 ```
 
-It completed in 292.71s with 4432 passed and 11 skipped. The slowest reported calls were:
+They completed in about 293-299s with the full repository suite. These
+local timings come from `PYTEST_NUM_WORKERS=8` on `auxme-imech036`, not from GitHub's
+`ubuntu-latest` runner, so they are directional rather than CI-equivalent. The slowest reported
+calls remain concentrated in example smoke coverage and one policy-stack smoke:
 
 | test | duration |
 | --- | ---: |
@@ -62,7 +90,8 @@ It completed in 292.71s with 4432 passed and 11 skipped. The slowest reported ca
 | `tests/examples/test_examples_run.py::test_example_runs_without_error[quickstart/03_custom_map.py]` | 12.69s |
 
 The local slowest-test evidence points at example smoke coverage and one policy-stack smoke as the
-first places to inspect before changing test selection or sharding.
+first places to inspect before changing test selection or sharding. This does not by itself justify
+skipping or weakening those tests; it identifies where a narrower timing probe should go next.
 
 ## Low-Risk Runtime Reduction
 
@@ -71,10 +100,27 @@ Routine pull-request runs no longer upload the full coverage HTML/database artif
 Coverage artifacts remain uploaded when `fast-feedback` fails and on `main`, where baseline
 maintenance happens.
 
-This preserves the proof bar while avoiding a success-path artifact upload for ordinary PRs.
+The validation contract is preserved because the coverage comparison still runs on every pull
+request; PR #1681 only removed the ordinary success-path upload of bulky coverage artifacts.
+
+The aggregate `ci` job remains unchanged. It still gates on both `fast-feedback` and
+`smoke-artifacts`, preserving the branch-protection-facing job name and split-job semantics.
+
+## Candidate Quick Wins
+
+| candidate | risk | evidence needed before implementation |
+| --- | --- | --- |
+| Add phase timing around `lint`, `typecheck`, `test`, `smoke`, and `artifact-policy` in `scripts/dev/ci_driver.sh` | low, implemented in this branch | CI log shows per-phase durations without changing pass/fail semantics |
+| Add timing around dependency sync and artifact migration in both CI jobs | low | CI log identifies whether repeated setup is material compared with test time |
+| Split slow example smoke tests into a separately timed subgroup while keeping them required | medium | Before/after CI run shows earlier failure signal or lower p90 without reducing coverage |
+| Investigate whether docs-only PRs can use a reduced gate | medium-high | Maintainer decision plus path filter proof that benchmark, planner, workflow, config, and code changes still run full gates |
+
+The recommended starting point is instrumentation, not deselection: use the new phase timestamps,
+then decide whether the next target is test grouping, setup/cache behavior, or smoke-artifact
+policy.
 
 ## Follow-Up
 
-Future #1653 work should use the improved job-level timing output to decide whether setup, tests,
-smoke scripts, or artifact uploads dominate current runs. Avoid moving required checks until a
-before/after CI run confirms the impact.
+Future #1653 work should inspect CI logs from this branch, then decide whether setup, tests, smoke
+scripts, or artifact handling dominate current runs. Avoid moving required checks until a
+before/after CI run confirms the impact and a maintainer accepts the coverage boundary.

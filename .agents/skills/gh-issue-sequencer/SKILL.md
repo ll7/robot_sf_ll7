@@ -16,8 +16,9 @@ output_schema: skill_run_summary.v1
 
 ## Purpose
 
-Maintain a clean Project #5 execution queue by separating clarification cleanup, readiness routing, and
-one-pass sequencing metadata writes.
+Maintain a clean Project #5 execution queue by separating clarification cleanup, readiness routing,
+and one-pass sequencing metadata writes. Project #5 priority is advisory; current maintainer
+direction and fresh evidence can override queue order.
 
 ## Workflow
 
@@ -38,7 +39,8 @@ one-pass sequencing metadata writes.
    - `Tracked` for valid but deferred work,
    - `Done` for merged/closed issues.
 5. Order and apply:
-   - sort by higher priority, lower uncertainty, unlock value, then oldest issue number,
+   - sort by explicit maintainer direction first, then higher priority, lower uncertainty, unlock
+     value, and oldest issue number,
    - apply status/priority/duration edits in one write pass,
    - run score sync once at batch end if inputs changed.
 6. If writes fail (rate limits or auth), stop writes and capture exact pending mutation details.

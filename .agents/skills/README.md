@@ -54,11 +54,12 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 ## GitHub And Project Policy
 
 - `goal-issue-implementation` owns the multi-issue loop and stop condition.
-- `gh-issue-sequencer` owns Project #5 queue ordering.
+- `gh-issue-sequencer` owns Project #5 queue ordering, with current maintainer direction and fresh
+  evidence allowed to override score order.
 - `gh-issue-autopilot` owns one selected issue -> branch -> validation -> draft PR.
 - `gh-issue-creator` owns new issue creation.
 - `issue-contract-maintainer` owns ambiguity, template, and decision repair.
-- Use Project #5 `Priority Score` as the queue-ordering source; use
+- Use Project #5 `Priority Score` as an advisory queue-ordering signal; use
   `gh-issue-priority-assessor` when score inputs need review.
 - Batch issue cleanup separately from Project #5 metadata writes; follow
   `docs/context/issue_713_batch_first_issue_workflow.md`.
@@ -164,7 +165,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `clean-up` | atomic | verification | yes | no | no | none | Clean up the current branch in the Robot SF repo by following docs/dev_guide.md and reusable scripts/dev commands; use when asked to tidy a branch, run Ruff format/fix, or run parallel pytest before sharing changes. |
 | `implementation-verification` | atomic | verification | no | no | no | none | Verify branch changes against origin/main with claim-based evidence, not only test status. |
 | `pr-ready-check` | atomic | verification | no | no | no | none | Run the repository PR readiness pipeline using shared scripts/dev entry points (ruff fix/format, parallel tests, coverage, and docstring checks). |
-| `quality-playbook` | policy | verification | no | no | no | none | Repo-wide proof-first workflow for non-trivial changes with context, risk, validation, and follow-through. |
+| `quality-playbook` | policy | verification | no | no | no | none | Repo-wide risk-proportional validation workflow for non-trivial changes with context, risk, validation, and follow-through. |
 | `review-and-refactor` | atomic | verification | yes | no | no | none | Surgical review-then-refactor workflow for small code or docs changes; use when a task needs inspection before a narrow improvement. |
 
 ## Aliases

@@ -864,7 +864,7 @@ skills:
     aliases: []
     requires_slurm: false
   quality-playbook:
-    description: Repo-wide proof-first workflow for non-trivial changes with context, risk, validation,
+    description: Repo-wide risk-proportional validation workflow for non-trivial changes with context, risk, validation,
       and follow-through.
     category: validation
     kind: policy

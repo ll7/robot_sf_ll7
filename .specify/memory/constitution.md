@@ -1,16 +1,13 @@
 <!--
 Sync Impact Report
-Previous Version: 1.3.1 -> New Version: 1.4.0 (MINOR bump)
-Rationale: Added new Principle XIII on test value verification and maintenance discipline. This principle adds governance scope for evaluating test significance and pruning low-value tests.
-Modified Principles: None
-Added Sections: Principle XIII - Test Value Verification & Maintenance Discipline
+Previous Version: 1.4.0 -> New Version: 1.4.1 (PATCH bump)
+Rationale: Reframed the constitution as contributor guidance with hard-contract boundaries, made research progress the leading value, and clarified low-risk validation and low-value test removal.
+Modified Principles: I, IX, XIII, Governance
+Added Sections: None
 Removed Sections: None
 Templates Updated:
- - ✅ plan-template.md: Verified constitution version reference alignment
- - ✅ spec-template.md: Verified template compatibility
- - ✅ tasks-template.md: Verified template compatibility
- - ✅ dev_guide.md: Added test significance verification guidance
- - ✅ copilot-instructions.md: Added test review guidance
+ - ✅ dev_guide.md: Removed stale runtime-specific guidance and aligned validation language
+ - ✅ copilot-instructions.md: Aligned quality-playbook language with risk-proportional validation
 Pending Template Updates: None
 Deferred TODOs: None
 All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
@@ -18,12 +15,22 @@ All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
 
 # Robot SF Project Constitution
 
-This Constitution specifies WHAT the Robot SF repository delivers: a cohesive, reproducible research and engineering platform for social navigation of a robot among pedestrians. It intentionally avoids HOW (implementation details) and focuses on scope, boundaries, artifacts, contracts, and non‑negotiable principles. Internal engineering rigor (naming, docstrings, helper clarity) is encoded where it impacts long‑term reproducibility or the stability of public contracts.
+This Constitution specifies WHAT the Robot SF repository delivers: a cohesive, reproducible research
+and engineering platform for social navigation of a robot among pedestrians. Treat it as contributor
+guidance plus hard contract notes. Benchmark, metric, schema, reproducibility, and paper-facing
+contracts remain strict; softer workflow guidance should support maintainer-directed research
+progress rather than override it.
 
 ## Core Principles
 
-### I. Reproducible Social Navigation Research Core
-The repository must provide a self‑contained, scriptable simulation and benchmarking substrate for robot–pedestrian social navigation. All primary artifacts (environments, configurations, benchmark outputs, episode logs, figures, metrics tables, weight files) must be derivable deterministically from versioned inputs (code + configs + seeds + model artifacts). Re-running documented commands must reproduce published metrics and figures (subject only to stochastic variance explicitly bounded by seeds and bootstrap CIs).
+### I. Research Progress Through Reproducible Social Navigation
+The repository prioritizes concrete research progress on robot–pedestrian social navigation. It must
+provide a self-contained, scriptable simulation and benchmarking substrate so that progress can be
+checked, reproduced, and compared. All published or benchmark-facing artifacts (environments,
+configurations, benchmark outputs, episode logs, figures, metrics tables, weight files) must be
+derivable deterministically from versioned inputs (code + configs + seeds + model artifacts).
+Re-running documented commands must reproduce published metrics and figures (subject only to
+stochastic variance explicitly bounded by seeds and bootstrap CIs).
 
 ### II. Factory‑Based Environment Abstraction
 All robot and pedestrian simulation capabilities are exposed through a small set of factory functions that yield Gym/Gymnasium‑compatible environments with consistent observation/action/reward interface surface. Direct instantiation of low‑level environment classes is out of scope for users. Extensibility of new environment modalities (e.g., image, pedestrian‑adversary variants) occurs by adding new factory entry points and unified config schema fields without breaking existing ones.
@@ -47,7 +54,11 @@ Public environment factory signatures, configuration field names, and episode/me
 Core guides (development guide, environment overview, benchmark docs, SNQI tooling) define expected usage. Every new public surface (environment factory variant, metric, baseline, figure generator, configuration field) MUST have a discoverable entry in the central docs index and a concise README (or clearly linked section) describing WHAT it provides and WHAT assumptions it encodes. Clarifications that do not alter semantics (typo fixes, examples, internal helper docstrings) may be added without version bumps, but any change that modifies a public contract or user‑visible invariant requires governance review.
 
 ### IX. Test Coverage for Public Behavior
-Any change to public environment behavior, benchmark schema, or metrics computation must be accompanied by at least a smoke test (reset/step loop), and if logic‑bearing, an assertion‑based unit/integration test. Omission requires an explicit, temporary TODO with rationale and follow‑up tracking.
+Any change to public environment behavior, benchmark schema, or metrics computation must be
+accompanied by at least a smoke test (reset/step loop), and if logic-bearing, an assertion-based
+unit/integration test. Omission requires an explicit, temporary TODO with rationale and follow-up
+tracking. Low-risk documentation and instruction-only changes may use cheaper review paths when the
+skipped checks are explicitly reported.
 
 ### X. Scope Discipline
 Out of scope: general robotics control stacks, unrelated perception models, arbitrary RL algorithm zoo, generic data science utilities, unversioned experiment notebooks. The repo remains focused strictly on social navigation simulation, evaluation, and analysis.
@@ -80,7 +91,10 @@ Non-compliance Handling:
 This principle adds governance scope (hence MINOR bump) but does not change public API or schema contracts; no migration guide required beyond updating contributing/dev documentation.
 
 ### XIII. Test Value Verification & Maintenance Discipline
-Before accepting test failures or implementing fixes, developers MUST verify the significance and necessity of the failing test. Not all tests provide equal value; some may be outdated, overly brittle, or testing non-critical behavior. Test suite health requires both coverage and relevance.
+Before accepting test failures or implementing fixes, developers MUST verify the significance and
+necessity of the failing test. Not all tests provide equal value; some may be outdated, overly
+brittle, or testing non-critical behavior. Test suite health requires both coverage and relevance,
+and low-value tests may be removed more readily when the rationale is documented.
 
 Verification Criteria (evaluate in order):
 1. **Core Feature Coverage**: Does the test verify a public contract (factory behavior, schema compliance, metric correctness, deterministic reproducibility)? If yes → high priority.
@@ -194,6 +208,13 @@ Traceability Requirements:
 
 ## Governance
 
-This Constitution supersedes ad‑hoc practices. Amendments require: (1) written proposal in `docs/dev/issues/<topic>/design.md`, (2) explicit enumeration of affected contracts (env, config, metrics, benchmark schema), (3) migration guidance or deprecation plan, (4) version/date update below. Pull Requests must assert compliance by referencing relevant sections. Any introduction of out‑of‑scope functionality must include justification aligning with Core Principles I–X or be rejected.
+This Constitution is the default contributor guide for repository contracts and values. It
+supersedes stale ad-hoc practices, but current maintainer direction can override softer workflow
+guidance when the conflict is stated and the docs are updated or flagged. Amendments that affect
+benchmark, environment, config, metric, schema, reproducibility, or paper-facing contracts require:
+(1) written proposal in `docs/dev/issues/<topic>/design.md`, (2) explicit enumeration of affected
+contracts, (3) migration guidance or deprecation plan, (4) version/date update below. Any
+introduction of out-of-scope functionality must include justification aligning with Core Principles
+I-X or be rejected.
 
-**Version**: 1.4.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-11-26
+**Version**: 1.4.1 | **Ratified**: 2025-09-19 | **Last Amended**: 2026-05-30

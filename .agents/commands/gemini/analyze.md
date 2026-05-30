@@ -12,7 +12,7 @@ Goal: Identify inconsistencies, duplications, ambiguities, and underspecified it
 
 STRICTLY READ-ONLY: Do **not** modify any files. Output a structured analysis report. Offer an optional remediation plan (user must explicitly approve before any follow-up editing commands would be invoked manually).
 
-Constitution Authority: The project constitution (`.specify/memory/constitution.md`) is **non-negotiable** within this analysis scope. Constitution conflicts are automatically CRITICAL and require adjustment of the spec, plan, or tasks—not dilution, reinterpretation, or silent ignoring of the principle. If a principle itself needs to change, that must occur in a separate, explicit constitution update outside `/analyze`.
+Constitution Authority: The project constitution (`.specify/memory/constitution.md`) is contributor guidance plus hard contract notes. Treat conflicts with benchmark, metric, schema, reproducibility, or paper-facing contracts as CRITICAL. For softer process conflicts, report the conflict and recommend whether the spec, plan, tasks, or guidance should change.
 
 Execution steps:
 

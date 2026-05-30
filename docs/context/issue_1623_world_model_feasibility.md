@@ -28,16 +28,19 @@ surface does not yet contain the full transition tuple needed for robust world-m
 | Candidate | Fit to Robot SF local navigation | Current blocker | Recommendation |
 | --- | --- | --- | --- |
 | DreamerV3 through the existing RLlib launcher | Strongest local surface: config-first launcher, Ray/RLlib tests, scenario-matrix parity, and BR-08 configs already exist. | The program close-out records repeated NaN/no-eval evidence plus a host-RAM leak/OOM failure, and #1190 shows no clean world-model import boundary. | Treat flat-vector BR-08 as retired; monitor only for a cleaner RLlib or repo-owned import boundary. |
-| PlaNet / latent dynamics planning | Conceptually adjacent: learns latent dynamics and plans in latent space. | No local launcher, checkpoint, dataset, or adapter surface; older than the repo's current DreamerV3 attempt and would restart the same data/provenance burden from less local infrastructure. | Monitor as background literature, not a Robot SF implementation issue now. |
-| TD-MPC2 / latent MPC | Best conceptual match among external candidates for AMV-style continuous control and future actuation-aware planning, because it combines learned latent dynamics with short-horizon MPC. | No Robot SF source integration, no durable checkpoint, no source-side reproduction proof, and no typed observation/action reduction for local navigation. | Monitor; consider a source-reproduction/design issue only after source, license, and reduction proof are concrete. |
+| PlaNet / latent dynamics planning | Conceptually adjacent: learns latent dynamics and plans in latent space. | No local launcher, Robot SF dataset, or adapter surface; older than the repo's current DreamerV3 attempt and would restart the same data/provenance burden from less local infrastructure. | Monitor as background literature, not a Robot SF implementation issue now. |
+| TD-MPC2 / latent MPC | Best conceptual match among external candidates for AMV-style continuous control and future actuation-aware planning, because it combines learned latent dynamics with short-horizon MPC. | Upstream source, license, commands, and checkpoints exist, but Robot SF has no integrated/provenanced checkpoint, source-side reproduction record, or typed observation/action reduction for local navigation. | Monitor; consider a source-reproduction/design issue only after source, license, checkpoint, and reduction proof are concrete for Robot SF. |
 | DreamerNav-style multimodal world models | Interesting for richer perception stacks and system-level navigation. | Assumes multimodal/depth/occupancy-style perception and curriculum surfaces outside the current Robot SF local-planner contract. | Monitor only; do not treat it as a restart of retired BR-08 DreamerV3. |
 | Existing Robot SF predictive/local planners | Already fit the local planner contract and benchmark provenance rules better than a new world-model track. | They do not provide a general learned latent dynamics model, but they are lower-cost and closer to current benchmark evidence. | Prefer these near-term when improving local navigation or AMV actuation support. |
 
 External anchors used for candidate framing:
 
-- PlaNet: <https://proceedings.mlr.press/v97/hafner19a.html>
+- PlaNet: <https://proceedings.mlr.press/v97/hafner19a.html>;
+  source/license: <https://github.com/google-research/planet>
 - DreamerV3: <https://arxiv.org/abs/2301.04104>
-- TD-MPC2: <https://arxiv.org/abs/2310.16828>
+- TD-MPC2: <https://arxiv.org/abs/2310.16828>;
+  source/license/checkpoints: <https://github.com/nicklashansen/tdmpc2> and
+  <https://huggingface.co/nicklashansen/tdmpc2>
 
 ## Local Evidence
 
@@ -85,7 +88,9 @@ Robot SF would need:
 - fail-closed status reporting for missing source assets or incompatible action semantics.
 
 The lower-risk path is to continue the existing AMV preflight, latency, and learned-policy adapter
-work before launching a new world-model family.
+work before launching a new world-model family. This note also updates the #1615 LiDAR launch-plan
+boundary so the older DreamerV3 LiDAR smoke idea is explicitly preflight-gated rather than a
+standing training recommendation.
 
 ## Follow-Up Boundary
 

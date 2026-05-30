@@ -85,6 +85,14 @@ The assessment must state:
 - whether normalization statistics were fit on training data only,
 - whether candidate evidence comes from source claims, Robot SF local execution, or synthesis.
 
+For any concrete checkpoint, normalizer, dataset, adapter config, or launch packet, record the
+learned-policy artifact manifest fields in
+`docs/context/artifact_evidence_vocabulary.md`. The manifest must name the policy id, artifact URI,
+checksum, training config and commit, observation/action schemas, normalizer URI or `not_required`,
+license/access note, split contract, benchmark eligibility, and fail-closed behavior. Missing or
+mismatched artifacts, checksums, normalizers, observation schemas, or action schemas make the
+candidate `not_available` for benchmark use until the manifest is repaired.
+
 Do not compare learned policies as benchmark candidates when their training/evaluation split leaks
 the exact test scenarios, future trajectories, or outcome labels used by Robot SF metrics.
 

@@ -234,9 +234,7 @@ class DummyLearnedLocalPolicyAdapter:
             )
 
         if observation is None:
-            raise LearnedPolicyAdapterContractError(
-                "observation must not be None"
-            )
+            raise LearnedPolicyAdapterContractError("observation must not be None")
         missing = [key for key in self._required_observation_inputs if key not in observation]
         if missing:
             raise LearnedPolicyAdapterContractError(

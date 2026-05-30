@@ -41,19 +41,45 @@ direction and fresh evidence can override queue order.
 5. Order and apply:
    - sort by explicit maintainer direction first, then higher priority, lower uncertainty, unlock
      factor, and oldest issue number,
+   - continue autonomous ordering when the top candidate is clearly actionable,
+   - use priority discussion only when two or more plausible next issues depend on a real value
+     tradeoff that repository evidence and Project #5 fields cannot resolve,
    - apply status/priority/duration edits in one write pass,
    - run score sync once at batch end if inputs changed.
 6. If writes fail (rate limits or auth), stop writes and capture exact pending mutation details.
+
+## Priority Discussion Mode
+
+Use this mode sparingly. It exists for queue-ordering tradeoffs, not for routine approval of every
+autonomous issue selection.
+
+Ask one focused priority question only when all are true:
+
+- at least two unblocked issues are implementable now,
+- their Project #5 score or labels do not clearly decide the order,
+- the choice changes real maintainer value, risk, or unblock impact,
+- the answer cannot be inferred from recent issue comments, PR state, or canonical docs.
+
+Frame the question around concrete choices, for example:
+`Should the next PR prioritize reducing CI minutes (#A) or improving benchmark provenance (#B)?`
+
+After the maintainer answers, record the decision in the relevant issue as a short comment or
+`Maintainer priority note` body entry. If the answer changes Project #5 priority fields, batch that
+write with the normal Project #5 metadata pass and run score sync once at the end. If the answer is
+only an ordering preference, do not invent new priority-score inputs.
 
 ## Guardrails
 
 - Use MCP/interactive tools when available; use `gh` for deterministic sequencing mutations.
 - Do not interleave issue-body edits, project routing, and score sync issue-by-issue for multi-issue batches.
+- Do not ask a priority question when the next issue is already clear, when a blocker/clarification
+  question is really needed instead, or when the tradeoff is only agent convenience.
 - Use follow-up handoffs rather than retry loops when quotas are temporarily exhausted.
 
 ## Output
 
 - Ordered issue queue with one-line rationale per item.
+- Priority discussion question asked, answer recorded, or reason it was unnecessary.
 - Status and priority changes applied.
 - Unresolved blockers and next candidate issue.
 - Whether final score sync completed.

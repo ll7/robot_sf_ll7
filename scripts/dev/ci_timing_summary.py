@@ -70,8 +70,8 @@ def _duration_seconds(start: str | None, end: str | None) -> float | None:
 def _completed_step_timings(payload: dict[str, Any]) -> list[StepTiming]:
     """Extract completed step durations from all jobs in a run payload."""
     timings: list[StepTiming] = []
-    for job in payload.get("jobs", []):
-        for step in job.get("steps", []):
+    for job in _iter_dicts(payload.get("jobs")):
+        for step in _iter_dicts(job.get("steps")):
             duration = _duration_seconds(step.get("startedAt"), step.get("completedAt"))
             if duration is None:
                 continue
@@ -89,7 +89,7 @@ def _completed_step_timings(payload: dict[str, Any]) -> list[StepTiming]:
 def _completed_job_timings(payload: dict[str, Any]) -> list[JobTiming]:
     """Extract completed job durations from a run payload."""
     timings: list[JobTiming] = []
-    for job in payload.get("jobs", []):
+    for job in _iter_dicts(payload.get("jobs")):
         duration = _duration_seconds(job.get("startedAt"), job.get("completedAt"))
         if duration is None:
             continue
@@ -106,7 +106,7 @@ def _completed_job_timings(payload: dict[str, Any]) -> list[JobTiming]:
 
 def summarize_run(payload: dict[str, Any], *, top: int = 10) -> RunTimingSummary:
     """Summarize queue, job, total, slowest-job, and slowest-step durations."""
-    jobs = list(payload.get("jobs", []))
+    jobs = _iter_dicts(payload.get("jobs"))
     created = _parse_timestamp(payload.get("createdAt"))
     updated = _parse_timestamp(payload.get("updatedAt"))
     job_starts = [
@@ -153,6 +153,18 @@ def _format_seconds(seconds: float) -> str:
     return f"{seconds:.1f}s"
 
 
+def _iter_dicts(value: Any) -> list[dict[str, Any]]:
+    """Return only dictionary items from a possibly malformed list payload."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _escape_md_table_cell(value: str) -> str:
+    """Escape Markdown table separators in generated cell text."""
+    return value.replace("|", r"\|")
+
+
 def format_markdown(summary: RunTimingSummary) -> str:
     """Format a timing summary as Markdown for issues and PR comments."""
     lines = [
@@ -173,7 +185,7 @@ def format_markdown(summary: RunTimingSummary) -> str:
     for job in summary.slowest_jobs:
         lines.append(
             "| "
-            f"{job.name} | {_format_seconds(job.duration_seconds)} | "
+            f"{_escape_md_table_cell(job.name)} | {_format_seconds(job.duration_seconds)} | "
             f"{job.started_at} | {job.completed_at} |",
         )
 
@@ -192,7 +204,7 @@ def format_markdown(summary: RunTimingSummary) -> str:
     for step in summary.slowest_steps:
         lines.append(
             "| "
-            f"{step.name} | {_format_seconds(step.duration_seconds)} | "
+            f"{_escape_md_table_cell(step.name)} | {_format_seconds(step.duration_seconds)} | "
             f"{step.started_at} | {step.completed_at} |",
         )
     return "\n".join(lines)

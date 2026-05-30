@@ -89,7 +89,8 @@ until normalization and source tags are proven.
 
 ## Minimal Follow-Up Shape
 
-Do not open a DT training campaign yet. The next concrete child should be:
+Do not open a DT training campaign yet. This assessment opens
+[Issue #1752](https://github.com/ll7/robot_sf_ll7/issues/1752) as the next concrete child:
 
 `data: define Decision Transformer trajectory dataset preflight`
 
@@ -123,8 +124,8 @@ reward-labeled trajectory dataset. It is more expensive and less immediately use
 warm-start today, but it is worth preserving as a future comparison once the oracle-imitation or PPO
 trajectory export path grows reward, done, and return-to-go fields.
 
-No DT smoke-training issue should be opened from this assessment. Open the dataset-preflight child
-only when someone is ready to modify and validate the trajectory dataset contract.
+No DT smoke-training issue should be opened from this assessment. The dataset-preflight child is
+tracked in Issue #1752 so the concrete schema work is not lost when Issue #1622 closes.
 
 ## Validation
 

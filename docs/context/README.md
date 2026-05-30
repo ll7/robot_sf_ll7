@@ -192,7 +192,7 @@ knowledge, not every transient iteration detail.
   [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
-* Issue #1686 learned-policy artifact manifest fields:
+* Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md) and
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Learned local-navigation policy registry:

@@ -156,7 +156,7 @@ fall back to a non-learned planner and report that row as learned-policy success
 - [Issue #1108 BC Warm-Start PPO Execution](https://github.com/ll7/robot_sf_ll7/issues/1108):
   SLURM logs, W&B run folders, and local `output/` paths are execution-run or exploratory evidence
   until a manifest, model registry entry, release artifact, or tracked evidence copy is published.
-- Learned-policy artifact manifests:
+- [Issue #1686 Learned-Policy Artifact Manifests](https://github.com/ll7/robot_sf_ll7/issues/1686):
   `docs/context/policy_search/contracts/learned_local_policy_eligibility.md` defines the
   observation/action review contract, and
   `docs/context/open_issues_training_split_audit_2026-05-30.md` records the current training-lane

@@ -57,8 +57,7 @@ Core guides (development guide, environment overview, benchmark docs, SNQI tooli
 Any change to public environment behavior, benchmark schema, or metrics computation must be
 accompanied by at least a smoke test (reset/step loop), and if logic-bearing, an assertion-based
 unit/integration test. Omission requires an explicit, temporary TODO with rationale and follow-up
-tracking. Low-risk documentation and instruction-only changes may use cheaper review paths when the
-skipped checks are explicitly reported.
+tracking.
 
 ### X. Scope Discipline
 Out of scope: general robotics control stacks, unrelated perception models, arbitrary RL algorithm zoo, generic data science utilities, unversioned experiment notebooks. The repo remains focused strictly on social navigation simulation, evaluation, and analysis.

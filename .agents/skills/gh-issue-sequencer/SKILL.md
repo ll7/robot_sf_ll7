@@ -40,7 +40,7 @@ direction and fresh evidence can override queue order.
    - `Done` for merged/closed issues.
 5. Order and apply:
    - sort by explicit maintainer direction first, then higher priority, lower uncertainty, unlock
-     value, and oldest issue number,
+     factor, and oldest issue number,
    - apply status/priority/duration edits in one write pass,
    - run score sync once at batch end if inputs changed.
 6. If writes fail (rate limits or auth), stop writes and capture exact pending mutation details.

@@ -50,6 +50,67 @@ coverage, temporary exports, videos, and caches, but it is not a durable depende
 - When evidence is expensive or too large to commit, track a manifest or pointer instead of copying
   raw episodes, videos, checkpoints, model caches, or logs into git.
 
+## Learned-Policy Artifact Manifests
+
+Learned local-policy checkpoints, normalizers, imitation datasets, and residual-policy artifacts
+should specialize this vocabulary instead of creating a parallel evidence system. A learned-policy
+artifact manifest is a compact pointer record. It is not the checkpoint, not a model registry, and
+not benchmark evidence by itself.
+
+Required fields:
+
+| Field | Meaning |
+| --- | --- |
+| `policy_id` | Stable policy or component id, such as `learned_risk_model_v1`. |
+| `artifact_role` | One of `checkpoint`, `normalizer`, `dataset_manifest`, `adapter_config`, or `launch_packet`. |
+| `artifact_uri` | Durable URI, release URL, or tracked config/evidence path. Local `output/` paths are allowed only as regeneration or hydration targets, not as durable URIs. |
+| `sha256` | Checksum for tracked fixtures, release artifacts, or local files promoted to durable storage. Use `pending` only before benchmark eligibility. |
+| `training_config` | Repository path to the config or launch packet that produced or will produce the artifact. |
+| `training_commit` | Git commit for the training, data-generation, or launch-packet contract. |
+| `observation_schema` | Observation contract path or named schema, including `observation_t` and deployment-visible fields. |
+| `action_schema` | Action-output family, bounds, frame, projection, and guard/fallback behavior. |
+| `normalizer_uri` | Durable normalizer artifact URI or `not_required`; learned normalizers must state the fit split. |
+| `license` | License or access note for the artifact and source data. |
+| `split_contract` | Train/validation/test split contract or note. |
+| `benchmark_eligibility` | One of `not_eligible`, `research_only`, `adapter_preflight`, or `benchmark_candidate`. |
+| `fail_closed_behavior` | Action when the artifact, checksum, normalizer, or schema is missing or mismatched. |
+
+Example manifest shape for the existing learned-risk launch lane:
+
+```yaml
+policy_id: learned_risk_model_v1
+artifact_role: launch_packet
+artifact_uri: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
+sha256: pending
+training_config: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
+training_commit: e14e2f8bc2058d9f0e071219629915dd5b5dd5a8
+observation_schema:
+  contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+  observation_t: current decision step
+  deployment_fields:
+    - trajectory_features.min_rollout_clearance_m
+    - trajectory_features.mean_pedestrian_distance_m
+    - trajectory_features.route_progress_delta
+action_schema:
+  family: auxiliary_cost
+  role: rank otherwise-safe local commands only
+  hard_guards_authoritative: true
+normalizer_uri: not_required_for_launch_packet
+license: repository-internal pre-SLURM launch packet; no checkpoint distributed
+split_contract: docs/context/open_issues_training_split_audit_2026-05-30.md
+benchmark_eligibility: adapter_preflight
+fail_closed_behavior:
+  missing_artifact: reject learned-policy benchmark row
+  checksum_mismatch: reject learned-policy benchmark row
+  missing_observation_or_action_schema: classify as not_eligible
+  missing_normalizer: reject if the policy declares learned normalization
+```
+
+Benchmark-facing learned-policy claims must resolve any `pending` checksum or artifact URI first.
+If a checkpoint, normalizer, dataset, or schema cannot be hydrated from the manifest, the dependent
+adapter or benchmark row must fail closed with `not_available` or `failed` status. Do not silently
+fall back to a non-learned planner and report that row as learned-policy success.
+
 ## Acceptable References
 
 - Exploratory run:
@@ -95,6 +156,11 @@ coverage, temporary exports, videos, and caches, but it is not a durable depende
 - [Issue #1108 BC Warm-Start PPO Execution](https://github.com/ll7/robot_sf_ll7/issues/1108):
   SLURM logs, W&B run folders, and local `output/` paths are execution-run or exploratory evidence
   until a manifest, model registry entry, release artifact, or tracked evidence copy is published.
+- [Issue #1686 Learned-Policy Artifact Manifests](https://github.com/ll7/robot_sf_ll7/issues/1686):
+  `docs/context/policy_search/contracts/learned_local_policy_eligibility.md` defines the
+  observation/action review contract, and
+  `docs/context/open_issues_training_split_audit_2026-05-30.md` records the current training-lane
+  split/provenance pointers that manifests should reference.
 - CARLA runtime qualification issues
   ([#872](https://github.com/ll7/robot_sf_ll7/issues/872),
   [#1111](https://github.com/ll7/robot_sf_ll7/issues/1111),

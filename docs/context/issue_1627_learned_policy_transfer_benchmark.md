@@ -130,8 +130,8 @@ Decision rules:
 
 | Condition | `execution_mode` | `readiness_status` | `availability_status` | `benchmark_success` |
 | --- | --- | --- | --- | --- |
-| Robot SF-native learned policy with complete local checkpoint and matching contract. | `native` | `native` | `available` | `true` only after smoke/benchmark proof. |
-| External policy through a declared adapter with source, checkpoint, observation, and action proof. | `adapter` | `adapter` | `available` | `true` only after smoke/benchmark proof. |
+| Robot SF-native learned policy with complete local checkpoint and matching contract. | `native` | `native` | `available` | `true` only after transfer benchmark proof; smoke proof remains smoke evidence. |
+| External policy through a declared adapter with source, checkpoint, observation, and action proof. | `adapter` | `adapter` | `available` | `true` only after transfer benchmark proof; smoke proof remains smoke evidence. |
 | External source command runs but Robot SF adapter metadata is incomplete. | `unknown` | `degraded` | `not_available` | `false` |
 | Checkpoint, normalizer, dependency, model registry entry, or source asset is missing. | `unknown` | `degraded` | `not_available` | `false` |
 | Observation uses forbidden evaluation-time fields or mismatched observation level. | `adapter` or `unknown` | `degraded` | `not_available` | `false` |

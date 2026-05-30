@@ -71,8 +71,7 @@ def _validate_success_semantics(payload: dict[str, Any]) -> None:
 
     if benchmark_success and readiness_status in _NON_SUCCESS_READINESS:
         raise ValueError(
-            "benchmark_success=true is incompatible with "
-            f"readiness_status={readiness_status!r}"
+            f"benchmark_success=true is incompatible with readiness_status={readiness_status!r}"
         )
     if benchmark_success and availability_status in _NON_SUCCESS_AVAILABILITY:
         raise ValueError(
@@ -127,9 +126,7 @@ def _validate_success_contract_placeholders(payload: dict[str, Any]) -> None:
     for path, value in contract_paths.items():
         normalized = str(value).strip().lower()
         if normalized in _UNRESOLVED_MARKERS:
-            raise ValueError(
-                f"benchmark_success=true requires resolved contract value for {path}"
-            )
+            raise ValueError(f"benchmark_success=true requires resolved contract value for {path}")
 
 
 def validate_transfer_metadata(payload: dict[str, Any]) -> None:

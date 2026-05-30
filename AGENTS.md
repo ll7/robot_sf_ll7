@@ -35,7 +35,7 @@ Treat the following files as the repository-native context stack for Agent-style
   and GitHub agent sources, mirrored into tool-specific compatibility paths when possible.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
 
-Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments, and avoid loading broad context-note indexes unless the task actually needs them.
+Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments. For context-note retrieval, start with `docs/context/INDEX.md` before opening broad historical note lists.
 
 ## Local Machine Context (Gitignored)
 
@@ -110,9 +110,9 @@ detail instead of turning the index into another full instruction document.
   or successor note when a document is superseded.
 - If a touched note contains outdated or superseded statements, update them, remove them, or mark
   them clearly with a pointer to the current source of truth.
-- Keep note names and links discoverable from normal contributor entry points. Start with
-  `docs/context/README.md` and use `.agents/skills/context-note-maintainer/SKILL.md` when creating
-  or refreshing context notes.
+- Keep note names and links discoverable from normal contributor entry points. Start retrieval with
+  `docs/context/INDEX.md`; use `docs/context/README.md` and
+  `.agents/skills/context-note-maintainer/SKILL.md` when creating or refreshing context notes.
 
 ## Cross-Agent Compatibility
 

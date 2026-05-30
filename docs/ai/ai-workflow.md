@@ -23,6 +23,7 @@ Read these first when working in this workflow:
 - [docs/dev_guide.md](../dev_guide.md)
 - [docs/README.md](../README.md)
 - [docs/ai/repo_overview.md](repo_overview.md)
+- [docs/context/INDEX.md](../context/INDEX.md)
 - [docs/context/README.md](../context/README.md)
 - [docs/context/issue_713_batch_first_issue_workflow.md](../context/issue_713_batch_first_issue_workflow.md)
 - [docs/context/issue_728_coding_agents_compatibility.md](../context/issue_728_coding_agents_compatibility.md)
@@ -171,7 +172,7 @@ Treat it as a reviewer-lens pass, not another full test suite:
   local paths in tracked evidence, and durable evidence files that still point at ignored
   `output/` artifacts.
 - docs/context changes: align PR-body validation, context-note validation, and exact proof output;
-  add required `docs/README.md` and `docs/context/README.md` links.
+  add required `docs/README.md`, `docs/context/INDEX.md`, and `docs/context/README.md` links.
 - schema, parser, path, JSON, artifact, and public-helper changes: check malformed payloads,
   missing values, wrong shapes, directories, absolute paths, traversal, `NaN`, `inf`, and negative
   sentinels.

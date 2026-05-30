@@ -34,7 +34,7 @@ Then branch by task type:
 - planner family support: `docs/benchmark_planner_family_coverage.md`
 - training/eval workflow: `docs/AGENT_INDEX.md`, `docs/training/`
 - end-to-end AI workflow: `docs/ai/ai-workflow.md`
-- issue execution history and handoff knowledge base: `docs/context/`
+- issue execution history and handoff knowledge base: start with `docs/context/INDEX.md`
 - context note workflow: `docs/context/README.md`
 
 ## Key Repository Areas
@@ -54,8 +54,10 @@ Then branch by task type:
 - `output/`: git-ignored canonical artifact root
 - `docs/context/evidence/`: small tracked evidence bundles promoted from generated outputs when
   they support durable benchmark or context decisions
-- `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context;
-  keep this tree indexed, pruned, and treated as a retrieval surface rather than a bulk dump
+- `docs/context/INDEX.md`: lean retrieval surface for linked execution notes, issue-specific
+  evidence logs, and agent handoff context
+- `docs/context/`: underlying note tree; keep it indexed, pruned, and treated as a retrieval
+  surface rather than a bulk dump
 - `memory/`: repo-local Markdown memory tree for stable cross-session facts and concise retrieval
 
 ### Existing agent workflow surfaces

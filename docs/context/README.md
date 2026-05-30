@@ -3,6 +3,10 @@
 `docs/context/` is the repository's Markdown knowledge base for issue execution history, durable
 agent handoff, and reusable reasoning that should not be trapped in chat or PR text.
 
+For retrieval, start with [INDEX.md](INDEX.md). This README defines how to create and maintain
+notes; the index is the lean entry point for finding current, domain-relevant context without
+bulk-reading the whole history.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 

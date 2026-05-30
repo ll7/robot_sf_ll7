@@ -651,7 +651,11 @@ def test_sim_view_ego_up_preserves_manual_offset_on_mode_switch() -> None:
 def test_sim_view_ego_up_skips_grid(monkeypatch) -> None:
     """Background grid drawing should be disabled while ego_up camera rotation is active."""
     view = SimulationView(
-        record_video=False, width=100, height=80, scaling=10, map_def=_map_def_with_routes_and_obstacles()
+        record_video=False,
+        width=100,
+        height=80,
+        scaling=10,
+        map_def=_map_def_with_routes_and_obstacles(),
     )
     view.set_manual_view_mode("ego_up")
 

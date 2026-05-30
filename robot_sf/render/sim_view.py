@@ -590,8 +590,12 @@ class SimulationView:
         if self._camera_center_world is not None and self._camera_rotation_rad is not None:
             dx = float(tup[0]) - self._camera_center_world[0]
             dy = float(tup[1]) - self._camera_center_world[1]
-            x = (dx * self._camera_rotation_cos - dy * self._camera_rotation_sin) * self.scaling + self.width / 2
-            y = (dx * self._camera_rotation_sin + dy * self._camera_rotation_cos) * self.scaling + self.height / 2
+            x = (
+                dx * self._camera_rotation_cos - dy * self._camera_rotation_sin
+            ) * self.scaling + self.width / 2
+            y = (
+                dx * self._camera_rotation_sin + dy * self._camera_rotation_cos
+            ) * self.scaling + self.height / 2
             return (x, y)
         x = tup[0] * self.scaling + self.offset[0]
         y = tup[1] * self.scaling + self.offset[1]

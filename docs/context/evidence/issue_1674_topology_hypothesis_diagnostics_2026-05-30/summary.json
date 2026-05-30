@@ -1,0 +1,144 @@
+{
+  "issue": 1674,
+  "date": "2026-05-30",
+  "base_ref": "origin/main",
+  "base_head_sha": "8e845fd05d5b8cc68039a53ecabece05b7a96d74",
+  "runs": [
+    {
+      "candidate": "hybrid_rule_v0_minimal",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111,
+      "horizon": 240,
+      "success": true,
+      "done_step": 144,
+      "route_complete": true,
+      "pedestrian_collision": false,
+      "obstacle_collision": false,
+      "near_misses": 0.0,
+      "comfort_exposure": 0.0,
+      "min_post_step_ped_distance": 1.8203366484386228,
+      "min_post_step_goal_distance": 1.9387763857461184,
+      "last_post_step_goal_distance": 1.9387763857461184,
+      "selected_source_counts": {
+        "dynamic_window": 138,
+        "path_follow_0.5m": 7
+      },
+      "rejection_counts": {
+        "dynamic_collision": 279,
+        "static_clearance": 2010
+      },
+      "fallback_count": 0
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_lookahead8",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111,
+      "horizon": 240,
+      "success": true,
+      "done_step": 152,
+      "route_complete": true,
+      "pedestrian_collision": false,
+      "obstacle_collision": false,
+      "near_misses": 0.0,
+      "comfort_exposure": 0.0,
+      "min_post_step_ped_distance": 1.8739167361486933,
+      "min_post_step_goal_distance": 1.9377791929149688,
+      "last_post_step_goal_distance": 1.9377791929149688,
+      "selected_source_counts": {
+        "dynamic_window": 139,
+        "path_follow_0.5m": 9,
+        "route_guide": 5
+      },
+      "rejection_counts": {
+        "dynamic_collision": 345,
+        "static_clearance": 1468
+      },
+      "fallback_count": 0
+    },
+    {
+      "candidate": "hybrid_rule_v0_minimal",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 111,
+      "horizon": 240,
+      "success": false,
+      "done_step": null,
+      "route_complete": false,
+      "pedestrian_collision": false,
+      "obstacle_collision": false,
+      "near_misses": null,
+      "comfort_exposure": null,
+      "min_post_step_ped_distance": 1.9122748535303034,
+      "min_post_step_goal_distance": 2.04917307810727,
+      "last_post_step_goal_distance": 4.208592980060457,
+      "selected_source_counts": {
+        "dynamic_window": 237,
+        "path_follow_0.5m": 3
+      },
+      "rejection_counts": {
+        "dynamic_collision": 881,
+        "static_clearance": 525
+      },
+      "fallback_count": 0
+    },
+    {
+      "candidate": "hybrid_rule_v3_waypoint2_route_lookahead8",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 111,
+      "horizon": 240,
+      "success": false,
+      "done_step": null,
+      "route_complete": false,
+      "pedestrian_collision": false,
+      "obstacle_collision": false,
+      "near_misses": null,
+      "comfort_exposure": null,
+      "min_post_step_ped_distance": 1.879302672867857,
+      "min_post_step_goal_distance": 2.018560766938374,
+      "last_post_step_goal_distance": 4.563027836879175,
+      "selected_source_counts": {
+        "dynamic_window": 236,
+        "path_follow_0.5m": 2,
+        "route_guide": 2
+      },
+      "rejection_counts": {
+        "dynamic_collision": 973,
+        "static_clearance": 293
+      },
+      "fallback_count": 0
+    },
+    {
+      "candidate": "hybrid_rule_v0_minimal",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "horizon": 120,
+      "success": false,
+      "done_step": 0,
+      "route_complete": false,
+      "pedestrian_collision": true,
+      "obstacle_collision": false,
+      "near_misses": 0.0,
+      "comfort_exposure": 0.5833333333333334,
+      "min_post_step_ped_distance": 1.3409169205211866,
+      "min_post_step_goal_distance": 17.027863218304603,
+      "last_post_step_goal_distance": 17.027863218304603,
+      "selected_source_counts": {
+        "all_candidates_rejected": 1
+      },
+      "rejection_counts": {
+        "dynamic_collision": 67
+      },
+      "fallback_count": 1
+    }
+  ],
+  "conclusion": {
+    "small_slice": [
+      "classic_bottleneck_medium seed 111",
+      "classic_realworld_double_bottleneck_high seed 111",
+      "classic_cross_trap_high seed 112"
+    ],
+    "topology_signal": "classic_realworld_double_bottleneck_high seed 111 stalled for both variants while the route-lookahead variant selected route_guide only 2/240 steps; current traces expose single-source local command dominance but not explicit alternate homotopy candidates.",
+    "not_topology_signal": "classic_cross_trap_high seed 112 fails at step 0 with all candidates rejected for dynamic_collision, so this row is an initial dynamic infeasibility/collision case rather than evidence for missing alternate topology.",
+    "follow_up_justified": true,
+    "follow_up_scope": "Add an explicit topology-hypothesis diagnostic that extracts two or more route/corridor alternatives around bottleneck obstacles and logs per-hypothesis clearance/progress before adding any new planner."
+  }
+}

@@ -137,25 +137,35 @@ hardware, SLURM, CARLA, private artifacts, checkpoint aliases, datasets, or a cl
 mark it blocked or send it to issue clarification instead of counting the queue as empty. Keep this
 audit read-only until the orchestrator has reviewed the proposed label/body changes.
 
-This audit is an illustrative handoff, not a new machine-readable schema. Keep it compact enough
-for the next agent or maintainer to act on directly:
+Example compact exhausted-queue audit:
 
-```md
-Queue exhaustion audit:
-- Query used: `gh issue list --state open --label state:ready --limit 100 --json number,title,labels,url`
+```text
+Queue exhaustion audit
+- Query used:
+  gh issue list --state open --label state:ready --json number,title,labels,url --limit 100
+  gh issue list --search "repo:ll7/robot_sf_ll7 is:issue is:open -label:state:ready -label:state:blocked -label:state:hold" --json number,title,labels,url --limit 100
 - Remaining ready issues:
-  - `#1457` needs SLURM capacity and durable artifact destination; classify as blocked on
-    `resource:slurm`.
-  - `#1512` is implementable only after the benchmark fallback policy note is refreshed; send to
+  - #1234 blocked locally: needs SLURM/Auxme allocation; mark `state:blocked` with unblock condition.
+  - #1235 ambiguous: acceptance criteria mix benchmark claim and exploratory probe; route to
     `gh-issue-clarifier`.
-  - `#1530` is too broad for one PR; best split candidate because it combines docs, validator
-    behavior, and Project #5 metadata.
-- Open issues without `state:*`: 7 found via
-  `gh issue list --state open --limit 100 --json number,title,labels,url`; no writes applied.
-- Proposed next action: open/split a child issue for the validator-only part of `#1530`, then
-  revisit the queue after maintainer review.
-- Labels/body writes: none; read-only audit only.
+  - #1236 too broad for one PR: split into fixture migration, docs migration, and compatibility
+    validation issues.
+- Remaining open issues without `state:*` labels:
+  - 17 proposal/research issues need template repair before implementation routing.
+- Best issue-splitting candidate:
+  - #1236, because the child issues can have independent validation gates and avoid one broad
+    path-rewrite PR.
+- Writes applied:
+  - none yet; audit is read-only pending orchestrator review.
+- Next action:
+  - clarify #1235 or split #1236 before claiming the implementation queue is exhausted.
 ```
+
+This is an illustrative report shape, not a required machine-readable schema. Prefer this compact
+summary in final handoffs and PR comments when the queue is genuinely exhausted. If a remaining
+issue only needs a clearer contract, route it to issue clarification. If a remaining issue bundles
+several independently validatable changes, create child issues with `gh-issue-creator` and leave the
+parent as the coordination issue instead of treating the bundle as unimplementable.
 
 Route remaining issues by their blocker:
 - Use `gh-issue-clarifier` when the issue intent, proof path, acceptance criteria, or ownership is

@@ -83,6 +83,27 @@ def test_current_structured_or_grid_planners_fail_closed_for_lidar_level(planner
     assert row["current_contract_status"] == "blocked_by_current_contract"
 
 
+def test_safety_barrier_lidar_level_requires_explicit_occupancy_adapter() -> None:
+    """Safety-barrier LiDAR evidence must go through the ray-derived occupancy adapter."""
+    with pytest.raises(PlannerContractValidationError, match="lidar_occupancy_adapter"):
+        validate_planner_contract(
+            algo="safety_barrier",
+            robot_kinematics="differential_drive",
+            algo_config={},
+            observation_level="lidar_2d",
+        )
+
+    contract = validate_planner_contract(
+        algo="safety_barrier",
+        robot_kinematics="differential_drive",
+        algo_config={"lidar_occupancy_adapter": {"lidar_grid_resolution": 0.5}},
+        observation_level="lidar_2d",
+    )
+
+    assert contract["observation_contract"]["active_mode"] == "sensor_fusion_state"
+    assert contract["observation_contract"]["observation_level"] == "lidar_2d"
+
+
 @pytest.mark.parametrize("planner", _ADAPTER_CONFIG_REQUIRED)
 def test_lidar_adapter_config_required_planners_fail_closed_without_adapter(
     planner: str,

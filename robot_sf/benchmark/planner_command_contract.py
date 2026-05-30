@@ -158,20 +158,20 @@ def validate_planner_contract(
             "algo_config['lidar_occupancy_adapter']."
         )
 
+    payload = contract.to_metadata()
     compatible, reason = planner_kinematics_compatibility(
         algo=algo_key,
         robot_kinematics=robot_kinematics,
         algo_config=algo_config,
     )
     if not compatible:
-        payload = contract.to_metadata()
         action = payload["action_contract"]
         raise PlannerContractValidationError(
             "Planner contract mismatch for "
             f"planner '{algo_key}' with robot_kinematics='{robot_kinematics}': {reason}. "
             f"Declared command_space='{action['command_space']}'."
         )
-    return contract.to_metadata()
+    return payload
 
 
 __all__ = [

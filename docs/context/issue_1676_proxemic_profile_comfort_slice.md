@@ -2,7 +2,7 @@
 
 Date: 2026-05-30
 
-Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1676>  
+Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1676>
 Parent survey: [issue_1617_local_planner_repo_survey.md](issue_1617_local_planner_repo_survey.md)
 
 ## Goal

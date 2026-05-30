@@ -54,6 +54,8 @@ Then branch by task type:
 - `output/`: git-ignored canonical artifact root
 - `docs/context/evidence/`: small tracked evidence bundles promoted from generated outputs when
   they support durable benchmark or context decisions
+- `docs/context/INDEX.md`: retrieval-first catalog for current context-note entry points, status
+  rules, optional context tools, and curated context-pack scopes
 - `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context
 - `memory/`: repo-local Markdown memory tree for stable cross-session facts and concise retrieval
 

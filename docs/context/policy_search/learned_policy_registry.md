@@ -154,10 +154,12 @@ source-side harnesses, license/checkpoint proof, observation/action-contract map
 metadata before entering the runnable candidate registry.
 
 - CrowdNav HEIGHT / IGAT / CrowdNav-family graph policies:
+  `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
   `docs/context/policy_search/issue_1367_crowdnav_family_verdict.md`,
   `docs/context/policy_search/issue_1394_crowdnav_height_source_harness.md`.
 - DRL-VO family: `docs/context/issue_769_drl_vo_assessment.md`.
 - NavDP / NoMaD visual navigation:
+  `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
   `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md`.
 - DreamerV3/world-model navigation:
   `docs/context/issue_1190_dreamerv3_checkpoint_import_boundary.md`.

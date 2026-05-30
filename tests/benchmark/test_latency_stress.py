@@ -54,6 +54,44 @@ def test_latency_stress_profile_requires_non_success_status_contract() -> None:
         )
 
 
+def test_latency_stress_profile_rejects_none_and_lossy_numeric_values() -> None:
+    """Explicit nulls and non-integral steps should not coerce into contract metadata."""
+    with pytest.raises(ValueError, match="name must be non-empty"):
+        load_latency_stress_profile({"name": None})
+
+    with pytest.raises(TypeError, match="observation_delay_steps must be an integer"):
+        load_latency_stress_profile({"name": "bad-latency", "observation_delay_steps": 1.9})
+
+    with pytest.raises(TypeError, match="non_success_statuses entries must be strings"):
+        load_latency_stress_profile(
+            {
+                "name": "bad-latency",
+                "non_success_statuses": [
+                    "fallback",
+                    "degraded",
+                    None,
+                    "timeout",
+                    "not_available",
+                    "failed",
+                ],
+            }
+        )
+
+
+def test_latency_stress_profile_validates_dataclass_field_types() -> None:
+    """Direct dataclass payloads should fail with clear type errors, not AttributeError."""
+    with pytest.raises(TypeError, match="name must be a string"):
+        load_latency_stress_profile(LatencyStressProfile(name=None))  # type: ignore[arg-type]
+
+    with pytest.raises(TypeError, match="non_success_statuses must be a tuple"):
+        load_latency_stress_profile(
+            LatencyStressProfile(  # type: ignore[arg-type]
+                name="bad-latency",
+                non_success_statuses=None,
+            )
+        )
+
+
 def test_not_available_latency_metrics_names_expected_placeholders() -> None:
     """Preflight-only contracts should emit explicit not-available metric placeholders."""
     metrics = not_available_latency_metrics()

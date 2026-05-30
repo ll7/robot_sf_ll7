@@ -3351,10 +3351,6 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - start_time))
     timing = {"steps_per_second": float(steps_taken) / wall_time if wall_time > 0 else 0.0}
-    if latency_profile is not None:
-        timing["latency_stress_profile"] = latency_profile.to_metadata(
-            dt=config.sim_config.time_per_step_in_secs
-        )
     route_complete = reached_goal_step is not None
     timeout_event = timeout_seen or termination_reason in {"truncated", "max_steps"}
     outcome = build_outcome_payload(
@@ -3639,6 +3635,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     noise_hash = observation_noise_hash(noise_spec)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
     latency_profile = _load_latency_stress_profile(latency_stress_profile)
+    latency_metadata_dt = float(dt) if dt is not None and float(dt) > 0.0 else 0.1
     benchmark_track = normalize_track_field(benchmark_track, field_name="benchmark_track")
     track_schema_version = normalize_track_field(
         track_schema_version,
@@ -3801,7 +3798,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             )
         preflight["synthetic_actuation_profile"] = actuation_profile.to_metadata()
     if latency_profile is not None:
-        latency_metadata = latency_profile.to_metadata(dt=dt)
+        latency_metadata = latency_profile.to_metadata(dt=latency_metadata_dt)
         if latency_profile.action_delay_steps > 0 and kinematics_tag != _DEFAULT_KINEMATICS:
             preflight["status"] = "skipped"
             preflight["compatibility_status"] = "incompatible"
@@ -3831,7 +3828,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "observation_noise": noise_spec,
             "observation_noise_hash": noise_hash,
             "latency_stress_profile": (
-                latency_profile.to_metadata(dt=dt) if latency_profile is not None else None
+                latency_profile.to_metadata(dt=latency_metadata_dt)
+                if latency_profile is not None
+                else None
             ),
             "latency_stress_metrics": (
                 not_available_latency_metrics() if latency_profile is not None else None
@@ -3883,7 +3882,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         actuation_profile.to_metadata() if actuation_profile is not None else None
                     ),
                     latency_stress_profile=(
-                        latency_profile.to_metadata(dt=dt) if latency_profile is not None else None
+                        latency_profile.to_metadata(dt=latency_metadata_dt)
+                        if latency_profile is not None
+                        else None
                     ),
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
@@ -3913,7 +3914,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             actuation_profile.to_metadata() if actuation_profile is not None else None
         ),
         "latency_stress_profile": (
-            latency_profile.to_metadata(dt=dt) if latency_profile is not None else None
+            latency_profile.to_metadata(dt=latency_metadata_dt)
+            if latency_profile is not None
+            else None
         ),
         "latency_stress_metrics": (
             not_available_latency_metrics() if latency_profile is not None else None
@@ -4108,7 +4111,12 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             actuation_profile.to_metadata() if actuation_profile is not None else None
         ),
         "latency_stress_profile": (
-            latency_profile.to_metadata(dt=dt) if latency_profile is not None else None
+            latency_profile.to_metadata(dt=latency_metadata_dt)
+            if latency_profile is not None
+            else None
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if latency_profile is not None else None
         ),
     }
     if benchmark_track is not None:

@@ -1138,6 +1138,41 @@ def test_load_holonomic_camera_ready_campaign_config() -> None:
     assert ppo_cfg["fallback_to_goal"] is False
 
 
+def test_load_campaign_config_treats_null_kinematics_matrix_as_default(
+    tmp_path: Path,
+) -> None:
+    """YAML null kinematics matrices should use the same default as an omitted matrix."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "null_kinematics.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: null_kinematics",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "kinematics_matrix:",
+                "latency_stress_profile:",
+                "  name: learned-policy-latency-stress-v0",
+                "  action_delay_steps: 1",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+
+    assert cfg.kinematics_matrix == ("differential_drive",)
+
+
 def test_load_paper_cross_kinematics_v1_campaign_config() -> None:
     """Cross-kinematics profile should be the only paper profile with a 3-mode matrix."""
     cfg = load_campaign_config(
@@ -2002,6 +2037,8 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
     assert summary_payload["campaign"]["latency_stress_metrics"]["held_action_ratio"] == (
         "not_available"
     )
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    assert summary_payload["campaign"]["evidence_status"] == "blocked"
     assert summary_payload["artifacts"]["actuation_envelope_json"].endswith(
         "reports/actuation_envelope_summary.json"
     )

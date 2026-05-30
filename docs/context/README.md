@@ -200,7 +200,7 @@ knowledge, not every transient iteration detail.
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
 * Issue #1556 synthetic AMV actuation stress slice:
   [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
-* Issue #1744 latency stress preflight contract:
+* Issue #1744 Latency Stress Preflight Contract (2026-05-30):
   [issue_1744_latency_stress_preflight_contract.md](issue_1744_latency_stress_preflight_contract.md)
 * Issue #1398 metric rollup reconciliation:
   [issue_1398_metric_rollup_reconciliation.md](issue_1398_metric_rollup_reconciliation.md)

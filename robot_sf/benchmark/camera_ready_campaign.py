@@ -205,6 +205,27 @@ def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
     return normalized
 
 
+def _normalize_kinematics_matrix(raw: Any) -> tuple[str, ...]:
+    """Return the campaign kinematics matrix while rejecting null entries."""
+    if raw is None:
+        return ("differential_drive",)
+    if isinstance(raw, str):
+        values = [raw]
+    elif isinstance(raw, list | tuple):
+        values = list(raw)
+    else:
+        raise TypeError("kinematics_matrix must be a string or list of strings")
+
+    normalized: list[str] = []
+    for value in values:
+        if value is None:
+            raise TypeError("kinematics_matrix entries must be strings")
+        text = str(value).strip()
+        if text:
+            normalized.append(text)
+    return tuple(normalized)
+
+
 @dataclass(frozen=True)
 class AmvProfileConfig:
     """AMV paper-profile scope contract settings."""
@@ -1599,6 +1620,9 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
     if synthetic_actuation_raw is not None and not isinstance(synthetic_actuation_raw, dict):
         raise TypeError("synthetic_actuation_profile must be a mapping when provided")
     latency_stress_raw = payload.get("latency_stress_profile")
+    kinematics_matrix = _normalize_kinematics_matrix(
+        payload.get("kinematics_matrix", ["differential_drive"])
+    )
 
     cfg = CampaignConfig(
         name=name,
@@ -1634,11 +1658,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
             payload.get("paper_interpretation_profile", "baseline-ready-core")
         ),
         preview_scenario_limit=int(payload.get("preview_scenario_limit", 100)),
-        kinematics_matrix=tuple(
-            str(value).strip()
-            for value in payload.get("kinematics_matrix", ["differential_drive"])
-            if str(value).strip()
-        ),
+        kinematics_matrix=kinematics_matrix,
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
         observation_mode=_normalize_observation_mode(
             payload.get("observation_mode"),

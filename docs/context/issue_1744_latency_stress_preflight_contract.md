@@ -56,10 +56,13 @@ uv run pytest -q tests/benchmark/test_latency_stress.py \
   tests/benchmark/test_issue_1556_amv_actuation_stress_slice.py \
   tests/benchmark/test_camera_ready_campaign.py::test_load_campaign_config_rejects_malformed_latency_stress_profile \
   tests/benchmark/test_camera_ready_campaign.py::test_load_campaign_config_rejects_invalid_latency_stress_scope \
+  tests/benchmark/test_camera_ready_campaign.py::test_load_campaign_config_treats_null_kinematics_matrix_as_default \
   tests/benchmark/test_camera_ready_campaign.py::test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata \
   tests/benchmark/test_camera_ready_campaign.py::test_run_campaign_writes_synthetic_actuation_artifacts \
+  tests/benchmark/test_map_runner_preflight_profiles.py \
   tests/benchmark/test_map_runner_utils.py::test_run_map_batch_fail_closed_when_latency_action_delay_is_not_diff_drive \
-  tests/benchmark/test_map_runner_resume_identity.py::test_scenario_identity_includes_latency_stress_profile
+  tests/benchmark/test_map_runner_resume_identity.py::test_scenario_identity_includes_latency_stress_profile \
+  tests/benchmark/test_map_runner_resume_identity.py::test_resume_identity_uses_effective_latency_profile_dt
 ```
 
 The canonical preflight smoke for the anchor config is:

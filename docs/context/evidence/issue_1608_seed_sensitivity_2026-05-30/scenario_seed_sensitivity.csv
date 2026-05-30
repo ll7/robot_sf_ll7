@@ -1,0 +1,49 @@
+scenario_id,classification,seed_count,planner_count,mean_success,min_seed_success,max_seed_success,seed_success_range,hard_seeds,easy_seeds,most_brittle_planner,most_brittle_planner_success_range,missing_cell_count
+classic_cross_trap_high,seed_sensitive,10,4,0.7000,0.0000,1.0000,1.0000,111 112 115,113 114 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_cross_trap_medium,seed_sensitive,10,4,0.8000,0.0000,1.0000,1.0000,111 115,112 113 114 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_doorway_high,seed_sensitive,10,4,0.6750,0.0000,1.0000,1.0000,112 113 117 118,111 114 115 116 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_doorway_low,seed_sensitive,10,4,0.8500,0.0000,1.0000,1.0000,111,112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_doorway_medium,seed_sensitive,10,4,0.6250,0.0000,1.0000,1.0000,114 115 117 118,111 112 113 116 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_group_crossing_high,seed_sensitive,10,4,0.8250,0.0000,1.0000,1.0000,117 119,111 112 113 114 115 116 118 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_group_crossing_low,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,117,111 112 113 114 115 116 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_head_on_corridor_low,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,116,111 112 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_head_on_corridor_medium,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,116,111 112 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_merging_low,seed_sensitive,10,4,0.7000,0.0000,1.0000,1.0000,111 117 119,112 113 114 115 116 118 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_urban_crossing_medium,seed_sensitive,10,4,0.8250,0.0000,1.0000,1.0000,112 116,111 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_blind_corner,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,116,111 112 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_circular_crossing,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,111,112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_intersection_no_gesture,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,116,111 112 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_intersection_proceed,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,116,111 112 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_intersection_wait,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,116,111 112 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_join_group,seed_sensitive,10,4,0.6000,0.0000,1.0000,1.0000,112 113 115 116,111 114 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_narrow_hallway,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,116,111 112 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_perpendicular_traffic,seed_sensitive,10,4,0.9000,0.0000,1.0000,1.0000,116,111 112 113 114 115 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_group_crossing_medium,seed_sensitive,10,4,0.9000,0.2500,1.0000,0.7500,117,111 112 113 114 115 116 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_merging_medium,seed_sensitive,10,4,0.8500,0.2500,1.0000,0.7500,112 115,111 113 114 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_overtaking_low,seed_sensitive,10,4,0.9250,0.2500,1.0000,0.7500,120,111 112 113 114 115 116 117 118 119,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+classic_overtaking_medium,seed_sensitive,10,4,0.9250,0.2500,1.0000,0.7500,120,111 112 113 114 115 116 117 118 119,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_exiting_elevator,seed_sensitive,10,4,0.8750,0.2500,1.0000,0.7500,113,111 112 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,1.0000,0
+francis2023_leave_group,seed_sensitive,10,4,0.7750,0.5000,1.0000,0.5000,113,111 112 114 115 116 117 118 119 120,hybrid_rule_v3_fast_progress_static_escape_continuous,1.0000,0
+classic_station_platform_medium,not_seed_sensitive,10,4,0.0500,0.0000,0.2500,0.2500,111 112 113 114 115 116 117 118 119 120,,hybrid_rule_v3_fast_progress_static_escape_continuous,1.0000,0
+classic_t_intersection_low,not_seed_sensitive,10,4,0.9750,0.7500,1.0000,0.2500,,111 112 113 114 115 116 117 118 119 120,hybrid_rule_v3_fast_progress_static_escape_continuous,1.0000,0
+classic_t_intersection_medium,not_seed_sensitive,10,4,0.9750,0.7500,1.0000,0.2500,,111 112 113 114 115 116 117 118 119 120,hybrid_rule_v3_fast_progress_static_escape_continuous,1.0000,0
+classic_bottleneck_high,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+classic_bottleneck_low,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+classic_bottleneck_medium,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+classic_cross_trap_low,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+classic_realworld_double_bottleneck_high,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_accompanying_peer,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_crowd_navigation,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_down_path,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_entering_elevator,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_entering_room,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_exiting_room,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_following_human,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_frontal_approach,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_leading_human,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_narrow_doorway,not_seed_sensitive,10,4,0.0000,0.0000,0.0000,0.0000,111 112 113 114 115 116 117 118 119 120,,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_parallel_traffic,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_pedestrian_obstruction,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_pedestrian_overtaking,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_robot_crowding,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0
+francis2023_robot_overtaking,not_seed_sensitive,10,4,1.0000,1.0000,1.0000,0.0000,,111 112 113 114 115 116 117 118 119 120,scenario_adaptive_hybrid_orca_v2_collision_guard,0.0000,0

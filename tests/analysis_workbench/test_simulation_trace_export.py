@@ -53,3 +53,43 @@ def test_simulation_trace_export_requires_monotonic_steps() -> None:
 
     with pytest.raises(SimulationTraceExportValidationError, match="/frames/1/step"):
         simulation_trace_export_from_dict(payload, source=FIXTURE_PATH)
+
+
+def test_simulation_trace_export_requires_monotonic_time() -> None:
+    """Workbench traces should expose increasing timestamps for playback."""
+
+    payload = load_simulation_trace_export(FIXTURE_PATH).to_dict()
+    payload["frames"][1]["time_s"] = 0.0
+
+    with pytest.raises(SimulationTraceExportValidationError, match="/frames/1/time_s"):
+        simulation_trace_export_from_dict(payload, source=FIXTURE_PATH)
+
+
+def test_simulation_trace_export_schema_errors_keep_numeric_frame_order() -> None:
+    """Schema errors should sort array indices numerically, not lexicographically."""
+
+    payload = load_simulation_trace_export(FIXTURE_PATH).to_dict()
+    template_frame = payload["frames"][-1]
+    while len(payload["frames"]) <= 10:
+        next_frame = dict(template_frame)
+        next_frame["robot"] = dict(template_frame["robot"])
+        next_frame["pedestrians"] = [
+            dict(pedestrian) for pedestrian in template_frame["pedestrians"]
+        ]
+        next_frame["planner"] = dict(template_frame["planner"])
+        next_frame["planner"]["selected_action"] = dict(
+            template_frame["planner"]["selected_action"]
+        )
+        next_frame["step"] = len(payload["frames"])
+        next_frame["time_s"] = float(len(payload["frames"]))
+        payload["frames"].append(next_frame)
+    payload["frames"][2]["unexpected"] = True
+    payload["frames"][10]["unexpected"] = True
+
+    with pytest.raises(SimulationTraceExportValidationError) as exc_info:
+        simulation_trace_export_from_dict(payload, source=FIXTURE_PATH)
+
+    errors = exc_info.value.errors
+    assert next(
+        index for index, error in enumerate(errors) if error.startswith("/frames/2:")
+    ) < next(index for index, error in enumerate(errors) if error.startswith("/frames/10:"))

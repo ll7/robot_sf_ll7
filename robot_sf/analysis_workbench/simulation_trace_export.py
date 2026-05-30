@@ -123,7 +123,7 @@ def _schema_validation_errors(payload: Mapping[str, Any]) -> list[str]:
         f"{_json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(
             validator.iter_errors(payload),
-            key=lambda err: tuple(str(path_part) for path_part in err.absolute_path),
+            key=lambda err: list(err.absolute_path),
         )
     ]
 

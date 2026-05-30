@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.learned_risk_surface import (
     LocalRiskSurfaceSpec,
@@ -98,9 +99,5 @@ def test_risk_surface_adapter_fails_closed_without_robot_state() -> None:
 
 def test_risk_surface_contract_rejects_invalid_resolution() -> None:
     """Invalid geometry should be rejected before any planner run."""
-    try:
+    with pytest.raises(RiskSurfaceUnavailable, match="resolution"):
         LocalRiskSurfaceSpec(resolution=0.0)
-    except RiskSurfaceUnavailable as exc:
-        assert "resolution" in str(exc)
-    else:  # pragma: no cover - assertion clarity
-        raise AssertionError("expected RiskSurfaceUnavailable")

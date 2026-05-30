@@ -88,7 +88,7 @@ class LocalRiskSurface:
             raise RiskSurfaceUnavailable("risk surface shape must match spec grid height and width")
         if not np.all(np.isfinite(values)):
             raise RiskSurfaceUnavailable("risk surface values must be finite")
-        if float(values.min(initial=0.0)) < 0.0 or float(values.max(initial=0.0)) > 1.0:
+        if float(np.min(values)) < 0.0 or float(np.max(values)) > 1.0:
             raise RiskSurfaceUnavailable("risk surface values must be normalized to [0, 1]")
         if self.status != "available":
             raise RiskSurfaceUnavailable("risk surface status must be 'available'")

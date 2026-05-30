@@ -1,4 +1,4 @@
-# Issue #1721 Benchmark Track Metadata Audit
+# Issue #1721 Benchmark Track Metadata Audit (2026-05-30)
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1721>
 
@@ -34,11 +34,13 @@ rg -l "benchmark_success|campaign_summary|scenario_seed|success_rate|collision|s
   docs/context docs/context/evidence -g '*.md' -g '*.json' -g '*.csv' -g '*.yaml'
 ```
 
-Observed result: no tracked files under `docs/context/evidence/` currently contain
-`benchmark_track` or `track_schema_version`. The track-aware contract is present in
-`docs/benchmark_spec.md`, `docs/context/issue_1612_observation_track_architecture.md`, current
-benchmark tests, and current benchmark/runtime code, but the preserved compact evidence bundles
-listed below were produced before that metadata became part of benchmark identity.
+Observed result: the preserved compact evidence rows and summaries under
+`docs/context/evidence/` do not record explicit `benchmark_track` or `track_schema_version`
+metadata. PR-introduced caveat text may mention those field names, but it does not turn legacy rows
+into track-known evidence. The track-aware contract is present in `docs/benchmark_spec.md`,
+`docs/context/issue_1612_observation_track_architecture.md`, current benchmark tests, and current
+benchmark/runtime code, but the preserved compact evidence bundles listed below were produced before
+that metadata became part of benchmark identity.
 
 ## Inventory
 

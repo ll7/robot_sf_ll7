@@ -272,10 +272,7 @@ def _path_dynamic_clearance(
     if len(world_points) < 2 or ped_positions.size == 0:
         return None
     distances = [
-        min(
-            _point_segment_distance(ped_pos, start, stop)
-            for start, stop in pairwise(world_points)
-        )
+        min(_point_segment_distance(ped_pos, start, stop) for start, stop in pairwise(world_points))
         for ped_pos in ped_positions
     ]
     return float(min(distances) - float(ped_radius)) if distances else None

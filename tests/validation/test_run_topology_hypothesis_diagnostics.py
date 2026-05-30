@@ -70,11 +70,14 @@ def test_distinct_path_uses_frozenset_signatures_without_list_conversion() -> No
         clearance_map=np.zeros((1, 1), dtype=bool),
         topology_signature=frozenset({(0, 1)}),
     )
-    assert _distinct_path(
-        path=[(0, 0), (0, 1), (0, 2)],
-        topology_signature=frozenset({(0, 1)}),
-        accepted=[route],
-    ) is False
+    assert (
+        _distinct_path(
+            path=[(0, 0), (0, 1), (0, 2)],
+            topology_signature=frozenset({(0, 1)}),
+            accepted=[route],
+        )
+        is False
+    )
 
 
 def test_find_alternative_paths_recovers_two_wall_gaps() -> None:

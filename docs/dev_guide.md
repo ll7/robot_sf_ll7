@@ -1394,7 +1394,7 @@ Use the following templates for specific tasks.
 - [issue creator skill](../.agents/skills/gh-issue-creator/SKILL.md) - Turn vague prompts into structured issues
 - [issue template auditor skill](../.agents/skills/gh-issue-template-auditor/SKILL.md) - Review and repair underspecified issues
 - [priority assessor skill](../.agents/skills/gh-issue-priority-assessor/SKILL.md) - Review Project #5 priority inputs against the rubric and explain plausibility
-- [PR opener skill](../.agents/skills/gh-pr-opener/SKILL.md) - Open draft PRs with the repository template, issue-scope verification, and conservative readiness freshness checks
+- [PR opener skill](../.agents/skills/gh-pr-opener/SKILL.md) - Open ready PRs by default with the repository template, issue-scope verification, and conservative readiness freshness checks
 - [design doc template](./templates/design-doc-template.md)
 - [PR template](../.github/PULL_REQUEST_TEMPLATE/pr_default.md)
 

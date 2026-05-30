@@ -9,7 +9,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | --- | --- | --- |
 | Not sure which skill applies | `skill-picker` | none |
 | Take the next eligible issue to PR | `goal-issue-implementation` | `gh-issue-autopilot` |
-| Execute one selected issue to draft PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |
+| Execute one selected issue to ready PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |
 | Clarify or repair issue contracts | `issue-contract-maintainer` | legacy aliases only when explicitly named |
 | Fix PR review comments | `gh-pr-comment-fixer` | `pr-ready-check` |
 | Open a ready PR | `gh-pr-opener` | `artifact-provenance` |
@@ -56,7 +56,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 - `goal-issue-implementation` owns the multi-issue loop and stop condition.
 - `gh-issue-sequencer` owns Project #5 queue ordering, with current maintainer direction and fresh
   evidence allowed to override score order.
-- `gh-issue-autopilot` owns one selected issue -> branch -> validation -> draft PR.
+- `gh-issue-autopilot` owns one selected issue -> branch -> validation -> ready PR.
 - `gh-issue-creator` owns new issue creation.
 - `issue-contract-maintainer` owns ambiguity, template, and decision repair.
 - Use Project #5 `Priority Score` as an advisory queue-ordering signal; use
@@ -123,7 +123,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `gh-issue-autopilot` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `artifact-provenance` | Autonomous issue-to-PR workflow from next eligible issue to draft PR with consistent metadata handling. |
+| `gh-issue-autopilot` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `artifact-provenance` | Autonomous issue-to-PR workflow from next eligible issue to ready PR with consistent metadata handling. |
 | `gh-issue-clarifier` | atomic | context | yes | no | no | none | Clarify ambiguous GitHub issues by tightening scope and acceptance criteria, proposing solution options with pros/cons, and marking decision-required issues when maintainer input is needed. |
 | `gh-issue-creator` | atomic | context | yes | no | no | none | Create structured GitHub issues from vague prompts using repo templates, conservative assumptions, and Project #5 metadata. |
 | `gh-issue-priority-assessor` | atomic | context | yes | no | no | none | LLM-backed review workflow for Project #5 priority inputs; assess plausibility, propose values with uncertainty, and optionally apply explicit opt-in updates. |

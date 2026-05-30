@@ -131,7 +131,9 @@ Use these shapes when splitting a roadmap row into implementation work.
 Validation for this roadmap:
 
 ```bash
-gh issue view 1618 1657 1675 1620 1621 1622 1623 1624 1625 1626 1627 1628 1629
+for issue in 1618 1657 1675 1685 1620 1621 1622 1623 1624 1625 1626 1627 1628 1629; do
+  gh issue view "$issue" --json number,title,state,labels,url
+done
 rg -n "Issue #1618|Issue #1657|Issue #1675|learned-policy registry|risk-surface" docs/context
 BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
 git diff --check origin/main...HEAD

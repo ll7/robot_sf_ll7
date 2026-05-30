@@ -48,6 +48,8 @@ def test_summarize_run_reports_queue_job_and_slowest_steps() -> None:
     assert summary.run_id == 123
     assert summary.queue_seconds == 10.0
     assert summary.job_seconds == 170.0
+    assert summary.slowest_jobs[0].name == "ci"
+    assert summary.slowest_jobs[0].duration_seconds == 170.0
     assert [step.name for step in summary.slowest_steps] == [
         "Unit tests",
         "Validation smoke tests",
@@ -63,8 +65,53 @@ def test_format_markdown_includes_phase_totals() -> None:
 
     assert "Run 123" in markdown
     assert "| queue | 10.0s |" in markdown
+    assert "| ci | 170.0s |" in markdown
     assert "| Unit tests | 120.0s |" in markdown
     assert "| Validation smoke tests | 30.0s |" in markdown
+
+
+def test_format_markdown_escapes_table_separators() -> None:
+    """Markdown tables should not break when GitHub names contain pipes."""
+    payload = _sample_run_payload()
+    payload["jobs"][0]["name"] = "ci | linux"
+    payload["jobs"][0]["steps"][1]["name"] = "Unit | tests"
+
+    markdown = format_markdown(summarize_run(payload, top=2))
+
+    assert "| ci \\| linux | 170.0s |" in markdown
+    assert "| Unit \\| tests | 120.0s |" in markdown
+
+
+def test_summarize_run_ignores_malformed_job_payloads() -> None:
+    """Malformed GitHub job payloads should degrade to an empty timing summary."""
+    payload = {
+        "databaseId": 123,
+        "displayTitle": "sample",
+        "createdAt": "2026-05-05T11:00:00Z",
+        "updatedAt": "2026-05-05T11:03:00Z",
+        "jobs": None,
+    }
+
+    summary = summarize_run(payload)
+
+    assert summary.slowest_jobs == []
+    assert summary.slowest_steps == []
+    assert summary.queue_seconds == 0.0
+    assert summary.job_seconds == 0.0
+
+
+def test_format_markdown_reports_missing_step_timestamps() -> None:
+    """Markdown should still expose job timing when steps lack timestamps."""
+    payload = _sample_run_payload()
+    for job in payload["jobs"]:
+        for step in job["steps"]:
+            step.pop("startedAt", None)
+            step.pop("completedAt", None)
+
+    markdown = format_markdown(summarize_run(payload))
+
+    assert "| ci | 170.0s |" in markdown
+    assert "No step timestamps reported" in markdown
 
 
 def test_main_reads_run_json_and_prints_markdown(tmp_path, capsys) -> None:

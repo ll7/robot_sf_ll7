@@ -208,12 +208,9 @@ sequencing record; use the GitHub issues for execution.
 
 ## Validation Notes
 
-This plan was refined with Qwen-only delegated reads:
-
-- `Qwen3.6-27B` scout:
-  `.git/codex-agent-runs/20260530T053204Z_qwen_qwen-scout-improve-memo/RESULT.md`
-- `Step-3.7-Flash` rewrite draft:
-  `.git/codex-agent-runs/20260530T053204Z_qwen_qwen-step-rewrite-memo/RESULT.md`
+This plan was refined with Qwen-only delegated reads. Those worker artifacts live under the
+gitignored `.git/codex-agent-runs/` cache, so they are local drafting aids rather than durable
+review evidence.
 
 The scout output was treated as a lead, not final truth. Local checks confirmed overlap with:
 

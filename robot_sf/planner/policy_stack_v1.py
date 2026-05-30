@@ -167,6 +167,7 @@ class PolicyStackV1Adapter:
             selected_mode = "fallback"
             shield_intervened = True
             step_status_counts["fallback"] += 1
+            proposal_commands["shield_stop"] = [0.0, 0.0]
             rejection_reasons["shield_stop"] = (
                 f"hard stop clearance below {float(self.config.hard_stop_clearance):.3f} m"
             )
@@ -209,6 +210,8 @@ class PolicyStackV1Adapter:
         self._last_step = {
             "selected_proposal_key": selected_key,
             "selected_mode": selected_mode,
+            "selected_command": [float(command[0]), float(command[1])],
+            "executed_command": [float(command[0]), float(command[1])],
             "candidate_count": len(candidates),
             "rejected_count": rejected_count,
             "failed_count": failed_count,

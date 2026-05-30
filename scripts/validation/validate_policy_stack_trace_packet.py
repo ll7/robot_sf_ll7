@@ -87,9 +87,21 @@ def _validate_contract_sections(packet: dict[str, Any]) -> list[str]:
     status_policy = packet.get("status_policy")
     if not isinstance(status_policy, dict):
         errors.append("status_policy must be present")
-    elif "not_available" not in status_policy.get("not_available_statuses", []):
+    else:
+        errors.extend(_validate_status_policy(status_policy))
+    return errors
+
+
+def _validate_status_policy(status_policy: dict[str, Any]) -> list[str]:
+    """Validate fallback/degraded and non-executable status policy labels."""
+    errors: list[str] = []
+    if set(status_policy.get("fallback_statuses", [])) != {"fallback"}:
+        errors.append("status_policy.fallback_statuses changed")
+    if set(status_policy.get("degraded_statuses", [])) != {"degraded"}:
+        errors.append("status_policy.degraded_statuses changed")
+    if "not_available" not in status_policy.get("not_available_statuses", []):
         errors.append("status_policy must identify not_available statuses")
-    elif set(status_policy.get("non_executable_statuses", [])) != {
+    if set(status_policy.get("non_executable_statuses", [])) != {
         "failed",
         "not_available",
         "rejected",
@@ -114,7 +126,19 @@ def _validate_trace_section(packet: dict[str, Any]) -> list[str]:
         ranking = trace["last_step"].get("candidate_ranking")
         if not isinstance(ranking, list) or not ranking:
             errors.append("trace.last_step.candidate_ranking must be non-empty")
+        executed_command = trace["last_step"].get("executed_command")
+        if not _is_command_pair(executed_command):
+            errors.append("trace.last_step.executed_command must be a two-value command")
     return errors
+
+
+def _is_command_pair(value: object) -> bool:
+    """Return whether a value is a JSON-style two-number command pair."""
+    return (
+        isinstance(value, list)
+        and len(value) == 2
+        and all(isinstance(item, int | float) for item in value)
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

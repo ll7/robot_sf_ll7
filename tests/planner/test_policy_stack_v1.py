@@ -149,6 +149,7 @@ def test_policy_stack_arbitration_trace_packet_contract() -> None:
     ]
     assert packet["trace"]["last_step"]["proposal_status_counts"]["not_available"] == 1
     assert packet["trace"]["last_step"]["candidate_ranking"][0]["proposal_key"] == "goal"
+    assert packet["trace"]["last_step"]["executed_command"] == [1.0, 0.0]
     assert stack.last_decision() == packet["trace"]["last_step"]
     json.dumps(packet, allow_nan=False)
 
@@ -226,6 +227,13 @@ def test_policy_stack_hard_shield_stops_unsafe_moving_command_and_resets() -> No
     assert diagnostics["shield_intervention_count"] == 1
     assert diagnostics["last_step"]["shield_intervened"] is True
     assert diagnostics["last_step"]["selected_proposal_key"] == "shield_stop"
+    assert diagnostics["last_step"]["selected_command"] == [0.0, 0.0]
+    assert diagnostics["last_step"]["executed_command"] == [0.0, 0.0]
+    assert diagnostics["last_step"]["proposal_commands"]["shield_stop"] == [0.0, 0.0]
+
+    packet = stack.arbitration_trace_packet()
+    assert packet["trace"]["last_step"]["selected_proposal_key"] == "shield_stop"
+    assert packet["trace"]["last_step"]["executed_command"] == [0.0, 0.0]
 
     stack.reset()
     assert stack.diagnostics()["steps"] == 0

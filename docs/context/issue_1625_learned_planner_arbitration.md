@@ -32,7 +32,7 @@ trained without hindsight leakage.
 | `docs/context/issue_1023_experimental_benchmark_candidates.md` | Records scenario-adaptive hybrid ORCA evidence and overfitting caveats. | Shows selector-style rows can be valuable, but benchmark-distribution knowledge must be treated cautiously. |
 | `docs/context/policy_search/experiment_ledger.md` | Compact candidate, stage, success, collision, and decision history. | Useful for episode-level labels; too coarse for safe per-step learned switching. |
 | `docs/context/issue_1618_learned_policy_adapter_interface.md` | Learned-policy observation, action, provenance, and fallback contract. | Required metadata boundary if the arbiter itself becomes a learned local policy. |
-| `docs/context/issue_1624_hybrid_learning_architecture.md` | Hybrid-learning architecture scaffold. | Places arbitration as a possible future arbiter over residual, risk, imitation, and classical proposal branches. |
+| Issue #1624 hybrid-learning architecture proposal | Open architecture proposal; not yet a durable context note on `main`. | Places arbitration as a possible future arbiter over residual, risk, imitation, and classical proposal branches, but should not be treated as accepted repository context until merged. |
 
 ## Candidate Arbitration Formulations
 
@@ -130,8 +130,8 @@ coarse to justify a learned runtime arbiter.
 
 ## Follow-Up Boundary
 
-No implementation issue is opened from this assessment. A future follow-up should be created only
-when it can name a concrete trace packet and smoke command, for example:
+This assessment opens [Issue #1751](https://github.com/ll7/robot_sf_ll7/issues/1751) as a
+docs/tooling-first follow-up because it can name a concrete trace packet boundary:
 
 `workflow: define policy_stack_v1 arbitration trace packet`
 

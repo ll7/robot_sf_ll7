@@ -215,6 +215,8 @@ knowledge, not every transient iteration detail.
   [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
 * Issue #1618 learned local-policy adapter interface:
   [issue_1618_learned_policy_adapter_interface.md](issue_1618_learned_policy_adapter_interface.md)
+* Issue #1627 learned-policy transfer benchmark design:
+  [issue_1627_learned_policy_transfer_benchmark.md](issue_1627_learned_policy_transfer_benchmark.md)
 * Issue #1677 SiT Dataset Terms Audit (2026-05-29):
   [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
 * Issue #1689 Simulation Trace Export Schema (2026-05-30):

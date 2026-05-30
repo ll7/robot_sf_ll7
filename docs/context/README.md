@@ -132,6 +132,8 @@ knowledge, not every transient iteration detail.
   [issue_1416_converted_map_cache_evaluation.md](issue_1416_converted_map_cache_evaluation.md)
 * Issue #1246 graded observation levels:
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
+* Issue #1612 parallel observation-space benchmark tracks:
+  [issue_1612_observation_track_architecture.md](issue_1612_observation_track_architecture.md)
 * Issue #1659 LiDAR occupancy adapter:
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:

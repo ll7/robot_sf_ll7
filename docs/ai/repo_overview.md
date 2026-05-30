@@ -13,20 +13,20 @@ This document is the shortest reliable orientation for Coding Agents working in
 - reproducible training and artifact workflows,
 - paper-facing benchmark documentation and provenance notes.
 
-The repository is optimized for reproducible experiments, benchmark comparability, and issue-driven
-delivery rather than generic robotics breadth.
+The repository is optimized for research progress through reproducible experiments, benchmark
+comparability, and issue-driven delivery rather than generic robotics breadth. Process should
+support that progress, not displace it.
 
 ## First Files To Read
 
 Start here before expanding:
 
 1. `AGENTS.md`
-2. `CLAUDE.md` when the agent runtime supports it
-3. `memory/MEMORY.md` for stable repo-local memory
-4. `.specify/memory/constitution.md`
-5. `docs/dev_guide.md`
-6. `docs/code_review.md`
-7. `.agent/PLANS.md` for non-trivial work
+2. `memory/MEMORY.md` for stable repo-local memory
+3. `.specify/memory/constitution.md`
+4. `docs/dev_guide.md`
+5. `docs/code_review.md`
+6. `.agent/PLANS.md` for non-trivial work
 
 Then branch by task type:
 
@@ -56,7 +56,8 @@ Then branch by task type:
   they support durable benchmark or context decisions
 - `docs/context/INDEX.md`: retrieval-first catalog for current context-note entry points, status
   rules, optional context tools, and curated context-pack scopes
-- `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context
+- `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context;
+  keep this tree indexed, pruned, and treated as a retrieval surface rather than a bulk dump
 - `memory/`: repo-local Markdown memory tree for stable cross-session facts and concise retrieval
 
 ### Existing agent workflow surfaces
@@ -78,26 +79,27 @@ Then branch by task type:
   traceability conventions
 - `docs/context/issue_1181_ml_intern_experiment_assistant.md`: `ml-intern` assessment and #1191
   decision to keep the useful no-edit planning, command-budget, trace/privacy, and one-smoke
-  workflow ideas inside the Codex-native proof-first path unless a future opt-in runtime smoke is
+  workflow ideas inside the repo-native validation path unless a future opt-in runtime smoke is
   explicitly approved
-- `CLAUDE.md` + `memory/MEMORY.md`: startup-oriented memory/index pair for agent runtimes that
-  support imported project instructions
+- `memory/MEMORY.md`: startup-oriented memory/index surface for stable repo facts
 - `.agents/skills/quality-playbook/`, `.agents/skills/agentic-eval/`,
   `.agents/skills/review-and-refactor/`, and `.agents/skills/update-docs-on-code-change/`: quality
-  and maintenance skills for proof-first changes, AI-output evaluation, narrow refactors, and
-  doc-sync
+  and maintenance skills for risk-proportional validation, AI-output evaluation, narrow refactors,
+  and doc-sync
 
 ## Working Style Defaults
 
 - Prefer config-first commands over long CLI override chains.
 - Use `scripts/dev/` entrypoints where available.
+- Prefer aggressive exploration when status is clearly labeled as exploratory, diagnostic, blocked,
+  or not yet benchmark evidence.
 - Preserve benchmark claims conservatively.
 - Treat planner provenance as part of correctness, not just documentation polish.
 - Distinguish observed evidence from hypothesis in findings and reports.
 - Prefer `autoresearch` for measurable improvement loops and `auto-improvement` for targeted
   refinement passes.
 - Prefer `context-map` before multi-file work, `what-context-needed` when context is missing,
-  `quality-playbook` for proof-first planning, `agentic-eval` for AI workflow outputs,
+  `quality-playbook` for risk-proportional validation planning, `agentic-eval` for AI workflow outputs,
   `review-and-refactor` for surgical improvements, and `update-docs-on-code-change` when a code
   change would stale docs.
 

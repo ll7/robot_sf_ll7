@@ -274,11 +274,9 @@ agent context.
   `memory/decisions/`, `memory/experiments/`, `memory/failures/`, and `memory/benchmarks/`.
 - Use the experiment naming pattern `memory/experiments/YYYY-MM-DD_<topic>.md`.
 - Keep `memory/MEMORY.md` short and push detail into linked topic files so it stays compatible with
-  Claude-style startup loading.
+  startup loading in agent runtimes that read project files.
 - Use `docs/context/` for issue execution history and validation detail; use `memory/` only for
   knowledge worth reusing across future sessions.
-- If Claude Code is in use, `CLAUDE.md` imports both `AGENTS.md` and `memory/MEMORY.md` so the
-  shared instructions and memory index load together.
 - Optional MCP integration should expose the Markdown files directly; do not add a retrieval
   database or vector store unless the repository's retrieval-deferral policy changes.
 
@@ -479,8 +477,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
   - Prompts are unique to the llm provider used. Adjust accordingly.
   - Canonical AI assistant content lives in `.agents/`:
     - Canonical skills live in `.agents/skills/`.
-    - `.agents/skills/` is mirrored at `.codex/skills/`, `.opencode/skills/`, and
-      `.claude/skills/`.
+    - `.agents/skills/` is mirrored at `.codex/skills/` and `.opencode/skills/`.
     - `.agents/prompts/codex/` is mirrored at `.codex/prompts/`.
     - `.agents/prompts/github/` is mirrored at `.github/prompts/`.
     - `.agents/agents/github/` is mirrored at `.github/agents/`.
@@ -1378,7 +1375,8 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
   document any meaningful remaining findings in the PR when they affect the change.
 - Docs updated (README in feature folder, diagrams if changed).
 - Feature branch synced with latest `origin/main` before PR creation, then validation scripts run
-  and pass; optional benchmark if perf‑sensitive.
+  and pass for higher-risk branches. Docs-only and low-risk instruction branches may use the
+  cheaper path from `docs/ai/ai-workflow.md` when the PR clearly states which checks were skipped.
 - CI green (lint + tests) and PR opened with appropriate links.
 
 ## Templates

@@ -1,6 +1,6 @@
 ---
 name: quality-playbook
-description: Repo-wide proof-first workflow for non-trivial changes with context, risk, validation, and
+description: Repo-wide risk-proportional validation workflow for non-trivial changes with context, risk, validation, and
   follow-through.
 category: validation
 kind: policy
@@ -19,8 +19,8 @@ aliases:
 
 ## Purpose
 
-Provide a minimal, reusable structure for higher-risk changes that need stronger validation and explicit
-risk accounting.
+Provide a minimal proof-first workflow for higher-risk changes that need stronger validation and
+explicit risk accounting without displacing research progress.
 
 ## Workflow
 
@@ -37,8 +37,8 @@ risk accounting.
 
 ## Guardrails
 
-- Avoid scope expansion and broad refactors during proof-first tasks.
-- Do not count fallback/degraded operation as success unless explicitly requested.
+- Avoid scope expansion and broad refactors during validation-sensitive tasks.
+- Do not count fallback/degraded benchmark operation as success evidence.
 - Keep follow-up work as explicit backlog items, not silent omissions.
 
 ## Output

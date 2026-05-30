@@ -6,11 +6,25 @@ Prefer reusable shell entry points under `scripts/dev/` for automation and AI sk
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
 Keep prompts, instructions, and handoff notes as streamlined and token-efficient as possible while preserving the same meaning and constraints.
 
+## Maintainer Value Hierarchy
+
+Optimize first for concrete research progress on social-navigation simulation, benchmarking, and
+planner exploration. Apply proof, documentation, and process in proportion to risk:
+
+- benchmark, metric, schema, model-provenance, and paper-facing claims still require strong,
+  reproducible evidence before they are treated as established;
+- exploratory planner or research work may move faster when its status is clearly labeled as
+  exploratory, diagnostic, blocked, or not yet benchmark evidence;
+- low-risk docs, metadata, and instruction changes may use a cheaper validation path when the user
+  explicitly asks for it, as long as the skipped checks are named in the PR or handoff;
+- current maintainer direction overrides stale workflow prose. When an instruction appears to
+  conflict with the user's current priority, follow the current priority, call out the conflict, and
+  propose or make the smallest doc update needed to remove the drift.
+
 ## Agent Context Stack
 Treat the following files as the repository-native context stack for Agent-style agents:
 
 - `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
-- `CLAUDE.md`: Claude Code entrypoint that imports `AGENTS.md` plus the repo-local memory index.
 - `memory/MEMORY.md`: concise repo-local memory index for stable cross-session facts and links to
   detailed topic files under `memory/`.
 - `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
@@ -18,12 +32,12 @@ Treat the following files as the repository-native context stack for Agent-style
   rules, optional context tools, and curated context-pack scopes.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
-  mirrored at `.codex/skills/`, `.opencode/skills/`, and `.claude/skills/` for compatibility.
+  mirrored at `.codex/skills/` and `.opencode/skills/` for compatibility.
 - `.agents/prompts/`, `.agents/commands/`, and `.agents/agents/`: canonical prompt, command,
   and GitHub agent sources, mirrored into tool-specific compatibility paths when possible.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
 
-Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments.
+Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments, and avoid loading broad context-note indexes unless the task actually needs them.
 
 ## Local Machine Context (Gitignored)
 
@@ -77,15 +91,17 @@ When working in a linked Git worktree, detect bootstrap state before running exp
 
 ## Knowledge Capture & Context Notes
 
-Treat `docs/context/` as the repository's Markdown knowledge base for agent handoff, not as a dump
-of incidental scratch notes.
+Treat `docs/context/` as the repository's Markdown knowledge base for issue execution history and
+agent handoff, not as a dump of incidental scratch notes. This tree should stay aggressively
+indexed, pruned, and refactored; stale or superseded notes should be marked or removed when touched.
+The broader retrieval-architecture redesign is tracked in GitHub issue #1714.
 
 Treat `memory/` as the complementary repo-local memory layer for stable cross-session facts:
 architecture summaries, durable decisions, reusable experiment outcomes, known failure modes, and
 benchmark memory boundaries. Keep `memory/MEMORY.md` concise and update linked topic files for
 detail instead of turning the index into another full instruction document.
 
-- For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
+- For relevant non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
   handoff context in Markdown when that context would otherwise be trapped in chat, PR text, or
   issue comments.
 - Use `docs/context/` for issue-specific execution history and validation detail; use `memory/`
@@ -150,10 +166,11 @@ The project enforces Ruff with a 4-space indent, 100-character lines, and double
 ## Testing Guidelines
 Target the full `tests/` suite before pushing changes and rerun targeted slow markers when behavior or performance may shift. GUI and physics suites are mandatory for changes touching rendering, SocialForce integration, or pedestrian dynamics. Record notable validation runs in `docs/context/` or other tracked notes when benchmarks change, and only keep small explicit manifests or reviewable artifacts under version control. Do not treat worktree-local `output/` as the durable record. Update or add smoke tests under `scripts/validation/` when introducing new critical workflows.
 
-## Proof-First Validation
+## Research-Progress-First Validation
 
-Any new change, skill, benchmark-facing update, or test must be verified with concrete evidence,
-not just implemented.
+Research progress is the primary goal. Verification should be strong where claims are strong and
+cheap where risk is low. Any benchmark-facing, metric-facing, schema-facing, skill, or test change
+must still be backed by concrete evidence appropriate to the risk.
 
 - New local planners must be proven with an actual benchmark or targeted execution path that shows
   they run correctly in this repository.
@@ -186,8 +203,10 @@ Prefer proof that matches the risk:
 - metrics/schema changes: targeted assertions plus a reproducible sample or fixture,
 - docs/skill/instruction changes: verify referenced paths, commands, and discoverability surfaces.
 
-Do not present a change as complete until the proof is recorded in the validation notes, PR text, or
-issue follow-up.
+Do not present benchmark, metric, schema, model-provenance, or paper-facing changes as complete
+until the proof is recorded in the validation notes, PR text, or issue follow-up. For docs-only or
+low-risk instruction changes, it is acceptable to skip expensive gates when the skipped checks are
+explicitly named.
 
 ## Commit & Pull Request Workflow
 Adopt the conventional commit style seen in history (e.g., `refactor: adjust observation scaling`).
@@ -197,6 +216,9 @@ screenshots or short GIFs when UI or playback output changes, and note any new a
 the feature branch, and then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`; readiness
 proof from before that sync is stale and must not be used for PR creation. Ensure CI stays green by
 resolving lint or test failures locally before requesting review.
+- Docs-only and low-risk instruction branches may use a cheaper official path when the user asks for
+  it: inspect the diff, verify referenced paths where practical, and state that the full readiness
+  gate was intentionally not run.
 - Do not wait until PR creation to pick up `main` branch improvements on long-lived branches.
   Merge the latest `origin/main` into the current branch at the start of active work, and repeat
   that sync before PR creation so validation covers the newest shared baseline.
@@ -235,6 +257,8 @@ Do not treat plans as throwaway scratch text when they influence benchmark seman
 
 When working issue batches or Project #5 updates:
 
+- treat Project #5 ordering and score fields as advisory planning inputs, not as hard authority over
+  current maintainer direction or fresh evidence,
 - use REST (`gh api repos/...`) for ordinary issue/PR/label/comment operations when GraphQL quota
   is low or when the operation does not need Projects v2,
 - use local `git` for branch, diff, merge-base, and commit state instead of asking GitHub,

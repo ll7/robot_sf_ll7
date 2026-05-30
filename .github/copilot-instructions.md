@@ -37,8 +37,8 @@ It is everyones guide on how to use this repository effectively.
   handoff context in linked Markdown notes under `docs/context/` when that context would otherwise
   be lost. Prefer updating the canonical existing note over creating a duplicate, and use
   `.agents/skills/context-note-maintainer/SKILL.md` when creating or refreshing those notes.
-- For proof-first quality work, use `.agents/skills/quality-playbook/SKILL.md` for non-trivial
-  changes, `.agents/skills/agentic-eval/SKILL.md` for AI-workflow artifacts, and
+- For risk-proportional validation planning, use `.agents/skills/quality-playbook/SKILL.md` for
+  non-trivial changes, `.agents/skills/agentic-eval/SKILL.md` for AI-workflow artifacts, and
   `.agents/skills/review-and-refactor/SKILL.md` for narrow review-then-refactor passes.
 - For doc synchronization, use `.agents/skills/update-docs-on-code-change/SKILL.md` when code
   changes would make docs stale.
@@ -46,7 +46,9 @@ It is everyones guide on how to use this repository effectively.
 - Keep `gh` for deterministic batch automation, score sync, and auth/debugging fallback.
 - Before opening a PR, follow the latest-main sync rule in
   `docs/dev_guide.md`: fetch `origin/main`, merge or rebase it into the feature branch, then run
-  `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
+  `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` for higher-risk branches. Docs-only and
+  low-risk instruction branches may use the cheaper path from `docs/ai/ai-workflow.md` when the PR
+  clearly states which checks were intentionally skipped.
 - Central point to link new documentation pages is `docs/README.md`.
   - Link new documentation (sub-)pages in the appropriate section.
 - For any changes that affect users, update the `CHANGELOG.md` file.

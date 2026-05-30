@@ -2,11 +2,13 @@
 
 [Back to Documentation Index](./README.md)
 
-This note defines the lightweight task-scoring model used to rank GitHub
-Project #5 issues for the AMV benchmark program.
+This note defines the lightweight task-scoring model used to advise GitHub
+Project #5 issue ordering for the AMV benchmark program.
 
 The LLM-backed priority-assessment skill uses this document as the static
-rubric for plausibility checks and proposed field values.
+rubric for plausibility checks and proposed field values. The score is an
+advisory planning signal; current maintainer direction and fresh evidence can
+override it.
 
 ## Score Model
 

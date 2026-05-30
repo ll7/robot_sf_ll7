@@ -174,6 +174,14 @@ issue only needs a clearer contract, route it to issue clarification. If a remai
 several independently validatable changes, create child issues with `gh-issue-creator` and leave the
 parent as the coordination issue instead of treating the bundle as unimplementable.
 
+Route remaining issues by their blocker:
+- Use `gh-issue-clarifier` when the issue intent, proof path, acceptance criteria, or ownership is
+  unclear.
+- Use `gh-issue-creator` or an explicit issue-splitting pass when one ready issue mixes multiple
+  independently reviewable PRs.
+- Mark the run `blocked` instead of exhausted when the next issue requires unavailable hardware,
+  private artifacts, credentials, live external services, or unapproved Project writes.
+
 ## Process
 
 1. Select one issue (`gh-issue-sequencer` output or explicit user target).

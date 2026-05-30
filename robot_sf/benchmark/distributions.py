@@ -19,6 +19,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+from robot_sf.benchmark.aggregate import (
+    ensure_observation_track_policy,
+    normalize_observation_track_mode,
+    observation_track_group_label,
+)
 from robot_sf.benchmark.plotting_style import apply_latex_style
 
 Record = Mapping[str, object]
@@ -40,6 +45,7 @@ def collect_grouped_values(
     metrics: Sequence[str],
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
+    observation_track_mode: str = "strict",
 ) -> dict[str, dict[str, list[float]]]:
     """Collect values per metric per group.
 
@@ -61,12 +67,19 @@ def collect_grouped_values(
             return None
         return float(v) if np.isfinite(v) else None
 
+    record_list = [dict(record) for record in records]
+    track_meta = ensure_observation_track_policy(
+        record_list,
+        observation_track_mode=observation_track_mode,
+    )
+    mode = normalize_observation_track_mode(str(track_meta["mode"]))
     out: dict[str, dict[str, list[float]]] = {}
-    for r in records:
+    for r in record_list:
         g = _get_dotted(r, group_by) or _get_dotted(r, fallback_group_by)
         if g is None:
             continue
-        gm = out.setdefault(str(g), {m: [] for m in metrics})
+        g = observation_track_group_label(r, str(g), mode=mode)
+        gm = out.setdefault(g, {m: [] for m in metrics})
         for m in metrics:
             fv = _to_float(_get_dotted(r, f"metrics.{m}"))
             if fv is None:

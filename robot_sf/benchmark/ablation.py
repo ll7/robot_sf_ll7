@@ -22,6 +22,11 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from robot_sf.benchmark.aggregate import (
+    ensure_observation_track_policy,
+    normalize_observation_track_mode,
+    observation_track_group_label,
+)
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi
 
 
@@ -40,20 +45,28 @@ def _group_by(
     records: Iterable[Mapping[str, Any]],
     group_by: str,
     fallback: str,
+    observation_track_mode: str = "strict",
 ) -> dict[str, list[Mapping[str, Any]]]:
     """Group records by a dotted key with fallback.
 
     Returns:
         Mapping of group id to record list.
     """
+    record_list = [dict(record) for record in records]
+    track_meta = ensure_observation_track_policy(
+        record_list,
+        observation_track_mode=observation_track_mode,
+    )
+    mode = normalize_observation_track_mode(str(track_meta["mode"]))
     groups: dict[str, list[Mapping[str, Any]]] = {}
-    for rec in records:
+    for rec in record_list:
         gid = _get_nested(rec, group_by)
         if gid is None:
             gid = _get_nested(rec, fallback)
         if gid is None:
             gid = "unknown"
-        groups.setdefault(str(gid), []).append(rec)
+        gid = observation_track_group_label(rec, str(gid), mode=mode)
+        groups.setdefault(gid, []).append(rec)
     return groups
 
 
@@ -85,13 +98,14 @@ def _compute_group_means(
     baseline: Mapping[str, Mapping[str, float]],
     group_by: str,
     fallback_group_by: str,
+    observation_track_mode: str = "strict",
 ) -> dict[str, float]:
     """Compute mean SNQI per group.
 
     Returns:
         Mapping of group id to mean SNQI.
     """
-    groups = _group_by(records, group_by, fallback_group_by)
+    groups = _group_by(records, group_by, fallback_group_by, observation_track_mode)
     means: dict[str, float] = {}
     for gid, rows in groups.items():
         vals: list[float] = []
@@ -139,6 +153,7 @@ def compute_snqi_ablation(
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
     top: int | None = None,
+    observation_track_mode: str = "strict",
 ) -> list[AblationRow]:
     """Compute per-group rank shifts for one-at-a-time SNQI ablations.
 
@@ -148,7 +163,15 @@ def compute_snqi_ablation(
     Returns:
         List of ablation rows showing rank changes when each weight is zeroed.
     """
-    base_means = _compute_group_means(records, weights, baseline, group_by, fallback_group_by)
+    record_list = [dict(record) for record in records]
+    base_means = _compute_group_means(
+        record_list,
+        weights,
+        baseline,
+        group_by,
+        fallback_group_by,
+        observation_track_mode,
+    )
     base_ranked = _ranking_from_means(base_means, ascending=False)
     base_positions: dict[str, int] = {g: i + 1 for i, (g, _m, _c) in enumerate(base_ranked)}
 
@@ -170,6 +193,7 @@ def compute_snqi_ablation(
             baseline,
             group_by,
             fallback_group_by,
+            observation_track_mode,
         )
         ranked = _ranking_from_means(means, ascending=False)
         pos = {g: i + 1 for i, (g, _m, _c) in enumerate(ranked)}

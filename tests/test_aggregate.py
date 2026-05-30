@@ -476,3 +476,129 @@ def test_compute_aggregates_with_ci_pairwise_contrasts_are_seed_deterministic() 
         bootstrap_seed=456,
     )
     assert first["pairwise_contrasts"] == second["pairwise_contrasts"]
+
+
+def _observation_track_records() -> list[dict]:
+    """Build rows that share an algorithm but differ by observation contract."""
+    return [
+        {
+            "episode_id": "grid-1",
+            "scenario_id": "track-scenario",
+            "seed": 1,
+            "benchmark_track": "grid_socnav_v1",
+            "scenario_params": {"algo": "planner-a", "benchmark_track": "grid_socnav_v1"},
+            "metrics": {"success": 1.0, "score": 1.0},
+        },
+        {
+            "episode_id": "lidar-1",
+            "scenario_id": "track-scenario",
+            "seed": 1,
+            "benchmark_track": "lidar_2d_v1",
+            "scenario_params": {"algo": "planner-a", "benchmark_track": "lidar_2d_v1"},
+            "algorithm_metadata": {"status": "fallback"},
+            "metrics": {"success": 0.0, "score": 3.0},
+        },
+    ]
+
+
+def test_compute_aggregates_fails_closed_for_mixed_observation_tracks() -> None:
+    """Default aggregation should not silently pool incompatible observation tracks."""
+    with pytest.raises(AggregationMetadataError) as excinfo:
+        compute_aggregates(_observation_track_records(), group_by="scenario_params.algo")
+
+    message = str(excinfo.value)
+    assert "Mixed benchmark_track values" in message
+    assert "grid_socnav_v1" in message
+    assert "lidar_2d_v1" in message
+    assert "diagnostic-cross-track" in (excinfo.value.advice or "")
+
+
+def test_compute_aggregates_strict_allows_single_declared_track() -> None:
+    """Strict mode should be the normal successful path for homogeneous track records."""
+    records = [
+        {
+            "episode_id": "grid-1",
+            "scenario_id": "track-scenario",
+            "seed": 1,
+            "benchmark_track": "grid_socnav_v1",
+            "scenario_params": {"algo": "planner-a", "benchmark_track": "grid_socnav_v1"},
+            "metrics": {"score": 1.0},
+        },
+        {
+            "episode_id": "grid-2",
+            "scenario_id": "track-scenario",
+            "seed": 2,
+            "benchmark_track": "grid_socnav_v1",
+            "scenario_params": {"algo": "planner-a", "benchmark_track": "grid_socnav_v1"},
+            "metrics": {"score": 3.0},
+        },
+    ]
+
+    summary = compute_aggregates(records, group_by="scenario_params.algo")
+
+    assert summary["planner-a"]["score"]["mean"] == 2.0
+    assert summary["_meta"]["observation_tracks"]["selected_track"] == "grid_socnav_v1"
+
+
+def test_compute_aggregates_strict_keeps_legacy_rows_backward_compatible() -> None:
+    """Legacy rows without track metadata should still aggregate as one unspecified track."""
+    records = [
+        {
+            "episode_id": "legacy-1",
+            "scenario_id": "legacy-scenario",
+            "seed": 1,
+            "scenario_params": {"algo": "planner-a"},
+            "metrics": {"score": 2.0},
+        },
+        {
+            "episode_id": "legacy-2",
+            "scenario_id": "legacy-scenario",
+            "seed": 2,
+            "scenario_params": {"algo": "planner-a"},
+            "metrics": {"score": 4.0},
+        },
+    ]
+
+    summary = compute_aggregates(records, group_by="scenario_params.algo")
+
+    assert summary["planner-a"]["score"]["mean"] == 3.0
+    assert summary["_meta"]["observation_tracks"]["selected_track"] == "unspecified"
+
+
+def test_compute_aggregates_diagnostic_cross_track_keeps_groups_separate() -> None:
+    """Explicit diagnostic mode should label cross-track comparisons and preserve caveats."""
+    summary = compute_aggregates(
+        _observation_track_records(),
+        group_by="scenario_params.algo",
+        expected_algorithms={"planner-a"},
+        observation_track_mode="diagnostic-cross-track",
+    )
+
+    assert set(summary) >= {
+        "grid_socnav_v1 :: planner-a",
+        "lidar_2d_v1 :: planner-a",
+        "_meta",
+    }
+    assert summary["grid_socnav_v1 :: planner-a"]["score"]["mean"] == 1.0
+    assert summary["lidar_2d_v1 :: planner-a"]["score"]["mean"] == 3.0
+    track_meta = summary["_meta"]["observation_tracks"]
+    assert summary["_meta"]["missing_algorithms"] == []
+    assert track_meta["mixed_tracks"] is True
+    assert track_meta["mode"] == "diagnostic_cross_track"
+    assert track_meta["caveat_record_count"] == 1
+    assert "different observation contracts" in track_meta["cross_track_caveat"]
+
+
+def test_compute_aggregates_with_ci_diagnostic_cross_track_namespaces_groups() -> None:
+    """The bootstrap CI path should use the same cross-track grouping policy."""
+    summary = compute_aggregates_with_ci(
+        _observation_track_records(),
+        group_by="scenario_params.algo",
+        observation_track_mode="diagnostic-cross-track",
+        bootstrap_samples=50,
+        bootstrap_seed=123,
+    )
+
+    assert "grid_socnav_v1 :: planner-a" in summary
+    assert "lidar_2d_v1 :: planner-a" in summary
+    assert summary["_meta"]["observation_tracks"]["mode"] == "diagnostic_cross_track"

@@ -208,3 +208,57 @@ def test_cli_aggregate_with_ci_writes_pairwise_contrasts(tmp_path: Path, capsys)
     assert score["delta_mean"] == 2.0
     assert score["delta_ci"] == [2.0, 2.0]
     assert data["pairwise_contrasts"]["_meta"]["correction_family"] == ["family", "metric"]
+
+
+def test_cli_aggregate_requires_explicit_cross_track_mode(tmp_path: Path, capsys) -> None:
+    """Mixed observation-track rows should fail closed by default and pass in diagnostic mode."""
+    episodes = tmp_path / "mixed_tracks.jsonl"
+    rows = [
+        {
+            "episode_id": "grid-1",
+            "scenario_id": "mixed-track",
+            "seed": 1,
+            "benchmark_track": "grid_socnav_v1",
+            "scenario_params": {"algo": "planner-a", "benchmark_track": "grid_socnav_v1"},
+            "metrics": {"score": 1.0},
+        },
+        {
+            "episode_id": "lidar-1",
+            "scenario_id": "mixed-track",
+            "seed": 1,
+            "benchmark_track": "lidar_2d_v1",
+            "scenario_params": {"algo": "planner-a", "benchmark_track": "lidar_2d_v1"},
+            "algorithm_metadata": {"status": "degraded"},
+            "metrics": {"score": 3.0},
+        },
+    ]
+    episodes.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    strict_out = tmp_path / "strict.json"
+    rc_strict = cli_main(["aggregate", "--in", str(episodes), "--out", str(strict_out)])
+    cap = capsys.readouterr()
+    assert rc_strict == 2
+    assert not strict_out.exists()
+
+    diagnostic_out = tmp_path / "diagnostic.json"
+    rc_diagnostic = cli_main(
+        [
+            "aggregate",
+            "--in",
+            str(episodes),
+            "--out",
+            str(diagnostic_out),
+            "--observation-track-mode",
+            "diagnostic-cross-track",
+        ]
+    )
+    cap = capsys.readouterr()
+    assert rc_diagnostic == 0, f"diagnostic aggregate failed: {cap.err}"
+
+    data = json.loads(diagnostic_out.read_text(encoding="utf-8"))
+    assert "grid_socnav_v1 :: planner-a" in data
+    assert "lidar_2d_v1 :: planner-a" in data
+    assert data["_meta"]["observation_tracks"]["caveat_record_count"] == 1

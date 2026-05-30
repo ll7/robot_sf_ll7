@@ -125,6 +125,16 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
 
 
 _EFFECTIVE_GROUP_KEY = "scenario_params.algo | algo | scenario_id"
+_UNKNOWN_BENCHMARK_TRACK = "unspecified"
+_CAVEAT_STATUSES = {
+    "degraded",
+    "diagnostic-stub",
+    "diagnostic_stub",
+    "failed",
+    "fallback",
+    "not_available",
+    "partial-failure",
+}
 
 
 def _normalize_algo(value: Any) -> str | None:
@@ -138,6 +148,139 @@ def _normalize_algo(value: Any) -> str | None:
         if trimmed:
             return trimmed
     return None
+
+
+def _normalize_observation_track_mode(value: str) -> str:
+    """Normalize observation-track aggregation mode strings.
+
+    Returns:
+        Canonical mode string used by aggregation internals.
+    """
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized not in {"strict", "diagnostic_cross_track"}:
+        raise ValueError("observation_track_mode must be 'strict' or 'diagnostic-cross-track'.")
+    return normalized
+
+
+def _resolve_benchmark_track(record: dict[str, Any]) -> str:
+    """Return the benchmark observation track declared by an episode record."""
+    candidates = [
+        record.get("benchmark_track"),
+        _get_nested(record, "scenario_params.benchmark_track"),
+        _get_nested(record, "algorithm_metadata.benchmark_track.benchmark_track"),
+        _get_nested(record, "algorithm_metadata.benchmark_track.track"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return _UNKNOWN_BENCHMARK_TRACK
+
+
+def normalize_observation_track_mode(value: str) -> str:
+    """Return the canonical observation-track aggregation mode."""
+    return _normalize_observation_track_mode(value)
+
+
+def resolve_benchmark_track(record: dict[str, Any]) -> str:
+    """Return the public benchmark observation track for an episode record."""
+    return _resolve_benchmark_track(record)
+
+
+def _record_has_benchmark_caveat(record: dict[str, Any]) -> bool:
+    """Return true when a record is fallback, degraded, failed, or diagnostic-only."""
+    candidates = [
+        record.get("availability_status"),
+        record.get("status"),
+        _get_nested(record, "benchmark_availability.availability_status"),
+        _get_nested(record, "algorithm_metadata.status"),
+        _get_nested(record, "algorithm_metadata.readiness_status"),
+        _get_nested(record, "algorithm_metadata.preflight_status"),
+        _get_nested(record, "algorithm_metadata.execution_mode"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip().lower() in _CAVEAT_STATUSES:
+            return True
+    return False
+
+
+def build_observation_track_meta(
+    records: list[dict[str, Any]],
+    *,
+    observation_track_mode: str = "strict",
+) -> dict[str, Any]:
+    """Summarize observation-track metadata for aggregate/report outputs.
+
+    Returns:
+        Metadata block describing observed tracks, mode, and caveat counts.
+    """
+    mode = _normalize_observation_track_mode(observation_track_mode)
+    track_counts: dict[str, int] = defaultdict(int)
+    caveat_count = 0
+    for record in records:
+        track_counts[_resolve_benchmark_track(record)] += 1
+        if _record_has_benchmark_caveat(record):
+            caveat_count += 1
+
+    tracks = dict(sorted(track_counts.items()))
+    mixed_tracks = len(tracks) > 1
+    selected_track = next(iter(tracks), None) if len(tracks) == 1 else None
+    meta: dict[str, Any] = {
+        "mode": mode,
+        "tracks": tracks,
+        "mixed_tracks": mixed_tracks,
+        "selected_track": selected_track,
+        "caveat_record_count": caveat_count,
+        "caveat_policy": (
+            "Fallback, degraded, failed, and diagnostic-stub rows are caveats, "
+            "not benchmark success evidence."
+        ),
+    }
+    if mixed_tracks:
+        meta["cross_track_caveat"] = (
+            "Rows use different observation contracts; compare tracks diagnostically "
+            "rather than pooling them as one benchmark."
+        )
+    return meta
+
+
+def ensure_observation_track_policy(
+    records: list[dict[str, Any]],
+    *,
+    observation_track_mode: str = "strict",
+) -> dict[str, Any]:
+    """Validate observation-track pooling policy and return report metadata.
+
+    Returns:
+        Observation-track metadata block when the input satisfies the selected policy.
+    """
+    meta = build_observation_track_meta(
+        records,
+        observation_track_mode=observation_track_mode,
+    )
+    if meta["mixed_tracks"] and meta["mode"] == "strict":
+        tracks = ", ".join(meta["tracks"])
+        raise AggregationMetadataError(
+            f"Mixed benchmark_track values cannot be pooled by default: {tracks}.",
+            missing_fields=(
+                "benchmark_track",
+                "scenario_params.benchmark_track",
+                "algorithm_metadata.benchmark_track",
+            ),
+            advice=(
+                "Aggregate one benchmark_track at a time, or rerun with "
+                "--observation-track-mode diagnostic-cross-track for an explicitly caveated "
+                "cross-track comparison."
+            ),
+        )
+    return meta
+
+
+def observation_track_group_label(record: dict[str, Any], group_key: str, *, mode: str) -> str:
+    """Return a group label that keeps cross-track diagnostics visibly separated."""
+    normalized_mode = _normalize_observation_track_mode(mode)
+    if normalized_mode == "diagnostic_cross_track":
+        return f"{_resolve_benchmark_track(record)} :: {group_key}"
+    return group_key
 
 
 def _ensure_mapping(record: dict[str, Any], key: str, episode_id: str | None) -> None:
@@ -361,9 +504,9 @@ def compute_aggregates(
     snqi_weights: dict[str, float] | None = None,
     snqi_baseline: dict[str, dict[str, float]] | None = None,
     expected_algorithms: set[str] | None = None,
+    observation_track_mode: str = "strict",
     logger_ctx=None,
 ) -> dict[str, dict[str, dict[str, float]]]:
-    # Optionally compute SNQI per record if missing
     """Aggregate metrics by group and compute summary statistics.
 
     Returns:
@@ -371,14 +514,22 @@ def compute_aggregates(
     """
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
+    observation_track_meta = ensure_observation_track_policy(
+        records,
+        observation_track_mode=observation_track_mode,
+    )
     threshold_meta = validate_threshold_parameter_consistency(records)
 
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     present_algorithms: set[str] = set()
     for rec in records:
         key = _resolve_group_key(rec, group_by=group_by, fallback_group_by=fallback_group_by)
-        key_str = str(key)
-        present_algorithms.add(key_str)
+        present_algorithms.add(str(key))
+        key_str = observation_track_group_label(
+            rec,
+            str(key),
+            mode=observation_track_meta["mode"],
+        )
         groups[key_str].append(flatten_metrics(rec))
 
     summary: dict[str, dict[str, dict[str, float]]] = {}
@@ -410,6 +561,7 @@ def compute_aggregates(
             "missing_profile_records": threshold_meta["missing_profile_records"],
             "explicit_profile_records": threshold_meta["explicit_profile_records"],
         },
+        "observation_tracks": observation_track_meta,
     }
 
     if expected_algorithms:
@@ -483,6 +635,7 @@ def _group_flattened(
     *,
     group_by: str,
     fallback_group_by: str,
+    observation_track_mode: str = "strict",
 ) -> dict[str, list[dict[str, Any]]]:
     """Group flattened episode rows by aggregation key.
 
@@ -490,9 +643,11 @@ def _group_flattened(
         Mapping of group key to flattened rows.
     """
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    mode = _normalize_observation_track_mode(observation_track_mode)
     for rec in records:
         key = _resolve_group_key(rec, group_by=group_by, fallback_group_by=fallback_group_by)
-        groups[str(key)].append(flatten_metrics(rec))
+        key_str = observation_track_group_label(rec, str(key), mode=mode)
+        groups[key_str].append(flatten_metrics(rec))
     return groups
 
 
@@ -719,6 +874,7 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
     bootstrap_confidence: float = 0.95,
     bootstrap_seed: int | None = None,
     expected_algorithms: set[str] | None = None,
+    observation_track_mode: str = "strict",
     logger_ctx=None,
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """Compute grouped aggregates and optional bootstrap CIs.
@@ -738,6 +894,7 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
         expected_algorithms=expected_algorithms,
+        observation_track_mode=observation_track_mode,
         logger_ctx=logger_ctx,
     )
     if not return_ci or bootstrap_samples <= 0:
@@ -747,7 +904,12 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
     # Rebuild groups with flattened numeric values to avoid rework
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
-    groups = _group_flattened(records, group_by=group_by, fallback_group_by=fallback_group_by)
+    groups = _group_flattened(
+        records,
+        group_by=group_by,
+        fallback_group_by=fallback_group_by,
+        observation_track_mode=observation_track_mode,
+    )
     pairwise_contrasts = _compute_pairwise_contrasts(
         groups,
         bootstrap_samples=bootstrap_samples,
@@ -780,9 +942,14 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
 
 
 __all__ = [
+    "build_observation_track_meta",
     "compute_aggregates",
     "compute_aggregates_with_ci",
+    "ensure_observation_track_policy",
     "flatten_metrics",
+    "normalize_observation_track_mode",
+    "observation_track_group_label",
     "read_jsonl",
+    "resolve_benchmark_track",
     "write_episode_csv",
 ]

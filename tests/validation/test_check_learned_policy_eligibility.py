@@ -163,6 +163,16 @@ def test_benchmark_promotion_requires_observation_track_metadata() -> None:
     assert "benchmark_promotion.allowed_observation_keys" in paths
 
 
+def test_benchmark_promotion_null_is_reported() -> None:
+    """A null promotion block should not bypass benchmark metadata validation."""
+    spec = _eligible_spec()
+    spec["benchmark_promotion"] = None
+
+    issues = validate_learned_policy_eligibility(spec)
+
+    assert any(issue.path == "benchmark_promotion" for issue in issues)
+
+
 def test_research_only_promotion_boundary_can_pass_without_track_fields() -> None:
     """Research-only candidates should declare the boundary without pretending to be benchmark rows."""
     spec = _eligible_spec()

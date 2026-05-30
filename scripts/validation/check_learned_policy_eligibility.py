@@ -313,7 +313,7 @@ def _validate_benchmark_promotion(payload: dict[str, Any], issues: list[Eligibil
         return
     registry_like_entry = {
         "model_id": payload.get("model_id", "candidate"),
-        "tags": ["learned-policy"],
+        "tags": ["learned-policy", "promoted"],
         "benchmark_promotion": payload.get("benchmark_promotion"),
     }
     issues.extend(

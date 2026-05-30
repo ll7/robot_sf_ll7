@@ -198,7 +198,7 @@ def _path_efficiency_distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     """
     pdf_path = out_dir / "path_efficiency.pdf"
     if plt is None:
-        return _PlotArtifact("kde", str(pdf_path), "skipped", note="matplotlib missing")
+        return _PlotArtifact("path_efficiency", str(pdf_path), "skipped", note="matplotlib missing")
     status = "failed"
     note = None
     vals: list[float] = []
@@ -207,7 +207,7 @@ def _path_efficiency_distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
         if pe:
             vals.append(float(pe.mean))
     if not vals:
-        return _PlotArtifact("kde", str(pdf_path), "skipped", note="no-path-efficiency")
+        return _PlotArtifact("path_efficiency", str(pdf_path), "skipped", note="no-path-efficiency")
     fig, ax = plt.subplots(figsize=(5, 3))
     ax.hist(vals, bins=min(10, len(vals)), color="tab:blue", alpha=0.8)
     ax.set_title("Path Efficiency Distribution")
@@ -221,7 +221,7 @@ def _path_efficiency_distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
         note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
-    return _PlotArtifact("kde", str(pdf_path), status, note=note)
+    return _PlotArtifact("path_efficiency", str(pdf_path), status, note=note)
 
 
 def _success_collision_scatter_plot(groups, out_dir: Path) -> _PlotArtifact:
@@ -232,7 +232,12 @@ def _success_collision_scatter_plot(groups, out_dir: Path) -> _PlotArtifact:
     """
     pdf_path = out_dir / "success_collision_scatter.pdf"
     if plt is None:
-        return _PlotArtifact("pareto", str(pdf_path), "skipped", note="matplotlib missing")
+        return _PlotArtifact(
+            "success_collision_scatter",
+            str(pdf_path),
+            "skipped",
+            note="matplotlib missing",
+        )
     status = "failed"
     note = None
     fig, ax = plt.subplots(figsize=(5, 4))
@@ -246,7 +251,12 @@ def _success_collision_scatter_plot(groups, out_dir: Path) -> _PlotArtifact:
         plotted = True
     if not plotted:
         _safe_fig_close(fig)
-        return _PlotArtifact("pareto", str(pdf_path), "skipped", note="no-metrics")
+        return _PlotArtifact(
+            "success_collision_scatter",
+            str(pdf_path),
+            "skipped",
+            note="no-metrics",
+        )
     ax.set_xlabel("collision_rate")
     ax.set_ylabel("success_rate")
     ax.set_title("Success vs Collision")
@@ -259,7 +269,7 @@ def _success_collision_scatter_plot(groups, out_dir: Path) -> _PlotArtifact:
         note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
-    return _PlotArtifact("pareto", str(pdf_path), status, note=note)
+    return _PlotArtifact("success_collision_scatter", str(pdf_path), status, note=note)
 
 
 def _episode_length_histogram(out_dir: Path, records: Iterable[dict]) -> _PlotArtifact:
@@ -270,12 +280,12 @@ def _episode_length_histogram(out_dir: Path, records: Iterable[dict]) -> _PlotAr
     """
     pdf_path = out_dir / "episode_lengths.pdf"
     if plt is None:
-        return _PlotArtifact("force_heatmap", str(pdf_path), "skipped", note="matplotlib missing")
+        return _PlotArtifact("episode_lengths", str(pdf_path), "skipped", note="matplotlib missing")
     status = "failed"
     note = None
     step_counts = [int(r.get("steps", 0)) for r in records if r.get("steps") is not None]
     if not step_counts:
-        return _PlotArtifact("force_heatmap", str(pdf_path), "skipped", note="no-steps")
+        return _PlotArtifact("episode_lengths", str(pdf_path), "skipped", note="no-steps")
     fig, ax = plt.subplots(figsize=(5, 3))
     ax.hist(step_counts, bins=min(10, len(step_counts)), color="tab:purple", alpha=0.8)
     ax.set_xlabel("steps")
@@ -289,7 +299,7 @@ def _episode_length_histogram(out_dir: Path, records: Iterable[dict]) -> _PlotAr
         note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
-    return _PlotArtifact("force_heatmap", str(pdf_path), status, note=note)
+    return _PlotArtifact("episode_lengths", str(pdf_path), status, note=note)
 
 
 def generate_plots(groups, records, out_dir, cfg):

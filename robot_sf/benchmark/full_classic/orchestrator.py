@@ -375,7 +375,11 @@ def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
     throughput_per_worker = (
         manifest.episodes_per_second / manifest.workers if manifest.workers > 0 else 0.0
     )
-    compatibility_efficiency = 1.0 / manifest.workers if manifest.workers > 0 else 0.0
+    compatibility_efficiency = (
+        1.0 / manifest.workers
+        if manifest.workers > 0 and manifest.episodes_per_second > 0.0
+        else 0.0
+    )
     evidence_status = (
         "smoke_only_non_evidence" if bool(getattr(cfg, "smoke", False)) else "diagnostic_only"
     )

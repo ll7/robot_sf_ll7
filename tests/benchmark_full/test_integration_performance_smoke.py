@@ -16,7 +16,11 @@ import json
 import time
 from pathlib import Path
 
-from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
+from robot_sf.benchmark.full_classic.orchestrator import (
+    BenchmarkManifest,
+    _update_scaling_efficiency,
+    run_full_benchmark,
+)
 
 SOFT_RUNTIME_SEC = 20.0  # generous for CI now that real simulation runs
 
@@ -58,3 +62,29 @@ def test_performance_smoke(config_factory):
     assert scaling["parallel_efficiency_basis"] == "requires measured sequential baseline"
     assert scaling["evidence_status"] == "smoke_only_non_evidence"
     assert scaling["parallel_efficiency_placeholder_deprecated"] is True
+
+
+def test_scaling_compatibility_alias_is_zero_without_throughput(tmp_path: Path) -> None:
+    """Deprecated efficiency alias should not report nonzero efficiency for zero throughput."""
+
+    class _Cfg:
+        """Minimal config stub for scaling diagnostics."""
+
+        workers = 4
+        smoke = True
+
+    manifest = BenchmarkManifest(
+        output_root=tmp_path,
+        git_hash="test",
+        scenario_matrix_hash="test",
+        config=_Cfg(),
+        episodes_path=str(tmp_path / "episodes.jsonl"),
+    )
+    manifest.created_at -= 10.0
+    manifest.executed_jobs = 0
+
+    scaling = _update_scaling_efficiency(manifest, _Cfg())
+
+    assert scaling["episodes_per_second"] == 0.0
+    assert scaling["throughput_per_worker"] == 0.0
+    assert scaling["parallel_efficiency_placeholder"] == 0.0

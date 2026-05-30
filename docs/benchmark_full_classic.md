@@ -285,8 +285,8 @@ full_classic_smoke/
     effect_sizes.json
     statistical_sufficiency.json
   plots/
-    distribution.pdf
-    trajectory.pdf
+    distributions_basic.pdf
+    trajectories_basic.pdf
     path_efficiency.pdf
     success_collision_scatter.pdf
     episode_lengths.pdf

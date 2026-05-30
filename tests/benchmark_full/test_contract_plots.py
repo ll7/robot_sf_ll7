@@ -83,5 +83,11 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
         status = getattr(art, "status", None) or (
             art.get("status") if isinstance(art, dict) else None
         )
-        assert kind in {"distribution", "trajectory", "kde", "pareto", "force_heatmap"}
+        assert kind in {
+            "distribution",
+            "trajectory",
+            "path_efficiency",
+            "success_collision_scatter",
+            "episode_lengths",
+        }
         assert status in {"generated", "skipped"}

@@ -10,7 +10,7 @@ data unless the license and a maintainer decision explicitly allow redistributio
 - Upstream source URL:
 - Access date:
 - Upstream version, tag, commit, or release:
-- Related issue or PR:
+- Related issue or PR: none / `Issue #<id>` / `PR #<id>`
 - Intended Robot SF use:
 
 ## License And Access
@@ -67,7 +67,7 @@ data unless the license and a maintainer decision explicitly allow redistributio
 - Benchmark eligibility: not eligible / blocked until hydrated / smoke-only / benchmark candidate
 - Redistribution status: no redistribution / derived-only / raw-and-derived allowed
 - Required durable pointer:
-- Required follow-up issue:
+- Required follow-up issue: none / `Issue #<id>`
 - Reviewer notes:
 
 ## Validation Checklist

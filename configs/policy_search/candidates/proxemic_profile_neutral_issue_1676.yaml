@@ -1,0 +1,13 @@
+name: proxemic_profile_neutral_issue_1676
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  desired_dynamic_clearance: 0.9
+  dynamic_clearance_weight: 1.8
+  ttc_weight: 0.8
+  stop_distance_human: 0.5
+  slow_distance_human: 1.0
+  moderate_distance_human: 2.0
+  moderate_speed: 0.6
+  near_human_angular_limit_distance: 0.8
+  near_human_max_angular_speed: 0.7

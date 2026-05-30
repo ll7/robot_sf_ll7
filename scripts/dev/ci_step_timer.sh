@@ -12,7 +12,7 @@ shift
 echo "::group::${label}"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 start_seconds="$(date +%s)"
-echo "ci_step_timer step_start label=${label} started_at=${started_at}"
+echo "ci_step_timer step_start label=\"${label}\" started_at=${started_at}"
 
 set +e
 "$@"
@@ -21,8 +21,8 @@ status=$?
 completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 end_seconds="$(date +%s)"
 duration=$((end_seconds - start_seconds))
-echo "ci_step_timer step_end label=${label} status=${status} duration_seconds=${duration} completed_at=${completed_at}"
-echo "::notice title=${label} timing::status=${status} duration_seconds=${duration}"
+echo "ci_step_timer step_end label=\"${label}\" status=${status} duration_seconds=${duration} completed_at=${completed_at}"
+echo "::notice title=\"${label}\" timing::status=${status} duration_seconds=${duration}"
 echo "::endgroup::"
 
 set -e

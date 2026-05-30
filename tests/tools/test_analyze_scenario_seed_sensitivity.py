@@ -7,7 +7,9 @@ import json
 from typing import TYPE_CHECKING
 
 from scripts.tools.analyze_scenario_seed_sensitivity import (
+    _parse_float,
     build_seed_sensitivity_analysis,
+    load_selected_episode_rows,
     main,
     select_top_planners,
 )
@@ -121,6 +123,38 @@ def test_select_top_planners_uses_late_tie_breakers(tmp_path: Path) -> None:
         "alpha",
         "zeta",
     ]
+
+
+def test_parse_float_strips_balanced_quotes() -> None:
+    """CSV values quoted by upstream tools should still parse as finite floats."""
+    assert _parse_float("'0.90'") == 0.9
+    assert _parse_float('"0.80"') == 0.8
+
+
+def test_load_selected_episode_rows_falls_back_to_time_to_goal(tmp_path: Path) -> None:
+    """Empty normalized time cells should fall back to the raw time-to-goal column."""
+    _write_csv(
+        tmp_path / "reports" / "seed_episode_rows.csv",
+        [
+            {
+                "scenario_id": "scenario",
+                "planner_key": "alpha",
+                "seed": "111",
+                "success": "1.0",
+                "collision": "0.0",
+                "near_miss": "0.0",
+                "time_to_goal_norm": "",
+                "time_to_goal": "0.42",
+            }
+        ],
+    )
+
+    rows = load_selected_episode_rows(
+        tmp_path / "reports" / "seed_episode_rows.csv",
+        {"alpha"},
+    )
+
+    assert rows[0].time_to_goal_norm == 0.42
 
 
 def test_build_seed_sensitivity_analysis_classifies_scenarios(tmp_path: Path) -> None:

@@ -87,7 +87,7 @@ def _parse_float(value: str | None) -> float | None:
     """Parse a finite float from a CSV cell."""
     if value is None:
         return None
-    cleaned = value.strip().lstrip("'").lstrip('"')
+    cleaned = value.strip().strip("'\"")
     if cleaned == "":
         return None
     try:
@@ -170,6 +170,9 @@ def load_selected_episode_rows(
             scenario_id = str(raw.get("scenario_id", "")).strip()
             if success is None or collision is None or seed is None or scenario_id == "":
                 continue
+            ttg_norm = _parse_float(raw.get("time_to_goal_norm"))
+            if ttg_norm is None:
+                ttg_norm = _parse_float(raw.get("time_to_goal"))
             rows.append(
                 EpisodeRow(
                     scenario_id=scenario_id,
@@ -178,9 +181,7 @@ def load_selected_episode_rows(
                     success=success,
                     collision=collision,
                     near_miss=_parse_float(raw.get("near_miss")),
-                    time_to_goal_norm=_parse_float(raw.get("time_to_goal_norm"))
-                    if raw.get("time_to_goal_norm") is not None
-                    else _parse_float(raw.get("time_to_goal")),
+                    time_to_goal_norm=ttg_norm,
                 )
             )
     if not rows:
@@ -190,6 +191,8 @@ def load_selected_episode_rows(
 
 def _mean(values: list[float]) -> float:
     """Return the arithmetic mean for a non-empty list."""
+    if not values:
+        return 0.0
     return sum(values) / len(values)
 
 

@@ -52,7 +52,7 @@ These upstream ideas were kept because they add direct value to this repository'
 
 - `context-map` for focused file and validation discovery,
 - `what-context-needed` for underspecified tasks,
-- `quality-playbook` for proof-first non-trivial changes,
+- `quality-playbook` for risk-proportional validation planning on non-trivial changes,
 - `agentic-eval` for improving AI workflow outputs with small rubrics,
 - `review-and-refactor` for narrow review-then-refactor passes,
 - `update-docs-on-code-change` for keeping workflow docs synchronized with code.
@@ -75,7 +75,7 @@ file-access layer rather than a new knowledge service.
 - Use `context-map` before multi-file changes when you need a compact file/validation map.
 - Use `what-context-needed` when the task is underspecified and you need the minimum missing
   context before proceeding.
-- Use `quality-playbook` when the task needs proof-first planning, risk classification, and a
+- Use `quality-playbook` when the task needs risk classification, validation planning, and a
   validation choice.
 - Use `agentic-eval` when the artifact being improved is a skill, instruction, prompt-like text, or
   other AI workflow output.

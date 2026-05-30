@@ -8,9 +8,10 @@ validation, PR review, and follow-up cleanup.
 
 ## What This Workflow Optimizes For
 
+- Research progress first, with proof and process proportional to the risk of the claim.
 - Markdown-first traceability for decisions, context, and handoffs.
 - Config-first reproducibility for training and benchmark runs.
-- Conservative validation before PR creation.
+- Conservative validation before PR creation for benchmark, schema, metric, and paper-facing work.
 - One canonical instruction tree for all supported coding-agent runtimes.
 - Follow-up issues instead of hidden scope creep.
 
@@ -42,7 +43,7 @@ Use the smallest useful routing skill first:
 - `what-context-needed` when the prompt is underspecified.
 - `gh-issue-clarifier` when an issue needs scope tightening or decision options.
 - `benchmark-overview` or `experiment-context` for benchmark, planner, or training work.
-- `quality-playbook` for non-trivial work that needs proof-first planning.
+- `quality-playbook` for non-trivial work that needs risk-proportional validation planning.
 
 The goal is to avoid jumping directly into edits before the problem, scope, and validation path are clear.
 
@@ -96,7 +97,8 @@ Use REST-backed `gh api repos/...` calls for ordinary issue/PR/label/comment ope
 queries that are genuinely cheaper. If GraphQL quota is low, finish issue cleanup through REST and
 leave Project #5 mutations as explicit pending work rather than retry-looping.
 
-The priority workflow uses [docs/project_prioritization.md](../project_prioritization.md) as the rubric.
+The priority workflow uses [docs/project_prioritization.md](../project_prioritization.md) as an
+advisory rubric, not as hard authority over current maintainer direction or fresh evidence.
 The fields to review are:
 
 - Improvement
@@ -138,13 +140,18 @@ Do not expand scope silently. If the issue grows, stop and split the extra work 
 
 ### 6. Validate before PR creation
 
-Use the repository gates before the PR is opened:
+Use the repository gates before higher-risk PRs are opened:
 
 - `scripts/dev/ruff_fix_format.sh`
 - `scripts/dev/run_tests_parallel.sh`
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 
 The standard readiness flow is fail-fast and failed-first by default. If a failure appears, assess test value first before changing or removing tests.
+
+For docs-only and low-risk instruction branches, a cheaper official path is allowed when the user
+asks for it: inspect the diff, verify referenced paths where practical, and state in the PR that the
+full readiness gate was intentionally skipped. Do not use the cheap path for benchmark, metric,
+schema, model-provenance, runtime, or paper-facing changes.
 
 The PR readiness gate also checks:
 
@@ -175,7 +182,9 @@ Treat it as a reviewer-lens pass, not another full test suite:
 
 ### 7. Open the PR
 
-Use `gh-pr-opener` after the branch has been synced with the latest `origin/main` and the readiness stamp is fresh.
+Use `gh-pr-opener` after the branch has been synced with the latest `origin/main`. For higher-risk
+branches, the readiness stamp must be fresh; for docs-only or low-risk branches using the cheap
+path, the PR must clearly list the skipped gate.
 
 The PR body should come from `.github/PULL_REQUEST_TEMPLATE/pr_default.md` and keep the template sections intact.
 
@@ -220,17 +229,21 @@ When work is deferred, create a follow-up issue rather than leaving the remainde
 
 Keep the parent issue open until the branch is ready for merge or the repository process says otherwise.
 
-Every substantial step should leave a durable Markdown trace in either `docs/context/` or `memory/`:
+Every relevant substantial step should leave a durable Markdown trace in either `docs/context/` or
+`memory/`:
 
-- use `docs/context/` for issue history, execution notes, and validation evidence,
+- use `docs/context/` for issue history, execution notes, and validation evidence, while keeping it
+  indexed and pruned rather than treating it as a bulk scratchpad,
 - use `memory/` for stable cross-session facts that will be reused later.
+
+The broader `docs/context/` retrieval-architecture redesign is tracked in GitHub issue #1714.
 
 ## Cross-Agent Compatibility
 
 Robot SF keeps one canonical instruction tree and mirrors it to the supported agent runtimes.
 
 - `.agents/` is the source of truth.
-- `.codex/`, `.opencode/`, `.claude/`, `.github/`, and `.gemini/` are compatibility surfaces.
+- `.codex/`, `.opencode/`, `.github/`, and `.gemini/` are compatibility surfaces.
 - When needed, `scripts/tools/sync_ai_config.py` checks or repairs the symlinked mirrors.
 
 The goal is not to maintain separate rule sets for different agents. The goal is to keep one

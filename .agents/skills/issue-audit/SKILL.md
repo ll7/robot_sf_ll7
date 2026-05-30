@@ -1,7 +1,7 @@
 ---
 name: issue-audit
-description: User-in-the-loop open-issue audit that asks one readiness-blocking question at a time and
-  updates issues as decisions are made.
+description: User-in-the-loop open-issue audit that asks one readiness-blocking question at a time
+  or one priority-tradeoff question at a time and updates issues as decisions are made.
 category: github-issue
 kind: atomic
 phase: context
@@ -19,8 +19,9 @@ Compatibility entry point: for new routing, use `issue-contract-maintainer` with
 
 ## Purpose
 
-Refine open issues through a guided loop: one blocking question at a time, immediate edits on confirmed
-decisions, and clear handoff state.
+Refine open issues through a guided loop: one blocking question at a time, immediate edits on
+confirmed decisions, and clear handoff state. Use the same loop for priority discussion when issue
+ordering depends on a real maintainer value tradeoff. Dedicated follow-up: issue #1729.
 
 ## Workflow
 
@@ -31,6 +32,8 @@ decisions, and clear handoff state.
 2. Gather readiness context:
    - issue states, labels, linked PRs, templates/contracts, and related files.
 3. Ask exactly one question at a time focused on scope, acceptance, or priority tradeoff.
+   - For priority tradeoffs, ask what matters more between concrete alternatives, then record the
+     answer in the issue body, labels, or Project metadata.
 4. Apply the decision immediately:
    - edit issue body/labels as needed,
    - remove `decision-required` when resolved,

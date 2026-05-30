@@ -8,6 +8,7 @@ This document should be kept as short as possible to maintain clarity and ease o
 Whenever possible, link out to more detailed documents or external resources.
 Refactor this document regularly to be as concise as possible.
 LLM Constitution and guides can be found here:
+- `docs/maintainer_values.md`
 - `.specify/memory/constitution.md`
 - `.github/copilot-instructions.md`
 - `AGENTS.md`
@@ -472,7 +473,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 ## Design and development workflow recommendations
 
-- Consider using <https://github.com/github/spec-kit> for complex specifications and design docs.
+- Consider using <https://github.com/github/spec-kit> for complex, multi-contract specifications
+  and design docs. Do not use it as the default governance layer for ordinary work.
   - Examples can be found in the `specs` directory.
   - Prompts are unique to the llm provider used. Adjust accordingly.
   - Canonical AI assistant content lives in `.agents/`:
@@ -486,6 +488,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
     `uv run python scripts/tools/sync_ai_config.py --check` or
     `uv run python scripts/tools/sync_ai_config.py --fix`.
   - LLM Constitution and guides can be found here:
+    - `docs/maintainer_values.md`
     - `.specify/memory/constitution.md`
     - `AGENTS.md`
   - For the repository's cross-agent compatibility stance and the retrieval → planning → execution
@@ -1375,8 +1378,9 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
   document any meaningful remaining findings in the PR when they affect the change.
 - Docs updated (README in feature folder, diagrams if changed).
 - Feature branch synced with latest `origin/main` before PR creation, then validation scripts run
-  and pass for higher-risk branches. Docs-only and low-risk instruction branches may use the
-  cheaper path from `docs/ai/ai-workflow.md` when the PR clearly states which checks were skipped.
+  and pass for higher-risk branches. Docs-only and low-risk instruction branches use the cheaper
+  path from `docs/ai/ai-workflow.md` by default when the PR clearly states which checks were
+  skipped.
 - CI green (lint + tests) and PR opened with appropriate links.
 
 ## Templates

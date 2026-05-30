@@ -85,6 +85,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Getting Started
 
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+* **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
 * **[Open-Issues Implementation Status](./context/open_issues_implementation_status_2026-05-12.md)** - Handoff record for the May 2026 open-issues pass, including implemented slices, blocked items, and remaining follow-up surface

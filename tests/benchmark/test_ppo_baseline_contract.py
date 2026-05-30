@@ -101,3 +101,14 @@ def test_issue_576_closeout_config_has_resolved_provenance(
     assert issue_config["provenance"]["checkpoint_id"] == ISSUE_576_PPO_MODEL_ID
     assert issue_config["provenance"]["normalization_id"] == "route_completion_v3"
     assert issue_config["quality_gate"]["measured_success_rate"] > 0.0
+
+
+def test_holonomic_ppo_baseline_uses_registry_model_id(
+    repo_root: Path, issue_576_entry: dict
+) -> None:
+    """Holonomic BR-06 baseline should not pin a worktree-local model cache path."""
+    config = _load_yaml(repo_root / "configs" / "baselines" / "ppo_15m_grid_socnav_holonomic.yaml")
+
+    assert "model_path" not in config
+    assert config["model_id"] == issue_576_entry["model_id"]
+    assert config["fallback_to_goal"] is False

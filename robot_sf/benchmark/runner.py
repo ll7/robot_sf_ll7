@@ -50,6 +50,7 @@ else:
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
+from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
@@ -149,6 +150,7 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
             cfg = yaml.safe_load(f) or {}
             if not isinstance(cfg, dict):
                 raise TypeError("Algorithm config must be a mapping (YAML dict).")
+            validate_no_local_model_artifacts(cfg, config_path=config_path)
             config = cfg
     planner = planner_class(config, seed=seed)
     return planner, Observation, config

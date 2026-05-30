@@ -3,7 +3,6 @@
 # measured_success_rate is updated from benchmark/policy-analysis results.
 
 model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
-model_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
 
 # Device selection for SB3
 device: auto

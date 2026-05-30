@@ -32,6 +32,7 @@ from robot_sf.benchmark.algorithm_readiness import (
     require_algorithm_allowed,
 )
 from robot_sf.benchmark.fallback_policy import availability_payload
+from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
 from robot_sf.benchmark.metrics import (
     EpisodeData,
     compute_all_metrics,
@@ -504,6 +505,7 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise TypeError("Algorithm config must be a mapping (YAML dict).")
+    validate_no_local_model_artifacts(data, config_path=path)
     return data
 
 

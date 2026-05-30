@@ -503,6 +503,106 @@ synthesis-eligible evidence.
 
 ---
 
+## Claim Area 6: Scenario Seed Sensitivity And Seed-Budget Stability
+
+### Candidate Claim
+
+"Robot-SF can identify seed-sensitive scenarios and hard-seed diagnostics that must caveat or gate
+paper-facing comparison language until stronger seed-budget evidence exists."
+
+### Evidence Links
+
+- Scenario seed-sensitivity analysis:
+  [issue_1608_seed_sensitivity_analysis.md](issue_1608_seed_sensitivity_analysis.md)
+- Derived evidence bundle:
+  [issue_1608_seed_sensitivity_2026-05-30/](evidence/issue_1608_seed_sensitivity_2026-05-30/)
+- Analysis report:
+  [seed_sensitivity_analysis.md](evidence/issue_1608_seed_sensitivity_2026-05-30/seed_sensitivity_analysis.md)
+- Scenario table:
+  [scenario_seed_sensitivity.csv](evidence/issue_1608_seed_sensitivity_2026-05-30/scenario_seed_sensitivity.csv)
+- Seed difficulty table:
+  [seed_difficulty_summary.csv](evidence/issue_1608_seed_sensitivity_2026-05-30/seed_difficulty_summary.csv)
+- Source S10/h500 candidate bundle:
+  [issue_1454_s10_h500_candidates_2026-05-23/](evidence/issue_1454_s10_h500_candidates_2026-05-23/)
+- Merged analysis PR: [#1713](https://github.com/ll7/robot_sf_ll7/pull/1713)
+- S20/S30 paper-facing evidence issue: [#1554](https://github.com/ll7/robot_sf_ll7/issues/1554)
+
+### Evidence Tier
+
+`diagnostic_s10` (derived analysis over durable compact Issue #1454 S10/h500 candidate artifacts)
+
+### Metrics Used
+
+- Per-scenario top-planner mean success by seed
+- Across-seed mean-success range
+- Hard seed count (`mean_success <= 0.5`)
+- Easy seed count (`mean_success >= 0.75`)
+- Hardest seed id across scenarios
+
+### Key Results
+
+PR #1713 classified all 48 scenarios from the issue #1454 S10/h500 candidate bundle:
+
+| Classification | Count |
+| --- | ---: |
+| `seed_sensitive` | 25 |
+| `not_seed_sensitive` | 23 |
+| `inconclusive` | 0 |
+
+Seed `116` was the hardest seed id across scenarios: mean top-planner success `0.7396`, with 12
+hard scenario rows. The next hardest seed ids were `117`, `111`, `115`, and `112`.
+
+### Claims Strengthened By #1713
+
+- The repository can now identify seed-sensitive scenarios from a durable compact S10 candidate
+  bundle without rerunning the full campaign.
+- Seed `116` should be treated as a hard-seed diagnostic for follow-up inspection and targeted
+  trace review.
+- Scenario-level claim assembly should distinguish stable scenario behavior from
+  seed-sensitive behavior before using single-seed or small-seed evidence in manuscript language.
+
+### Claims That Remain S10-Only Or Blocked
+
+- The #1713 analysis does **not** upgrade S10 evidence into paper-facing significance evidence.
+- The result does **not** explain the causal mechanism behind hard seeds; issue #1609 or a
+  trace-level mechanism review is still needed for causal interpretation.
+- The result does **not** satisfy the #1554 claim-map gate for S20/S30 paper-facing comparisons.
+  Issue #1554 remains blocked on a durable S20/S30 bundle when a paper-facing comparison requires
+  stronger seed-budget evidence.
+- SNQI ordering remains diagnostic only for this source surface; #1713 did not use SNQI as a
+  manuscript-ready ranking metric.
+
+### Known Caveats
+
+1. **Derived diagnostic evidence**: The source is the exploratory issue #1454 S10/h500 candidate
+   surface, not a pre-registered paper-facing S20/S30 campaign.
+2. **No causal mechanism proof**: Seed sensitivity identifies where behavior changes across seeds;
+   it does not prove why those seeds are hard.
+3. **Top-planner subset**: Planner selection is deterministic and documented, but limited to the
+   top four benchmark-success planner rows in the source bundle.
+4. **Paper-facing boundary**: Per the artifact evidence vocabulary, this analysis is useful for
+   prioritization and claim hygiene, not for standalone paper-facing significance claims.
+
+### Blocker / Next Action
+
+**Blocker:** Paper-facing seed-budget stability still requires the #1554 S20/S30 evidence gate when
+the manuscript claim depends on stable planner rankings, safety deltas, or close metric comparisons.
+
+**Next actions:**
+
+1. Use seed `116` as a hard-seed diagnostic for targeted trace review and mechanism hypotheses.
+2. Keep #1554 blocked on durable S20/S30 evidence; #1713 raises the importance of that evidence but
+   does not unblock it.
+3. When drafting manuscript claims, treat seed-sensitive scenarios as caveated unless supported by
+   the stronger seed-budget tier required by #1554.
+
+### Verdict
+
+`insufficient` — #1713 strengthens diagnostic claim hygiene and hard-seed prioritization, but the
+evidence remains S10-derived and does not satisfy paper-facing seed-budget stability requirements.
+
+---
+
 ## Cross-Claim Summary
 
 | Claim Area | Verdict | Readiness Blocker | Evidence Tier |
@@ -512,6 +612,7 @@ synthesis-eligible evidence.
 | CARLA/Native Replay Parity | `blocked` | Robot actor spawn failure prevents oracle replay | `failed` |
 | Predictive Planner v2 | `negative` | Obstacle-feature variant worsened success despite forecast improvement | `stress` |
 | Hard-Guarded Hybrid Learning | `not_ready` | Component campaigns incomplete | `launch_packet` |
+| Scenario Seed Sensitivity And Seed-Budget Stability | `insufficient` | S20/S30 paper-facing evidence gate remains blocked (#1554) | `diagnostic_s10` |
 
 ## Conservative Manuscript Readiness Assessment
 
@@ -529,6 +630,9 @@ evidence boundaries.**
   coupling/objective revision before further expansion.
 - **Hard-guarded hybrid learning**: schema and launch packet frozen, but component campaigns have
   not produced synthesis-eligible evidence.
+- **Scenario seed sensitivity**: PR #1713 identifies seed-sensitive scenarios and seed `116` as a
+  hard-seed diagnostic. This strengthens prioritization and caveat discipline, but it remains
+  S10-derived diagnostic evidence and does not satisfy #1554's S20/S30 paper-facing evidence gate.
 
 ## Recommended Follow-Up Issues
 
@@ -544,6 +648,8 @@ evidence boundaries.**
    Issue #1474, Issue #1475, Issue #1358, Issue #1496) before synthesis (Issue #1489).
 6. **Adversarial execution**: Complete issue #1501 (one-family smoke) before adversarial stress
    testing can support manuscript claims.
+7. **Seed-budget evidence**: Keep issue #1554 blocked until a durable S20/S30 evidence bundle is
+   available for any paper-facing comparison that depends on stable rankings or safety deltas.
 
 ## Validation
 

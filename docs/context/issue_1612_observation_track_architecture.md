@@ -44,15 +44,15 @@ Required track fields:
 | `benchmark_track` | stable slug, for example `grid_socnav_v1` or `lidar_2d_v1` | Primary aggregation fence. Rows with different values must not be aggregated as one result set. |
 | `observation_level` | vocabulary from `robot_sf/benchmark/observation_levels.py` | Coarse perception assumption, such as `oracle_full_state` or `lidar_2d`. |
 | `observation_mode` | runner/environment mode, such as `socnav_state` or `sensor_fusion_state` | Active observation producer and policy input mode. |
-| `runtime_input_contract` | list of semantic inputs | Human-readable guard against hidden privileged inputs. |
-| `privileged_runtime_inputs` | boolean plus optional list | Explicitly distinguishes benchmark tracks that may use simulator state. |
+| `runtime_inputs` | list of semantic inputs | Human-readable guard against hidden privileged inputs. |
+| `privileged_runtime_inputs` | boolean | Explicitly distinguishes benchmark tracks that may use simulator state. |
 | `adapter_mode` | `native`, `native_or_mixed_policy_action`, `adapter`, `perception_adapter`, `diagnostic_stub`, `fallback`, or `degraded` | Separates native rows from adapter-derived or caveated execution. |
 | `planner_mode` | `classical`, `learned_checkpoint`, `learned_stub`, `hybrid`, or `external_wrapper` | Makes planner-family grouping independent of observation-track grouping. |
 | `track_schema_version` | semver-like slug, for example `observation-track.v1` | Lets future schema additions remain additive. |
 
 Recommended optional fields:
 
-- `observation_keys`: concrete environment observation keys such as `drive_state`, `rays`, or
+- `environment_observation_keys`: concrete environment observation keys such as `drive_state`, `rays`, or
   `occupancy_grid`.
 - `sensor_geometry`: ray count, range, field of view, stack steps, or grid resolution when those
   values define the track.
@@ -87,11 +87,14 @@ scenario_reuse_policy:
 observation_track:
   benchmark_observation_level: lidar_2d
   active_observation_mode: sensor_fusion_state
-  runtime_input_contract: [robot_state, goal, lidar_rays]
-  observation_keys: [drive_state, rays]
-  privileged_runtime_inputs:
-    allowed: false
-    inputs: []
+  runtime_inputs:
+    - robot_state
+    - goal
+    - lidar_rays
+  environment_observation_keys:
+    - drive_state
+    - rays
+  privileged_runtime_inputs: false
   excluded_runtime_inputs:
     - occupancy_grid
     - simulator_backed_global_map

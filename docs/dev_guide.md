@@ -1396,6 +1396,7 @@ Use the following templates for specific tasks.
 - [priority assessor skill](../.agents/skills/gh-issue-priority-assessor/SKILL.md) - Review Project #5 priority inputs against the rubric and explain plausibility
 - [PR opener skill](../.agents/skills/gh-pr-opener/SKILL.md) - Open draft PRs with the repository template, issue-scope verification, and conservative readiness freshness checks
 - [design doc template](./templates/design-doc-template.md)
+- [external data audit template](./templates/external_data_audit.md) - Record source, license, redistribution, checksum, and Robot SF use decisions before staging external assets
 - [PR template](../.github/PULL_REQUEST_TEMPLATE/pr_default.md)
 
 

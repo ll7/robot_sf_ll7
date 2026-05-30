@@ -80,3 +80,5 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   archive, and checksum evidence for the first `crossing_ttc` adversarial smoke job.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and
   reports from the May 4 run.
+- `issue_1692_topology_hypothesis_probe_2026-05-30/`: compact diagnostic-only evidence for the
+  topology-hypothesis trace probe on `classic_realworld_double_bottleneck_high` seed 111.

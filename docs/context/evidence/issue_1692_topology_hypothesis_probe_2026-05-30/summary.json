@@ -1,0 +1,139 @@
+{
+  "diagnostic_kind": "topology_hypothesis_trace",
+  "diagnostic_status": "diagnostic_complete",
+  "claim_boundary": "diagnostic_only_not_benchmark_success",
+  "candidate": "hybrid_rule_v3_waypoint2_route_lookahead8",
+  "stage": "full_matrix",
+  "scenario_id": "classic_realworld_double_bottleneck_high",
+  "seed": 111,
+  "horizon": 160,
+  "command": "uv run python scripts/validation/run_topology_hypothesis_diagnostics.py --scenario-name classic_realworld_double_bottleneck_high --seed 111 --horizon 160 --output-dir output/diagnostics/issue1692_topology_hypothesis_probe/classic_realworld_double_bottleneck_high_seed111 --max-hypotheses 3",
+  "summary": {
+    "topology_status_counts": {
+      "insufficient_hypotheses": 64,
+      "ok": 96
+    },
+    "selected_source_counts": {
+      "dynamic_window": 156,
+      "path_follow_0.5m": 2,
+      "route_guide": 2
+    },
+    "hypothesis_progress_by_rank": {
+      "0": {
+        "samples": 127,
+        "first_corridor_name": "left_corridor_0",
+        "last_corridor_name": "right_corridor_0",
+        "first_remaining_distance_m": 2.3313708846386088,
+        "last_remaining_distance_m": 16.59411279696697,
+        "progress_delta_m": -14.262741912328362,
+        "min_static_clearance_m": 0.20000000298023224,
+        "min_dynamic_clearance_m": 0.6522960007333864
+      },
+      "1": {
+        "samples": 96,
+        "first_corridor_name": "right_corridor_1",
+        "last_corridor_name": "left_corridor_1",
+        "first_remaining_distance_m": 16.099495176512836,
+        "last_remaining_distance_m": 17.208326368492564,
+        "progress_delta_m": -1.1088311919797285,
+        "min_static_clearance_m": 0.20000000298023224,
+        "min_dynamic_clearance_m": 0.6510872404758408
+      },
+      "2": {
+        "samples": 30,
+        "first_corridor_name": "right_corridor_2",
+        "last_corridor_name": "right_corridor_2",
+        "first_remaining_distance_m": 15.727922295722157,
+        "last_remaining_distance_m": 8.297056398483486,
+        "progress_delta_m": 7.430865897238672,
+        "min_static_clearance_m": 0.20000000298023224,
+        "min_dynamic_clearance_m": 0.6392461414108603
+      }
+    }
+  },
+  "done_info": {},
+  "first_ok_step": {
+    "step": 1,
+    "hypothesis_count": 3,
+    "selected_local_command_source": "dynamic_window",
+    "planner_mode": "NORMAL",
+    "goal_distance": 11.792476658810694,
+    "hypotheses": [
+      {
+        "hypothesis_id": "primary_route",
+        "rank": 0,
+        "corridor_name": "right_corridor_0",
+        "blocked_cell": null,
+        "path_cell_count": 60,
+        "route_remaining_distance_m": 14.948023296778425,
+        "route_progress_reference_m": -14.948023296778425,
+        "static_clearance_min_m": 0.20000000298023224,
+        "static_clearance_mean_m": 1.6933333585659662,
+        "static_clearance_waypoint_m": 2.400000035762787,
+        "dynamic_clearance_min_m": 0.8040071823208379,
+        "waypoint_world": [
+          6.760259562665075,
+          12.719799613484694
+        ],
+        "goal_world": [
+          16.9141426084289,
+          14.942109743235463
+        ],
+        "route_tangent_heading": -0.7635545418901659,
+        "route_heading_error": -0.7853981633974527
+      },
+      {
+        "hypothesis_id": "blocked_cell_63_95",
+        "rank": 1,
+        "corridor_name": "right_corridor_1",
+        "blocked_cell": [
+          63,
+          95
+        ],
+        "path_cell_count": 67,
+        "route_remaining_distance_m": 16.099495176512836,
+        "route_progress_reference_m": -16.099495176512836,
+        "static_clearance_min_m": 0.20000000298023224,
+        "static_clearance_mean_m": 1.635820919898019,
+        "static_clearance_waypoint_m": 2.8000000417232513,
+        "dynamic_clearance_min_m": 1.2040071882813024,
+        "waypoint_world": [
+          5.960450400678458,
+          12.70232610565848
+        ],
+        "goal_world": [
+          16.9141426084289,
+          14.942109743235463
+        ],
+        "route_tangent_heading": -1.5489527052876098,
+        "route_heading_error": -1.5707963267948968
+      },
+      {
+        "hypothesis_id": "blocked_cell_61_103",
+        "rank": 2,
+        "corridor_name": "right_corridor_2",
+        "blocked_cell": [
+          61,
+          103
+        ],
+        "path_cell_count": 61,
+        "route_remaining_distance_m": 15.727922295722157,
+        "route_progress_reference_m": -15.727922295722157,
+        "static_clearance_min_m": 0.20000000298023224,
+        "static_clearance_mean_m": 1.7278688782062688,
+        "static_clearance_waypoint_m": 2.600000038743019,
+        "dynamic_clearance_min_m": 1.5099464882796607,
+        "waypoint_world": [
+          6.56030727216842,
+          12.71543123652814
+        ],
+        "goal_world": [
+          16.9141426084289,
+          14.942109743235463
+        ],
+        "route_tangent_heading": -0.7635545418901593,
+        "route_heading_error": -0.7853981633974465
+      }
+    ]
+  }
+}

@@ -169,8 +169,10 @@ def _extract_robot_pose(observation: dict[str, Any]) -> tuple[tuple[float, float
     robot = observation.get("robot")
     if not isinstance(robot, dict):
         raise RiskSurfaceUnavailable("observation must contain structured robot state")
-    position = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float).reshape(-1)
-    heading = np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)
+    if "position" not in robot or "heading" not in robot:
+        raise RiskSurfaceUnavailable("robot position and heading are required")
+    position = np.asarray(robot["position"], dtype=float).reshape(-1)
+    heading = np.asarray(robot["heading"], dtype=float).reshape(-1)
     if position.size < 2 or heading.size < 1:
         raise RiskSurfaceUnavailable("robot position and heading are required")
     if not np.all(np.isfinite(position[:2])) or not np.isfinite(heading[0]):

@@ -43,7 +43,12 @@ def test_deterministic_surface_has_reviewable_contract_and_peak_near_pedestrian(
     assert surface.values.shape == (8, 8)
     assert diagnostics["status"] == "available"
     assert diagnostics["frame"] == "ego"
-    assert diagnostics["risk_cells_at_or_above_threshold"] > 0
+    peak_row, peak_col = np.unravel_index(np.argmax(surface.values), surface.values.shape)
+    origin_x, origin_y = spec.grid_origin
+    expected_col = int((0.75 - origin_x) / spec.resolution)
+    expected_row = int((0.0 - origin_y) / spec.resolution)
+    assert abs(int(peak_col) - expected_col) <= 1
+    assert abs(int(peak_row) - expected_row) <= 1
     assert 0.0 <= diagnostics["mean_risk"] <= diagnostics["max_risk"] <= 1.0
 
     meta = surface.occupancy_meta()

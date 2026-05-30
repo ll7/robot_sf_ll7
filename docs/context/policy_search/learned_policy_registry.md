@@ -158,7 +158,8 @@ metadata before entering the runnable candidate registry.
   `docs/context/policy_search/issue_1394_crowdnav_height_source_harness.md`.
 - DRL-VO family: `docs/context/issue_769_drl_vo_assessment.md`.
 - NavDP / NoMaD visual navigation:
-  `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md`.
+  `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md` and
+  `docs/context/policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md`.
 - DreamerV3/world-model navigation:
   `docs/context/issue_1190_dreamerv3_checkpoint_import_boundary.md`.
 

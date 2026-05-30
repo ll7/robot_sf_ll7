@@ -58,6 +58,10 @@ Use it for three things only:
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
 - `2026-05-20_navdp_nomad_diffusion_assessment.md`: Issue #1356 Assessment of NavDP and NoMaD
   Diffusion-Navigation Source Contracts, with Monitor-Only Verdicts for Robot SF Local-Planner Use.
+- `2026-05-30_diffusion_policy_feasibility_issue_1621.md`: Issue #1621 broader feasibility
+  assessment for diffusion, consistency, and trajectory-diffusion local-navigation policy families;
+  current verdict is no external adapter and monitor/source-first until a Robot SF-compatible
+  observation/action contract and latency proof exist.
 - `../issue_1318_teb_corridor_deadlock_eval.md`: issue #1318 classic-merging corridor-deadlock
   comparison showing current in-repo TEB collides on the selected #1022 seeds while the hybrid-rule
   incumbent solves four of five.

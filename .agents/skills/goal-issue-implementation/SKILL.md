@@ -143,7 +143,7 @@ Example compact exhausted-queue audit:
 Queue exhaustion audit
 - Query used:
   gh issue list --state open --label state:ready --json number,title,labels,url --limit 100
-  gh issue list --state open --search "repo:ll7/robot_sf_ll7 is:issue is:open -label:state:ready -label:state:blocked -label:state:hold" --json number,title,labels,url --limit 100
+  gh issue list --search "repo:ll7/robot_sf_ll7 is:issue is:open -label:state:ready -label:state:blocked -label:state:hold" --json number,title,labels,url --limit 100
 - Remaining ready issues:
   - #1234 blocked locally: needs SLURM/Auxme allocation; mark `state:blocked` with unblock condition.
   - #1235 ambiguous: acceptance criteria mix benchmark claim and exploratory probe; route to

@@ -67,7 +67,9 @@ from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
+    attach_track_metadata,
     index_existing,
+    normalize_track_field,
     validate_episode_success_integrity,
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
@@ -2638,60 +2640,6 @@ def _validate_sensor_fusion_adapter_config(
         )
 
 
-def _normalize_track_field(raw: str | None, *, field_name: str) -> str | None:
-    """Return a stripped track metadata value, failing fast on blank strings."""
-    if raw is None:
-        return None
-    value = str(raw).strip()
-    if not value:
-        raise ValueError(f"{field_name} cannot be empty.")
-    return value
-
-
-def _track_metadata_block(
-    *,
-    benchmark_track: str | None,
-    track_schema_version: str | None,
-    observation_level: str,
-    observation_mode: str,
-) -> dict[str, str] | None:
-    """Build the algorithm-metadata benchmark-track block for track-aware rows.
-
-    Returns:
-        Track metadata block, or ``None`` for legacy non-track-aware rows.
-    """
-    if benchmark_track is None and track_schema_version is None:
-        return None
-    block = {
-        "observation_level": str(observation_level),
-        "observation_mode": str(observation_mode),
-    }
-    if benchmark_track is not None:
-        block["benchmark_track"] = benchmark_track
-    if track_schema_version is not None:
-        block["track_schema_version"] = track_schema_version
-    return block
-
-
-def _attach_benchmark_track_metadata(
-    metadata: dict[str, Any],
-    *,
-    benchmark_track: str | None,
-    track_schema_version: str | None,
-    observation_level: str,
-    observation_mode: str,
-) -> None:
-    """Attach additive observation-track provenance to algorithm metadata."""
-    block = _track_metadata_block(
-        benchmark_track=benchmark_track,
-        track_schema_version=track_schema_version,
-        observation_level=observation_level,
-        observation_mode=observation_mode,
-    )
-    if block is not None:
-        metadata["benchmark_track"] = block
-
-
 def _robot_kinematics_label(config: RobotSimulationConfig) -> str:
     """Derive the runtime robot kinematics label from simulation config.
 
@@ -3007,8 +2955,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario_id = str(
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )
-    benchmark_track = _normalize_track_field(benchmark_track, field_name="benchmark_track")
-    track_schema_version = _normalize_track_field(
+    benchmark_track = normalize_track_field(benchmark_track, field_name="benchmark_track")
+    track_schema_version = normalize_track_field(
         track_schema_version,
         field_name="track_schema_version",
     )
@@ -3078,7 +3026,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         observation_level=observation_level,
     )
     active_observation_level = str(algo_meta["observation_level"]["key"])
-    _attach_benchmark_track_metadata(
+    attach_track_metadata(
         algo_meta,
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
@@ -3303,7 +3251,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 observation_mode=active_observation_mode,
                 observation_level=active_observation_level,
             )
-            _attach_benchmark_track_metadata(
+            attach_track_metadata(
                 algo_meta,
                 benchmark_track=benchmark_track,
                 track_schema_version=track_schema_version,
@@ -3646,8 +3594,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
-    benchmark_track = _normalize_track_field(benchmark_track, field_name="benchmark_track")
-    track_schema_version = _normalize_track_field(
+    benchmark_track = normalize_track_field(benchmark_track, field_name="benchmark_track")
+    track_schema_version = normalize_track_field(
         track_schema_version,
         field_name="track_schema_version",
     )
@@ -3684,7 +3632,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     active_observation_mode = str(algo_contract["observation_spec"]["active_mode"])
     active_observation_level = str(algo_contract["observation_level"]["key"])
-    _attach_benchmark_track_metadata(
+    attach_track_metadata(
         algo_contract,
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
@@ -4012,7 +3960,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 observation_mode=active_observation_mode,
                 observation_level=active_observation_level,
             )
-            _attach_benchmark_track_metadata(
+            attach_track_metadata(
                 algo_contract,
                 benchmark_track=benchmark_track,
                 track_schema_version=track_schema_version,

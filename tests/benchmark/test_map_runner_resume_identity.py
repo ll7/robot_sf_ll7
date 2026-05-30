@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import yaml
 
 from robot_sf.benchmark import map_runner
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-
-SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
+SCHEMA_PATH = str(
+    Path(__file__).resolve().parents[2] / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+)
 
 
 def _minimal_map_scenario() -> dict[str, object]:

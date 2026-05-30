@@ -67,9 +67,11 @@ from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
+    attach_track_metadata,
     compute_episode_id,
     episode_identity_hash,
     index_existing,
+    normalize_track_field,
     validate_episode_success_integrity,
 )
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
@@ -82,16 +84,6 @@ if TYPE_CHECKING:
 
 DEFAULT_BENCHMARK_ROBOT_RADIUS_M = 0.3
 DEFAULT_BENCHMARK_PED_RADIUS_M = 0.35
-
-
-def _normalize_track_field(raw: str | None, *, field_name: str) -> str | None:
-    """Return a stripped track metadata value, failing fast on blank strings."""
-    if raw is None:
-        return None
-    value = str(raw).strip()
-    if not value:
-        raise ValueError(f"{field_name} cannot be empty.")
-    return value
 
 
 def _apply_track_metadata_to_scenarios(
@@ -127,28 +119,6 @@ def _apply_track_metadata_to_scenarios(
             payload["track_schema_version"] = track_schema_version
         tracked.append(payload)
     return tracked
-
-
-def _attach_benchmark_track_metadata(
-    metadata: dict[str, Any],
-    *,
-    scenario_params: dict[str, Any],
-) -> None:
-    """Attach additive observation-track provenance to algorithm metadata."""
-    benchmark_track = scenario_params.get("benchmark_track")
-    track_schema_version = scenario_params.get("track_schema_version")
-    if benchmark_track is None and track_schema_version is None:
-        return
-    block: dict[str, str] = {}
-    if benchmark_track is not None:
-        block["benchmark_track"] = str(benchmark_track)
-    if track_schema_version is not None:
-        block["track_schema_version"] = str(track_schema_version)
-    for key in ("observation_level", "observation_mode"):
-        value = scenario_params.get(key)
-        if value is not None:
-            block[key] = str(value)
-    metadata["benchmark_track"] = block
 
 
 def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
@@ -1214,9 +1184,16 @@ def _build_episode_record(
     episode_id = compute_episode_id(scenario_params, seed)
     algo_name = str(scenario_params.get("algo") or algo_metadata.get("algorithm") or "unknown")
     enriched_algo_metadata = enrich_algorithm_metadata(algo=algo_name, metadata=algo_metadata)
-    _attach_benchmark_track_metadata(
+    attach_track_metadata(
         enriched_algo_metadata,
-        scenario_params=scenario_params,
+        benchmark_track=normalize_track_field(
+            scenario_params.get("benchmark_track"), field_name="benchmark_track"
+        ),
+        track_schema_version=normalize_track_field(
+            scenario_params.get("track_schema_version"), field_name="track_schema_version"
+        ),
+        observation_level=scenario_params.get("observation_level"),
+        observation_mode=scenario_params.get("observation_mode"),
     )
     contradictions = outcome_contradictions(
         termination_reason=termination_reason,
@@ -1851,8 +1828,8 @@ def run_batch(  # noqa: PLR0913
         schema_path,
         append,
     )
-    benchmark_track = _normalize_track_field(benchmark_track, field_name="benchmark_track")
-    track_schema_version = _normalize_track_field(
+    benchmark_track = normalize_track_field(benchmark_track, field_name="benchmark_track")
+    track_schema_version = normalize_track_field(
         track_schema_version,
         field_name="track_schema_version",
     )

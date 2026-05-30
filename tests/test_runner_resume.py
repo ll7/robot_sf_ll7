@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from robot_sf.benchmark.runner import run_batch
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
+SCHEMA_PATH = str(
+    Path(__file__).resolve().parents[1] / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+)
 
 
 def test_run_batch_resume_skips_existing(tmp_path: Path):

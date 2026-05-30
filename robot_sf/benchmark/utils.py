@@ -32,6 +32,61 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
+def normalize_track_field(raw: str | None, *, field_name: str) -> str | None:
+    """Return a stripped track metadata value, failing fast on blank strings."""
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        raise ValueError(f"{field_name} cannot be empty.")
+    return value
+
+
+def build_track_metadata_block(
+    *,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+    observation_level: str | None,
+    observation_mode: str | None,
+) -> dict[str, str] | None:
+    """Build the algorithm-metadata benchmark-track block for track-aware rows.
+
+    Returns:
+        Track metadata block, or ``None`` when no track fields are provided.
+    """
+    if benchmark_track is None and track_schema_version is None:
+        return None
+    block: dict[str, str] = {}
+    if observation_level is not None:
+        block["observation_level"] = str(observation_level)
+    if observation_mode is not None:
+        block["observation_mode"] = str(observation_mode)
+    if benchmark_track is not None:
+        block["benchmark_track"] = str(benchmark_track)
+    if track_schema_version is not None:
+        block["track_schema_version"] = str(track_schema_version)
+    return block
+
+
+def attach_track_metadata(
+    metadata: dict[str, Any],
+    *,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+    observation_level: str | None,
+    observation_mode: str | None,
+) -> None:
+    """Attach additive observation-track provenance to algorithm metadata."""
+    block = build_track_metadata_block(
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        observation_level=observation_level,
+        observation_mode=observation_mode,
+    )
+    if block is not None:
+        metadata["benchmark_track"] = block
+
+
 def load_optional_json(path: str | None) -> dict[str, Any] | None:
     """Load JSON from an optional file path.
 

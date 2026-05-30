@@ -137,6 +137,38 @@ def test_reward_label_misalignment_quarantines(tmp_path):
     assert result.integrity_report["alignment_issues"][0]["lengths"]["rewards"] == 2
 
 
+def test_missing_reward_episode_quarantines(tmp_path):
+    """Decision Transformer preflight labels must align episode-for-episode."""
+    dataset_path = tmp_path / "missing_reward_episode.npz"
+    positions = np.zeros((2, 3, 2), dtype=float)
+    actions = np.zeros((2, 3, 2), dtype=float)
+    observations = np.zeros((2, 3, 5), dtype=float)
+    rewards = np.zeros((1, 3), dtype=float)
+    terminated = np.zeros((2, 3), dtype=bool)
+    truncated = np.zeros((2, 3), dtype=bool)
+    return_to_go = np.zeros((1, 3), dtype=float)
+    np.savez(
+        dataset_path,
+        positions=positions,
+        actions=actions,
+        observations=observations,
+        rewards=rewards,
+        terminated=terminated,
+        truncated=truncated,
+        return_to_go=return_to_go,
+        episode_count=np.array(2),
+        metadata={"scenario_coverage": {"classic_interactions": 2}},
+    )
+
+    result = TrajectoryDatasetValidator(dataset_path).validate(minimum_episodes=2)
+
+    assert result.quality_status == common.TrajectoryQuality.QUARANTINED
+    issue = result.integrity_report["alignment_issues"][0]
+    assert issue["episode_index"] is None
+    assert issue["expected_episodes"] == 2
+    assert issue["array_episode_counts"]["rewards"] == 1
+
+
 def test_unlabeled_fallback_rows_quarantine_dataset(tmp_path):
     """Fallback/degraded/not_available rows need an explicit exclusion policy."""
     dataset_path = tmp_path / "fallback_rows.npz"

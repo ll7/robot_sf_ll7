@@ -214,9 +214,25 @@ class TrajectoryDatasetValidator:
         if any(name not in arrays for name in required_arrays):
             return []
 
-        episode_count = min(len(arrays[name]) for name in required_arrays)
         issues: list[dict[str, Any]] = []
+        top_level_lengths = {name: len(arrays[name]) for name in required_arrays}
+        episode_count = int(arrays.get("episode_count", np.array(min(top_level_lengths.values()))))
+        top_level_mismatches = {
+            name: length for name, length in top_level_lengths.items() if length != episode_count
+        }
+        if top_level_mismatches:
+            issues.append(
+                {
+                    "episode_index": None,
+                    "expected_episodes": episode_count,
+                    "array_episode_counts": top_level_lengths,
+                }
+            )
+
+        comparable_episode_count = min(top_level_lengths.values())
         for episode_index in range(episode_count):
+            if episode_index >= comparable_episode_count:
+                break
             lengths: dict[str, int] = {}
             for name in required_arrays:
                 value = arrays[name][episode_index]
@@ -225,9 +241,7 @@ class TrajectoryDatasetValidator:
                 except TypeError:
                     lengths[name] = 1
             expected = lengths["actions"]
-            mismatched = {
-                name: length for name, length in lengths.items() if length != expected
-            }
+            mismatched = {name: length for name, length in lengths.items() if length != expected}
             if mismatched:
                 issues.append(
                     {
@@ -245,9 +259,7 @@ class TrajectoryDatasetValidator:
         Returns:
             Status counters and samples used to quarantine unlabeled excluded rows.
         """
-        readiness_values = TrajectoryDatasetValidator._status_values(
-            arrays.get("readiness_status")
-        )
+        readiness_values = TrajectoryDatasetValidator._status_values(arrays.get("readiness_status"))
         availability_values = TrajectoryDatasetValidator._status_values(
             arrays.get("availability_status")
         )

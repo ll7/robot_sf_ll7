@@ -75,6 +75,4 @@ def test_write_dataset_persists_decision_transformer_arrays(tmp_path) -> None:
         stored_metadata = data["metadata"].item()
 
     assert stored_metadata["reward_convention"] == "environment_step_reward"
-    assert stored_metadata["status_policy"]["availability_status_excluded"] == [
-        "not_available"
-    ]
+    assert stored_metadata["status_policy"]["availability_status_excluded"] == ["not_available"]

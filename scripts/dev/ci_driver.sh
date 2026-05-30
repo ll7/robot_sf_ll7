@@ -251,7 +251,7 @@ run_phase_with_timing() {
   set -e
 
   completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  duration="$(python - "$started_at" "$completed_at" <<'PY'
+  duration="$(python3 - "$started_at" "$completed_at" <<'PY'
 from __future__ import annotations
 
 import sys

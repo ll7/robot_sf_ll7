@@ -797,6 +797,9 @@ why a change was made rather than a full issue execution transcript.
   Run-level outcome and diagnostics summary for Slurm 12159.
 * [DreamerV3 Program Close-Out (2026-04-30)](dreamerv3_program_close_out_2026_04_30.md)
   Program-level stop decision and closure rationale after the probe/gate/full sequence.
+* [Issue #1623 World-Model Navigation Feasibility](issue_1623_world_model_feasibility.md)
+  Decision note for DreamerV3, PlaNet, TD-MPC2, and DreamerNav-style candidates: monitor external
+  methods, reject another local flat-vector retrain, and require source/provenance preflights first.
 * [Issue 782: DreamerV3 world-model pretraining design](issue_782_dreamerv3_pretraining_design.md)
   Inventory of reusable rollout sources plus the recommended proof-first pretraining path.
 * [Issue #1190 DreamerV3 checkpoint import boundary probe](issue_1190_dreamerv3_checkpoint_import_boundary.md)

@@ -235,6 +235,9 @@ class SimulationView:
     _prev_robot_speed_vec: np.ndarray | None = field(init=False, default=None)
     _camera_center_world: tuple[float, float] | None = field(init=False, default=None)
     _camera_rotation_rad: float | None = field(init=False, default=None)
+    _camera_rotation_cos: float | None = field(init=False, default=None)
+    _camera_rotation_sin: float | None = field(init=False, default=None)
+    _prev_offset_for_ego_up: tuple[float, float] | None = field(init=False, default=None)
     # Telemetry pane state
     show_telemetry_panel: bool = field(default=False)
     telemetry_session: object | None = field(default=None)
@@ -587,10 +590,8 @@ class SimulationView:
         if self._camera_center_world is not None and self._camera_rotation_rad is not None:
             dx = float(tup[0]) - self._camera_center_world[0]
             dy = float(tup[1]) - self._camera_center_world[1]
-            rotation_cos = cos(self._camera_rotation_rad)
-            rotation_sin = sin(self._camera_rotation_rad)
-            x = (dx * rotation_cos - dy * rotation_sin) * self.scaling + self.width / 2
-            y = (dx * rotation_sin + dy * rotation_cos) * self.scaling + self.height / 2
+            x = (dx * self._camera_rotation_cos - dy * self._camera_rotation_sin) * self.scaling + self.width / 2
+            y = (dx * self._camera_rotation_sin + dy * self._camera_rotation_cos) * self.scaling + self.height / 2
             return (x, y)
         x = tup[0] * self.scaling + self.offset[0]
         y = tup[1] * self.scaling + self.offset[1]
@@ -601,10 +602,20 @@ class SimulationView:
         normalized = str(getattr(view_mode, "value", view_mode))
         if normalized not in {"fixed_map", "ego_up"}:
             raise NotImplementedError(f"manual view mode is not implemented: {normalized}")
+        if normalized == "ego_up":
+            self._prev_offset_for_ego_up = (float(self.offset[0]), float(self.offset[1]))
+            self.manual_view_mode = normalized
+            return
+        # fixed_map restores any previously saved pan offset.
         self.manual_view_mode = normalized
-        if normalized == "fixed_map":
-            self._camera_center_world = None
-            self._camera_rotation_rad = None
+        self._camera_center_world = None
+        self._camera_rotation_rad = None
+        self._camera_rotation_cos = None
+        self._camera_rotation_sin = None
+        if self._prev_offset_for_ego_up is not None:
+            self.offset[0] = self._prev_offset_for_ego_up[0]
+            self.offset[1] = self._prev_offset_for_ego_up[1]
+            self._prev_offset_for_ego_up = None
 
     def exit_simulation(self, return_frames: bool = False):
         """Exit the simulation.
@@ -757,12 +768,14 @@ class SimulationView:
         """Moves the camera based on the focused object."""
         self._camera_center_world = None
         self._camera_rotation_rad = None
+        self._camera_rotation_cos = None
+        self._camera_rotation_sin = None
         if self.manual_view_mode == "ego_up":
             (r_x, r_y), theta = state.robot_pose
             self._camera_center_world = (float(r_x), float(r_y))
             self._camera_rotation_rad = -pi / 2.0 - float(theta)
-            self.offset[0] = self.width / 2 - float(r_x) * self.scaling
-            self.offset[1] = self.height / 2 - float(r_y) * self.scaling
+            self._camera_rotation_cos = cos(self._camera_rotation_rad)
+            self._camera_rotation_sin = sin(self._camera_rotation_rad)
             return
         if self.focus_on_robot:
             r_x, r_y = state.robot_pose[0]
@@ -1685,6 +1698,8 @@ class SimulationView:
         :param grid_increment: The increment of the grid in pixels.
         :param grid_color: The color of the grid lines.
         """
+        if self.manual_view_mode == "ego_up":
+            return
         scaled_grid_size = grid_increment * self.scaling
         font = pygame.font.Font(None, 24)
         # draw the vertical lines

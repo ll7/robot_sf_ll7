@@ -20,6 +20,13 @@ Verdict categories:
 - `insufficient`: evidence exists but is too weak/narrow for the claim.
 - `not_ready`: evidence collection or validation is incomplete.
 
+Observation-track metadata boundary: most historical benchmark evidence cited by this map predates
+first-class `benchmark_track` and `track_schema_version` metadata. Unless an evidence row
+explicitly records both fields, treat it as `legacy_track_unknown`: useful for within-surface
+interpretation, but not safe to aggregate with track-aware results or compare across observation
+tracks. See
+[issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md).
+
 ## Claim Area 1: AMV Benchmark Evidence
 
 ### Candidate Claim

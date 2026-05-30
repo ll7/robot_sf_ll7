@@ -17,6 +17,7 @@ WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
     "smoke-artifacts": 30,
+    "examples-smoke": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(
@@ -182,6 +183,24 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert _workflow_job_phases("fast-feedback") == {"lint", "typecheck", "test"}
     assert _workflow_job_phases("smoke-artifacts") == {"smoke", "artifact-policy"}
     assert "needs" not in workflow["jobs"]["fast-feedback"]
+
+
+def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -> None:
+    """Keep example smoke tests in a separately timed job required by aggregate CI."""
+    workflow = yaml.safe_load(_workflow_text())
+
+    assert "examples-smoke" in workflow["jobs"]
+    assert _workflow_job_phases("examples-smoke") == {"examples-smoke"}
+    assert "needs" not in workflow["jobs"]["examples-smoke"]
+    assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
+
+
+def test_ci_driver_test_phase_excludes_separately_timed_examples() -> None:
+    """Keep example smoke timing out of the fast-feedback pytest phase."""
+    driver_text = CI_DRIVER.read_text(encoding="utf-8")
+
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples' in driver_text
+    assert "uv run python scripts/validation/run_examples_smoke.py --skip-perf-tests" in driver_text
 
 
 def test_ci_workflow_does_not_download_apt_fast_at_runtime() -> None:

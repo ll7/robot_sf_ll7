@@ -136,7 +136,7 @@ knowledge, not every transient iteration detail.
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:
   [issue_1653_ci_runtime_slice.md](issue_1653_ci_runtime_slice.md)
-* Issue #1690 root-layout cleanup inventory:
+* Issue #1690 Root Layout Inventory:
   [issue_1690_root_layout_inventory.md](issue_1690_root_layout_inventory.md)
 * Issue #1613 LiDAR Observation Track Setup (2026-05-29):
   [issue_1613_lidar_observation_track.md](issue_1613_lidar_observation_track.md)

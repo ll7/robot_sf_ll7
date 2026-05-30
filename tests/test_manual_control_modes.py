@@ -6,6 +6,7 @@ from robot_sf.manual_control.modes import (
     CONTROL_MODE_REGISTRY,
     ManualControlMode,
     ManualViewMode,
+    configure_manual_view_renderer,
     control_mode_for_input_mapping_version,
     ensure_supported_manual_mode,
     ensure_supported_mvp_mode,
@@ -31,12 +32,12 @@ def test_ensure_supported_mvp_mode_rejects_unimplemented_control_mode():
         )
 
 
-def test_ensure_supported_mvp_mode_rejects_unimplemented_view_mode():
+def test_ensure_supported_mvp_mode_rejects_robot_static_until_camera_hook_exists():
     """Stretch view modes should fail closed until implemented."""
-    with pytest.raises(NotImplementedError, match="ego_up"):
+    with pytest.raises(NotImplementedError, match="robot_static"):
         ensure_supported_mvp_mode(
             control_mode=ManualControlMode.KEYBOARD_HOLD,
-            view_mode=ManualViewMode.EGO_UP,
+            view_mode=ManualViewMode.ROBOT_STATIC,
         )
 
 
@@ -61,17 +62,42 @@ def test_input_mapping_versions_resolve_back_to_control_modes() -> None:
         control_mode_for_input_mapping_version("joystick_arcade_v1")
 
 
-def test_ego_up_view_fails_closed_with_documented_blocker():
-    """Ego-up should be explicit but blocked until the renderer exposes camera hooks."""
+def test_ego_up_view_is_supported_by_mode_registry():
+    """Ego-up should be selectable now that the renderer exposes camera hooks."""
     spec = view_mode_spec(ManualViewMode.EGO_UP)
 
-    assert spec.implemented is False
-    assert "renderer camera transform hook" in str(spec.blocker)
-    with pytest.raises(NotImplementedError, match="renderer camera transform hook"):
-        ensure_supported_manual_mode(
-            control_mode=ManualControlMode.KEYBOARD_CRUISE,
-            view_mode=ManualViewMode.EGO_UP,
-        )
+    assert spec.implemented is True
+    assert spec.blocker is None
+    ensure_supported_manual_mode(
+        control_mode=ManualControlMode.KEYBOARD_CRUISE,
+        view_mode=ManualViewMode.EGO_UP,
+    )
+
+
+def test_ego_up_renderer_adapter_requires_camera_transform_hook():
+    """Ego-up should still fail closed when a renderer cannot apply the camera transform."""
+    with pytest.raises(NotImplementedError, match="camera transform hook"):
+        configure_manual_view_renderer(object(), ManualViewMode.EGO_UP)
+
+
+def test_fixed_map_renderer_adapter_allows_renderers_without_camera_hook():
+    """Fixed-map remains compatible with renderers that have no manual camera hook."""
+    configure_manual_view_renderer(object(), ManualViewMode.FIXED_MAP)
+
+
+def test_ego_up_renderer_adapter_configures_supported_renderer():
+    """Supported renderers receive the selected manual view mode."""
+
+    class _Renderer:
+        configured_mode = None
+
+        def set_manual_view_mode(self, mode):
+            self.configured_mode = mode
+
+    renderer = _Renderer()
+    configure_manual_view_renderer(renderer, ManualViewMode.EGO_UP)
+
+    assert renderer.configured_mode == ManualViewMode.EGO_UP
 
 
 def test_ensure_supported_mvp_mode_accepts_supported_string_inputs():

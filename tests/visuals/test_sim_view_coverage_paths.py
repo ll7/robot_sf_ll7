@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pygame
@@ -377,6 +378,25 @@ def test_sim_view_sprite_helpers_and_camera(monkeypatch, tmp_path) -> None:
     view.clear()
 
 
+def test_sim_view_ego_up_camera_transform_centers_robot_and_rotates_heading() -> None:
+    """Ego-up camera mode keeps the robot centered with its heading toward screen up."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.set_manual_view_mode("ego_up")
+    view._move_camera(SimpleNamespace(robot_pose=((2.0, 3.0), 0.0)))
+
+    assert view._scale_tuple((2.0, 3.0)) == pytest.approx((50.0, 40.0))
+    assert view._scale_tuple((3.0, 3.0)) == pytest.approx((50.0, 30.0))
+
+
+def test_sim_view_default_camera_transform_keeps_existing_affine_scaling() -> None:
+    """The default camera path should preserve the existing scale-plus-offset transform."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.focus_on_robot = False
+    view.offset[:] = (5, 7)
+
+    assert view._scale_tuple((2.0, 3.0)) == pytest.approx((25.0, 37.0))
+
+
 def test_robot_action_uses_speed_times_horizon_without_extra_scaling(monkeypatch) -> None:
     """Robot speed vector should use distance = speed * horizon (meters), then one screen scaling."""
     view = SimulationView(
@@ -583,3 +603,76 @@ def test_sim_view_exit_and_telemetry_paths(monkeypatch) -> None:
     view._augment_lidar(None)
     view._augment_lidar(np.empty((0, 2, 2), dtype=np.float32))
     view._augment_lidar(5)  # type: ignore[arg-type]
+
+
+def test_sim_view_ego_up_caches_rotation_trig() -> None:
+    """Ego-up mode should cache rotation cosine/sine and clear them on fixed_map."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.offset[:] = (4.0, 6.0)
+    view.set_manual_view_mode("ego_up")
+    view._move_camera(SimpleNamespace(robot_pose=((2.0, 3.0), 0.25)))
+
+    assert view._camera_center_world == pytest.approx((2.0, 3.0))
+    assert view._camera_rotation_rad == pytest.approx(-(np.pi / 2.0) - 0.25)
+    assert view._camera_rotation_cos == pytest.approx(np.cos(view._camera_rotation_rad))
+    assert view._camera_rotation_sin == pytest.approx(np.sin(view._camera_rotation_rad))
+    assert view._scale_tuple((2.0, 3.0)) == pytest.approx((50.0, 40.0))
+    assert view._scale_tuple((3.0, 3.0)) == pytest.approx(
+        (
+            view._camera_rotation_cos * 10.0 + 50.0,
+            view._camera_rotation_sin * 10.0 + 40.0,
+        )
+    )
+
+    view.set_manual_view_mode("fixed_map")
+    assert view._camera_center_world is None
+    assert view._camera_rotation_rad is None
+    assert view._camera_rotation_cos is None
+    assert view._camera_rotation_sin is None
+
+
+def test_sim_view_ego_up_preserves_manual_offset_on_mode_switch() -> None:
+    """Switching to ego_up should save the manual offset, and fixed_map should restore it."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.offset[:] = (12.0, 18.0)
+
+    view.set_manual_view_mode("ego_up")
+    assert view._prev_offset_for_ego_up == pytest.approx((12.0, 18.0))
+    view._move_camera(SimpleNamespace(robot_pose=((2.0, 3.0), 0.0)))
+    # In ego_up mode, world_to-screen ignores offset; the saved offset must not leak through.
+    assert view._scale_tuple((2.0, 3.0)) == pytest.approx((50.0, 40.0))
+
+    view.set_manual_view_mode("fixed_map")
+    assert view._prev_offset_for_ego_up is None
+    assert view.offset[0] == pytest.approx(12.0)
+    assert view.offset[1] == pytest.approx(18.0)
+
+
+def test_sim_view_ego_up_skips_grid(monkeypatch) -> None:
+    """Background grid drawing should be disabled while ego_up camera rotation is active."""
+    view = SimulationView(
+        record_video=False,
+        width=100,
+        height=80,
+        scaling=10,
+        map_def=_map_def_with_routes_and_obstacles(),
+    )
+    view.set_manual_view_mode("ego_up")
+
+    class DummyScreen:
+        """Record line-draw calls."""
+
+        def __init__(self) -> None:
+            self.blit_calls: list[tuple[Any, tuple[float, float]]] = []
+
+        def blit(self, source, dest, area=None):
+            self.blit_calls.append((source, dest))
+
+        def fill(self, color):
+            pass
+
+    dummy_screen = DummyScreen()
+    monkeypatch.setattr(view, "screen", dummy_screen)
+    monkeypatch.setattr(view, "offset", np.array([0.0, 0.0]))
+    view._draw_grid(grid_increment=10)
+    assert not dummy_screen.blit_calls

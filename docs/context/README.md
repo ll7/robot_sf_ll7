@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_1613_lidar_observation_track.md](issue_1613_lidar_observation_track.md)
 * Issue #1614 LiDAR Planner Compatibility Audit (2026-05-29):
   [issue_1614_lidar_planner_compatibility.md](issue_1614_lidar_planner_compatibility.md)
+* Issue #1685 dummy learned-policy adapter fixture:
+  [issue_1685_dummy_learned_policy_adapter.md](issue_1685_dummy_learned_policy_adapter.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:

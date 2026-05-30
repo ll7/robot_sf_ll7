@@ -78,6 +78,19 @@ class _FakeEnv:
         self.exit_count += 1
 
 
+class _FakeManualView:
+    """Renderer test double that records manual view mode configuration."""
+
+    def __init__(self) -> None:
+        self.configured_mode = None
+        self.font = _FakeFont()
+        self.screen = _FakeScreen()
+        self._use_display = False
+
+    def set_manual_view_mode(self, mode) -> None:
+        self.configured_mode = mode
+
+
 class _FakeKey:
     @staticmethod
     def name(key) -> str:
@@ -258,6 +271,34 @@ def test_pygame_runner_countdown_render_overlay_and_keyup(tmp_path):
     assert screen.blits
     assert _FakeDisplay.updates >= 1
     assert _FakeClock.ticks
+
+
+def test_pygame_runner_configures_ego_up_renderer_view(tmp_path):
+    """Ego-up sessions should configure the env renderer before rendering."""
+    _FakeClock.ticks.clear()
+    sim_ui = _FakeManualView()
+    env = _FakeEnv(terminal_after=1, success=True, sim_ui=sim_ui)
+    settings = ManualPygameRunnerSettings(
+        scenario_id="scenario-ego-up",
+        seed=16,
+        policy_to_beat="policy-ego-up",
+        policy_to_beat_source="explicit-test",
+        output_dir=tmp_path,
+        session_id="session-ego-up",
+        countdown_steps=0,
+        max_steps=1,
+        render=True,
+        view_mode="ego_up",
+    )
+
+    ManualPygameRunner(
+        settings,
+        env_factory=lambda **_kwargs: env,
+        pygame_module=_OverlayPygame,
+        event_source=lambda: [],
+    ).run()
+
+    assert sim_ui.configured_mode == "ego_up"
     assert all(target_fps == settings.target_fps for target_fps in _FakeClock.ticks)
 
 

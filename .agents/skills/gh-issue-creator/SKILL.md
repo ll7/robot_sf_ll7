@@ -32,6 +32,8 @@ execution.
 3. Normalize prompt into required fields:
    - goal, scope/non-scope, value/effort/complexity/risk, definition of done, success metrics,
      validation plan.
+   - for child issues, include `Parent issue`, `Non-goals`, `Validation / Testing`, and
+     `Blocked by` fields before creation.
 4. Assign an archetype and evidence tier using the convention in
    `docs/context/issue_1512_issue_archetypes.md`. Include the archetype metadata block in
    the issue body. Use only the canonical values from that note. When the archetype is unclear,
@@ -56,6 +58,8 @@ execution.
 - Keep assumptions explicit and conservative.
 - If template fit is unclear, pick the smallest viable template and note the assumption.
 - Do not proceed with speculative follow-up links unless concrete and actionable.
+- For parent-derived child issues, require a duplicate check from `issue-splitter` or perform one
+  before calling `gh issue create`.
 - Use REST for deterministic issue operations; use GraphQL/MCP only where useful for Project #5.
 
 ## Output

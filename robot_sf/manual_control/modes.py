@@ -70,11 +70,6 @@ VIEW_MODE_REGISTRY: dict[ManualViewMode, ManualViewModeSpec] = {
     ManualViewMode.EGO_UP: ManualViewModeSpec(
         mode=ManualViewMode.EGO_UP,
         overlay_label="Ego-up view: robot-centered camera with robot facing up",
-        implemented=False,
-        blocker=(
-            "ego_up_view_v1 requires an interactive renderer camera transform hook; "
-            "the current manual-control foundation exposes pure mode metadata only"
-        ),
     ),
     ManualViewMode.ROBOT_STATIC: ManualViewModeSpec(
         mode=ManualViewMode.ROBOT_STATIC,
@@ -186,3 +181,24 @@ def ensure_supported_mvp_mode(
         raise NotImplementedError(
             f"manual control mode is not implemented: {control_mode}"
         ) from exc
+
+
+def configure_manual_view_renderer(renderer: object, view_mode: str | ManualViewMode) -> None:
+    """Apply manual-view camera settings to a renderer, failing closed when unsupported."""
+    parsed = parse_manual_view_mode(view_mode)
+    view_spec = view_mode_spec(parsed)
+    if not view_spec.implemented:
+        blocker = f"; blocker: {view_spec.blocker}" if view_spec.blocker else ""
+        raise NotImplementedError(
+            f"manual view mode is not implemented: {view_spec.mode.value}{blocker}"
+        )
+    configure = getattr(renderer, "set_manual_view_mode", None)
+    if parsed == ManualViewMode.FIXED_MAP:
+        if callable(configure):
+            configure(parsed)
+        return
+    if not callable(configure):
+        raise NotImplementedError(
+            f"manual view mode requires a renderer camera transform hook: {parsed.value}"
+        )
+    configure(parsed)

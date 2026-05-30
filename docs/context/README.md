@@ -148,6 +148,8 @@ knowledge, not every transient iteration detail.
   [issue_1614_lidar_planner_compatibility.md](issue_1614_lidar_planner_compatibility.md)
 * Issue #1685 dummy learned-policy adapter fixture (2026-05-30):
   [issue_1685_dummy_learned_policy_adapter.md](issue_1685_dummy_learned_policy_adapter.md)
+* Issue #1674 Topology-Hypothesis Diagnostics (2026-05-30):
+  [issue_1674_topology_hypothesis_diagnostics.md](issue_1674_topology_hypothesis_diagnostics.md)
 * Issue #1675 learned risk-surface interface:
   [issue_1675_learned_risk_surface_interface.md](issue_1675_learned_risk_surface_interface.md)
 * Issue #1239 human-model transfer robustness:
@@ -202,6 +204,9 @@ knowledge, not every transient iteration detail.
   [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
+* Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):
+  [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md) and
+  [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Learned local-navigation policy registry:
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
@@ -210,6 +215,8 @@ knowledge, not every transient iteration detail.
   [issue_1618_learned_policy_adapter_interface.md](issue_1618_learned_policy_adapter_interface.md)
 * Issue #1677 SiT Dataset Terms Audit (2026-05-29):
   [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
+* Issue #1689 Simulation Trace Export Schema (2026-05-30):
+  [issue_1689_simulation_trace_export_schema.md](issue_1689_simulation_trace_export_schema.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
   [issue_1676_proxemic_profile_comfort_slice.md](issue_1676_proxemic_profile_comfort_slice.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):
@@ -441,8 +448,8 @@ knowledge, not every transient iteration detail.
   `hybrid_rule_v3_fast_progress_static_escape_continuous`, promotion-gate outcome, comparator
   deltas, remaining failure taxonomy, and artifact persistence boundary.
 * [Issue #1152 Manual-Control Mode Experiments](issue_1152_manual_control_modes.md)
-  records the first post-MVP steering-mode bundle, artifact-filterability contract, and fail-closed
-  `ego_up_view_v1` renderer-hook blocker.
+  records the first post-MVP steering-mode bundle, artifact-filterability contract, and issue #1604
+  `ego_up_view_v1` renderer-hook implementation proof.
 
 ## Manual Control Notes
 

@@ -362,7 +362,7 @@ def _init_manifest(
 
 
 def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
-    """Update runtime, throughput and synthetic parallel efficiency stats in manifest.
+    """Update runtime, throughput and scaling diagnostics in manifest.
 
     Returns:
         Updated scaling_efficiency dictionary from the manifest.
@@ -372,17 +372,28 @@ def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
     manifest.workers = int(getattr(cfg, "workers", 1) or 1)
     if manifest.runtime_sec > 0:
         manifest.episodes_per_second = manifest.executed_jobs / manifest.runtime_sec
-    ideal_rate = manifest.workers * manifest.episodes_per_second if manifest.workers > 0 else 0
-    efficiency = 0.0
-    if ideal_rate > 0:
-        efficiency = manifest.episodes_per_second / ideal_rate
+    throughput_per_worker = (
+        manifest.episodes_per_second / manifest.workers if manifest.workers > 0 else 0.0
+    )
+    compatibility_efficiency = 1.0 / manifest.workers if manifest.workers > 0 else 0.0
+    evidence_status = (
+        "smoke_only_non_evidence" if bool(getattr(cfg, "smoke", False)) else "diagnostic_only"
+    )
     manifest.scaling_efficiency = {
         "runtime_sec": manifest.runtime_sec,
         "executed_jobs": manifest.executed_jobs,
         "skipped_jobs": manifest.skipped_jobs,
         "episodes_per_second": manifest.episodes_per_second,
         "workers": manifest.workers,
-        "parallel_efficiency_placeholder": efficiency,
+        "throughput_per_worker": throughput_per_worker,
+        "parallel_efficiency": "not_available",
+        "parallel_efficiency_basis": "requires measured sequential baseline",
+        "evidence_status": evidence_status,
+        "parallel_efficiency_placeholder": compatibility_efficiency,
+        "parallel_efficiency_placeholder_deprecated": True,
+        "parallel_efficiency_placeholder_note": (
+            "Deprecated compatibility alias; not benchmark-strength evidence."
+        ),
     }
     return manifest.scaling_efficiency
 
@@ -1331,7 +1342,7 @@ def run_episode_jobs(jobs: Iterable[object], cfg, manifest) -> Iterator[dict]:  
 
 
 def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T028
-    """Decide whether additional episode jobs are required (placeholder T028).
+    """Decide whether additional episode jobs are required.
 
     Minimal implementation for contract phase:
       - Count existing episodes per scenario from current_records.
@@ -1339,8 +1350,8 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
       - Else create up to cfg.batch_size new synthetic jobs per iteration (evenly per scenario needing more, but simplified here: all remaining for first scenario).
 
     Future iterations (T034) will incorporate precision evaluation. Seeds are derived
-    by extending scenario.planned_seeds with deterministic incremental integers if
-    needed (placeholder logic) to avoid blocking on full seeding strategy.
+    by extending scenario.planned_seeds with deterministic incremental integers when
+    needed, which keeps smoke runs bounded while preserving reproducibility.
 
     Returns:
         Tuple of (done_flag, new_jobs_list).

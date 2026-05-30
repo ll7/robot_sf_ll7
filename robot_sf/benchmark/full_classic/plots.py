@@ -1,4 +1,4 @@
-"""Plot generation utilities for distributions, trajectories, KDEs, Pareto, force heatmaps.
+"""Plot generation utilities for distributions, trajectories, and diagnostics.
 
 Implemented across tasks T035 (basic), T036 (extended plots).
 """
@@ -54,11 +54,11 @@ def _safe_fig_close(fig):  # pragma: no cover - trivial
             pass
 
 
-def _write_placeholder_text(path: Path, title: str, lines: list[str]):
-    """Write a text-only placeholder plot to disk.
+def _write_fallback_text_plot(path: Path, title: str, lines: list[str]):
+    """Write a text-only fallback plot to disk.
 
     Returns:
-        True when the placeholder was written successfully.
+        True when the fallback plot was written successfully.
     """
     if plt is None:
         return False
@@ -87,7 +87,7 @@ def _write_placeholder_text(path: Path, title: str, lines: list[str]):
         ) as exc:  # pragma: no cover - defensive
             try:
                 logger = importlib.import_module("loguru").logger
-                logger.debug("_write_placeholder_text close failed: %s", exc)
+                logger.debug("_write_fallback_text_plot close failed: %s", exc)
             except ImportError:
                 pass
     return True
@@ -190,8 +190,8 @@ def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
     return _PlotArtifact("trajectory", str(pdf_path), status, note=note)
 
 
-def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
-    """Render a placeholder KDE-style histogram for path efficiency.
+def _path_efficiency_distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
+    """Render a lightweight histogram for path efficiency.
 
     Returns:
         Plot artifact metadata.
@@ -224,13 +224,13 @@ def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     return _PlotArtifact("kde", str(pdf_path), status, note=note)
 
 
-def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
-    """Render a placeholder Pareto scatter plot.
+def _success_collision_scatter_plot(groups, out_dir: Path) -> _PlotArtifact:
+    """Render a lightweight success-vs-collision scatter plot.
 
     Returns:
         Plot artifact metadata.
     """
-    pdf_path = out_dir / "pareto_placeholder.pdf"
+    pdf_path = out_dir / "success_collision_scatter.pdf"
     if plt is None:
         return _PlotArtifact("pareto", str(pdf_path), "skipped", note="matplotlib missing")
     status = "failed"
@@ -262,8 +262,8 @@ def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     return _PlotArtifact("pareto", str(pdf_path), status, note=note)
 
 
-def _force_heatmap_placeholder(out_dir: Path, records: Iterable[dict]) -> _PlotArtifact:
-    """Render a placeholder histogram for episode lengths.
+def _episode_length_histogram(out_dir: Path, records: Iterable[dict]) -> _PlotArtifact:
+    """Render a lightweight histogram for episode lengths.
 
     Returns:
         Plot artifact metadata.
@@ -292,14 +292,14 @@ def _force_heatmap_placeholder(out_dir: Path, records: Iterable[dict]) -> _PlotA
     return _PlotArtifact("force_heatmap", str(pdf_path), status, note=note)
 
 
-def generate_plots(groups, records, out_dir, cfg):  # T035 basic + T036 extended placeholders
+def generate_plots(groups, records, out_dir, cfg):
     """Generate plots returning artifact metadata list.
 
     Includes:
       - Distribution & trajectory (implemented minimal versions)
-      - KDE, Pareto, force heatmap placeholders (T036) always produced as placeholder PDFs
-        unless matplotlib missing (then skipped).
-    In smoke mode all artifacts are still generated as lightweight placeholders.
+      - Path-efficiency, success-vs-collision, and episode-length diagnostic PDFs
+        unless matplotlib is missing.
+    In smoke mode artifacts are lightweight diagnostics and not benchmark-strength evidence.
 
     Returns:
         List of _PlotArtifact objects containing metadata for all generated plots.
@@ -310,8 +310,8 @@ def generate_plots(groups, records, out_dir, cfg):  # T035 basic + T036 extended
     artifacts: list[_PlotArtifact] = []
     artifacts.append(_distribution_plot(groups, out_path))
     artifacts.append(_trajectory_plot(records, out_path))
-    artifacts.append(_kde_plot_placeholder(groups, out_path))
-    artifacts.append(_pareto_plot_placeholder(groups, out_path))
-    artifacts.append(_force_heatmap_placeholder(out_path, records))
+    artifacts.append(_path_efficiency_distribution_plot(groups, out_path))
+    artifacts.append(_success_collision_scatter_plot(groups, out_path))
+    artifacts.append(_episode_length_histogram(out_path, records))
 
     return artifacts

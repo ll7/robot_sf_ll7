@@ -1,7 +1,7 @@
 """State builder for SimulationView rendering (T037).
 
 Transforms a `ReplayEpisode` into a sequence of minimal objects exposing the
-attributes expected by `SimulationView.render` for the current placeholder
+attributes expected by `SimulationView.render` for the current lightweight
 integration. This keeps the adapter logic isolated so future enrichment
 (pedestrians, actions, sensor rays) only touches this module.
 

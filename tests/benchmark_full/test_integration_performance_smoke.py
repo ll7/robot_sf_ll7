@@ -2,7 +2,7 @@
 
 Objectives:
   - Execute a minimal benchmark run in non-smoke mode with tiny episode counts.
-  - Assert overall runtime stays within soft threshold (e.g., < 3 seconds) for synthetic placeholder implementation.
+  - Assert overall runtime stays within soft threshold for the synthetic smoke implementation.
   - Validate manifest contains scaling efficiency metrics introduced in T041.
 
 Rationale:
@@ -12,6 +12,7 @@ Rationale:
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -50,3 +51,10 @@ def test_performance_smoke(config_factory):
         "scaling_efficiency",
     ]:
         assert key in data, f"Missing '{key}' in manifest JSON content"
+    manifest = json.loads(data)
+    scaling = manifest["scaling_efficiency"]
+    assert scaling["throughput_per_worker"] >= 0.0
+    assert scaling["parallel_efficiency"] == "not_available"
+    assert scaling["parallel_efficiency_basis"] == "requires measured sequential baseline"
+    assert scaling["evidence_status"] == "smoke_only_non_evidence"
+    assert scaling["parallel_efficiency_placeholder_deprecated"] is True

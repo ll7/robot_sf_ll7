@@ -28,7 +28,7 @@ uv run python scripts/classic_benchmark_full.py \
   --target-success-half-width 0.05 \
   --target-snqi-half-width 0.05
 ```
-Smoke mode (fast placeholder artifacts):
+Smoke mode (fast smoke-only diagnostics; not benchmark-strength evidence):
 ```bash
 uv run python scripts/classic_benchmark_full.py \
   --scenarios configs/scenarios/classic_interactions.yaml \
@@ -48,10 +48,10 @@ uv run python scripts/classic_benchmark_full.py \
 | `--max-episodes N` | Per-scenario cap before stopping (0 = only precision criteria) |
 | `--batch-size N` | Episodes scheduled per adaptive iteration |
 | `--horizon N` | Override horizon for all episodes (0 = scenario default) |
-| `--smoke` | Enable fast placeholder run (skips heavy video generation) |
+| `--smoke` | Enable fast smoke-only diagnostic run (skips heavy video generation) |
 | `--target-collision-half-width F` | CI half-width target for collision_rate |
 | `--target-success-half-width F` | CI half-width target for success_rate |
-| `--target-snqi-half-width F` | CI half-width target for snqi (placeholder until SNQI integrated) |
+| `--target-snqi-half-width F` | CI half-width target for snqi when that metric is present |
 | `--bootstrap-samples N` | Bootstrap sample count used for aggregate CIs |
 | `--bootstrap-confidence F` | Bootstrap confidence level used for aggregate CIs |
 | `--bootstrap-seed N` | Optional bootstrap RNG seed (defaults to master seed) |
@@ -110,7 +110,13 @@ when enabled). The values are **not** decomposed by source.
     "skipped_jobs": 0,
     "episodes_per_second": 52.1,
     "workers": 2,
+    "throughput_per_worker": 26.05,
+    "parallel_efficiency": "not_available",
+    "parallel_efficiency_basis": "requires measured sequential baseline",
+    "evidence_status": "diagnostic_only",
     "parallel_efficiency_placeholder": 0.5,
+    "parallel_efficiency_placeholder_deprecated": true,
+    "parallel_efficiency_placeholder_note": "Deprecated compatibility alias; not benchmark-strength evidence.",
     "finalized": true
   }
 }
@@ -144,7 +150,14 @@ When `--freeze-manifest` is provided, `run_meta.json` also includes a `freeze_ma
 with validation status (`match`, `mismatch`, or `error`) and structured mismatches.
 
 ## Scaling & Efficiency
-Current efficiency metric is a placeholder (episodes_per_second / (workers * episodes_per_second)) and will be replaced with a more meaningful comparison vs. sequential baseline timing in a future optimization task.
+The manifest reports measured runtime, total throughput, and `throughput_per_worker`. It does not
+claim a true parallel-efficiency score unless a sequential baseline is measured for the same run
+contract. Until that baseline exists, `parallel_efficiency` is `"not_available"` and
+`parallel_efficiency_basis` explains the missing comparison.
+
+For one transition, manifests keep `parallel_efficiency_placeholder` as a deprecated compatibility
+alias for downstream consumers. Treat that alias as non-evidence; use the measured throughput fields
+or a future sequential-baseline comparison for performance claims.
 
 ## Reproducibility Guarantees
 Determinism hinges on two persisted identifiers:
@@ -220,7 +233,7 @@ the mismatches in `run_meta.json`.
 | Effect Sizes | Include confidence intervals via bootstrap on standardized metrics |
 | Precision | Relative half‑width targets for continuous metrics |
 | Scaling | True parallel efficiency (compare against timed sequential baseline) |
-| Visualization | Replace placeholders (KDE, Pareto, force heatmap) with real data-driven plots |
+| Visualization | Expand lightweight diagnostic plots into publication-grade data-driven figures |
 
 ## Related Spec Files
 - `specs/122-full-classic-interaction/tasks.md`
@@ -274,9 +287,9 @@ full_classic_smoke/
   plots/
     distribution.pdf
     trajectory.pdf
-    kde_placeholder.pdf
-    pareto_placeholder.pdf
-    force_heatmap_placeholder.pdf
+    path_efficiency.pdf
+    success_collision_scatter.pdf
+    episode_lengths.pdf
   manifest.json
   run_meta.json
   artifacts/

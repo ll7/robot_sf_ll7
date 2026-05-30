@@ -12,12 +12,16 @@ from scripts.tools.issue_template_audit import SECTION_ORDER
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
 DOCS_GUIDE = ROOT / "docs" / "dev_guide.md"
-SKILL_FILES = [
-    ROOT / ".agents" / "skills" / "gh-issue-creator" / "SKILL.md",
-    ROOT / ".agents" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
-    ROOT / ".agents" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
-    ROOT / ".agents" / "skills" / "issue-contract-maintainer" / "SKILL.md",
-]
+
+
+def _skill_path(name: str) -> Path:
+    """Resolve an agent skill file by its directory name."""
+
+    skill_file = ROOT / ".agents" / "skills" / name / "SKILL.md"
+    assert skill_file.exists(), f"missing skill file: {skill_file}"
+    return skill_file
+
+
 KNOWN_LABELS = {
     "agent",
     "benchmark",
@@ -193,7 +197,7 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "High `Improvement`" in prioritization_text
     assert "High `Success Probability`" in prioritization_text
 
-    creator_text = SKILL_FILES[0].read_text(encoding="utf-8")
+    creator_text = _skill_path("gh-issue-creator").read_text(encoding="utf-8")
     assert "GitHub MCP / GitHub app tools" in creator_text
     assert "gh issue create" in creator_text
     assert "gh project item-add" in creator_text
@@ -205,7 +209,7 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "Expected Duration in Hours" in creator_text
     assert "Reviewed" in creator_text
 
-    auditor_text = SKILL_FILES[1].read_text(encoding="utf-8")
+    auditor_text = _skill_path("gh-issue-template-auditor").read_text(encoding="utf-8")
     assert "GitHub MCP / GitHub app tools" in auditor_text
     assert "uv run python scripts/tools/issue_template_audit.py" in auditor_text
     assert "gh issue view" in auditor_text
@@ -214,7 +218,7 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "Archetype Metadata" in auditor_text
     assert "docs/context/issue_1512_issue_archetypes.md" in auditor_text
 
-    assessor_text = SKILL_FILES[2].read_text(encoding="utf-8")
+    assessor_text = _skill_path("gh-issue-priority-assessor").read_text(encoding="utf-8")
     assert "GitHub MCP / GitHub app tools" in assessor_text
     assert "docs/project_prioritization.md" in assessor_text
     assert "gh issue view" in assessor_text
@@ -224,10 +228,43 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "Estimate Discussion" in assessor_text
     assert "plausibility" in assessor_text.lower()
 
-    maintainer_text = SKILL_FILES[3].read_text(encoding="utf-8")
+    maintainer_text = _skill_path("issue-contract-maintainer").read_text(encoding="utf-8")
     assert "audit-template-compliance" in maintainer_text
     assert "Archetype Metadata" in maintainer_text
     assert "docs/context/issue_1512_issue_archetypes.md" in maintainer_text
 
     documentation_text = (TEMPLATE_DIR / "documentation.md").read_text(encoding="utf-8")
     assert "docs/README.md" in documentation_text
+
+
+def test_issue_splitter_skill_defines_parent_child_contract() -> None:
+    """Verify the parent-to-child issue-splitting mode stays conservative and auditable."""
+
+    splitter_text = _skill_path("issue-splitter").read_text(encoding="utf-8")
+    expected_markers = [
+        "smallest independently implementable child",
+        "duplicate check",
+        "Next Implementable Child",
+        "Parent issue",
+        "Non-goals",
+        "Validation / Testing",
+        "Blocked by",
+        "Project #5",
+        "draft-only",
+    ]
+    for marker in expected_markers:
+        assert marker in splitter_text, f"missing issue-splitter marker {marker!r}"
+
+    maintainer_text = _skill_path("issue-contract-maintainer").read_text(encoding="utf-8")
+    assert "split-parent-to-child" in maintainer_text
+    assert "issue-splitter" in maintainer_text
+
+    creator_text = _skill_path("gh-issue-creator").read_text(encoding="utf-8")
+    assert "Parent issue" in creator_text
+    assert "Blocked by" in creator_text
+
+    goal_text = (ROOT / ".agents" / "skills" / "goal-issue-implementation" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "issue-splitter" in goal_text
+    assert "Next Implementable Child" in goal_text

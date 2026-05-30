@@ -628,6 +628,7 @@ skills:
     - gh-pr-opener
     - gh-issue-creator
     - context-note-maintainer
+    - issue-splitter
     output_schema: issue_to_pr_summary.v1
     aliases:
     - issue-queue-runner
@@ -746,12 +747,36 @@ skills:
     - gh-issue-clarifier
     - gh-issue-template-auditor
     - issue-audit
+    - issue-splitter
     output_schema: skill_run_summary.v1
     aliases:
     - issue-contract-audit
     - issue-clarification
     requires_slurm: false
     requires_benchmark_artifacts: false
+  issue-splitter:
+    description: Split a parent, epic, decision, or research issue into the smallest independently
+      implementable child issue with duplicate checks and conservative parent linking.
+    category: github-issue
+    kind: atomic
+    phase: planning
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    delegates_to:
+    - gh-issue-creator
+    output_schema: skill_run_summary.v1
+    aliases:
+    - parent-to-child-issue
   oracle-imitation-campaign:
     writes:
       git: false

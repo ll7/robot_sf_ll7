@@ -1,4 +1,4 @@
-# Issue #1629 Latency-Aware Learned Navigation Safety
+# Issue #1629 Latency-Aware Learned Navigation Safety (2026-05-30)
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1629>
 
@@ -41,7 +41,7 @@ Use these terms distinctly:
 |---|---|---|
 | Observation delay | Missing as a benchmark runner hook. `SensorFusion` and `SocialGraphObservationAdapter` keep history, but they do not expose delayed observation selection. | Needs an explicit queue/buffer contract so the policy consumes state from `t-k`, not just a stacked current-history tensor. |
 | Action or actuation delay | Partly implemented by `SyntheticActuationController` and Issue #1556 profile metadata. | This is synthetic command-path delay, not measured hardware latency. It currently applies to differential-drive absolute commands. |
-| Planner update frequency | Missing as a named map-runner control. Current policy calls are effectively once per environment step in `run_map_episode`. | Needs `always`, periodic update, and hold-last semantics with stale-action provenance. |
+| Planner update frequency | Missing as a named map-runner control. Current policy calls are effectively once per environment step in `robot_sf/benchmark/map_runner.py`. | Needs `always`, periodic update, and hold-last semantics with stale-action provenance. |
 | Policy inference deadline | Present in the older benchmark runner through `POLICY_STEP_TIMEOUT_SECS`, but not as a learned-policy latency metric in the main map-runner path. | Wall-clock timeout is not simulated delay; it is runtime reliability evidence and should be tracked separately. |
 
 At the default benchmark `dt=0.1`, the requested delays map to:
@@ -107,6 +107,8 @@ Core metrics should include existing safety and progress metrics plus latency-na
 Recommended first bounded implementation issue:
 <https://github.com/ll7/robot_sf_ll7/issues/1744>
 
+Issue #1744 was open when this note was validated on 2026-05-30.
+
 That issue should add the smallest executable preflight/config contract for latency stress. It
 should express observation delay, action or actuation delay, and planner update hold independently;
 emit latency provenance and metrics; and fail closed for unsupported modes before benchmark evidence
@@ -138,3 +140,5 @@ Validation for this docs-only change:
 BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
 git diff --check origin/main...HEAD
 ```
+
+Both commands passed on 2026-05-30.

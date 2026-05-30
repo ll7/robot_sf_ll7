@@ -54,7 +54,7 @@ pretending to be a faithful upstream benchmark row.
 
 | Rank | Candidate/family | Source | License status | Checkpoint/source status | Observation/action fit | Reproducibility status | Novelty | Effort | Benchmark value | Publication value | Verdict |
 | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Tentabot-style motion-primitive value policy | <https://github.com/RIVeR-Lab/tentabot> | no GitHub-detected license | ROS/Gazebo source visible; trained-model path is source-specific | good conceptual fit as a learned scorer over motion primitives, weak direct adapter fit | source harness or Robot SF-native scorer spike needed | high | medium | high | high | `source-side reproduction first` |
+| 1 | Tentabot-style motion-primitive value policy | <https://github.com/RIVeR-Lab/tentabot> | no GitHub-detected license | ROS/Gazebo source visible; trained-model path is source-specific; Robot SF has a clean-room `tentabot_value_scorer_v0` spike staged in `candidate_registry.yaml` | good conceptual fit as a learned scorer over motion primitives, weak direct adapter fit | upstream source harness remains unproven; staged Robot SF scorer still needs its required smoke and nominal-sanity validation before evidence use | high | medium | high | high | `source-side reproduction first` |
 | 2 | CrowdNav HEIGHT / IGAT graph policies | <https://github.com/Shuijing725/CrowdNav_HEIGHT> | MIT in GitHub metadata | active source; prior Robot SF note records checkpoint/source-harness blockers | medium if graph/history adapter is proven; weak without source-state parity | source harness blocked on legacy dependencies/assets | high | medium-large | high | high | `source-side reproduction first` |
 | 3 | Arena-Rosnav learned policy stack | <https://github.com/Arena-Rosnav/arena-rosnav> | MIT in current org repo metadata | ROSNav source visible; full stack rather than a single local-policy checkpoint | medium for ROS benchmark comparison; poor as direct Robot SF planner | new source-side assessment needed before adapter claims | medium | large | medium | medium-high | `source-side reproduction first` |
 | 4 | DRL-VO | <https://github.com/TempleRAIL/drl_vo_nav> | GPL-3.0 in GitHub metadata | ROS source visible; prior Robot SF audit keeps it prototype-only | medium-low due tracked-agent and VO contract assumptions | source/prototype only; privileged-state audit already exists | high | large | medium | high | `source-side reproduction first` |
@@ -74,8 +74,11 @@ pretending to be a faithful upstream benchmark row.
 
 The top external lane is not a direct import. Tentabot is ranked first because its motion-primitive
 value idea matches Robot SF's planner shape better than visual or full-stack ROS navigation systems.
-The useful Robot SF follow-up is a learned scorer over existing rollout/proposal candidates, gated
-by Issue #1387 and the adapter diagnostics from Issue #1618.
+Robot SF already stages the clean-room `tentabot_value_scorer_v0` spike in
+`docs/context/policy_search/candidate_registry.yaml`; the remaining gap is validation/provenance,
+not inventing another duplicate spike. Upstream Tentabot source reproduction remains separate from
+that clean-room scorer and must not be used as benchmark evidence until its own source harness,
+license boundary, and observation/action metadata are proven.
 
 CrowdNav HEIGHT/IGAT remains the highest-value graph/social-navigation family, but its value depends
 on source-state parity and checkpoint/source-harness proof. The existing CrowdNav-family verdicts
@@ -94,21 +97,37 @@ and fail-closed behavior, so their next work is analysis, dataset preflight, or 
 ## Next-Step Issue Routing
 
 Do not open duplicate implementation issues for the ranked families without changing the source
-evidence. Existing issues already cover most useful work:
+evidence. Separate closed predecessor anchors from active next-step coverage:
 
-- Tentabot-style learned scorer: Issue #1357 is the source assessment predecessor; Issue #1387 is
-  the Robot SF-native scorer spike.
-- CrowdNav/HEIGHT source harness: Issue #1394 plus Issue #1367. Classic DS-RNN/RGL/CrowdNav
-  predecessor notes include Issue #600 and the CrowdNav-family verdict.
-- DRL-VO privileged-state and prototype boundary: Issue #1364 and
-  `docs/context/issue_769_drl_vo_assessment.md`.
-- GenSafeNav/SoNIC source harness and conformal-contract checks: Issue #1393 and Issue #1366.
-- NeuPAN source-side boundary: Issue #1368.
-- NavDP/NoMaD diffusion/visual navigation: Issue #1356 and Issue #1621.
+Active next-step coverage and still-applicable gates:
+
+- Tentabot-style learned scorer: staged `tentabot_value_scorer_v0` covers the Robot SF-native
+  scorer spike; required smoke and nominal-sanity validation remain the relevant gate before using
+  that staged candidate as evidence.
+- CrowdNav/HEIGHT source harness: source-harness and checkpoint/source-state parity remain the
+  active gate before any direct adapter or benchmark row.
+- GenSafeNav/SoNIC source harness and conformal-contract checks remain the active gate before any
+  guarded learned-policy benchmark claim.
+- NeuPAN source-side boundary remains monitor-only until source-side proof and adapter metadata
+  exist.
 - General diffusion-policy/consistency-policy method feasibility: Issue #1621.
 - Decision Transformer trajectory-data preflight: Issue #1622 and Issue #1752.
 - Foundation/VLA readiness: Issue #1626.
-- SAGE / MPC-transfer GNN: Issue #1369.
+- SAGE / MPC-transfer GNN remains blocked on source-side execution, checkpoint/inference path, and
+  observation/action metadata.
+
+Closed or historical anchors, not active next-step coverage:
+
+- Tentabot source assessment and local spike predecessors: Issue #1357 and Issue #1387.
+- CrowdNav/HEIGHT and classic CrowdNav-family predecessors: Issue #1394, Issue #1367, Issue #600,
+  and the CrowdNav-family verdict.
+- GenSafeNav/SoNIC source-harness and conformal-contract predecessors: Issue #1393 and Issue #1366.
+- NeuPAN predecessor: Issue #1368.
+- SAGE / MPC-transfer predecessor: Issue #1369.
+- DRL-VO privileged-state/prototype predecessor: Issue #1364 and
+  `docs/context/issue_769_drl_vo_assessment.md`.
+- NavDP/NoMaD diffusion/visual navigation predecessor: Issue #1356; current broader diffusion
+  routing is Issue #1621.
 - DWA-RL learned dynamic-window route: closed registry-maintenance Issue #1359 records the current
   monitor boundary; open a new source-side issue only if public source/checkpoint evidence appears.
 
@@ -121,7 +140,24 @@ New recommended follow-up:
 
 ## Source Checks
 
-Source and issue checks used for this note:
+Source and issue checks used for this note. These checks were run on 2026-05-30 and support
+metadata/routing claims only; they are not source-side execution proof.
+
+| Family | Checked result used in ranking |
+| --- | --- |
+| Tentabot | `RIVeR-Lab/tentabot` source was visible; GitHub license metadata was absent; Robot SF already has staged clean-room `tentabot_value_scorer_v0` config metadata, but no new validation result is introduced here. |
+| CrowdNav HEIGHT / CrowdNav graph family | GitHub metadata showed visible source for the checked CrowdNav-family repositories; existing Robot SF notes still require source-harness/checkpoint parity before adapter claims. |
+| Arena-Rosnav | `Arena-Rosnav/arena-rosnav` was checked directly and via search; current source assessment is delegated to Issue #1758. |
+| DRL-VO | `TempleRAIL/drl_vo_nav` GitHub metadata was visible with GPL-3.0 license metadata; existing Robot SF assessment remains prototype-only. |
+| GenSafeNav / SoNIC | `tasl-lab/GenSafeNav` and `tasl-lab/SoNIC-Social-Nav` were visible with MIT license metadata in the checked GitHub response; existing source-harness and conformal-contract gates remain. |
+| NeuPAN | `hanruihua/NeuPAN` metadata was visible with GPL-3.0 license metadata; no Robot SF checkpoint/import path is claimed. |
+| SAGE / MPC-transfer GNN | `TIB-K330/drl_planner` metadata was visible with MIT license metadata; prior source smoke remains blocked before checkpoint/inference claims. |
+| NavDP / NoMaD | NavDP source was visible with no GitHub-detected license metadata; NoMaD source metadata remained monitor-only due visual/topomap assumptions. |
+| Diffusion / Consistency / Diffuser | Checked repositories were visible; no local social-navigation checkpoint or Robot SF adapter contract is claimed. |
+| Foundation/VLA | `openvla/openvla` and `octo-models/octo` metadata were visible; readiness remains reject-for-current-adapter. |
+| Issue routing | Open-issue listing was used only for active coverage; closed predecessors are now marked as historical anchors. |
+
+Command recipes:
 
 ```bash
 gh repo view RIVeR-Lab/tentabot --json nameWithOwner,url,description,licenseInfo,isArchived,stargazerCount,updatedAt,defaultBranchRef
@@ -137,6 +173,7 @@ gh repo view InternRobotics/NavDP --json nameWithOwner,url,description,licenseIn
 gh repo view robodhruv/visualnav-transformer --json nameWithOwner,url,description,licenseInfo,isArchived,stargazerCount,updatedAt,defaultBranchRef
 gh repo view hanruihua/NeuPAN --json nameWithOwner,url,description,licenseInfo,isArchived,stargazerCount,updatedAt,defaultBranchRef
 gh repo view TIB-K330/drl_planner --json nameWithOwner,url,description,licenseInfo,isArchived,stargazerCount,updatedAt,defaultBranchRef
+gh repo view Arena-Rosnav/arena-rosnav --json nameWithOwner,url,description,licenseInfo,isArchived,stargazerCount,updatedAt,defaultBranchRef
 gh search repos "Arena Rosnav" --limit 10 --json fullName,url,description,license,updatedAt,stargazersCount
 gh repo view openvla/openvla --json nameWithOwner,url,description,licenseInfo,isArchived,stargazerCount,updatedAt,defaultBranchRef
 gh repo view octo-models/octo --json nameWithOwner,url,description,licenseInfo,isArchived,stargazerCount,updatedAt,defaultBranchRef

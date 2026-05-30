@@ -336,6 +336,48 @@ def test_scenario_identity_includes_observation_noise_hash() -> None:
     )
 
 
+def test_scenario_identity_includes_latency_stress_profile() -> None:
+    """Resume identity should distinguish latency-stress profile variants."""
+    scenario = _minimal_map_scenario()
+
+    one_step = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=0.1,
+        record_forces=True,
+        latency_stress_profile={
+            "name": "learned-policy-latency-stress-v0",
+            "observation_delay_steps": 1,
+            "action_delay_steps": 1,
+            "planner_update_mode": "hold-last",
+            "planner_update_period_steps": 2,
+        },
+    )
+    two_step = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=0.1,
+        record_forces=True,
+        latency_stress_profile={
+            "name": "learned-policy-latency-stress-v0",
+            "observation_delay_steps": 2,
+            "action_delay_steps": 1,
+            "planner_update_mode": "hold-last",
+            "planner_update_period_steps": 2,
+        },
+    )
+
+    assert one_step["latency_stress_profile"]["observation_delay_steps"] == 1
+    assert map_runner._compute_map_episode_id(
+        one_step,
+        seed=1,
+    ) != map_runner._compute_map_episode_id(two_step, seed=1)
+
+
 def test_scenario_identity_includes_observation_mode() -> None:
     """Observation-mode parity runs should not collide in resume identity."""
     scenario = _minimal_map_scenario()

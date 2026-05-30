@@ -85,7 +85,11 @@ def test_lazy_simulation_view_replays_pending_attributes(monkeypatch) -> None:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
             self.render_calls = []
+            self.manual_view_modes = []
             created["view"] = self
+
+        def set_manual_view_mode(self, view_mode):
+            self.manual_view_modes.append(view_mode)
 
         def render(self, *args, **kwargs):
             self.render_calls.append((args, kwargs))
@@ -99,6 +103,7 @@ def test_lazy_simulation_view_replays_pending_attributes(monkeypatch) -> None:
 
     view = LazySimulationView(record_video=True, width=320, height=200)
     view.observation_space_mode = "grid"
+    view.set_manual_view_mode("ego_up")
 
     assert bool(view)
     assert view.materialized is False
@@ -109,6 +114,7 @@ def test_lazy_simulation_view_replays_pending_attributes(monkeypatch) -> None:
     materialized = created["view"]
     assert materialized.kwargs["width"] == 320
     assert materialized.observation_space_mode == "grid"
+    assert materialized.manual_view_modes == ["ego_up"]
     assert materialized.render_calls == [(("state",), {"target_fps": 12})]
 
 
@@ -148,6 +154,36 @@ def test_lazy_simulation_view_propagates_tracked_attribute_mutations(monkeypatch
     view.height = 480
 
     assert materialized.height == 480
+
+
+def test_lazy_simulation_view_forwards_manual_view_mode_after_materialization(monkeypatch) -> None:
+    """Manual view mode changes should forward to an already materialized SimulationView."""
+    from robot_sf.render.lazy_sim_view import LazySimulationView
+
+    created = {}
+
+    class FakeSimulationView:
+        def __init__(self, **_kwargs):
+            self.manual_view_modes = []
+            created["view"] = self
+
+        def set_manual_view_mode(self, view_mode):
+            self.manual_view_modes.append(view_mode)
+
+        def render(self):
+            return "rendered"
+
+    def fake_import_module(name: str):
+        assert name == "robot_sf.render.sim_view"
+        return SimpleNamespace(SimulationView=FakeSimulationView)
+
+    monkeypatch.setattr("robot_sf.render.lazy_sim_view.importlib.import_module", fake_import_module)
+
+    view = LazySimulationView(record_video=False)
+    assert view.render() == "rendered"
+    view.set_manual_view_mode("ego_up")
+
+    assert created["view"].manual_view_modes == ["ego_up"]
 
 
 def test_pysocialforce_visualization_export_remains_available() -> None:

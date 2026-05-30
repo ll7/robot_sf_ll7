@@ -16,6 +16,7 @@ class LazySimulationView:
         """Store view construction arguments without importing pygame."""
         object.__setattr__(self, "_view_kwargs", dict(view_kwargs))
         object.__setattr__(self, "_pending_attrs", {})
+        object.__setattr__(self, "_pending_manual_view_mode", None)
         object.__setattr__(self, "_view", None)
         object.__setattr__(self, "record_video", bool(view_kwargs.get("record_video", False)))
         object.__setattr__(self, "video_path", view_kwargs.get("video_path"))
@@ -42,7 +43,11 @@ class LazySimulationView:
         view = sim_view_module.SimulationView(**self._view_kwargs)
         for name, value in self._pending_attrs.items():
             setattr(view, name, value)
+        pending_manual_view_mode = self._pending_manual_view_mode
+        if pending_manual_view_mode is not None:
+            view.set_manual_view_mode(pending_manual_view_mode)
         object.__setattr__(self, "_pending_attrs", {})
+        object.__setattr__(self, "_pending_manual_view_mode", None)
         object.__setattr__(self, "_view", view)
         return view
 
@@ -94,6 +99,14 @@ class LazySimulationView:
             Any: Result returned by ``SimulationView.render``.
         """
         return self._ensure_view().render(*args, **kwargs)
+
+    def set_manual_view_mode(self, view_mode: Any) -> None:
+        """Store or forward manual-control camera mode selection."""
+        view = self._view
+        if view is None:
+            object.__setattr__(self, "_pending_manual_view_mode", view_mode)
+            return
+        view.set_manual_view_mode(view_mode)
 
     def exit_simulation(self, *args: Any, **kwargs: Any) -> Any:
         """Close the materialized view, or no-op if rendering never started.

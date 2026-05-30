@@ -429,8 +429,8 @@ knowledge, not every transient iteration detail.
   `hybrid_rule_v3_fast_progress_static_escape_continuous`, promotion-gate outcome, comparator
   deltas, remaining failure taxonomy, and artifact persistence boundary.
 * [Issue #1152 Manual-Control Mode Experiments](issue_1152_manual_control_modes.md)
-  records the first post-MVP steering-mode bundle, artifact-filterability contract, and fail-closed
-  `ego_up_view_v1` renderer-hook blocker.
+  records the first post-MVP steering-mode bundle, artifact-filterability contract, and issue #1604
+  `ego_up_view_v1` renderer-hook implementation proof.
 
 ## Manual Control Notes
 

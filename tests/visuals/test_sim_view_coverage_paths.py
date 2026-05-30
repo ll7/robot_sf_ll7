@@ -377,6 +377,25 @@ def test_sim_view_sprite_helpers_and_camera(monkeypatch, tmp_path) -> None:
     view.clear()
 
 
+def test_sim_view_ego_up_camera_transform_centers_robot_and_rotates_heading() -> None:
+    """Ego-up camera mode keeps the robot centered with its heading toward screen up."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.set_manual_view_mode("ego_up")
+    view._move_camera(SimpleNamespace(robot_pose=((2.0, 3.0), 0.0)))
+
+    assert view._scale_tuple((2.0, 3.0)) == pytest.approx((50.0, 40.0))
+    assert view._scale_tuple((3.0, 3.0)) == pytest.approx((50.0, 30.0))
+
+
+def test_sim_view_default_camera_transform_keeps_existing_affine_scaling() -> None:
+    """The default camera path should preserve the existing scale-plus-offset transform."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.focus_on_robot = False
+    view.offset[:] = (5, 7)
+
+    assert view._scale_tuple((2.0, 3.0)) == pytest.approx((25.0, 37.0))
+
+
 def test_robot_action_uses_speed_times_horizon_without_extra_scaling(monkeypatch) -> None:
     """Robot speed vector should use distance = speed * horizon (meters), then one screen scaling."""
     view = SimulationView(

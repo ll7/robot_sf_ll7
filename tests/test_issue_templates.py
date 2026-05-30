@@ -12,12 +12,16 @@ from scripts.tools.issue_template_audit import SECTION_ORDER
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
 DOCS_GUIDE = ROOT / "docs" / "dev_guide.md"
+
+
 def _skill_path(name: str) -> Path:
     """Resolve an agent skill file by its directory name."""
 
     skill_file = ROOT / ".agents" / "skills" / name / "SKILL.md"
     assert skill_file.exists(), f"missing skill file: {skill_file}"
     return skill_file
+
+
 KNOWN_LABELS = {
     "agent",
     "benchmark",

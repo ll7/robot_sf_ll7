@@ -27,7 +27,7 @@ primarily behavior-cloning oriented and does not persist reward or continuation 
 
 | Source | Current status | State/observation | Action | Reward/return | Durable provenance | DT reuse verdict |
 | --- | --- | --- | --- | --- | --- | --- |
-| PPO checkpoints / registry | Implemented learned baseline, especially `ppo_issue791_best_v1`. | Checkpoints do not store rollouts; replay through collectors is required. | Inferred during replay. | Not in checkpoint. | `model/registry.yaml`, candidate configs, policy-search reports. | Good teacher source, but not a DT dataset by itself. |
+| PPO checkpoints / registry | Implemented learned baseline, especially `ppo_issue791_best_v1`. | Checkpoints do not store rollouts; replay through collectors is required. | Inferred during replay. | Not in checkpoint. | `configs/policy_search/candidates/ppo_issue791_best_v1.yaml`, `model/registry.yaml`, and `docs/context/policy_search/reports/2026-05-05_best_learning_policy.md`. | Good teacher source, but not a DT dataset by itself. |
 | PPO trajectory export | Implemented for imitation workflows. | `observations` object array in `.npz`. | `actions` object array in `.npz`. | Not stored by the current collector. | Manifest from `robot_sf.benchmark.imitation_manifest`; validation by `TrajectoryDatasetValidator`. | Good BC source; incomplete for DT until rewards, dones, and returns are added. |
 | BC pretraining pipeline | Implemented. | Flattens stored observations into imitation trajectories. | Uses stored action arrays. | BC does not require returns. | Config-first BC/PPO warm-start manifests. | Reusable loader patterns, but objective differs from DT. |
 | Oracle imitation launch packet | Staged, no dataset collected yet. | Planned manifest/split contract. | Planned oracle actions. | Not collected yet. | `configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml` and split policy. | Best future source if extended with reward/return labels before collection. |
@@ -55,7 +55,7 @@ A first Robot SF DT dataset should be explicit and small:
 | `terminal_t` / `truncated_t` | Explicit episode end flags so low-progress timeouts are not confused with successful completion. |
 | `episode_id`, `scenario_id`, `seed`, `step_idx` | Required provenance keys for split, leakage, and reproducibility checks. |
 | `source_policy_id` | Teacher policy or planner that generated the action. |
-| `status` | `available`, `failed`, `fallback`, `degraded`, or `not_available` for the source action, following `docs/context/issue_691_benchmark_fallback_policy.md`. |
+| `availability_status`, `readiness_status` | Canonical fallback-policy fields for the source action, following `docs/context/issue_691_benchmark_fallback_policy.md`: availability uses values such as `available`, `failed`, or `not_available`, while readiness carries `fallback` or `degraded` caveats. |
 | `split` | Train/validation/evaluation split assigned before collection. |
 
 Initial horizon should be short enough to keep the baseline falsifiable: use context windows of
@@ -100,15 +100,19 @@ Acceptance criteria for that child:
 - define a manifest schema with source policy, scenario IDs, seeds by split, episode IDs by split,
   reward convention, return convention, checksums, generating commit, and durable artifact URI
   policy,
-- validate that fallback/degraded/`not_available` rows are excluded or explicitly labeled,
+- validate that rows with `readiness_status` `fallback`/`degraded` or `availability_status`
+  `not_available` are excluded or explicitly labeled,
 - prove the schema on a tiny dry-run fixture or fail closed with missing durable inputs,
 - avoid model training until the dataset validator passes and a fair BC/PPO/oracle comparison plan
   exists.
 
-Possible first source policy: `ppo_issue791_best_v1`, because it has the cleanest current learned
-policy mapping and registry provenance. Use `hybrid_rule_v3_static_margin0_waypoint2` only if the
-oracle-imitation dataset collection packet is already being executed and can include DT fields from
-the start.
+Possible first source policy: `ppo_issue791_best_v1`, because
+`configs/policy_search/candidates/ppo_issue791_best_v1.yaml` and
+`docs/context/policy_search/reports/2026-05-05_best_learning_policy.md` provide the cleanest
+current learned-policy mapping and registry provenance. The referenced registry model id is
+`ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417`. Use
+`hybrid_rule_v3_static_margin0_waypoint2` only if the oracle-imitation dataset collection packet is
+already being executed and can include DT fields from the start.
 
 ## Recommendation
 

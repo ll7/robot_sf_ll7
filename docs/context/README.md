@@ -146,6 +146,8 @@ knowledge, not every transient iteration detail.
   [issue_1613_lidar_observation_track.md](issue_1613_lidar_observation_track.md)
 * Issue #1614 LiDAR Planner Compatibility Audit (2026-05-29):
   [issue_1614_lidar_planner_compatibility.md](issue_1614_lidar_planner_compatibility.md)
+* Issue #1674 Topology-Hypothesis Diagnostics (2026-05-30):
+  [issue_1674_topology_hypothesis_diagnostics.md](issue_1674_topology_hypothesis_diagnostics.md)
 * Issue #1675 learned risk-surface interface:
   [issue_1675_learned_risk_surface_interface.md](issue_1675_learned_risk_surface_interface.md)
 * Issue #1239 human-model transfer robustness:

@@ -47,6 +47,9 @@ from robot_sf.benchmark.planner_inclusion import (
     run_planner_inclusion_check,
     to_jsonable_payload,
 )
+from robot_sf.benchmark.planner_tradeoff_plot import (
+    save_planner_tradeoff_figure as _save_planner_tradeoff_figure,
+)
 from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
 from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
@@ -57,7 +60,10 @@ from robot_sf.benchmark.report_table import format_latex_booktabs as _tbl_format
 from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
 from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario_schema import (
+    validate_scenario_list,
+    validate_scenario_matrix_metadata,
+)
 from robot_sf.benchmark.scenario_thumbnails import (
     resolve_scenario_label as _thumb_resolve_label,
 )
@@ -859,6 +865,32 @@ def _handle_plot_distributions(args) -> int:
         return 2
 
 
+def _handle_plot_planner_tradeoff(args) -> int:
+    """Render the paper-style planner safety-efficiency tradeoff plot.
+
+    Returns:
+        Exit code (0 success, 2 failure).
+    """
+    try:
+        meta = _save_planner_tradeoff_figure(
+            Path(args.bundle_path),
+            out_png=Path(args.out),
+            out_pdf=(Path(args.out_pdf) if getattr(args, "out_pdf", None) else None),
+            bootstrap_samples=int(args.bootstrap_samples),
+            ci_confidence=float(args.ci_confidence),
+            bootstrap_seed=int(args.bootstrap_seed),
+            title=(str(args.title) if args.title is not None else None),
+        )
+        if getattr(args, "metadata_out", None):
+            metadata_path = Path(args.metadata_out)
+            metadata_path.parent.mkdir(parents=True, exist_ok=True)
+            metadata_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        return 0
+    except Exception as exc:  # pragma: no cover - error path
+        logging.exception("Planner tradeoff plot failed: %s", exc)
+        return 2
+
+
 def _handle_plot_scenarios(args) -> int:
     """Render scenario thumbnails and optional montage.
 
@@ -950,7 +982,9 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
             "select_scenarios": select_scenarios,
         }
     doc = docs[0]
+    schema_version: object = None
     if isinstance(doc, Mapping):
+        schema_version = doc.get("schema_version")
         raw_includes = doc.get("includes") or doc.get("include") or doc.get("scenario_files")
         if isinstance(raw_includes, list):
             includes = [str(entry) for entry in raw_includes]
@@ -971,7 +1005,23 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
         "format": format_hint,
         "includes": includes,
         "select_scenarios": select_scenarios,
+        **({"schema_version": schema_version} if isinstance(schema_version, str) else {}),
     }
+
+
+def _load_matrix_metadata(matrix_path: str | Path) -> object:
+    """Load raw top-level YAML metadata for validation without expanding includes.
+
+    Returns:
+        object: First YAML document, or ``None`` when unavailable.
+    """
+    if is_task_bundle_reference(matrix_path):
+        return None
+    try:
+        with Path(matrix_path).open("r", encoding="utf-8") as handle:
+            return next(yaml.safe_load_all(handle), None)
+    except Exception:
+        return None
 
 
 def _summarize_scenarios(scenarios: list[dict[str, Any]]) -> dict[str, object]:
@@ -1190,7 +1240,8 @@ def _handle_validate_config(args) -> int:
     """
     try:
         scenarios = load_scenario_matrix(args.matrix)
-        errors = validate_scenario_list(scenarios)
+        metadata_errors = validate_scenario_matrix_metadata(_load_matrix_metadata(args.matrix))
+        errors = [*metadata_errors, *validate_scenario_list(scenarios)]
         warnings = _collect_scenario_warnings(scenarios, matrix_path=args.matrix)
         summary = _summarize_scenarios(scenarios)
         source = _extract_matrix_source(args.matrix)
@@ -2026,6 +2077,52 @@ def _add_plot_distributions_subparser(
     p.set_defaults(cmd="plot-distributions")
 
 
+def _add_plot_planner_tradeoff_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the plot-planner-tradeoff subcommand parser."""
+    p = subparsers.add_parser(
+        "plot-planner-tradeoff",
+        help="Plot planner collision-rate versus success-rate from a publication bundle",
+    )
+    p.add_argument(
+        "--bundle-path",
+        required=True,
+        help="Publication bundle root containing payload/reports and payload/runs.",
+    )
+    p.add_argument("--out", required=True, help="Output PNG path")
+    p.add_argument("--out-pdf", default=None, help="Optional path to also export vector PDF")
+    p.add_argument(
+        "--metadata-out",
+        default=None,
+        help="Optional JSON metadata path with plotted points and CI values",
+    )
+    p.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=400,
+        help="Bootstrap resamples over seed-level means. Default: 400",
+    )
+    p.add_argument(
+        "--ci-confidence",
+        type=float,
+        default=0.95,
+        help="Bootstrap confidence level. Default: 0.95",
+    )
+    p.add_argument(
+        "--bootstrap-seed",
+        type=int,
+        default=42,
+        help="Seed for deterministic bootstrap resampling. Default: 42",
+    )
+    p.add_argument(
+        "--title",
+        default="Preferred region: lower collision, higher success",
+        help="Optional plot title; pass an empty string for no title.",
+    )
+    p.set_defaults(cmd="plot-planner-tradeoff")
+
+
 def _add_plot_scenarios_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2112,6 +2209,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_debug_seeds_subparser(subparsers)
     _add_plot_pareto_subparser(subparsers)
     _add_plot_distributions_subparser(subparsers)
+    _add_plot_planner_tradeoff_subparser(subparsers)
     _add_plot_scenarios_subparser(subparsers)
     _add_list_subparser(subparsers)
     _add_planner_inclusion_subparser(subparsers)
@@ -2563,6 +2661,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "debug-seeds": _handle_debug_seeds,
         "plot-pareto": _handle_plot_pareto,
         "plot-distributions": _handle_plot_distributions,
+        "plot-planner-tradeoff": _handle_plot_planner_tradeoff,
         "plot-scenarios": _handle_plot_scenarios,
     }
     handler = handlers.get(args.cmd)

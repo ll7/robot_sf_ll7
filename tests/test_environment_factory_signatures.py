@@ -17,6 +17,9 @@ from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.crowd_sim_env import CrowdSimEnv, CrowdSimulationConfig
 from robot_sf.gym_env.env_config import SimulationSettings
 from robot_sf.gym_env.environment_factory import (
+    EnvironmentFactory,
+    JsonlRecordingOptions,
+    TelemetryOptions,
     make_crowd_sim_env,
     make_image_robot_env,
     make_multi_robot_env,
@@ -26,6 +29,7 @@ from robot_sf.gym_env.environment_factory import (
 from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.robot_env_with_image import RobotEnvWithImage
+from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
 
 
 def _param_names(func):
@@ -81,6 +85,296 @@ def test_public_factories_reject_retired_legacy_kwargs(factory, kwargs):
     """Retired catch-all factory kwargs should fail at the Python signature boundary."""
     with pytest.raises(TypeError, match="unexpected keyword argument"):
         factory(**kwargs)
+
+
+def test_robot_factory_normalizes_deprecated_force_flag_once(monkeypatch):
+    """Internal factory should sync the legacy kwarg through the shared config helper."""
+    captured = {}
+
+    class FakeRobotEnv:
+        """Minimal robot env stub for factory normalization assertions."""
+
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(environment_factory_module, "RobotEnv", FakeRobotEnv)
+    config = RobotSimulationConfig()
+
+    env = EnvironmentFactory.create_robot_env(
+        config=config,
+        use_image_obs=False,
+        peds_have_obstacle_forces=False,
+        reward_func=None,
+        debug=False,
+        recording_enabled=False,
+        record_video=False,
+        video_path=None,
+        video_fps=None,
+    )
+
+    assert isinstance(env, FakeRobotEnv)
+    assert config.peds_have_static_obstacle_forces is False
+    assert config.peds_have_obstacle_forces is False
+    assert captured["peds_have_obstacle_forces"] is False
+
+    explicit_false_config = RobotSimulationConfig(peds_have_static_obstacle_forces=False)
+    EnvironmentFactory.create_robot_env(
+        config=explicit_false_config,
+        use_image_obs=False,
+        peds_have_obstacle_forces=True,
+        reward_func=None,
+        debug=False,
+        recording_enabled=False,
+        record_video=False,
+        video_path=None,
+        video_fps=None,
+    )
+
+    assert explicit_false_config.peds_have_static_obstacle_forces is False
+    assert explicit_false_config.peds_have_obstacle_forces is False
+
+
+def test_robot_factory_option_objects_override_flat_recording_and_telemetry(
+    monkeypatch,
+) -> None:
+    """Focused option objects should be the canonical path over flat convenience kwargs."""
+    captured = {}
+
+    def fake_create_robot_env(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        EnvironmentFactory,
+        "create_robot_env",
+        staticmethod(fake_create_robot_env),
+    )
+    config = RobotSimulationConfig()
+
+    env = make_robot_env(
+        config=config,
+        telemetry_options=TelemetryOptions(
+            enable_panel=True,
+            metrics=["speed", "clearance"],
+            record=True,
+            refresh_hz=4.0,
+            pane_layout="horizontal_split",
+            decimation=3,
+        ),
+        jsonl_recording_options=JsonlRecordingOptions(
+            enabled=True,
+            recording_dir="option-recordings",
+            suite_name="option-suite",
+            scenario_name="option-scenario",
+            algorithm_name="option-algorithm",
+            recording_seed=17,
+        ),
+        enable_telemetry_panel=False,
+        telemetry_metrics=["legacy"],
+        telemetry_record=False,
+        telemetry_refresh_hz=1.0,
+        telemetry_pane_layout="vertical_split",
+        telemetry_decimation=1,
+        use_jsonl_recording=False,
+        recording_dir="legacy-recordings",
+        suite_name="legacy-suite",
+        scenario_name="legacy-scenario",
+        algorithm_name="legacy-algorithm",
+        recording_seed=3,
+    )
+
+    assert env.applied_seed is None
+    assert captured["telemetry_options"].enable_panel is True
+    assert captured["telemetry_options"].metrics == ["speed", "clearance"]
+    assert captured["telemetry_options"].record is True
+    assert captured["telemetry_options"].refresh_hz == 4.0
+    assert captured["telemetry_options"].pane_layout == "horizontal_split"
+    assert captured["telemetry_options"].decimation == 3
+    assert captured["jsonl_recording_options"].enabled is True
+    assert captured["jsonl_recording_options"].recording_dir == "option-recordings"
+    assert captured["jsonl_recording_options"].suite_name == "option-suite"
+    assert captured["jsonl_recording_options"].scenario_name == "option-scenario"
+    assert captured["jsonl_recording_options"].algorithm_name == "option-algorithm"
+    assert captured["jsonl_recording_options"].recording_seed == 17
+
+
+def test_make_robot_env_copies_user_telemetry_options_before_validation(
+    monkeypatch,
+) -> None:
+    """Public telemetry normalization should not mutate caller-owned option objects."""
+    captured = {}
+
+    def fake_create_robot_env(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        EnvironmentFactory,
+        "create_robot_env",
+        staticmethod(fake_create_robot_env),
+    )
+    telemetry_options = TelemetryOptions(metrics=["", "speed", "  "])
+
+    env = make_robot_env(config=RobotSimulationConfig(), telemetry_options=telemetry_options)
+
+    assert env.applied_seed is None
+    assert captured["telemetry_options"] is not telemetry_options
+    assert captured["telemetry_options"].metrics == ["speed"]
+    assert telemetry_options.metrics == ["", "speed", "  "]
+
+
+def test_internal_robot_factory_applies_option_objects(monkeypatch) -> None:
+    """Internal factory consumes grouped JSONL and telemetry options."""
+    captured = {}
+
+    class FakeRobotEnv:
+        """Minimal env that records constructor kwargs."""
+
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(environment_factory_module, "RobotEnv", FakeRobotEnv)
+    config = RobotSimulationConfig()
+
+    env = EnvironmentFactory.create_robot_env(
+        config=config,
+        use_image_obs=False,
+        peds_have_obstacle_forces=True,
+        reward_func=None,
+        debug=False,
+        recording_enabled=True,
+        record_video=False,
+        video_path=None,
+        video_fps=None,
+        telemetry_options=TelemetryOptions(
+            enable_panel=True,
+            metrics=["speed"],
+            record=True,
+            refresh_hz=2.0,
+            pane_layout="horizontal_split",
+            decimation=2,
+        ),
+        jsonl_recording_options=JsonlRecordingOptions(
+            enabled=True,
+            recording_dir="jsonl-dir",
+            suite_name="suite",
+            scenario_name="scenario",
+            algorithm_name="algo",
+            recording_seed=5,
+        ),
+    )
+
+    assert isinstance(env, FakeRobotEnv)
+    assert config.enable_telemetry_panel is True
+    assert config.telemetry_metrics == ["speed"]
+    assert config.telemetry_record is True
+    assert config.telemetry_refresh_hz == 2.0
+    assert config.telemetry_pane_layout == "horizontal_split"
+    assert config.telemetry_decimation == 2
+    assert captured["use_jsonl_recording"] is True
+    assert captured["recording_dir"] == "jsonl-dir"
+    assert captured["suite_name"] == "suite"
+    assert captured["scenario_name"] == "scenario"
+    assert captured["algorithm_name"] == "algo"
+    assert captured["recording_seed"] == 5
+
+
+def test_internal_robot_factory_copies_user_telemetry_options_before_validation(
+    monkeypatch,
+) -> None:
+    """Internal telemetry validation should not mutate caller-owned option objects."""
+    captured = {}
+
+    class FakeRobotEnv:
+        """Minimal env that records constructor kwargs."""
+
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(environment_factory_module, "RobotEnv", FakeRobotEnv)
+    config = RobotSimulationConfig()
+    telemetry_options = TelemetryOptions(metrics=["", "speed", "  "])
+
+    env = EnvironmentFactory.create_robot_env(
+        config=config,
+        use_image_obs=False,
+        peds_have_obstacle_forces=True,
+        reward_func=None,
+        debug=False,
+        recording_enabled=False,
+        record_video=False,
+        video_path=None,
+        video_fps=None,
+        telemetry_options=telemetry_options,
+    )
+
+    assert isinstance(env, FakeRobotEnv)
+    assert config.telemetry_metrics == ["speed"]
+    assert telemetry_options.metrics == ["", "speed", "  "]
+
+
+def test_image_factory_accepts_jsonl_recording_options(monkeypatch) -> None:
+    """Image factory should share the grouped JSONL option path."""
+    captured = {}
+
+    def fake_create_robot_env(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(
+        EnvironmentFactory,
+        "create_robot_env",
+        staticmethod(fake_create_robot_env),
+    )
+
+    env = make_image_robot_env(
+        jsonl_recording_options=JsonlRecordingOptions(
+            enabled=True,
+            recording_dir="image-jsonl",
+            suite_name="image-suite",
+            scenario_name="image-scenario",
+            algorithm_name="image-algo",
+            recording_seed=11,
+        ),
+        use_jsonl_recording=False,
+        recording_dir="legacy",
+    )
+
+    assert env.applied_seed is None
+    assert captured["use_image_obs"] is True
+    assert captured["jsonl_recording_options"].enabled is True
+    assert captured["jsonl_recording_options"].recording_dir == "image-jsonl"
+    assert captured["jsonl_recording_options"].suite_name == "image-suite"
+    assert captured["jsonl_recording_options"].scenario_name == "image-scenario"
+    assert captured["jsonl_recording_options"].algorithm_name == "image-algo"
+    assert captured["jsonl_recording_options"].recording_seed == 11
+
+
+def test_pedestrian_factory_preserves_explicit_static_force_config(monkeypatch):
+    """Default legacy kwarg should not override an explicit canonical false value."""
+    captured = {}
+
+    class FakePedestrianEnv:
+        """Minimal pedestrian env stub for factory normalization assertions."""
+
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        environment_factory_module, "_load_pedestrian_env", lambda: FakePedestrianEnv
+    )
+    config = PedestrianSimulationConfig(peds_have_static_obstacle_forces=False)
+
+    env = EnvironmentFactory.create_pedestrian_env(
+        robot_model=None,
+        config=config,
+        peds_have_obstacle_forces=True,
+    )
+
+    assert isinstance(env, FakePedestrianEnv)
+    assert config.peds_have_static_obstacle_forces is False
+    assert config.peds_have_obstacle_forces is False
+    assert captured["peds_have_obstacle_forces"] is True
 
 
 def test_make_multi_robot_env_signature_explicit():

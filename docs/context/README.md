@@ -104,6 +104,18 @@ knowledge, not every transient iteration detail.
   [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
 * Issue #1550 predictive same-seed row summary schema:
   [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
+* Issue #1573 Root-Layout Inventory:
+  [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
+* Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):
+  [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
+* Issue #1583 high-risk root path boundaries:
+  [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
+* Issue #1636 benchmark metric semantics:
+  [issue_1636_benchmark_metric_semantics.md](issue_1636_benchmark_metric_semantics.md)
+* Issue #1634 SocNav Module Split Plan (2026-05-28):
+  [issue_1634_socnav_split_plan.md](issue_1634_socnav_split_plan.md)
+* Issues #1598/#1599 Root Compatibility Decisions (2026-05-28):
+  [issue_1598_1599_root_compatibility_decisions.md](issue_1598_1599_root_compatibility_decisions.md)
 * Issue #1504 ego-conditioned feature contract:
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)
 * Issue #1543 predictive v2 negative audit:
@@ -124,6 +136,14 @@ knowledge, not every transient iteration detail.
   [issue_1416_converted_map_cache_evaluation.md](issue_1416_converted_map_cache_evaluation.md)
 * Issue #1246 graded observation levels:
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
+* Issue #1659 LiDAR occupancy adapter:
+  [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
+* Issue #1653 CI runtime slice:
+  [issue_1653_ci_runtime_slice.md](issue_1653_ci_runtime_slice.md)
+* Issue #1613 LiDAR Observation Track Setup (2026-05-29):
+  [issue_1613_lidar_observation_track.md](issue_1613_lidar_observation_track.md)
+* Issue #1614 LiDAR Planner Compatibility Audit (2026-05-29):
+  [issue_1614_lidar_planner_compatibility.md](issue_1614_lidar_planner_compatibility.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:
@@ -150,6 +170,8 @@ knowledge, not every transient iteration detail.
   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
+* Issue #1633 RobotEnv SNQI proxy extraction:
+  [issue_1633_robot_env_snqi_proxy.md](issue_1633_robot_env_snqi_proxy.md)
 * Issue #1342 GH-Act Runtime Requirements:
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
 * Issue #1387 Tentabot-style value scorer spike:
@@ -162,6 +184,8 @@ knowledge, not every transient iteration detail.
   [issue_1397_oracle_imitation_launch_packet.md](issue_1397_oracle_imitation_launch_packet.md)
 * Issue #1353 Broader AMV Baseline Preflight:
   [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
+* Issue #1484 Broader Cross-Kinematics Launch Packet:
+  [issue_1484_broader_cross_kinematics_launch.md](issue_1484_broader_cross_kinematics_launch.md)
 * Issue #1546 AMV actuation-envelope stress slice:
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
 * Issue #1556 synthetic AMV actuation stress slice:
@@ -172,6 +196,18 @@ knowledge, not every transient iteration detail.
   [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
+* Learned local-navigation policy registry:
+  [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
+* Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
+  [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
+* Issue #1618 learned local-policy adapter interface:
+  [issue_1618_learned_policy_adapter_interface.md](issue_1618_learned_policy_adapter_interface.md)
+* Issue #1677 SiT Dataset Terms Audit (2026-05-29):
+  [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
+* Issue #1617 Local-Planner Repository Survey (2026-05-29):
+  [issue_1617_local_planner_repo_survey.md](issue_1617_local_planner_repo_survey.md)
+* Issue #1662 LiDAR PPO MLP Smoke (2026-05-29):
+  [issue_1662_lidar_ppo_smoke.md](issue_1662_lidar_ppo_smoke.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Issue archetypes and evidence tiers:
@@ -355,6 +391,12 @@ knowledge, not every transient iteration detail.
 * [Issue #1168 Multi-AMV Planner Support Classification](issue_1168_multi_amv_planner_support.md)
   records the current planner-family inventory, fail-closed support gate, and the boundary between
   goal-controller smoke execution and real multi-AMV planner support.
+* [Issue #1660 LiDAR Tracked-Agent Adapter](issue_1660_lidar_tracked_agent_adapter.md)
+  records the testing-only `lidar_social_force` adapter contract, endpoint-cluster tracking
+  assumptions, and fail-closed boundary for LiDAR-derived social-state planner inputs.
+* [Issue #1659 LiDAR Ego Occupancy Adapter](issue_1659_lidar_ego_occupancy_adapter.md)
+  records the testing-only `lidar_grid_route` adapter contract, opt-in gate, and fail-closed
+  boundary between LiDAR-derived ego occupancy and privileged map/SocNav state.
 * [Issue #1091 SDD Importer](issue_1091_sdd_importer.md)
   records the one-dataset-first real-world trajectory import boundary, SDD license assumptions,
   importer outputs, and deferred generalization scope.

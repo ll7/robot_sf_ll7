@@ -20,6 +20,6 @@ python3 svg_conv.py osm_input_file.svg output_file.json
 Now, the file can be further edited with the MapEditor.
 
 ```sh
-cd ..
-python3 -m map_editor
+cd ../../..
+uv run python examples/osm_map_editor_demo.py
 ```

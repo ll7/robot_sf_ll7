@@ -14,7 +14,7 @@ try:
 except ImportError:  # pragma: no cover - runtime-only dependency
     SAC = None  # type: ignore
 
-from robot_sf.baselines.social_force import Observation
+from robot_sf.baselines.interface import Observation
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
 from robot_sf.sensor.socnav_observation import SOCNAV_POSITION_CAP_M

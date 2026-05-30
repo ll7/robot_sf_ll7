@@ -89,6 +89,7 @@ Feature-focused demos for developers exploring capabilities.
 | [26 Telemetry Pane](./advanced/26_telemetry_pane.py) | Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance. | _None_ | telemetry, visualization, pygame, interactive | ⚠️ Interactive pygame session not reliable for CI; use headless variant instead. |
 | [27 Telemetry Headless Smoke](./advanced/27_telemetry_headless_smoke.py) | Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering. | _None_ | telemetry, visualization, headless, ci | ⚠️ Requires file output inspection; not suitable for smoke tests. |
 | [32 Demo Adversarial Pedestrian](./advanced/32_demo_adversarial_pedestrian.py) | Run a modernized debug rollout for pedestrian PPO policies with factory-based setup. | maps/svg_maps/masterthesis/intersection.svg<br>model/run_043<br>model_ped/ppo_intersection.zip | pedestrian, policy, debug, ppo | ⚠️ Interactive pygame debug demo with offline checkpoints. |
+| [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | recordings/<file>.jsonl | visualization, recording, threejs | ✅ |
 | [Occupancy Reward Shaping](./occupancy_reward_shaping.py) | Derive a clearance penalty from occupancy grid observations in a short rollout. | _None_ | occupancy, reward, grid | ✅ |
 
 ## Benchmarks

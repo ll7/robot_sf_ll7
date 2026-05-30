@@ -1,0 +1,22 @@
+# Testing-only LiDAR endpoint-cluster tracked-agent adapter for SocialForce.
+allow_testing_algorithms: true
+lidar_tracking:
+  max_scan_dist: 10.0
+  visual_angle_portion: 1.0
+  normalized_observation: true
+  target_distance_scale: 50.0
+  linear_speed_scale: 2.0
+  angular_speed_scale: 1.0
+  robot_radius: 0.3
+  track_radius: 0.3
+  min_track_range: 0.15
+  max_track_range: null
+  cluster_gap_rays: 1
+  max_tracks: 8
+  timestep: 0.1
+social_force:
+  max_linear_speed: 1.0
+  max_angular_speed: 1.0
+  social_force_desired_speed: 0.8
+  social_force_repulsion_weight: 1.0
+  social_force_tau: 0.5

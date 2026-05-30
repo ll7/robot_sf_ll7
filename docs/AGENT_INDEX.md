@@ -6,6 +6,10 @@ entry points, contracts, and where to change behavior.
 ## Training Entry Points
 - `scripts/training/train_ppo.py` - supported config-driven PPO expert training entrypoint.
 - `scripts/training_ppo.py` - removed legacy PPO entry point; fails closed with a migration command.
+- `scripts/training_a2c.py` - retired legacy A2C entry point; fails closed with config-first migration guidance.
+- `scripts/wandb_ppo_training.py` - retired legacy W&B PPO entry point; use `scripts/training/train_ppo.py` with W&B enabled in config.
+- `scripts/training/launch_optuna_expert_ppo.py` - supported config-driven Optuna PPO-imitation launcher.
+- `scripts/hparam_opt.py` - retired legacy Optuna entry point; fails closed with migration guidance.
 - `scripts/training/collect_expert_trajectories.py` - dataset collection for imitation pipelines.
 - `scripts/training/pretrain_from_expert.py` - behavioral cloning pretrain from expert data.
 - `scripts/training/train_ppo_with_pretrained_policy.py` - PPO fine-tuning from pretrain.
@@ -17,6 +21,8 @@ entry points, contracts, and where to change behavior.
 - `scripts/run_social_navigation_benchmark.py` - run standard benchmark flows.
 - `scripts/classic_benchmark_full.py` - full classic interactions benchmark run.
 - `scripts/benchmark_planner.py` - planner benchmarking.
+- `scripts/benchmark02.py` - retired legacy performance benchmark; fails closed with smoke/worker migration guidance.
+- `scripts/validation/performance_smoke_test.py` - maintained headless performance smoke.
 - `robot_sf/benchmark/full_classic/orchestrator.py` - programmatic full-classic runner.
 - `scripts/tools/run_camera_ready_benchmark.py` - config-driven camera-ready campaign runner; canonical path for paper-facing runs.
 - `scripts/tools/policy_analysis_run.py` - policy sweep with per-scenario seed-holdout support.

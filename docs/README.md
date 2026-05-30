@@ -349,6 +349,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Trajectory Visualization](./trajectory_visualization.md)** - Generate trajectory plots
 * **[Force Field Visualization](./force_field_visualization.md)** - Heatmap + quiver figures (PNG/PDF)
 * **[Pareto Plotting](./pareto_plotting.md)** - Generate Pareto frontier plots
+* **[Planner Tradeoff Plotting](./planner_tradeoff_plotting.md)** - Generate success/collision tradeoff figures from publication bundles
 * **[Force Field Heatmap](./force_field_heatmap.md)** - Heatmap + vector overlays figure (PNG/PDF)
 
 ### Performance & CI
@@ -423,6 +424,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
   + [Random baseline](./dev/baselines/random.md) — how to use and configure
 * [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)
 * [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
+* [**Planner Tradeoff Plotting**](./planner_tradeoff_plotting.md) — Generate safety-efficiency figures from publication bundles
 * [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
 
 </details>

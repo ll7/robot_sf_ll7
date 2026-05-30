@@ -1,4 +1,10 @@
-"""TODO docstring. Document this module."""
+"""LiDAR-style range scanning utilities for continuous occupancy maps.
+
+The helpers in this module cast radial rays from a robot or ego pedestrian pose
+against line-segment obstacles and circular dynamic objects. Distances are
+reported in world units and clipped/noised to match the configured scanner
+settings before they are exposed as Gymnasium observation spaces.
+"""
 
 from dataclasses import dataclass, field
 from math import cos, sin
@@ -113,7 +119,22 @@ def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: 
 
 @dataclass
 class LidarScannerSettings:
-    """Representing LiDAR sensor configuration settings."""
+    """Configuration for a radial LiDAR scan in world-coordinate units.
+
+    Attributes:
+        max_scan_dist: Maximum distance returned by any ray, in map/world units.
+        visual_angle_portion: Fraction of a full circle scanned around the
+            sensor heading. ``1.0`` covers 360 degrees and ``1 / 3`` covers a
+            120-degree field of view centered on the heading.
+        num_rays: Number of equally spaced scalar range readings per scan.
+        scan_noise: Two probabilities ``[loss, corruption]``. Loss replaces a
+            ray with ``max_scan_dist``; corruption scales the clipped range by a
+            random factor in ``[0, 1)``.
+        detect_other_robots: When true, dynamic objects exposed by the
+            occupancy source are treated as circular obstacles.
+        angle_opening: Derived symmetric angular interval in radians, populated
+            during initialization.
+    """
 
     max_scan_dist: float = 10.0
     visual_angle_portion: float = 1.0
@@ -123,7 +144,12 @@ class LidarScannerSettings:
     angle_opening: Range = field(init=False)
 
     def __post_init__(self):
-        """TODO docstring. Document this function."""
+        """Validate scanner settings and derive the symmetric angular opening.
+
+        ``visual_angle_portion`` is a fraction of a full circle, so ``1.0``
+        scans 360 degrees and ``1 / 3`` scans 120 degrees. ``scan_noise`` stores
+        scan-loss and corruption probabilities, both constrained to ``[0, 1]``.
+        """
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
         if self.max_scan_dist <= 0:
@@ -198,7 +224,21 @@ def raycast_circles(
     circles: np.ndarray,
     ray_angles: np.ndarray,
 ):
-    """Perform raycasts to detect generic circular obstacles."""
+    """Update ray ranges with intersections against circular obstacles.
+
+    Args:
+        out_ranges: Mutable per-ray distances. Values are lowered in place when
+            a circle intersects a ray closer than the current entry.
+        scanner_pos: Scanner origin in world coordinates.
+        max_scan_range: Distance threshold used to skip circles too far from
+            the scanner to affect the scan.
+        circles: ``(N, 3)`` float array of ``x, y, radius`` rows.
+        ray_angles: Absolute ray directions in radians, one per output entry.
+
+    Notes:
+        Invalid or empty circle arrays are ignored. The function mutates
+        ``out_ranges`` and returns ``None``.
+    """
     if len(circles.shape) != 2 or circles.shape[0] == 0 or circles.shape[1] != 3:
         return
 
@@ -232,13 +272,16 @@ def raycast_obstacles(
     obstacles: np.ndarray,
     ray_angles: np.ndarray,
 ):
-    """TODO docstring. Document this function.
+    """Update ray ranges with intersections against static obstacle segments.
 
     Args:
-        out_ranges: TODO docstring.
-        scanner_pos: TODO docstring.
-        obstacles: TODO docstring.
-        ray_angles: TODO docstring.
+        out_ranges: Mutable per-ray distances. Entries are replaced in place
+            when a nearer obstacle intersection is found.
+        scanner_pos: Scanner origin in world coordinates.
+        obstacles: Obstacle segments as an ``(N, 4)`` array of
+            ``start_x, start_y, end_x, end_y`` rows.
+        ray_angles: Absolute ray directions in radians, one per ``out_ranges``
+            entry.
     """
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
@@ -266,11 +309,26 @@ def raycast(  # noqa: PLR0913
     """Cast rays to compute minimal collision distances along given angles.
 
     The scan originates from the scanner's position and considers pedestrians,
-    obstacles, and optionally an enemy agent. When no collision occurs, the
-    maximum scan range is returned for that ray.
+    obstacles, and optionally an enemy agent. Rays that miss every object remain
+    ``np.inf`` here; ``range_postprocessing`` later clips them to the configured
+    maximum scan distance.
+
+    Args:
+        scanner_pos: Scanner origin in world coordinates.
+        obstacles: Static obstacle segments as an ``(N, 4)`` array of
+            ``start_x, start_y, end_x, end_y`` rows.
+        max_scan_range: Distance threshold for dynamic circular objects.
+        ped_pos: Pedestrian centers as an ``(N, 2)`` array.
+        ped_radius: Radius used to approximate pedestrians as circles.
+        ray_angles: Absolute ray directions in radians.
+        enemy_pos: Optional ``(N, 2)`` array for the robot seen by an
+            ego-pedestrian scanner.
+        enemy_radius: Radius used for ``enemy_pos`` circles.
+        other_robot_circles: Optional dynamic robot circles as ``(N, 3)`` rows
+            of ``x, y, radius``.
 
     Returns:
-        numpy.ndarray: Per-ray distances with shape ``(num_rays,)``.
+        numpy.ndarray: Raw per-ray distances with shape ``(num_rays,)``.
     """
     out_ranges = np.full((ray_angles.shape[0]), np.inf)
     raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
@@ -327,7 +385,20 @@ def _dynamic_objects_to_circle_array(occ: ContinuousOccupancy) -> np.ndarray | N
 
 @numba.njit(fastmath=True)
 def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_scan_dist: float):
-    """Postprocess the raycast results to simulate a noisy scan result."""
+    """Clip and optionally corrupt ray ranges in place.
+
+    Args:
+        out_ranges: Mutable per-ray distances from ``raycast``. Values larger
+            than ``max_scan_dist`` are clipped before noise is applied.
+        scan_noise: Two probabilities ``[loss, corruption]``. Loss replaces the
+            reading with ``max_scan_dist``; corruption scales the reading by a
+            fresh random factor.
+        max_scan_dist: Maximum sensor range in world units.
+
+    Notes:
+        The input array is modified in place. Callers that need deterministic
+        output should pass ``[0.0, 0.0]`` for ``scan_noise``.
+    """
     prob_scan_loss, prob_scan_corruption = scan_noise
     for i in range(out_ranges.shape[0]):
         out_ranges[i] = min(out_ranges[i], max_scan_dist)
@@ -347,9 +418,18 @@ def lidar_ray_scan(
     The occupancy contains the robot (as circle), a set of pedestrians
     (as circles) and a set of static obstacles (as 2D lines).
 
+    Args:
+        pose: ``((x, y), heading)`` scanner pose in world coordinates and
+            radians.
+        occ: Continuous occupancy provider exposing pedestrian coordinates,
+            obstacle segments, and optionally dynamic robot circles.
+        settings: Scanner settings controlling range, field of view, ray count,
+            noise, and dynamic-object detection.
+
     Returns:
         tuple[numpy.ndarray, numpy.ndarray]: A pair ``(ranges, ray_angles)`` where
-        ``ranges`` are per-ray distances and ``ray_angles`` are absolute ray angles.
+        ``ranges`` are per-ray distances with shape ``(settings.num_rays,)`` and
+        ``ray_angles`` are absolute ray angles in radians with the same shape.
     """
 
     (pos_x, pos_y), robot_orient = pose
@@ -395,14 +475,16 @@ def lidar_ray_scan(
 
 
 def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:
-    """TODO docstring. Document this function.
+    """Build the Gymnasium observation space for LiDAR range readings.
 
     Args:
-        num_rays: TODO docstring.
-        max_scan_dist: TODO docstring.
+        num_rays: Number of scalar range readings in each scan.
+        max_scan_dist: Inclusive upper bound for each range reading, in world
+            distance units.
 
     Returns:
-        TODO docstring.
+        A float32 ``Box`` with shape ``(num_rays,)`` and bounds
+        ``[0, max_scan_dist]`` for every ray.
     """
     high = np.full((num_rays), max_scan_dist, dtype=np.float32)
     low = np.zeros((num_rays), dtype=np.float32)

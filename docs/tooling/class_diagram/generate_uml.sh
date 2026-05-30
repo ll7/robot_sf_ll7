@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# execute from repo root with ./class_diagram/generate_uml.sh
+# execute from repo root with ./docs/tooling/class_diagram/generate_uml.sh
 
 # Activate repo-local venv
 if [ ! -f ".venv/bin/activate" ]; then
@@ -26,4 +26,4 @@ if ! command -v pylint &> /dev/null; then
     exit 1
 fi
 
-pyreverse -o svg -p robot_sf --colorized --max-color-depth 8 --show-ancestors 1 --show-associated 1 -my --show-stdlib --output-dir class_diagram/ robot_sf/
+pyreverse -o svg -p robot_sf --colorized --max-color-depth 8 --show-ancestors 1 --show-associated 1 -my --show-stdlib --output-dir docs/tooling/class_diagram/ robot_sf/

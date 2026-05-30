@@ -28,3 +28,6 @@ This directory hosts configuration files used by the expert-policy, trajectory c
 5. W&B is enabled by default for Optuna launcher runs; set `disable_wandb: true` only for offline/reliability scenarios.
 6. Safety-gated Optuna sweeps can set `constraint_collision_rate_max` (and optional
 `constraint_comfort_exposure_max` ) plus `constraint_handling: penalize|prune` .
+7. Optuna launcher configs use `schema_version: robot_sf.optuna_expert_ppo_launcher.v1`.
+Unsupported versions fail at `scripts/training/launch_optuna_expert_ppo.py --config <path>`
+before any trials are launched.

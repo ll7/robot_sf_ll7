@@ -26,6 +26,7 @@ try:
 except Exception as e:  # pragma: no cover - jsonschema is project dependency
     raise RuntimeError("jsonschema package is required for scenario validation") from e
 
+SCENARIO_MATRIX_SCHEMA_VERSION = "robot_sf.scenario_matrix.v1"
 SCHEMA_FILE = Path(__file__).with_name("schema").joinpath("scenarios.schema.json")
 
 
@@ -138,4 +139,34 @@ def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, An
     return errors
 
 
-__all__ = ["SCHEMA_FILE", "load_scenario_schema", "validate_scenario_list"]
+def validate_scenario_matrix_metadata(payload: object) -> list[dict[str, Any]]:
+    """Validate optional top-level scenario-matrix metadata.
+
+    Returns:
+        list[dict[str, Any]]: Metadata validation errors, empty when supported or absent.
+    """
+    if not isinstance(payload, dict) or "schema_version" not in payload:
+        return []
+    schema_version = payload.get("schema_version")
+    if schema_version == SCENARIO_MATRIX_SCHEMA_VERSION:
+        return []
+    return [
+        {
+            "index": None,
+            "id": None,
+            "error": (
+                f"unsupported scenario matrix schema_version {schema_version!r}; "
+                f"expected {SCENARIO_MATRIX_SCHEMA_VERSION!r}"
+            ),
+            "path": "/schema_version",
+        }
+    ]
+
+
+__all__ = [
+    "SCENARIO_MATRIX_SCHEMA_VERSION",
+    "SCHEMA_FILE",
+    "load_scenario_schema",
+    "validate_scenario_list",
+    "validate_scenario_matrix_metadata",
+]

@@ -5,6 +5,7 @@ This document describes the JSON Schema used to validate benchmark scenario matr
 - Schema file: `robot_sf/benchmark/schema/scenarios.schema.json`
 - Validator helper: `robot_sf/benchmark/scenario_schema.py`
 - CLI validation: `robot_sf_bench validate-config --matrix <path>.yaml`
+- Current manifest metadata version: `robot_sf.scenario_matrix.v1`
 
 A scenario matrix is a YAML (or JSON) list of scenario objects. Minimal valid entry:
 
@@ -22,6 +23,10 @@ Optional fields:
 - goal_topology: point | swap | circulate
 - robot_context: ahead | behind | embedded
 
+Manifest-style matrices may include `schema_version: robot_sf.scenario_matrix.v1` next to
+`includes`, `scenario_files`, `select_scenarios`, or `scenarios`. Unsupported versions fail early
+in `validate-config` with an error at `/schema_version`.
+
 Notes:
 - The CLI also checks for duplicate `id` values.
 - The validator uses Draft-07 JSON Schema.
@@ -32,4 +37,5 @@ Example:
 uv run robot_sf_bench validate-config --matrix configs/baselines/example_matrix.yaml
 ```
 
-This prints a JSON report with `num_scenarios`, `errors`, and `warnings`, and exits non‑zero on errors.
+This prints a JSON report with `num_scenarios`, `errors`, `warnings`, and source metadata, and
+exits non-zero on errors.

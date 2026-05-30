@@ -180,10 +180,14 @@ class MergedObservationFusion:
 
     This wrapper does not modify SensorFusion internals. It calls the base
     fusion's next_obs() and then augments the dict with additional sensor
-    observations under keys of the form "custom.<name>".
+    observations under keys of the form "custom.<name>". The returned dict is
+    the base observation mapping after in-place augmentation, so callers should
+    treat custom keys as part of the same observation payload.
 
-    Sensors are stepped with a lightweight state dict containing the simulator
-    and robot_id for potential future use by sensor implementations.
+    Sensors are stepped with a lightweight state dict containing exactly
+    ``{"sim": sim, "robot_id": robot_id}``. Sensor outputs may be any object
+    accepted by the surrounding observation-space declaration, though numpy
+    arrays are the common case.
     """
 
     def __init__(
@@ -195,15 +199,46 @@ class MergedObservationFusion:
         sim: Any | None = None,
         robot_id: int | None = None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Store the base fusion object and registry-backed sensor instances.
 
-        Args:
-            base_fusion: TODO docstring.
-            sensors: TODO docstring.
-            sensor_names: TODO docstring.
-            sim: TODO docstring.
-            robot_id: TODO docstring.
+        Parameters
+        ----------
+        base_fusion : Any
+            Existing fusion object that provides ``next_obs`` and optionally
+            ``reset_cache``.
+        sensors : list[Sensor]
+            Additional registry-created sensors to step after the base
+            observation is produced.
+        sensor_names : list[str]
+            Names used to place sensor observations under ``custom.<name>``
+            keys. Must align with ``sensors`` order.
+        sim : Any | None
+            Optional simulator handle passed to custom sensors in their
+            lightweight state dict.
+        robot_id : int | None
+            Optional robot identifier passed to custom sensors in their
+            lightweight state dict.
+
+        Raises
+        ------
+        ValueError
+            If ``sensors`` and ``sensor_names`` have different lengths.
         """
+        if len(sensors) != len(sensor_names):
+            raise ValueError(
+                "MergedObservationFusion requires one sensor name per sensor "
+                f"(got {len(sensors)} sensors and {len(sensor_names)} names)."
+            )
+        seen_names: dict[str, str] = {}
+        for name in sensor_names:
+            normalized_name = name.casefold()
+            if normalized_name in seen_names:
+                raise ValueError(
+                    "MergedObservationFusion requires unique sensor names "
+                    f"(duplicate custom observation name '{name}' conflicts with "
+                    f"'{seen_names[normalized_name]}')."
+                )
+            seen_names[normalized_name] = name
         self._base = base_fusion
         self._sensors = sensors
         self._names = sensor_names
@@ -211,11 +246,17 @@ class MergedObservationFusion:
         self._robot_id = robot_id
 
     def next_obs(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
+        """Return base observations augmented with registry sensor outputs.
 
+        Each custom sensor receives a state dict containing ``sim`` and
+        ``robot_id`` before its observation is read. Sensor failures are logged
+        with the configured sensor name and then re-raised.
 
-        Returns:
-            TODO docstring.
+        Returns
+        -------
+        dict[str, Any]
+            Observation dictionary from the base fusion plus ``custom.<name>``
+            entries for every configured registry sensor.
         """
         obs = self._base.next_obs()
         state = {"sim": self._sim, "robot_id": self._robot_id}
@@ -230,7 +271,13 @@ class MergedObservationFusion:
 
     # Pass-through API used by RobotState
     def reset_cache(self) -> None:
-        """TODO docstring. Document this function."""
+        """Reset cached base-fusion state and custom sensors when supported.
+
+        The base fusion receives ``reset_cache`` only when it exposes that
+        method. Custom sensors receive ``reset`` when available. Missing reset
+        hooks are treated as no-ops so stateless sensors can participate without
+        extra adapter code.
+        """
         if hasattr(self._base, "reset_cache"):
             self._base.reset_cache()
         for sensor in self._sensors:

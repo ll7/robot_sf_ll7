@@ -1,0 +1,127 @@
+version: issue-1484-broader-cross-kinematics-v1
+profile: issue-1484-broader-cross-kinematics
+scenario_surface: configs/scenarios/sets/cross_kinematics_v1.yaml
+source_evidence:
+  broader_rows: docs/context/evidence/issue_1353_broader_amv_2026-05-26/README.md
+  compact_cross_kinematics: docs/context/evidence/issue_1353_broader_amv_2026-05-26/cross_kinematics_1354/
+kinematics:
+  - differential_drive
+  - bicycle_drive
+  - holonomic
+holonomic_command_mode: vx_vy
+status_values:
+  supported: Native or adapter path is expected to run in this bounded campaign.
+  experimental: Row is executed as broader evidence but must be interpreted with an experimental caveat.
+  not_available: Row is deliberately excluded because required assets are unavailable.
+  unsupported: Row must not be counted as a successful benchmark row.
+planners:
+  goal:
+    algo: goal
+    planner_group: core
+    support:
+      differential_drive:
+        status: supported
+        reason: Goal ran as a #1353 core row and already has cross-kinematics support in the compact #1354 surface.
+      bicycle_drive:
+        status: supported
+        reason: Goal commands route through the benchmark kinematics projection layer.
+      holonomic:
+        status: supported
+        reason: Goal commands run through holonomic unicycle_vw compatibility.
+  social_force:
+    algo: social_force
+    planner_group: core
+    support:
+      differential_drive:
+        status: supported
+        reason: Social Force ran as a #1353 core row and projects into the differential-drive command contract.
+      bicycle_drive:
+        status: supported
+        reason: Social Force output projects through the bicycle-drive benchmark adapter.
+      holonomic:
+        status: supported
+        reason: Social Force output can use the holonomic benchmark bridge and records projection metadata.
+  orca:
+    algo: orca
+    planner_group: core
+    support:
+      differential_drive:
+        status: supported
+        reason: ORCA ran as a #1353 core row and projects into the unicycle command contract.
+      bicycle_drive:
+        status: supported
+        reason: ORCA world-velocity output projects through the bicycle-drive benchmark adapter.
+      holonomic:
+        status: supported
+        reason: ORCA world-velocity output maps directly to the holonomic vx_vy benchmark contract.
+  ppo:
+    algo: ppo
+    planner_group: experimental
+    support:
+      differential_drive:
+        status: experimental
+        reason: PPO ran in #1353 differential-drive evidence, but learned-policy artifact provenance remains kinematics-specific.
+      bicycle_drive:
+        status: experimental
+        reason: This campaign probes adapter behavior; do not promote it as planner-invariant evidence without artifact audit.
+      holonomic:
+        status: experimental
+        reason: This campaign probes adapter behavior; do not promote it as planner-invariant evidence without artifact audit.
+  prediction_planner:
+    algo: prediction_planner
+    planner_group: experimental
+    support:
+      differential_drive:
+        status: experimental
+        reason: Prediction planner ran in #1353 but remains a runtime hotspot and adapter-sensitive row.
+      bicycle_drive:
+        status: experimental
+        reason: This campaign probes cross-kinematics behavior for an adapter-sensitive planner.
+      holonomic:
+        status: experimental
+        reason: This campaign probes cross-kinematics behavior for an adapter-sensitive planner.
+  sacadrl:
+    algo: sacadrl
+    planner_group: experimental
+    support:
+      differential_drive:
+        status: experimental
+        reason: SACADRL ran in #1353 through the SocNav compatibility path and remains adapter-sensitive.
+      bicycle_drive:
+        status: experimental
+        reason: This campaign probes cross-kinematics behavior for an adapter-sensitive SocNav-family row.
+      holonomic:
+        status: experimental
+        reason: This campaign probes cross-kinematics behavior for an adapter-sensitive SocNav-family row.
+  socnav_sampling:
+    algo: socnav_sampling
+    planner_group: experimental
+    support:
+      differential_drive:
+        status: experimental
+        reason: SocNav sampling ran in #1353 with skip-with-warning prereq handling and remains caveated.
+      bicycle_drive:
+        status: experimental
+        reason: This campaign probes cross-kinematics behavior under explicit SocNav prereq caveats.
+      holonomic:
+        status: experimental
+        reason: This campaign probes cross-kinematics behavior under explicit SocNav prereq caveats.
+excluded_planners:
+  socnav_bench:
+    status: not_available
+    reason: #1353 preserved this row as not_available because SocNavBench control-pipeline assets are missing.
+  rvo:
+    status: unsupported
+    reason: Placeholder adapter rows are disabled for holonomic benchmark runs and must not count as parity evidence.
+  dwa:
+    status: unsupported
+    reason: Placeholder adapter rows are disabled for holonomic benchmark runs and must not count as parity evidence.
+validation_contract:
+  supported_pairs_must_run: true
+  experimental_pairs_must_be_caveated: true
+  unsupported_or_unavailable_pairs_must_have_reason: true
+  required_artifacts:
+    - reports/kinematics_parity_table.csv
+    - reports/kinematics_parity_table.md
+    - reports/kinematics_skipped_combinations.csv
+    - reports/kinematics_skipped_combinations.md

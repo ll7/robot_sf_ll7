@@ -1,0 +1,44 @@
+{
+  "issue": 1677,
+  "created_utc": "2026-05-29",
+  "source": {
+    "repository": "https://github.com/SPALaboratory/SiT-Dataset",
+    "observed_commit": "b5fa5ae795dc0041468d07b997b0d50c166fb76e",
+    "observed_commit_date": "2024-10-17T09:16:53Z",
+    "project_page": "https://spalaboratory.github.io/SiT/",
+    "paper": "https://openreview.net/forum?id=gMYsxTin4x",
+    "download_form": "https://docs.google.com/forms/u/3/d/e/1FAIpQLSfsMQq5Ob2NI1aV96C7NhnMtXvBshJvbuegVeQ5B3KETNv0FQ/viewform?usp=send_form",
+    "access_date": "2026-05-29"
+  },
+  "observed_terms": {
+    "code_license": "Apache-2.0 repository LICENSE and GitHub metadata",
+    "dataset_license_readme": "README states the SiT dataset is under CC BY-NC-ND 4.0 and code is Apache-2.0.",
+    "dataset_terms_form": "The current Google Form says dataset access is non-commercial and, unless otherwise stated, governed by CC BY-NC-SA 4.0 plus additional dataset terms.",
+    "download_flow": "README directs users to a Google Form. The form asks users to agree to terms and provide name, affiliation, country, and email before access.",
+    "citation_source": "OpenReview NeurIPS 2023 Datasets and Benchmarks paper page lists title, authors, publication date, and project URL."
+  },
+  "robot_sf_decision": {
+    "status": "external_pointer_only",
+    "reason": "The public README and current form disagree on the dataset Creative Commons variant, and both observed dataset terms are non-commercial. Until maintainers clarify the effective dataset license and redistribution boundary, Robot SF should not commit raw, transformed, sampled, or derived SiT dataset fixtures.",
+    "allowed_now": [
+      "Tracked context notes with source URLs, observed commit SHA, access date, license observations, and exclusion rationale.",
+      "Metadata-only manifests that list upstream file names, repository blob SHAs, source URLs, and retrieval commands without embedding dataset contents.",
+      "Conceptual references to SiT scenario categories, sensor setup, and semantic-map availability."
+    ],
+    "not_allowed_now": [
+      "Raw SiT dataset files, images, point clouds, annotations, semantic-map PNGs or JSON files.",
+      "Derived fixtures, simplified maps, converted Robot SF maps, trajectory subsets, or checksums used as a durable dependency without maintainer/legal clarification.",
+      "Benchmark-strength claims that depend on SiT assets."
+    ]
+  },
+  "smallest_reviewable_follow_up": {
+    "artifact": "metadata-only upstream semantic-map manifest",
+    "contents": [
+      "upstream repository URL and pinned commit SHA",
+      "semantic-maps file names and GitHub blob SHAs only",
+      "license conflict note",
+      "retrieval command that fetches from upstream after the user independently accepts dataset terms"
+    ],
+    "validation_command": "python -m json.tool docs/context/evidence/<future_sit_manifest>.json >/dev/null"
+  }
+}

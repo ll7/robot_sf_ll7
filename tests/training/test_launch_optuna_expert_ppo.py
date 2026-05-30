@@ -50,6 +50,32 @@ def test_load_launch_config_rejects_unknown_keys(tmp_path: Path):
         load_launch_config(config_path)
 
 
+def test_load_launch_config_accepts_supported_schema_version(tmp_path: Path):
+    """Versioned Optuna launcher configs should load without changing semantics."""
+    config_path = tmp_path / "optuna.yaml"
+    config_path.write_text(
+        "schema_version: robot_sf.optuna_expert_ppo_launcher.v1\nbase_config: expert_ppo.yaml\n",
+        encoding="utf-8",
+    )
+
+    payload = load_launch_config(config_path)
+
+    assert payload["schema_version"] == "robot_sf.optuna_expert_ppo_launcher.v1"
+    assert payload["base_config"] == "expert_ppo.yaml"
+
+
+def test_load_launch_config_rejects_unsupported_schema_version(tmp_path: Path):
+    """Unsupported Optuna launcher schema versions should fail at the config boundary."""
+    config_path = tmp_path / "optuna.yaml"
+    config_path.write_text(
+        "schema_version: robot_sf.optuna_expert_ppo_launcher.v0\nbase_config: expert_ppo.yaml\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="schema_version"):
+        load_launch_config(config_path)
+
+
 def test_build_optuna_cli_args_resolves_relative_paths(tmp_path: Path):
     """Relative base config should resolve from launcher config location."""
     launch_dir = tmp_path / "configs"

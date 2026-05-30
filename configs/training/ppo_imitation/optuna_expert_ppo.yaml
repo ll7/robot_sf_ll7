@@ -1,3 +1,4 @@
+schema_version: robot_sf.optuna_expert_ppo_launcher.v1
 base_config: expert_ppo.yaml
 
 # Study settings

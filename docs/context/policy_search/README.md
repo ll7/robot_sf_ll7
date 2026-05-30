@@ -13,6 +13,9 @@ Use it for three things only:
 
 - `candidate_registry.yaml`: canonical candidate list and config pointers for implemented or
   concrete runnable Robot SF candidates.
+- `learned_policy_registry.md`: compact learned local-navigation registry for implemented,
+  staged, monitor-only, and blocked learned-policy families. Use this before adding a learned
+  policy to the runnable candidate registry.
 - `reject_monitor_registry.md`: reusable negative/monitor trail for learned-policy families such as
   CrowdNav descendants, Dreamer/world-model approaches, diffusion/visual navigation, SAC/TD3/PPO
   variants, DRL-VO, and source-side-only candidates. Check this before proposing a new follow-up.
@@ -82,6 +85,9 @@ Use it for three things only:
   reuse.
 - `contracts/learned_local_policy_eligibility.md`: learned-policy eligibility checklist for
   observation/action leakage, registry entry, and required raw/adapted/guarded action logging.
+- `../issue_1618_learned_policy_adapter_interface.md`: adapter-interface contract that turns the
+  learned-policy eligibility checklist into runtime loading, inference, action-adaptation,
+  diagnostics, and fail-closed status requirements.
 - `reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md`: issue #1358 ORCA-residual guarded
   PPO benchmark-surface smoke; validates the bounded residual action path for unsafe PPO proposals
   before the deferred training campaign.

@@ -446,6 +446,20 @@ def test_build_policy_orca_preserves_provenance_metadata() -> None:
     )
 
 
+def test_build_policy_social_force_exposes_projection_metadata() -> None:
+    """Local SocialForce metadata should expose explicit adapter projection fields."""
+    _, meta = _build_policy(
+        "social_force",
+        {"allow_testing_algorithms": True},
+        robot_kinematics="differential_drive",
+    )
+
+    planner_meta = meta["planner_kinematics"]
+    assert planner_meta["planner_command_space"] == "unicycle_vw"
+    assert planner_meta["benchmark_command_space"] == "unicycle_vw"
+    assert planner_meta["projection_policy"] == "heading_safe_velocity_to_unicycle_vw"
+
+
 def test_build_policy_hrvo_preserves_local_provenance_metadata() -> None:
     """HRVO metadata should expose its local implementation boundary explicitly."""
     _, meta = _build_policy(

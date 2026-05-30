@@ -90,7 +90,7 @@ Environment creation now uses explicit parameters and structured option objects.
 ```python
 from robot_sf.gym_env.environment_factory import (
   make_robot_env, make_image_robot_env,
-  RecordingOptions, RenderOptions
+  JsonlRecordingOptions, RecordingOptions, RenderOptions, TelemetryOptions
 )
 
 # Minimal
@@ -102,7 +102,21 @@ env = make_robot_env(record_video=True, video_path="episode.mp4")
 # Structured options (preferred for explicit control)
 render_opts = RenderOptions(max_fps_override=30)
 rec_opts = RecordingOptions(record=True, video_path="episode.mp4")
-env = make_robot_env(render_options=render_opts, recording_options=rec_opts, debug=True)
+jsonl_opts = JsonlRecordingOptions(
+    enabled=True,
+    recording_dir="recordings",
+    suite_name="demo",
+    scenario_name="quickstart",
+    algorithm_name="manual",
+)
+telemetry_opts = TelemetryOptions(enable_panel=True, metrics=["reward", "collisions"])
+env = make_robot_env(
+    render_options=render_opts,
+    recording_options=rec_opts,
+    jsonl_recording_options=jsonl_opts,
+    telemetry_options=telemetry_opts,
+    debug=True,
+)
 
 # Image observations
 img_env = make_image_robot_env(render_options=RenderOptions(max_fps_override=24))
@@ -111,6 +125,9 @@ img_env = make_image_robot_env(render_options=RenderOptions(max_fps_override=24)
 ### Precedence
 - `record_video=True` overrides `RecordingOptions(record=False)` (warning emitted).
 - `video_fps` maps to `RenderOptions.max_fps_override` unless that field already set.
+- `JsonlRecordingOptions` overrides the flat JSONL kwargs (`use_jsonl_recording`,
+  `recording_dir`, `suite_name`, `scenario_name`, `algorithm_name`, `recording_seed`).
+- `TelemetryOptions` overrides flat telemetry kwargs on `make_robot_env`.
 - Legacy catch-all kwargs were retired in Robot SF 2.0. Use `video_fps=` or
   `RenderOptions(max_fps_override=...)` instead of `fps=`, and use `video_path=` or
   `RecordingOptions(video_path=...)` instead of `video_output_path=`.

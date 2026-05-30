@@ -106,6 +106,12 @@ from robot_sf.planner.kinematics_model import (
     KinematicsModel,
     resolve_benchmark_kinematics_model,
 )
+from robot_sf.planner.lidar_occupancy import (
+    LidarOccupancyPlannerAdapter,
+    build_lidar_occupancy_config,
+)
+from robot_sf.planner.lidar_occupancy_grid import build_lidar_grid_route_adapter
+from robot_sf.planner.lidar_tracked_agents import build_lidar_tracked_social_force_adapter
 from robot_sf.planner.mppi_social import (
     MPPISocialPlannerAdapter,
     build_mppi_social_config,
@@ -1360,6 +1366,19 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             normalized_robot_command_mode=normalized_robot_command_mode,
         )
 
+    if algo_key in {"lidar_social_force", "lidar_tracked_social_force"}:
+        adapter = build_lidar_tracked_social_force_adapter(algo_config)
+        return _build_adapter_policy(
+            algo_key="lidar_social_force",
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="LidarTrackedSocialForceAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="lidar_endpoint_tracked_social_force_testing_only",
+        )
+
     if algo_key in {"trivial_reference", "reference_adapter"}:
         adapter = TrivialReferencePlannerAdapter(config=_build_socnav_config(algo_config))
         meta["algorithm"] = "trivial_reference"
@@ -1407,16 +1426,31 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
     if algo_key == "safety_barrier":
-        adapter = SafetyBarrierPlannerAdapter(config=build_safety_barrier_config(algo_config))
+        adapter: Any = SafetyBarrierPlannerAdapter(config=build_safety_barrier_config(algo_config))
+        adapter_name = "SafetyBarrierPlannerAdapter"
+        limitations = "static_obstacle_first_testing_only"
+        if algo_config.get("lidar_occupancy_adapter"):
+            adapter = LidarOccupancyPlannerAdapter(
+                planner=adapter,
+                config=build_lidar_occupancy_config(algo_config),
+            )
+            adapter_name = "LidarOccupancySafetyBarrierAdapter"
+            limitations = "lidar_derived_ego_occupancy_testing_only"
+            meta["lidar_occupancy_adapter"] = {
+                "status": "enabled",
+                "source": "lidar_rays",
+                "output": "ego_occupancy_grid",
+                "planner": "safety_barrier",
+            }
         return _build_adapter_policy(
             algo_key=algo_key,
             algo_config=algo_config,
             meta=meta,
             adapter=adapter,
-            adapter_name="SafetyBarrierPlannerAdapter",
+            adapter_name=adapter_name,
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations="static_obstacle_first_testing_only",
+            limitations=limitations,
         )
 
     if algo_key == "grid_route":
@@ -1430,6 +1464,19 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
             limitations="static_obstacle_first_testing_only",
+        )
+
+    if algo_key in {"lidar_grid_route", "lidar_occupancy_grid_route"}:
+        adapter = build_lidar_grid_route_adapter(algo_config)
+        return _build_adapter_policy(
+            algo_key="lidar_grid_route",
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="LidarOccupancyGridRouteAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="lidar_ego_occupancy_grid_route_testing_only",
         )
 
     if algo_key == "stream_gap":
@@ -2554,6 +2601,37 @@ def _build_env_config(
     return config
 
 
+def _apply_active_observation_mode_to_env_config(
+    config: RobotSimulationConfig,
+    *,
+    active_observation_mode: str,
+) -> None:
+    """Apply planner observation-mode requirements to the runtime environment config."""
+    if active_observation_mode != "sensor_fusion_state":
+        return
+    config.observation_mode = ObservationMode.DEFAULT_GYM
+    config.use_occupancy_grid = False
+    config.include_grid_in_observation = False
+    config.grid_config = None
+
+
+def _validate_sensor_fusion_adapter_config(
+    *,
+    algo: str,
+    active_observation_mode: str,
+    algo_config: dict[str, Any],
+) -> None:
+    """Fail closed when a planner requests sensor-fusion input without an adapter."""
+    if active_observation_mode != "sensor_fusion_state":
+        return
+    algo_key = str(algo).strip().lower()
+    if algo_key == "safety_barrier" and not algo_config.get("lidar_occupancy_adapter"):
+        raise ValueError(
+            "safety_barrier with sensor_fusion_state/lidar_2d requires "
+            "algo_config['lidar_occupancy_adapter']."
+        )
+
+
 def _robot_kinematics_label(config: RobotSimulationConfig) -> str:
     """Derive the runtime robot kinematics label from simulation config.
 
@@ -2901,6 +2979,15 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo,
         observation_mode,
         observation_level=observation_level,
+    )
+    _apply_active_observation_mode_to_env_config(
+        config,
+        active_observation_mode=active_observation_mode,
+    )
+    _validate_sensor_fusion_adapter_config(
+        algo=algo,
+        active_observation_mode=active_observation_mode,
+        algo_config=policy_cfg,
     )
     _validate_planner_contract(
         algo=algo,

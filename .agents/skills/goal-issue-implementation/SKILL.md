@@ -137,6 +137,34 @@ hardware, SLURM, CARLA, private artifacts, checkpoint aliases, datasets, or a cl
 mark it blocked or send it to issue clarification instead of counting the queue as empty. Keep this
 audit read-only until the orchestrator has reviewed the proposed label/body changes.
 
+This audit is an illustrative handoff, not a new machine-readable schema. Keep it compact enough
+for the next agent or maintainer to act on directly:
+
+```md
+Queue exhaustion audit:
+- Query used: `gh issue list --state open --label state:ready --limit 100 --json number,title,labels,url`
+- Remaining ready issues:
+  - `#1457` needs SLURM capacity and durable artifact destination; classify as blocked on
+    `resource:slurm`.
+  - `#1512` is implementable only after the benchmark fallback policy note is refreshed; send to
+    `gh-issue-clarifier`.
+  - `#1530` is too broad for one PR; best split candidate because it combines docs, validator
+    behavior, and Project #5 metadata.
+- Open issues without `state:*`: 7 found via
+  `gh issue list --state open --limit 100 --json number,title,labels,url`; no writes applied.
+- Proposed next action: open/split a child issue for the validator-only part of `#1530`, then
+  revisit the queue after maintainer review.
+- Labels/body writes: none; read-only audit only.
+```
+
+Route remaining issues by their blocker:
+- Use `gh-issue-clarifier` when the issue intent, proof path, acceptance criteria, or ownership is
+  unclear.
+- Use `gh-issue-creator` or an explicit issue-splitting pass when one ready issue mixes multiple
+  independently reviewable PRs.
+- Mark the run `blocked` instead of exhausted when the next issue requires unavailable hardware,
+  private artifacts, credentials, live external services, or unapproved Project writes.
+
 ## Process
 
 1. Select one issue (`gh-issue-sequencer` output or explicit user target).

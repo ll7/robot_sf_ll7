@@ -84,6 +84,73 @@ DEFAULT_BENCHMARK_ROBOT_RADIUS_M = 0.3
 DEFAULT_BENCHMARK_PED_RADIUS_M = 0.35
 
 
+def _normalize_track_field(raw: str | None, *, field_name: str) -> str | None:
+    """Return a stripped track metadata value, failing fast on blank strings."""
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        raise ValueError(f"{field_name} cannot be empty.")
+    return value
+
+
+def _apply_track_metadata_to_scenarios(
+    scenarios: list[dict[str, Any]],
+    *,
+    observation_mode: str | None,
+    observation_level: str | None,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+) -> list[dict[str, Any]]:
+    """Attach track metadata to scenario payloads used for rows and resume identity.
+
+    Returns:
+        Scenario payloads with additive track fields, or the original list when no track is set.
+    """
+    if (
+        observation_mode is None
+        and observation_level is None
+        and benchmark_track is None
+        and track_schema_version is None
+    ):
+        return scenarios
+    tracked: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        payload = dict(scenario)
+        if observation_mode is not None:
+            payload["observation_mode"] = observation_mode
+        if observation_level is not None:
+            payload["observation_level"] = observation_level
+        if benchmark_track is not None:
+            payload["benchmark_track"] = benchmark_track
+        if track_schema_version is not None:
+            payload["track_schema_version"] = track_schema_version
+        tracked.append(payload)
+    return tracked
+
+
+def _attach_benchmark_track_metadata(
+    metadata: dict[str, Any],
+    *,
+    scenario_params: dict[str, Any],
+) -> None:
+    """Attach additive observation-track provenance to algorithm metadata."""
+    benchmark_track = scenario_params.get("benchmark_track")
+    track_schema_version = scenario_params.get("track_schema_version")
+    if benchmark_track is None and track_schema_version is None:
+        return
+    block: dict[str, str] = {}
+    if benchmark_track is not None:
+        block["benchmark_track"] = str(benchmark_track)
+    if track_schema_version is not None:
+        block["track_schema_version"] = str(track_schema_version)
+    for key in ("observation_level", "observation_mode"):
+        value = scenario_params.get(key)
+        if value is not None:
+            block[key] = str(value)
+    metadata["benchmark_track"] = block
+
+
 def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
     """Load and construct a baseline planner from the registry.
 
@@ -1147,6 +1214,10 @@ def _build_episode_record(
     episode_id = compute_episode_id(scenario_params, seed)
     algo_name = str(scenario_params.get("algo") or algo_metadata.get("algorithm") or "unknown")
     enriched_algo_metadata = enrich_algorithm_metadata(algo=algo_name, metadata=algo_metadata)
+    _attach_benchmark_track_metadata(
+        enriched_algo_metadata,
+        scenario_params=scenario_params,
+    )
     contradictions = outcome_contradictions(
         termination_reason=termination_reason,
         outcome=outcome,
@@ -1176,6 +1247,10 @@ def _build_episode_record(
     algo_value = scenario_params.get("algo")
     if algo_value is not None:
         record["algo"] = algo_value
+    for key in ("observation_mode", "observation_level", "benchmark_track", "track_schema_version"):
+        value = scenario_params.get(key)
+        if value is not None:
+            record[key] = value
     ensure_metric_parameters(record)
     return record
 
@@ -1754,6 +1829,8 @@ def run_batch(  # noqa: PLR0913
     ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
     observation_level: str | None = None,
+    benchmark_track: str | None = None,
+    track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     workers: int = 1,
@@ -1773,6 +1850,18 @@ def run_batch(  # noqa: PLR0913
         out_path,
         schema_path,
         append,
+    )
+    benchmark_track = _normalize_track_field(benchmark_track, field_name="benchmark_track")
+    track_schema_version = _normalize_track_field(
+        track_schema_version,
+        field_name="track_schema_version",
+    )
+    scenarios = _apply_track_metadata_to_scenarios(
+        scenarios,
+        observation_mode=observation_mode,
+        observation_level=observation_level,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
     )
 
     # Map-based scenario detection: delegate to map runner
@@ -1796,6 +1885,8 @@ def run_batch(  # noqa: PLR0913
             ped_impact_window_steps=ped_impact_window_steps,
             observation_mode=observation_mode,
             observation_level=observation_level,
+            benchmark_track=benchmark_track,
+            track_schema_version=track_schema_version,
             observation_noise=observation_noise,
             synthetic_actuation_profile=synthetic_actuation_profile,
             workers=workers,
@@ -1840,4 +1931,8 @@ def run_batch(  # noqa: PLR0913
     summary = _finalize_batch(out_path, wrote, resume)
     summary["total_jobs"] = len(jobs)
     summary["failures"] = failures
+    if benchmark_track is not None:
+        summary["benchmark_track"] = benchmark_track
+    if track_schema_version is not None:
+        summary["track_schema_version"] = track_schema_version
     return summary

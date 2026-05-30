@@ -301,6 +301,8 @@ def _handle_run(args) -> int:
             ped_impact_window_steps=int(getattr(args, "ped_impact_window_steps", 5)),
             observation_mode=getattr(args, "observation_mode", None),
             observation_level=getattr(args, "observation_level", None),
+            benchmark_track=getattr(args, "benchmark_track", None),
+            track_schema_version=getattr(args, "track_schema_version", None),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
                 if getattr(args, "observation_noise", None)
@@ -1506,6 +1508,16 @@ def _add_run_subparser(
             "Optional graded benchmark observation-level override. Unsupported "
             "planner/level combinations fail before episodes are written."
         ),
+    )
+    p.add_argument(
+        "--benchmark-track",
+        default=None,
+        help="Optional observation-track aggregation fence for track-aware benchmark rows.",
+    )
+    p.add_argument(
+        "--track-schema-version",
+        default=None,
+        help="Optional version slug for the benchmark-track metadata contract.",
     )
     p.add_argument(
         "--structured-output",

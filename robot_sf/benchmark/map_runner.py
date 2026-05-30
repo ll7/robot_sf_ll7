@@ -2486,6 +2486,8 @@ def _scenario_identity_payload(  # noqa: PLR0913
     record_forces: bool,
     observation_mode: str | None = None,
     observation_level: str | None = None,
+    benchmark_track: str | None = None,
+    track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -2509,6 +2511,10 @@ def _scenario_identity_payload(  # noqa: PLR0913
         payload["observation_mode"] = str(observation_mode)
     if observation_level is not None:
         payload["observation_level"] = str(observation_level)
+    if benchmark_track is not None:
+        payload["benchmark_track"] = str(benchmark_track)
+    if track_schema_version is not None:
+        payload["track_schema_version"] = str(track_schema_version)
     noise_spec = normalize_observation_noise_spec(observation_noise)
     if bool(noise_spec["enabled"]):
         payload["observation_noise_profile"] = str(noise_spec["profile"])
@@ -2630,6 +2636,60 @@ def _validate_sensor_fusion_adapter_config(
             "safety_barrier with sensor_fusion_state/lidar_2d requires "
             "algo_config['lidar_occupancy_adapter']."
         )
+
+
+def _normalize_track_field(raw: str | None, *, field_name: str) -> str | None:
+    """Return a stripped track metadata value, failing fast on blank strings."""
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        raise ValueError(f"{field_name} cannot be empty.")
+    return value
+
+
+def _track_metadata_block(
+    *,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+    observation_level: str,
+    observation_mode: str,
+) -> dict[str, str] | None:
+    """Build the algorithm-metadata benchmark-track block for track-aware rows.
+
+    Returns:
+        Track metadata block, or ``None`` for legacy non-track-aware rows.
+    """
+    if benchmark_track is None and track_schema_version is None:
+        return None
+    block = {
+        "observation_level": str(observation_level),
+        "observation_mode": str(observation_mode),
+    }
+    if benchmark_track is not None:
+        block["benchmark_track"] = benchmark_track
+    if track_schema_version is not None:
+        block["track_schema_version"] = track_schema_version
+    return block
+
+
+def _attach_benchmark_track_metadata(
+    metadata: dict[str, Any],
+    *,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+    observation_level: str,
+    observation_mode: str,
+) -> None:
+    """Attach additive observation-track provenance to algorithm metadata."""
+    block = _track_metadata_block(
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        observation_level=observation_level,
+        observation_mode=observation_mode,
+    )
+    if block is not None:
+        metadata["benchmark_track"] = block
 
 
 def _robot_kinematics_label(config: RobotSimulationConfig) -> str:
@@ -2926,6 +2986,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
     observation_level: str | None = None,
+    benchmark_track: str | None = None,
+    track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -2944,6 +3006,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
     scenario_id = str(
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
+    )
+    benchmark_track = _normalize_track_field(benchmark_track, field_name="benchmark_track")
+    track_schema_version = _normalize_track_field(
+        track_schema_version,
+        field_name="track_schema_version",
     )
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_rng = make_observation_noise_rng(noise_spec, seed=seed, scenario_id=scenario_id)
@@ -3011,6 +3078,13 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         observation_level=observation_level,
     )
     active_observation_level = str(algo_meta["observation_level"]["key"])
+    _attach_benchmark_track_metadata(
+        algo_meta,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        observation_level=active_observation_level,
+        observation_mode=active_observation_mode,
+    )
     planner_close = getattr(policy_fn, "_planner_close", None)
     planner_reset = getattr(policy_fn, "_planner_reset", None)
     planner_bind_env = getattr(policy_fn, "_planner_bind_env", None)
@@ -3229,6 +3303,13 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 observation_mode=active_observation_mode,
                 observation_level=active_observation_level,
             )
+            _attach_benchmark_track_metadata(
+                algo_meta,
+                benchmark_track=benchmark_track,
+                track_schema_version=track_schema_version,
+                observation_level=active_observation_level,
+                observation_mode=active_observation_mode,
+            )
         else:
             impact["status"] = "not_applicable"
             impact["adapter_fraction"] = 0.0
@@ -3274,6 +3355,8 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         record_forces=record_forces,
         observation_mode=active_observation_mode,
         observation_level=active_observation_level,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
         observation_noise=noise_spec,
         synthetic_actuation_profile=(
             actuation_profile.to_metadata() if actuation_profile is not None else None
@@ -3326,6 +3409,10 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "outcome": outcome,
         "integrity": {"contradictions": contradictions},
     }
+    if benchmark_track is not None:
+        record["benchmark_track"] = benchmark_track
+    if track_schema_version is not None:
+        record["track_schema_version"] = track_schema_version
     ensure_metric_parameters(record)
     return record
 
@@ -3385,6 +3472,8 @@ def _run_map_job_worker(
         ped_impact_window_steps=int(params.get("ped_impact_window_steps", 5)),
         observation_mode=params.get("observation_mode"),
         observation_level=params.get("observation_level"),
+        benchmark_track=params.get("benchmark_track"),
+        track_schema_version=params.get("track_schema_version"),
         observation_noise=params.get("observation_noise"),
         synthetic_actuation_profile=params.get("synthetic_actuation_profile"),
     )
@@ -3523,6 +3612,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
     observation_level: str | None = None,
+    benchmark_track: str | None = None,
+    track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     workers: int = 1,
@@ -3555,6 +3646,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
+    benchmark_track = _normalize_track_field(benchmark_track, field_name="benchmark_track")
+    track_schema_version = _normalize_track_field(
+        track_schema_version,
+        field_name="track_schema_version",
+    )
 
     filtered: list[dict[str, Any]] = []
     for scenario in scenarios:
@@ -3588,6 +3684,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     active_observation_mode = str(algo_contract["observation_spec"]["active_mode"])
     active_observation_level = str(algo_contract["observation_level"]["key"])
+    _attach_benchmark_track_metadata(
+        algo_contract,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        observation_level=active_observation_level,
+        observation_mode=active_observation_mode,
+    )
     planner_meta = algo_contract.get("planner_kinematics")
     if isinstance(planner_meta, dict):
         planner_meta["scenario_kinematics"] = scenario_kinematics
@@ -3724,6 +3827,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "observation_noise": noise_spec,
             "observation_noise_hash": noise_hash,
         }
+        if benchmark_track is not None:
+            summary["benchmark_track"] = benchmark_track
+        if track_schema_version is not None:
+            summary["track_schema_version"] = track_schema_version
         summary["benchmark_availability"] = availability_payload(summary)
         return summary
 
@@ -3759,6 +3866,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     record_forces=record_forces,
                     observation_mode=identity_observation_mode,
                     observation_level=identity_observation_level,
+                    benchmark_track=benchmark_track,
+                    track_schema_version=track_schema_version,
                     observation_noise=noise_spec,
                     synthetic_actuation_profile=(
                         actuation_profile.to_metadata() if actuation_profile is not None else None
@@ -3785,6 +3894,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "observation_noise": noise_spec,
         "observation_mode": batch_observation_mode,
         "observation_level": observation_level,
+        "benchmark_track": benchmark_track,
+        "track_schema_version": track_schema_version,
         "synthetic_actuation_profile": (
             actuation_profile.to_metadata() if actuation_profile is not None else None
         ),
@@ -3901,6 +4012,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 observation_mode=active_observation_mode,
                 observation_level=active_observation_level,
             )
+            _attach_benchmark_track_metadata(
+                algo_contract,
+                benchmark_track=benchmark_track,
+                track_schema_version=track_schema_version,
+                observation_level=active_observation_level,
+                observation_mode=active_observation_mode,
+            )
         else:
             impact_contract["status"] = "not_applicable"
             impact_contract["adapter_fraction"] = 0.0
@@ -3971,6 +4089,10 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             actuation_profile.to_metadata() if actuation_profile is not None else None
         ),
     }
+    if benchmark_track is not None:
+        summary["benchmark_track"] = benchmark_track
+    if track_schema_version is not None:
+        summary["track_schema_version"] = track_schema_version
     summary["benchmark_availability"] = availability_payload(summary)
     return summary
 

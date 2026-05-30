@@ -1,5 +1,7 @@
 schema_version: lidar-observation-track-smoke.v1
 name: issue_1613_lidar_observation_track_smoke
+benchmark_track: lidar_2d_v1
+track_schema_version: observation-track.v1
 parent_issue: 1611
 issue: 1613
 paper_facing: false

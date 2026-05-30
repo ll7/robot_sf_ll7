@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""CLI smoke tests for benchmark episode generation."""
 
 from __future__ import annotations
 
@@ -14,13 +14,7 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def test_cli_run_subcommand(tmp_path: Path, capsys):
-    # Minimal scenario matrix YAML
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Run a minimal benchmark matrix through the CLI and verify row metadata."""
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {
@@ -57,6 +51,14 @@ def test_cli_run_subcommand(tmp_path: Path, capsys):
             "6",
             "--dt",
             "0.1",
+            "--observation-mode",
+            "socnav_state",
+            "--observation-level",
+            "tracked_agents_no_noise",
+            "--benchmark-track",
+            "grid_socnav_v1",
+            "--track-schema-version",
+            "observation-track.v1",
         ],
     )
     cap = capsys.readouterr()
@@ -71,3 +73,16 @@ def test_cli_run_subcommand(tmp_path: Path, capsys):
     rec = json.loads(lines[0])
     assert "episode_id" in rec and "metrics" in rec
     assert "algorithm_metadata" in rec and isinstance(rec["algorithm_metadata"], dict)
+    assert rec["observation_mode"] == "socnav_state"
+    assert rec["observation_level"] == "tracked_agents_no_noise"
+    assert rec["benchmark_track"] == "grid_socnav_v1"
+    assert rec["track_schema_version"] == "observation-track.v1"
+    assert rec["scenario_params"]["observation_mode"] == "socnav_state"
+    assert rec["scenario_params"]["observation_level"] == "tracked_agents_no_noise"
+    assert rec["scenario_params"]["benchmark_track"] == "grid_socnav_v1"
+    assert rec["algorithm_metadata"]["benchmark_track"] == {
+        "benchmark_track": "grid_socnav_v1",
+        "track_schema_version": "observation-track.v1",
+        "observation_level": "tracked_agents_no_noise",
+        "observation_mode": "socnav_state",
+    }

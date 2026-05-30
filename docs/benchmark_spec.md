@@ -112,8 +112,10 @@ For parallel grid/SocNav-state, LiDAR, privileged, and adapter-derived evidence 
 observation-track architecture in
 [`docs/context/issue_1612_observation_track_architecture.md`](./context/issue_1612_observation_track_architecture.md).
 That note defines the proposed `benchmark_track` metadata, aggregation boundary, and config/result
-naming convention. Until those follow-up implementation changes land, treat track metadata as a
-design contract and keep incompatible observation contracts out of the same aggregate.
+naming convention. Track-aware map benchmark runs now preserve `benchmark_track` and
+`track_schema_version` in episode rows, `scenario_params`, algorithm metadata, and resume identity.
+Keep incompatible observation contracts out of the same aggregate unless a report explicitly opts
+into cross-track diagnostics.
 
 Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 

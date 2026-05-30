@@ -124,6 +124,16 @@
             ],
             "description": "Active graded benchmark observation-level contract for this episode."
         },
+        "benchmark_track": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Primary observation-track aggregation fence for track-aware benchmark rows."
+        },
+        "track_schema_version": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Version slug for the benchmark-track metadata contract."
+        },
         "algorithm_metadata": {
             "type": "object",
             "description": "Metadata about the algorithm/policy used (name, config, status).",
@@ -183,6 +193,27 @@
                             "type": "boolean"
                         },
                         "notes": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
+                "benchmark_track": {
+                    "type": "object",
+                    "description": "Observation-track provenance for track-aware benchmark rows.",
+                    "properties": {
+                        "benchmark_track": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "track_schema_version": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "observation_level": {
+                            "type": "string"
+                        },
+                        "observation_mode": {
                             "type": "string"
                         }
                     },

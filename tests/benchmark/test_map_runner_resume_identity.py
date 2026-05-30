@@ -363,3 +363,100 @@ def test_scenario_identity_includes_observation_mode() -> None:
     assert map_runner._compute_map_episode_id(goal_state_payload, seed=1) != (
         map_runner._compute_map_episode_id(socnav_state_payload, seed=1)
     )
+
+
+def test_scenario_identity_includes_benchmark_track() -> None:
+    """Track-aware rows should not collide when only the observation track changes."""
+    scenario = _minimal_map_scenario()
+    grid_track_payload = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        observation_mode="socnav_state",
+        observation_level="tracked_agents_no_noise",
+        benchmark_track="grid_socnav_v1",
+        track_schema_version="observation-track.v1",
+    )
+    lidar_track_payload = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        observation_mode="socnav_state",
+        observation_level="tracked_agents_no_noise",
+        benchmark_track="lidar_2d_v1",
+        track_schema_version="observation-track.v1",
+    )
+
+    assert map_runner._compute_map_episode_id(grid_track_payload, seed=1) != (
+        map_runner._compute_map_episode_id(lidar_track_payload, seed=1)
+    )
+
+
+def test_resume_identity_uses_identity_benchmark_track(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Resume skipping should treat benchmark_track as part of row identity."""
+    scenario = _minimal_map_scenario()
+    written_ids: set[str] = set()
+
+    monkeypatch.setattr(map_runner, "validate_scenario_list", lambda _scenarios: [])
+    monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
+
+    def _fake_worker(job: tuple[dict, int, dict]) -> dict[str, str]:
+        """Compute the same track-scoped episode identity that the real worker returns."""
+        scenario_payload, seed, params = job
+        identity_payload = map_runner._scenario_identity_payload(
+            scenario_payload,
+            algo=str(params.get("algo", "goal")),
+            algo_config=dict(params.get("algo_config", {})),
+            horizon=params.get("horizon"),
+            dt=params.get("dt"),
+            record_forces=bool(params.get("record_forces", True)),
+            observation_mode=params.get("observation_mode"),
+            observation_level=params.get("observation_level"),
+            benchmark_track=params.get("benchmark_track"),
+            track_schema_version=params.get("track_schema_version"),
+            observation_noise=params.get("observation_noise"),
+        )
+        return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
+
+    def _fake_write(_out: Path, _schema: dict, record: dict[str, str]) -> None:
+        """Record written episode IDs without touching JSONL output."""
+        written_ids.add(record["episode_id"])
+
+    monkeypatch.setattr(map_runner, "_run_map_job_worker", _fake_worker)
+    monkeypatch.setattr(map_runner, "_write_validated", _fake_write)
+
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text("", encoding="utf-8")
+
+    first = map_runner.run_map_batch(
+        [scenario],
+        out_path,
+        schema_path=SCHEMA_PATH,
+        observation_level="tracked_agents_no_noise",
+        benchmark_track="grid_socnav_v1",
+        track_schema_version="observation-track.v1",
+        resume=False,
+    )
+    assert first["written"] == 1
+
+    monkeypatch.setattr(map_runner, "index_existing", lambda _path: set(written_ids))
+
+    second = map_runner.run_map_batch(
+        [scenario],
+        out_path,
+        schema_path=SCHEMA_PATH,
+        observation_level="tracked_agents_no_noise",
+        benchmark_track="lidar_2d_v1",
+        track_schema_version="observation-track.v1",
+        resume=True,
+    )
+    assert second["written"] == 1

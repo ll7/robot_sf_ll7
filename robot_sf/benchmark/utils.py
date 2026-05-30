@@ -346,7 +346,8 @@ def compute_episode_id(scenario_params: dict[str, Any], seed: int) -> str:
     Uses a readable, stable id format suitable for resume semantics.
 
     Returns:
-        Episode ID string in format <scenario_id>--<seed>.
+        Episode ID string. Legacy rows use ``<scenario_id>--<seed>``; track-aware rows append a
+        short identity hash so incompatible observation tracks do not collide.
     """
     scenario_id = (
         scenario_params.get("id")
@@ -354,6 +355,14 @@ def compute_episode_id(scenario_params: dict[str, Any], seed: int) -> str:
         or scenario_params.get("scenario_id")
         or "unknown"
     )
+    if scenario_params.get("benchmark_track") or scenario_params.get("track_schema_version"):
+        identity = {
+            "benchmark_track": scenario_params.get("benchmark_track"),
+            "track_schema_version": scenario_params.get("track_schema_version"),
+            "observation_level": scenario_params.get("observation_level"),
+            "observation_mode": scenario_params.get("observation_mode"),
+        }
+        return f"{scenario_id}--{seed}--{_config_hash(identity)}"
     return f"{scenario_id}--{seed}"
 
 

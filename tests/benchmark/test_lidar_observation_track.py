@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import yaml
 
-from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner import _run_map_job_worker
 from robot_sf.benchmark.planner_command_contract import (
     PlannerContractValidationError,
     validate_planner_contract,
@@ -178,28 +178,44 @@ def test_stubbed_lidar_map_episode_records_track_metadata(
         lambda metrics, **kwargs: metrics,
     )
 
-    record = _run_map_episode(
-        {"name": "lidar_smoke", "simulation_config": {"max_episode_steps": 1}},
-        seed=1613,
-        horizon=1,
-        dt=0.1,
-        record_forces=False,
-        snqi_weights=None,
-        snqi_baseline=None,
-        algo="ppo",
-        algo_config={},
-        scenario_path=_REPO_ROOT / "configs/scenarios/sanity_v1.yaml",
-        observation_mode="sensor_fusion_state",
-        observation_level="lidar_2d",
+    record = _run_map_job_worker(
+        (
+            {"name": "lidar_smoke", "simulation_config": {"max_episode_steps": 1}},
+            1613,
+            {
+                "horizon": 1,
+                "dt": 0.1,
+                "record_forces": False,
+                "snqi_weights": None,
+                "snqi_baseline": None,
+                "algo": "ppo",
+                "algo_config": {},
+                "scenario_path": str(_REPO_ROOT / "configs/scenarios/sanity_v1.yaml"),
+                "observation_mode": "sensor_fusion_state",
+                "observation_level": "lidar_2d",
+                "benchmark_track": "lidar_2d_v1",
+                "track_schema_version": "observation-track.v1",
+            },
+        )
     )
 
     assert seen_observations
     assert set(seen_observations[0]) == {"drive_state", "rays"}
     assert record["observation_level"] == "lidar_2d"
     assert record["observation_mode"] == "sensor_fusion_state"
+    assert record["benchmark_track"] == "lidar_2d_v1"
+    assert record["track_schema_version"] == "observation-track.v1"
     assert record["scenario_params"]["observation_level"] == "lidar_2d"
     assert record["scenario_params"]["observation_mode"] == "sensor_fusion_state"
+    assert record["scenario_params"]["benchmark_track"] == "lidar_2d_v1"
+    assert record["scenario_params"]["track_schema_version"] == "observation-track.v1"
     metadata = record["algorithm_metadata"]
+    assert metadata["benchmark_track"] == {
+        "benchmark_track": "lidar_2d_v1",
+        "track_schema_version": "observation-track.v1",
+        "observation_level": "lidar_2d",
+        "observation_mode": "sensor_fusion_state",
+    }
     assert metadata["observation_level"]["key"] == "lidar_2d"
     assert metadata["observation_spec"]["active_mode"] == "sensor_fusion_state"
     assert metadata["planner_contract"]["observation_contract"]["required_inputs"] == [

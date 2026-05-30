@@ -25,6 +25,16 @@ class StepTiming:
 
 
 @dataclass(frozen=True, slots=True)
+class JobTiming:
+    """Duration for one GitHub Actions job."""
+
+    name: str
+    duration_seconds: float
+    started_at: str
+    completed_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class RunTimingSummary:
     """Compact timing summary for one GitHub Actions workflow run."""
 
@@ -33,6 +43,7 @@ class RunTimingSummary:
     queue_seconds: float
     job_seconds: float
     total_seconds: float
+    slowest_jobs: list[JobTiming]
     slowest_steps: list[StepTiming]
 
     def to_json(self) -> str:
@@ -75,8 +86,26 @@ def _completed_step_timings(payload: dict[str, Any]) -> list[StepTiming]:
     return timings
 
 
+def _completed_job_timings(payload: dict[str, Any]) -> list[JobTiming]:
+    """Extract completed job durations from a run payload."""
+    timings: list[JobTiming] = []
+    for job in payload.get("jobs", []):
+        duration = _duration_seconds(job.get("startedAt"), job.get("completedAt"))
+        if duration is None:
+            continue
+        timings.append(
+            JobTiming(
+                name=str(job.get("name", "")),
+                duration_seconds=duration,
+                started_at=str(job.get("startedAt", "")),
+                completed_at=str(job.get("completedAt", "")),
+            ),
+        )
+    return timings
+
+
 def summarize_run(payload: dict[str, Any], *, top: int = 10) -> RunTimingSummary:
-    """Summarize queue, job, total, and slowest-step durations from a run payload."""
+    """Summarize queue, job, total, slowest-job, and slowest-step durations."""
     jobs = list(payload.get("jobs", []))
     created = _parse_timestamp(payload.get("createdAt"))
     updated = _parse_timestamp(payload.get("updatedAt"))
@@ -103,6 +132,10 @@ def summarize_run(payload: dict[str, Any], *, top: int = 10) -> RunTimingSummary
         _completed_step_timings(payload),
         key=lambda step: (-step.duration_seconds, step.name),
     )[:top]
+    slowest_jobs = sorted(
+        _completed_job_timings(payload),
+        key=lambda job: (-job.duration_seconds, job.name),
+    )[:top]
 
     return RunTimingSummary(
         run_id=int(payload.get("databaseId") or 0),
@@ -110,6 +143,7 @@ def summarize_run(payload: dict[str, Any], *, top: int = 10) -> RunTimingSummary
         queue_seconds=queue_seconds,
         job_seconds=job_seconds,
         total_seconds=total_seconds,
+        slowest_jobs=slowest_jobs,
         slowest_steps=slowest_steps,
     )
 
@@ -132,10 +166,29 @@ def format_markdown(summary: RunTimingSummary) -> str:
         f"| job | {_format_seconds(summary.job_seconds)} |",
         f"| total | {_format_seconds(summary.total_seconds)} |",
         "",
-        "## Slowest steps",
-        "| step | duration | started | completed |",
+        "## Slowest jobs",
+        "| job | duration | started | completed |",
         "| --- | --- | --- | --- |",
     ]
+    for job in summary.slowest_jobs:
+        lines.append(
+            "| "
+            f"{job.name} | {_format_seconds(job.duration_seconds)} | "
+            f"{job.started_at} | {job.completed_at} |",
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Slowest steps",
+            "| step | duration | started | completed |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    if not summary.slowest_steps:
+        lines.append("| _No step timestamps reported by `gh run view`_ | n/a | n/a | n/a |")
+        return "\n".join(lines)
+
     for step in summary.slowest_steps:
         lines.append(
             "| "

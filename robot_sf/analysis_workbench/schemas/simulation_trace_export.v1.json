@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/simulation_trace_export.v1.json",
+  "title": "Robot SF Simulation Trace Export v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trace_id",
+    "source",
+    "evidence_boundary",
+    "coordinate_frame",
+    "units",
+    "frames"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "simulation_trace_export.v1"
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "seed", "planner_id", "episode_id", "generated_by"],
+      "properties": {
+        "scenario_id": {"type": "string", "minLength": 1},
+        "seed": {"type": "integer"},
+        "planner_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1},
+        "generated_by": {"type": "string", "minLength": 1}
+      }
+    },
+    "evidence_boundary": {
+      "const": "analysis_workbench_only"
+    },
+    "coordinate_frame": {
+      "enum": ["world", "robot"]
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "heading", "time", "velocity"],
+      "properties": {
+        "position": {"const": "m"},
+        "heading": {"const": "rad"},
+        "time": {"const": "s"},
+        "velocity": {"const": "m/s"}
+      }
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "time_s", "robot", "pedestrians", "planner"],
+        "properties": {
+          "step": {"type": "integer", "minimum": 0},
+          "time_s": {"type": "number", "minimum": 0},
+          "robot": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["position", "heading", "velocity"],
+            "properties": {
+              "position": {"$ref": "#/$defs/vector2"},
+              "heading": {"type": "number"},
+              "velocity": {"$ref": "#/$defs/vector2"}
+            }
+          },
+          "pedestrians": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "position", "velocity"],
+              "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "position": {"$ref": "#/$defs/vector2"},
+                "velocity": {"$ref": "#/$defs/vector2"}
+              }
+            }
+          },
+          "planner": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["selected_action"],
+            "properties": {
+              "selected_action": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": ["linear_velocity", "angular_velocity"],
+                "properties": {
+                  "linear_velocity": {"type": "number"},
+                  "angular_velocity": {"type": "number"}
+                }
+              },
+              "event": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "vector2": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    }
+  }
+}

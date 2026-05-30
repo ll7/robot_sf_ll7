@@ -54,6 +54,8 @@ def _group_values(
     fallback_group_by: str,
     metric: str,
     observation_track_mode: str = "strict",
+    *,
+    mode: str | None = None,
 ) -> dict[str, list[float]]:
     """Collect metric values grouped by a dotted key.
 
@@ -61,11 +63,12 @@ def _group_values(
         Mapping of group id to list of metric values.
     """
     record_list = [dict(record) for record in records]
-    track_meta = ensure_observation_track_policy(
-        record_list,
-        observation_track_mode=observation_track_mode,
-    )
-    mode = normalize_observation_track_mode(str(track_meta["mode"]))
+    if mode is None:
+        track_meta = ensure_observation_track_policy(
+            record_list,
+            observation_track_mode=observation_track_mode,
+        )
+        mode = normalize_observation_track_mode(str(track_meta["mode"]))
     out: dict[str, list[float]] = {}
     for r in record_list:
         g = _get_dotted(r, group_by)
@@ -99,19 +102,24 @@ def compute_pareto_points(
     - labels: matching list of group labels
     """
     record_list = [dict(record) for record in records]
+    track_meta = ensure_observation_track_policy(
+        record_list,
+        observation_track_mode=observation_track_mode,
+    )
+    mode = normalize_observation_track_mode(str(track_meta["mode"]))
     gx = _group_values(
         record_list,
         group_by,
         fallback_group_by,
         x_metric,
-        observation_track_mode,
+        mode=mode,
     )
     gy = _group_values(
         record_list,
         group_by,
         fallback_group_by,
         y_metric,
-        observation_track_mode,
+        mode=mode,
     )
     labels: list[str] = []
     points: list[tuple[float, float]] = []

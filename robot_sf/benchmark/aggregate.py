@@ -132,8 +132,10 @@ _CAVEAT_STATUSES = {
     "diagnostic_stub",
     "failed",
     "fallback",
+    "not-available",
     "not_available",
     "partial-failure",
+    "partial_failure",
 }
 
 

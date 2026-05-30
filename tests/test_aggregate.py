@@ -589,6 +589,21 @@ def test_compute_aggregates_diagnostic_cross_track_keeps_groups_separate() -> No
     assert "different observation contracts" in track_meta["cross_track_caveat"]
 
 
+def test_compute_aggregates_counts_caveat_status_spelling_variants() -> None:
+    """Common underscore and hyphen caveat statuses should be counted consistently."""
+    records = _observation_track_records()
+    records[0]["algorithm_metadata"] = {"status": "not-available"}
+    records[1]["algorithm_metadata"] = {"status": "partial_failure"}
+
+    summary = compute_aggregates(
+        records,
+        group_by="scenario_params.algo",
+        observation_track_mode="diagnostic-cross-track",
+    )
+
+    assert summary["_meta"]["observation_tracks"]["caveat_record_count"] == 2
+
+
 def test_compute_aggregates_with_ci_diagnostic_cross_track_namespaces_groups() -> None:
     """The bootstrap CI path should use the same cross-track grouping policy."""
     summary = compute_aggregates_with_ci(

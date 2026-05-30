@@ -19,7 +19,7 @@ aliases:
 
 ## Purpose
 
-Provide a minimal, reusable structure for higher-risk changes that need stronger validation and
+Provide a minimal proof-first workflow for higher-risk changes that need stronger validation and
 explicit risk accounting without displacing research progress.
 
 ## Workflow

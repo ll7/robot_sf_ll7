@@ -108,6 +108,13 @@ The built-in `goal` planner declares both `goal_state` and `socnav_state`, makin
 two-mode demonstration path. Extra channels in `socnav_state` are ignored by that planner, so this
 is useful for input-contract parity checks but is not a claim of pure planner-logic attribution.
 
+For parallel grid/SocNav-state, LiDAR, privileged, and adapter-derived evidence lanes, use the
+observation-track architecture in
+[`docs/context/issue_1612_observation_track_architecture.md`](./context/issue_1612_observation_track_architecture.md).
+That note defines the proposed `benchmark_track` metadata, aggregation boundary, and config/result
+naming convention. Until those follow-up implementation changes land, treat track metadata as a
+design contract and keep incompatible observation contracts out of the same aggregate.
+
 Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
 
 ## Success And Collision Semantics

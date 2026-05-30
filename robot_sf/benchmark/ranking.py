@@ -15,6 +15,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.aggregate import (
+    ensure_observation_track_policy,
+    normalize_observation_track_mode,
+    observation_track_group_label,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -61,6 +67,7 @@ def compute_ranking(
     metric: str = "collisions",
     ascending: bool = True,
     top: int | None = None,
+    observation_track_mode: str = "strict",
 ) -> list[RankingRow]:
     """Compute ranking by mean of metrics.<metric> per group.
 
@@ -71,17 +78,24 @@ def compute_ranking(
     Returns:
         List of RankingRow objects sorted by mean metric value, optionally limited to top N.
     """
+    record_list = [dict(record) for record in records]
+    track_meta = ensure_observation_track_policy(
+        record_list,
+        observation_track_mode=observation_track_mode,
+    )
+    mode = normalize_observation_track_mode(str(track_meta["mode"]))
     by_group: dict[str, list[float]] = {}
-    for rec in records:
+    for rec in record_list:
         gid = _get_nested(rec, group_by)
         if gid is None:
             gid = _get_nested(rec, fallback_group_by)
         if gid is None:
             continue
+        gid = observation_track_group_label(rec, str(gid), mode=mode)
         val = _to_float((rec.get("metrics") or {}).get(metric))
         if val is None:
             continue
-        by_group.setdefault(str(gid), []).append(val)
+        by_group.setdefault(gid, []).append(val)
 
     rows: list[RankingRow] = []
     for gid, vals in by_group.items():

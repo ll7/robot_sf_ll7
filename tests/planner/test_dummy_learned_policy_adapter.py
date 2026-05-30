@@ -16,7 +16,7 @@ from scripts.validation.check_learned_policy_eligibility import (
 def _lidar_observation() -> dict[str, object]:
     """Return the minimal LiDAR-style observation expected by the dummy adapter."""
     return {
-        "drive_state": [0.0, 0.0, 0.0, 0.0],
+        "drive_state": [0.0, 0.0, 0.0, 0.0, 0.0],
         "rays": [2.0, 1.5, 1.0, 1.5, 2.0],
     }
 
@@ -79,6 +79,17 @@ def test_dummy_learned_policy_plan_returns_unicycle_tuple_for_planner_smokes() -
     adapter.configure({})
     adapter.configure(None)
     adapter.close()
+
+
+def test_dummy_learned_policy_fails_closed_for_none_observation() -> None:
+    """None observations should fail closed before returning an action."""
+    adapter = DummyLearnedLocalPolicyAdapter()
+
+    with pytest.raises(LearnedPolicyAdapterContractError, match="observation must not be None"):
+        adapter.predict(None)
+
+    with pytest.raises(LearnedPolicyAdapterContractError, match="observation must not be None"):
+        adapter.plan(None)
 
 
 @pytest.mark.parametrize(

@@ -32,6 +32,9 @@ class LearnedPolicyStepResult:
     action_bounds: dict[str, list[float]]
     action_projection_metadata: dict[str, Any]
 
+    _ACTION_BOUND_LOWER = 0
+    _ACTION_BOUND_UPPER = 1
+
     def to_metadata(self) -> dict[str, Any]:
         """Return a JSON-serializable diagnostic payload for this decision step."""
         return {
@@ -44,7 +47,10 @@ class LearnedPolicyStepResult:
             "observation_level": self.observation_level,
             "planner_observation_mode": self.planner_observation_mode,
             "action_bounds": {
-                key: [float(bounds[0]), float(bounds[1])]
+                key: [
+                    float(bounds[self._ACTION_BOUND_LOWER]),
+                    float(bounds[self._ACTION_BOUND_UPPER]),
+                ]
                 for key, bounds in self.action_bounds.items()
             },
             "action_projection_metadata": dict(self.action_projection_metadata),
@@ -75,6 +81,8 @@ class DummyLearnedLocalPolicyAdapter:
     )
     _action = {"v": 0.25, "omega": 0.0}
     _action_bounds = {"v": [0.0, 0.5], "omega": [-0.5, 0.5]}
+    _ACTION_BOUND_LOWER = 0
+    _ACTION_BOUND_UPPER = 1
 
     def metadata(self) -> dict[str, Any]:
         """Return checklist-style metadata for the dummy adapter fixture."""
@@ -171,7 +179,10 @@ class DummyLearnedLocalPolicyAdapter:
             observation_level=self.observation_level,
             planner_observation_mode=self.planner_observation_mode,
             action_bounds={
-                key: [float(bounds[0]), float(bounds[1])]
+                key: [
+                    float(bounds[self._ACTION_BOUND_LOWER]),
+                    float(bounds[self._ACTION_BOUND_UPPER]),
+                ]
                 for key, bounds in self._action_bounds.items()
             },
             action_projection_metadata={
@@ -222,6 +233,10 @@ class DummyLearnedLocalPolicyAdapter:
                 f"'{action_command_space}'; expected '{self.action_command_space}'"
             )
 
+        if observation is None:
+            raise LearnedPolicyAdapterContractError(
+                "observation must not be None"
+            )
         missing = [key for key in self._required_observation_inputs if key not in observation]
         if missing:
             raise LearnedPolicyAdapterContractError(

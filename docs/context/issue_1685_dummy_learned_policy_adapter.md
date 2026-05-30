@@ -51,7 +51,7 @@ Green state:
 uv run pytest -q tests/planner/test_dummy_learned_policy_adapter.py
 ```
 
-Result: `8 passed`.
+Result: `9 passed`.
 
 The focused test also calls
 `scripts.validation.check_learned_policy_eligibility.validate_learned_policy_eligibility()` on the

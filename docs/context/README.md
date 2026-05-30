@@ -154,6 +154,8 @@ knowledge, not every transient iteration detail.
   [issue_1674_topology_hypothesis_diagnostics.md](issue_1674_topology_hypothesis_diagnostics.md)
 * Issue #1675 learned risk-surface interface:
   [issue_1675_learned_risk_surface_interface.md](issue_1675_learned_risk_surface_interface.md)
+* Issue #1628 actuation-aware learned navigation for AMVs:
+  [issue_1628_actuation_aware_learned_navigation.md](issue_1628_actuation_aware_learned_navigation.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:

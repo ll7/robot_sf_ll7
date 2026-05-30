@@ -6,8 +6,12 @@ import numpy as np
 
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from scripts.validation.run_topology_hypothesis_diagnostics import (
+    _distinct_path,
+    _extract_pedestrians,
     _find_alternative_paths,
+    _first_float,
     _path_dynamic_clearance,
+    _RouteHypothesisPath,
     _summarize_hypotheses,
     _topology_signature,
 )
@@ -21,6 +25,56 @@ def _adapter() -> GridRoutePlannerAdapter:
             clearance_penalty_weight=0.0,
         )
     )
+
+
+def test_first_float_handles_none_and_non_finite_values() -> None:
+    """_first_float should fall back to defaults for None/non-finite inputs."""
+    assert _first_float(None, 0.35) == 0.35
+    assert _first_float(float("nan"), 0.5) == 0.5
+    assert _first_float(float("inf"), 1.0) == 1.0
+    assert _first_float([2.5], 0.0) == 2.5
+    assert _first_float(3.0, 0.0) == 3.0
+
+
+def test_extract_pedestrians_handles_none_count_metadata() -> None:
+    """_extract_pedestrians should not crash when count metadata is None."""
+    obs = {
+        "pedestrians": {
+            "positions": np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+            "count": None,
+            "radius": 0.3,
+        }
+    }
+
+    class _FailingAdapter:
+        def _socnav_fields(self, obs):
+            raise AttributeError
+
+    positions, radius = _extract_pedestrians(_FailingAdapter(), obs)
+    assert positions.shape == (2, 2)
+    assert radius == 0.3
+
+
+def test_path_dynamic_clearance_works_without_inner_asarray() -> None:
+    """_path_dynamic_clearance should accept plain ndarray pedestrians without redundant conversion."""
+    path = [np.array([0.0, 0.0]), np.array([10.0, 0.0])]
+    pedestrians = np.array([[5.0, 2.0]])
+    assert _path_dynamic_clearance(path, pedestrians, ped_radius=0.5) == 1.5
+
+
+def test_distinct_path_uses_frozenset_signatures_without_list_conversion() -> None:
+    """_distinct_path should accept frozenset topology_signatures without converting to lists."""
+    route = _RouteHypothesisPath(
+        hypothesis_id="primary",
+        path=[(0, 0), (0, 1)],
+        clearance_map=np.zeros((1, 1), dtype=bool),
+        topology_signature=frozenset({(0, 1)}),
+    )
+    assert _distinct_path(
+        path=[(0, 0), (0, 1), (0, 2)],
+        topology_signature=frozenset({(0, 1)}),
+        accepted=[route],
+    ) is False
 
 
 def test_find_alternative_paths_recovers_two_wall_gaps() -> None:

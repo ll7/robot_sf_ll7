@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -33,6 +33,9 @@ from scripts.validation.run_policy_search_candidate import (
     _resolve_path,
     load_candidate_definition,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Collection
 from scripts.validation.run_policy_search_step_diagnostics import (
     _json_ready,
     _obs_min_robot_ped_distance,
@@ -80,11 +83,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _first_float(value: Any, default: float) -> float:
+    """Return the first finite scalar float from ``value`` or ``default``."""
+    if value is None:
+        return default
+    raw = np.asarray(value, dtype=float).reshape(-1)
+    if not raw.size or not np.isfinite(raw[0]):
+        return default
+    return float(raw[0])
+
+
 def _resolution(meta: dict[str, Any]) -> float:
     """Return occupancy-grid resolution in meters."""
-    raw = np.asarray(meta.get("resolution", [0.2]), dtype=float).reshape(-1)
-    value = float(raw[0]) if raw.size else 0.2
-    return value if np.isfinite(value) and value > _EPS else 0.2
+    value = _first_float(meta.get("resolution"), 0.2)
+    return value if value > _EPS else 0.2
 
 
 def _path_length(path: list[tuple[int, int]], *, resolution: float) -> float:
@@ -96,7 +108,7 @@ def _path_length(path: list[tuple[int, int]], *, resolution: float) -> float:
     )
 
 
-def _path_overlap(left: list[tuple[int, int]], right: list[tuple[int, int]]) -> float:
+def _path_overlap(left: Collection[tuple[int, int]], right: Collection[tuple[int, int]]) -> float:
     """Return Jaccard overlap between two grid-cell paths."""
     left_cells = set(left)
     right_cells = set(right)
@@ -119,7 +131,7 @@ def _distinct_path(
         if _path_overlap(path, item.path) > max_overlap:
             return False
         if topology_signature and item.topology_signature:
-            overlap = _path_overlap(list(topology_signature), list(item.topology_signature))
+            overlap = _path_overlap(topology_signature, item.topology_signature)
             if overlap > max_signature_overlap:
                 return False
     return True
@@ -259,14 +271,13 @@ def _path_dynamic_clearance(
     """Return nearest pedestrian clearance to a route polyline."""
     if len(world_points) < 2 or ped_positions.size == 0:
         return None
-    distances: list[float] = []
-    for ped_pos in ped_positions:
-        distances.append(
-            min(
-                _point_segment_distance(np.asarray(ped_pos, dtype=float), start, stop)
-                for start, stop in pairwise(world_points)
-            )
+    distances = [
+        min(
+            _point_segment_distance(ped_pos, start, stop)
+            for start, stop in pairwise(world_points)
         )
+        for ped_pos in ped_positions
+    ]
     return float(min(distances) - float(ped_radius)) if distances else None
 
 
@@ -286,11 +297,9 @@ def _extract_pedestrians(
         positions = positions.reshape(-1, 2) if positions.size % 2 == 0 else np.zeros((0, 2))
     if positions.ndim != 2:
         positions = np.zeros((0, 2), dtype=float)
-    count_raw = np.asarray(pedestrians.get("count", [positions.shape[0]]), dtype=float).reshape(-1)
-    count = int(count_raw[0]) if count_raw.size else int(positions.shape[0])
+    count = int(_first_float(pedestrians.get("count"), positions.shape[0]))
     count = max(0, min(count, int(positions.shape[0])))
-    radius_raw = np.asarray(pedestrians.get("radius", [0.35]), dtype=float).reshape(-1)
-    radius = float(radius_raw[0]) if radius_raw.size else 0.35
+    radius = _first_float(pedestrians.get("radius"), 0.35)
     if not np.isfinite(radius) or radius <= _EPS:
         radius = 0.35
     return positions[:count, :2], radius
@@ -681,7 +690,12 @@ def main() -> int:  # noqa: C901, PLR0915
         if planner_adapter is not None:
             diagnostics = getattr(planner_adapter, "diagnostics", None)
             if callable(diagnostics):
-                planner_summary = diagnostics()
+                try:
+                    planner_summary = diagnostics()
+                except Exception:
+                    planner_summary = {
+                        "status": "diagnostics_failed",
+                    }
         env.close()
 
     summary = _summarize_hypotheses(steps)

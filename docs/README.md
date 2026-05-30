@@ -162,7 +162,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Waypoint Noise For Route Generalization](./training/waypoint_noise.md)** - Configure Gaussian waypoint perturbation to reduce route memorization during training
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
-* **[Run Tracker & History CLI](./dev_guide.md#run-tracker-history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,    `watch`,    `list`,    `summary`,    `export`,    `perf-tests`,    `enable-tensorboard`)
+* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
 * **[Issue #845 Slurm Utilization Probe](./context/issue_845_slurm_utilization_probe.md)** - Collect `sstat`/`sacct`/`seff` evidence for low CPU-utilization investigations without launching new jobs
 
 ### Benchmarking & Metrics

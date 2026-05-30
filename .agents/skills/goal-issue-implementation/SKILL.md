@@ -16,6 +16,7 @@ delegates_to:
 - gh-pr-opener
 - gh-issue-creator
 - context-note-maintainer
+- issue-splitter
 output_schema: issue_to_pr_summary.v1
 aliases:
 - issue-queue-runner
@@ -34,6 +35,7 @@ It is an orchestrator over:
 - `gh-pr-opener`
 - `gh-issue-creator`
 - `context-note-maintainer`
+- `issue-splitter`
 
 It does not define subordinate command details; it standardizes queue policy, evidence and proof
 requirements, and loop boundaries.
@@ -136,6 +138,41 @@ machine and with the available durable artifacts. If a supposedly ready issue ne
 hardware, SLURM, CARLA, private artifacts, checkpoint aliases, datasets, or a clearer proof path,
 mark it blocked or send it to issue clarification instead of counting the queue as empty. Keep this
 audit read-only until the orchestrator has reviewed the proposed label/body changes.
+
+If the final audit leaves only parent, epic, decision, or research issues that are not directly
+implementable, hand exactly one parent to `issue-splitter` instead of stopping with a prose-only
+report. The splitter should produce or create one `Next Implementable Child` only after duplicate
+checks show that no equivalent child already exists.
+
+Example compact exhausted-queue audit:
+
+```text
+Queue exhaustion audit
+- Query used:
+  gh issue list --state open --label state:ready --json number,title,labels,url --limit 100
+  gh issue list --search "repo:ll7/robot_sf_ll7 is:issue is:open -label:state:ready -label:state:blocked -label:state:hold" --json number,title,labels,url --limit 100
+- Remaining ready issues:
+  - #1234 blocked locally: needs SLURM/Auxme allocation; mark `state:blocked` with unblock condition.
+  - #1235 ambiguous: acceptance criteria mix benchmark claim and exploratory probe; route to
+    `gh-issue-clarifier`.
+  - #1236 too broad for one PR: split into fixture migration, docs migration, and compatibility
+    validation issues.
+- Remaining open issues without `state:*` labels:
+  - 17 proposal/research issues need template repair before implementation routing.
+- Best issue-splitting candidate:
+  - #1236, because the child issues can have independent validation gates and avoid one broad
+    path-rewrite PR.
+- Writes applied:
+  - none yet; audit is read-only pending orchestrator review.
+- Next action:
+  - clarify #1235 or split #1236 before claiming the implementation queue is exhausted.
+```
+
+This is an illustrative report shape, not a required machine-readable schema. Prefer this compact
+summary in final handoffs and PR comments when the queue is genuinely exhausted. If a remaining
+issue only needs a clearer contract, route it to issue clarification. If a remaining issue bundles
+several independently validatable changes, create child issues with `gh-issue-creator` and leave the
+parent as the coordination issue instead of treating the bundle as unimplementable.
 
 ## Process
 

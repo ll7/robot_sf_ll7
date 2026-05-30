@@ -1,12 +1,13 @@
 # SLURM Issue Batch Status 2026-05-21
 
-Related issues: #1167, #1344, #1354, #1358, #1391, #1392, #1398.
+Related issues: Issue #1167, Issue #1344, Issue #1354, Issue #1358, Issue #1391,
+Issue #1392, Issue #1398.
 
 ## Current Status
 
 The 2026-05-20 batch was split after PR #1400 was closed without merge. The durable workflow
 pieces landed through smaller PRs, while the remaining benchmark interpretation blocker is handled
-by the #1398 analyzer fix.
+by the Issue #1398 analyzer fix.
 
 | Issue | Current state | Result |
 | --- | --- | --- |
@@ -20,9 +21,180 @@ by the #1398 analyzer fix.
 
 No user SLURM jobs were queued when this note was written.
 
+## Reusable SLURM Issue Status Block
+
+Use this compact block in issue bodies, issue comments, and context notes when a training or
+benchmark issue is waiting on SLURM/Auxme execution. It is human-readable status, not a new
+machine-readable ledger. The stricter stale-trail closure states remain documented in
+`docs/context/issue_1544_slurm_experiment_state_ledger.md`.
+
+```yaml
+slurm_issue_status:
+  issue_number: 0000
+  state: not_submitted | submitted_running | completed_pending_artifact_promotion | artifact_rescue | rerun_required | failed_closed | inconclusive_close | completed_with_durable_evidence | parent_blocked | insufficient_data
+  slurm_job_id: not_submitted
+  branch: unknown
+  commit: unknown
+  config_path:
+    - missing
+  output_root: missing
+  stdout_stderr_path: missing
+  durable_artifact_pointer_status: missing
+  next_action: record the single next operational step
+  closure_condition: state the condition needed before this issue can close or transition
+  last_update: YYYY-MM-DD
+  comparison_status: pending
+  status_basis: issue body | issue comment | context note | local inspection
+  notes_non_evidence: local output paths are scratch until promoted to durable evidence
+```
+
+Field rules:
+
+- `issue_number`, `state`, `slurm_job_id`, `commit`, `config_path`, `output_root`,
+  `durable_artifact_pointer_status`, and `next_action` should always be present.
+- Use `not_submitted`, `missing`, or `unknown` rather than omitting fields.
+- `parent_blocked` is for umbrella issues that should not be executed directly.
+- `insufficient_data` is for issues where the current issue/context trail does not identify enough
+  config, commit, or artifact information to submit or rescue a run safely.
+- `output_root` and `stdout_stderr_path` may name local `output/...` locations for triage, but they
+  are not durable evidence by themselves. Use the artifact vocabulary in
+  `docs/context/artifact_evidence_vocabulary.md` before closing an issue as complete.
+
+## Current SLURM-Needed Training Issue Snapshot 2026-05-30
+
+This docs-only pass did not submit SLURM jobs, move artifacts, upload checkpoints, or write Project
+metadata. It reviewed open issues carrying the `slurm` label and records conservative status blocks
+only where the issue trail already named enough context. Missing `output/...` paths stay
+non-evidence.
+
+### Issue #1470 Oracle Imitation Dataset Collection
+
+```yaml
+slurm_issue_status:
+  issue_number: 1470
+  state: not_submitted
+  slurm_job_id: not_submitted
+  branch: issue-1397-oracle-imitation-launch-packet
+  commit: unknown
+  config_path:
+    - configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+  output_root: missing
+  stdout_stderr_path: missing
+  durable_artifact_pointer_status: missing dataset manifest, checksum, split validation, and artifact pointer
+  next_action: validate the launch packet at the exact collection commit and select durable dataset storage before submission
+  closure_condition: dataset manifest, checksums, split/leakage validation, and durable artifact pointer exist, or the trail is closed failed/inconclusive/rerun-required
+  last_update: 2026-05-30
+  comparison_status: pending split/leakage validation
+  status_basis: issue body and docs/context/policy_search/SLURM/003_imitation_oracle_dataset_campaign.md
+  notes_non_evidence: issue body names candidate launch commit 034ac79e, but the exact collection commit is not recorded as the execution commit
+```
+
+### Issue #1472 Learned Risk Model v1 SLURM Campaign
+
+```yaml
+slurm_issue_status:
+  issue_number: 1472
+  state: not_submitted
+  slurm_job_id: not_submitted
+  branch: issue-1395-learned-risk-launch-packet
+  commit: unknown
+  config_path:
+    - configs/training/learned_risk_model_issue_1395_launch_packet.yaml
+  output_root: missing
+  stdout_stderr_path: missing
+  durable_artifact_pointer_status: missing trace manifest, learned-risk checkpoint pointer, diagnostics report, and downstream evaluation summary
+  next_action: validate the launch packet and replace pending trace/baseline artifact aliases with concrete durable pointers before training
+  closure_condition: trace inputs, checkpoint, diagnostics, and stress/full-matrix comparison are durable, or the campaign is closed failed/inconclusive/rerun-required
+  last_update: 2026-05-30
+  comparison_status: pending stress/full-matrix comparison after training
+  status_basis: issue body and docs/context/policy_search/SLURM/001_learned_risk_model_v1.md
+  notes_non_evidence: launch-packet validity is not learned-risk training or benchmark evidence
+```
+
+### Issue #1474 Shielded PPO Repair Campaign
+
+```yaml
+slurm_issue_status:
+  issue_number: 1474
+  state: not_submitted
+  slurm_job_id: not_submitted
+  branch: issue-1396-shielded-ppo-launch-packet
+  commit: unknown
+  config_path:
+    - configs/training/shielded_ppo_issue_1396_launch_packet.yaml
+  output_root: missing
+  stdout_stderr_path: missing
+  durable_artifact_pointer_status: missing base checkpoint, baseline artifacts, trained checkpoint, compact evaluation artifacts, and checksums
+  next_action: validate the launch packet, record exact training commit/base checkpoint, and submit only the guarded smoke/nominal gate sequence
+  closure_condition: smoke and nominal gates pass with runtime guard diagnostics and durable artifact pointers, or the campaign is revised/rejected/closed
+  last_update: 2026-05-30
+  comparison_status: pending smoke and nominal-sanity gates
+  status_basis: issue body and docs/context/policy_search/SLURM/002_shielded_ppo_repair_campaign.md
+  notes_non_evidence: guard-saturated gains must not be reported as raw PPO improvement
+```
+
+### Issue #1475 ORCA-Residual BC Smoke And Nominal Lineage
+
+```yaml
+slurm_issue_status:
+  issue_number: 1475
+  state: not_submitted
+  slurm_job_id: not_submitted
+  branch: unknown
+  commit: unknown
+  config_path:
+    - configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+    - docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
+  output_root: missing
+  stdout_stderr_path: missing
+  durable_artifact_pointer_status: missing residual dataset manifest, learned residual checkpoint pointer, and diagnostics report
+  next_action: validate the lineage packet, replace pending artifact aliases, and run smoke before nominal escalation
+  closure_condition: smoke records success, collision, residual clipping, guard rates, fallback/degraded status, and durable artifact status before any nominal escalation
+  last_update: 2026-05-30
+  comparison_status: pending smoke before nominal escalation
+  status_basis: issue body and linked Issue #1428 handoff docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
+  notes_non_evidence: fallback/degraded rows must not count as learned-residual success evidence
+```
+
+### Issue #1108 BC Warm-Start PPO Artifact Rescue
+
+```yaml
+slurm_issue_status:
+  issue_number: 1108
+  state: artifact_rescue
+  slurm_job_id: 12472
+  branch: issue-1108-bc-warm-start-ppo
+  commit: unknown
+  config_path:
+    - configs/training/ppo_imitation/bc_pretrain_issue_749_v10_warm_start.yaml
+    - configs/training/ppo_imitation/ppo_finetune_issue_749_v10_warm_start.yaml
+    - SLURM/Auxme/issue_1108_bc_warm_start.sl
+  output_root: output/slurm/issue1108-bcppo-job-12472/
+  stdout_stderr_path: output/slurm/12472-issue1108-bc-warm-start.out
+  durable_artifact_pointer_status: missing or not yet proven durable for dataset, BC checkpoint, PPO checkpoint, and policy-analysis comparison
+  next_action: recover/promote the historical job trail or split a clean rerun follow-up
+  closure_condition: classify as artifact_rescue_success, rerun_required, or inconclusive_close with durable evidence or explicit missing-evidence rationale
+  last_update: 2026-05-30
+  comparison_status: pending against 27dbe5xu and b60iopxt
+  status_basis: issue body and docs/context/issue_1544_slurm_experiment_state_ledger.md
+  notes_non_evidence: local output paths and historical logs are not durable evidence unless recovered and promoted
+```
+
+### Insufficient-Data Or Parent-Blocked SLURM Issues
+
+Rows in this table are not execution blocks. They mark why a full SLURM status block would be
+misleading until the parent issue is converted into a concrete execution child or the missing
+status basis is added.
+
+| Issue | Status | Status basis | Why this pass does not create a full execution block | Next action |
+| --- | --- | --- | --- | --- |
+| Issue #1358 | `parent_blocked` | Issue body | Parent issue; current body says execute through Issue #1475 only. | Wait for Issue #1475 to classify the ORCA-residual lane as continue/revise/stop. |
+| Issue #1490 | `parent_blocked` | Issue body and `docs/context/issue_1543_predictive_v2_negative_audit.md` | Predictive-v2 umbrella; current body says do not execute directly after Issue #1543. | Maintainer selects a revised predictive-v2 hypothesis or child sequence. |
+| Issue #1496 | `parent_blocked` | Issue body | Blocked by Issue #1470 durable oracle-imitation dataset. | Wait for Issue #1470 dataset manifest/checksums and split validation. |
+
 ## Benchmark Evidence Carried Forward
 
-Issue #1344 post-#1384 reruns completed cleanly and are recorded in
+Issue #1344 reruns after Issue #1384 completed cleanly and are recorded in
 `docs/context/issue_1344_paired_amv_protocol_report.md`:
 
 - nominal primary-row job `12572`: `COMPLETED 0:0`, `benchmark_success=true`
@@ -32,10 +204,10 @@ Issue #1354 has bounded compatibility proof for `goal`, `orca`, and `social_forc
 `differential_drive`, `bicycle_drive`, and `holonomic`:
 
 - initial job `12571`: `COMPLETED 0:0`, but analyzer reported row-level SNQI mismatches
-- post-#1384 job `12575`: `COMPLETED 0:0`, no campaign warnings, but the old analyzer still
+- job `12575` after Issue #1384: `COMPLETED 0:0`, no campaign warnings, but the old analyzer still
   reported row-level SNQI mismatches
 
-The #1398 fix reinterprets the #1354 post-#1384 artifact by matching summary rows on
+The Issue #1398 fix reinterprets the Issue #1354 artifact from after Issue #1384 by matching summary rows on
 `(planner_key, kinematics)` instead of only `planner_key`. On the local job `12575` artifact, the
 patched analyzer reports no automated inconsistencies.
 
@@ -51,14 +223,14 @@ uv run python scripts/tools/analyze_camera_ready_campaign.py \
 
 The raw campaign output remains local and ignored; set `RAW_ISSUE_1354_ROOT` to the checkout that
 owns the generated `output/` tree before rerunning the command. Promote only compact summaries or
-manifests if the #1354 report is updated for paper-facing use.
+manifests if the Issue #1354 report is updated for paper-facing use.
 
 ## Remaining SLURM Decisions
 
-Issue #1354 should not launch a larger fixed-spec AMV campaign until the #1398 analyzer fix is merged and
+Issue #1354 should not launch a larger fixed-spec AMV campaign until the Issue #1398 analyzer fix is merged and
 the existing bounded proof is reinterpreted in the issue thread. After that, the next decision is
 whether the bounded three-planner cross-kinematics surface is enough for an outlook note, or whether
-to launch a broader #1353-dependent matrix.
+to launch a broader Issue #1353-dependent matrix.
 
 Issue #1358 should not submit a generic PPO or policy-search smoke as the training run. PR #1409 gives the
 bounded residual adapter and diagnostics surface, but the issue still asks for a learned residual

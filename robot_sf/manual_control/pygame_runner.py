@@ -22,6 +22,7 @@ from robot_sf.manual_control.input_mapping import (
     mapper_for_manual_mode,
 )
 from robot_sf.manual_control.manifest import ManualSessionManifest, write_manual_session_manifest
+from robot_sf.manual_control.modes import configure_manual_view_renderer
 from robot_sf.manual_control.recording import (
     ManualControlRecord,
     ManualJsonlRecorder,
@@ -345,13 +346,17 @@ class ManualPygameRunner:
         Any
             Gymnasium-compatible Robot SF environment.
         """
-        return self.env_factory(
+        env = self.env_factory(
             seed=self.settings.seed,
             debug=self.settings.render,
             scenario_name=self.settings.scenario_id,
             algorithm_name="manual_control",
             recording_enabled=False,
         )
+        sim_ui = getattr(env, "sim_ui", None)
+        if sim_ui is not None:
+            configure_manual_view_renderer(sim_ui, runtime_config.view_mode)
+        return env
 
     def _build_baseline(self) -> PolicyBaseline:
         """Freeze the policy-to-beat metadata for this session.

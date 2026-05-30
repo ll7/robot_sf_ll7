@@ -20,16 +20,17 @@ and `--robot-action-space` through `scripts/manual_control/validate_modes.py`. T
 interactive runners the same validated selector path without making the pure mapper tests depend on
 Pygame.
 
-## Ego-up blocker
+## Ego-up renderer hook
 
-`ego_up_view_v1` is registry-visible but intentionally fails closed. The stacked #1151 foundation
-contains pure mode, recording, replay, and export primitives, but it does not yet expose an
-interactive renderer camera-transform hook that can make a robot-centered, robot-up view executable.
+Issue #1604 removes the `ego_up_view_v1` fail-closed blocker by adding a renderer-facing camera
+hook to `SimulationView` and replay support through `LazySimulationView`. Manual-control sessions
+now configure the environment renderer with `set_manual_view_mode("ego_up")`, which centers the
+camera on the robot and rotates world coordinates so the robot heading points toward screen up.
 
-The current blocker text is stored in `robot_sf/manual_control/modes.py` and is surfaced through
-`ManualControlRuntimeConfig.from_strings(view_mode="ego_up")`. A later runner/rendering issue should
-replace the fail-closed state with an implemented `ManualViewModeSpec` only after the camera
-transform is exercised by a real or headless rendering smoke.
+The fixed-map path remains backward-compatible: renderers without a manual camera hook are allowed
+for `fixed_map`, and `SimulationView` falls back to the original scale-plus-offset transform when no
+ego-up camera center/rotation is active. `robot_static` remains intentionally fail-closed until a
+separate renderer mode is implemented.
 
 ## Validation path
 
@@ -39,6 +40,16 @@ Targeted proof for this issue should cover:
 - mode-registry and unsupported action-space validation,
 - session manifest and JSONL recording mode metadata,
 - CLI mode-selection smoke via `scripts/manual_control/validate_modes.py`.
+- for issue #1604 specifically: ego-up mode-registry support, unsupported-renderer fail-closed
+  behavior, `LazySimulationView` replay/forwarding, manual runner renderer wiring, and the
+  `SimulationView` transform that maps robot heading to screen up.
 
 Before PR handoff, run the targeted manual-control tests and then the repository PR readiness check
-against the stacked #1151 base.
+against the current `origin/main` base.
+
+Issue #1604 targeted validation on 2026-05-30:
+
+- `uv run pytest -q tests/test_manual_control_modes.py tests/test_manual_control_pygame_runner.py tests/test_lazy_pygame_init.py tests/visuals/test_sim_view_coverage_paths.py::test_sim_view_ego_up_camera_transform_centers_robot_and_rotates_heading tests/visuals/test_sim_view_coverage_paths.py::test_sim_view_default_camera_transform_keeps_existing_affine_scaling`
+  passed with `34 passed`.
+- `uv run ruff check robot_sf/manual_control robot_sf/render tests/test_manual_control_modes.py tests/test_manual_control_pygame_runner.py tests/test_lazy_pygame_init.py tests/visuals/test_sim_view_coverage_paths.py`
+  passed.

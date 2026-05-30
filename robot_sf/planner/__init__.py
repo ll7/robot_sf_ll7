@@ -22,6 +22,14 @@ from robot_sf.planner.classic_planner_adapter import (
     PlannerActionAdapter,
     attach_classic_global_planner,
 )
+from robot_sf.planner.learned_risk_surface import (
+    LocalRiskSurface,
+    LocalRiskSurfaceSpec,
+    RiskSurfacePlannerAdapter,
+    RiskSurfaceUnavailable,
+    attach_risk_surface_to_observation,
+    deterministic_pedestrian_risk_surface,
+)
 from robot_sf.planner.poi_sampler import POISampler
 from robot_sf.planner.policy_stack_v1 import PolicyStackV1Adapter, PolicyStackV1Config
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
@@ -40,6 +48,8 @@ __all__ = [
     "ClassicGlobalPlanner",
     "ClassicPlannerConfig",
     "GlobalPlanner",
+    "LocalRiskSurface",
+    "LocalRiskSurfaceSpec",
     "POISampler",
     "PlannerActionAdapter",
     "PlannerConfig",
@@ -49,10 +59,14 @@ __all__ = [
     "PolicyStackV1Config",
     "RiskDWAPlannerAdapter",
     "RiskDWAPlannerConfig",
+    "RiskSurfacePlannerAdapter",
+    "RiskSurfaceUnavailable",
     "TEBCommitmentConfig",
     "TEBCommitmentPlannerAdapter",
     "VisibilityPlanner",
     "attach_classic_global_planner",
+    "attach_risk_surface_to_observation",
+    "deterministic_pedestrian_risk_surface",
     "plot_global_plan",
     "plot_visibility_graph",
 ]

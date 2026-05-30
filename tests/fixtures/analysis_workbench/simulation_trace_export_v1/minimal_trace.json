@@ -1,0 +1,67 @@
+{
+  "schema_version": "simulation_trace_export.v1",
+  "trace_id": "fixture_trace_001",
+  "source": {
+    "scenario_id": "classic_bottleneck_medium",
+    "seed": 111,
+    "planner_id": "hybrid_rule_v0_minimal",
+    "episode_id": "fixture_episode_001",
+    "generated_by": "unit-test fixture"
+  },
+  "evidence_boundary": "analysis_workbench_only",
+  "coordinate_frame": "world",
+  "units": {
+    "position": "m",
+    "heading": "rad",
+    "time": "s",
+    "velocity": "m/s"
+  },
+  "frames": [
+    {
+      "step": 0,
+      "time_s": 0.0,
+      "robot": {
+        "position": [0.0, 0.0],
+        "heading": 0.0,
+        "velocity": [0.1, 0.0]
+      },
+      "pedestrians": [
+        {
+          "id": "ped_1",
+          "position": [1.0, 0.5],
+          "velocity": [0.0, 0.0]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.1,
+          "angular_velocity": 0.0
+        },
+        "event": "start"
+      }
+    },
+    {
+      "step": 1,
+      "time_s": 0.1,
+      "robot": {
+        "position": [0.01, 0.0],
+        "heading": 0.0,
+        "velocity": [0.1, 0.0]
+      },
+      "pedestrians": [
+        {
+          "id": "ped_1",
+          "position": [1.0, 0.5],
+          "velocity": [0.0, 0.0]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.1,
+          "angular_velocity": 0.0
+        },
+        "event": "advance"
+      }
+    }
+  ]
+}

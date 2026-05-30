@@ -227,6 +227,8 @@ knowledge, not every transient iteration detail.
   [issue_1662_lidar_ppo_smoke.md](issue_1662_lidar_ppo_smoke.md)
 * Issue #1294 seed-sensitivity perturbations:
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
+* Issue #1608 scenario seed sensitivity:
+  [issue_1608_seed_sensitivity_analysis.md](issue_1608_seed_sensitivity_analysis.md)
 * Issue archetypes and evidence tiers:
   [issue_1512_issue_archetypes.md](issue_1512_issue_archetypes.md)
 * Issue #1532 archetype metadata sync decision:

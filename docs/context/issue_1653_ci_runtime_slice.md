@@ -1,6 +1,6 @@
 # Issue #1653 CI Runtime Slice
 
-Status: post-trim timing baseline
+Status: xdist scheduler slice
 
 ## Scope
 
@@ -113,11 +113,60 @@ The aggregate `ci` job remains unchanged. It still gates on both `fast-feedback`
 | Add phase timing around `lint`, `typecheck`, `test`, `smoke`, and `artifact-policy` in `scripts/dev/ci_driver.sh` | low, implemented in this branch | CI log shows per-phase durations without changing pass/fail semantics |
 | Add timing around dependency sync and artifact migration in both CI jobs | low | CI log identifies whether repeated setup is material compared with test time |
 | Split slow example smoke tests into a separately timed subgroup while keeping them required | medium | Before/after CI run shows earlier failure signal or lower p90 without reducing coverage |
+| Evaluate xdist `worksteal` scheduling for hosted `fast-feedback` tests | low as an experiment, rejected as a CI default in #1768 | PR CI showed no timing win and exposed test-order dependencies |
 | Investigate whether docs-only PRs can use a reduced gate | medium-high | Maintainer decision plus path filter proof that benchmark, planner, workflow, config, and code changes still run full gates |
 
 The recommended starting point is instrumentation, not deselection: use the new phase timestamps,
 then decide whether the next target is test grouping, setup/cache behavior, or smoke-artifact
 policy.
+
+## Xdist Scheduler Slice
+
+Issue [#1768](https://github.com/ll7/robot_sf_ll7/issues/1768) evaluated a narrow scheduler-only
+runtime slice for the `fast-feedback` test phase. The latest hosted #1767 run still showed
+`fast-feedback` as the wall-time limiter after example smoke separation:
+
+- `ci_driver phase_end phase=test status=0 duration_seconds=563`
+- `4486 passed, 9 skipped, 9 warnings in 541.51s`
+- slowest non-example calls included `tests/adversarial/test_adversarial_search.py` at 24.30s,
+  `tests/classic_interactions/test_headless_safety.py` at 19.68s, and
+  `tests/test_load_states_and_record_video.py` at 18.84s.
+
+The #1768 change keeps the same shared pytest wrapper and collected test paths, but lets the
+wrapper accept `PYTEST_XDIST_DIST=<mode>` for targeted scheduler experiments. Hosted CI keeps the
+historical `load` scheduler because hosted `worksteal` evidence was not good enough to use as the
+default.
+
+Local compatibility proof before implementation showed that the current xdist stack accepts
+`worksteal` together with the repository's ordering flags:
+
+```bash
+PYTEST_NUM_WORKERS=4 uv run pytest -n 4 --dist worksteal --failed-first \
+  tests/test_ci_script_contract.py tests/dev/test_resolve_pytest_workers.py -q
+```
+
+Result: `11 passed in 21.02s`.
+
+The hosted experiment rejected `worksteal` as a CI default for this suite. Two hosted runs failed
+after alternate scheduling exposed order dependencies, and the third run already exceeded the
+previous #1767 `fast-feedback` timing window before completion. This is useful negative evidence:
+scheduler mode alone is not the next reliable #1653 speed lever.
+
+The first hosted #1768 run failed after `worksteal` changed scheduling enough to expose a shared
+temporary path in `tests/sb3_test.py::test_can_load_model_snapshot`. That test wrote to
+`./temp/ppo_model.zip`, which is unsafe under alternate xdist scheduling. The branch now uses
+pytest's per-test `tmp_path` fixture for the saved model snapshot before rerunning hosted timing.
+
+The second hosted run exposed a second scheduler-order dependency: the SoNIC probe import-state
+test left `sys.modules["gym"]` set to a sentinel object after the test completed. The branch now
+uses `monkeypatch.setitem()` so pytest restores the caller's original import state after the test.
+
+The accepted #1768 outcome is therefore:
+
+- keep `PYTEST_XDIST_DIST=<mode>` as an explicit wrapper knob for local or future hosted
+  experiments,
+- do not set `PYTEST_XDIST_DIST=worksteal` in hosted CI by default,
+- keep the two test-isolation fixes because they remove real xdist-order coupling.
 
 ## Follow-Up
 

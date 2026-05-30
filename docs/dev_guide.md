@@ -298,6 +298,11 @@ default instead of `-n auto`, because the unbounded auto worker selection can le
 validation wrappers hanging after child processes should have exited. Override with
 `PYTEST_NUM_WORKERS=<int>` or `PYTEST_NUM_WORKERS=auto` when needed.
 
+`scripts/dev/run_tests_parallel.sh` also accepts `PYTEST_XDIST_DIST=<mode>` to select the
+pytest-xdist scheduler. The default remains `load` for compatibility. Use alternate schedulers
+such as `PYTEST_XDIST_DIST=worksteal` only for targeted local experiments until hosted evidence
+shows they improve CI timing without exposing new order dependencies.
+
 For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the submitted
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
 `#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.

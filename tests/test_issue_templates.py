@@ -17,6 +17,7 @@ SKILL_FILES = [
     ROOT / ".agents" / "skills" / "gh-issue-template-auditor" / "SKILL.md",
     ROOT / ".agents" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
     ROOT / ".agents" / "skills" / "issue-contract-maintainer" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "issue-splitter" / "SKILL.md",
 ]
 KNOWN_LABELS = {
     "agent",
@@ -231,3 +232,36 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
 
     documentation_text = (TEMPLATE_DIR / "documentation.md").read_text(encoding="utf-8")
     assert "docs/README.md" in documentation_text
+
+
+def test_issue_splitter_skill_defines_parent_child_contract() -> None:
+    """Verify the parent-to-child issue-splitting mode stays conservative and auditable."""
+
+    splitter_text = SKILL_FILES[4].read_text(encoding="utf-8")
+    expected_markers = [
+        "smallest independently implementable child",
+        "duplicate check",
+        "Next Implementable Child",
+        "Parent issue",
+        "Non-goals",
+        "Validation / Testing",
+        "Blocked by",
+        "Project #5",
+        "draft-only",
+    ]
+    for marker in expected_markers:
+        assert marker in splitter_text, f"missing issue-splitter marker {marker!r}"
+
+    maintainer_text = SKILL_FILES[3].read_text(encoding="utf-8")
+    assert "split-parent-to-child" in maintainer_text
+    assert "issue-splitter" in maintainer_text
+
+    creator_text = SKILL_FILES[0].read_text(encoding="utf-8")
+    assert "Parent issue" in creator_text
+    assert "Blocked by" in creator_text
+
+    goal_text = (ROOT / ".agents" / "skills" / "goal-issue-implementation" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "issue-splitter" in goal_text
+    assert "Next Implementable Child" in goal_text

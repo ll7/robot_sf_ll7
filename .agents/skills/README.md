@@ -129,9 +129,10 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `gh-issue-sequencer` | atomic | context | yes | no | no | none | Maintain a clear next-work queue in GitHub Project #5 by normalizing issue status, priority, and execution order. |
 | `gh-issue-template-auditor` | atomic | context | yes | no | no | none | Review existing GitHub issues against the repo's issue-template contract and repair underspecified issues when the fix is clear. |
 | `goal-issue-discovery` | orchestrator | analysis | yes | no | no | `gh-issue-creator`, `gh-issue-sequencer`, `gh-issue-priority-assessor`, `agentic-eval`, `auto-improvement`, `autoresearch`, `context-map` | Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities and creates evidence-graded GitHub issues; not for implementation. |
-| `goal-issue-implementation` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `gh-issue-autopilot`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `gh-issue-creator`, `context-note-maintainer` | Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements one scoped issue at a time, validates, pushes, and opens PRs. |
+| `goal-issue-implementation` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `gh-issue-autopilot`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `gh-issue-creator`, `context-note-maintainer`, `issue-splitter` | Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements one scoped issue at a time, validates, pushes, and opens PRs. |
 | `issue-audit` | atomic | context | yes | no | no | none | User-in-the-loop open-issue audit that asks one readiness-blocking question at a time and updates issues as decisions are made. |
-| `issue-contract-maintainer` | orchestrator | planning | yes | no | no | `gh-issue-clarifier`, `gh-issue-template-auditor`, `issue-audit` | Maintain GitHub issue contracts through template audits, ambiguity clarification, and user-decision application. |
+| `issue-contract-maintainer` | orchestrator | planning | yes | no | no | `gh-issue-clarifier`, `gh-issue-template-auditor`, `issue-audit`, `issue-splitter` | Maintain GitHub issue contracts through template audits, ambiguity clarification, and user-decision application. |
+| `issue-splitter` | atomic | planning | yes | no | no | `gh-issue-creator` | Split a parent, epic, decision, or research issue into the smallest independently implementable child issue with duplicate checks and conservative parent linking. |
 
 ### PR Lifecycle
 
@@ -179,6 +180,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `issue-discovery` | `goal-issue-discovery` |
 | `issue-queue-runner` | `goal-issue-implementation` |
 | `issue-to-pr` | `gh-issue-autopilot` |
+| `parent-to-child-issue` | `issue-splitter` |
 | `pr-review-runner` | `goal-pr-review` |
 | `proof-policy` | `quality-playbook` |
 | `quality-strategy` | `quality-playbook` |

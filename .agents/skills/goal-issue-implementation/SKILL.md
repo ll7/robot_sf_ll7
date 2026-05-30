@@ -16,6 +16,7 @@ delegates_to:
 - gh-pr-opener
 - gh-issue-creator
 - context-note-maintainer
+- issue-splitter
 output_schema: issue_to_pr_summary.v1
 aliases:
 - issue-queue-runner
@@ -34,6 +35,7 @@ It is an orchestrator over:
 - `gh-pr-opener`
 - `gh-issue-creator`
 - `context-note-maintainer`
+- `issue-splitter`
 
 It does not define subordinate command details; it standardizes queue policy, evidence and proof
 requirements, and loop boundaries.
@@ -136,6 +138,11 @@ machine and with the available durable artifacts. If a supposedly ready issue ne
 hardware, SLURM, CARLA, private artifacts, checkpoint aliases, datasets, or a clearer proof path,
 mark it blocked or send it to issue clarification instead of counting the queue as empty. Keep this
 audit read-only until the orchestrator has reviewed the proposed label/body changes.
+
+If the final audit leaves only parent, epic, decision, or research issues that are not directly
+implementable, hand exactly one parent to `issue-splitter` instead of stopping with a prose-only
+report. The splitter should produce or create one `Next Implementable Child` only after duplicate
+checks show that no equivalent child already exists.
 
 ## Process
 

@@ -15,7 +15,7 @@ architecture, decisions, experiments, failures, and benchmark-specific memory gu
 
 ## What This Includes
 
-- `CLAUDE.md` importing both `AGENTS.md` and `memory/MEMORY.md`
+- `AGENTS.md` listing `memory/MEMORY.md` as part of the repo-native context stack
 - a stable `memory/` taxonomy
 - one example note per memory type
 - contributor guidance in `docs/dev_guide.md`
@@ -32,3 +32,6 @@ architecture, decisions, experiments, failures, and benchmark-specific memory gu
 
 Current repository policy allows optional MCP exposure of these Markdown files, but the files
 themselves remain the source of truth.
+
+Update 2026-05-30: the original Claude-specific startup pointer was retired. The memory-layer
+decision remains active through the `AGENTS.md` context stack and supported compatibility surfaces.

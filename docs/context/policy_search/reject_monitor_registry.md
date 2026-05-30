@@ -338,20 +338,26 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
 - Source URL: family-level reject; representative systems vary by visual-language model,
   object-goal benchmark, or embodied foundation-model stack rather than one canonical source.
 - Current status: `reject for now`
-- Evidence grade: `proposal`
+- Evidence grade: `observed`
 - Source-backed facts: The 2026-05-20 screen explicitly called out generic visual-language
   navigation, object-goal navigation, foundation-model scoring policies, and full embodied visual
-  navigation stacks as tempting but poorly bounded learned-policy follow-ups.
+  navigation stacks as tempting but poorly bounded learned-policy follow-ups. Issue #1626 records a
+  focused readiness pass over OpenVLA/Octo/RT-2-style manipulation VLAs, LM-Nav-style composed
+  navigation, ViNT/NoMaD/NavDP visual navigation, and emerging navigation VLA project surfaces.
 - Robot SF synthesis: Do not open local-planner implementation work for these families unless the
   method exposes a bounded local `observation_t -> action_t` policy under Robot SF scenario, seed,
   and metric contracts. Full embodied navigation stacks usually assume RGB/RGB-D observations,
   semantic goals, global mapping, language/object labels, or simulator assets that Robot SF's
   current AMV benchmark does not provide.
 - Related Robot SF work: #1359, #1355,
+  `docs/context/policy_search/2026-05-30_foundation_model_readiness_issue_1626.md`,
   `docs/context/policy_search/candidate_registry.yaml`.
 - Reopen if: a specific public method has reproducible source assets and a narrow reduction proof
   showing that the policy can act only from Robot SF-available local observations without semantic
-  oracle inputs, global-map leakage, or changing the benchmark task.
+  oracle inputs, global-map leakage, or changing the benchmark task. If the policy needs language
+  or visual inputs, reopen only after an observation-track contract defines image/depth/semantic
+  payloads, task-language schema, topological-memory boundary, action adapter, and fail-closed
+  missing-modality behavior.
 
 ## Maintenance Rules
 

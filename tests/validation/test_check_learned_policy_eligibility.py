@@ -76,6 +76,23 @@ def _eligible_spec() -> dict[str, object]:
             "unsupported_observation_policy": "fail closed before benchmark run",
             "guard_activation_policy": "report as caveat, not success evidence",
         },
+        "benchmark_promotion": {
+            "claim_boundary": "benchmark_promoted",
+            "benchmark_track": "grid_socnav_v1",
+            "track_schema_version": "observation-track.v1",
+            "observation_level": "tracked_agents_no_noise",
+            "observation_mode": "socnav_state",
+            "allowed_observation_keys": [
+                "robot_state",
+                "goal",
+                "tracked_agents",
+                "occupancy_grid",
+            ],
+            "goal_encoding": "current route goal included in planner observation",
+            "sensor_geometry": "local occupancy-grid/SocNav state, no LiDAR ray geometry",
+            "privileged_input_status": "no evaluation-time privileged inputs",
+            "reference": "docs/context/issue_1612_observation_track_architecture.md",
+        },
     }
 
 
@@ -125,6 +142,45 @@ def test_training_only_or_oracle_can_record_forbidden_fields() -> None:
     spec["observation_fields"]["forbidden_evaluation_time"] = [
         "future collision label",
     ]
+    spec["benchmark_promotion"] = {
+        "claim_boundary": "research_only",
+        "non_benchmark_reason": "Oracle-training spec is not a benchmark-promoted checkpoint.",
+    }
+
+    assert validate_learned_policy_eligibility(spec) == []
+
+
+def test_benchmark_promotion_requires_observation_track_metadata() -> None:
+    """Learned checkpoints cannot be promoted without explicit observation-track metadata."""
+    spec = _eligible_spec()
+    spec["benchmark_promotion"] = {"claim_boundary": "benchmark_promoted"}
+
+    issues = validate_learned_policy_eligibility(spec)
+    paths = {issue.path for issue in issues}
+
+    assert "benchmark_promotion.benchmark_track" in paths
+    assert "benchmark_promotion.observation_level" in paths
+    assert "benchmark_promotion.allowed_observation_keys" in paths
+
+
+def test_benchmark_promotion_null_is_reported() -> None:
+    """A null promotion block should not bypass benchmark metadata validation."""
+    spec = _eligible_spec()
+    spec["benchmark_promotion"] = None
+
+    issues = validate_learned_policy_eligibility(spec)
+
+    assert any(issue.path == "benchmark_promotion" for issue in issues)
+
+
+def test_research_only_promotion_boundary_can_pass_without_track_fields() -> None:
+    """Research-only candidates should declare the boundary without pretending to be benchmark rows."""
+    spec = _eligible_spec()
+    spec["verdict"] = "eligible_for_research_only"
+    spec["benchmark_promotion"] = {
+        "claim_boundary": "research_only",
+        "non_benchmark_reason": "Adapter smoke only; not benchmark promotion evidence.",
+    }
 
     assert validate_learned_policy_eligibility(spec) == []
 

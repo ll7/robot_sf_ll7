@@ -67,9 +67,11 @@ from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
+    attach_track_metadata,
     compute_episode_id,
     episode_identity_hash,
     index_existing,
+    normalize_track_field,
     validate_episode_success_integrity,
 )
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
@@ -82,6 +84,41 @@ if TYPE_CHECKING:
 
 DEFAULT_BENCHMARK_ROBOT_RADIUS_M = 0.3
 DEFAULT_BENCHMARK_PED_RADIUS_M = 0.35
+
+
+def _apply_track_metadata_to_scenarios(
+    scenarios: list[dict[str, Any]],
+    *,
+    observation_mode: str | None,
+    observation_level: str | None,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+) -> list[dict[str, Any]]:
+    """Attach track metadata to scenario payloads used for rows and resume identity.
+
+    Returns:
+        Scenario payloads with additive track fields, or the original list when no track is set.
+    """
+    if (
+        observation_mode is None
+        and observation_level is None
+        and benchmark_track is None
+        and track_schema_version is None
+    ):
+        return scenarios
+    tracked: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        payload = dict(scenario)
+        if observation_mode is not None:
+            payload["observation_mode"] = observation_mode
+        if observation_level is not None:
+            payload["observation_level"] = observation_level
+        if benchmark_track is not None:
+            payload["benchmark_track"] = benchmark_track
+        if track_schema_version is not None:
+            payload["track_schema_version"] = track_schema_version
+        tracked.append(payload)
+    return tracked
 
 
 def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
@@ -1147,6 +1184,17 @@ def _build_episode_record(
     episode_id = compute_episode_id(scenario_params, seed)
     algo_name = str(scenario_params.get("algo") or algo_metadata.get("algorithm") or "unknown")
     enriched_algo_metadata = enrich_algorithm_metadata(algo=algo_name, metadata=algo_metadata)
+    attach_track_metadata(
+        enriched_algo_metadata,
+        benchmark_track=normalize_track_field(
+            scenario_params.get("benchmark_track"), field_name="benchmark_track"
+        ),
+        track_schema_version=normalize_track_field(
+            scenario_params.get("track_schema_version"), field_name="track_schema_version"
+        ),
+        observation_level=scenario_params.get("observation_level"),
+        observation_mode=scenario_params.get("observation_mode"),
+    )
     contradictions = outcome_contradictions(
         termination_reason=termination_reason,
         outcome=outcome,
@@ -1176,6 +1224,10 @@ def _build_episode_record(
     algo_value = scenario_params.get("algo")
     if algo_value is not None:
         record["algo"] = algo_value
+    for key in ("observation_mode", "observation_level", "benchmark_track", "track_schema_version"):
+        value = scenario_params.get(key)
+        if value is not None:
+            record[key] = value
     ensure_metric_parameters(record)
     return record
 
@@ -1754,6 +1806,8 @@ def run_batch(  # noqa: PLR0913
     ped_impact_window_steps: int = 5,
     observation_mode: str | None = None,
     observation_level: str | None = None,
+    benchmark_track: str | None = None,
+    track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     workers: int = 1,
@@ -1773,6 +1827,18 @@ def run_batch(  # noqa: PLR0913
         out_path,
         schema_path,
         append,
+    )
+    benchmark_track = normalize_track_field(benchmark_track, field_name="benchmark_track")
+    track_schema_version = normalize_track_field(
+        track_schema_version,
+        field_name="track_schema_version",
+    )
+    scenarios = _apply_track_metadata_to_scenarios(
+        scenarios,
+        observation_mode=observation_mode,
+        observation_level=observation_level,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
     )
 
     # Map-based scenario detection: delegate to map runner
@@ -1796,6 +1862,8 @@ def run_batch(  # noqa: PLR0913
             ped_impact_window_steps=ped_impact_window_steps,
             observation_mode=observation_mode,
             observation_level=observation_level,
+            benchmark_track=benchmark_track,
+            track_schema_version=track_schema_version,
             observation_noise=observation_noise,
             synthetic_actuation_profile=synthetic_actuation_profile,
             workers=workers,
@@ -1840,4 +1908,8 @@ def run_batch(  # noqa: PLR0913
     summary = _finalize_batch(out_path, wrote, resume)
     summary["total_jobs"] = len(jobs)
     summary["failures"] = failures
+    if benchmark_track is not None:
+        summary["benchmark_track"] = benchmark_track
+    if track_schema_version is not None:
+        summary["track_schema_version"] = track_schema_version
     return summary

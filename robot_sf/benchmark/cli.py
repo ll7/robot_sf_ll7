@@ -301,6 +301,8 @@ def _handle_run(args) -> int:
             ped_impact_window_steps=int(getattr(args, "ped_impact_window_steps", 5)),
             observation_mode=getattr(args, "observation_mode", None),
             observation_level=getattr(args, "observation_level", None),
+            benchmark_track=getattr(args, "benchmark_track", None),
+            track_schema_version=getattr(args, "track_schema_version", None),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
                 if getattr(args, "observation_noise", None)
@@ -474,6 +476,7 @@ def _handle_aggregate(args) -> int:
                 bootstrap_seed=(
                     int(args.bootstrap_seed) if args.bootstrap_seed is not None else None
                 ),
+                observation_track_mode=str(args.observation_track_mode),
             )
         else:
             summary = _agg_compute(
@@ -482,6 +485,7 @@ def _handle_aggregate(args) -> int:
                 fallback_group_by=args.fallback_group_by,
                 snqi_weights=snqi_weights,
                 snqi_baseline=snqi_baseline,
+                observation_track_mode=str(args.observation_track_mode),
             )
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -609,6 +613,7 @@ def _handle_snqi_ablate(args) -> int:
             group_by=args.group_by,
             fallback_group_by=args.fallback_group_by,
             top=(int(args.top) if args.top is not None else None),
+            observation_track_mode=str(args.observation_track_mode),
         )
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -659,6 +664,7 @@ def _handle_seed_variance(args) -> int:
             group_by=args.group_by,
             fallback_group_by=args.fallback_group_by,
             metrics=metrics,
+            observation_track_mode=str(args.observation_track_mode),
         )
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -724,6 +730,7 @@ def _handle_rank(args) -> int:
             metric=args.metric,
             ascending=bool(args.ascending),
             top=(int(args.top) if args.top is not None else None),
+            observation_track_mode=str(args.observation_track_mode),
         )
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -761,6 +768,7 @@ def _handle_table(args) -> int:
             metrics=metrics,
             group_by=args.group_by,
             fallback_group_by=args.fallback_group_by,
+            observation_track_mode=str(args.observation_track_mode),
         )
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -828,6 +836,7 @@ def _handle_plot_pareto(args) -> int:
             y_higher_better=bool(args.y_higher_better),
             title=str(args.title) if args.title is not None else None,
             out_pdf=(str(args.out_pdf) if getattr(args, "out_pdf", None) else None),
+            observation_track_mode=str(args.observation_track_mode),
         )
         return 0
     except Exception:  # pragma: no cover - error path
@@ -848,6 +857,7 @@ def _handle_plot_distributions(args) -> int:
             metrics=metrics,
             group_by=str(args.group_by),
             fallback_group_by=str(args.fallback_group_by),
+            observation_track_mode=str(args.observation_track_mode),
         )
         _dist_save(
             grouped,
@@ -1508,6 +1518,16 @@ def _add_run_subparser(
         ),
     )
     p.add_argument(
+        "--benchmark-track",
+        default=None,
+        help="Optional observation-track aggregation fence for track-aware benchmark rows.",
+    )
+    p.add_argument(
+        "--track-schema-version",
+        default=None,
+        help="Optional version slug for the benchmark-track metadata contract.",
+    )
+    p.add_argument(
         "--structured-output",
         choices=["none", "json", "jsonl"],
         default="none",
@@ -1657,6 +1677,15 @@ def _add_aggregate_subparser(
         help="Confidence level for bootstrap intervals (e.g., 0.95)",
     )
     p.add_argument("--bootstrap-seed", type=int, default=None)
+    p.add_argument(
+        "--observation-track-mode",
+        choices=["strict", "diagnostic-cross-track"],
+        default="strict",
+        help=(
+            "How to handle mixed benchmark_track values. Default strict fails closed; "
+            "diagnostic-cross-track namespaces groups by track with caveats."
+        ),
+    )
     p.add_argument(
         "--snqi-weights",
         type=str,
@@ -1819,6 +1848,15 @@ def _add_snqi_ablate_subparser(
     p.add_argument("--format", choices=["md", "csv", "json"], default="md")
     p.add_argument("--top", type=int, default=None, help="Limit to top-N groups by base ranking")
     p.add_argument(
+        "--observation-track-mode",
+        choices=["strict", "diagnostic-cross-track"],
+        default="strict",
+        help=(
+            "How to handle mixed benchmark_track values. Default strict fails closed; "
+            "diagnostic-cross-track namespaces groups by track with caveats."
+        ),
+    )
+    p.add_argument(
         "--summary-out",
         type=str,
         default=None,
@@ -1865,6 +1903,15 @@ def _add_seed_variance_subparser(
         "--metrics",
         default=None,
         help="Optional comma-separated list of metric names to include (default: all)",
+    )
+    p.add_argument(
+        "--observation-track-mode",
+        choices=["strict", "diagnostic-cross-track"],
+        default="strict",
+        help=(
+            "How to handle mixed benchmark_track values. Default strict fails closed; "
+            "diagnostic-cross-track namespaces groups by track with caveats."
+        ),
     )
     p.set_defaults(cmd="seed-variance")
 
@@ -1938,6 +1985,15 @@ def _add_rank_subparser(
     sort.add_argument("--descending", dest="ascending", action="store_false")
     p.add_argument("--top", type=int, default=None, help="Limit to top N rows")
     p.add_argument(
+        "--observation-track-mode",
+        choices=["strict", "diagnostic-cross-track"],
+        default="strict",
+        help=(
+            "How to handle mixed benchmark_track values. Default strict fails closed; "
+            "diagnostic-cross-track namespaces groups by track with caveats."
+        ),
+    )
+    p.add_argument(
         "--format",
         choices=["md", "csv", "tex", "json"],
         default="md",
@@ -1979,6 +2035,15 @@ def _add_table_subparser(
         choices=["md", "csv", "tex", "json"],
         default="md",
         help="Output format (Markdown table, CSV, LaTeX booktabs, or JSON)",
+    )
+    p.add_argument(
+        "--observation-track-mode",
+        choices=["strict", "diagnostic-cross-track"],
+        default="strict",
+        help=(
+            "How to handle mixed benchmark_track values. Default strict fails closed; "
+            "diagnostic-cross-track namespaces rows by track with caveats."
+        ),
     )
     p.set_defaults(cmd="table")
 
@@ -2029,6 +2094,15 @@ def _add_plot_pareto_subparser(
     p.add_argument("--y-higher-better", action="store_true", default=False)
     p.add_argument("--title", default=None)
     p.add_argument("--out-pdf", default=None, help="Optional path to also export a vector PDF")
+    p.add_argument(
+        "--observation-track-mode",
+        choices=["strict", "diagnostic-cross-track"],
+        default="strict",
+        help=(
+            "How to handle mixed benchmark_track values. Default strict fails closed; "
+            "diagnostic-cross-track namespaces groups by track with caveats."
+        ),
+    )
     p.set_defaults(cmd="plot-pareto")
 
 
@@ -2073,6 +2147,15 @@ def _add_plot_distributions_subparser(
         action="store_true",
         default=False,
         help="Also export LaTeX-friendly vector PDFs",
+    )
+    p.add_argument(
+        "--observation-track-mode",
+        choices=["strict", "diagnostic-cross-track"],
+        default="strict",
+        help=(
+            "How to handle mixed benchmark_track values. Default strict fails closed; "
+            "diagnostic-cross-track namespaces groups by track with caveats."
+        ),
     )
     p.set_defaults(cmd="plot-distributions")
 

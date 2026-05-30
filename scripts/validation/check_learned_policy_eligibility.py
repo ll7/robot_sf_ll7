@@ -18,6 +18,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.models.registry import validate_registry_entry_benchmark_promotion
+
 ALLOWED_VERDICTS = {
     "eligible_for_adapter",
     "eligible_for_research_only",
@@ -305,6 +307,21 @@ def _validate_registry_boundary(payload: dict[str, Any], issues: list[Eligibilit
         )
 
 
+def _validate_benchmark_promotion(payload: dict[str, Any], issues: list[EligibilityIssue]) -> None:
+    """Validate optional benchmark-promotion observation-track metadata."""
+    if "benchmark_promotion" not in payload:
+        return
+    registry_like_entry = {
+        "model_id": payload.get("model_id", "candidate"),
+        "tags": ["learned-policy", "promoted"],
+        "benchmark_promotion": payload.get("benchmark_promotion"),
+    }
+    issues.extend(
+        EligibilityIssue(issue.path, issue.message)
+        for issue in validate_registry_entry_benchmark_promotion(registry_like_entry)
+    )
+
+
 def validate_learned_policy_eligibility(payload: dict[str, Any]) -> list[EligibilityIssue]:
     """Return checklist-completeness and consistency issues for one candidate spec."""
     issues: list[EligibilityIssue] = []
@@ -314,6 +331,7 @@ def validate_learned_policy_eligibility(payload: dict[str, Any]) -> list[Eligibi
     _validate_action_contract(payload, issues)
     _validate_logging(payload, issues)
     _validate_registry_boundary(payload, issues)
+    _validate_benchmark_promotion(payload, issues)
     return issues
 
 

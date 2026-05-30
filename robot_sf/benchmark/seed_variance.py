@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from robot_sf.benchmark.aggregate import flatten_metrics
+from robot_sf.benchmark.aggregate import (
+    ensure_observation_track_policy,
+    flatten_metrics,
+    normalize_observation_track_mode,
+    observation_track_group_label,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -64,6 +69,7 @@ def _group_rows(
     records: Sequence[dict[str, Any]],
     group_by: str,
     fallback_group_by: str,
+    observation_track_mode: str = "strict",
 ) -> dict[str, list[dict[str, Any]]]:
     """Group flattened records by a dotted-path key with fallback.
 
@@ -71,13 +77,19 @@ def _group_rows(
         Mapping of group key to flattened rows.
     """
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    track_meta = ensure_observation_track_policy(
+        list(records),
+        observation_track_mode=observation_track_mode,
+    )
+    mode = normalize_observation_track_mode(str(track_meta["mode"]))
     for rec in records:
         g = _get_nested(rec, group_by)
         if g is None:
             g = _get_nested(rec, fallback_group_by)
         if g is None:
             g = "unknown"
-        groups[str(g)].append(flatten_metrics(rec))
+        key = observation_track_group_label(rec, str(g), mode=mode)
+        groups[key].append(flatten_metrics(rec))
     return groups
 
 
@@ -220,13 +232,14 @@ def compute_seed_variance(
     group_by: str = "scenario_id",
     fallback_group_by: str = "scenario_id",
     metrics: Sequence[str] | None = None,
+    observation_track_mode: str = "strict",
 ) -> dict[str, dict[str, dict[str, float]]]:
     """Compute per-metric seed variability for groups.
 
     Returns:
         Nested dictionary of group -> metric -> summary statistics.
     """
-    groups = _group_rows(records, group_by, fallback_group_by)
+    groups = _group_rows(records, group_by, fallback_group_by, observation_track_mode)
     metric_names = _collect_metric_names(groups, metrics)
 
     out: dict[str, dict[str, dict[str, float]]] = {}

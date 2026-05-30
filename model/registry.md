@@ -25,7 +25,32 @@ notebooks to insert/update entries without manual YAML editing.
   exists on the current machine.
 - `replacement_model_id`: optional migration target surfaced in local-only
   resolution errors.
+- `benchmark_promotion` (required for benchmark-promoted learned checkpoints): observation-track
+  claim boundary and policy input contract.
 - `tags` / `notes`: free-form metadata for discovery.
+
+### Benchmark promotion metadata
+
+Learned checkpoints promoted for benchmark claims must include `benchmark_promotion` so LiDAR,
+grid/SocNav, privileged-state, and adapter-derived policies cannot be confused in reports. The
+vocabulary follows `docs/context/issue_1612_observation_track_architecture.md`.
+
+Required for `claim_boundary: benchmark_promoted` or `benchmark_candidate`:
+
+- `benchmark_track`: stable aggregation lane such as `grid_socnav_v1` or `lidar_2d_v1`.
+- `track_schema_version`: schema slug such as `observation-track.v1`.
+- `observation_level`: benchmark observation-level vocabulary from
+  `robot_sf/benchmark/observation_levels.py`.
+- `observation_mode`: active environment or policy observation mode, such as `socnav_state`,
+  `sensor_fusion_state`, or a documented learned-policy dict contract.
+- `allowed_observation_keys`: concrete policy input keys allowed at evaluation time.
+- `goal_encoding`: how the current route or goal enters the observation.
+- `sensor_geometry`: grid, ray, stack, range, or other sensor-shape details that define the track.
+- `privileged_input_status`: explicit statement about evaluation-time privileged inputs.
+
+Research-only, smoke-only, legacy, or otherwise non-benchmark entries may omit those track fields
+only when `benchmark_promotion.claim_boundary` is one of `research_only`, `smoke_only`,
+`legacy_non_track`, or `not_for_benchmark` and `non_benchmark_reason` explains the claim boundary.
 
 ### Minimal schema (YAML)
 
@@ -50,6 +75,17 @@ models:
       url: https://github.com/owner/repo/releases/download/artifact/models-YYYY-MM-registry-v1/my_model_id-model.zip
       sha256: ...
       size_bytes: 123
+    benchmark_promotion:
+      claim_boundary: benchmark_promoted
+      benchmark_track: grid_socnav_v1
+      track_schema_version: observation-track.v1
+      observation_level: tracked_agents_no_noise
+      observation_mode: socnav_state
+      allowed_observation_keys: [robot_state, goal, tracked_agents]
+      goal_encoding: current route goal in planner observation
+      sensor_geometry: tracked-agent state, no LiDAR ray geometry
+      privileged_input_status: no evaluation-time privileged inputs
+      reference: docs/context/issue_1612_observation_track_architecture.md
     local_only: false
     replacement_model_id: my_model_id_v2
     tags: ["ppo", "socnav"]

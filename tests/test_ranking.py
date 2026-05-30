@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+
+from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.ranking import compute_ranking, format_csv, format_markdown
 
 
@@ -62,3 +65,29 @@ def test_formatters_return_strings():
     assert md.endswith("\n")
     assert csv.splitlines()[0].startswith("rank,group,mean_")
     assert csv.endswith("\n")
+
+
+def test_compute_ranking_requires_explicit_cross_track_mode() -> None:
+    """Ranking should share the aggregate guard against silent cross-track pooling."""
+    records = [
+        {
+            "benchmark_track": "grid_socnav_v1",
+            "scenario_params": {"algo": "a", "benchmark_track": "grid_socnav_v1"},
+            "metrics": {"collisions": 1},
+        },
+        {
+            "benchmark_track": "lidar_2d_v1",
+            "scenario_params": {"algo": "a", "benchmark_track": "lidar_2d_v1"},
+            "metrics": {"collisions": 3},
+        },
+    ]
+
+    with pytest.raises(AggregationMetadataError):
+        compute_ranking(records, metric="collisions")
+
+    rows = compute_ranking(
+        records,
+        metric="collisions",
+        observation_track_mode="diagnostic-cross-track",
+    )
+    assert [row.group for row in rows] == ["grid_socnav_v1 :: a", "lidar_2d_v1 :: a"]

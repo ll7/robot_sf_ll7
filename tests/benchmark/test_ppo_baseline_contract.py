@@ -73,6 +73,20 @@ def test_canonical_ppo_baseline_points_at_promoted_artifact_path(
     assert canonical_entry["wandb_artifact_path"].endswith("-best-success:v9")
 
 
+def test_canonical_ppo_baseline_declares_observation_track_metadata(canonical_entry: dict) -> None:
+    """The benchmark-promoted PPO checkpoint should declare its track-level input contract."""
+    promotion = canonical_entry["benchmark_promotion"]
+
+    assert promotion["claim_boundary"] == "benchmark_promoted"
+    assert promotion["benchmark_track"] == "grid_socnav_v1"
+    assert promotion["observation_level"] == "tracked_agents_no_noise"
+    assert promotion["observation_mode"] == "dict"
+    assert "occupancy_grid" in promotion["allowed_observation_keys"]
+    assert "predictive_min_clearance" in promotion["allowed_observation_keys"]
+    assert promotion["privileged_input_status"] == "no evaluation-time privileged inputs"
+    assert "docs/context/issue_1612_observation_track_architecture.md" in promotion["reference"]
+
+
 def test_issue_576_closeout_config_has_resolved_provenance(
     repo_root: Path, issue_576_entry: dict
 ) -> None:

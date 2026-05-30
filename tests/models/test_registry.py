@@ -206,6 +206,49 @@ models:
         registry.load_registry(registry_path)
 
 
+def test_promoted_learned_policy_requires_observation_track_metadata() -> None:
+    """Benchmark-promoted learned checkpoints must declare their observation contract."""
+    entry = {
+        "model_id": "promoted_ppo",
+        "tags": ["ppo", "promoted"],
+        "benchmark_promotion": {"claim_boundary": "benchmark_promoted"},
+    }
+
+    issues = registry.validate_registry_entry_benchmark_promotion(entry)
+    paths = {issue.path for issue in issues}
+
+    assert "benchmark_promotion.benchmark_track" in paths
+    assert "benchmark_promotion.allowed_observation_keys" in paths
+    assert "benchmark_promotion.privileged_input_status" in paths
+
+
+def test_research_only_registry_boundary_is_allowed_with_reason() -> None:
+    """Non-benchmark learned checkpoints can stay in the registry with a clear claim boundary."""
+    entry = {
+        "model_id": "lidar_smoke_candidate",
+        "tags": ["learned-policy", "candidate"],
+        "benchmark_promotion": {
+            "claim_boundary": "smoke_only",
+            "non_benchmark_reason": "LiDAR launch packet only; no benchmark claim.",
+        },
+    }
+
+    assert registry.validate_registry_entry_benchmark_promotion(entry) == []
+
+
+def test_repository_registry_benchmark_promotion_metadata_is_valid() -> None:
+    """Tracked registry entries should satisfy benchmark-promotion claim boundaries."""
+    registry_path = Path(__file__).resolve().parents[2] / "model" / "registry.yaml"
+    entries = registry.load_registry(registry_path)
+
+    issues = {
+        model_id: registry.validate_registry_entry_benchmark_promotion(entry)
+        for model_id, entry in entries.items()
+    }
+
+    assert {model_id: row_issues for model_id, row_issues in issues.items() if row_issues} == {}
+
+
 def test_get_registry_entry_raises_for_unknown_model(tmp_path: Path) -> None:
     """Unknown model ids should raise a clear KeyError."""
     registry_path = tmp_path / "registry.yaml"

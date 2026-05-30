@@ -45,7 +45,22 @@ github_release:
   sha256: <sha256>
   size_bytes: <bytes>
   metadata_asset: <model_id>-metadata.json
+benchmark_promotion:
+  claim_boundary: benchmark_promoted
+  benchmark_track: grid_socnav_v1
+  track_schema_version: observation-track.v1
+  observation_level: tracked_agents_no_noise
+  observation_mode: socnav_state
+  allowed_observation_keys: [robot_state, goal, tracked_agents]
+  goal_encoding: current route goal in planner observation
+  sensor_geometry: tracked-agent state, no LiDAR ray geometry
+  privileged_input_status: no evaluation-time privileged inputs
+  reference: docs/context/issue_1612_observation_track_architecture.md
 ```
+
+Use a non-benchmark boundary such as `research_only` or `smoke_only` plus
+`non_benchmark_reason` when the entry is preserved for analysis or launch checks but is not eligible
+for benchmark claims.
 
 ## How
 

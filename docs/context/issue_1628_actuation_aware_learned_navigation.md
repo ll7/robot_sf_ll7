@@ -1,4 +1,4 @@
-# Issue #1628 Actuation-Aware Learned Navigation For AMVs
+# Issue #1628 Actuation-Aware Learned Navigation for AMVs
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1628>
 
@@ -134,7 +134,9 @@ The cleanest first experiment is not a broad training campaign. It is a local sm
 This analysis was built from:
 
 ```bash
-gh issue view 1628 1556 1569 1572 1559 1618 1624 1625
+for issue in 1628 1556 1569 1572 1559 1618 1624 1625; do
+  gh issue view "$issue" --json number,title,state,labels,url
+done
 rg -n "actuation|AMV|micromobility|kinematic|latency|learned|PPO|ORCA residual|risk|arbitration" \
   docs/context docs/benchmark* configs scripts tests robot_sf
 ```

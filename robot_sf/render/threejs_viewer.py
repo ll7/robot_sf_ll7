@@ -96,20 +96,42 @@ def _copy_web_asset(asset_name: str, destination: Path) -> None:
 
 
 def _map_to_payload(map_def: MapDefinition) -> dict[str, Any]:
+    """Convert a map definition into JSON-safe scalar geometry lists.
+
+    Returns:
+        dict[str, Any]: Map dimensions, bounds, obstacles, and zones as JSON-safe lists.
+    """
     return {
         "width": float(map_def.width),
         "height": float(map_def.height),
-        "bounds": [_line_to_list(bound) for bound in map_def.bounds],
-        "obstacles": [_obstacle_to_payload(obstacle) for obstacle in map_def.obstacles],
-        "robot_spawn_zones": [_zone_to_payload(zone) for zone in map_def.robot_spawn_zones],
-        "robot_goal_zones": [_zone_to_payload(zone) for zone in map_def.robot_goal_zones],
-        "ped_spawn_zones": [_zone_to_payload(zone) for zone in map_def.ped_spawn_zones],
-        "ped_goal_zones": [_zone_to_payload(zone) for zone in map_def.ped_goal_zones],
-        "ped_crowded_zones": [_zone_to_payload(zone) for zone in map_def.ped_crowded_zones],
+        "bounds": [_line_to_list(bound) for bound in getattr(map_def, "bounds", [])],
+        "obstacles": [
+            _obstacle_to_payload(obstacle) for obstacle in getattr(map_def, "obstacles", [])
+        ],
+        "robot_spawn_zones": [
+            _zone_to_payload(zone) for zone in getattr(map_def, "robot_spawn_zones", [])
+        ],
+        "robot_goal_zones": [
+            _zone_to_payload(zone) for zone in getattr(map_def, "robot_goal_zones", [])
+        ],
+        "ped_spawn_zones": [
+            _zone_to_payload(zone) for zone in getattr(map_def, "ped_spawn_zones", [])
+        ],
+        "ped_goal_zones": [
+            _zone_to_payload(zone) for zone in getattr(map_def, "ped_goal_zones", [])
+        ],
+        "ped_crowded_zones": [
+            _zone_to_payload(zone) for zone in getattr(map_def, "ped_crowded_zones", [])
+        ],
     }
 
 
 def _obstacle_to_payload(obstacle: Obstacle) -> dict[str, Any]:
+    """Convert an obstacle object into JSON-safe vertices and line segments.
+
+    Returns:
+        dict[str, Any]: Obstacle vertices and lines as float lists.
+    """
     return {
         "vertices": [_point_to_list(vertex) for vertex in obstacle.vertices],
         "lines": [_line_to_list(line) for line in obstacle.lines],
@@ -117,22 +139,36 @@ def _obstacle_to_payload(obstacle: Obstacle) -> dict[str, Any]:
 
 
 def _state_to_frame(state: VisualizableSimState, frame_idx: int) -> dict[str, Any]:
+    """Convert one visualizable state into a JSON-safe animation frame.
+
+    Returns:
+        dict[str, Any]: Frame metadata, poses, pedestrians, rays, and planned path.
+    """
     frame = {
         "frame_idx": frame_idx,
-        "timestep": int(state.timestep),
-        "time_s": float(state.timestep) * float(state.time_per_step_in_secs or 0.1),
-        "robot": _pose_to_payload(state.robot_pose),
+        "timestep": int(getattr(state, "timestep", frame_idx)),
+        "time_s": float(getattr(state, "timestep", frame_idx))
+        * float(getattr(state, "time_per_step_in_secs", 0.1) or 0.1),
+        "robot": _pose_to_payload(getattr(state, "robot_pose", None)),
         "pedestrians": _pedestrians_to_payload(state),
-        "rays": _vectors_to_payload(state.ray_vecs),
-        "planned_path": [_point_to_list(point) for point in state.planned_path or []],
+        "rays": _vectors_to_payload(getattr(state, "ray_vecs", None)),
+        "planned_path": [
+            _point_to_list(point) for point in (getattr(state, "planned_path", None) or [])
+        ],
     }
-    if state.ego_ped_pose is not None:
-        frame["ego_pedestrian"] = _pose_to_payload(state.ego_ped_pose)
+    ego_ped_pose = getattr(state, "ego_ped_pose", None)
+    if ego_ped_pose is not None:
+        frame["ego_pedestrian"] = _pose_to_payload(ego_ped_pose)
     return frame
 
 
 def _pedestrians_to_payload(state: VisualizableSimState) -> list[dict[str, Any]]:
-    positions = state.pedestrian_positions
+    """Convert optional pedestrian positions into JSON-safe id/position entries.
+
+    Returns:
+        list[dict[str, Any]]: Pedestrian ids and two-dimensional positions, or an empty list.
+    """
+    positions = getattr(state, "pedestrian_positions", None)
     if positions is None:
         return []
     return [
@@ -143,6 +179,11 @@ def _pedestrians_to_payload(state: VisualizableSimState) -> list[dict[str, Any]]
 
 
 def _pose_to_payload(pose: Any) -> dict[str, Any] | None:
+    """Convert an optional ``(position, heading)`` pose into a JSON-safe dict.
+
+    Returns:
+        dict[str, Any] | None: Position and heading, or ``None`` for absent poses.
+    """
     if pose is None:
         return None
     position, heading = pose
@@ -150,6 +191,11 @@ def _pose_to_payload(pose: Any) -> dict[str, Any] | None:
 
 
 def _vectors_to_payload(vectors: Any) -> list[list[list[float]]]:
+    """Convert optional ray vectors into nested JSON-safe float lists.
+
+    Returns:
+        list[list[list[float]]]: Ray vectors, or an empty list when absent.
+    """
     if vectors is None:
         return []
     if hasattr(vectors, "tolist"):
@@ -158,14 +204,29 @@ def _vectors_to_payload(vectors: Any) -> list[list[list[float]]]:
 
 
 def _zone_to_payload(zone: Any) -> list[list[float]]:
+    """Convert a polygon-like zone into JSON-safe point lists.
+
+    Returns:
+        list[list[float]]: Zone vertices as ``[x, y]`` lists.
+    """
     return [_point_to_list(point) for point in zone]
 
 
 def _line_to_list(line: Any) -> list[float]:
+    """Convert a four-value line-like object into JSON-safe floats.
+
+    Returns:
+        list[float]: Four line coordinates.
+    """
     return [float(value) for value in line]
 
 
 def _point_to_list(point: Any) -> list[float]:
+    """Convert a two-value point-like object into a JSON-safe ``[x, y]`` list.
+
+    Returns:
+        list[float]: Two point coordinates.
+    """
     return [float(point[0]), float(point[1])]
 
 

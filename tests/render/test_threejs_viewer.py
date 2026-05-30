@@ -1,6 +1,7 @@
 """Smoke tests for the optional Three.js recording viewer export."""
 
 import json
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -61,6 +62,23 @@ def test_build_threejs_scene_contains_non_empty_playback_payload() -> None:
     assert scene["frames"][0]["pedestrians"][0]["position"] == [3.0, 4.0]
     assert scene["trajectory"] == [[1.0, 2.0], [2.0, 2.0]]
     assert "Pygame remains" in scene["limitations"][1]
+
+
+def test_build_threejs_scene_tolerates_legacy_states_without_optional_fields() -> None:
+    """Legacy pickle states may not carry every modern visualizer attribute."""
+    legacy_state = SimpleNamespace(
+        timestep=0,
+        robot_pose=((1.0, 2.0), 0.25),
+        pedestrian_positions=np.array([[3.0, 4.0]]),
+    )
+    episode = PlaybackEpisode(episode_id=8, states=[legacy_state])
+
+    scene = build_threejs_scene(episode, _map(), source="legacy.pkl")
+
+    assert scene["frames"][0]["time_s"] == 0.0
+    assert scene["frames"][0]["rays"] == []
+    assert scene["frames"][0]["planned_path"] == []
+    assert "ego_pedestrian" not in scene["frames"][0]
 
 
 def test_export_threejs_viewer_writes_static_assets(tmp_path) -> None:

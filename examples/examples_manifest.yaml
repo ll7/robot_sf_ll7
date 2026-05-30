@@ -215,8 +215,7 @@ examples:
     name: "33 Three.js Recording Viewer"
     summary: "Export a JSONL or pickle recording to a static browser viewer."
     category_slug: advanced
-    prerequisites:
-      - recordings/<file>.jsonl
+    prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: docs/dev_guide.md#advanced-feature-demos

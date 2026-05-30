@@ -8,6 +8,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111827);
 
 const camera = new THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 1000);
+camera.up.set(0, 0, -1);
 camera.position.set(0, 55, 0);
 camera.lookAt(0, 0, 0);
 
@@ -29,6 +30,7 @@ world.add(robot, egoPedestrian, pedestrianGroup, trajectory, rays);
 let payload = null;
 let currentFrame = 0;
 let playing = true;
+let lastFrameTime = 0;
 
 fetch("./scene.json")
   .then((response) => response.json())
@@ -111,7 +113,8 @@ function drawFrame(index) {
 
 function animate() {
   requestAnimationFrame(animate);
-  if (playing && payload?.frames.length > 1) {
+  if (playing && payload?.frames.length > 1 && performance.now() - lastFrameTime >= 100) {
+    lastFrameTime = performance.now();
     drawFrame((currentFrame + 1) % payload.frames.length);
   }
   renderer.render(scene, camera);
@@ -151,17 +154,45 @@ function makePolyline(points, color) {
 }
 
 function replaceChildren(group, children) {
+  group.traverse((object) => {
+    if (object === group) return;
+    disposeObject(object);
+  });
   group.clear();
   children.filter(Boolean).forEach((child) => group.add(child));
 }
 
+function disposeObject(object) {
+  if (object.geometry) object.geometry.dispose();
+  const materials = Array.isArray(object.material) ? object.material : [object.material];
+  materials.filter(Boolean).forEach((material) => {
+    if (material.map) material.map.dispose();
+    material.dispose();
+  });
+}
+
 function fitCamera(map) {
-  camera.left = -map.width * 0.08;
-  camera.right = map.width * 1.08;
-  camera.top = -map.height * 0.08;
-  camera.bottom = map.height * 1.08;
-  camera.position.set(map.width / 2, Math.max(map.width, map.height) * 2.1, map.height / 2);
-  camera.lookAt(map.width / 2, 0, map.height / 2);
+  const width = root.clientWidth || window.innerWidth;
+  const height = root.clientHeight || window.innerHeight;
+  const aspect = width / Math.max(height, 1);
+  const centerX = map.width / 2;
+  const centerY = map.height / 2;
+  const margin = 1.16;
+  let halfWidth = (map.width * margin) / 2;
+  let halfHeight = (map.height * margin) / 2;
+
+  if (halfWidth / halfHeight > aspect) {
+    halfHeight = halfWidth / aspect;
+  } else {
+    halfWidth = halfHeight * aspect;
+  }
+
+  camera.left = centerX - halfWidth;
+  camera.right = centerX + halfWidth;
+  camera.top = halfHeight;
+  camera.bottom = -halfHeight;
+  camera.position.set(centerX, Math.max(map.width, map.height) * 2.1, centerY);
+  camera.lookAt(centerX, 0, centerY);
   camera.updateProjectionMatrix();
 }
 
@@ -169,4 +200,5 @@ function resize() {
   const width = root.clientWidth || window.innerWidth;
   const height = root.clientHeight || window.innerHeight;
   renderer.setSize(width, height);
+  if (payload) fitCamera(payload.map);
 }

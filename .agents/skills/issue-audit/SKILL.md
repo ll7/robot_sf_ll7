@@ -40,7 +40,7 @@ decisions, and clear handoff state.
    - routing/Project #5 updates second,
    - one score-sync batch at the end if needed.
 
-## Priority Questions
+## Priority Discussion Mode
 
 Priority tradeoffs are allowed in this audit loop, but they should not become a confirmation gate
 for ordinary autonomous issue pickup. Ask a priority question only when the agent can name the

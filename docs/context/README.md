@@ -211,6 +211,8 @@ knowledge, not every transient iteration detail.
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Learned local-navigation policy registry:
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
+* Issue #1758 Arena-Rosnav Source-Side Assessment (2026-05-30):
+  [policy_search/issue_1758_arena_rosnav_source_assessment.md](policy_search/issue_1758_arena_rosnav_source_assessment.md)
 * Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
   [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
 * Issue #1618 learned local-policy adapter interface:

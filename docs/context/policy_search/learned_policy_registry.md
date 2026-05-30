@@ -63,6 +63,7 @@ metadata from Issue #1618, smoke proof, and fail-closed handling before benchmar
 | `crowdnav_height_igat_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | Source/checkpoint and graph-observation parity must be proven before a Robot SF adapter or benchmark row. |
 | `drl_vo_family` | `external_learned_policy` | `monitor_only` | `prototype_only` | `blocked` | Tracked-agent diagnostic/prototype boundary only; not main-table ready and not a leakage-free benchmark policy. |
 | `navdp_nomad_visual_family` | `external_visual_policy` | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | RGB-D/topomap/visual-goal assumptions do not reduce cleanly to the current 2D local-planner contract. |
+| `arena_rosnav_stack` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | ROS Noetic/Gazebo/Flatland workspace and Rosnav checkpoint proof are required before any Robot SF adapter or benchmark row. |
 | `dreamerv3_navigation_family` | `external_world_model` | `monitor_only` | `blocked` | `blocked` | Checkpoint import and Robot SF observation-contract boundaries remain fail-closed. |
 
 ## Entry Details
@@ -159,6 +160,8 @@ metadata before entering the runnable candidate registry.
 - DRL-VO family: `docs/context/issue_769_drl_vo_assessment.md`.
 - NavDP / NoMaD visual navigation:
   `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md`.
+- Arena-Rosnav learned navigation stack:
+  `docs/context/policy_search/issue_1758_arena_rosnav_source_assessment.md`.
 - DreamerV3/world-model navigation:
   `docs/context/issue_1190_dreamerv3_checkpoint_import_boundary.md`.
 

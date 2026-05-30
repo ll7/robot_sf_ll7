@@ -64,6 +64,9 @@ Use it for three things only:
 - `2026-05-20_learned_local_navigation_screen.md`: Issue #1355 Source-Backed Screening Matrix for
   learning-based local-navigation candidates, with implement/source-first/monitor/reject verdicts
   and links to existing Robot SF duplicate boundaries.
+- `issue_1758_arena_rosnav_source_assessment.md`: Arena-Rosnav source-side assessment; current
+  verdict is `source-side reproduction first` because the source requires a ROS Noetic/Gazebo
+  Arena workspace and no durable trained-policy files were bundled in the checked source.
 - `../issue_1368_neupan_point_obstacle_assessment.md`: source-side NeuPAN assessment; current
   verdict is monitor/source-side only because GPL-3.0, source-environment, runtime, and
   point-obstacle/social-claim boundaries block a Robot SF adapter for now.

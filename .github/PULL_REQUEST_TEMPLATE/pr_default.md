@@ -5,6 +5,13 @@ What changed, in one or two sentences.
 - Closes #<id>
 - Relates to #<id>
 
+## Stack / Dependency
+- Base dependency: none / PR #<id> / branch `<name>`
+- Required prior PRs: none / #<id>
+- Stack follow-up issues: none / #<id>
+- Safe to review independently: yes / no
+- Review dependency reason, if any: <reason>
+
 ## What Changed
 - Key implementation changes.
 - Any docs, config, or tests updated.

@@ -22,6 +22,43 @@ models:
   - predictive-foresight
   - promoted
   - canonical-baseline
+  benchmark_promotion:
+    claim_boundary: benchmark_promoted
+    benchmark_track: grid_socnav_v1
+    track_schema_version: observation-track.v1
+    observation_level: tracked_agents_no_noise
+    observation_mode: dict
+    allowed_observation_keys:
+    - occupancy_grid
+    - occupancy_grid_meta_origin
+    - occupancy_grid_meta_resolution
+    - occupancy_grid_meta_width
+    - occupancy_grid_meta_height
+    - robot_position
+    - robot_heading
+    - robot_velocity_xy
+    - robot_speed
+    - robot_angular_velocity
+    - robot_radius
+    - goal_current
+    - goal_next
+    - pedestrians_positions
+    - pedestrians_velocities
+    - pedestrians_radius
+    - pedestrians_count
+    - map_size
+    - sim_timestep
+    - predictive_min_clearance
+    - predictive_ttc_risk
+    - predictive_crossing_count
+    - predictive_gap_scores
+    - predictive_flow_alignment
+    - predictive_uncertainty
+    goal_encoding: current route goal encoded in the PPO dict observation as goal_current
+    sensor_geometry: local occupancy-grid/SocNav state with predictive foresight features; no LiDAR
+      ray geometry
+    privileged_input_status: no evaluation-time privileged inputs
+    reference: docs/context/issue_1612_observation_track_architecture.md
   notes:
   - Promoted on 2026-04-28 as the canonical PPO benchmark baseline; replaces BR-06
     v3 as the default for configs/baselines/ppo_15m_grid_socnav.yaml.
@@ -463,6 +500,10 @@ models:
   - xl
   - ego-conditioned
   - promoted
+  benchmark_promotion:
+    claim_boundary: not_for_benchmark
+    non_benchmark_reason: Auxiliary predictive-foresight checkpoint, not a standalone learned
+      navigation policy or benchmark-promoted local planner.
   notes:
   - 'Dataset: output/tmp/predictive_planner/pipeline/predictive_br07_all_maps_randomized_xl_ego_20260309T141432Z/datasets/predictive_rollouts_mixed.npz'
   - 'Training summary uploaded to W&B run file: training_summary.json'

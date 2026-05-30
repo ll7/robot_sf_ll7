@@ -21,6 +21,37 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
 
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
 _LOGGED_CACHED_MODEL_ARTIFACTS: set[Path] = set()
+BENCHMARK_PROMOTED_CLAIM_BOUNDARIES = {
+    "benchmark_promoted",
+    "benchmark_candidate",
+}
+NON_BENCHMARK_CLAIM_BOUNDARIES = {
+    "research_only",
+    "smoke_only",
+    "legacy_non_track",
+    "not_for_benchmark",
+}
+BENCHMARK_PROMOTION_CLAIM_BOUNDARIES = (
+    BENCHMARK_PROMOTED_CLAIM_BOUNDARIES | NON_BENCHMARK_CLAIM_BOUNDARIES
+)
+BENCHMARK_PROMOTION_REQUIRED_OBSERVATION_FIELDS = {
+    "benchmark_track",
+    "track_schema_version",
+    "observation_level",
+    "observation_mode",
+    "allowed_observation_keys",
+    "goal_encoding",
+    "sensor_geometry",
+    "privileged_input_status",
+}
+LEARNED_POLICY_REGISTRY_TAGS = {
+    "ppo",
+    "learned-policy",
+    "learned-checkpoint",
+    "rl-policy",
+    "imitation-policy",
+    "predictive",
+}
 
 
 def _local_only_resolution_error(
@@ -54,6 +85,107 @@ class WandbLatestModel:
     state: str | None
     created_at: str | None
     file_name: str
+
+
+@dataclass(frozen=True)
+class RegistryIssue:
+    """One model-registry validation issue."""
+
+    path: str
+    message: str
+
+
+def _is_missing(value: Any) -> bool:
+    """Return whether a registry value is absent for contract validation."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, (list, tuple, set, dict)):
+        return len(value) == 0
+    return False
+
+
+def _registry_tags(entry: dict[str, Any]) -> set[str]:
+    """Return normalized registry tags."""
+    raw_tags = entry.get("tags")
+    if not isinstance(raw_tags, list):
+        return set()
+    return {str(tag).strip().lower() for tag in raw_tags if str(tag).strip()}
+
+
+def _is_promoted_learned_policy(entry: dict[str, Any]) -> bool:
+    """Return whether a registry row is a promoted learned-policy checkpoint."""
+    tags = _registry_tags(entry)
+    return "promoted" in tags and bool(tags & LEARNED_POLICY_REGISTRY_TAGS)
+
+
+def _require_benchmark_promotion_field(
+    issues: list[RegistryIssue],
+    promotion: dict[str, Any],
+    field: str,
+) -> None:
+    """Require one non-empty benchmark-promotion field."""
+    if _is_missing(promotion.get(field)):
+        issues.append(RegistryIssue(f"benchmark_promotion.{field}", "is required"))
+
+
+def validate_registry_entry_benchmark_promotion(entry: dict[str, Any]) -> list[RegistryIssue]:
+    """Validate observation-track metadata for benchmark promotion.
+
+    Promoted learned-policy checkpoints must declare a benchmark-promotion block with the
+    observation-track contract needed to compare their benchmark rows. Research, smoke, legacy, and
+    non-benchmark entries can remain in the registry when they declare an explicit claim boundary.
+
+    Returns:
+        list[RegistryIssue]: Validation issues, empty when the entry satisfies this contract.
+    """
+    issues: list[RegistryIssue] = []
+    promotion_raw = entry.get("benchmark_promotion")
+    if promotion_raw is None:
+        if _is_promoted_learned_policy(entry):
+            issues.append(
+                RegistryIssue(
+                    "benchmark_promotion",
+                    "promoted learned-policy checkpoints require observation-track metadata",
+                )
+            )
+        return issues
+    if not isinstance(promotion_raw, dict) or not promotion_raw:
+        return [RegistryIssue("benchmark_promotion", "must be a non-empty mapping")]
+
+    promotion = dict(promotion_raw)
+    claim_boundary = promotion.get("claim_boundary")
+    if claim_boundary not in BENCHMARK_PROMOTION_CLAIM_BOUNDARIES:
+        issues.append(
+            RegistryIssue(
+                "benchmark_promotion.claim_boundary",
+                f"must be one of {', '.join(sorted(BENCHMARK_PROMOTION_CLAIM_BOUNDARIES))}",
+            )
+        )
+        return issues
+
+    if claim_boundary in BENCHMARK_PROMOTED_CLAIM_BOUNDARIES:
+        for field in sorted(BENCHMARK_PROMOTION_REQUIRED_OBSERVATION_FIELDS):
+            _require_benchmark_promotion_field(issues, promotion, field)
+        if not _is_missing(promotion.get("allowed_observation_keys")) and not isinstance(
+            promotion.get("allowed_observation_keys"), list
+        ):
+            issues.append(
+                RegistryIssue(
+                    "benchmark_promotion.allowed_observation_keys",
+                    "must be a non-empty list",
+                )
+            )
+    elif _is_missing(promotion.get("non_benchmark_reason")):
+        issues.append(
+            RegistryIssue(
+                "benchmark_promotion.non_benchmark_reason",
+                "is required for non-benchmark claim boundaries",
+            )
+        )
+
+    return issues
 
 
 def load_registry(path: str | Path | None = None) -> dict[str, dict[str, Any]]:

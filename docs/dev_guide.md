@@ -167,6 +167,9 @@ easier:
 
 Use `robot_sf.models.upsert_registry_entry(...)` to auto-populate or update the
 registry from training pipelines.
+Benchmark-promoted learned checkpoints must also include `benchmark_promotion`
+observation-track metadata; see `model/registry.md` and
+`docs/context/issue_1612_observation_track_architecture.md`.
 
 ### One‑liner quality gates (CLI):
 

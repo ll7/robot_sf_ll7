@@ -582,6 +582,9 @@ knowledge, not every transient iteration detail.
 * [Issue #871 Policy Stack Topology Smoke](issue_871_policy_stack_topology_smoke.md)
   records the `corridor_following` atomic topology smoke that proves `policy_stack_v1` can reach a
   topology-heavy goal through the normal map-runner path with proposal diagnostics intact.
+* [Issue #1751 Policy Stack Arbitration Trace Packet](issue_1751_policy_stack_arbitration_trace.md)
+  defines the diagnostic-only `policy_stack_v1.arbitration_trace_packet.v1` contract for future
+  learned-arbiter data collection, plus the compact validation smoke command.
 * [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
   records source-level hybrid-rule rejection diagnostics, rejected classic-merging recovery
   mechanisms, and the later #1034 targeted recovery result.

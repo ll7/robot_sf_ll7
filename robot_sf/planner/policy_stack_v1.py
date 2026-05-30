@@ -30,6 +30,21 @@ _STATUS_KEYS = (
     "rejected",
 )
 _COMMAND_STATUSES = {"native", "adapter", "fallback", "degraded"}
+ARBITRATION_TRACE_SCHEMA = "policy_stack_v1.arbitration_trace_packet.v1"
+_INFERENCE_AVAILABLE_FEATURES = (
+    "robot.position",
+    "robot.heading",
+    "goal.current",
+    "goal.next",
+    "pedestrians.positions",
+)
+_LEAKAGE_EXCLUSIONS = (
+    "future_trajectory",
+    "simulator_collision_label",
+    "episode_success_label",
+    "route_outcome_label",
+    "benchmark_metric_rollups",
+)
 
 
 @dataclass(frozen=True)
@@ -164,6 +179,23 @@ class PolicyStackV1Adapter:
 
         failed_count = step_status_counts["failed"]
         unavailable_count = step_status_counts["not_available"]
+        candidate_ranking = [
+            {
+                "proposal_key": proposal.key,
+                "status": proposal.status,
+                "rank": rank,
+                "score_total": float(scores[proposal.key]["total"]),
+                "command": [
+                    float(proposal.command[0]),
+                    float(proposal.command[1]),
+                ],
+            }
+            for rank, proposal in enumerate(
+                sorted(candidates, key=lambda item: scores[item.key]["total"], reverse=True),
+                start=1,
+            )
+            if proposal.command is not None
+        ]
 
         self._steps += 1
         _accumulate_counts(self._status_counts, step_status_counts)
@@ -185,10 +217,19 @@ class PolicyStackV1Adapter:
             "proposal_status_counts": dict(step_status_counts),
             "proposal_statuses": proposal_statuses,
             "proposal_commands": proposal_commands,
+            "candidate_ranking": candidate_ranking,
             "risk_score_components": {key: dict(value) for key, value in scores.items()},
             "rejection_reasons": rejection_reasons,
         }
         return float(command[0]), float(command[1])
+
+    def last_decision(self) -> dict[str, Any] | None:
+        """Return the most recent step decision packet.
+
+        Returns:
+            JSON-safe step decision, or ``None`` before the first planner step.
+        """
+        return deepcopy(self._last_step) if self._last_step is not None else None
 
     def diagnostics(self) -> dict[str, Any]:
         """Return JSON-safe episode diagnostics for benchmark metadata."""
@@ -201,6 +242,52 @@ class PolicyStackV1Adapter:
             "rejected_count": int(self._rejected_count),
             "shield_intervention_count": int(self._shield_intervention_count),
             "last_step": deepcopy(self._last_step) if self._last_step is not None else None,
+        }
+
+    def arbitration_trace_packet(self) -> dict[str, Any]:
+        """Return a JSON-safe packet for future learned-arbiter data collection.
+
+        Returns:
+            Trace packet with proposal, action, observation, cadence, and status contracts.
+        """
+        diagnostics = self.diagnostics()
+        return {
+            "schema_version": ARBITRATION_TRACE_SCHEMA,
+            "planner_key": "policy_stack_v1",
+            "packet_mode": "diagnostic_trace_only",
+            "training_enabled": False,
+            "proposal_sources": list(self.config.proposal_sources),
+            "command_contract": {
+                "action_space": "unicycle_vw",
+                "command_fields": ["linear_velocity_m_s", "angular_velocity_rad_s"],
+                "max_linear_speed": float(self.config.max_linear_speed),
+                "max_angular_speed": float(self.config.max_angular_speed),
+                "source_statuses": list(_STATUS_KEYS),
+                "executable_statuses": sorted(_COMMAND_STATUSES),
+            },
+            "observation_contract": {
+                "inference_available_features": list(_INFERENCE_AVAILABLE_FEATURES),
+                "leakage_exclusions": list(_LEAKAGE_EXCLUSIONS),
+            },
+            "switching_contract": {
+                "cadence": "one_arbitration_decision_per_planner_step",
+                "min_dwell_steps": 1,
+                "dwell_enforcement": "not_enforced_in_v1_trace",
+                "future_learned_arbiter_constraint": (
+                    "learned arbiters must record and enforce any dwell constraint explicitly"
+                ),
+            },
+            "status_policy": {
+                "fallback_statuses": ["fallback"],
+                "degraded_statuses": ["degraded"],
+                "not_available_statuses": ["not_available"],
+                "non_executable_statuses": ["failed", "not_available", "rejected"],
+                "training_use": (
+                    "fallback, degraded, failed, not_available, and rejected proposals are "
+                    "diagnostic labels, not successful training targets unless explicitly filtered"
+                ),
+            },
+            "trace": diagnostics,
         }
 
     def _collect_proposals(self, observation: dict[str, Any]) -> list[_Proposal]:
@@ -509,6 +596,7 @@ def _accumulate_counts(target: dict[str, int], delta: dict[str, int]) -> None:
 
 
 __all__ = [
+    "ARBITRATION_TRACE_SCHEMA",
     "PolicyStackV1Adapter",
     "PolicyStackV1BuildConfig",
     "PolicyStackV1Config",

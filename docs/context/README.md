@@ -501,6 +501,9 @@ knowledge, not every transient iteration detail.
 * [Issue #749 BC-Preinitialized PPO Launch Packet](issue_749_bc_preinit_ppo_launch_packet.md)
   defines the config-first launch path and artifact boundary for the deferred BC warm-start PPO
   challenger experiment.
+* [Issue #1752 Decision Transformer Dataset Preflight](issue_1752_decision_transformer_dataset_preflight.md)
+  records the reward/terminal/return-to-go trajectory schema, manifest metadata, validator CLI, and
+  tiny dry-run proof needed before any future Decision Transformer training campaign.
 * [Issue #1209 Imitation Observation Contract](issue_1209_imitation_observation_contract.md)
   records the BR-06 checkpoint-compatible observation-contract fix and validation path that
   unblocks #1108's BC warm-start launch.

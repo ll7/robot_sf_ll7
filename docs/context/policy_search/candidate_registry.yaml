@@ -310,6 +310,49 @@ candidates:
       - smoke
       - nominal_sanity
 
+  proxemic_profile_conservative_issue_1676:
+    status: implemented
+    family: proxemic_profile_diagnostic
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/proxemic_profile_conservative_issue_1676.yaml
+    hypothesis: >
+      A conservative proxemic profile with larger dynamic-clearance targets,
+      wider human slow zones, and stronger TTC pressure should reduce
+      intrusive-clearance and comfort-exposure proxies, with a likely efficiency
+      tradeoff.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  proxemic_profile_neutral_issue_1676:
+    status: implemented
+    family: proxemic_profile_diagnostic
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/proxemic_profile_neutral_issue_1676.yaml
+    hypothesis: >
+      The neutral profile restates the base hybrid-rule v3 social-distance knobs
+      so conservative and open profiles can be compared against an explicit
+      middle setting.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  proxemic_profile_open_issue_1676:
+    status: implemented
+    family: proxemic_profile_diagnostic
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/proxemic_profile_open_issue_1676.yaml
+    hypothesis: >
+      An open proxemic profile with lower dynamic-clearance pressure and a
+      narrower human slow zone should improve progress in crowds while risking
+      higher near-miss or comfort-exposure proxy values.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   hybrid_rule_v3_waypoint2_progress:
     status: implemented
     family: hybrid_rule_based

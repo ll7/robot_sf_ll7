@@ -90,6 +90,10 @@ knowledge, not every transient iteration detail.
   [open_issues_maintainer_input_triage.md](open_issues_maintainer_input_triage.md)
 * Open-issues PR split strategy:
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
+* Open-issues training split audit 2026-05-30:
+  [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
+* Open-issue execution improvement plan 2026-05-30:
+  [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md)
 * Thursday development review 2026-05-21:
   [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Worktree training preservation audit 2026-05-25:
@@ -136,10 +140,14 @@ knowledge, not every transient iteration detail.
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:
   [issue_1653_ci_runtime_slice.md](issue_1653_ci_runtime_slice.md)
+* Issue #1690 Root Layout Inventory:
+  [issue_1690_root_layout_inventory.md](issue_1690_root_layout_inventory.md)
 * Issue #1613 LiDAR Observation Track Setup (2026-05-29):
   [issue_1613_lidar_observation_track.md](issue_1613_lidar_observation_track.md)
 * Issue #1614 LiDAR Planner Compatibility Audit (2026-05-29):
   [issue_1614_lidar_planner_compatibility.md](issue_1614_lidar_planner_compatibility.md)
+* Issue #1675 learned risk-surface interface:
+  [issue_1675_learned_risk_surface_interface.md](issue_1675_learned_risk_surface_interface.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:
@@ -200,6 +208,8 @@ knowledge, not every transient iteration detail.
   [issue_1618_learned_policy_adapter_interface.md](issue_1618_learned_policy_adapter_interface.md)
 * Issue #1677 SiT Dataset Terms Audit (2026-05-29):
   [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
+* Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
+  [issue_1676_proxemic_profile_comfort_slice.md](issue_1676_proxemic_profile_comfort_slice.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):
   [issue_1617_local_planner_repo_survey.md](issue_1617_local_planner_repo_survey.md)
 * Issue #1662 LiDAR PPO MLP Smoke (2026-05-29):

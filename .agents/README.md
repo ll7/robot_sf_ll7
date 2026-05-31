@@ -13,9 +13,13 @@ Tool-specific directories should point here when their formats allow it.
 | `.agents/agents/github/` | `.github/agents/` | GitHub agent definitions. |
 | `.agents/commands/gemini/` | `.gemini/commands/` | Gemini command definitions. |
 
-`AGENTS.md` remains the top-level instruction source for repository rules. Tool-specific
-instruction files, such as `.github/copilot-instructions.md` and `.cursorrules`, should be thin
-pointers to `AGENTS.md` plus only the tool-specific details that cannot live in `AGENTS.md`.
+`AGENTS.md` remains the top-level instruction source for repository rules, and
+`docs/maintainer_values.md` is the compact source for current values and hard contracts.
+Tool-specific instruction files, such as `.github/copilot-instructions.md` and `.cursorrules`,
+should be thin pointers to those sources plus only the tool-specific details that cannot live there.
+
+Stale compatibility surfaces should be removed when they no longer provide value. Claude cleanup is
+tracked in issue #1728.
 
 ## Maintenance
 

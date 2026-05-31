@@ -1,7 +1,7 @@
 ---
 name: gh-issue-sequencer
 description: 'Maintain a clear next-work queue in GitHub Project #5 by normalizing issue status, priority,
-  and execution order.'
+  and execution order; route genuine priority tradeoffs to issue-audit.'
 category: github-issue
 kind: atomic
 phase: context
@@ -18,7 +18,9 @@ output_schema: skill_run_summary.v1
 
 Maintain a clean Project #5 execution queue by separating clarification cleanup, readiness routing,
 and one-pass sequencing metadata writes. Project #5 priority is advisory; current maintainer
-direction and fresh evidence can override queue order.
+direction and fresh evidence can override queue order. If ordering depends on a real value
+tradeoff, route to `issue-audit` for one focused priority question rather than blocking autonomous
+selection broadly.
 
 ## Workflow
 
@@ -32,6 +34,7 @@ direction and fresh evidence can override queue order.
 3. Resolve blockers first:
    - route ambiguous issues to `gh-issue-clarifier`,
    - route implausible priorities to `gh-issue-priority-assessor`,
+   - route genuine value tradeoffs to `issue-audit` priority discussion,
    - keep `decision-required`, `blocked`, `duplicate`, `wontfix` out of execution-ready ordering.
 4. Normalize issue status:
    - `In progress` for the active item,

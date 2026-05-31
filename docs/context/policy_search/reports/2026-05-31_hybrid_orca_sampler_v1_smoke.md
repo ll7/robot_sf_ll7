@@ -34,7 +34,7 @@ Keep ORCA-like safety behavior while allowing a short-horizon sampler to recover
 
 - No failures recorded.
 
-## Issue #1829 Comparison
+## Issue #1829 Comparison - 2026-05-31
 
 This run retunes the experimental candidate's speed envelope from the inherited `1.1 m/s` cap to
 `2.0 m/s` for both the ORCA head and MPPI sampler, and keeps the route-stall sampler handoff

@@ -35,6 +35,7 @@ from robot_sf.benchmark.map_runner import (
     _robot_kinematics_label,
     _robot_max_speed,
     _run_map_episode,
+    _run_map_job_worker,
     _scenario_robot_kinematics_label,
     _scenario_with_episode_seed_defaults,
     _select_seeds,
@@ -3723,6 +3724,164 @@ def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
         result["algorithm_metadata_contract"]["upstream_reference"]["adapter_boundary"]
         == "runtime direct world velocity passthrough"
     )
+
+
+def test_run_map_batch_parallel_preserves_runtime_metadata_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Serialized worker results should feed the same batch metadata bridge as serial runs."""
+    scenarios = [
+        {
+            "name": "slow",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        },
+        {
+            "name": "fast",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        },
+    ]
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        ThreadPoolExecutor,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._write_validated",
+        lambda *args, **kwargs: None,
+    )
+
+    def _fake_worker(job):
+        """Return worker metadata out of completion order to exercise the serialized bridge."""
+        scenario, seed, _params = job
+        if scenario["name"] == "slow":
+            time.sleep(0.05)
+        return {
+            "episode_id": f"{scenario['name']}-{seed}",
+            "algorithm_metadata": {
+                "adapter_impact": {
+                    "requested": True,
+                    "native_steps": 2 if scenario["name"] == "slow" else 1,
+                    "adapted_steps": 1,
+                },
+                "kinematics_feasibility": {
+                    "commands_evaluated": 3,
+                    "infeasible_native_count": 1,
+                    "projected_count": 1,
+                    "mean_abs_delta_linear": 0.2,
+                    "mean_abs_delta_angular": 0.4,
+                    "max_abs_delta_linear": 0.5,
+                    "max_abs_delta_angular": 0.7,
+                },
+                "planner_kinematics": {
+                    "robot_kinematics": "holonomic",
+                    "execution_mode": "adapter",
+                    "planner_command_space": "holonomic_vxy_world",
+                    "benchmark_command_space": "holonomic_vxy_world",
+                    "projection_policy": "world_velocity_passthrough",
+                    "execution_detail": "direct_holonomic_world_velocity",
+                },
+                "upstream_reference": {
+                    "adapter_boundary": "parallel runtime direct world velocity passthrough"
+                },
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", _fake_worker)
+
+    result = run_map_batch(
+        scenarios,
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        algo="orca",
+        adapter_impact_eval=True,
+        workers=2,
+        resume=False,
+    )
+
+    meta = result["algorithm_metadata_contract"]
+    planner_meta = meta["planner_kinematics"]
+    assert planner_meta["planner_command_space"] == "holonomic_vxy_world"
+    assert planner_meta["benchmark_command_space"] == "holonomic_vxy_world"
+    assert planner_meta["projection_policy"] == "world_velocity_passthrough"
+    assert planner_meta["execution_detail"] == "direct_holonomic_world_velocity"
+    assert meta["upstream_reference"]["adapter_boundary"] == (
+        "parallel runtime direct world velocity passthrough"
+    )
+    assert meta["adapter_impact"]["status"] == "complete"
+    assert meta["adapter_impact"]["native_steps"] == 3
+    assert meta["adapter_impact"]["adapted_steps"] == 2
+    assert meta["kinematics_feasibility"]["commands_evaluated"] == 6
+    assert meta["kinematics_feasibility"]["projected_count"] == 2
+    assert meta["kinematics_feasibility"]["mean_abs_delta_linear"] == pytest.approx(0.2)
+
+
+def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serialized map jobs should forward benchmark metadata fields into episode execution."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_map_episode(scenario, seed, **kwargs):
+        """Capture worker-forwarded keyword arguments."""
+        captured["scenario"] = scenario
+        captured["seed"] = seed
+        captured.update(kwargs)
+        return {
+            "episode_id": "forwarded",
+            "algorithm_metadata": {
+                "benchmark_track": {
+                    "benchmark_track": kwargs["benchmark_track"],
+                    "track_schema_version": kwargs["track_schema_version"],
+                    "observation_level": kwargs["observation_level"],
+                    "observation_mode": kwargs["observation_mode"],
+                }
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_episode", _fake_run_map_episode)
+
+    record = _run_map_job_worker(
+        (
+            {"name": "metadata-forwarding"},
+            7,
+            {
+                "horizon": 3,
+                "dt": 0.1,
+                "record_forces": False,
+                "snqi_weights": None,
+                "snqi_baseline": None,
+                "algo": "goal",
+                "algo_config": {"max_speed": 1.0},
+                "algo_config_path": None,
+                "scenario_path": "configs/scenarios/demo.yaml",
+                "adapter_impact_eval": True,
+                "experimental_ped_impact": False,
+                "ped_impact_radius_m": 2.0,
+                "ped_impact_window_steps": 5,
+                "observation_noise": {"enabled": False},
+                "observation_mode": "socnav_state",
+                "observation_level": "tracked_agents_no_noise",
+                "benchmark_track": "lidar",
+                "track_schema_version": "track-v1",
+                "synthetic_actuation_profile": None,
+                "latency_stress_profile": None,
+            },
+        )
+    )
+
+    assert captured["scenario"] == {"name": "metadata-forwarding"}
+    assert captured["seed"] == 7
+    assert captured["observation_mode"] == "socnav_state"
+    assert captured["observation_level"] == "tracked_agents_no_noise"
+    assert captured["benchmark_track"] == "lidar"
+    assert captured["track_schema_version"] == "track-v1"
+    assert record["algorithm_metadata"]["benchmark_track"]["benchmark_track"] == "lidar"
 
 
 def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(

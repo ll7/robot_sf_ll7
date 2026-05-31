@@ -248,10 +248,17 @@ def attach_risk_surface_to_observation(
     """
     if not isinstance(observation, dict):
         raise RiskSurfaceUnavailable("observation must be a mapping")
+    robot_position, robot_heading = _extract_robot_pose(observation)
+    robot_pose = [robot_position[0], robot_position[1], robot_heading]
     enriched = dict(observation)
+    meta = surface.occupancy_meta()
+    if surface.spec.frame == "ego":
+        meta["robot_pose"] = robot_pose
+    diagnostics = surface.diagnostics()
+    diagnostics["robot_pose"] = robot_pose
     enriched["occupancy_grid"] = surface.occupancy_grid()
-    enriched["occupancy_grid_meta"] = surface.occupancy_meta()
-    enriched["local_risk_surface_diagnostics"] = surface.diagnostics()
+    enriched["occupancy_grid_meta"] = meta
+    enriched["local_risk_surface_diagnostics"] = diagnostics
     return enriched
 
 
@@ -333,8 +340,9 @@ class RiskSurfacePlannerAdapter(OccupancyAwarePlannerMixin):
         """
         normalized = self._observation_for_surface(observation)
         surface = deterministic_pedestrian_risk_surface(normalized, self.spec)
-        self._last_surface = surface.diagnostics()
-        return attach_risk_surface_to_observation(normalized, surface)
+        enriched = attach_risk_surface_to_observation(normalized, surface)
+        self._last_surface = enriched["local_risk_surface_diagnostics"]
+        return enriched
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Plan with fail-closed behavior when the surface is unavailable.

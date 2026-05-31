@@ -57,6 +57,20 @@ make missing step timestamps explicit in Markdown output. The post-trim sample s
 step-level durations, so PR #1700 added explicit phase timing emitted by
 `scripts/dev/ci_driver.sh` instead of relying on GitHub's step payload.
 
+The timing helper can now read saved job logs that contain those phase lines:
+
+```bash
+uv run python scripts/dev/ci_timing_summary.py \
+  --run-id <github-actions-run-id> \
+  --log output/ci_logs/fast-feedback.log \
+  --log output/ci_logs/smoke-artifacts.log \
+  --top 10
+```
+
+This keeps the measurement-first #1653 workflow additive: the command ranks repository-owned
+`ci_driver phase_end` durations without changing CI job structure, test selection, or required
+checks.
+
 `fast-feedback` and `smoke-artifacts` both repeat checkout, uv setup, Python setup, system package
 installation, dependency sync, and artifact migration. Because GitHub did not expose step durations
 for the sampled runs, the current evidence cannot yet quantify repeated setup or artifact-generation

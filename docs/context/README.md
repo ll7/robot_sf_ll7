@@ -143,6 +143,8 @@ knowledge, not every transient iteration detail.
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
 * Issue #1612 parallel observation-space benchmark tracks:
   [issue_1612_observation_track_architecture.md](issue_1612_observation_track_architecture.md)
+* Issue #1721 Legacy Benchmark-Track Metadata Audit:
+  [issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md)
 * Issue #1659 LiDAR occupancy adapter:
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:

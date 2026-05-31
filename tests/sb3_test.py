@@ -1,6 +1,6 @@
 """TODO docstring. Document this module."""
 
-import os
+from pathlib import Path
 
 import pytest
 
@@ -19,41 +19,37 @@ def _make_robot_env() -> RobotEnv:
     return RobotEnv()
 
 
-def test_can_load_model_snapshot():
+def test_can_load_model_snapshot(tmp_path: Path) -> None:
     """Train, save, and reload a PPO model snapshot to ensure compatibility."""
-    MODEL_PATH = "./temp/ppo_model"
-    MODEL_FILE = f"{MODEL_PATH}.zip"
-
-    # Create the directory if it doesn't exist
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-
-    if os.path.exists(MODEL_FILE) and os.path.isfile(MODEL_FILE):
-        os.remove(MODEL_FILE)
+    model_path = tmp_path / "ppo_model"
+    model_file = model_path.with_suffix(".zip")
 
     vec_env = make_vec_env(_make_robot_env, n_envs=1)
     policy_kwargs = {"features_extractor_class": DynamicsExtractor}
-    model = PPO(
-        "MultiInputPolicy",
-        vec_env,
-        policy_kwargs=policy_kwargs,
-        n_steps=16,
-        batch_size=16,
-        n_epochs=1,
-        gamma=0.95,
-        learning_rate=3e-4,
-        verbose=0,
-    )
-    model.save(MODEL_PATH)
-    assert os.path.exists(MODEL_FILE)
+    inf_env = None
+    try:
+        model = PPO(
+            "MultiInputPolicy",
+            vec_env,
+            policy_kwargs=policy_kwargs,
+            n_steps=16,
+            batch_size=16,
+            n_epochs=1,
+            gamma=0.95,
+            learning_rate=3e-4,
+            verbose=0,
+        )
+        model.save(model_path)
+        assert model_file.exists()
 
-    inf_env = RobotEnv()
-    model2 = PPO.load(MODEL_PATH, env=inf_env)
+        inf_env = RobotEnv()
+        model2 = PPO.load(model_path, env=inf_env)
 
-    obs, _info = inf_env.reset()
-    action, _ = model2.predict(obs, deterministic=True)
+        obs, _info = inf_env.reset()
+        action, _ = model2.predict(obs, deterministic=True)
 
-    assert action.shape == inf_env.action_space.shape
-
-    if os.path.exists(MODEL_FILE) and os.path.isfile(MODEL_FILE):
-        os.remove(MODEL_FILE)
-        os.rmdir(os.path.dirname(MODEL_PATH))
+        assert action.shape == inf_env.action_space.shape
+    finally:
+        vec_env.close()
+        if inf_env is not None:
+            inf_env.close()

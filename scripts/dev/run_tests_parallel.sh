@@ -21,17 +21,20 @@ Wrapper options:
 
 Environment overrides:
   PYTEST_FAST_FAIL=1|0
+  PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup
   PYTEST_ORDER_MODE=failed-first|new-first|none
   PYTEST_NUM_WORKERS=<int>|auto
 
 Examples:
   scripts/dev/run_tests_parallel.sh
+  PYTEST_XDIST_DIST=worksteal scripts/dev/run_tests_parallel.sh
   scripts/dev/run_tests_parallel.sh --new-first tests/benchmark
   scripts/dev/run_tests_parallel.sh --no-fast-fail tests
 EOF
 }
 
 fast_fail="${PYTEST_FAST_FAIL:-1}"
+dist_mode="${PYTEST_XDIST_DIST:-load}"
 order_mode="${PYTEST_ORDER_MODE:-failed-first}"
 worker_override="${PYTEST_NUM_WORKERS:-}"
 
@@ -69,6 +72,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "$dist_mode" in
+  load|worksteal|loadscope|loadfile|loadgroup)
+    ;;
+  *)
+    echo "Invalid PYTEST_XDIST_DIST value '$dist_mode' (expected load|worksteal|loadscope|loadfile|loadgroup)." >&2
+    exit 2
+    ;;
+esac
+
+echo "Resolved pytest-xdist distribution mode: $dist_mode" >&2
+
 requested_args=()
 if [[ -n "$worker_override" ]]; then
   requested_args=(--requested "$worker_override")
@@ -85,7 +99,7 @@ fi
 
 echo "Resolved pytest-xdist workers: $worker_spec" >&2
 
-cmd=(uv run pytest -n "$worker_spec")
+cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
 
 if [[ "$fast_fail" == "1" ]]; then
   cmd+=("-x")

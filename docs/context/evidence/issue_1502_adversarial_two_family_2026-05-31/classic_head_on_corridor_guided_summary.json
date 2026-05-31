@@ -1,0 +1,85 @@
+{
+  "scenario_id": "classic_head_on_corridor_low",
+  "map_file": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-1502-adversarial-two-family/maps/svg_maps/classic_head_on_corridor.svg",
+  "optimizer": "optuna_tpe",
+  "seed": 123,
+  "trial_count": 100,
+  "objective_mode": "composite",
+  "best_score": 0.3876022791660954,
+  "route_payload": {
+    "robot_routes": [
+      {
+        "spawn_id": 0,
+        "goal_id": 0,
+        "waypoints": [
+          [
+            22.25,
+            5.75
+          ],
+          [
+            13.25,
+            34.25
+          ]
+        ]
+      }
+    ],
+    "ped_routes": [
+      {
+        "spawn_id": 0,
+        "goal_id": 0,
+        "waypoints": [
+          [
+            13.25,
+            2.25
+          ],
+          [
+            23.25,
+            24.75
+          ]
+        ]
+      },
+      {
+        "spawn_id": 0,
+        "goal_id": 0,
+        "waypoints": [
+          [
+            3.25,
+            14.75
+          ],
+          [
+            4.75,
+            16.25
+          ],
+          [
+            5.25,
+            16.75
+          ],
+          [
+            25.25,
+            35.25
+          ]
+        ]
+      }
+    ]
+  },
+  "diagnostics": {
+    "failed_trials": 60,
+    "valid_trial_count": 40,
+    "feasibility_rejection_counts": {
+      "invalid_start_or_goal": 60
+    },
+    "top_k_scores": [
+      0.3876022791660954,
+      0.370716524593506,
+      0.3594986874126194,
+      0.3560990942145813,
+      0.3474276984592932
+    ],
+    "components": {
+      "failure_proxy": 0.22222222222222224,
+      "delay_proxy": 0.5503961960096395,
+      "path_inefficiency": 2.153442457020205e-05,
+      "near_miss_stress": 1.0
+    }
+  }
+}

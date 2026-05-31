@@ -285,10 +285,13 @@ def _load_synthetic_actuation_profile(payload: Any) -> SyntheticActuationProfile
     if not isinstance(payload, dict):
         raise TypeError("synthetic_actuation_profile must be a mapping when provided")
     validate_actuation_profile_claim_boundary(payload)
+    claim_scope = str(payload.get("claim_scope", "synthetic-only")).strip() or "synthetic-only"
+    if claim_scope != "synthetic-only":
+        raise ValueError("synthetic_actuation_profile.claim_scope must be 'synthetic-only'")
     profile = SyntheticActuationProfile(
         name=str(payload.get("name", "")),
         profile_version=str(payload.get("profile_version", "v0")),
-        claim_scope=str(payload.get("claim_scope", "synthetic-only")),
+        claim_scope=claim_scope,
         claim_boundary=str(payload.get("claim_boundary", "")),
         max_linear_accel_m_s2=float(payload.get("max_linear_accel_m_s2")),
         max_linear_decel_m_s2=float(payload.get("max_linear_decel_m_s2")),

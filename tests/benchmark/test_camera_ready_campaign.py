@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -388,13 +389,26 @@ def test_calibrated_labeled_actuation_profile_requires_provenance_fields() -> No
         )
 
 
+def test_uncalibrated_label_does_not_trigger_calibrated_profile_gate() -> None:
+    """Exact calibrated marker matching should not reject ordinary uncalibrated labels."""
+    validate_actuation_profile_claim_boundary(
+        {
+            "name": "uncalibrated-synthetic-amv-v0",
+            "profile_version": "v0",
+            "claim_scope": "synthetic-only",
+            "claim_boundary": "diagnostic-only",
+            "calibration_status": "uncalibrated",
+        }
+    )
+
+
 def test_typed_synthetic_profile_rejects_calibrated_label_without_provenance() -> None:
     """Direct SyntheticActuationProfile callers must not bypass calibrated-claim provenance."""
     profile = SyntheticActuationProfile(
         name="amv-actuation-calibrated-v0",
         profile_version="v0",
-        claim_scope="synthetic-only",
-        claim_boundary="diagnostic-only",
+        claim_scope="hardware-calibrated",
+        claim_boundary="calibrated-amv-actuation",
         max_linear_accel_m_s2=1.5,
         max_linear_decel_m_s2=2.0,
         max_yaw_rate_rad_s=0.9,
@@ -404,6 +418,26 @@ def test_typed_synthetic_profile_rejects_calibrated_label_without_provenance() -
     )
 
     with pytest.raises(ValueError, match="requires provenance fields"):
+        validate_synthetic_actuation_profile(profile)
+
+
+@pytest.mark.parametrize("bad_bound", [math.nan, math.inf, -math.inf])
+def test_typed_synthetic_profile_rejects_non_finite_bounds(bad_bound: float) -> None:
+    """Synthetic actuation bounds must be finite before controller math uses them."""
+    profile = SyntheticActuationProfile(
+        name="amv-actuation-stress-v0",
+        profile_version="v0",
+        claim_scope="synthetic-only",
+        claim_boundary="diagnostic-only",
+        max_linear_accel_m_s2=bad_bound,
+        max_linear_decel_m_s2=2.0,
+        max_yaw_rate_rad_s=0.9,
+        max_angular_accel_rad_s2=2.5,
+        latency_mode="one-step-delay",
+        update_mode="5hz-hold",
+    )
+
+    with pytest.raises(ValueError, match="max_linear_accel_m_s2 must be > 0"):
         validate_synthetic_actuation_profile(profile)
 
 

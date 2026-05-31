@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -98,7 +100,10 @@ def _looks_calibrated_actuation_profile(payload: Mapping[str, Any]) -> bool:
         payload.get("profile_family"),
     )
     return any(
-        marker in str(value).strip().lower() for value in fields for marker in calibrated_markers
+        token in calibrated_markers
+        for value in fields
+        for token in re.split(r"[^a-z]+", str(value).strip().lower())
+        if token
     )
 
 
@@ -167,7 +172,7 @@ def _validate_synthetic_positive_bounds(profile: SyntheticActuationProfile) -> N
         "max_angular_accel_rad_s2": profile.max_angular_accel_rad_s2,
     }
     for field_name, value in bounds.items():
-        if value <= 0.0:
+        if not math.isfinite(value) or value <= 0.0:
             raise ValueError(f"synthetic_actuation_profile.{field_name} must be > 0")
 
 
@@ -187,6 +192,12 @@ def validate_synthetic_actuation_profile(profile: SyntheticActuationProfile) -> 
         raise ValueError("synthetic_actuation_profile.name must be non-empty")
     if not profile.profile_version.strip():
         raise ValueError("synthetic_actuation_profile.profile_version must be non-empty")
+    profile_metadata = profile.to_metadata()
+    if _looks_calibrated_actuation_profile(profile_metadata):
+        _validate_calibrated_actuation_provenance(
+            profile_metadata,
+            label="synthetic_actuation_profile",
+        )
     if profile.claim_scope.strip() != SYNTHETIC_ACTUATION_CLAIM_SCOPE:
         raise ValueError(
             f"synthetic_actuation_profile.claim_scope must be '{SYNTHETIC_ACTUATION_CLAIM_SCOPE}'"
@@ -195,12 +206,6 @@ def validate_synthetic_actuation_profile(profile: SyntheticActuationProfile) -> 
         raise ValueError(
             "synthetic_actuation_profile.claim_boundary must be "
             f"'{SYNTHETIC_ACTUATION_CLAIM_BOUNDARY}'"
-        )
-    profile_metadata = profile.to_metadata()
-    if _looks_calibrated_actuation_profile(profile_metadata):
-        _validate_calibrated_actuation_provenance(
-            profile_metadata,
-            label="synthetic_actuation_profile",
         )
     _validate_synthetic_positive_bounds(profile)
     _validate_mode(

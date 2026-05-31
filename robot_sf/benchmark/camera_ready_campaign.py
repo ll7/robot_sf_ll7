@@ -1622,6 +1622,12 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         raise TypeError("synthetic_actuation_profile must be a mapping when provided")
     if synthetic_actuation_raw is not None:
         validate_actuation_profile_claim_boundary(synthetic_actuation_raw)
+        raw_claim_scope = (
+            str(synthetic_actuation_raw.get("claim_scope", "synthetic-only")).strip()
+            or "synthetic-only"
+        )
+        if raw_claim_scope != "synthetic-only":
+            raise ValueError("synthetic_actuation_profile.claim_scope must be 'synthetic-only'")
     latency_stress_raw = payload.get("latency_stress_profile")
     kinematics_matrix = _normalize_kinematics_matrix(
         payload.get("kinematics_matrix", ["differential_drive"])

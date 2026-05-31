@@ -15,8 +15,8 @@ A clean-room Tentabot-style primitive value scorer can reuse Robot SF's hybrid-r
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/policy_search/nominal_sanity_matrix.yaml`
 - Seed manifest: `configs/policy_search/nominal_sanity_seeds.yaml`
-- Summary JSON: `output/policy_search/tentabot_value_scorer_v0/nominal_sanity/issue1826_safety_retune_final_h120/summary.json`
-- Git commit: `30570b7ee4af32fb6d185cdd822f744fb5a9c284`
+- Summary JSON: `output/policy_search/tentabot_value_scorer_v0/nominal_sanity/issue1832_final/summary.json`
+- Git commit: `39e6417e783504cb6873b4b9bfae73f458f0a2f5`
 
 ## Aggregate Results
 
@@ -38,13 +38,21 @@ A clean-room Tentabot-style primitive value scorer can reuse Robot SF's hybrid-r
 - `static_collision`: `1`
 - `timeout_low_progress`: `11`
 
-## Issue #1826 Comparison (2026-05-31)
+## Issue #1832 Progress-Recovery Probe
 
-The safety retune lowers the hand-scored Tentabot-style scorer's speed/progress pressure and raises
-static-clearance, dynamic-clearance, TTC, and hard-safety margins. Against the predecessor
-2026-05-31 nominal-sanity report, success is unchanged at `0.2222`, collision rate drops from
-`0.1111` to `0.0556`, and near-miss rate drops from `0.2222` to `0.1667`. The tradeoff is more
-low-progress timeouts (`9` to `11`), so this remains a `revise` result rather than a promotion.
+Issue #1832 tested three bounded recovery directions after the #1826 safety retune:
+
+- Baseline reproduction at `issue1832_baseline`: 4/18 success, 1/18 collision, 3/18 near-miss,
+  11 low-progress timeouts.
+- Progress-pressure config retune at `issue1832_progress_recovery`: low-progress timeouts improved
+  to 8, but collisions increased to 3/18 and near-miss episodes increased to 4/18. Rejected.
+- Static recovery-only config retune at `issue1832_static_recovery_only`: low-progress timeouts
+  improved to 10, but collisions increased to 2/18. Rejected.
+
+The retained planner change treats negative goal-distance progress as stalled for corridor-subgoal
+activation, which is the safer interpretation for recovery gating. On this nominal slice it did not
+change aggregate outcomes relative to the #1831/#1826 baseline, so the candidate remains
+`revise`; this is not progress-improvement evidence.
 
 ## Claim Boundary
 

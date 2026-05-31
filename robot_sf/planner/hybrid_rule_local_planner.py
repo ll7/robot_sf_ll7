@@ -697,8 +697,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         goal_progress_3s_threshold = float(self.config.corridor_subgoal_goal_stall_progress_3s)
         goal_progress_1s_threshold = goal_progress_3s_threshold / 3.0
         goal_stalled = (
-            0.0 <= goal_progress_1s <= goal_progress_1s_threshold
-            and 0.0 <= goal_progress_3s <= goal_progress_3s_threshold
+            goal_progress_1s <= goal_progress_1s_threshold
+            and goal_progress_3s <= goal_progress_3s_threshold
         )
         route_stalled = route_progress_3s <= float(
             self.config.corridor_subgoal_route_stall_progress_3s

@@ -5,7 +5,7 @@ or other expensive execution that should not happen on the local machine.
 
 This file is a convenience index for policy-search SLURM handoff notes. It is not the execution
 status ledger. For current issue state, blocker classification, and artifact-promotion status, use
-`../../slurm_issue_batch_status_2026-05-21.md`.
+[slurm_issue_batch_status_2026-05-21.md](../../slurm_issue_batch_status_2026-05-21.md).
 
 - [Learned Risk Model v1](001_learned_risk_model_v1.md)
 - [Shielded PPO Repair Campaign](002_shielded_ppo_repair_campaign.md)

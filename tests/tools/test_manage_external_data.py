@@ -22,12 +22,13 @@ def _init_git_repo(path: Path, *, gitignore: str = "") -> None:
 
 
 def test_registry_covers_initial_required_asset_groups() -> None:
-    """The first slice should cover SDD and SocNavBench S3DIS/control assets."""
+    """The first slice should cover SDD, SocNavBench, and AMV provenance assets."""
     asset_ids = {asset.asset_id for asset in manage_external_data.list_assets()}
 
     assert "sdd" in asset_ids
     assert "socnavbench-s3dis-eth" in asset_ids
     assert "socnavbench-control" in asset_ids
+    assert "amv-calibration" in asset_ids
 
 
 def test_missing_license_gated_asset_fails_closed(tmp_path: Path) -> None:
@@ -105,3 +106,27 @@ def test_socnavbench_control_check_accepts_wayptnav_layout(tmp_path: Path) -> No
 
     assert report["ok"] is True
     assert report["matched_required_paths"] == ["wayptnav_data"]
+
+
+def test_amv_calibration_check_accepts_one_source_format(tmp_path: Path) -> None:
+    """AMV calibration provenance can be represented by one accepted local source file."""
+    (tmp_path / "accepted_source.json").write_text(
+        '{"source_class": "official_spec", "note": "fixture only"}\n',
+        encoding="utf-8",
+    )
+
+    report = manage_external_data.check_asset("amv-calibration", source_path=tmp_path)
+
+    assert report["ok"] is True
+    assert report["matched_required_paths"] == ["accepted_source.json"]
+
+
+def test_amv_calibration_check_reports_source_alternatives(tmp_path: Path) -> None:
+    """Missing AMV calibration input should point to the source alternative group."""
+    report = manage_external_data.check_asset("amv-calibration", source_path=tmp_path)
+
+    assert report["ok"] is False
+    assert report["status"] == "incomplete"
+    assert report["missing_required_paths"] == [
+        "source: one of **/*.json, **/*.yaml, **/*.yml, **/*.csv, **/*.pdf"
+    ]

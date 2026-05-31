@@ -3,6 +3,36 @@
 Related issues: Issue #1167, Issue #1344, Issue #1354, Issue #1358, Issue #1391,
 Issue #1392, Issue #1398.
 
+## Canonical Source-Of-Truth Policy
+
+This file remains the canonical SLURM issue-status ledger for the current open training and
+artifact-rescue issue batch. Do not create a successor ledger until there is a concrete consumer
+that needs a different path or machine-readable registry. Use
+`docs/context/issue_1544_slurm_experiment_state_ledger.md` for the shared state vocabulary and
+stale-trail closure protocol; use this file for the issue-by-issue source-of-truth rows.
+
+Individual issue bodies and comments should carry only a short pointer or summary. When an issue
+body, issue comment, PR text, and this ledger disagree, trust the newest source that includes both:
+
+- a `source_of_truth` value pointing at this ledger or an explicitly named successor; and
+- a `last_verified` date tied to a read-only issue/artifact inspection.
+
+If no newer source names a replacement ledger, agents should use this file's row and fail closed on
+missing durable artifacts. Local `output/...` paths, raw SLURM logs, and worktree-local checkpoints
+remain triage clues until promoted through a durable artifact pointer or compact tracked evidence.
+
+Use this short pointer in issue bodies or comments when reconciling duplicated status:
+
+```yaml
+slurm_issue_pointer:
+  issue_number: 0000
+  slurm_state: "not_submitted | submitted_running | completed_pending_artifact_promotion | artifact_rescue | rerun_required | failed_closed | inconclusive_close | completed_with_durable_evidence | parent_blocked | insufficient_data"
+  source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
+  last_verified: YYYY-MM-DD
+  artifact_status: "missing | partial | durable | not_applicable"
+  next_action: one short operational step
+```
+
 ## Current Status
 
 The 2026-05-20 batch was split after PR #1400 was closed without merge. The durable workflow
@@ -25,13 +55,15 @@ No user SLURM jobs were queued when this note was written.
 
 Use this compact block in issue bodies, issue comments, and context notes when a training or
 benchmark issue is waiting on SLURM/Auxme execution. It is human-readable status, not a new
-machine-readable ledger. The stricter stale-trail closure states remain documented in
-`docs/context/issue_1544_slurm_experiment_state_ledger.md`.
+machine-readable registry. The stricter stale-trail closure states remain documented in
+`docs/context/issue_1544_slurm_experiment_state_ledger.md`. When a full block would duplicate this
+ledger, prefer the short `slurm_issue_pointer` above.
 
 ```yaml
 slurm_issue_status:
   issue_number: 0000
   state: not_submitted | submitted_running | completed_pending_artifact_promotion | artifact_rescue | rerun_required | failed_closed | inconclusive_close | completed_with_durable_evidence | parent_blocked | insufficient_data
+  source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: not_submitted
   branch: unknown
   commit: unknown
@@ -50,7 +82,7 @@ slurm_issue_status:
 
 Field rules:
 
-- `issue_number`, `state`, `slurm_job_id`, `commit`, `config_path`, `output_root`,
+- `issue_number`, `state`, `source_of_truth`, `slurm_job_id`, `commit`, `config_path`, `output_root`,
   `durable_artifact_pointer_status`, and `next_action` should always be present.
 - Use `not_submitted`, `missing`, or `unknown` rather than omitting fields.
 - `parent_blocked` is for umbrella issues that should not be executed directly.
@@ -73,6 +105,7 @@ non-evidence.
 slurm_issue_status:
   issue_number: 1470
   state: not_submitted
+  source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: not_submitted
   branch: issue-1397-oracle-imitation-launch-packet
   commit: unknown
@@ -95,6 +128,7 @@ slurm_issue_status:
 slurm_issue_status:
   issue_number: 1472
   state: not_submitted
+  source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: not_submitted
   branch: issue-1395-learned-risk-launch-packet
   commit: unknown
@@ -117,6 +151,7 @@ slurm_issue_status:
 slurm_issue_status:
   issue_number: 1474
   state: not_submitted
+  source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: not_submitted
   branch: issue-1396-shielded-ppo-launch-packet
   commit: unknown
@@ -139,6 +174,7 @@ slurm_issue_status:
 slurm_issue_status:
   issue_number: 1475
   state: not_submitted
+  source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: not_submitted
   branch: unknown
   commit: unknown
@@ -162,6 +198,7 @@ slurm_issue_status:
 slurm_issue_status:
   issue_number: 1108
   state: artifact_rescue
+  source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: 12472
   branch: issue-1108-bc-warm-start-ppo
   commit: unknown

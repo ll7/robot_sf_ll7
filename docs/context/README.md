@@ -210,7 +210,7 @@ knowledge, not every transient iteration detail.
   [issue_1387_tentabot_value_scorer_spike.md](issue_1387_tentabot_value_scorer_spike.md)
 * Issue #1344 paired AMV primary protocol report:
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
-* SLURM issue batch status 2026-05-21:
+* SLURM issue batch status 2026-05-21 (canonical SLURM issue-status ledger):
   [slurm_issue_batch_status_2026-05-21.md](slurm_issue_batch_status_2026-05-21.md)
 * Issue #1397 Oracle Imitation Launch Packet:
   [issue_1397_oracle_imitation_launch_packet.md](issue_1397_oracle_imitation_launch_packet.md)

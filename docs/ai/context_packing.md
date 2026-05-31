@@ -66,6 +66,27 @@ Start with a documented Repomix workflow for focused bundles such as:
 
 Only add automation around this after a few manual bundle workflows prove useful.
 
+Use [docs/context/INDEX.md](../context/INDEX.md) as the maintained manifest source for recurring
+packs. It currently defines scoped starting points for:
+
+- `learned_policy_integration`,
+- `benchmark_campaign_evidence`,
+- `slurm_artifact_rescue`,
+- `root_layout_cleanup`,
+- `adversarial_search`.
+
+Generated bundles should live under ignored paths such as `output/context_packs/`. Do not commit
+packed repository dumps, raw benchmark output, checkpoints, videos, or local machine context unless
+a separate durable-artifact decision explicitly promotes a small manifest or pointer.
+
+Example command shape:
+
+```bash
+repomix \
+  --include "AGENTS.md,docs/context/INDEX.md,docs/context/issue_691_benchmark_fallback_policy.md,docs/benchmark*.md,robot_sf/benchmark/**,configs/benchmarks/**,scripts/validation/**" \
+  --output output/context_packs/benchmark_campaign_evidence.txt
+```
+
 ## Source Note
 
 This decision was checked against the current upstream project pages on 2026-03-19.

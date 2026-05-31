@@ -79,7 +79,9 @@ the launch packet test confirms LiDAR-only runtime inputs plus artifact-promotio
 ## Follow-Up Boundary
 
 Future training work should create dedicated issues for a PPO MLP smoke/short run, a richer
-attention or LSTM perception variant, a DreamerV3 LiDAR smoke, and eventual registry promotion.
-Each follow-up must record exact commit, config, seeds, ray count, stack steps, checkpoint artifact
-URI, smoke result, and whether any guard or projection was active. Checkpoints and raw logs stay
-out of git; only compact manifests or summaries should be tracked.
+attention or LSTM perception variant, and eventual registry promotion. Any DreamerV3 or other
+world-model LiDAR branch is further gated by the #1623 world-model feasibility decision: first open
+a source/provenance and data-contract preflight, not a training smoke. Each follow-up must record
+exact commit, config, seeds, ray count, stack steps, checkpoint artifact URI, smoke result, and
+whether any guard or projection was active. Checkpoints and raw logs stay out of git; only compact
+manifests or summaries should be tracked.

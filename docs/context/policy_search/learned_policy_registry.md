@@ -60,10 +60,19 @@ metadata from Issue #1618, smoke proof, and fail-closed handling before benchmar
 | `predictive_planner_v1` | `predictive_model` | `implemented` | `comparison_available` | `comparison_available` | Uses a learned pedestrian predictor inside a planner stack; evidence applies to the configured predictive planner, not a general learned local policy. |
 | `predictive_mppi` | `predictive_model` | `implemented` | `comparison_available` | `comparison_available` | Learned prediction informs MPPI-style rollout scoring; integration depends on predictive model/config provenance. |
 | `lidar_ppo_mlp_gate_v1` | `lidar_policy` | `adapter_needed` | `proposal` | `blocked` | Planned LiDAR learned-policy smoke from Issues #1615/#1662; not available on `main` until launch-packet work lands and smoke training runs. |
+| `tentabot_value_scorer_v0` | `external_learned_policy` | `staged` | `proposal` | `smoke_only` | Clean-room Robot SF scorer spike is staged in `candidate_registry.yaml`; upstream Tentabot remains source-side only and the staged candidate still needs required smoke/nominal-sanity validation before evidence use. |
 | `crowdnav_height_igat_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | Source/checkpoint and graph-observation parity must be proven before a Robot SF adapter or benchmark row. |
+| `arena_rosnav_stack` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | ROSNav stack is a source-side reproduction target only; no single Robot SF-compatible policy checkpoint or adapter contract is claimed. |
 | `drl_vo_family` | `external_learned_policy` | `monitor_only` | `prototype_only` | `blocked` | Tracked-agent diagnostic/prototype boundary only; not main-table ready and not a leakage-free benchmark policy. |
+| `gensafenav_sonic_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | Safety-aware crowd-navigation source family remains behind source-harness and conformal-contract gates; no Robot SF benchmark parity claim. |
+| `neupan_family` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | Point-obstacle model-based learning source is not social-navigation benchmark evidence without source-side proof and adapter contract. |
+| `sage_mpc_transfer_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | MPC-transfer/GNN source lane remains blocked after legacy dependency smoke; checkpoint/inference path is not proven. |
 | `navdp_nomad_visual_family` | `external_visual_policy` | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | RGB-D/topomap/visual-goal assumptions do not reduce cleanly to the current 2D local-planner contract. |
 | `arena_rosnav_stack` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | ROS Noetic/Gazebo/Flatland workspace and Rosnav checkpoint proof are required before any Robot SF adapter or benchmark row. |
+| `diffusion_policy_family` | `external_learned_policy` | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | Diffusion/consistency/diffuser sources are design references, not current Robot SF local-navigation adapters. |
+| `decision_transformer_local_nav_family` | `external_learned_policy` | `monitor_only` | `proposal` | `blocked` | Local trajectory-data preflight exists, but no external local-navigation checkpoint or runnable adapter is selected. |
+| `foundation_vla_navigation_family` | `external_visual_policy` | `rejected` | `monitor_only` | `rejected_for_current_adapter` | VLA/foundation-model sources require missing RGB/RGB-D, language-task, semantic-map, and action-interface contracts. |
+| `dwa_rl_family` | `external_learned_policy` | `monitor_only` | `monitor_only` | `blocked` | Learned dynamic-window route remains source/checkpoint-first; no public source/checkpoint path is currently selected. |
 | `dreamerv3_navigation_family` | `external_world_model` | `monitor_only` | `blocked` | `blocked` | Checkpoint import and Robot SF observation-contract boundaries remain fail-closed. |
 
 ## Entry Details
@@ -154,14 +163,31 @@ External learned-policy families remain registry entries only to prevent duplica
 source-side harnesses, license/checkpoint proof, observation/action-contract mapping, and eligibility
 metadata before entering the runnable candidate registry.
 
+- Tentabot-style motion-primitive value policies:
+  `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
+  `docs/context/policy_search/candidate_registry.yaml`.
 - CrowdNav HEIGHT / IGAT / CrowdNav-family graph policies:
+  `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
   `docs/context/policy_search/issue_1367_crowdnav_family_verdict.md`,
   `docs/context/policy_search/issue_1394_crowdnav_height_source_harness.md`.
+- Arena-Rosnav stack:
+  `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
+  `docs/context/policy_search/issue_1758_arena_rosnav_source_assessment.md`.
 - DRL-VO family: `docs/context/issue_769_drl_vo_assessment.md`.
+- GenSafeNav / SoNIC, NeuPAN, SAGE / MPC-transfer, DWA-RL, Decision Transformer,
+  and Foundation/VLA families:
+  `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`.
 - NavDP / NoMaD visual navigation:
+  `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
   `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md`.
 - Arena-Rosnav learned navigation stack:
   `docs/context/policy_search/issue_1758_arena_rosnav_source_assessment.md`.
+- Diffusion Policy / Consistency Policy / Diffuser families:
+  `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
+- Foundation-model / VLA / multimodal navigation:
+  `docs/context/policy_search/2026-05-30_foundation_model_readiness_issue_1626.md`.
+  `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md` and
+  `docs/context/policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md`.
 - DreamerV3/world-model navigation:
   `docs/context/issue_1190_dreamerv3_checkpoint_import_boundary.md`.
 

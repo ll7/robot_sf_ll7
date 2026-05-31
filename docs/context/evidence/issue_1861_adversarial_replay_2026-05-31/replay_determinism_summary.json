@@ -11,7 +11,7 @@
   "method": {
     "selection": "one representative archived crossing/TTC failure from each #1502 failure cluster",
     "input_policy": "regenerated scenario.yaml and route_overrides.yaml from tracked archive candidate payloads plus committed crossing/TTC template and search-space config",
-    "raw_output_root": "output/adversarial/issue_1861_replay_gate/",
+    "raw_output_root": "ignored local adversarial replay directory",
     "raw_output_tracked": false,
     "repeat_count": 2
   },

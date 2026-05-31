@@ -12,9 +12,9 @@ Related issues:
 ## Scope
 
 This note records a compact replay-determinism gate for representative archived failures from the
-#1502 adversarial two-family run. It uses tracked #1502/#1503 compact evidence and regenerates the
-crossing/TTC replay inputs from tracked archive candidate payloads plus committed scenario/search
-config. It does not run new adversarial search and does not submit new Slurm work.
+Issue #1502 adversarial two-family run. It uses tracked Issue #1502/Issue #1503 compact evidence and
+regenerates the crossing/TTC replay inputs from tracked archive candidate payloads plus committed
+scenario/search config. It does not run new adversarial search and does not submit new Slurm work.
 
 Evidence summary:
 

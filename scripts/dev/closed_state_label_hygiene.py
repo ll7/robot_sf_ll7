@@ -73,6 +73,28 @@ def build_search_command(*, repo: str, label: str, limit: int) -> list[str]:
     ]
 
 
+def _run_search_command(command: list[str]) -> list[dict[str, object]]:
+    """Run one read-only GitHub search command and return object rows."""
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError("GitHub CLI 'gh' was not found; install gh or add it to PATH.") from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        details = f": {stderr}" if stderr else ""
+        raise RuntimeError(f"GitHub CLI command failed ({' '.join(command)}){details}") from exc
+
+    try:
+        payload = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Failed to parse GitHub CLI JSON output ({' '.join(command)}): {exc.msg}"
+        ) from exc
+    if not isinstance(payload, list):
+        raise ValueError(f"Expected a JSON list from {' '.join(command)}")
+    return [row for row in payload if isinstance(row, dict)]
+
+
 def collect_stale_issues(
     rows_by_label: dict[str, list[dict[str, object]]],
     *,
@@ -158,11 +180,7 @@ def fetch_closed_issues_by_label(
     rows_by_label: dict[str, list[dict[str, object]]] = {}
     for label in labels:
         command = build_search_command(repo=repo, label=label, limit=limit)
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-        payload = json.loads(result.stdout or "[]")
-        if not isinstance(payload, list):
-            raise ValueError(f"Expected a JSON list from {' '.join(command)}")
-        rows_by_label[label] = [row for row in payload if isinstance(row, dict)]
+        rows_by_label[label] = _run_search_command(command)
     return rows_by_label
 
 
@@ -203,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         stale_issues = collect_stale_issues(rows_by_label, watched_labels=labels)
         report = build_report(repo=args.repo, checked_labels=labels, stale_issues=stale_issues)
-    except (json.JSONDecodeError, OSError, subprocess.CalledProcessError, ValueError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         _dump_json(
             {
                 "schema": "closed_state_label_hygiene.v1",

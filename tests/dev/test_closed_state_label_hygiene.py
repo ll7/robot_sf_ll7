@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 
 import pytest
 
@@ -143,3 +144,45 @@ def test_main_returns_nonzero_json_summary_without_live_github(
     assert payload["ok"] is False
     assert payload["stale_count"] == 1
     assert payload["issues"][0]["number"] == 12
+
+
+def test_run_search_command_reports_missing_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Missing gh should produce an actionable runtime error."""
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError("gh")
+
+    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="GitHub CLI 'gh' was not found"):
+        closed_state_label_hygiene._run_search_command(["gh", "search", "issues"])
+
+
+def test_run_search_command_preserves_captured_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Captured gh stderr should appear in the machine-readable error path."""
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=("gh", "search", "issues"),
+            stderr="authentication required",
+        )
+
+    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="authentication required"):
+        closed_state_label_hygiene._run_search_command(["gh", "search", "issues"])
+
+
+def test_run_search_command_reports_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Malformed gh output should be diagnosed before row filtering."""
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=("gh",), returncode=0, stdout="not-json")
+
+    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="Failed to parse GitHub CLI JSON output"):
+        closed_state_label_hygiene._run_search_command(["gh", "search", "issues"])

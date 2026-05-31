@@ -17,10 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
 _CONTEXT_README = Path("docs/context/README.md")
+_CONTEXT_CATALOG = Path("docs/context/catalog.yaml")
 _TOP_LEVEL_CONTEXT_DIR = Path("docs/context")
 _EVIDENCE_DIR = Path("docs/context/evidence")
 _ABSOLUTE_LOCAL_PATH_RE = re.compile(r"(?<!\w)(/home/[^\s`'\"<>)\]}]+|/Users/[^\s`'\"<>)\]}]+)")
@@ -38,6 +41,8 @@ _LINE_START_ISSUE_REF_RE = re.compile(
     r"#(?P<number>\d+)\b"
 )
 _FENCE_START_RE = re.compile(r"^([`~]{3,})")
+_CATALOG_STATUSES = {"current", "historical", "superseded", "evidence", "proposal"}
+_CATALOG_DEFAULT_FRESHNESS = {"maintained", "dated", "policy", "evidence"}
 
 
 @dataclass(frozen=True)
@@ -246,6 +251,224 @@ def _evidence_path_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     return diagnostics
 
 
+def _load_yaml(path: Path) -> object:
+    """Load YAML from a repository path."""
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _catalog_path(raw_path: object) -> Path | None:
+    """Return a catalog path value when it is a non-empty string."""
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    path = Path(raw_path.strip())
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return path
+
+
+def _catalog_value_keys(raw_values: object, *, default_values: set[str]) -> set[str]:
+    """Return declared catalog vocabulary keys, falling back to default values."""
+    if not isinstance(raw_values, dict):
+        return default_values
+    keys = {key for key in raw_values if isinstance(key, str) and key.strip()}
+    return keys or default_values
+
+
+def _catalog_entry_path_diagnostics(
+    entry: dict[object, object],
+    *,
+    entry_path: str,
+    catalog_path: Path,
+    repo_root: Path,
+    seen_paths: set[Path],
+) -> tuple[Path | None, list[Diagnostic]]:
+    """Validate and return a catalog row path."""
+    diagnostics: list[Diagnostic] = []
+    path = _catalog_path(entry.get("path"))
+    if path is None:
+        diagnostics.append(Diagnostic(catalog_path, f"{entry_path}.path is required"))
+        return None, diagnostics
+    if path in seen_paths:
+        diagnostics.append(
+            Diagnostic(catalog_path, f"{entry_path}.path duplicates {path.as_posix()}")
+        )
+    seen_paths.add(path)
+    if not (repo_root / path).exists():
+        diagnostics.append(
+            Diagnostic(catalog_path, f"{entry_path}.path does not exist: {path.as_posix()}")
+        )
+    return path, diagnostics
+
+
+def _catalog_entry_metadata_diagnostics(
+    entry: dict[object, object],
+    *,
+    entry_path: str,
+    catalog_path: Path,
+    status_values: set[str],
+    freshness_values: set[str],
+) -> list[Diagnostic]:
+    """Validate status and freshness metadata for a catalog row."""
+    diagnostics: list[Diagnostic] = []
+    status = entry.get("status")
+    if status not in status_values:
+        diagnostics.append(
+            Diagnostic(
+                catalog_path,
+                f"{entry_path}.status must be one of {', '.join(sorted(status_values))}",
+            )
+        )
+
+    freshness = entry.get("freshness")
+    if not isinstance(freshness, str) or not freshness.strip():
+        diagnostics.append(Diagnostic(catalog_path, f"{entry_path}.freshness is required"))
+    elif freshness not in freshness_values:
+        diagnostics.append(
+            Diagnostic(
+                catalog_path,
+                f"{entry_path}.freshness must be one of {', '.join(sorted(freshness_values))}",
+            )
+        )
+    return diagnostics
+
+
+def _catalog_entry_replacement_diagnostics(
+    entry: dict[object, object],
+    *,
+    entry_path: str,
+    catalog_path: Path,
+    repo_root: Path,
+) -> list[Diagnostic]:
+    """Validate superseded replacement metadata for a catalog row."""
+    if entry.get("status") != "superseded":
+        return []
+    replacement = _catalog_path(entry.get("replacement"))
+    if replacement is None:
+        return [
+            Diagnostic(catalog_path, f"{entry_path}.replacement is required for superseded entries")
+        ]
+    if not (repo_root / replacement).exists():
+        return [
+            Diagnostic(
+                catalog_path,
+                f"{entry_path}.replacement does not exist: {replacement.as_posix()}",
+            )
+        ]
+    return []
+
+
+def _catalog_entry_evidence_diagnostics(
+    entry: dict[object, object],
+    *,
+    path: Path | None,
+    entry_path: str,
+    catalog_path: Path,
+    repo_root: Path,
+) -> list[Diagnostic]:
+    """Validate durable evidence paths referenced by catalog evidence rows."""
+    if entry.get("status") != "evidence" or path is None or not (repo_root / path).is_file():
+        return []
+
+    text = _read_text(repo_root / path)
+    scan_text = _strip_fenced_code_blocks(text) if path.suffix == ".md" else text
+    diagnostics: list[Diagnostic] = []
+    if _OUTPUT_PATH_RE.search(scan_text):
+        diagnostics.append(
+            Diagnostic(
+                catalog_path,
+                f"{entry_path}.path is evidence and points to ignored output/ artifacts",
+            )
+        )
+    if _ABSOLUTE_LOCAL_PATH_RE.search(scan_text):
+        diagnostics.append(
+            Diagnostic(
+                catalog_path,
+                f"{entry_path}.path is evidence and contains absolute local filesystem paths",
+            )
+        )
+    return diagnostics
+
+
+def _context_catalog_diagnostics(catalog_path: Path, *, repo_root: Path) -> list[Diagnostic]:
+    """Validate the curated context catalog sidecar."""
+    diagnostics: list[Diagnostic] = []
+    full_catalog_path = repo_root / catalog_path
+    if not full_catalog_path.exists():
+        return diagnostics
+
+    payload = _load_yaml(full_catalog_path)
+    if not isinstance(payload, dict):
+        return [Diagnostic(catalog_path, "context catalog must be a YAML mapping")]
+    if payload.get("version") != 1:
+        diagnostics.append(Diagnostic(catalog_path, "context catalog version must be 1"))
+
+    status_values = _catalog_value_keys(
+        payload.get("status_values"), default_values=_CATALOG_STATUSES
+    )
+    missing_statuses = _CATALOG_STATUSES - status_values
+    if missing_statuses:
+        diagnostics.append(
+            Diagnostic(
+                catalog_path,
+                f"context catalog status_values is missing: {', '.join(sorted(missing_statuses))}",
+            )
+        )
+    freshness_values = _catalog_value_keys(
+        payload.get("freshness_values"), default_values=_CATALOG_DEFAULT_FRESHNESS
+    )
+
+    entries = payload.get("entries")
+    if not isinstance(entries, list) or not entries:
+        diagnostics.append(
+            Diagnostic(catalog_path, "context catalog entries must be a non-empty list")
+        )
+        return diagnostics
+
+    seen_paths: set[Path] = set()
+    for index, entry in enumerate(entries):
+        entry_path = f"{catalog_path.as_posix()}:entries[{index}]"
+        if not isinstance(entry, dict):
+            diagnostics.append(Diagnostic(catalog_path, f"{entry_path} must be a mapping"))
+            continue
+
+        path, path_diagnostics = _catalog_entry_path_diagnostics(
+            entry,
+            entry_path=entry_path,
+            catalog_path=catalog_path,
+            repo_root=repo_root,
+            seen_paths=seen_paths,
+        )
+        diagnostics.extend(path_diagnostics)
+        diagnostics.extend(
+            _catalog_entry_metadata_diagnostics(
+                entry,
+                entry_path=entry_path,
+                catalog_path=catalog_path,
+                status_values=status_values,
+                freshness_values=freshness_values,
+            )
+        )
+        diagnostics.extend(
+            _catalog_entry_replacement_diagnostics(
+                entry,
+                entry_path=entry_path,
+                catalog_path=catalog_path,
+                repo_root=repo_root,
+            )
+        )
+        diagnostics.extend(
+            _catalog_entry_evidence_diagnostics(
+                entry,
+                path=path,
+                entry_path=entry_path,
+                catalog_path=catalog_path,
+                repo_root=repo_root,
+            )
+        )
+
+    return diagnostics
+
+
 def _validation_phrase_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     """Flag notes that claim no validation ran while also listing executed commands."""
     if not _is_within_dir(path, _TOP_LEVEL_CONTEXT_DIR):
@@ -335,6 +558,7 @@ def _collect_diagnostics(
                 context_readme_text=_read_text(context_readme),
             )
         )
+    diagnostics.extend(_context_catalog_diagnostics(_CONTEXT_CATALOG, repo_root=repo_root))
 
     for changed in changed_list:
         full_path = repo_root / changed.path

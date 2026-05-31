@@ -29,6 +29,11 @@ context surface before reading issue history in bulk.
 When updating a note, mark stale or superseded claims in place instead of stacking contradictory
 paragraphs.
 
+Machine-readable sidecar: [catalog.yaml](catalog.yaml) records the curated entry points below with
+`status` and `freshness` metadata. Validate it with
+`uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml`
+or the normal diff wrapper.
+
 ## Pruning And Refactoring Rules
 
 - Do not delete or rewrite the full context corpus in the first pass.

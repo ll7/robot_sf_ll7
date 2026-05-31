@@ -114,6 +114,8 @@ knowledge, not every transient iteration detail.
   [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
 * Issue #1508 CARLA native/aligned eligibility audit:
   [issue_1508_carla_native_aligned_eligibility.md](issue_1508_carla_native_aligned_eligibility.md)
+* Issue #1509 CARLA native fixture certification:
+  [issue_1509_carla_native_fixture_certification.md](issue_1509_carla_native_fixture_certification.md)
 * Issue #1894 SLURM job finalizer:
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #1573 Root-Layout Inventory:

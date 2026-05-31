@@ -64,11 +64,11 @@ ensure_module_command() {
 }
 
 run_in_allocation() {
-  if command -v srun >/dev/null 2>&1; then
+  if [[ "${ISSUE1470_USE_SRUN:-0}" == "1" ]] && command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "[issue1470] Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
     srun --cpu_bind=cores --gpus-per-node=1 "$@"
   else
-    echo "[issue1470] srun unavailable; running directly in the batch allocation." >&2
+    echo "[issue1470] Running directly inside the batch allocation; set ISSUE1470_USE_SRUN=1 to opt into srun." >&2
     "$@"
   fi
 }

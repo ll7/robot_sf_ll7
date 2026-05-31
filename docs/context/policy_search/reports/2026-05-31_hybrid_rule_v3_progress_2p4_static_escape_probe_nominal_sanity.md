@@ -15,8 +15,8 @@ Keeping the 2.4 m/s progress envelope while enabling the static-escape and recen
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/policy_search/nominal_sanity_matrix.yaml`
 - Seed manifest: `configs/policy_search/nominal_sanity_seeds.yaml`
-- Summary JSON: `output/policy_search/hybrid_rule_v3_progress_2p4_static_escape_probe_nominal_issue1834_final/summary.json`
-- Git commit: `fd66bceb514418f6250bbdc601962c2478dd9b99`
+- Summary JSON: `output/policy_search/hybrid_rule_v3_progress_2p4_static_escape_probe_nominal_pr1837_current_head/summary.json`
+- Git commit: `2a14055d5621522f6663b20d72784bd37b3b14e5`
 
 ## Aggregate Results
 
@@ -39,13 +39,13 @@ Keeping the 2.4 m/s progress envelope while enabling the static-escape and recen
 
 ## Issue 1834 Interpretation
 
-This probe is diagnostic-only and should not be promoted from the nominal-sanity result. It preserves
-the original `hybrid_rule_v3_progress_2p4` nominal success rate recorded in
+This current-head rerun keeps the probe diagnostic-only and should not be used for promotion. It
+preserves the original `hybrid_rule_v3_progress_2p4` nominal success rate recorded in
 `docs/context/policy_search/experiment_ledger.md` (`0.2222`) and keeps collision rate at `0.0000`,
 but it increases nominal near-miss rate from the ledger value (`0.1667`) to `0.2778` while
 `timeout_low_progress` remains the dominant failure mode. The bounded static-escape/recenter
-mechanism is therefore wired and runnable, but it has not yet repaired the 2.4 m/s progress
-regression.
+mechanism is wired and runnable at PR head `2a14055d5621522f6663b20d72784bd37b3b14e5`, but it has
+not repaired the 2.4 m/s progress regression.
 
 ## Claim Boundary
 

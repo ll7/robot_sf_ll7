@@ -15,8 +15,8 @@ Keeping the 2.4 m/s progress envelope while enabling the static-escape and recen
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/hybrid_rule_v3_progress_2p4_static_escape_probe_smoke_issue1834/summary.json`
-- Git commit: `fd66bceb514418f6250bbdc601962c2478dd9b99`
+- Summary JSON: `output/policy_search/hybrid_rule_v3_progress_2p4_static_escape_probe_smoke_pr1837_current_head/summary.json`
+- Git commit: `2a14055d5621522f6663b20d72784bd37b3b14e5`
 
 ## Aggregate Results
 

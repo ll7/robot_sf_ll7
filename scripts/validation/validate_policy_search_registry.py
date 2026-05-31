@@ -52,10 +52,11 @@ def _is_missing(value: Any) -> bool:
 
 def _repo_root_for(path: Path) -> Path:
     """Return the nearest repository root, falling back to the registry directory."""
-    for parent in [path.resolve().parent, *path.resolve().parents]:
+    registry_dir = path.resolve().parent
+    for parent in (registry_dir, *registry_dir.parents):
         if (parent / ".git").exists():
             return parent
-    return path.resolve().parent
+    return registry_dir
 
 
 def _resolve_repo_path(repo_root: Path, raw_path: Any) -> Path | None:
@@ -158,28 +159,32 @@ def _load_known_names(
     payload: dict[str, Any],
     *,
     repo_root: Path,
-) -> None:
-    """Load known promotion gates and stages into private payload keys."""
+) -> tuple[set[str], set[str]]:
+    """Load known promotion gates and stages from registry support files."""
+    known_gates: set[str] = set()
+    known_stages: set[str] = set()
+
     gates_path = _resolve_repo_path(repo_root, payload.get("promotion_gates"))
     if gates_path is not None and gates_path.exists():
         gates_payload = _load_yaml(gates_path)
         gates = gates_payload.get("gates") if isinstance(gates_payload, dict) else None
         if isinstance(gates, dict):
-            payload["_known_promotion_gates"] = set(gates)
+            known_gates = set(gates)
 
     funnel_path = _resolve_repo_path(repo_root, payload.get("funnel_config"))
     if funnel_path is not None and funnel_path.exists():
         funnel_payload = _load_yaml(funnel_path)
         stages = funnel_payload.get("stages") if isinstance(funnel_payload, dict) else None
         if isinstance(stages, dict):
-            payload["_known_stages"] = set(stages)
+            known_stages = set(stages)
+
+    return known_gates, known_stages
 
 
 def _validate_top_level(
     payload: Any,
     *,
     issues: list[RegistryIssue],
-    registry_path: Path,
     repo_root: Path,
     as_of: date,
     default_max_age_days: int,
@@ -209,8 +214,6 @@ def _validate_top_level(
         issues.append(RegistryIssue("candidates", "must be a non-empty mapping"))
         return {}
 
-    _load_known_names(payload, repo_root=repo_root)
-    del registry_path
     return dict(candidates)
 
 
@@ -294,7 +297,9 @@ def _validate_slurm_row(
         repo_root=repo_root,
     )
     if row.get("training_required") is not True:
-        issues.append(RegistryIssue(f"{prefix}.training_required", "must be true for SLURM handoff"))
+        issues.append(
+            RegistryIssue(f"{prefix}.training_required", "must be true for SLURM handoff")
+        )
 
     packet_path = _resolve_repo_path(repo_root, row.get("launch_packet_config_path"))
     if packet_path is not None and packet_path.exists():
@@ -384,13 +389,11 @@ def validate_registry(
     candidates = _validate_top_level(
         payload,
         issues=issues,
-        registry_path=registry_path,
         repo_root=repo_root,
         as_of=as_of or _current_utc_date(),
         default_max_age_days=max_age_days,
     )
-    known_gates = payload_mapping.get("_known_promotion_gates", set())
-    known_stages = payload_mapping.get("_known_stages", set())
+    known_gates, known_stages = _load_known_names(payload_mapping, repo_root=repo_root)
     for candidate_id, row in candidates.items():
         _validate_candidate(
             issues,

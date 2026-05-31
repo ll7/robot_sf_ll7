@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 from textwrap import dedent
 
-from scripts.validation.validate_policy_search_registry import validate_registry
+from scripts.validation.validate_policy_search_registry import _load_known_names, validate_registry
 
 
 def _write(path: Path, text: str) -> None:
@@ -105,6 +105,24 @@ def test_valid_registry_fixture_passes(tmp_path: Path) -> None:
     issues = validate_registry(registry, as_of=date(2026, 5, 31))
 
     assert issues == []
+
+
+def test_known_names_loader_returns_sets_without_mutating_payload(tmp_path: Path) -> None:
+    """Known stage and gate loading should not add private keys to the registry payload."""
+    _write_support_files(tmp_path)
+    payload = {
+        "funnel_config": "configs/policy_search/funnel.yaml",
+        "promotion_gates": "configs/policy_search/promotion_gates.yaml",
+    }
+
+    known_gates, known_stages = _load_known_names(payload, repo_root=tmp_path)
+
+    assert known_gates == {"tier_b"}
+    assert known_stages == {"smoke", "nominal_sanity"}
+    assert payload == {
+        "funnel_config": "configs/policy_search/funnel.yaml",
+        "promotion_gates": "configs/policy_search/promotion_gates.yaml",
+    }
 
 
 def test_missing_implemented_fields_are_reported(tmp_path: Path) -> None:

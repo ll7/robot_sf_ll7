@@ -14,10 +14,7 @@ from robot_sf.benchmark.learned_policy_transfer_metadata import (
 )
 
 FIXTURE_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "learned_policy_transfer_benchmark"
-    / "v1"
+    Path(__file__).resolve().parents[1] / "fixtures" / "learned_policy_transfer_benchmark" / "v1"
 )
 
 

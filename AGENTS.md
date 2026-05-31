@@ -44,7 +44,9 @@ Treat the following files as the repository-native context stack for Agent-style
   and GitHub agent sources, mirrored into tool-specific compatibility paths when possible.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
 - `.understand-anything/knowledge-graph.json`: shared codebase knowledge graph for interactive
-  navigation; see `docs/ai/understand_anything.md` before regenerating or updating it.
+  navigation through the Understand-Anything dashboard/chat tools; see
+  `docs/ai/understand_anything.md` before reading the raw large JSON, regenerating it, or updating
+  it.
 
 Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments, and avoid loading broad context-note indexes unless the task actually needs them.
 

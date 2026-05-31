@@ -161,6 +161,8 @@ knowledge, not every transient iteration detail.
   [issue_1674_topology_hypothesis_diagnostics.md](issue_1674_topology_hypothesis_diagnostics.md)
 * Issue #1675 learned risk-surface interface:
   [issue_1675_learned_risk_surface_interface.md](issue_1675_learned_risk_surface_interface.md)
+* Issue #1720 learned-policy roadmap and issue routing:
+  [issue_1720_learned_policy_roadmap.md](issue_1720_learned_policy_roadmap.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:

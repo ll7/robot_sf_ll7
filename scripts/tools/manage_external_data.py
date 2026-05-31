@@ -32,6 +32,7 @@ class RequiredPath:
     pattern: str
     kind: str
     description: str
+    group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,59 @@ ASSETS: tuple[AssetSpec, ...] = (
         ),
         related_issues=(1456, 562),
     ),
+    AssetSpec(
+        asset_id="amv-calibration",
+        title="AMV calibration source provenance",
+        expected_local_path=REPO_ROOT / "output" / "external_data" / "amv_calibration",
+        source_url="https://github.com/ll7/robot_sf_ll7/issues/1585",
+        source_note=(
+            "Local-only accepted source bundle for AMV actuation calibration provenance. "
+            "Acceptable source classes are an official platform/controller specification, a "
+            "maintainer-accepted platform-class source, or a command-response trace bundle."
+        ),
+        license_note=(
+            "Access and redistribution depend on the selected source. Private traces and vendor "
+            "documents must stay local unless explicit redistribution rights are recorded."
+        ),
+        access_note=(
+            "Manual provenance handoff only. Stage the accepted source file or trace bundle after "
+            "#1585 identifies it; this helper records checksums and access notes but does not "
+            "promote synthetic AMV diagnostics into calibrated evidence."
+        ),
+        required_paths=(
+            RequiredPath(
+                pattern="**/*.json",
+                kind="file",
+                description="Accepted JSON manifest, official spec extract, or trace metadata.",
+                group="source",
+            ),
+            RequiredPath(
+                pattern="**/*.yaml",
+                kind="file",
+                description="Accepted YAML manifest, official spec extract, or trace metadata.",
+                group="source",
+            ),
+            RequiredPath(
+                pattern="**/*.yml",
+                kind="file",
+                description="Accepted YAML manifest, official spec extract, or trace metadata.",
+                group="source",
+            ),
+            RequiredPath(
+                pattern="**/*.csv",
+                kind="file",
+                description="Accepted command-response trace table.",
+                group="source",
+            ),
+            RequiredPath(
+                pattern="**/*.pdf",
+                kind="file",
+                description="Accepted official specification document.",
+                group="source",
+            ),
+        ),
+        related_issues=(1585, 1559),
+    ),
 )
 
 
@@ -159,6 +213,14 @@ def _match_required_path(source_root: Path, required: RequiredPath) -> list[Path
             if path.is_dir() and any(child.is_file() for child in path.rglob("*"))
         ]
     raise ExternalDataError(f"Unsupported required path kind: {required.kind}")
+
+
+def _required_groups(asset: AssetSpec) -> dict[str, list[RequiredPath]]:
+    """Group required paths; entries in the same group are alternatives."""
+    groups: dict[str, list[RequiredPath]] = {}
+    for required in asset.required_paths:
+        groups.setdefault(required.group or required.pattern, []).append(required)
+    return groups
 
 
 def _relative_to_repo(path: Path, repo_root: Path) -> Path | None:
@@ -242,6 +304,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
                 "pattern": required.pattern,
                 "kind": required.kind,
                 "description": required.description,
+                "group": required.group,
             }
             for required in asset.required_paths
         ],
@@ -260,12 +323,18 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
 
     matched_paths: list[Path] = []
     missing: list[str] = []
-    for required in asset.required_paths:
-        matches = _match_required_path(root, required)
-        if not matches:
-            missing.append(required.pattern)
+    for group_name, requirements in _required_groups(asset).items():
+        group_matches: list[Path] = []
+        for required in requirements:
+            group_matches.extend(_match_required_path(root, required))
+        if not group_matches:
+            if len(requirements) == 1:
+                missing.append(requirements[0].pattern)
+            else:
+                alternatives = ", ".join(required.pattern for required in requirements)
+                missing.append(f"{group_name}: one of {alternatives}")
             continue
-        matched_paths.extend(matches)
+        matched_paths.extend(group_matches)
 
     report["missing_required_paths"] = missing
     report["matched_required_paths"] = [
@@ -464,6 +533,7 @@ def _handle_explain(args: argparse.Namespace) -> int:
             "pattern": required.pattern,
             "kind": required.kind,
             "description": required.description,
+            "group": required.group,
         }
         for required in asset.required_paths
     ]

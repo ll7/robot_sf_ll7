@@ -1,0 +1,51 @@
+version: 1
+policy: issue_1775_promoted_config_local_artifact_guard
+follow_up_issue: https://github.com/ll7/robot_sf_ll7/issues/1764
+rule: >
+  A promoted config surface is a checked-in algorithm or baseline YAML that is cited by
+  camera-ready, paper-facing, or benchmark-baseline workflows as a reusable benchmark input.
+  These configs must resolve learned checkpoints through durable registry ids or artifact
+  pointers, not direct worktree-local output/ model paths.
+promoted_configs:
+  - path: configs/algos/gap_prediction_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/grid_route_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/guarded_ppo_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/hrvo_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/hybrid_portfolio_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/mppi_social_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/ppo_v3_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/prediction_planner_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/prediction_planner_camera_ready_xl_ego.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/predictive_mppi_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/risk_dwa_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/safety_barrier_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/sicnav_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/stream_gap_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/algos/teb_commitment_camera_ready.yaml
+    reason: Camera-ready benchmark algorithm config.
+  - path: configs/baselines/ppo_15m_grid_socnav.yaml
+    reason: Canonical PPO benchmark/evaluation baseline.
+  - path: configs/baselines/ppo_15m_grid_socnav_holonomic.yaml
+    reason: Strict holonomic camera-ready PPO baseline profile.
+  - path: configs/baselines/ppo_issue_576_br06_v2_15m.yaml
+    reason: Paper-baseline gate config kept for issue-576 BR-06 closeout.
+  - path: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
+    reason: Issue-791 Wave-5 leader benchmark baseline.
+  - path: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_portable.yaml
+    reason: Portable issue-791 Wave-5 leader benchmark baseline.
+  - path: configs/baselines/ppo_v10_carry_forward_27dbe5xu.yaml
+    reason: Carry-forward benchmark/evaluation PPO candidate.

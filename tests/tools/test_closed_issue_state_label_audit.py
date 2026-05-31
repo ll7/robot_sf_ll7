@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import Any
 
 from scripts.tools import closed_issue_state_label_audit as audit
@@ -119,3 +120,57 @@ def test_cli_exits_nonzero_and_emits_machine_readable_failure_summary(monkeypatc
     assert summary["stale_issue_count"] == 1
     assert summary["stale_label_counts"]["state:blocked"] == 1
     assert summary["mutation_plan"] == []
+
+
+def test_run_gh_json_reports_missing_gh(monkeypatch) -> None:
+    """A missing GitHub CLI should fail with an actionable message."""
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError("gh")
+
+    monkeypatch.setattr(audit.subprocess, "run", fake_run)
+
+    try:
+        audit._run_gh_json(("gh", "issue", "list"))
+    except RuntimeError as err:
+        assert "GitHub CLI 'gh' was not found" in str(err)
+    else:
+        raise AssertionError("expected missing gh to raise RuntimeError")
+
+
+def test_run_gh_json_reports_captured_stderr(monkeypatch) -> None:
+    """Captured gh stderr should be preserved when a command fails."""
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=("gh", "issue", "list"),
+            stderr="authentication required",
+        )
+
+    monkeypatch.setattr(audit.subprocess, "run", fake_run)
+
+    try:
+        audit._run_gh_json(("gh", "issue", "list"))
+    except RuntimeError as err:
+        message = str(err)
+        assert "GitHub CLI command failed" in message
+        assert "authentication required" in message
+    else:
+        raise AssertionError("expected failing gh command to raise RuntimeError")
+
+
+def test_run_gh_json_reports_invalid_json(monkeypatch) -> None:
+    """Non-JSON gh output should fail before callers inspect the payload shape."""
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=("gh",), returncode=0, stdout="not-json")
+
+    monkeypatch.setattr(audit.subprocess, "run", fake_run)
+
+    try:
+        audit._run_gh_json(("gh", "issue", "list"))
+    except RuntimeError as err:
+        assert "Failed to parse GitHub CLI JSON output" in str(err)
+    else:
+        raise AssertionError("expected invalid JSON to raise RuntimeError")

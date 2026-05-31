@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from collections import defaultdict
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -73,8 +74,24 @@ def build_query_plan(
 
 def _run_gh_json(command: tuple[str, ...]) -> list[dict[str, Any]]:
     """Run a gh JSON command and return its decoded list payload."""
-    completed = subprocess.run(command, check=True, capture_output=True, text=True)
-    payload = json.loads(completed.stdout)
+    try:
+        completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError as err:
+        raise RuntimeError(
+            "GitHub CLI 'gh' was not found; install gh or ensure it is on PATH."
+        ) from err
+    except subprocess.CalledProcessError as err:
+        stderr = (err.stderr or "").strip()
+        details = f": {stderr}" if stderr else ""
+        raise RuntimeError(f"GitHub CLI command failed ({' '.join(command)}){details}") from err
+
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as err:
+        raise RuntimeError(
+            f"Failed to parse GitHub CLI JSON output ({' '.join(command)}): {err.msg}"
+        ) from err
+
     if not isinstance(payload, list):
         raise RuntimeError(f"GitHub command did not return a JSON list: {' '.join(command)}")
     if not all(isinstance(item, dict) for item in payload):
@@ -113,7 +130,7 @@ def audit_closed_issue_state_labels(
     runner = _run_gh_json if runner is None else runner
     query_plan = build_query_plan(repo=repo, labels=labels, limit=limit)
     issues_by_number: dict[int, dict[str, Any]] = {}
-    stale_labels_by_number: dict[int, set[str]] = {}
+    stale_labels_by_number: defaultdict[int, set[str]] = defaultdict(set)
 
     for command in query_plan:
         queried_label = command[command.index("--label") + 1]
@@ -123,7 +140,7 @@ def audit_closed_issue_state_labels(
                 continue
             number = _issue_number(issue_payload)
             issues_by_number[number] = issue_payload
-            stale_labels_by_number.setdefault(number, set()).add(queried_label)
+            stale_labels_by_number[number].add(queried_label)
 
     stale_issues = tuple(
         StaleClosedIssue(

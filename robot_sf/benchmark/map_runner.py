@@ -114,6 +114,10 @@ from robot_sf.planner.kinematics_model import (
     KinematicsModel,
     resolve_benchmark_kinematics_model,
 )
+from robot_sf.planner.learned_risk_surface import (
+    RiskSurfacePlannerAdapter,
+    build_local_risk_surface_spec,
+)
 from robot_sf.planner.lidar_occupancy import (
     LidarOccupancyPlannerAdapter,
     build_lidar_occupancy_config,
@@ -1382,6 +1386,37 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="RiskDWAPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key in {"risk_surface_dwa", "risk_surface_dwa_v0"}:
+        risk_surface_cfg = (
+            algo_config.get("risk_surface")
+            if isinstance(algo_config.get("risk_surface"), dict)
+            else {}
+        )
+        risk_dwa_cfg = (
+            algo_config.get("risk_dwa") if isinstance(algo_config.get("risk_dwa"), dict) else {}
+        )
+        adapter = RiskSurfacePlannerAdapter(
+            spec=build_local_risk_surface_spec(risk_surface_cfg),
+            planner=RiskDWAPlannerAdapter(config=build_risk_dwa_config(risk_dwa_cfg)),
+        )
+        meta["risk_surface_planner"] = {
+            "status": "enabled",
+            "producer": "deterministic_pedestrian_risk_surface",
+            "wrapped_planner": "risk_dwa",
+            "benchmark_strength": False,
+            "claim_boundary": "exploratory_smoke_only",
+        }
+        return _build_adapter_policy(
+            algo_key="risk_surface_dwa",
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="RiskSurfacePlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="deterministic_risk_surface_fixture_not_benchmark_evidence",
         )
 
     if algo_key in {"lidar_social_force", "lidar_tracked_social_force"}:

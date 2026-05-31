@@ -1,0 +1,12 @@
+queue_audit:
+  schema: queue_audit.v1
+  query_used:
+  - gh issue list ...
+  issues:
+  - issue: '#1234'
+    classification: parent_or_epic | analysis_only | blocked_external | blocked_slurm | covered_by_pr | ready_local | ambiguous | too_broad | blocked_other
+    implementable_now: true | false
+    recommended_action: implement | split_parent | clarify | mark_blocked | wait_for_pr | synthesize | skip
+    rationale: string
+    linked_pr: '#optional'
+  best_next_action: string

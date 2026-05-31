@@ -46,7 +46,7 @@ def test_aggregate_metrics_structure(synthetic_episode_record):
     assert groups and len(groups) == 1
     g = groups[0]
     assert g.archetype == "crossing" and g.density == "low"
-    # Required placeholder metrics present
+    # Required smoke-path aggregate metrics present
     for key in [
         "collision_rate",
         "success_rate",

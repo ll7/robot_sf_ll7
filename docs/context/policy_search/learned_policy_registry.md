@@ -181,6 +181,9 @@ metadata before entering the runnable candidate registry.
   `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md`.
 - Diffusion Policy / Consistency Policy / Diffuser families:
   `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
+- Foundation-model / VLA / multimodal navigation:
+  `docs/context/policy_search/2026-05-30_foundation_model_readiness_issue_1626.md`.
+  `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md` and
   `docs/context/policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md`.
 - DreamerV3/world-model navigation:
   `docs/context/issue_1190_dreamerv3_checkpoint_import_boundary.md`.

@@ -58,6 +58,10 @@ Use it for three things only:
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
 - `2026-05-20_navdp_nomad_diffusion_assessment.md`: Issue #1356 Assessment of NavDP and NoMaD
   Diffusion-Navigation Source Contracts, with Monitor-Only Verdicts for Robot SF Local-Planner Use.
+- `2026-05-30_diffusion_policy_feasibility_issue_1621.md`: Issue #1621 broader feasibility
+  assessment for diffusion, consistency, and trajectory-diffusion local-navigation policy families;
+  current verdict is no external adapter and monitor/source-first until a Robot SF-compatible
+  observation/action contract and latency proof exist.
 - `../issue_1318_teb_corridor_deadlock_eval.md`: issue #1318 classic-merging corridor-deadlock
   comparison showing current in-repo TEB collides on the selected #1022 seeds while the hybrid-rule
   incumbent solves four of five.
@@ -67,6 +71,9 @@ Use it for three things only:
 - `2026-05-30_external_learned_policy_ranking_issue_1620.md`: Issue #1620 ranked external
   learned-policy shortlist across graph/social-RL, ROSNav, diffusion/visual, transformer, VLA, and
   mapless-baseline families, with source/checkpoint/adapter-fit verdicts and follow-up routing.
+- `2026-05-30_foundation_model_readiness_issue_1626.md`: Issue #1626 readiness boundary for
+  foundation-model, VLA, and multimodal navigation policy families; current verdict is interface
+  design or monitor-only, not model integration.
 - `../issue_1368_neupan_point_obstacle_assessment.md`: source-side NeuPAN assessment; current
   verdict is monitor/source-side only because GPL-3.0, source-environment, runtime, and
   point-obstacle/social-claim boundaries block a Robot SF adapter for now.

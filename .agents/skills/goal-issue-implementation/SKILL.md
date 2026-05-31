@@ -139,6 +139,33 @@ hardware, SLURM, CARLA, private artifacts, checkpoint aliases, datasets, or a cl
 mark it blocked or send it to issue clarification instead of counting the queue as empty. Keep this
 audit read-only until the orchestrator has reviewed the proposed label/body changes.
 
+Emit the compact `queue_audit.v1` shape alongside the prose handoff when the queue is exhausted or
+nearly exhausted. Each row must include:
+
+- issue number,
+- classification,
+- `implementable_now`,
+- recommended action.
+
+Allowed classifications:
+
+- `parent_or_epic`: parent, epic, decision, or umbrella issue that should produce a child issue,
+- `analysis_only`: synthesis, interpretation, or research-only work that is not an implementation
+  PR unless the run explicitly targets synthesis,
+- `blocked_external`: requires unavailable datasets, private artifacts, external services, CARLA,
+  or non-local credentials,
+- `blocked_slurm`: requires SLURM/Auxme or another unavailable execution environment,
+- `covered_by_pr`: already has an open PR or merged change covering the scope,
+- `ready_local`: clear, bounded, locally implementable issue,
+- `ambiguous`: needs one clarification before implementation routing,
+- `too_broad`: mixes multiple independently validatable PRs,
+- `blocked_other`: blocked for a reason not covered above, with rationale.
+
+Parent, epic, and analysis-only issues must not be reported as ready implementation work unless the
+run explicitly targets clarification, splitting, or synthesis. Blocked-external and blocked-SLURM
+issues must route to `mark_blocked`, `clarify`, or `skip` until the missing artifact, service,
+credential, or execution environment is actually available.
+
 If the final audit leaves only parent, epic, decision, or research issues that are not directly
 implementable, hand exactly one parent to `issue-splitter` instead of stopping with a prose-only
 report. The splitter should produce or create one `Next Implementable Child` only after duplicate
@@ -168,11 +195,63 @@ Queue exhaustion audit
   - clarify #1235 or split #1236 before claiming the implementation queue is exhausted.
 ```
 
-This is an illustrative report shape, not a required machine-readable schema. Prefer this compact
-summary in final handoffs and PR comments when the queue is genuinely exhausted. If a remaining
-issue only needs a clearer contract, route it to issue clarification. If a remaining issue bundles
-several independently validatable changes, create child issues with `gh-issue-creator` and leave the
-parent as the coordination issue instead of treating the bundle as unimplementable.
+Companion `queue_audit.v1` example:
+
+```yaml
+queue_audit:
+  schema: queue_audit.v1
+  query_used:
+    - gh issue list --state open --label state:ready --json number,title,labels,url --limit 100
+    - gh issue list --search "repo:ll7/robot_sf_ll7 is:issue is:open -label:state:ready -label:state:blocked -label:state:hold" --json number,title,labels,url --limit 100
+  issues:
+    - issue: "#1234"
+      classification: blocked_slurm
+      implementable_now: false
+      recommended_action: mark_blocked
+      rationale: needs SLURM/Auxme allocation
+    - issue: "#1235"
+      classification: ambiguous
+      implementable_now: false
+      recommended_action: clarify
+      rationale: acceptance criteria mix benchmark claim and exploratory probe
+    - issue: "#1236"
+      classification: too_broad
+      implementable_now: false
+      recommended_action: split_parent
+      rationale: path rewrite should split into fixture migration, docs migration, and validation
+    - issue: "#1237"
+      classification: covered_by_pr
+      implementable_now: false
+      recommended_action: wait_for_pr
+      rationale: open PR #1238 covers the scope
+    - issue: "#1239"
+      classification: ready_local
+      implementable_now: true
+      recommended_action: implement
+      rationale: bounded docs/tooling change with local validation path
+    - issue: "#1240"
+      classification: parent_or_epic
+      implementable_now: false
+      recommended_action: split_parent
+      rationale: umbrella issue needs a next implementable child
+    - issue: "#1241"
+      classification: analysis_only
+      implementable_now: false
+      recommended_action: synthesize
+      rationale: asks for evidence interpretation, not code or docs implementation
+    - issue: "#1242"
+      classification: blocked_external
+      implementable_now: false
+      recommended_action: mark_blocked
+      rationale: depends on unavailable licensed dataset assets
+  best_next_action: implement #1239, or split #1236 if no ready_local row remains
+```
+
+Use the prose summary for human readability and `queue_audit.v1` for repeatable comparison across
+runs. If a remaining issue only needs a clearer contract, route it to issue clarification. If a
+remaining issue bundles several independently validatable changes, create child issues with
+`gh-issue-creator` and leave the parent as the coordination issue instead of treating the bundle as
+unimplementable.
 
 Route remaining issues by their blocker:
 - Use `gh-issue-clarifier` when the issue intent, proof path, acceptance criteria, or ownership is
@@ -255,7 +334,8 @@ For each issue completed or stopped, report:
 
 When the queue exhausts, also report the final implementability audit result: remaining ready
 issues, remaining open issues missing `state:*`, any labels/body updates applied after review, and
-the command or query used to confirm the queue state.
+the command or query used to confirm the queue state. Include `queue_audit.v1` rows for exhausted
+or nearly exhausted queues so future agents can compare classifications across runs.
 
 ## When to use
 

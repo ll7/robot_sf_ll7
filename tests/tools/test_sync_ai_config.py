@@ -9,6 +9,18 @@ import pytest
 from scripts.tools import sync_ai_config
 
 
+def test_supported_ai_config_mirror_set_is_explicit() -> None:
+    """Only currently supported tool mirrors should be recreated by the sync set."""
+    assert sync_ai_config.LINK_SPECS == (
+        sync_ai_config.LinkSpec(".codex/skills", "../.agents/skills"),
+        sync_ai_config.LinkSpec(".opencode/skills", "../.agents/skills"),
+        sync_ai_config.LinkSpec(".codex/prompts", "../.agents/prompts/codex"),
+        sync_ai_config.LinkSpec(".github/prompts", "../.agents/prompts/github"),
+        sync_ai_config.LinkSpec(".github/agents", "../.agents/agents/github"),
+        sync_ai_config.LinkSpec(".gemini/commands", "../.agents/commands/gemini"),
+    )
+
+
 def test_check_link_accepts_expected_symlink(tmp_path: Path, monkeypatch) -> None:
     """An exact compatibility symlink should be accepted without errors."""
     monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)

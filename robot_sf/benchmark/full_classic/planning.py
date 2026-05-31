@@ -1,7 +1,4 @@
-"""Planning utilities for the Full Classic Interaction Benchmark.
-
-Currently placeholder functions; implemented across tasks T022-T024.
-"""
+"""Planning utilities for the Full Classic Interaction Benchmark."""
 
 from __future__ import annotations
 
@@ -33,7 +30,7 @@ def _validate_scenario_dicts(scenarios: list[dict]) -> None:
             raise ValueError(f"Scenario '{sc.get('name')}' metadata missing archetype/density")
 
 
-# Minimal placeholder dataclasses matching data-model (subset for scaffolding)
+# Minimal dataclasses matching the data-model subset used by current scaffolding.
 @dataclass
 class ScenarioDescriptor:  # duplicated light form; real version will live centrally later
     """Lightweight scenario description for planning and manifesting."""

@@ -46,8 +46,35 @@ profile: experimental
     )
     registered_config = tmp_path / "configs" / "baselines" / "registered.yaml"
     _write(registered_config, "model_id: durable_model\n")
+    source_only_config = tmp_path / "configs" / "baselines" / "source_only.yaml"
+    _write(source_only_config, "model_id: source_only_model\n")
+    run_id_only_config = tmp_path / "configs" / "baselines" / "run_id_only.yaml"
+    _write(run_id_only_config, "model_id: run_id_only_model\n")
     promoted_config = tmp_path / "configs" / "benchmarks" / "promoted.yaml"
     _write(promoted_config, "model_path: output/model_cache/promoted/model.zip\n")
+    matrix_config = tmp_path / "configs" / "baselines" / "example_matrix.yaml"
+    _write(
+        matrix_config,
+        """
+- id: demo
+  repeats: 1
+""".strip()
+        + "\n",
+    )
+    blocklist = tmp_path / "configs" / "baselines" / "local_model_artifact_blocklist.yaml"
+    _write(
+        blocklist,
+        """
+version: 1
+follow_up_issue: https://github.com/ll7/robot_sf_ll7/issues/1764
+blocked_references:
+  - path: configs/baselines/missing.yaml
+    field: model_path
+    value: output/models/missing/model.zip
+    reason: Synthetic missing checkpoint is local-only.
+""".strip()
+        + "\n",
+    )
     registry = tmp_path / "model" / "registry.yaml"
     _write(
         registry,
@@ -61,6 +88,10 @@ models:
       url: https://github.com/ll7/robot_sf_ll7/releases/download/artifact/models/durable.zip
       sha256: abc123
       size_bytes: 123
+  - model_id: source_only_model
+    public_artifact_source: github_release
+  - model_id: run_id_only_model
+    wandb_run_id: abc123
 """.strip()
         + "\n",
     )
@@ -80,8 +111,12 @@ promoted_configs:
         "present_config": present_config,
         "missing_config": missing_config,
         "registered_config": registered_config,
+        "source_only_config": source_only_config,
+        "run_id_only_config": run_id_only_config,
         "promoted_config": promoted_config,
+        "matrix_config": matrix_config,
         "registry": registry,
+        "blocklist": blocklist,
         "promoted_surfaces": promoted_surfaces,
     }
 
@@ -97,6 +132,8 @@ def test_plan_classifies_present_missing_registered_and_promoted_local_configs(
             paths["present_config"],
             paths["missing_config"],
             paths["registered_config"],
+            paths["source_only_config"],
+            paths["run_id_only_config"],
             paths["promoted_config"],
         ],
         repo_root=tmp_path,
@@ -116,12 +153,21 @@ def test_plan_classifies_present_missing_registered_and_promoted_local_configs(
     missing = rows["configs/baselines/missing.yaml"]
     assert missing["classification"] == "retire_candidate"
     assert missing["artifact"]["exists"] is False
+    assert missing["blocker_reason"] == "Synthetic missing checkpoint is local-only."
     assert "recover the checkpoint" in missing["action"]
 
     registered = rows["configs/baselines/registered.yaml"]
     assert registered["classification"] == "already_registered"
     assert registered["model_id"] == "durable_model"
     assert registered["registry_entry"]["public_artifact_source"] == "github_release"
+
+    source_only = rows["configs/baselines/source_only.yaml"]
+    assert source_only["classification"] == "manual_decision_required"
+    assert source_only["decision"] == "resolve_model_id_alias"
+
+    run_id_only = rows["configs/baselines/run_id_only.yaml"]
+    assert run_id_only["classification"] == "manual_decision_required"
+    assert run_id_only["decision"] == "resolve_model_id_alias"
 
     promoted = rows["configs/benchmarks/promoted.yaml"]
     assert promoted["classification"] == "manual_decision_required"
@@ -162,6 +208,22 @@ def test_write_report_emits_json_and_issue_table(tmp_path: Path, capsys) -> None
     stdout = capsys.readouterr().out
     assert "| Config | Classification | Decision | Action |" in stdout
     assert "configs/baselines/present.yaml" in stdout
+
+
+def test_directory_scan_handles_non_mapping_yaml_and_skips_manifests(tmp_path: Path) -> None:
+    """Directory scans should report unsupported YAML shapes without scanning manifests as configs."""
+    paths = _repo_fixture(tmp_path)
+
+    report = plan_model_artifact_promotion.build_promotion_report(
+        [tmp_path / "configs" / "baselines"],
+        repo_root=tmp_path,
+        registry_path=paths["registry"],
+        promoted_surfaces_path=paths["promoted_surfaces"],
+    )
+
+    rows = {row["config_path"]: row for row in report["rows"]}
+    assert "configs/baselines/local_model_artifact_blocklist.yaml" not in rows
+    assert rows["configs/baselines/example_matrix.yaml"]["decision"] == "unsupported_yaml_shape"
 
 
 def test_initial_issue_config_list_gets_one_row_per_config() -> None:

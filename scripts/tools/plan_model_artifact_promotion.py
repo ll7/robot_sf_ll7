@@ -19,9 +19,11 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.local_model_artifacts import (
+    BlocklistMetadata,
     display_path,
     iter_local_model_references,
     iter_yaml_files,
+    load_blocklist,
     load_promoted_surfaces,
     path_lookup_candidates,
 )
@@ -29,6 +31,7 @@ from robot_sf.benchmark.local_model_artifacts import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
 DEFAULT_PROMOTED_SURFACES_PATH = Path("configs/benchmarks/promoted_config_surfaces.yaml")
+DEFAULT_BLOCKLIST_PATH = Path("configs/baselines/local_model_artifact_blocklist.yaml")
 SCHEMA_VERSION = "robot-sf-model-artifact-promotion-plan.v1"
 
 INITIAL_TARGET_CONFIGS = [
@@ -44,10 +47,15 @@ INITIAL_TARGET_CONFIGS = [
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
     """Load one YAML mapping from disk."""
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    payload = _load_yaml_payload(path)
     if not isinstance(payload, dict):
         raise ValueError(f"{path}: expected top-level mapping")
     return payload
+
+
+def _load_yaml_payload(path: Path) -> Any:
+    """Load one YAML payload from disk."""
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
 def _load_registry(path: Path) -> dict[str, dict[str, Any]]:
@@ -71,14 +79,24 @@ def _load_registry(path: Path) -> dict[str, dict[str, Any]]:
 def _is_durable_registry_entry(entry: dict[str, Any]) -> bool:
     """Return whether a registry entry has a durable artifact pointer."""
     github_release = entry.get("github_release")
-    if isinstance(github_release, dict) and github_release.get("url"):
+    if _github_release_is_public_pointer(github_release):
         return True
     return bool(
-        entry.get("public_artifact_source")
-        or entry.get("wandb_artifact_path")
+        entry.get("wandb_artifact_path")
         or entry.get("wandb_run_path")
-        or entry.get("wandb_run_id")
+        or (entry.get("wandb_entity") and entry.get("wandb_project") and entry.get("wandb_run_id"))
     )
+
+
+def _github_release_is_public_pointer(release: Any) -> bool:
+    """Return whether GitHub release metadata is enough to retrieve and verify an asset."""
+    if not isinstance(release, dict):
+        return False
+    has_location = bool(
+        release.get("url")
+        or (release.get("repo") and release.get("tag") and release.get("asset_name"))
+    )
+    return bool(has_location and release.get("sha256"))
 
 
 def _sha256(path: Path) -> str:
@@ -190,6 +208,7 @@ def _row_for_local_reference(
     payload: dict[str, Any],
     repo_root: Path,
     promoted_reason: str,
+    blocker_reason: str,
 ) -> dict[str, Any]:
     """Classify one local output artifact reference."""
     artifact = _artifact_metadata(value, repo_root=repo_root)
@@ -210,6 +229,7 @@ def _row_for_local_reference(
             "value": value,
             "artifact": artifact,
             "promotion_plan": promotion_plan,
+            "blocker_reason": blocker_reason or None,
             "claim_boundary": "not benchmark evidence until durable artifact exists",
             "action": (
                 f"{promoted_reason} This local-only path must not be treated as benchmark "
@@ -239,6 +259,8 @@ def _row_for_local_reference(
             "Missing checkpoint: recover the checkpoint from a durable source or retire this "
             "config; do not use it as benchmark evidence."
         )
+    if blocker_reason:
+        action = f"{blocker_reason} {action}"
 
     return {
         "config_path": config_path,
@@ -249,6 +271,7 @@ def _row_for_local_reference(
         "value": value,
         "artifact": artifact,
         "promotion_plan": promotion_plan,
+        "blocker_reason": blocker_reason or None,
         "claim_boundary": "not benchmark evidence until durable artifact exists",
         "action": action,
     }
@@ -301,10 +324,24 @@ def _row_for_config(
     repo_root: Path,
     registry: dict[str, dict[str, Any]],
     promoted_surfaces: dict[str, str],
+    blocklist: BlocklistMetadata,
 ) -> dict[str, Any]:
     """Build one planner row for a YAML config."""
-    payload = _load_yaml_mapping(config_path)
     rel_path = display_path(config_path, repo_root=repo_root)
+    payload = _load_yaml_payload(config_path)
+    if not isinstance(payload, dict):
+        return {
+            "config_path": rel_path,
+            "classification": "manual_decision_required",
+            "decision": "unsupported_yaml_shape",
+            "surface": "non_mapping_yaml",
+            "yaml_top_level_type": type(payload).__name__,
+            "claim_boundary": "not benchmark evidence until artifact provenance is explicit",
+            "action": (
+                "Top-level YAML is not a mapping, so model artifact fields were not interpreted; "
+                "inspect this file manually or exclude it from the model promotion scan."
+            ),
+        }
     local_references = iter_local_model_references(payload)
     promoted_reason = _promoted_reason_for(
         config_path,
@@ -313,6 +350,7 @@ def _row_for_config(
     )
     if local_references:
         field, value = local_references[0]
+        blocker_reason = blocklist.reasons.get((rel_path, field, value), "")
         row = _row_for_local_reference(
             config_path=rel_path,
             field=field,
@@ -320,6 +358,7 @@ def _row_for_config(
             payload=payload,
             repo_root=repo_root,
             promoted_reason=promoted_reason,
+            blocker_reason=blocker_reason,
         )
         row["local_references"] = [
             {"field": reference_field, "value": reference_value}
@@ -347,6 +386,7 @@ def build_promotion_report(
     repo_root: Path = REPO_ROOT,
     registry_path: Path = DEFAULT_REGISTRY_PATH,
     promoted_surfaces_path: Path = DEFAULT_PROMOTED_SURFACES_PATH,
+    blocklist_path: Path = DEFAULT_BLOCKLIST_PATH,
 ) -> dict[str, Any]:
     """Build a metadata-only promotion/retirement report for config paths."""
     registry_resolved = registry_path if registry_path.is_absolute() else repo_root / registry_path
@@ -355,15 +395,29 @@ def build_promotion_report(
         if promoted_surfaces_path.is_absolute()
         else repo_root / promoted_surfaces_path
     )
+    blocklist_resolved = (
+        blocklist_path if blocklist_path.is_absolute() else repo_root / blocklist_path
+    )
     registry = _load_registry(registry_resolved)
     promoted_surfaces = load_promoted_surfaces(promoted_resolved, strict=True)
-    config_paths = _expand_config_paths(paths or INITIAL_TARGET_CONFIGS, repo_root=repo_root)
+    blocklist = load_blocklist(blocklist_resolved, strict=True)
+    ignored_manifest_paths = {
+        registry_resolved.resolve(),
+        promoted_resolved.resolve(),
+        blocklist_resolved.resolve(),
+    }
+    config_paths = [
+        path
+        for path in _expand_config_paths(paths or INITIAL_TARGET_CONFIGS, repo_root=repo_root)
+        if path.resolve() not in ignored_manifest_paths
+    ]
     rows = [
         _row_for_config(
             path,
             repo_root=repo_root,
             registry=registry,
             promoted_surfaces=promoted_surfaces,
+            blocklist=blocklist,
         )
         for path in config_paths
     ]
@@ -411,6 +465,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--registry-path", type=Path, default=DEFAULT_REGISTRY_PATH)
     parser.add_argument("--promoted-surfaces", type=Path, default=DEFAULT_PROMOTED_SURFACES_PATH)
+    parser.add_argument("--blocklist-path", type=Path, default=DEFAULT_BLOCKLIST_PATH)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -447,6 +502,7 @@ def main(argv: list[str] | None = None) -> int:
         repo_root=args.repo_root,
         registry_path=args.registry_path,
         promoted_surfaces_path=args.promoted_surfaces,
+        blocklist_path=args.blocklist_path,
     )
 
     if args.command == "write-report":

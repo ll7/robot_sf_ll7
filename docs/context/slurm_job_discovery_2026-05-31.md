@@ -42,6 +42,7 @@ Live state:
 | #1475 | `blocked_dependency` | comments require replacing pending ORCA-residual output artifact aliases before smoke and nominal execution | Do not submit; assign durable dataset/checkpoint/report pointers first. |
 | #1502 | `completed_needs_analysis` | Slurm job `12664` completed and compact evidence landed in PR #1777 | Do not rerun; analyze via #1503 from tracked evidence. |
 | #1503 | `analysis_only` | issue body says no new search execution; PR #1777 merged #1502 evidence | Produce a synthesis note only. |
+| #1784 | `closed_workflow_cleanup` | issue tracked the SLURM ledger/source-of-truth policy and is already closed; it is not a job-launch candidate | No submission; keep this discovery note consistent with the Related list. |
 
 ## Workflow Insight
 

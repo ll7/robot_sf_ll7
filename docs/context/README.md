@@ -79,6 +79,7 @@ knowledge, not every transient iteration detail.
 ## Skills And Entry Points
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
+* Machine-readable context catalog: [catalog.yaml](catalog.yaml)
 * Repository rule: [AGENTS.md](../../AGENTS.md)
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
@@ -197,6 +198,8 @@ knowledge, not every transient iteration detail.
   [issue_1500_adversarial_manifest.md](issue_1500_adversarial_manifest.md)
 * Issue #1571 Adversarial Smoke Packet Sharpening (2026-05-27):
   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
+* Issue #1502 Adversarial Two-Family Run (2026-05-31):
+  [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:
@@ -207,7 +210,7 @@ knowledge, not every transient iteration detail.
   [issue_1387_tentabot_value_scorer_spike.md](issue_1387_tentabot_value_scorer_spike.md)
 * Issue #1344 paired AMV primary protocol report:
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
-* SLURM issue batch status 2026-05-21:
+* SLURM issue batch status 2026-05-21 (canonical SLURM issue-status ledger):
   [slurm_issue_batch_status_2026-05-21.md](slurm_issue_batch_status_2026-05-21.md)
 * Issue #1397 Oracle Imitation Launch Packet:
   [issue_1397_oracle_imitation_launch_packet.md](issue_1397_oracle_imitation_launch_packet.md)

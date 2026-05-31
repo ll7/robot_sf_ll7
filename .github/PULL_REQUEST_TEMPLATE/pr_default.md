@@ -36,6 +36,17 @@ What changed, in one or two sentences.
 - Relevant design or provenance notes:
 - Any assumptions that need to be preserved:
 
+## Downstream Propagation
+- Parent issue updated (yes/no/NA):
+- Claim map / benchmark report updated (yes/no/NA):
+- Registry or config index updated (yes/no/NA):
+- Context index / memory note updated (yes/no/NA):
+- Follow-up issue opened for deferred propagation (yes/no/NA):
+- Not-applicable rationale:
+
+For benchmark, registry, claim-map, or paper-facing changes, explicitly say when downstream
+propagation is deferred and name the issue or note that will carry it.
+
 ## Follow-Up Issues
 - Deferred work:
 - Issues opened for follow-up:

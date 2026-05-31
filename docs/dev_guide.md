@@ -229,6 +229,8 @@ branch adds or edits context notes, evidence bundles, or other proof-heavy docs 
 checker is intentionally conservative: it only flags high-confidence issues such as missing
 `docs/context/README.md` links for new top-level context notes, tracked evidence files that still
 contain absolute local paths, and tracked evidence that links to ignored `output/` artifacts.
+It also validates the curated machine-readable context catalog at `docs/context/catalog.yaml` so
+indexed context entry points keep explicit status and freshness metadata.
 When issue or PR text needs to classify proof strength, use the
 [artifact evidence vocabulary](context/artifact_evidence_vocabulary.md) so local `output/` paths are
 not promoted into durable benchmark or paper-facing claims.
@@ -298,6 +300,11 @@ On macOS, `scripts/dev/run_tests_parallel.sh` uses a bounded fixed xdist worker 
 default instead of `-n auto`, because the unbounded auto worker selection can leave local
 validation wrappers hanging after child processes should have exited. Override with
 `PYTEST_NUM_WORKERS=<int>` or `PYTEST_NUM_WORKERS=auto` when needed.
+
+`scripts/dev/run_tests_parallel.sh` also accepts `PYTEST_XDIST_DIST=<mode>` to select the
+pytest-xdist scheduler. The default remains `load` for compatibility. Use alternate schedulers
+such as `PYTEST_XDIST_DIST=worksteal` only for targeted local experiments until hosted evidence
+shows they improve CI timing without exposing new order dependencies.
 
 For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the submitted
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded

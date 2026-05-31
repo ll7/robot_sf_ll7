@@ -234,6 +234,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="risk_surface_dwa",
+        tier="experimental",
+        aliases=("risk_surface_dwa", "risk_surface_dwa_v0"),
+        note=(
+            "Deterministic local risk-surface producer wrapped around risk_dwa; "
+            "prototype-only and not learned-risk benchmark evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="hybrid_rule_local_planner",
         tier="experimental",
         aliases=("hybrid_rule_local_planner", "hybrid_rule_v0_minimal"),

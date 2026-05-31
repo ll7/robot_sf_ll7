@@ -10,7 +10,7 @@ requires_slurm: false
 requires_benchmark_artifacts: false
 delegates_to:
 - gh-issue-creator
-output_schema: skill_run_summary.v1
+output_schema: issue_split_summary.v1
 aliases:
 - parent-to-child-issue
 ---
@@ -79,26 +79,36 @@ When the child is created, add a concise parent comment or body note:
 
 ## Output
 
+Use `.agents/skills/schemas/issue_split_summary.v1.yaml` as the compact machine-readable
+companion to the prose handoff. Keep the prose summary for readability, but include the schema
+shape when the caller needs repeatable comparison across runs.
+
 ```yaml
-parent_issue: "#..."
-mode: draft-only | created
-duplicate_check:
-  queries:
-    - "..."
-  matches:
-    - "#..."
-child_issue:
-  title: "..."
-  url: "..."
-  body_fields:
-    parent_issue: "..."
-    scope: "..."
-    non_goals: "..."
-    validation_testing: "..."
-    blocked_by: "none | ..."
-parent_update:
-  next_implementable_child: "added | skipped"
-blockers:
-  - "..."
-next_skill: gh-issue-creator | goal-issue-implementation | none
+issue_split_summary:
+  schema: issue_split_summary.v1
+  parent_issue: "#..."
+  mode: draft-only | created | duplicate-found | blocked
+  duplicate_check:
+    queries:
+      - "..."
+    matches:
+      - issue: "#..."
+        reason: "..."
+  proposed_children:
+    - title: "..."
+      issue: "#optional"
+      url: "optional"
+      readiness: ready_local | blocked_external | blocked_slurm | decision_required | duplicate | too_broad
+      blocker: none | "..."
+      scope: "..."
+      non_goals:
+        - "..."
+      validation:
+        - "..."
+  recommendation:
+    action: create_child | use_existing_child | clarify_parent | stop_blocked
+    rationale: "..."
+  parent_update:
+    next_implementable_child: added | skipped
+    note: "..."
 ```

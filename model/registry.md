@@ -118,6 +118,15 @@ Treat W&B fields as experiment-lineage provenance unless the entry is intentiona
 If a paper-facing registry entry still has `commit: null`, keep the missing source commit visible as
 a provenance caveat until it is repaired.
 
+Promoted benchmark configs are listed in
+`configs/benchmarks/promoted_config_surfaces.yaml`. Those config files must use durable ids or
+artifact pointers such as `model_id`, not direct `model_path` or `resume_from` values under
+`output/`. Validate the boundary with:
+
+```bash
+uv run python scripts/validation/check_local_model_artifacts.py
+```
+
 ### Publishing preserved models
 
 Use `scripts/tools/publish_model_registry_release.py` to migrate W&B-backed model entries to GitHub

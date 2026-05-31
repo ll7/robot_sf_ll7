@@ -288,6 +288,7 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
     for algo in (
         "hrvo",
         "risk_dwa",
+        "risk_surface_dwa",
         "safety_barrier",
         "grid_route",
         "mppi_social",

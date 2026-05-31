@@ -1,5 +1,9 @@
 version: 1
 updated_at: 2026-05-20
+freshness:
+  policy: manual_registry_edit
+  max_age_days: 90
+  stale_action: update updated_at when candidate rows or routing contracts change
 funnel_config: configs/policy_search/funnel.yaml
 promotion_gates: configs/policy_search/promotion_gates.yaml
 
@@ -178,12 +182,28 @@ candidates:
       - smoke
       - nominal_sanity
 
+  risk_surface_dwa_v0:
+    status: experimental_spike
+    family: local_risk_surface
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/risk_surface_dwa_v0.yaml
+    hypothesis: >
+      A deterministic local risk-surface producer can expose pedestrian proximity as an
+      occupancy-compatible ego grid and let the existing Risk-DWA planner consume that surface
+      through the normal policy-search smoke path. This is a prototype interface proof only, not
+      learned-risk model or benchmark-strength evidence.
+    required_stages:
+      - smoke
+
   tentabot_value_scorer_v0:
     status: experimental_spike
     family: learned_style_value_scorer
     training_required: false
     promotion_gate: tier_b
     candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v0.yaml
+    learned_policy_registry_id: tentabot_value_scorer_v0
+    adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
     hypothesis: >
       A clean-room Tentabot-style primitive value scorer can reuse Robot SF's
       hybrid-rule candidate lattice and auditable route, clearance, pedestrian
@@ -559,6 +579,7 @@ candidates:
     training_required: true
     promotion_gate: tier_c
     candidate_config_path: configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml
+    learned_policy_registry_id: orca_residual_guarded_ppo_v0
     hypothesis: >
       Unsafe PPO proposals can be reinterpreted as a bounded residual over the nominal ORCA command
       before falling through to the existing prior/fallback shield. This v0 entry wires the
@@ -575,6 +596,7 @@ candidates:
     training_required: false
     promotion_gate: tier_c
     candidate_config_path: configs/policy_search/candidates/ppo_issue791_best_v1.yaml
+    learned_policy_registry_id: ppo_issue791_best_v1
     hypothesis: >
       The repository's current best learned checkpoint from issue 791 should be the strongest
       feasible learning-only candidate: eval-aligned large-capacity PPO with predictive foresight,
@@ -619,6 +641,8 @@ candidates:
     promotion_gate: tier_b
     slurm_handoff: docs/context/policy_search/SLURM/001_learned_risk_model_v1.md
     launch_packet_config_path: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
+    learned_policy_registry_id: learned_risk_model_v1
+    adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
     hypothesis: >
       A lightweight learned risk estimator should improve candidate ranking only
       when attached to a hard safety guard.

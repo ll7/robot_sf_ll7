@@ -10,6 +10,15 @@ Keep `candidate_registry.yaml` focused on implemented or concrete runnable Robot
 config pointers. A method should move from this registry into `candidate_registry.yaml` only after
 there is a bounded Robot SF candidate config, runnable command, and proof path.
 
+Ownership boundary:
+
+- `learned_policy_registry.md` owns the current planning state for each learned-policy family and
+  should contain at most one current-state row per stable `policy_id`.
+- This reject/monitor registry owns source-backed negative evidence, monitor-only rationale,
+  historical deferrals, and reopen criteria.
+- `candidate_registry.yaml` owns runnable Robot SF candidates. Entries here should not be treated as
+  runnable or benchmark-ready unless they graduate to a concrete candidate config with proof.
+
 Status vocabulary:
 
 - `reject for now`: Do not implement without materially new evidence.

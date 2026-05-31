@@ -14,6 +14,7 @@ open PR coverage, and blocker labels as stronger routing signals than `state:rea
 | --- | --- | --- | --- |
 | Clear, bounded local implementation with no active PR | `state:ready` + `resource:local` | `ready_local` | Implement next. |
 | Clear issue currently covered by an open PR | `state:running` | `covered_by_pr` | Wait for PR outcome; do not reimplement. |
+| Follow-up issue depends on an unmerged `source_pr` or explicit prerequisite PR | `state:blocked` or leave out of clean-main queue | `blocked_other` | Wait for prerequisite merge, or choose an explicit stacked-PR route. |
 | Requires SLURM/Auxme execution | `state:blocked` + `resource:slurm` | `blocked_slurm` | Skip locally; update ledger or launch only from SLURM host. |
 | Requires CARLA runtime | `state:blocked` + `resource:carla` | `blocked_external` | Skip locally unless CARLA host is available. |
 | Requires unavailable dataset/model/artifact | `state:blocked` + `resource:external-data` or `state:needs-artifact-promotion` | `blocked_external` | Mark unblock condition; do not count as ready. |
@@ -23,7 +24,10 @@ open PR coverage, and blocker labels as stronger routing signals than `state:rea
 
 `state:ready` is therefore necessary but not sufficient for implementation routing. Agents should
 exclude open issues with active PR coverage, blocker/resource contradictions, parent/epic bodies,
-or analysis-only scope before selecting a worktree branch.
+analysis-only scope, or unmerged source-PR prerequisites before selecting a worktree branch. Before
+branching from clean `origin/main`, inspect issue bodies/comments for `source_pr`, linked PRs,
+`Closes`/`Refs`, and explicit prerequisite PRs, then verify the referenced implementation surface
+exists on current `origin/main`.
 
 ## Bounded Audit On 2026-05-31
 

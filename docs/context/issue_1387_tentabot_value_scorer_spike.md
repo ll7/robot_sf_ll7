@@ -212,3 +212,28 @@ collisions. Near misses return to the #1832 retained baseline level at 3/18, but
 regression remains. Treat this as negative diagnostic evidence for hand-authored Tentabot recovery
 logic. The next meaningful lane is a learned value estimator or a different planner family, not
 another hand-tuned Tentabot recovery variant.
+
+## 2026-05-31 Issue #1910 Decision
+
+Decision: **stop hand-authored Tentabot-style recovery variants**.
+
+The v0 through v3 clean-room candidates prove that the Robot SF-native Tentabot-style lattice,
+diagnostics, static-safety gate, route-arc scoring, and trace-level recovery hooks are executable.
+They do not justify another hand-tuned recovery iteration. Every mechanism that reduced
+low-progress timeouts either increased static collisions, increased near misses, or failed the smoke
+route:
+
+| Candidate / lane | Success | Collision | Near miss | Low-progress timeouts | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Issue #1832 retained v0 baseline | 0.2222 | 0.0556 | 0.1667 | 11/18 | revise baseline |
+| Issue #1877 v1 static gate | 0.2222 | 0.1111 | 0.2222 | 9/18 | stop hand static gate |
+| Issue #1877 v2 route-arc score | 0.2222 | 0.1111 | 0.2778 | 8/18 | stop hand route score |
+| Issue #1908 v3 trace recovery | 0.2222 | 0.1111 | 0.1667 | 9/18 | stop hand trace recovery |
+
+Do not open or implement another scalar speed, clearance, static-gate, route-progress, or
+trace-recovery retune for this Tentabot-style hand-authored lane unless new evidence changes the
+premise. The only currently credible next Tentabot-style work is a separate learned-value-estimator
+or data-derived ranking experiment with an explicit feature/label contract, durable data
+provenance, and a requirement to preserve or improve the Issue #1832 collision and near-miss
+baseline before claiming low-progress improvement. If that contract is not worth funding, leave the
+Tentabot-style lane as diagnostic-only and route effort to another planner family.

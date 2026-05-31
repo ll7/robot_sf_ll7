@@ -15,6 +15,25 @@ For the evidence boundary, keep these surfaces separate:
 - Fallback and degraded execution policy:
   [Issue #691 Benchmark Fallback Policy](../context/issue_691_benchmark_fallback_policy.md).
 
+## Draft Authoring
+
+Use the v1 authoring tools when a contributor needs a small, deterministic YAML skeleton instead of
+copying a large existing scenario by hand:
+
+```bash
+uv run python scripts/tools/create_scenario.py \
+  --template bottleneck \
+  --name draft_bottleneck_review \
+  --output configs/scenarios/single/draft_bottleneck_review.yaml
+
+uv run python scripts/tools/validate_scenario.py \
+  configs/scenarios/single/draft_bottleneck_review.yaml
+```
+
+The authoring validator checks required draft fields, map references, and seed metadata, then reuses
+the maintained scenario loader and map/config builder. A passing draft is reviewable and loadable,
+but it is not certified and is not benchmark evidence.
+
 ## Families
 
 | Family | Scenario ids / examples | Maps and configs | Agents / actors | Difficulty | Known failure modes | Recommended seed / source | Example command or links |

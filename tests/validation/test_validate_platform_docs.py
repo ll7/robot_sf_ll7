@@ -203,14 +203,34 @@ def test_benchmark_suite_requires_schema_fields(tmp_path: Path) -> None:
 
         ```yaml
         suite_id: demo
-        purpose: Demo.
-        scenario_ids: [classic]
-        seed_set: [0]
-        eligible_planners: [orca]
-        metrics: [success]
-        expected_runtime: 1m
-        canonical_command: uv run python scripts/missing.py
+        status: draft
         ```
+
+        ## Purpose
+
+        Demo.
+
+        ## Scenarios And Seeds
+
+        Scenario ID: `classic`; seed set: `0`.
+
+        ## Eligible Planners
+
+        `orca`
+
+        ## Metrics
+
+        success
+
+        ## Canonical Command
+
+        ```bash
+        uv run python scripts/missing.py
+        ```
+
+        ## Expected Runtime
+
+        1m
         """,
     )
 
@@ -218,5 +238,5 @@ def test_benchmark_suite_requires_schema_fields(tmp_path: Path) -> None:
     paths = {issue.path for issue in issues}
 
     assert "docs/benchmark_suites/demo.md.summary.benchmark_track" in paths
-    assert "docs/benchmark_suites/demo.md.summary.claim_boundary" in paths
+    assert "docs/benchmark_suites/demo.md.section.Claim Boundary" in paths
     assert any("command path does not exist" in issue.message for issue in issues)

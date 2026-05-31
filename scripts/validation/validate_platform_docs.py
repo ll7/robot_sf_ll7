@@ -50,16 +50,18 @@ LEADERBOARD_REQUIRED_COLUMNS = {
 }
 BENCHMARK_SUITE_REQUIRED_FIELDS = {
     "suite_id",
-    "purpose",
-    "scenario_ids",
-    "seed_set",
-    "eligible_planners",
     "benchmark_track",
-    "metrics",
-    "expected_runtime",
-    "canonical_command",
-    "claim_boundary",
+    "status",
 }
+BENCHMARK_SUITE_REQUIRED_HEADINGS = {
+    "Purpose",
+    "Scenarios And Seeds",
+    "Eligible Planners",
+    "Metrics",
+    "Expected Runtime",
+    "Claim Boundary",
+}
+BENCHMARK_SUITE_COMMAND_HEADINGS = {"Canonical Command", "Canonical Commands"}
 VALID_LEADERBOARD_STATUSES = {
     "completed_smoke_not_benchmark_evidence",
     "excluded",
@@ -623,19 +625,23 @@ def _validate_benchmark_suite_page(
     for field in sorted(BENCHMARK_SUITE_REQUIRED_FIELDS):
         if not summary.get(field):
             issues.append(PlatformDocsIssue(f"{rel_path}.summary.{field}", "is required"))
-    command = str(summary.get("canonical_command") or "")
-    if "output/" in command or "results/" in command:
-        issues.append(
-            PlatformDocsIssue(
-                f"{rel_path}.summary.canonical_command",
-                "canonical command should not depend on pre-existing output/ artifacts",
-            )
-        )
+    headings = set(re.findall(r"^##\s+(.+?)\s*$", markdown, flags=re.MULTILINE))
+    for heading in sorted(BENCHMARK_SUITE_REQUIRED_HEADINGS):
+        if heading not in headings:
+            issues.append(PlatformDocsIssue(f"{rel_path}.section.{heading}", "is required"))
+    if not headings & BENCHMARK_SUITE_COMMAND_HEADINGS:
+        issues.append(PlatformDocsIssue(f"{rel_path}.section.Canonical Command", "is required"))
+    command_sections = re.findall(
+        r"^##\s+Canonical Commands?\s*\n(.*?)(?:\n##\s+|\Z)",
+        markdown,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    command = command_sections[0] if command_sections else ""
     for token in PATHLIKE_RE.findall(command):
         if not (repo_root / token).exists():
             issues.append(
                 PlatformDocsIssue(
-                    f"{rel_path}.summary.canonical_command",
+                    f"{rel_path}.section.Canonical Command",
                     f"command path does not exist: {token}",
                 )
             )

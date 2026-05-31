@@ -30,6 +30,7 @@ _SUPPORTED_VARIANTS = {
     "hybrid_rule_v5_ensemble_selector",
     "tentabot_value_scorer_v0",
     "tentabot_value_scorer_v1_static_gated",
+    "tentabot_value_scorer_v2_route_arc",
     "actuation_aware_hybrid_rule_v0",
 }
 _EPS = 1e-9
@@ -160,6 +161,7 @@ class HybridRuleLocalPlannerConfig:
     velocity_smoothness_weight: float = 0.3
     control_effort_weight: float = 0.2
     deadlock_escape_weight: float = 0.0
+    route_arc_progress_weight: float = 0.0
     route_guide_commitment_weight: float = 0.0
     corridor_subgoal_route_progress_weight: float = 0.0
     corridor_subgoal_centering_weight: float = 0.0
@@ -1602,6 +1604,22 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         route_dir = np.array([np.cos(tangent_heading), np.sin(tangent_heading)], dtype=float)
         return float(np.dot(end_pos - start_pos, route_dir)), "route_local"
 
+    def _route_arc_progress_term(
+        self,
+        *,
+        route_corridor: dict[str, Any] | None,
+        start_pos: np.ndarray,
+        end_pos: np.ndarray,
+        max_progress: float,
+    ) -> float:
+        """Return normalized route-tangent progress for any accepted candidate."""
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        if tangent_heading is None:
+            return 0.0
+        route_dir = np.array([np.cos(tangent_heading), np.sin(tangent_heading)], dtype=float)
+        route_progress = float(np.dot(end_pos - start_pos, route_dir))
+        return float(np.clip(route_progress / max(max_progress, _EPS), -1.0, 1.0))
+
     def _evaluate_candidate(  # noqa: PLR0915
         self,
         *,
@@ -1853,6 +1871,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         terms = {
             "goal_progress": float(np.clip(progress / max_progress, -1.0, 1.0)),
+            "route_arc_progress": self._route_arc_progress_term(
+                route_corridor=route_corridor,
+                start_pos=start_pos,
+                end_pos=robot_pos,
+                max_progress=max_progress,
+            ),
             "path_alignment": float(np.cos(heading_error)),
             "speed_preference": _clip01(rollout_mean_linear / max(speed_cap, _EPS)),
             "static_clearance": static_clearance,
@@ -1897,6 +1921,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.velocity_smoothness_weight) * terms["velocity_smoothness"]
             + float(self.config.control_effort_weight) * terms["control_effort"]
             + float(self.config.deadlock_escape_weight) * terms["deadlock_escape"]
+            + float(self.config.route_arc_progress_weight) * terms["route_arc_progress"]
             + float(self.config.static_recenter_weight) * terms["static_recenter"]
             + float(self.config.static_corridor_transit_weight) * terms["static_corridor_transit"]
             + float(self.config.route_guide_commitment_weight) * terms["route_guide_commitment"]
@@ -2288,7 +2313,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "upstream_code_used": False,
             "observation_scope": (
                 "route_progress, static_clearance, pedestrian_distance_ttc, "
-                "smoothness, and command_bounds"
+                "route_arc_progress, smoothness, and command_bounds"
             ),
         }
 

@@ -329,6 +329,60 @@ def test_tentabot_value_scorer_v1_static_gate_can_cover_all_sources(monkeypatch)
     assert evaluation["static_safety_gate"]["tier"] == "low_clearance_demoted"
 
 
+def test_tentabot_value_scorer_v2_scores_route_arc_progress_over_goal_shortcut(
+    monkeypatch,
+) -> None:
+    """V2 should reward route-local progress even when Euclidean goal distance regresses."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v2_route_arc",
+            "goal_progress_weight": 1.0,
+            "route_arc_progress_weight": 4.0,
+            "path_alignment_weight": 0.0,
+            "speed_preference_weight": 0.0,
+            "static_clearance_weight": 0.0,
+            "dynamic_clearance_weight": 0.0,
+            "ttc_weight": 0.0,
+            "heading_smoothness_weight": 0.0,
+            "velocity_smoothness_weight": 0.0,
+            "control_effort_weight": 0.0,
+            "freezing_weight": 0.0,
+            "oscillation_weight": 0.0,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(heading=np.pi, goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    route_corridor = _route_corridor_payload(tangent_heading=np.pi)
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+
+    forward_eval = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(0.25, 0.0, "route_guide"),
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=route_corridor,
+    )
+    stop_eval = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(0.0, 0.0, "stop"),
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=route_corridor,
+    )
+
+    assert forward_eval["accepted"] is True
+    assert stop_eval["accepted"] is True
+    assert forward_eval["terms"]["goal_progress"] < 0.0
+    assert forward_eval["terms"]["route_arc_progress"] > 0.0
+    assert forward_eval["score"] > stop_eval["score"]
+
+
 def test_actuation_aware_variant_penalizes_synthetic_clip_risk() -> None:
     """Actuation-aware scoring should expose and penalize synthetic envelope risk."""
     config = build_hybrid_rule_local_planner_config(

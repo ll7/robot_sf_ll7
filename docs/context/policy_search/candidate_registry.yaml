@@ -289,6 +289,25 @@ candidates:
       - smoke
       - nominal_sanity
 
+  tentabot_value_scorer_v2_route_arc:
+    status: experimental_spike
+    family: learned_style_value_scorer
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v2_route_arc.yaml
+    learned_policy_registry_id: tentabot_value_scorer_v2_route_arc
+    adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+    hypothesis: >
+      A clean-room Tentabot-style primitive value scorer can keep the v1 static
+      safety gate while making route-arc progress a first-class value term for
+      all accepted candidates. This tests whether route-local progress can
+      reduce low-progress timeouts without buying that gain through more static
+      collisions.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   actuation_aware_hybrid_rule_v0:
     status: experimental_spike
     family: amv_actuation_diagnostic

@@ -146,3 +146,35 @@ reduced low-progress timeouts from 11 to 9 while doubling static collisions from
 increasing near-miss episodes from 3 to 4. Treat this as negative diagnostic evidence: future
 Tentabot-style work should move to trace-level recovery policy design or a genuinely learned value
 model rather than stronger hand-tuned static penalties.
+
+## 2026-05-31 Issue #1877 Route-Arc Progress Probe
+
+Issue #1877 next tested `tentabot_value_scorer_v2_route_arc`, a clean-room scorer variant that keeps
+the v1 static-safety gate unchanged and adds a first-class `route_arc_progress` value term for every
+accepted candidate when route geometry is available. This is a route-local progress mechanism, not a
+speed, clearance, or static-gate retune.
+
+Validation commands run:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- pytest tests/planner/test_hybrid_rule_local_planner.py -q
+scripts/dev/run_worktree_shared_venv.sh -- pytest tests/validation/test_run_policy_search_candidate.py tests/validation/test_validate_policy_search_registry.py -q
+LOGURU_LEVEL=WARNING DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v2_route_arc --stage smoke --workers 1 --output-dir output/policy_search/tentabot_value_scorer_v2_route_arc/smoke/issue1877_v2
+LOGURU_LEVEL=WARNING DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v2_route_arc --stage nominal_sanity --workers 2 --output-dir output/policy_search/tentabot_value_scorer_v2_route_arc/nominal_sanity/issue1877_v2
+```
+
+Summary:
+
+| Candidate | Stage | Episodes | Success | Collision | Near miss | Low-progress timeouts | Decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `tentabot_value_scorer_v2_route_arc` | smoke | 1 | 1.0000 | 0.0000 | 0.0000 | 0 | pass |
+| `tentabot_value_scorer_v2_route_arc` | nominal_sanity | 18 | 0.2222 | 0.1111 | 0.2778 | 8 | revise |
+
+Classification: **revise / stop this hand-scored route-arc lane**.
+
+Interpretation: route-arc scoring is executable and the unit tests prove it can rank route-local
+progress ahead of misleading Euclidean goal progress. The nominal-sanity result still fails the
+issue acceptance rule: low-progress timeouts drop from the #1832 retained baseline's 11/18 to 8/18,
+but static collisions rise from 1/18 to 2/18 and near misses rise from 3/18 to 5/18. Treat this as
+negative diagnostic evidence for hand-scored route-progress weighting. Further Tentabot-style work
+should be trace-level recovery policy or learned value estimation, not larger route-progress weights.

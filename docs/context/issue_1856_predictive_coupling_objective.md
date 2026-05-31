@@ -82,6 +82,18 @@ The exact thresholds are deliberately small because this is a local smoke/prefli
 evidence. Passing the gate only justifies the next child issue; it does not justify predictive-v2
 claims without same-seed closed-loop artifacts.
 
+## 2026-05-31 Execution Update
+
+Issue #1897 ran this local gate with the selected-v2 local checkpoint cache and recorded a
+fail-closed result:
+`docs/context/issue_1897_predictive_coupling_gate_preflight.md`.
+
+Both `baseline_like` and `phase_coupled_sequence_gate` had `0.0000` hard success and `0.0000`
+global success. The phase-coupled row ranked higher only by a small clearance gain, so the gate
+failed with `global_success_delta_below_gate`. Keep #1505/#1506/#1507 blocked unless a future
+revised coupling gate produces real closed-loop success improvement with durable artifact
+boundaries.
+
 ## Child Issue Routing
 
 REST preflight on 2026-05-31 found the four-way expansion issues already open and blocked:

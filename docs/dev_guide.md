@@ -203,11 +203,12 @@ EOF
 ```
 
 `scripts/dev/run_ci_local.sh` is the local CI-equivalent entrypoint for the shared
-validation phases. It runs `uv sync --all-extras --frozen`, migrates legacy artifacts,
+validation phases. By default it runs `uv sync --all-extras --frozen`, migrates legacy artifacts,
 then delegates to `scripts/dev/ci_driver.sh` so local runs and `.github/workflows/ci.yml`
 share the same phase definitions (`lint`, `typecheck`, `test`, `smoke`, and
 `artifact-policy`). Pass explicit phases to scope a run, for example
-`scripts/dev/run_ci_local.sh lint test`.
+`scripts/dev/run_ci_local.sh lint test`. After dependencies are already current, use
+`scripts/dev/run_ci_local.sh --no-setup lint test` for faster repeat local feedback.
 
 Before opening a PR, fetch the latest `origin/main`, integrate it into the feature branch with
 either merge or rebase, and only then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
@@ -1031,6 +1032,8 @@ committed entry points:
 
 **Local Testing**:
 - Use `scripts/dev/run_ci_local.sh` for the canonical local CI-equivalent path.
+- Use `scripts/dev/run_ci_local.sh --no-setup <phase> ...` for repeat local phase runs after the
+  worktree has already been synced.
 - Use `scripts/dev/ci_driver.sh <phase>` for narrower local phases such as `lint`, `typecheck`,
   `test`, `smoke`, or `artifact-policy`.
 - Use `uv run python scripts/dev/ci_timing_summary.py --run-id <github-actions-run-id> --top 10`

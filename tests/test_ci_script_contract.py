@@ -115,6 +115,26 @@ def test_run_ci_local_loads_default_phases_from_ci_driver() -> None:
     assert 'phases=("lint" "typecheck" "test" "smoke" "artifact-policy")' not in script_text
 
 
+def test_run_ci_local_exposes_fast_repeat_mode_with_timed_setup() -> None:
+    """Local CI repeats should be able to skip setup after dependencies are current."""
+
+    script_text = RUN_CI_LOCAL.read_text(encoding="utf-8")
+    normalized_script = " ".join(script_text.replace("\\\n", " ").split())
+
+    assert "--no-setup" in script_text
+    assert 'run_setup="1"' in script_text
+    assert 'run_setup="0"' in script_text
+    assert 'if [[ "$run_setup" == "1" ]]' in script_text
+    assert (
+        'bash "$SCRIPT_DIR/ci_step_timer.sh" "Sync dependencies (locked)" '
+        "uv sync --all-extras --frozen"
+    ) in normalized_script
+    assert (
+        'bash "$SCRIPT_DIR/ci_step_timer.sh" "Migrate legacy artifacts into canonical root" '
+        "uv run python scripts/tools/migrate_artifacts.py"
+    ) in normalized_script
+
+
 def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     """The PR-ready wrapper should record the freshness stamp its consumers require.
 

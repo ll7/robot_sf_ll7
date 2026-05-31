@@ -10,6 +10,7 @@ from robot_sf.planner.learned_risk_surface import (
     RiskSurfacePlannerAdapter,
     RiskSurfaceUnavailable,
     attach_risk_surface_to_observation,
+    build_local_risk_surface_spec,
     deterministic_pedestrian_risk_surface,
 )
 
@@ -106,3 +107,23 @@ def test_risk_surface_contract_rejects_invalid_resolution() -> None:
     """Invalid geometry should be rejected before any planner run."""
     with pytest.raises(RiskSurfaceUnavailable, match="resolution"):
         LocalRiskSurfaceSpec(resolution=0.0)
+
+
+def test_build_local_risk_surface_spec_accepts_yaml_style_origin() -> None:
+    """YAML mappings should build the same validated risk-surface contract."""
+    spec = build_local_risk_surface_spec(
+        {
+            "resolution": 0.5,
+            "width": 3.0,
+            "height": 2.0,
+            "origin": [-1.5, -1.0],
+            "producer_id": "test_fixture",
+            "ignored": "value",
+        }
+    )
+
+    assert spec.resolution == 0.5
+    assert spec.width == 3.0
+    assert spec.height == 2.0
+    assert spec.origin == (-1.5, -1.0)
+    assert spec.producer_id == "test_fixture"

@@ -1,0 +1,4 @@
+name: risk_surface_dwa_v0
+algo: risk_surface_dwa
+base_config_path: configs/algos/risk_surface_dwa_v0.yaml
+params: {}

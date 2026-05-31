@@ -28,6 +28,7 @@ from robot_sf.planner.learned_risk_surface import (
     RiskSurfacePlannerAdapter,
     RiskSurfaceUnavailable,
     attach_risk_surface_to_observation,
+    build_local_risk_surface_spec,
     deterministic_pedestrian_risk_surface,
 )
 from robot_sf.planner.poi_sampler import POISampler
@@ -66,6 +67,7 @@ __all__ = [
     "VisibilityPlanner",
     "attach_classic_global_planner",
     "attach_risk_surface_to_observation",
+    "build_local_risk_surface_spec",
     "deterministic_pedestrian_risk_surface",
     "plot_global_plan",
     "plot_visibility_graph",

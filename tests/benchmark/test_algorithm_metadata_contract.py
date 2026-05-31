@@ -143,6 +143,30 @@ def test_grid_route_metadata_marks_testing_only_route_spike() -> None:
     assert planner["adapter_name"] == "GridRoutePlannerAdapter"
 
 
+def test_risk_surface_dwa_metadata_marks_prototype_surface_adapter() -> None:
+    """Risk-surface DWA metadata should prevent learned-risk overclaiming."""
+    assert canonical_algorithm_name("risk_surface_dwa_v0") == "risk_surface_dwa"
+    meta = enrich_algorithm_metadata(
+        algo="risk_surface_dwa_v0",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["canonical_algorithm"] == "risk_surface_dwa"
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "deterministic_local_risk_surface_dwa"
+    assert meta["observation_spec"]["inputs"] == [
+        "robot_state",
+        "goal",
+        "pedestrians",
+        "local_risk_surface",
+    ]
+    assert planner["adapter_name"] == "RiskSurfacePlannerAdapter"
+    assert planner["testing_only_adapter"] is True
+    assert planner["prototype_only"] is True
+
+
 def test_safety_barrier_accepts_lidar_level_through_sensor_fusion_contract() -> None:
     """Safety-barrier LiDAR compatibility should be explicit adapter metadata, not fallback."""
     meta = enrich_algorithm_metadata(

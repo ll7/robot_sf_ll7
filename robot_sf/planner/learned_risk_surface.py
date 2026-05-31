@@ -9,7 +9,7 @@ weights, or datasets.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any
 
 import numpy as np
@@ -254,6 +254,24 @@ def attach_risk_surface_to_observation(
     return enriched
 
 
+def build_local_risk_surface_spec(cfg: dict[str, Any] | None) -> LocalRiskSurfaceSpec:
+    """Build a local risk-surface spec from a YAML-style mapping.
+
+    Returns:
+        LocalRiskSurfaceSpec: Validated surface geometry and metadata.
+    """
+    payload = cfg if isinstance(cfg, dict) else {}
+    allowed = {field.name for field in fields(LocalRiskSurfaceSpec)}
+    filtered = {key: value for key, value in payload.items() if key in allowed}
+    origin = filtered.get("origin")
+    if origin is not None:
+        origin_values = np.asarray(origin, dtype=float).reshape(-1)
+        if origin_values.size != 2:
+            raise RiskSurfaceUnavailable("origin must contain two finite values")
+        filtered["origin"] = (float(origin_values[0]), float(origin_values[1]))
+    return LocalRiskSurfaceSpec(**filtered)
+
+
 class RiskSurfacePlannerAdapter:
     """Adapter that lets an existing local planner consume a risk surface."""
 
@@ -347,5 +365,6 @@ __all__ = [
     "RiskSurfacePlannerAdapter",
     "RiskSurfaceUnavailable",
     "attach_risk_surface_to_observation",
+    "build_local_risk_surface_spec",
     "deterministic_pedestrian_risk_surface",
 ]

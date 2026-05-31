@@ -37,10 +37,10 @@
     }
   ],
   "stable_signature": {
-    "sha256": "360057895f1e6f5a04fa045141ae26b961184367a8a3d854e7437f52f48dc78a",
+    "sha256": "32925ce0d9f97ca4826d441ff673f1a724e2674cecac3fb37277896874d6269d",
+    "scope": "behavior fields excluding git_hash and run metadata",
     "matched_across_replays": true,
     "fields": {
-      "git_hash": "25427f7705978866afe179f9d388110586a25840",
       "status": "collision",
       "termination_reason": "collision",
       "steps": 335,
@@ -69,8 +69,31 @@
       }
     }
   },
+  "review_validation": {
+    "reviewed_pr": 1884,
+    "reviewed_head": "622d2cfff7ec534666bcbfd944f74faba3ecf46b",
+    "executed_at": "2026-05-31",
+    "output_artifacts": [
+      {
+        "ignored_artifact": "adversarial/issue_1878/review_1884_head_on_replay_a.jsonl",
+        "sha256": "bebd93cac9723658a7aace25ae8b2ca2f35300a335e6f15a8df4f08dbb3c79dc",
+        "tracked": false
+      },
+      {
+        "ignored_artifact": "adversarial/issue_1878/review_1884_head_on_replay_b.jsonl",
+        "sha256": "f6d529124af3af8dc604f55e0a78493dbf49ba7b3a59ca185581011e0e0f6219",
+        "tracked": false
+      }
+    ],
+    "execution_git_hash": "622d2cfff7ec534666bcbfd944f74faba3ecf46b",
+    "execution_mode": "native",
+    "availability_status": "available",
+    "stable_signature_sha256": "32925ce0d9f97ca4826d441ff673f1a724e2674cecac3fb37277896874d6269d",
+    "matched_tracked_behavior_signature": true
+  },
   "warnings": [
     "validate-config warns that the replay matrix carries one seed; this is intentional for a fixed-seed determinism gate and is not a coverage sweep.",
-    "The replay emitted a missing pedestrian force data warning, so force-based metrics are not part of the stable signature."
+    "The replay emitted a missing pedestrian force data warning, so force-based metrics are not part of the stable signature.",
+    "Git hash is recorded as execution provenance and excluded from the behavior signature so review reruns on later commits can compare the same deterministic fields."
   ]
 }

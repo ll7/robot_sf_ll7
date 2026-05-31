@@ -46,11 +46,12 @@ The two replay runs matched on the stable replay signature:
 - status: `collision`
 - termination: `collision`
 - steps: `335`
-- stable signature SHA-256: `360057895f1e6f5a04fa045141ae26b961184367a8a3d854e7437f52f48dc78a`
+- stable behavior signature SHA-256:
+  `32925ce0d9f97ca4826d441ff673f1a724e2674cecac3fb37277896874d6269d`
 
 The raw JSONL files have different raw SHA-256 values because volatile run metadata is present, so
-they remain ignored under `output/`. The compact tracked summary records the raw hashes and the
-stable deterministic fields.
+they remain ignored under `output/`. The compact tracked summary records the raw hashes, execution
+git hashes as provenance, and stable deterministic behavior fields excluding run metadata.
 
 ## Validation
 
@@ -71,6 +72,9 @@ Observed results:
 - config validation: exit `0`, with an intentional one-seed warning
 - replay A/B: both exit `0`, native/available, `1` written episode each
 - stable signature comparison: matched
+- PR #1884 review rerun on head `622d2cfff7ec534666bcbfd944f74faba3ecf46b`: replay A/B
+  both exited `0`, native/available, `1` written episode each, and matched the same stable
+  behavior signature.
 
 ## Limits
 

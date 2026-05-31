@@ -196,6 +196,12 @@ def validate_synthetic_actuation_profile(profile: SyntheticActuationProfile) -> 
             "synthetic_actuation_profile.claim_boundary must be "
             f"'{SYNTHETIC_ACTUATION_CLAIM_BOUNDARY}'"
         )
+    profile_metadata = profile.to_metadata()
+    if _looks_calibrated_actuation_profile(profile_metadata):
+        _validate_calibrated_actuation_provenance(
+            profile_metadata,
+            label="synthetic_actuation_profile",
+        )
     _validate_synthetic_positive_bounds(profile)
     _validate_mode(
         profile.latency_mode,

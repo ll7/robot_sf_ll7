@@ -44,6 +44,7 @@ from robot_sf.benchmark.synthetic_actuation import (
     CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS,
     SyntheticActuationProfile,
     validate_actuation_profile_claim_boundary,
+    validate_synthetic_actuation_profile,
 )
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -385,6 +386,25 @@ def test_calibrated_labeled_actuation_profile_requires_provenance_fields() -> No
             },
             label="calibrated_actuation_profile",
         )
+
+
+def test_typed_synthetic_profile_rejects_calibrated_label_without_provenance() -> None:
+    """Direct SyntheticActuationProfile callers must not bypass calibrated-claim provenance."""
+    profile = SyntheticActuationProfile(
+        name="amv-actuation-calibrated-v0",
+        profile_version="v0",
+        claim_scope="synthetic-only",
+        claim_boundary="diagnostic-only",
+        max_linear_accel_m_s2=1.5,
+        max_linear_decel_m_s2=2.0,
+        max_yaw_rate_rad_s=0.9,
+        max_angular_accel_rad_s2=2.5,
+        latency_mode="one-step-delay",
+        update_mode="5hz-hold",
+    )
+
+    with pytest.raises(ValueError, match="requires provenance fields"):
+        validate_synthetic_actuation_profile(profile)
 
 
 def test_calibrated_actuation_profile_provenance_contract_names_required_fields() -> None:

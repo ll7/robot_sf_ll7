@@ -2,7 +2,7 @@
 
 ## Decision
 
-excluded
+pass
 
 ## Hypothesis
 
@@ -16,45 +16,31 @@ A deterministic hybrid-rule local scorer can penalize command candidates that wo
 - Scenario matrix: `configs/scenarios/sets/classic_cross_trap_subset.yaml`
 - Scenario filter: `classic_cross_trap_high`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/actuation_aware_hybrid_rule_v0/amv_actuation_smoke/pr1828_current_head/summary.json`
-- Git commit: `bc0ff9f4011d365163e81c833ac3c5c35cc5b40a`
+- Summary JSON: `output/policy_search/actuation_aware_hybrid_rule_v0/amv_actuation_smoke/latest/summary.json`
+- Git commit: `d65d33dfc6c8b6b4ab861311bb172a99783a9136`
 - Synthetic actuation profile: `amv-actuation-stress-v0` (`synthetic-only`, diagnostic-only)
 
 ## Aggregate Results
 
 | Episodes | Success | Collision | Near Miss | Mean MinDist | Mean AvgSpeed |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 0.0000 | 1.0000 | 0.0000 | 1.0513 | 0.0000 |
-
-## Evidence-Adjusted Results
-
-| Episodes | Excluded | Success | Collision | Near Miss |
-|---:|---:|---:|---:|---:|
-| 0 | 1 | 0.0000 | 0.0000 | 0.0000 |
-
-Raw aggregate results above still include excluded rows; evidence-adjusted results only remove rows with explicit exclusion metadata.
+| 1 | 0.0000 | 0.0000 | 0.0000 | 2.3627 | 1.6670 |
 
 ## Synthetic Actuation Diagnostics
 
 | Command Clip | Yaw Saturation | Signed Braking Peak |
 |---:|---:|---:|
-| 0.0000 | 0.0000 | 0.0000 |
-
-## Scenario Exclusions
-
-| Scenario | Seed | Status | Reason | Evidence |
-|---|---:|---|---|---|
-| classic_cross_trap_high | 111 | impossible | initial_robot_pedestrian_overlap | first_step_collision_with_zero_progress; min_clearance_m=-0.3487; nearest_pedestrian_distance_m=1.0117; candidate_collision_radius_m=1.4500; all_first_step_candidates_rejected_for_dynamic_collision |
+| 0.1875 | 0.0000 | -2.5000 |
 
 ## Scenario-Family Split
 
 | Family | Episodes | Success | Collision | Near Miss |
 |---|---:|---:|---:|---:|
-| classic | 1 | 0.0000 | 1.0000 | 0.0000 |
+| classic | 1 | 0.0000 | 0.0000 | 0.0000 |
 
 ## Failure Taxonomy
 
-- No failures recorded.
+- `timeout_low_progress`: `1`
 
 ## Claim Boundary
 
@@ -66,6 +52,6 @@ _Diagnostic-only arithmetic context; not a benchmark comparison claim._
 
 | Baseline | Success Delta | Collision Delta | Near-Miss Delta |
 |---|---:|---:|---:|
-| goal | -0.0142 | +0.7589 | n/a |
-| orca | -0.1844 | +0.9645 | n/a |
-| ppo | -0.2482 | +0.9007 | n/a |
+| goal | -0.0142 | -0.2411 | n/a |
+| orca | -0.1844 | -0.0355 | n/a |
+| ppo | -0.2482 | -0.0993 | n/a |

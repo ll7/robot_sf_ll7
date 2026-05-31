@@ -28,7 +28,7 @@ stages:
   amv_actuation_smoke:
     scenario_matrix: configs/scenarios/sets/classic_cross_trap_subset.yaml
     scenario_filter: [ classic_cross_trap_high ]
-    seed_list: [ 111 ]
+    seed_list: [ 101 ]
     benchmark_profile: experimental
     horizon: 80
     dt: 0.1

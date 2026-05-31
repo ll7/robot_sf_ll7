@@ -98,6 +98,10 @@ def test_find_alternative_paths_recovers_two_wall_gaps() -> None:
     )
 
     assert len(paths) >= 2
+    assert all(
+        route.hypothesis_id == "primary_route" or route.hypothesis_id.startswith("masked_cell_")
+        for route in paths
+    )
     gap_rows = {
         next(cell[0] for cell in route.path if cell[1] == 12)
         for route in paths

@@ -119,7 +119,7 @@ failures from each archive cluster and the best head-on route override from a du
 
 Supported:
 
-- #1502 completed the bounded two-family execution and explicit row accounting.
+- Issue #1502 completed the bounded two-family execution and explicit row accounting.
 - Crossing/TTC random search outperformed Optuna/TPE in failures per attempted candidate at the
   fixed 256-candidate budget.
 - Optuna/TPE currently suffers from very high invalid-candidate rates in this search space.

@@ -11,6 +11,7 @@ import numpy as np
 
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
 from robot_sf.planner.hybrid_rule_local_planner import (
+    HybridRuleCandidate,
     HybridRuleLocalPlannerAdapter,
     HybridRuleLocalPlannerConfig,
     build_hybrid_rule_local_planner_config,
@@ -29,6 +30,10 @@ _TOPOLOGY_KEYS = {
     "static_clearance_weight",
     "fail_closed_on_missing_inputs",
     "fail_closed_on_insufficient_hypotheses",
+    "topology_command_enabled",
+    "topology_command_speed",
+    "topology_command_heading_gain",
+    "topology_command_turn_in_place_error",
     "route_hypothesis",
 }
 
@@ -50,6 +55,10 @@ class TopologyGuidedLocalPolicyConfig:
     static_clearance_weight: float = 0.6
     fail_closed_on_missing_inputs: bool = True
     fail_closed_on_insufficient_hypotheses: bool = False
+    topology_command_enabled: bool = True
+    topology_command_speed: float = 0.35
+    topology_command_heading_gain: float = 1.0
+    topology_command_turn_in_place_error: float = 0.25
 
 
 @dataclass(frozen=True)
@@ -176,6 +185,12 @@ def build_topology_guided_local_policy_config(
         fail_closed_on_missing_inputs=bool(raw.get("fail_closed_on_missing_inputs", True)),
         fail_closed_on_insufficient_hypotheses=bool(
             raw.get("fail_closed_on_insufficient_hypotheses", False)
+        ),
+        topology_command_enabled=bool(raw.get("topology_command_enabled", True)),
+        topology_command_speed=float(raw.get("topology_command_speed", 0.35)),
+        topology_command_heading_gain=float(raw.get("topology_command_heading_gain", 1.0)),
+        topology_command_turn_in_place_error=float(
+            raw.get("topology_command_turn_in_place_error", 0.25)
         ),
     )
 
@@ -391,6 +406,166 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         route_corridor["topology_status"] = "ok"
         return route_corridor
 
+    def _candidate_source_priority(self, source: str) -> int:
+        """Prefer explicit topology-hypothesis candidates over duplicate generic commands.
+
+        Returns:
+            int: Candidate-source priority used during duplicate-command collapse.
+        """
+        if source == "topology_hypothesis":
+            return 35
+        return super()._candidate_source_priority(source)
+
+    def _topology_hypothesis_candidate(
+        self,
+        *,
+        state: dict[str, Any],
+        speed_cap: float,
+        route_corridor: dict[str, Any] | None,
+        bounds: tuple[float, float, float, float],
+    ) -> HybridRuleCandidate | None:
+        """Return a bounded command that tracks the selected topology hypothesis."""
+        if not bool(self.topology_config.topology_command_enabled):
+            return None
+        if not isinstance(route_corridor, dict) or route_corridor.get("topology_status") != "ok":
+            return None
+        waypoint = self._route_point(route_corridor, "route_waypoint_world")
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        if waypoint is None or tangent_heading is None:
+            return None
+
+        v_min, v_max, w_min, w_max = bounds
+        robot_pos = state["robot_pos"]
+        heading = float(state["heading"])
+        waypoint_vec = waypoint - robot_pos
+        waypoint_heading = (
+            tangent_heading
+            if float(np.linalg.norm(waypoint_vec)) <= _EPS
+            else float(np.arctan2(waypoint_vec[1], waypoint_vec[0]))
+        )
+        tangent_error = float((tangent_heading - heading + np.pi) % (2.0 * np.pi) - np.pi)
+        turn_in_place_error = max(
+            float(self.topology_config.topology_command_turn_in_place_error), 0.0
+        )
+        if abs(tangent_error) >= turn_in_place_error:
+            desired_heading_error = tangent_error
+            desired_linear = 0.0
+        else:
+            blended_heading = float(
+                np.arctan2(
+                    0.5 * np.sin(tangent_heading) + 0.5 * np.sin(waypoint_heading),
+                    0.5 * np.cos(tangent_heading) + 0.5 * np.cos(waypoint_heading),
+                )
+            )
+            desired_heading_error = float(
+                (blended_heading - heading + np.pi) % (2.0 * np.pi) - np.pi
+            )
+            alignment = max(0.0, float(np.cos(desired_heading_error)))
+            desired_linear = min(
+                float(speed_cap),
+                float(self.topology_config.topology_command_speed),
+                float(self.config.max_linear_speed),
+            )
+            desired_linear *= alignment
+        desired_angular = float(
+            np.clip(
+                float(self.topology_config.topology_command_heading_gain)
+                * desired_heading_error
+                / max(float(self.config.control_period), _EPS),
+                w_min,
+                w_max,
+            )
+        )
+        linear = float(np.clip(desired_linear, v_min, v_max))
+        rollout_sequence = ((float(self.config.rollout_horizon), linear, desired_angular),)
+        return HybridRuleCandidate(
+            linear,
+            desired_angular,
+            "topology_hypothesis",
+            rollout_sequence,
+        )
+
+    def _generate_candidates(
+        self,
+        state: dict[str, Any],
+        speed_cap: float,
+        *,
+        route_corridor: dict[str, Any] | None = None,
+        corridor_subgoal: dict[str, Any] | None = None,
+    ) -> list[HybridRuleCandidate]:
+        """Add a selected-hypothesis command to the base hybrid-rule candidate set.
+
+        Returns:
+            list[HybridRuleCandidate]: De-duplicated local command candidates.
+        """
+        candidates = super()._generate_candidates(
+            state,
+            speed_cap,
+            route_corridor=route_corridor,
+            corridor_subgoal=corridor_subgoal,
+        )
+        topology_candidate = self._topology_hypothesis_candidate(
+            state=state,
+            speed_cap=speed_cap,
+            route_corridor=route_corridor,
+            bounds=self._dynamic_window(state["current_speed"], speed_cap),
+        )
+        if topology_candidate is not None:
+            candidates.append(topology_candidate)
+
+        unique: dict[tuple[Any, ...], HybridRuleCandidate] = {}
+        for candidate in candidates:
+            clipped = self._clip_candidate(candidate, speed_cap=speed_cap)
+            key = self._candidate_key(clipped)
+            existing = unique.get(key)
+            if existing is None or self._candidate_source_priority(
+                clipped.source
+            ) > self._candidate_source_priority(existing.source):
+                unique[key] = clipped
+        return list(unique.values())
+
+    def _corridor_subgoal_score_terms(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        route_corridor: dict[str, Any] | None,
+        state: dict[str, Any],
+        end_pos: np.ndarray,
+        end_heading: float,
+        min_static_clearance: float,
+        hard_static_clearance: float,
+    ) -> dict[str, float]:
+        """Score topology-hypothesis commands with the existing route-corridor terms.
+
+        Returns:
+            dict[str, float]: Route-corridor score terms for candidate selection.
+        """
+        if candidate.source != "topology_hypothesis":
+            return super()._corridor_subgoal_score_terms(
+                candidate=candidate,
+                route_corridor=route_corridor,
+                state=state,
+                end_pos=end_pos,
+                end_heading=end_heading,
+                min_static_clearance=min_static_clearance,
+                hard_static_clearance=hard_static_clearance,
+            )
+        proxy = HybridRuleCandidate(
+            candidate.linear,
+            candidate.angular,
+            "corridor_subgoal",
+            candidate.rollout_sequence,
+        )
+        return super()._corridor_subgoal_score_terms(
+            candidate=proxy,
+            route_corridor=route_corridor,
+            state=state,
+            end_pos=end_pos,
+            end_heading=end_heading,
+            min_static_clearance=min_static_clearance,
+            hard_static_clearance=hard_static_clearance,
+        )
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return a command, stopping fail-closed when topology hypotheses are unavailable.
 
@@ -417,6 +592,14 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             return (0.0, 0.0)
         if self._last_decision:
             self._last_decision["topology_guided"] = topology
+            if self._last_decision.get("selected_source") == "topology_hypothesis":
+                self._last_decision["topology_command_influence"] = {
+                    "source": "topology_hypothesis",
+                    "reason": "selected_hypothesis_route_command_won_safety_scoring",
+                    "selected_hypothesis_id": topology.get("selected_hypothesis_id"),
+                    "selected_score": self._last_decision.get("selected_score"),
+                    "selected_terms": self._last_decision.get("selected_terms", {}),
+                }
         return command
 
     def diagnostics(self) -> dict[str, Any]:
@@ -427,6 +610,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             "claim_boundary": self.topology_config.claim_boundary,
             "min_hypotheses": int(self.topology_config.min_hypotheses),
             "max_hypotheses": int(self.topology_config.max_hypotheses),
+            "topology_command_enabled": bool(self.topology_config.topology_command_enabled),
             "status_counts": dict(sorted(self._topology_status_counts.items())),
             "selected_hypothesis_counts": dict(sorted(self._selected_hypothesis_counts.items())),
             "last_topology_decision": self._last_topology_decision,

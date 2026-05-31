@@ -9,12 +9,12 @@ risk_surface:
   risk_threshold: 0.5
   producer_id: deterministic_pedestrian_fixture_v0
 risk_dwa:
-  max_linear_speed: 1.2
+  max_linear_speed: 2.0
   max_angular_speed: 1.2
   rollout_dt: 0.2
   rollout_steps: 8
   goal_tolerance: 0.25
-  linear_candidates: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
+  linear_candidates: [0.0, 0.4, 0.8, 1.2, 1.6, 2.0]
   angular_candidates: [-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2]
   goal_progress_weight: 4.0
   heading_weight: 0.8
@@ -31,5 +31,5 @@ risk_dwa:
   near_field_speed_cap: 0.6
   progress_escape_enabled: true
   progress_escape_distance: 1.0
-  progress_escape_speed: 0.55
+  progress_escape_speed: 0.9
   progress_escape_heading_gain: 1.6

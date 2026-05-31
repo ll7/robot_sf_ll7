@@ -120,3 +120,29 @@ def test_risk_surface_dwa_requires_explicit_experimental_opt_in() -> None:
         )
         == spec
     )
+
+
+def test_actuation_aware_hybrid_rule_alias_stays_experimental() -> None:
+    """The AMV actuation-aware local candidate should require exploratory opt-in."""
+    spec = get_algorithm_readiness("actuation_aware_hybrid_rule_v0")
+    assert spec is not None
+    assert spec.canonical_name == "hybrid_rule_local_planner"
+    assert spec.tier == "experimental"
+    assert spec.requires_explicit_opt_in is True
+
+    with pytest.raises(ValueError, match="allow_testing_algorithms"):
+        require_algorithm_allowed(
+            algo="actuation_aware_hybrid_rule_v0",
+            benchmark_profile="experimental",
+            ppo_paper_ready=False,
+        )
+
+    assert (
+        require_algorithm_allowed(
+            algo="actuation_aware_hybrid_rule_v0",
+            benchmark_profile="experimental",
+            ppo_paper_ready=False,
+            allow_testing_algorithms=True,
+        )
+        == spec
+    )

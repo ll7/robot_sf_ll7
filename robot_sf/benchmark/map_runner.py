@@ -1568,7 +1568,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             normalized_robot_command_mode=normalized_robot_command_mode,
         )
 
-    if algo_key in {"hybrid_rule_local_planner", "hybrid_rule_v0_minimal"}:
+    if algo_key in {
+        "hybrid_rule_local_planner",
+        "hybrid_rule_v0_minimal",
+        "actuation_aware_hybrid_rule_v0",
+    }:
         adapter = HybridRuleLocalPlannerAdapter(
             config=build_hybrid_rule_local_planner_config(algo_config)
         )

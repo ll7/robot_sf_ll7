@@ -157,6 +157,36 @@ def test_topology_hypothesis_can_select_local_command_source() -> None:
     )
 
 
+def test_topology_hypothesis_command_blends_headings_across_pi_boundary() -> None:
+    """Route tangent and waypoint headings should not cancel across the wrap boundary."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(topology_command_turn_in_place_error=4.0)
+    )
+    tangent_heading = float(np.pi - 0.1)
+    waypoint_heading = float(-np.pi + 0.1)
+    waypoint = np.array([np.cos(waypoint_heading), np.sin(waypoint_heading)], dtype=float)
+
+    candidate = planner._topology_hypothesis_candidate(
+        state={
+            "robot_pos": np.zeros(2, dtype=float),
+            "heading": 0.0,
+            "current_speed": 0.0,
+        },
+        speed_cap=1.0,
+        route_corridor={
+            "topology_status": "ok",
+            "route_waypoint_world": waypoint,
+            "route_tangent_heading": tangent_heading,
+        },
+        bounds=(-1.0, 1.0, -10.0, 10.0),
+    )
+
+    assert candidate is not None
+    assert candidate.source == "topology_hypothesis"
+    assert candidate.linear == 0.0
+    assert abs(candidate.angular) > 1.0
+
+
 def test_topology_guided_policy_resets_stale_topology_decision() -> None:
     """A later plan step with missing inputs must not reuse the prior topology result."""
     planner = TopologyGuidedHybridRulePlannerAdapter(_config())

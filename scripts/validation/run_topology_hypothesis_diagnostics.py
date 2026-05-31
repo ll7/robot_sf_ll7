@@ -241,7 +241,7 @@ def _find_alternative_paths(
             continue
         hypotheses.append(
             _RouteHypothesisPath(
-                hypothesis_id=f"blocked_cell_{blocked_cell[0]}_{blocked_cell[1]}",
+                hypothesis_id=f"masked_cell_{blocked_cell[0]}_{blocked_cell[1]}",
                 path=path,
                 clearance_map=clearance,
                 topology_signature=topology_signature,

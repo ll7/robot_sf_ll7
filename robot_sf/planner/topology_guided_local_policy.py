@@ -444,7 +444,6 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             else float(np.arctan2(waypoint_vec[1], waypoint_vec[0]))
         )
         tangent_error = float((tangent_heading - heading + np.pi) % (2.0 * np.pi) - np.pi)
-        waypoint_error = float((waypoint_heading - heading + np.pi) % (2.0 * np.pi) - np.pi)
         turn_in_place_error = max(
             float(self.topology_config.topology_command_turn_in_place_error), 0.0
         )
@@ -452,7 +451,15 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             desired_heading_error = tangent_error
             desired_linear = 0.0
         else:
-            desired_heading_error = 0.5 * tangent_error + 0.5 * waypoint_error
+            blended_heading = float(
+                np.arctan2(
+                    0.5 * np.sin(tangent_heading) + 0.5 * np.sin(waypoint_heading),
+                    0.5 * np.cos(tangent_heading) + 0.5 * np.cos(waypoint_heading),
+                )
+            )
+            desired_heading_error = float(
+                (blended_heading - heading + np.pi) % (2.0 * np.pi) - np.pi
+            )
             alignment = max(0.0, float(np.cos(desired_heading_error)))
             desired_linear = min(
                 float(speed_cap),

@@ -18,6 +18,7 @@ from robot_sf.benchmark.aggregate import (
     normalize_observation_track_mode,
     observation_track_group_label,
 )
+from robot_sf.benchmark.grouping import resolve_report_group_key
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -83,11 +84,12 @@ def _group_rows(
     )
     mode = normalize_observation_track_mode(str(track_meta["mode"]))
     for rec in records:
-        g = _get_nested(rec, group_by)
-        if g is None:
-            g = _get_nested(rec, fallback_group_by)
-        if g is None:
-            g = "unknown"
+        g = resolve_report_group_key(
+            rec,
+            group_by=group_by,
+            fallback_group_by=fallback_group_by,
+            missing="unknown",
+        )
         key = observation_track_group_label(rec, str(g), mode=mode)
         groups[key].append(flatten_metrics(rec))
     return groups

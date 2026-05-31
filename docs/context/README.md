@@ -148,6 +148,8 @@ knowledge, not every transient iteration detail.
   [issue_1612_observation_track_architecture.md](issue_1612_observation_track_architecture.md)
 * Issue #1721 Legacy Benchmark-Track Metadata Audit:
   [issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md)
+* Issue #1846 metadata worker bridge:
+  [issue_1846_metadata_worker_bridge.md](issue_1846_metadata_worker_bridge.md)
 * Issue #1659 LiDAR occupancy adapter:
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:
@@ -247,6 +249,8 @@ knowledge, not every transient iteration detail.
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Issue #1638 local model path preflight:
   [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
+* Issue #1845 report grouping contracts:
+  [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1758 Arena-Rosnav Source-Side Assessment (2026-05-30):

@@ -16,6 +16,7 @@ from robot_sf.benchmark.aggregate import (
     observation_track_group_label,
     resolve_benchmark_track,
 )
+from robot_sf.benchmark.grouping import resolve_report_group_key
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -48,10 +49,12 @@ def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None
     Returns:
         Group key string or None if missing.
     """
-    g = _get_dotted(rec, group_by)
-    if g is None:
-        g = _get_dotted(rec, fallback_group_by)
-    return None if g is None else str(g)
+    return resolve_report_group_key(
+        rec,
+        group_by=group_by,
+        fallback_group_by=fallback_group_by,
+        missing="skip",
+    )
 
 
 @dataclass

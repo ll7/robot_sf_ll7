@@ -74,8 +74,6 @@ VIEW_MODE_REGISTRY: dict[ManualViewMode, ManualViewModeSpec] = {
     ManualViewMode.ROBOT_STATIC: ManualViewModeSpec(
         mode=ManualViewMode.ROBOT_STATIC,
         overlay_label="Robot-static view: robot-centered camera without ego-up rotation",
-        implemented=False,
-        blocker="robot_static view has no renderer camera transform hook in this foundation",
     ),
 }
 """Versioned manual-control view mode registry."""

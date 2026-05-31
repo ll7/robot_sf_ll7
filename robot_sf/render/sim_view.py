@@ -604,10 +604,14 @@ class SimulationView:
     def set_manual_view_mode(self, view_mode: object) -> None:
         """Configure the renderer camera mode used by manual-control sessions."""
         normalized = str(getattr(view_mode, "value", view_mode))
-        if normalized not in {"fixed_map", "ego_up"}:
+        if normalized not in {"fixed_map", "ego_up", "robot_static"}:
             raise NotImplementedError(f"manual view mode is not implemented: {normalized}")
-        if normalized == "ego_up":
-            self._prev_offset_for_ego_up = (float(self.offset[0]), float(self.offset[1]))
+        if normalized in {"ego_up", "robot_static"}:
+            if self._prev_offset_for_ego_up is None:
+                self._prev_offset_for_ego_up = (
+                    float(self.offset[0]),
+                    float(self.offset[1]),
+                )
             self.manual_view_mode = normalized
             return
         # fixed_map restores any previously saved pan offset.
@@ -780,6 +784,13 @@ class SimulationView:
             self._camera_rotation_rad = -pi / 2.0 - float(theta)
             self._camera_rotation_cos = cos(self._camera_rotation_rad)
             self._camera_rotation_sin = sin(self._camera_rotation_rad)
+            return
+        if self.manual_view_mode == "robot_static":
+            r_x, r_y = state.robot_pose[0]
+            self._camera_center_world = (float(r_x), float(r_y))
+            self._camera_rotation_rad = 0.0
+            self._camera_rotation_cos = 1.0
+            self._camera_rotation_sin = 0.0
             return
         if self.focus_on_robot:
             r_x, r_y = state.robot_pose[0]

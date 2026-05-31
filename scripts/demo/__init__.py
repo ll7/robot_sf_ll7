@@ -1,2 +1,1 @@
 """Local demo entry points."""
-

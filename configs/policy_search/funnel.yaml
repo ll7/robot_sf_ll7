@@ -45,6 +45,7 @@ stages:
       max_angular_accel_rad_s2: 4.0
       latency_mode: zero-step-delay
       update_mode: 10hz-matched
+    fail_closed_initial_overlap_exclusion: true
   nominal_sanity:
     scenario_matrix: configs/policy_search/nominal_sanity_matrix.yaml
     seed_manifest: configs/policy_search/nominal_sanity_seeds.yaml

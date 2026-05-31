@@ -2,7 +2,7 @@
 
 ## Decision
 
-pass
+excluded
 
 ## Hypothesis
 
@@ -17,7 +17,7 @@ A deterministic hybrid-rule local scorer can penalize command candidates that wo
 - Scenario filter: `classic_cross_trap_high`
 - Seed manifest: `suite default`
 - Summary JSON: `output/policy_search/actuation_aware_hybrid_rule_v0/amv_actuation_smoke/latest/summary.json`
-- Git commit: `7b5547ed5dacd3a00c59a3e346994385435c997c`
+- Git commit: `f81ff02484d7c8dff60fd3295eb73add433194c6`
 - Synthetic actuation profile: `amv-actuation-stress-v0` (`synthetic-only`, diagnostic-only)
 
 ## Aggregate Results
@@ -26,11 +26,25 @@ A deterministic hybrid-rule local scorer can penalize command candidates that wo
 |---:|---:|---:|---:|---:|---:|
 | 1 | 0.0000 | 1.0000 | 0.0000 | 1.0513 | 0.0000 |
 
+## Evidence-Adjusted Results
+
+| Episodes | Excluded | Success | Collision | Near Miss |
+|---:|---:|---:|---:|---:|
+| 0 | 1 | 0.0000 | 0.0000 | 0.0000 |
+
+Raw aggregate results above still include excluded rows; evidence-adjusted results only remove rows with explicit exclusion metadata.
+
 ## Synthetic Actuation Diagnostics
 
 | Command Clip | Yaw Saturation | Signed Braking Peak |
 |---:|---:|---:|
 | 0.0000 | 0.0000 | 0.0000 |
+
+## Scenario Exclusions
+
+| Scenario | Seed | Status | Reason | Evidence |
+|---|---:|---|---|---|
+| classic_cross_trap_high | 111 | impossible | initial_robot_pedestrian_overlap | first_step_collision_with_zero_progress; min_clearance_m=-0.3487; nearest_pedestrian_distance_m=1.0117; candidate_collision_radius_m=1.4500; all_first_step_candidates_rejected_for_dynamic_collision |
 
 ## Scenario-Family Split
 
@@ -40,7 +54,7 @@ A deterministic hybrid-rule local scorer can penalize command candidates that wo
 
 ## Failure Taxonomy
 
-- `static_collision`: `1`
+- No failures recorded.
 
 ## Baseline Deltas
 

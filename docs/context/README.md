@@ -3,6 +3,10 @@
 `docs/context/` is the repository's Markdown knowledge base for issue execution history, durable
 agent handoff, and reusable reasoning that should not be trapped in chat or PR text.
 
+For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-first catalog for
+current entry points, status rules, and curated context-pack scopes. This README remains the note
+maintenance workflow and full discoverability surface.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 
@@ -74,6 +78,7 @@ knowledge, not every transient iteration detail.
 
 ## Skills And Entry Points
 
+* Retrieval-first context index: [INDEX.md](INDEX.md)
 * Repository rule: [AGENTS.md](../../AGENTS.md)
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)

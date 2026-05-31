@@ -28,6 +28,8 @@ Treat the following files as the repository-native context stack for Agent-style
 - `memory/MEMORY.md`: concise repo-local memory index for stable cross-session facts and links to
   detailed topic files under `memory/`.
 - `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
+- `docs/context/INDEX.md`: retrieval-first catalog for current context-note entry points, status
+  rules, optional context tools, and curated context-pack scopes.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
   mirrored at `.codex/skills/` and `.opencode/skills/` for compatibility.
@@ -110,9 +112,9 @@ detail instead of turning the index into another full instruction document.
   or successor note when a document is superseded.
 - If a touched note contains outdated or superseded statements, update them, remove them, or mark
   them clearly with a pointer to the current source of truth.
-- Keep note names and links discoverable from normal contributor entry points. Start with
-  `docs/context/README.md` and use `.agents/skills/context-note-maintainer/SKILL.md` when creating
-  or refreshing context notes.
+- Keep note names and links discoverable from normal contributor entry points. Start broad reads
+  from `docs/context/INDEX.md`; use `docs/context/README.md` and
+  `.agents/skills/context-note-maintainer/SKILL.md` when creating or refreshing context notes.
 
 ## Cross-Agent Compatibility
 

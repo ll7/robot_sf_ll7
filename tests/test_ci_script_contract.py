@@ -236,3 +236,21 @@ def test_worktree_shared_venv_helper_fails_for_missing_shared_env(tmp_path: Path
     assert result.returncode == 2
     assert f"Shared virtualenv not found or incomplete: {missing_venv}" in result.stderr
     assert "Create it with 'uv sync --all-extras'" in result.stderr
+
+
+def test_worktree_shared_venv_helper_reports_relative_missing_env() -> None:
+    """Relative missing env paths should still use the helper's actionable error."""
+    missing_venv = Path("does/not/exist")
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(missing_venv), "--", "python", "-V"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert f"Shared virtualenv not found or incomplete: {ROOT / missing_venv}" in result.stderr
+    assert "cd:" not in result.stderr

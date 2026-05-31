@@ -67,7 +67,7 @@ main_repo_root="$(cd "$git_common_dir/.." && pwd)"
 
 venv_path="${venv_override:-$main_repo_root/.venv}"
 if [[ "$venv_path" != /* ]]; then
-  venv_path="$(cd "$(dirname "$venv_path")" && pwd)/$(basename "$venv_path")"
+  venv_path="$repo_root/$venv_path"
 fi
 
 if [[ ! -x "$venv_path/bin/python" ]]; then

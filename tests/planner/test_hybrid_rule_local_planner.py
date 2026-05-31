@@ -182,6 +182,50 @@ def test_tentabot_value_scorer_v0_exposes_clean_room_diagnostics() -> None:
     ]
 
 
+def test_actuation_aware_variant_penalizes_synthetic_clip_risk() -> None:
+    """Actuation-aware scoring should expose and penalize synthetic envelope risk."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "actuation_aware_hybrid_rule_v0",
+            "actuation_score_enabled": True,
+            "actuation_profile_name": "amv-actuation-stress-v0",
+            "actuation_max_linear_accel": 1.0,
+            "actuation_max_linear_decel": 1.0,
+            "actuation_max_yaw_rate": 0.6,
+            "actuation_max_angular_accel": 1.0,
+            "actuation_feasibility_weight": 3.0,
+            "actuation_projection_weight": 1.0,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    state = planner._extract_state(_obs(speed=0.0))
+    smooth = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(0.1, 0.0, "smooth"),
+        observation=_obs(speed=0.0),
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 1.0},
+    )
+    abrupt = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(1.2, 1.2, "abrupt"),
+        observation=_obs(speed=0.0),
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 1.0},
+    )
+
+    assert smooth["accepted"] is True
+    assert abrupt["accepted"] is True
+    assert smooth["terms"]["actuation_clip_risk"] == pytest.approx(0.0)
+    assert abrupt["terms"]["actuation_clip_risk"] > 0.0
+    assert abrupt["terms"]["actuation_feasibility"] < smooth["terms"]["actuation_feasibility"]
+    assert abrupt["actuation_diagnostics"]["profile"] == "amv-actuation-stress-v0"
+    assert abrupt["actuation_diagnostics"]["projected_command"] != [1.2, 1.2]
+    assert smooth["score"] > abrupt["score"]
+
+
 def test_hybrid_rule_last_decision_returns_copy() -> None:
     """Step-level diagnostics should not expose mutable planner internals."""
     planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())

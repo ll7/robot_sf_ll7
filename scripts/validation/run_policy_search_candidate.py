@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         choices=(
             "smoke",
+            "amv_actuation_smoke",
             "nominal_sanity",
             "stress_slice",
             "full_matrix",
@@ -162,6 +163,20 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
     return str(
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )
+
+
+def _filter_scenarios(
+    scenarios: list[dict[str, Any]],
+    scenario_filter: list[str] | None,
+) -> list[dict[str, Any]]:
+    """Return only scenarios named by a stage filter when one is configured."""
+    if not scenario_filter:
+        return scenarios
+    allowed = {str(item) for item in scenario_filter}
+    filtered = [scenario for scenario in scenarios if _scenario_id(scenario) in allowed]
+    if not filtered:
+        raise ValueError(f"Stage scenario_filter matched no scenarios: {sorted(allowed)}")
+    return filtered
 
 
 def _effective_candidate_config_for_scenario(
@@ -298,7 +313,7 @@ def _group_scenarios_by_config_overrides(
 
 def decide_stage_status(stage_name: str, stage_cfg: dict[str, Any], summary: dict[str, Any]) -> str:
     """Convert a stage summary into the registry/report decision label."""
-    if stage_name == "smoke":
+    if stage_name == "smoke" or stage_name.endswith("_smoke"):
         return "pass" if int(summary.get("episodes", 0)) > 0 else "revise"
     gate = stage_cfg.get("gate")
     if not isinstance(gate, dict):
@@ -336,19 +351,43 @@ def _load_stage_scenarios(
     stage_matrix: Path,
     seed_manifest: Path | None,
     seed_list: list[int] | None = None,
+    scenario_filter: list[str] | None = None,
 ) -> Path | list[dict[str, Any]]:
     """Resolve the scenario surface for a stage, including explicit seed overrides."""
     if seed_manifest is None:
-        if seed_list:
-            scenarios = load_scenarios(stage_matrix)
+        if seed_list or scenario_filter:
+            scenarios = _filter_scenarios(load_scenarios(stage_matrix), scenario_filter)
             base_dir = stage_matrix.parent.resolve()
             prepared = _prepare_scenarios_for_inline_run(scenarios, scenario_root=base_dir)
-            for scenario in prepared:
-                scenario["seeds"] = list(seed_list)
+            if seed_list:
+                for scenario in prepared:
+                    scenario["seeds"] = list(seed_list)
             return prepared
         return stage_matrix
     manifest = load_seed_manifest(seed_manifest)
-    return make_subset_scenarios(stage_matrix, manifest)
+    return _filter_scenarios(make_subset_scenarios(stage_matrix, manifest), scenario_filter)
+
+
+def _stage_scenario_filter(stage_cfg: Mapping[str, Any]) -> list[str] | None:
+    """Return a normalized stage scenario filter."""
+    scenario_filter_raw = stage_cfg.get("scenario_filter")
+    if isinstance(scenario_filter_raw, list) and scenario_filter_raw:
+        return [str(item) for item in scenario_filter_raw]
+    return None
+
+
+def _stage_synthetic_actuation_profile(
+    stage_cfg: Mapping[str, Any],
+    *,
+    stage_name: str,
+) -> dict[str, Any] | None:
+    """Return a validated synthetic-actuation profile payload for a stage."""
+    synthetic_actuation_profile = stage_cfg.get("synthetic_actuation_profile")
+    if synthetic_actuation_profile is None:
+        return None
+    if not isinstance(synthetic_actuation_profile, dict):
+        raise TypeError(f"Stage synthetic_actuation_profile must be a mapping: {stage_name}")
+    return synthetic_actuation_profile
 
 
 def _load_records(path: Path) -> list[dict[str, Any]]:
@@ -386,6 +425,7 @@ def _run_stage_eval(  # noqa: PLR0913
     dt: float,
     workers: int,
     benchmark_profile: str,
+    synthetic_actuation_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one stage evaluation and collect records plus summary metadata.
 
@@ -412,6 +452,7 @@ def _run_stage_eval(  # noqa: PLR0913
         workers=int(workers),
         resume=False,
         benchmark_profile=str(benchmark_profile),
+        synthetic_actuation_profile=synthetic_actuation_profile,
     )
     rows = _load_records(jsonl_path)
     summary = summarize_policy_search_records(rows)
@@ -485,6 +526,64 @@ def _format_signed_optional_float(value: Any) -> str:
         return "n/a"
 
 
+def _evaluation_scope_lines(
+    *,
+    stage_name: str,
+    candidate_payload: Mapping[str, Any],
+    stage_cfg: Mapping[str, Any],
+    stage_matrix: Path,
+    seed_manifest: Path | None,
+    summary_json_path: Path,
+    git_hash: str | None,
+) -> list[str]:
+    """Return Markdown lines that describe one candidate-stage run scope."""
+    lines = [
+        "## Evaluation Scope",
+        "",
+        f"- Stage: `{stage_name}`",
+        f"- Algorithm: `{candidate_payload.get('algo', 'unknown')}`",
+        f"- Scenario matrix: `{_display_path(stage_matrix)}`",
+    ]
+    scenario_filter = stage_cfg.get("scenario_filter")
+    if isinstance(scenario_filter, list) and scenario_filter:
+        lines.append(f"- Scenario filter: `{', '.join(str(item) for item in scenario_filter)}`")
+    lines.extend(
+        [
+            f"- Seed manifest: `{_display_path(seed_manifest)}`"
+            if seed_manifest is not None
+            else "- Seed manifest: `suite default`",
+            f"- Summary JSON: `{_display_path(summary_json_path)}`",
+            f"- Git commit: `{git_hash}`" if git_hash else "- Git commit: `unavailable`",
+        ]
+    )
+    synthetic_profile = stage_cfg.get("synthetic_actuation_profile")
+    if isinstance(synthetic_profile, dict):
+        profile_name = str(synthetic_profile.get("name", "unknown"))
+        claim_scope = str(synthetic_profile.get("claim_scope", "unknown"))
+        lines.append(
+            f"- Synthetic actuation profile: `{profile_name}` (`{claim_scope}`, diagnostic-only)"
+        )
+    return lines
+
+
+def _actuation_diagnostics_lines(summary: Mapping[str, Any]) -> list[str]:
+    """Return optional Markdown rows for synthetic actuation diagnostics."""
+    actuation_summary_raw = summary.get("synthetic_actuation")
+    actuation_summary = actuation_summary_raw if isinstance(actuation_summary_raw, dict) else {}
+    if not any(value is not None for value in actuation_summary.values()):
+        return []
+    return [
+        "",
+        "## Synthetic Actuation Diagnostics",
+        "",
+        "| Command Clip | Yaw Saturation | Signed Braking Peak |",
+        "|---:|---:|---:|",
+        f"| {_format_optional_float(actuation_summary.get('command_clip_fraction_mean'))} | "
+        f"{_format_optional_float(actuation_summary.get('yaw_rate_saturation_fraction_mean'))} | "
+        f"{_format_optional_float(actuation_summary.get('signed_braking_peak_m_s2_mean'))} |",
+    ]
+
+
 def _write_markdown_report(  # noqa: PLR0913
     *,
     docs_root: Path,
@@ -525,16 +624,15 @@ def _write_markdown_report(  # noqa: PLR0913
         "",
         str(candidate_entry.get("hypothesis") or candidate_payload.get("hypothesis") or "n/a"),
         "",
-        "## Evaluation Scope",
-        "",
-        f"- Stage: `{stage_name}`",
-        f"- Algorithm: `{candidate_payload.get('algo', 'unknown')}`",
-        f"- Scenario matrix: `{_display_path(stage_matrix)}`",
-        f"- Seed manifest: `{_display_path(seed_manifest)}`"
-        if seed_manifest is not None
-        else "- Seed manifest: `suite default`",
-        f"- Summary JSON: `{_display_path(summary_json_path)}`",
-        f"- Git commit: `{git_hash}`" if git_hash else "- Git commit: `unavailable`",
+        *_evaluation_scope_lines(
+            stage_name=stage_name,
+            candidate_payload=candidate_payload,
+            stage_cfg=stage_cfg,
+            stage_matrix=stage_matrix,
+            seed_manifest=seed_manifest,
+            summary_json_path=summary_json_path,
+            git_hash=git_hash,
+        ),
         "",
         "## Aggregate Results",
         "",
@@ -548,6 +646,7 @@ def _write_markdown_report(  # noqa: PLR0913
         f"{float(summary.get('collision_rate', 0.0)):.4f} | {float(summary.get('near_miss_rate', 0.0)):.4f} | "
         f"{_format_optional_float(mean_min_distance)} | {_format_optional_float(mean_avg_speed)} |"
     )
+    lines.extend(_actuation_diagnostics_lines(summary))
     lines.extend(
         [
             "",
@@ -633,16 +732,26 @@ def main() -> int:
         if isinstance(seed_list_raw, list) and seed_list_raw
         else None
     )
+    scenario_filter = _stage_scenario_filter(stage_cfg)
     horizon = int(args.horizon if args.horizon is not None else stage_cfg.get("horizon", 120))
     dt = float(args.dt if args.dt is not None else stage_cfg.get("dt", 0.1))
     workers = int(args.workers if args.workers is not None else stage_cfg.get("workers", 1))
     benchmark_profile = str(stage_cfg.get("benchmark_profile", "experimental"))
+    synthetic_actuation_profile = _stage_synthetic_actuation_profile(
+        stage_cfg,
+        stage_name=args.stage,
+    )
 
     output_dir = (
         args.output_dir or Path("output/policy_search") / args.candidate / args.stage / "latest"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
-    scenarios_or_path = _load_stage_scenarios(stage_matrix, seed_manifest, seed_list)
+    scenarios_or_path = _load_stage_scenarios(
+        stage_matrix,
+        seed_manifest,
+        seed_list,
+        scenario_filter,
+    )
 
     family_overrides = candidate_payload.get("family_overrides")
     scenario_overrides = candidate_payload.get("scenario_overrides")
@@ -685,6 +794,7 @@ def main() -> int:
                 dt=dt,
                 workers=workers,
                 benchmark_profile=benchmark_profile,
+                synthetic_actuation_profile=synthetic_actuation_profile,
             )
             family_runs[tag] = {key: value for key, value in run.items() if key != "records"}
             combined_records.extend(run["records"])
@@ -707,6 +817,7 @@ def main() -> int:
             dt=dt,
             workers=workers,
             benchmark_profile=benchmark_profile,
+            synthetic_actuation_profile=synthetic_actuation_profile,
         )
 
     stage_summary = summary_payload["summary"]
@@ -721,7 +832,9 @@ def main() -> int:
         "candidate_config_path": str(candidate_config_path),
         "scenario_matrix": str(stage_matrix),
         "seed_manifest": str(seed_manifest) if seed_manifest is not None else None,
+        "scenario_filter": scenario_filter,
         "benchmark_profile": benchmark_profile,
+        "synthetic_actuation_profile": synthetic_actuation_profile,
         "git_hash": git_hash,
         "summary": stage_summary,
         "decision": decision,

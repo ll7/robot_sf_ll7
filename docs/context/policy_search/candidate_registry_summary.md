@@ -50,6 +50,7 @@ not headline promotion without a separate issue and evidence decision.
 | `proxemic_profile_conservative_issue_1676` | `diagnostic_only` | `diagnostic_only` | Conservative proxemic/comfort profile. |
 | `proxemic_profile_neutral_issue_1676` | `diagnostic_only` | `diagnostic_only` | Neutral profile used as middle setting. |
 | `proxemic_profile_open_issue_1676` | `diagnostic_only` | `diagnostic_only` | Open comfort profile with higher expected near-miss risk. |
+| `actuation_aware_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Synthetic AMV actuation scorer; not calibrated hardware evidence. |
 
 ## Learned-Policy And Learned-Style Rows
 

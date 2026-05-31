@@ -29,6 +29,7 @@ _SUPPORTED_VARIANTS = {
     "hybrid_rule_v4_recovery_aware",
     "hybrid_rule_v5_ensemble_selector",
     "tentabot_value_scorer_v0",
+    "actuation_aware_hybrid_rule_v0",
 }
 _EPS = 1e-9
 
@@ -219,6 +220,19 @@ class HybridRuleLocalPlannerConfig:
     # weights.
     value_scorer_profile: str = "manual_linear"
     value_scorer_training_source: str = "hand_scored_hybrid_rule_teacher"
+
+    # Experimental AMV synthetic-actuation scoring for issue #1807. These
+    # values intentionally mirror the diagnostic profile shape used by issue
+    # #1556; they are not calibrated hardware limits.
+    actuation_score_enabled: bool = False
+    actuation_profile_name: str = "amv-actuation-stress-v0"
+    actuation_claim_scope: str = "synthetic-diagnostic-only"
+    actuation_max_linear_accel: float = 2.0
+    actuation_max_linear_decel: float = 2.5
+    actuation_max_yaw_rate: float = 1.2
+    actuation_max_angular_accel: float = 4.0
+    actuation_feasibility_weight: float = 0.0
+    actuation_projection_weight: float = 0.0
 
 
 class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -1402,6 +1416,94 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return terms
 
+    def _actuation_scoring_metadata(self) -> dict[str, Any] | None:
+        """Return synthetic actuation-scoring metadata for exploratory variants."""
+        if not bool(self.config.actuation_score_enabled):
+            return None
+        return {
+            "profile": str(self.config.actuation_profile_name),
+            "claim_scope": str(self.config.actuation_claim_scope),
+            "interpretation": "synthetic_diagnostic_only",
+            "hardware_calibrated": False,
+            "paper_facing": False,
+            "projection_policy": "score_penalty_only",
+            "limits": {
+                "max_linear_accel_m_s2": float(self.config.actuation_max_linear_accel),
+                "max_linear_decel_m_s2": float(self.config.actuation_max_linear_decel),
+                "max_yaw_rate_rad_s": float(self.config.actuation_max_yaw_rate),
+                "max_angular_accel_rad_s2": float(self.config.actuation_max_angular_accel),
+            },
+        }
+
+    def _actuation_terms(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        state: dict[str, Any],
+    ) -> tuple[dict[str, float], dict[str, Any] | None]:
+        """Score synthetic actuation-envelope risk without replacing diagnostics.
+
+        Returns:
+            Scoring terms plus optional per-candidate diagnostic metadata.
+        """
+        if not bool(self.config.actuation_score_enabled):
+            return {
+                "actuation_feasibility": 1.0,
+                "actuation_clip_risk": 0.0,
+            }, None
+
+        dt = max(float(state.get("dt", self.config.rollout_dt)), 1e-3)
+        current_linear = float(state.get("current_speed", self._last_command[0]))
+        current_angular = float(self._last_command[1])
+        target_linear = float(candidate.linear)
+        target_angular = float(candidate.angular)
+
+        allowed_linear_up = max(float(self.config.actuation_max_linear_accel), _EPS) * dt
+        allowed_linear_down = max(float(self.config.actuation_max_linear_decel), _EPS) * dt
+        linear_delta = target_linear - current_linear
+        if linear_delta >= 0.0:
+            projected_linear = current_linear + min(linear_delta, allowed_linear_up)
+            linear_norm = allowed_linear_up
+        else:
+            projected_linear = current_linear + max(linear_delta, -allowed_linear_down)
+            linear_norm = allowed_linear_down
+
+        yaw_limit = max(float(self.config.actuation_max_yaw_rate), _EPS)
+        bounded_target_angular = float(np.clip(target_angular, -yaw_limit, yaw_limit))
+        allowed_angular_delta = max(float(self.config.actuation_max_angular_accel), _EPS) * dt
+        angular_delta = bounded_target_angular - current_angular
+        projected_angular = current_angular + float(
+            np.clip(angular_delta, -allowed_angular_delta, allowed_angular_delta)
+        )
+
+        linear_projection_delta = abs(projected_linear - target_linear)
+        yaw_projection_delta = abs(bounded_target_angular - target_angular)
+        angular_projection_delta = abs(projected_angular - bounded_target_angular)
+        linear_clip_risk = _clip01(linear_projection_delta / max(linear_norm, _EPS))
+        yaw_clip_risk = _clip01(yaw_projection_delta / max(yaw_limit, _EPS))
+        angular_clip_risk = _clip01(angular_projection_delta / max(allowed_angular_delta, _EPS))
+        clip_risk = max(linear_clip_risk, yaw_clip_risk, angular_clip_risk)
+        feasibility = 1.0 - clip_risk
+        diagnostics = {
+            "profile": str(self.config.actuation_profile_name),
+            "claim_scope": str(self.config.actuation_claim_scope),
+            "requested_command": [target_linear, target_angular],
+            "projected_command": [float(projected_linear), float(projected_angular)],
+            "command_clipped": bool(clip_risk > 0.0),
+            "yaw_rate_saturated": bool(yaw_projection_delta > _EPS),
+            "linear_accel_required_m_s2": float(linear_delta / dt),
+            "angular_accel_required_rad_s2": float((target_angular - current_angular) / dt),
+            "clip_risk": float(clip_risk),
+            "linear_clip_risk": float(linear_clip_risk),
+            "yaw_rate_clip_risk": float(yaw_clip_risk),
+            "angular_accel_clip_risk": float(angular_clip_risk),
+            "interpretation": "synthetic_diagnostic_only",
+        }
+        return {
+            "actuation_feasibility": float(feasibility),
+            "actuation_clip_risk": float(clip_risk),
+        }, diagnostics
+
     def _evaluate_candidate(
         self,
         *,
@@ -1628,6 +1730,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             min_static_clearance=min_static_clearance,
             hard_static_clearance=hard_static_clearance,
         )
+        actuation_terms, actuation_diagnostics = self._actuation_terms(
+            candidate=candidate,
+            state=state,
+        )
         terms = {
             "goal_progress": float(np.clip(progress / max_progress, -1.0, 1.0)),
             "path_alignment": float(np.cos(heading_error)),
@@ -1660,6 +1766,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else 0.0,
             "route_guide_commitment": route_guide_commitment,
             **corridor_subgoal_terms,
+            **actuation_terms,
         }
         score = (
             float(self.config.goal_progress_weight) * terms["goal_progress"]
@@ -1685,6 +1792,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             * terms["corridor_subgoal_clearance_margin"]
             + float(self.config.corridor_subgoal_continuity_weight)
             * terms["corridor_subgoal_continuity"]
+            + float(self.config.actuation_feasibility_weight) * terms["actuation_feasibility"]
+            - float(self.config.actuation_projection_weight) * terms["actuation_clip_risk"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )
@@ -1697,6 +1806,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "min_dynamic_clearance": min_dynamic_clearance,
             "predicted_ttc": ttc,
             "continuous_static_checked": bool(use_continuous_static_check),
+            "actuation_diagnostics": actuation_diagnostics,
         }
 
     def _candidate_diagnostic(self, evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -1718,6 +1828,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ]
         if "continuous_static_checked" in evaluation:
             row["continuous_static_checked"] = bool(evaluation.get("continuous_static_checked"))
+        if isinstance(evaluation.get("actuation_diagnostics"), dict):
+            row["actuation_diagnostics"] = dict(evaluation["actuation_diagnostics"])
         return row
 
     def _rejection_diagnostic(self, evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -1890,6 +2002,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             terms = best["terms"]
             nearest_static = best["min_static_clearance"]
             predicted_ttc = best["predicted_ttc"]
+            actuation_diagnostics = best.get("actuation_diagnostics")
             top_k = [
                 self._candidate_diagnostic(item)
                 for item in accepted[: max(int(self.config.top_k_diagnostics), 1)]
@@ -1913,6 +2026,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             score = 0.0
             terms = {"freezing_penalty": 1.0}
             nearest_static = self._min_obstacle_clearance(robot_pos, observation)
+            actuation_diagnostics = None
             predicted_ttc = self._ttc_proxy(
                 robot_pos=robot_pos,
                 heading=float(state["heading"]),
@@ -1936,6 +2050,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             progress_windows=progress_windows,
             route_corridor=route_corridor,
             corridor_subgoal=corridor_subgoal,
+            actuation_diagnostics=actuation_diagnostics,
             rejected_examples=rejected_examples,
             moving_rejection_counts=dict(moving_rejection_counts),
             rejection_counts_by_source=rejection_counts_by_source,
@@ -1974,6 +2089,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         progress_windows: dict[str, float],
         route_corridor: dict[str, Any] | None = None,
         corridor_subgoal: dict[str, Any] | None = None,
+        actuation_diagnostics: dict[str, Any] | None = None,
         rejected_examples: list[dict[str, Any]] | None = None,
         moving_rejection_counts: dict[str, int] | None = None,
         rejection_counts_by_source: dict[str, dict[str, int]] | None = None,
@@ -2010,6 +2126,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "progress_windows": {key: float(value) for key, value in progress_windows.items()},
             "route_corridor": route_corridor,
             "corridor_subgoal": corridor_subgoal,
+            "selected_actuation_diagnostics": actuation_diagnostics,
         }
 
     def diagnostics(self) -> dict[str, Any]:
@@ -2017,6 +2134,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         return {
             "planner_variant": self.config.planner_variant,
             "value_scorer": self._value_scorer_metadata(),
+            "actuation_scoring": self._actuation_scoring_metadata(),
             "steps": int(self._step_index),
             "selected_source_counts": dict(sorted(self._selected_source_counts.items())),
             "rejection_counts": dict(sorted(self._rejection_counts.items())),

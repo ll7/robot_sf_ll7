@@ -1,5 +1,6 @@
 stage_order:
   - smoke
+  - amv_actuation_smoke
   - nominal_sanity
   - stress_slice
   - full_matrix
@@ -24,6 +25,26 @@ stages:
     dt: 0.1
     workers: 1
     requires_slurm: false
+  amv_actuation_smoke:
+    scenario_matrix: configs/scenarios/sets/classic_cross_trap_subset.yaml
+    scenario_filter: [ classic_cross_trap_high ]
+    seed_list: [ 111 ]
+    benchmark_profile: experimental
+    horizon: 80
+    dt: 0.1
+    workers: 1
+    requires_slurm: false
+    paper_facing: false
+    synthetic_actuation_profile:
+      name: amv-actuation-stress-v0
+      profile_version: v0
+      claim_scope: synthetic-only
+      max_linear_accel_m_s2: 2.0
+      max_linear_decel_m_s2: 2.5
+      max_yaw_rate_rad_s: 1.2
+      max_angular_accel_rad_s2: 4.0
+      latency_mode: zero-step-delay
+      update_mode: 10hz-matched
   nominal_sanity:
     scenario_matrix: configs/policy_search/nominal_sanity_matrix.yaml
     seed_manifest: configs/policy_search/nominal_sanity_seeds.yaml

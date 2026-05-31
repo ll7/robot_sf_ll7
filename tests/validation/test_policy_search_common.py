@@ -98,6 +98,40 @@ def test_summarize_policy_search_records_builds_family_and_failure_counts() -> N
     assert summary["scenario_family"]["francis2023"]["episodes"] == 2
 
 
+def test_summarize_policy_search_records_keeps_actuation_diagnostics_separate() -> None:
+    """Synthetic actuation diagnostics should aggregate outside outcome rates."""
+    records = [
+        {
+            "scenario_id": "classic_cross_trap_high",
+            "termination_reason": "collision",
+            "metrics": {
+                "command_clip_fraction": 0.25,
+                "yaw_rate_saturation_fraction": 0.5,
+                "signed_braking_peak_m_s2": -1.0,
+            },
+        },
+        {
+            "scenario_id": "classic_cross_trap_high",
+            "termination_reason": "success",
+            "metrics": {
+                "command_clip_fraction": 0.0,
+                "yaw_rate_saturation_fraction": 0.0,
+                "signed_braking_peak_m_s2": -0.5,
+            },
+        },
+    ]
+
+    summary = summarize_policy_search_records(records)
+
+    assert summary["success_rate"] == 0.5
+    assert summary["collision_rate"] == 0.5
+    assert summary["synthetic_actuation"] == {
+        "command_clip_fraction_mean": 0.125,
+        "yaw_rate_saturation_fraction_mean": 0.25,
+        "signed_braking_peak_m_s2_mean": -0.75,
+    }
+
+
 def test_policy_search_exclusions_require_explicit_evidence() -> None:
     """Invalid/impossible scenarios should only be excluded with explicit evidence."""
     excluded = {

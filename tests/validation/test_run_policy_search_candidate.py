@@ -74,6 +74,37 @@ def test_load_candidate_definition_merges_base_config_and_params(
     assert config_path == candidate_cfg.resolve()
 
 
+def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -> None:
+    """Issue #1807 candidate routing should stay diagnostic-only and synthetic-slice first."""
+    repo_root = Path(__file__).parents[2]
+
+    entry, payload, config, config_path = load_candidate_definition(
+        repo_root / "docs/context/policy_search/candidate_registry.yaml",
+        "actuation_aware_hybrid_rule_v0",
+    )
+    funnel = yaml.safe_load(
+        (repo_root / "configs/policy_search/funnel.yaml").read_text(encoding="utf-8")
+    )
+
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert entry["required_stages"] == ["amv_actuation_smoke"]
+    assert payload["algo"] == "actuation_aware_hybrid_rule_v0"
+    assert (
+        config_path
+        == (
+            repo_root / "configs/policy_search/candidates/actuation_aware_hybrid_rule_v0.yaml"
+        ).resolve()
+    )
+    assert config["planner_variant"] == "actuation_aware_hybrid_rule_v0"
+    assert config["actuation_profile_name"] == "amv-actuation-stress-v0"
+    assert config["actuation_score_enabled"] is True
+    stage = funnel["stages"]["amv_actuation_smoke"]
+    assert stage["scenario_matrix"] == "configs/scenarios/sets/classic_cross_trap_subset.yaml"
+    assert stage["scenario_filter"] == ["classic_cross_trap_high"]
+    assert stage["synthetic_actuation_profile"]["claim_scope"] == "synthetic-only"
+    assert stage["paper_facing"] is False
+
+
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
     """Scenario names should drive family inference when scenario_id is absent."""
     grouped = split_scenarios_by_family(
@@ -194,6 +225,36 @@ def test_load_stage_scenarios_applies_inline_seed_list(tmp_path: Path) -> None:
     assert Path(scenarios[0]["map_file"]) == map_path.resolve()
 
 
+def test_load_stage_scenarios_applies_scenario_filter(tmp_path: Path) -> None:
+    """Stage-level scenario_filter should narrow inline smoke runs."""
+    matrix = tmp_path / "matrix.yaml"
+    map_path = tmp_path / "maps" / "open.svg"
+    map_path.parent.mkdir()
+    map_path.write_text("<svg />", encoding="utf-8")
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {"name": "classic_cross_trap_low", "map_file": "maps/open.svg"},
+                    {"name": "classic_cross_trap_high", "map_file": "maps/open.svg"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    scenarios = _load_stage_scenarios(
+        matrix,
+        seed_manifest=None,
+        seed_list=[111],
+        scenario_filter=["classic_cross_trap_high"],
+    )
+
+    assert isinstance(scenarios, list)
+    assert [scenario["name"] for scenario in scenarios] == ["classic_cross_trap_high"]
+    assert scenarios[0]["seeds"] == [111]
+
+
 def test_load_stage_scenarios_preserves_path_without_seed_override(tmp_path: Path) -> None:
     """Stages without inline seed overrides can keep the matrix path fast path."""
     matrix = tmp_path / "matrix.yaml"
@@ -222,6 +283,12 @@ def test_decide_stage_status_enforces_nominal_gate() -> None:
         )
         == "revise"
     )
+
+
+def test_decide_stage_status_treats_named_smoke_stages_as_smoke() -> None:
+    """Diagnostic smoke stages should pass only when they run at least one episode."""
+    assert decide_stage_status("amv_actuation_smoke", {}, {"episodes": 1}) == "pass"
+    assert decide_stage_status("amv_actuation_smoke", {}, {"episodes": 0}) == "revise"
 
 
 def test_format_optional_float_keeps_present_values() -> None:

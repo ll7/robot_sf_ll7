@@ -187,6 +187,13 @@ def build_adaptive_proxemic_selector_config(
     """
     raw = dict(cfg or {}) if isinstance(cfg, dict) else {}
     selector = _selector_settings(raw)
+    diagnostic_only = bool(raw.get("diagnostic_only", True))
+    claim_boundary = str(raw.get("claim_boundary") or "diagnostic_only")
+    if not diagnostic_only or claim_boundary != "diagnostic_only":
+        raise ValueError(
+            "adaptive_proxemic_selector_v0 is diagnostic-only; "
+            "set diagnostic_only: true and claim_boundary: diagnostic_only"
+        )
     profiles = _profile_defaults()
     common_overrides = _common_profile_overrides(raw)
     profile_payload = raw.get("profiles")
@@ -217,8 +224,8 @@ def build_adaptive_proxemic_selector_config(
                 params=_deep_merge(profile.params, common_overrides),
             )
     return AdaptiveProxemicSelectorConfig(
-        diagnostic_only=bool(raw.get("diagnostic_only", True)),
-        claim_boundary=str(raw.get("claim_boundary", "diagnostic_only")),
+        diagnostic_only=diagnostic_only,
+        claim_boundary=claim_boundary,
         profiles=profiles,
         **selector,
     )
@@ -260,7 +267,7 @@ class AdaptiveProxemicSelectorAdapter:
         """
         profile, reason, context = self._select_profile(observation)
         planner = self._planners[profile]
-        linear, angular = planner.plan(observation)
+        linear, angular = planner.plan(self._observation_for_selected_planner(observation))
         self._step_index += 1
         self._selected_profile_counts[profile] += 1
         self._trigger_reason_counts[reason] += 1
@@ -339,6 +346,22 @@ class AdaptiveProxemicSelectorAdapter:
             return "neutral", "moderate_density", context
         return "open", "clear_low_density", context
 
+    def _observation_for_selected_planner(self, observation: dict[str, Any]) -> dict[str, Any]:
+        """Return observation with invalid pedestrian counts normalized for profile planners."""
+        pedestrians = observation.get("pedestrians")
+        if not isinstance(pedestrians, dict):
+            return observation
+        ped_pos = _xy_rows(pedestrians.get("positions", observation.get("pedestrians_positions")))
+        count_raw = _as_1d_float(pedestrians.get("count", [ped_pos.shape[0]]))
+        count_val = count_raw[0] if count_raw.size else float("nan")
+        if np.isfinite(count_val):
+            return observation
+        sanitized_pedestrians = dict(pedestrians)
+        sanitized_pedestrians["count"] = np.asarray([ped_pos.shape[0]], dtype=float)
+        sanitized = dict(observation)
+        sanitized["pedestrians"] = sanitized_pedestrians
+        return sanitized
+
     def _extract_robot_and_pedestrians(
         self,
         observation: dict[str, Any],
@@ -361,7 +384,12 @@ class AdaptiveProxemicSelectorAdapter:
             robot_pos = np.pad(robot_pos, (0, 2 - robot_pos.size), constant_values=0.0)
         ped_pos = _xy_rows(pedestrians.get("positions", observation.get("pedestrians_positions")))
         count_raw = _as_1d_float(pedestrians.get("count", [ped_pos.shape[0]]))
-        count = max(0, min(int(count_raw[0]), ped_pos.shape[0]))
+        count_val = count_raw[0] if count_raw.size else float("nan")
+        count = (
+            max(0, min(int(count_val), ped_pos.shape[0]))
+            if np.isfinite(count_val)
+            else ped_pos.shape[0]
+        )
         return robot_pos[:2], ped_pos[:count]
 
     def _is_constrained_passage(self, observation: dict[str, Any]) -> bool:
@@ -378,7 +406,7 @@ class AdaptiveProxemicSelectorAdapter:
                 width = float(route_corridor[key])
             except (TypeError, ValueError):
                 continue
-            if np.isfinite(width) and width <= self.config.constrained_width_m:
+            if np.isfinite(width) and 0.0 < width <= self.config.constrained_width_m:
                 return True
         return False
 

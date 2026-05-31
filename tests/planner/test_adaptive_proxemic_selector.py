@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.adaptive_proxemic_selector import (
     AdaptiveProxemicSelectorAdapter,
@@ -106,3 +107,41 @@ def test_adaptive_selector_uses_neutral_profile_for_constrained_passage() -> Non
     assert (
         diagnostics["last_selection"]["source_candidate"] == "proxemic_profile_neutral_issue_1676"
     )
+
+
+def test_adaptive_selector_ignores_nonfinite_pedestrian_count() -> None:
+    """Nonfinite pedestrian counts should fall back to the available rows."""
+    planner = AdaptiveProxemicSelectorAdapter(build_adaptive_proxemic_selector_config({}))
+    obs = _obs(ped_positions=[(0.55, 0.0)])
+    obs["pedestrians"]["count"] = np.asarray([float("nan")], dtype=float)
+
+    planner.plan(obs)
+
+    diagnostics = planner.diagnostics()
+    assert diagnostics["last_selection"]["selected_profile"] == "conservative"
+    assert diagnostics["last_selection"]["trigger_reason"] == "near_human"
+
+
+def test_adaptive_selector_requires_positive_constrained_width() -> None:
+    """Zero or negative corridor widths are invalid signals, not constrained passages."""
+    planner = AdaptiveProxemicSelectorAdapter(build_adaptive_proxemic_selector_config({}))
+    obs = _obs(ped_positions=[(2.0, 0.0)])
+    obs["route_corridor"] = {"corridor_width_estimate": 0.0}
+
+    planner.plan(obs)
+
+    diagnostics = planner.diagnostics()
+    assert diagnostics["last_selection"]["trigger_reason"] == "clear_low_density"
+
+
+def test_adaptive_selector_defaults_blank_claim_boundary() -> None:
+    """Blank registry values should keep the diagnostic-only claim boundary."""
+    config = build_adaptive_proxemic_selector_config({"claim_boundary": ""})
+
+    assert config.claim_boundary == "diagnostic_only"
+
+
+def test_adaptive_selector_rejects_non_diagnostic_claim_boundary() -> None:
+    """The selector is diagnostic-only until a future issue promotes it."""
+    with pytest.raises(ValueError, match="diagnostic-only"):
+        build_adaptive_proxemic_selector_config({"claim_boundary": "benchmark_candidate"})

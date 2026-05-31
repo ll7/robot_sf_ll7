@@ -43,6 +43,8 @@ still required before making performance claims.
 
 ## Baseline Deltas
 
+_Diagnostic-only arithmetic context; not a benchmark comparison claim._
+
 | Baseline | Success Delta | Collision Delta | Near-Miss Delta |
 |---|---:|---:|---:|
 | goal | +0.9858 | -0.2411 | n/a |

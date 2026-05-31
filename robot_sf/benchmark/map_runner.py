@@ -1483,17 +1483,15 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
     if algo_key == "adaptive_proxemic_selector_v0":
-        adapter = AdaptiveProxemicSelectorAdapter(
-            config=build_adaptive_proxemic_selector_config(algo_config)
-        )
+        selector_config = build_adaptive_proxemic_selector_config(algo_config)
+        adapter = AdaptiveProxemicSelectorAdapter(config=selector_config)
         meta["adaptive_proxemic_selector"] = {
             "status": "enabled",
-            "diagnostic_only": True,
-            "claim_boundary": "diagnostic_only",
+            "diagnostic_only": bool(selector_config.diagnostic_only),
+            "claim_boundary": selector_config.claim_boundary,
             "profile_sources": [
-                "proxemic_profile_conservative_issue_1676",
-                "proxemic_profile_neutral_issue_1676",
-                "proxemic_profile_open_issue_1676",
+                selector_config.profiles[name].source_candidate
+                for name in ("conservative", "neutral", "open")
             ],
         }
         return _build_adapter_policy(

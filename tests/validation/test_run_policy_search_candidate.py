@@ -76,8 +76,10 @@ def test_load_candidate_definition_merges_base_config_and_params(
 
 def test_adaptive_proxemic_selector_candidate_is_diagnostic_only() -> None:
     """The adaptive proxemic selector should be registered as diagnostic-only."""
+    registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"
+
     entry, payload, merged, config_path = load_candidate_definition(
-        Path("docs/context/policy_search/candidate_registry.yaml"),
+        registry_path,
         "adaptive_proxemic_selector_v0",
     )
 

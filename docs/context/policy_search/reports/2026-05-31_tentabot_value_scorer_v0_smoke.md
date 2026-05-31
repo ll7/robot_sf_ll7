@@ -15,14 +15,14 @@ A clean-room Tentabot-style primitive value scorer can reuse Robot SF's hybrid-r
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/tentabot_value_scorer_v0/smoke/issue_tentabot_smoke_h80_claim_boundary/summary.json`
-- Git commit: `fd66bceb514418f6250bbdc601962c2478dd9b99`
+- Summary JSON: `output/policy_search/tentabot_value_scorer_v0/smoke/issue1826_safety_retune_final_h80/summary.json`
+- Git commit: `30570b7ee4af32fb6d185cdd822f744fb5a9c284`
 
 ## Aggregate Results
 
 | Episodes | Success | Collision | Near Miss | Mean MinDist | Mean AvgSpeed |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 1.0000 | 0.0000 | 0.0000 | n/a | 1.8193 |
+| 1 | 1.0000 | 0.0000 | 0.0000 | n/a | 1.8190 |
 
 ## Scenario-Family Split
 

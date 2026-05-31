@@ -337,19 +337,22 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
 
 - Source URL: https://github.com/RIVeR-Lab/tentabot
 - Current status: `monitor only`
-- Evidence grade: `proposal`
+- Evidence grade: `diagnostic negative for hand-authored Robot SF recovery`
 - Source-backed facts: The open assessment issue records Tentabot as an occupancy-value
   motion-primitive family with an open-source ROS/Gazebo-oriented framework and a local-candidate
   scoring shape that is closer to Robot SF than full visual navigation.
-- Robot SF synthesis: This is the most plausible learning component among the source-side-only
-  candidates because it could become a learned scorer over existing rollout candidates. Do not port
-  the ROS/Gazebo stack or train a policy until the source license, runtime, and 2D reduction are
-  checked.
-- Related Robot SF work: #1357, #1355,
+- Robot SF synthesis: This remains a plausible learning component only as a learned scorer over
+  existing rollout candidates. The Robot SF-native hand-authored scorer/recovery lane is stopped
+  after Issues #1832, #1877, #1908, and #1910 because scalar route-progress and trace-recovery
+  rules reduced low-progress timeouts only by regressing static collisions, near misses, or the
+  smoke route.
+  Do not port the ROS/Gazebo stack or add another hand-tuned recovery variant. Reopen only with an
+  explicit learned-value feature/label/provenance contract or a source-side reproduction path.
+- Related Robot SF work: #1357, #1355, Issue #1910,
   `docs/context/policy_search/candidate_registry.yaml`.
 - Reopen if: the source-side path is reproducible without adding ROS/Gazebo as a Robot SF runtime
   dependency, and the method can be reduced to a learned scorer over existing Robot SF rollout
-  candidates with a clear falsification experiment.
+  candidates with a clear falsification experiment and durable data provenance.
 
 ### DWA-RL / Learned Dynamic-Window Navigation
 

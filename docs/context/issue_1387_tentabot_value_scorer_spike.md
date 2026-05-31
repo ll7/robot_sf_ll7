@@ -79,3 +79,31 @@ diagnostics, but the v0 hand-scored value weights do not beat the relevant hybri
 same-seed nominal sanity and introduce two static collisions. It is safer than the registered
 `risk_dwa_camera_ready` comparison on collision rate, but it is not a promotion candidate. The next
 iteration should tune or learn only after preserving the hybrid-rule static collision gate.
+
+## 2026-05-31 Issue #1832 Progress-Recovery Probe
+
+Issue #1832 revisited the low-progress timeout failure after the #1826 safety retune. Validation
+used the same `tentabot_value_scorer_v0` smoke and nominal-sanity stages:
+
+```bash
+LOGURU_LEVEL=WARNING DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v0 --stage smoke --horizon 80 --workers 1 --output-dir output/policy_search/tentabot_value_scorer_v0/smoke/issue1832_final_h80
+LOGURU_LEVEL=WARNING DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v0 --stage nominal_sanity --workers 2 --output-dir output/policy_search/tentabot_value_scorer_v0/nominal_sanity/issue1832_final
+```
+
+Summary:
+
+| Candidate state | Stage | Episodes | Success | Collision | Near miss | Low-progress timeouts | Decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| retained regression-recovery gate | smoke | 1 | 1.0000 | 0.0000 | 0.0000 | 0 | pass |
+| retained regression-recovery gate | nominal_sanity | 18 | 0.2222 | 0.0556 | 0.1667 | 11 | revise |
+| progress-pressure config probe | nominal_sanity | 18 | 0.2222 | 0.1667 | 0.2222 | 8 | rejected |
+| static-recovery config probe | nominal_sanity | 18 | 0.2222 | 0.1111 | 0.1667 | 10 | rejected |
+
+Classification: **revise / stop this retune lane**.
+
+Interpretation: treating negative goal-distance progress as stalled is the correct fail-closed
+activation semantics for corridor-subgoal recovery, but it did not change the nominal-sanity
+aggregate for the current candidate. The config retunes that reduced low-progress timeouts did so
+by increasing static collisions, so they were not retained. Future work should add a stronger
+route-aware progress objective or trace-level recovery policy before changing speed/clearance
+weights again.

@@ -12,7 +12,7 @@ It points to the smallest authority surface for common agent questions.
 | Current runnable candidate list | `candidate_registry.yaml` | Canonical machine-readable list of concrete Robot SF candidates with config pointers. |
 | Candidate lifecycle buckets | `candidate_registry_summary.md` | Compact routing summary for active, diagnostic, learned, SLURM, monitor, and historical lanes. |
 | Local execution workflow | `contracts/agent_runbook.md` | How to pick and run candidate stages without overclaiming evidence. |
-| Promotion gates | `contracts/promotion_gates.md`, `configs/policy_search/promotion_gates.yaml` | Human and structured gate definitions. |
+| Promotion gates | [promotion_gates.md](contracts/promotion_gates.md), [promotion_gates.yaml](../../../configs/policy_search/promotion_gates.yaml) | Human and structured gate definitions. |
 | Learned-policy intake | `learned_policy_registry.md`, `contracts/learned_local_policy_eligibility.md` | Learned-policy status, adapter eligibility, and leakage checks. |
 | External learned-policy rejects or monitor lanes | `reject_monitor_registry.md` | Negative and source-side-first decisions that should not re-enter runnable work. |
 | SLURM handoffs | `SLURM/todo.md`, `../slurm_issue_batch_status_2026-05-21.md` | Local handoff index plus execution-status ledger for training or long-run work. |

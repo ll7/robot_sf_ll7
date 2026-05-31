@@ -38,6 +38,7 @@ from robot_sf.benchmark.distributions import collect_grouped_values as _dist_col
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
+from robot_sf.benchmark.grouping import DEFAULT_REPORT_FALLBACK_GROUP_BY, DEFAULT_REPORT_GROUP_BY
 from robot_sf.benchmark.observation_levels import OBSERVATION_LEVEL_KEYS
 from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.parquet_export import export_episodes_jsonl_to_parquet
@@ -1656,12 +1657,12 @@ def _add_aggregate_subparser(
     p.add_argument("--out", required=True, help="Output JSON summary path")
     p.add_argument(
         "--group-by",
-        default="scenario_params.algo",
+        default=DEFAULT_REPORT_GROUP_BY,
         help="Grouping key (dotted path). Default: scenario_params.algo",
     )
     p.add_argument(
         "--fallback-group-by",
-        default="scenario_id",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
         help="Fallback grouping key when group-by is missing. Default: scenario_id",
     )
     p.add_argument(
@@ -1837,12 +1838,12 @@ def _add_snqi_ablate_subparser(
     p.add_argument("--out", required=True, help="Output path (.md/.csv/.json)")
     p.add_argument(
         "--group-by",
-        default="scenario_params.algo",
+        default=DEFAULT_REPORT_GROUP_BY,
         help="Grouping key (dotted path). Default: scenario_params.algo",
     )
     p.add_argument(
         "--fallback-group-by",
-        default="scenario_id",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
         help="Fallback grouping key when group-by is missing. Default: scenario_id",
     )
     p.add_argument("--format", choices=["md", "csv", "json"], default="md")
@@ -1891,12 +1892,12 @@ def _add_seed_variance_subparser(
     p.add_argument("--out", required=True, help="Output JSON summary path")
     p.add_argument(
         "--group-by",
-        default="scenario_id",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
         help="Grouping key (dotted path). Default: scenario_id",
     )
     p.add_argument(
         "--fallback-group-by",
-        default="scenario_id",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
         help="Fallback grouping key when group-by is missing. Default: scenario_id",
     )
     p.add_argument(
@@ -1971,12 +1972,12 @@ def _add_rank_subparser(
     p.add_argument("--out", required=True, help="Output path (md/csv/json)")
     p.add_argument(
         "--group-by",
-        default="scenario_params.algo",
+        default=DEFAULT_REPORT_GROUP_BY,
         help="Grouping key (dotted path). Default: scenario_params.algo",
     )
     p.add_argument(
         "--fallback-group-by",
-        default="scenario_id",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
         help="Fallback grouping key when group-by is missing. Default: scenario_id",
     )
     p.add_argument("--metric", default="collisions", help="Metric name under metrics.<name>")
@@ -2017,12 +2018,12 @@ def _add_table_subparser(
     p.add_argument("--out", required=True, help="Output path (md/csv/json)")
     p.add_argument(
         "--group-by",
-        default="scenario_params.algo",
+        default=DEFAULT_REPORT_GROUP_BY,
         help="Grouping key (dotted path). Default: scenario_params.algo",
     )
     p.add_argument(
         "--fallback-group-by",
-        default="scenario_id",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
         help="Fallback grouping key when group-by is missing. Default: scenario_id",
     )
     p.add_argument(
@@ -2081,12 +2082,12 @@ def _add_plot_pareto_subparser(
     p.add_argument("--y-metric", required=True, help="Metric name for Y axis")
     p.add_argument(
         "--group-by",
-        default="scenario_params.algo",
+        default=DEFAULT_REPORT_GROUP_BY,
         help="Grouping key (dotted path). Default: scenario_params.algo",
     )
     p.add_argument(
         "--fallback-group-by",
-        default="scenario_id",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
         help="Fallback grouping key when group-by is missing. Default: scenario_id",
     )
     p.add_argument("--agg", choices=["mean", "median"], default="mean")
@@ -2123,12 +2124,12 @@ def _add_plot_distributions_subparser(
     )
     p.add_argument(
         "--group-by",
-        default="scenario_params.algo",
+        default=DEFAULT_REPORT_GROUP_BY,
         help="Grouping key (dotted path). Default: scenario_params.algo",
     )
     p.add_argument(
         "--fallback-group-by",
-        default="scenario_id",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
         help="Fallback grouping key when group-by is missing. Default: scenario_id",
     )
     p.add_argument("--bins", type=int, default=30)

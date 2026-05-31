@@ -17,6 +17,7 @@ from robot_sf.benchmark.aggregate import (
     normalize_observation_track_mode,
     observation_track_group_label,
 )
+from robot_sf.benchmark.grouping import resolve_report_group_key
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -71,9 +72,12 @@ def _group_values(
         mode = normalize_observation_track_mode(str(track_meta["mode"]))
     out: dict[str, list[float]] = {}
     for r in record_list:
-        g = _get_dotted(r, group_by)
-        if g is None:
-            g = _get_dotted(r, fallback_group_by)
+        g = resolve_report_group_key(
+            r,
+            group_by=group_by,
+            fallback_group_by=fallback_group_by,
+            missing="skip",
+        )
         val = _get_dotted(r, f"metrics.{metric}")
         if g is None or val is None:
             continue

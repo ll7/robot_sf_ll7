@@ -26,6 +26,7 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.errors import AggregationMetadataError, EpisodeRecordInputError
+from robot_sf.benchmark.grouping import EFFECTIVE_REPORT_GROUP_KEY, resolve_report_group_key
 from robot_sf.benchmark.metrics import snqi as snqi_fn
 from robot_sf.benchmark.thresholds import validate_threshold_parameter_consistency
 
@@ -124,7 +125,7 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
     return cur
 
 
-_EFFECTIVE_GROUP_KEY = "scenario_params.algo | algo | scenario_id"
+_EFFECTIVE_GROUP_KEY = EFFECTIVE_REPORT_GROUP_KEY
 _UNKNOWN_BENCHMARK_TRACK = "unspecified"
 _CAVEAT_STATUSES = {
     "degraded",
@@ -953,5 +954,6 @@ __all__ = [
     "observation_track_group_label",
     "read_jsonl",
     "resolve_benchmark_track",
+    "resolve_report_group_key",
     "write_episode_csv",
 ]

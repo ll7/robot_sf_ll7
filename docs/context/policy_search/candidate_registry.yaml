@@ -257,7 +257,7 @@ candidates:
     claim_scope: diagnostic_only
     promotion_gate: tier_b
     candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v1_static_gated.yaml
-    learned_policy_registry_id: tentabot_value_scorer_v0
+    learned_policy_registry_id: tentabot_value_scorer_v1_static_gated
     adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
     hypothesis: >
       A clean-room Tentabot-style primitive value scorer can preserve the v0

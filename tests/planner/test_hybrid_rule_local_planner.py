@@ -256,6 +256,46 @@ def test_tentabot_value_scorer_v1_static_gate_allows_low_clearance_progress(
     assert evaluation["score"] == pytest.approx(evaluation["raw_value_score"])
     assert evaluation["terms"]["static_safety_gate_penalty"] == 0.0
     assert evaluation["static_safety_gate"]["tier"] == "guarded_progress"
+    assert evaluation["static_safety_gate"]["progress_metric"] == "goal_distance"
+
+
+def test_tentabot_value_scorer_v1_static_gate_uses_route_local_progress(
+    monkeypatch,
+) -> None:
+    """Route-aware gate progress should follow corridor direction, not Euclidean goal progress."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "route_guide_enabled": True,
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_min_clearance": 0.55,
+            "static_safety_gate_progress_threshold": 0.05,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.25, 0.0, "route_guide")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(tangent_heading=np.pi),
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["terms"]["goal_progress"] > 0.0
+    assert evaluation["terms"]["static_safety_gate_penalty"] == pytest.approx(12.0)
+    assert evaluation["static_safety_gate"]["tier"] == "low_clearance_demoted"
+    assert evaluation["static_safety_gate"]["progress_metric"] == "route_local"
+    assert evaluation["static_safety_gate"]["progress"] < 0.0
 
 
 def test_tentabot_value_scorer_v1_static_gate_can_cover_all_sources(monkeypatch) -> None:

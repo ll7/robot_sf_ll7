@@ -1515,6 +1515,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         *,
         candidate: HybridRuleCandidate,
         progress: float,
+        progress_metric: str,
         initial_static_clearance: float,
         min_static_clearance: float,
     ) -> dict[str, Any] | None:
@@ -1571,6 +1572,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 "min_static_clearance": min_clearance,
                 "initial_static_clearance": initial_clearance,
                 "progress": float(progress),
+                "progress_metric": progress_metric,
                 "penalty": 0.0,
             }
         return {
@@ -1581,8 +1583,24 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "min_static_clearance": min_clearance,
             "initial_static_clearance": initial_clearance,
             "progress": float(progress),
+            "progress_metric": progress_metric,
             "penalty": float(self.config.static_safety_gate_penalty),
         }
+
+    def _static_safety_gate_progress(
+        self,
+        *,
+        route_corridor: dict[str, Any] | None,
+        start_pos: np.ndarray,
+        end_pos: np.ndarray,
+        fallback_goal_progress: float,
+    ) -> tuple[float, str]:
+        """Return route-local static-gate progress when route geometry is available."""
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        if tangent_heading is None:
+            return float(fallback_goal_progress), "goal_distance"
+        route_dir = np.array([np.cos(tangent_heading), np.sin(tangent_heading)], dtype=float)
+        return float(np.dot(end_pos - start_pos, route_dir)), "route_local"
 
     def _evaluate_candidate(  # noqa: PLR0915
         self,
@@ -1611,7 +1629,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             }
 
         dt, _steps, rollout_commands = self._candidate_rollout_plan(candidate)
-        robot_pos = np.array(state["robot_pos"], dtype=float)
+        start_pos = np.array(state["robot_pos"], dtype=float)
+        robot_pos = np.array(start_pos, dtype=float)
         heading = float(state["heading"])
         goal = state["goal"]
         ped_pos = state["ped_pos"]
@@ -1736,6 +1755,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
         end_dist = float(np.linalg.norm(goal - robot_pos))
         progress = start_dist - end_dist
+        static_gate_progress, static_gate_progress_metric = self._static_safety_gate_progress(
+            route_corridor=route_corridor,
+            start_pos=start_pos,
+            end_pos=robot_pos,
+            fallback_goal_progress=progress,
+        )
         max_progress = max(
             float(self.config.max_linear_speed) * float(self.config.rollout_horizon), _EPS
         )
@@ -1816,7 +1841,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         static_safety_gate = self._static_safety_gate(
             candidate=candidate,
-            progress=progress,
+            progress=static_gate_progress,
+            progress_metric=static_gate_progress_metric,
             initial_static_clearance=initial_static_clearance,
             min_static_clearance=min_static_clearance,
         )

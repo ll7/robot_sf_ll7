@@ -96,6 +96,25 @@ git fetch origin main
 git merge origin/main
 ```
 
+### Targeted shared-venv worktree validation
+
+For quick, targeted checks in a sibling worktree, you can reuse the main checkout virtualenv while
+pinning imports to the current worktree:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
+scripts/dev/run_worktree_shared_venv.sh --venv ../robot_sf_ll7/.venv -- ruff check scripts/dev
+```
+
+The helper runs from `git rev-parse --show-toplevel`, prepends that root to `PYTHONPATH`, sets
+`UV_PROJECT_ENVIRONMENT` to the shared `.venv`, and sets `UV_NO_SYNC=1`. This is intended for fast
+local feedback when dependencies are already current. It should fail if the shared virtualenv is
+missing instead of silently installing into the wrong checkout.
+
+Use a normal worktree-local `uv sync --all-extras` and
+`PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh` for final PR proof,
+dependency changes, generated lockfile validation, or any run where environment isolation matters.
+
 ### Critical dependencies and setup: Fast-pysf integration
 
 The `fast-pysf/` directory contains the optimized SocialForce physics engine and is now integrated as a **git subtree** (previously a submodule). After cloning the repository, the fast-pysf code is automatically available—no additional initialization steps required.
@@ -189,6 +208,7 @@ skills use the same commands:
 ```bash
 scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
+scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
 scripts/dev/run_ci_local.sh
 scripts/dev/check_docs_proof_consistency_diff.sh
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl

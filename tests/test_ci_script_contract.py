@@ -13,6 +13,7 @@ PYPROJECT = ROOT / "pyproject.toml"
 RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
+RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
 
 
 def test_ci_driver_smoke_uses_runtime_schema_and_output_matrix_path() -> None:
@@ -177,3 +178,79 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "recording interim PR readiness from a dirty non-ignored worktree" in script_text
     assert "--require-clean-tree" in script_text
     assert "pr_ready_freshness.py" in script_text
+
+
+def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
+    """Shared-venv validation must import from the active worktree, not the owning checkout."""
+    script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+
+    assert 'repo_root="$(git rev-parse --show-toplevel)"' in script_text
+    assert 'main_repo_root="$(cd "$git_common_dir/.." && pwd)"' in script_text
+    assert 'venv_path="${venv_override:-$main_repo_root/.venv}"' in script_text
+    assert 'export UV_PROJECT_ENVIRONMENT="$venv_path"' in script_text
+    assert "export UV_NO_SYNC=1" in script_text
+    assert 'export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"' in script_text
+    assert 'exec uv run "${cmd[@]}"' in script_text
+
+
+def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
+    """The shared-venv helper should be shell-valid and document its safety boundary."""
+    syntax = subprocess.run(
+        ["bash", "-n", str(RUN_WORKTREE_SHARED_VENV)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert syntax.returncode == 0, syntax.stderr
+
+    help_result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert help_result.returncode == 0
+    assert "PYTHONPATH=$PWD" in help_result.stdout
+    assert "UV_PROJECT_ENVIRONMENT" in help_result.stdout
+    assert "UV_NO_SYNC=1" in help_result.stdout
+    assert "full local .venv" in help_result.stdout
+
+
+def test_worktree_shared_venv_helper_fails_for_missing_shared_env(tmp_path: Path) -> None:
+    """A missing shared env should fail before uv can fall back to an unintended checkout."""
+    missing_venv = tmp_path / "missing-venv"
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(missing_venv), "--", "python", "-V"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert f"Shared virtualenv not found or incomplete: {missing_venv}" in result.stderr
+    assert "Create it with 'uv sync --all-extras'" in result.stderr
+
+
+def test_worktree_shared_venv_helper_reports_relative_missing_env() -> None:
+    """Relative missing env paths should still use the helper's actionable error."""
+    missing_venv = Path("does/not/exist")
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(missing_venv), "--", "python", "-V"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert f"Shared virtualenv not found or incomplete: {ROOT / missing_venv}" in result.stderr
+    assert "cd:" not in result.stderr

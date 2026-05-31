@@ -767,6 +767,56 @@ def test_hybrid_orca_sampler_uses_sampler_after_route_goal_regression(
     assert last_decision["route_state"]["route_regressed"] is True
 
 
+def test_hybrid_orca_sampler_switches_to_sampler_after_route_stall_without_progress(
+    monkeypatch,
+) -> None:
+    """Route-level stall should override clear-scene fast-path ORCA selection."""
+
+    class _PrimaryHead:
+        """Primary ORCA head test double for stalled route cases."""
+
+        def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a modest command that keeps short-horizon progress above margin."""
+            _ = observation
+            return 0.2, 0.0
+
+    class _SamplerHead:
+        """Sampler head test double that should win once route stalls."""
+
+        def plan(self, observation: dict) -> tuple[float, float]:
+            """Return a fallback command with lower short-horizon local gain."""
+            _ = observation
+            return 0.5, 0.0
+
+    planner = HybridORCASamplerAdapter(
+        config=HybridORCASamplerConfig(
+            sampler_progress_margin=0.05,
+            near_field_distance=2.0,
+            route_stall_cycles_before_sampler=1,
+            route_progress_epsilon=0.05,
+        ),
+        orca_adapter=_PrimaryHead(),
+        sampler_adapter=_SamplerHead(),
+    )
+
+    def _eval(_observation: dict, command: tuple[float, float]) -> dict[str, float | bool]:
+        """Keep both heads safe while keeping ORCA local-progress slightly higher."""
+        if command[0] < 0.3:
+            return {"safe": True, "progress": 0.2, "min_ped_clear": 3.0}
+        return {"safe": True, "progress": 0.1, "min_ped_clear": 3.0}
+
+    monkeypatch.setattr(planner, "_evaluate_command", _eval)
+    observation = _obs(goal=(3.0, 0.0))
+
+    first = planner.plan(observation)
+    assert first == (0.2, 0.0)
+
+    second = planner.plan(observation)
+    assert second == (0.5, 0.0)
+    assert planner.last_decision()["decision"] == "sampler_progress_repair"
+    assert planner.last_decision()["route_state"]["route_stalled"] is True
+
+
 def test_hybrid_orca_sampler_builder_preserves_nested_configs() -> None:
     """Hybrid ORCA sampler builder should parse guard, ORCA, and MPPI knobs."""
     build = build_hybrid_orca_sampler_build_config(

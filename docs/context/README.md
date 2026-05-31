@@ -237,7 +237,7 @@ knowledge, not every transient iteration detail.
   [issue_1484_broader_cross_kinematics_launch.md](issue_1484_broader_cross_kinematics_launch.md)
 * Issue #1546 AMV actuation-envelope stress slice:
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
-* Issue #1556 synthetic AMV actuation stress slice:
+* Issue #1556 synthetic AMV actuation stress slice and #1570 claim boundary:
   [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
 * Issue #1606 Full Classic placeholder retirement:
   [issue_1606_full_classic_placeholder_retirement.md](issue_1606_full_classic_placeholder_retirement.md)

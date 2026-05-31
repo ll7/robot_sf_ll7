@@ -45,6 +45,18 @@ for issue-facing handoff without mirroring the generated campaign artifacts into
    metadata blocks in the scenario matrix.
 5. Adapter diagnostics remain caveated: ORCA required command projection for most steps in this
    smoke, and the `social_force` campaign row still reports unknown command-space/projection-policy
-   metadata in the underlying campaign output. Follow-up issue #1572 tracks that metadata cleanup.
+   metadata in the underlying campaign output.
+
+## Post-Smoke Claim-Map Update
+
+Issue #1572 and its decision split #1582 are now closed. PR #1580 implemented the conservative
+metadata contract for future synthetic actuation summaries: slice-local synthetic AMV overrides,
+compact scenario AMV rows, and explicit planner command-space/projection metadata. That repair makes
+future diagnostics easier to interpret, but it does not rewrite this historical smoke campaign and
+does not promote the Issue #1569 evidence beyond `synthetic diagnostic` / `non-paper-facing`
+status.
+
+Issue #1570 records this bundle as compact smoke evidence only. Calibrated or paper-facing AMV
+actuation claims remain blocked on Issue #1559.
 
 See `summary.json` for the compact planner-level snapshot promoted from the local campaign.

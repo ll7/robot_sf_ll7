@@ -89,9 +89,10 @@ Acceptance criteria:
 
 ### 4. Tighten SLURM State Using The Existing SLURM Note
 
-The pasted memo proposed a new SLURM ledger. A better first step is to extend the existing SLURM
-batch-status/context-note pattern and only introduce machine-readable files when a concrete
-consumer exists.
+The pasted memo proposed a new SLURM ledger. Issue #1784 keeps
+`docs/context/slurm_issue_batch_status_2026-05-21.md` as the canonical SLURM issue-status ledger
+for the current batch and only introduces short issue pointers back to that file. Add a successor
+ledger or machine-readable registry only when a concrete consumer exists.
 
 Proposed issue:
 

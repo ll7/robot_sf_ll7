@@ -7,6 +7,8 @@ Related issues:
   <https://github.com/ll7/robot_sf_ll7/issues/1618>
 - Issue #1363 learned-policy eligibility checklist:
   <https://github.com/ll7/robot_sf_ll7/issues/1363>
+- Issue #1870 external learned-policy intake:
+  <https://github.com/ll7/robot_sf_ll7/issues/1870>
 
 ## Purpose
 
@@ -49,7 +51,8 @@ checkpoint_availability: local_registry | wandb_artifact | pending | source_clai
 expected_dependencies: local_repo | slurm | external_legacy_env | source_harness |
   unknown
 reproducibility_status: smoke_proven | launch_packet | source_harness_required |
-  comparison_available | proposal | prototype_only | monitor_only | blocked | rejected
+  source_smoke_proven | comparison_available | proposal | prototype_only | monitor_only |
+  blocked | rejected
 integration_status: implemented | staged | adapter_needed | monitor_only | rejected
 benchmark_status: smoke_only | comparison_available | not_benchmark_evidence |
   blocked | rejected | rejected_for_current_adapter
@@ -61,6 +64,12 @@ local_anchors: local docs, configs, tests, issues, or model registry paths
 Passing this registry screen does not make a policy benchmark-ready. Any learned policy still needs
 the checklist in `docs/context/policy_search/contracts/learned_local_policy_eligibility.md`, adapter
 metadata from Issue #1618, smoke proof, and fail-closed handling before benchmark claims.
+
+External learned-policy families must also follow
+`docs/context/policy_search/contracts/external_policy_intake.md`. That contract defines the
+source-screen, license, checkpoint, observation/action, source-side-smoke, Robot SF adapter,
+Robot SF smoke, and benchmark-suite stages. This registry owns only the durable roll-up status; do
+not maintain a second current-state table in the intake contract or family notes.
 
 ## Status Crosswalk
 
@@ -77,6 +86,22 @@ stricter benchmark-readiness interpretation wins.
 | `monitor_only` with `monitor_only` | `monitor only` or `defer` | Track for future review; do not open implementation work without materially new source or contract evidence. |
 | `blocked` benchmark status | `defer`, `source-side reproduction first`, or `prototype only` | Treat as blocked for benchmark use; the row may still guide a narrow prerequisite issue. |
 | `rejected` or `rejected_for_current_adapter` | `reject for now` | Not compatible with the current local-planner adapter contract; reopen only with new public assets or a narrower reduction proof. |
+
+## External Intake Crosswalk
+
+Use this crosswalk with `contracts/external_policy_intake.md` when an external family moves through
+source-side and Robot SF adapter intake. The mapping is fail-closed: source-side proof and
+adapter-only proof are useful planning evidence, but they are not benchmark evidence.
+
+| External intake roll-up | Registry fields | Benchmark-readiness interpretation |
+| --- | --- | --- |
+| `source_screened` | `integration_status: monitor_only`; `reproducibility_status: monitor_only` or `source_harness_required`; `benchmark_status: blocked` or `not_benchmark_evidence` | Interesting enough to track, not enough to implement or benchmark. |
+| `license_or_checkpoint_blocked` | `integration_status: monitor_only` or `rejected`; `reproducibility_status: blocked` or `source_harness_required`; `benchmark_status: blocked` or `rejected_for_current_adapter` | Do not start adapter work until license and durable artifact blockers are cleared. |
+| `contract_blocked` | `integration_status: monitor_only` or `adapter_needed`; `reproducibility_status: source_harness_required` or `monitor_only`; `benchmark_status: blocked` or `rejected_for_current_adapter` | Observation/action mismatch blocks Robot SF benchmark use even if the source looks promising. |
+| `source_smoke_only` | `integration_status: monitor_only` or `adapter_needed`; `reproducibility_status: source_smoke_proven`; `benchmark_status: not_benchmark_evidence` | Native upstream/source-harness inference worked, but no Robot SF benchmark claim is allowed. |
+| `adapter_only` | `integration_status: staged` or `adapter_needed`; `reproducibility_status: launch_packet` or `source_smoke_proven`; `benchmark_status: not_benchmark_evidence` | Adapter import or metadata exists, but the Robot SF runtime path has not produced smoke evidence. |
+| `robot_sf_smoke_only` | `integration_status: staged` or `implemented`; `reproducibility_status: smoke_proven`; `benchmark_status: smoke_only` | Local smoke supports adapter viability only, not ranking or paper-facing comparison. |
+| `benchmark_suite_complete` | `integration_status: implemented`; `reproducibility_status: comparison_available`; `benchmark_status: comparison_available` | Benchmark evidence is available only for the named config, checkpoint, stage, and promotion gate. |
 
 ## Entries
 

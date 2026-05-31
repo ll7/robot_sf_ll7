@@ -1,0 +1,131 @@
+version: 1
+updated_at: 2026-05-31
+policy: context-catalog.v1
+description: >
+  Machine-readable catalog for the current retrieval-first context index. This is not a full
+  inventory of docs/context; it covers curated entry points from docs/context/INDEX.md so agents can
+  validate routing metadata without normalizing the entire historical note tree.
+status_values:
+  current: Active source of truth or current entry point.
+  historical: Useful background; check newer linked notes before relying on conclusions.
+  superseded: Kept only for provenance; replacement must be named.
+  evidence: Tracked compact proof or manifest.
+  proposal: Planned or exploratory guidance, not completed implementation evidence.
+freshness_values:
+  maintained: Update when the referenced workflow or contract changes.
+  dated: Date-scoped note; preserve as historical context unless a newer note supersedes it.
+  policy: Durable policy boundary; update only when the policy changes.
+  evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
+entries:
+  - path: docs/context/INDEX.md
+    status: current
+    freshness: maintained
+    area: context_architecture
+  - path: docs/context/goal_driven_agent_loops_2026-05-13.md
+    status: current
+    freshness: policy
+    area: agent_workflow
+  - path: docs/context/open_issue_execution_improvement_plan_2026-05-30.md
+    status: current
+    freshness: dated
+    area: agent_workflow
+  - path: docs/context/issue_713_batch_first_issue_workflow.md
+    status: current
+    freshness: policy
+    area: agent_workflow
+  - path: docs/context/issue_728_coding_agents_compatibility.md
+    status: current
+    freshness: policy
+    area: context_architecture
+  - path: docs/context/issue_691_benchmark_fallback_policy.md
+    status: current
+    freshness: policy
+    area: benchmark_evidence
+  - path: docs/context/artifact_evidence_vocabulary.md
+    status: current
+    freshness: policy
+    area: benchmark_evidence
+  - path: docs/context/issue_1436_reproducibility_flaky_acceptance.md
+    status: current
+    freshness: policy
+    area: benchmark_evidence
+  - path: docs/context/issue_1542_manuscript_claim_evidence_map.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
+  - path: docs/context/issue_750_paper_results_handoff.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
+  - path: docs/context/issue_1530_optional_preflight_audit.md
+    status: current
+    freshness: dated
+    area: planner_integration
+  - path: docs/context/issue_1360_external_teb_assessment.md
+    status: current
+    freshness: dated
+    area: planner_integration
+  - path: docs/context/policy_search/learned_policy_registry.md
+    status: current
+    freshness: maintained
+    area: learned_policy
+  - path: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+    status: current
+    freshness: policy
+    area: learned_policy
+  - path: docs/context/issue_1618_learned_policy_adapter_interface.md
+    status: current
+    freshness: policy
+    area: learned_policy
+  - path: docs/context/open_issues_training_split_audit_2026-05-30.md
+    status: current
+    freshness: dated
+    area: learned_policy
+  - path: docs/context/issue_1169_carla_live_replay.md
+    status: current
+    freshness: maintained
+    area: carla_external_sim
+  - path: docs/context/slurm_issue_batch_status_2026-05-21.md
+    status: current
+    freshness: maintained
+    area: slurm
+  - path: docs/context/issue_1690_root_layout_inventory.md
+    status: current
+    freshness: maintained
+    area: root_layout
+  - path: docs/context/issue_1573_root_layout_inventory.md
+    status: historical
+    freshness: dated
+    area: root_layout
+  - path: docs/context/issue_1583_high_risk_root_boundaries.md
+    status: current
+    freshness: policy
+    area: root_layout
+  - path: docs/context/issue_1598_1599_root_compatibility_decisions.md
+    status: current
+    freshness: policy
+    area: root_layout
+  - path: docs/context/issue_1457_adversarial_generation_protocol.md
+    status: current
+    freshness: policy
+    area: adversarial_search
+  - path: docs/context/issue_1500_adversarial_manifest.md
+    status: current
+    freshness: maintained
+    area: adversarial_search
+  - path: docs/context/issue_1571_adversarial_smoke_packet_sharpening.md
+    status: current
+    freshness: dated
+    area: adversarial_search
+  - path: docs/context/issue_1151_manual_control_mvp_foundation.md
+    status: current
+    freshness: maintained
+    area: manual_control_trace
+  - path: docs/context/issue_1689_simulation_trace_export_schema.md
+    status: current
+    freshness: policy
+    area: manual_control_trace
+  - path: docs/context/evidence/README.md
+    status: evidence
+    freshness: evidence
+    area: evidence_policy

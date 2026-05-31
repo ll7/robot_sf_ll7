@@ -79,6 +79,7 @@ knowledge, not every transient iteration detail.
 ## Skills And Entry Points
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
+* Machine-readable context catalog: [catalog.yaml](catalog.yaml)
 * Repository rule: [AGENTS.md](../../AGENTS.md)
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)

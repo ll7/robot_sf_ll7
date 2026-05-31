@@ -34,6 +34,22 @@ def _observation_with_pedestrian() -> dict:
     }
 
 
+def _flattened_observation_with_pedestrian() -> dict:
+    """Return the flattened SocNav observation shape used by benchmark adapters."""
+    return {
+        "robot_position": np.asarray([0.0, 0.0], dtype=float),
+        "robot_heading": np.asarray([0.0], dtype=float),
+        "robot_speed": np.asarray([0.0], dtype=float),
+        "robot_radius": np.asarray([0.3], dtype=float),
+        "goal_current": np.asarray([2.0, 0.0], dtype=float),
+        "goal_next": np.asarray([2.0, 0.0], dtype=float),
+        "pedestrians_positions": np.asarray([[0.75, 0.0]], dtype=float),
+        "pedestrians_velocities": np.asarray([[0.0, 0.0]], dtype=float),
+        "pedestrians_count": np.asarray([1], dtype=float),
+        "pedestrians_radius": np.asarray([0.3], dtype=float),
+    }
+
+
 def test_deterministic_surface_has_reviewable_contract_and_peak_near_pedestrian() -> None:
     """The fixture producer should emit a normalized ego-frame risk surface."""
     spec = LocalRiskSurfaceSpec(resolution=0.25, width=2.0, height=2.0, risk_threshold=0.6)
@@ -116,6 +132,22 @@ def test_risk_surface_planner_adapter_produces_bounded_command_and_diagnostics()
     assert diagnostics["execution_mode"] == "adapter"
     assert diagnostics["availability_status"] == "available"
     assert diagnostics["benchmark_strength"] is False
+    assert diagnostics["surface"]["risk_cells_at_or_above_threshold"] > 0
+
+
+def test_risk_surface_planner_adapter_accepts_flattened_socnav_observation() -> None:
+    """Benchmark flattened SocNav fields should be normalized before surface generation."""
+    adapter = RiskSurfacePlannerAdapter(
+        spec=LocalRiskSurfaceSpec(resolution=0.25, width=4.0, height=4.0)
+    )
+
+    linear, angular = adapter.plan(_flattened_observation_with_pedestrian())
+    diagnostics = adapter.diagnostics()
+
+    assert 0.0 <= linear <= 1.2
+    assert abs(angular) <= np.pi
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["availability_status"] == "available"
     assert diagnostics["surface"]["risk_cells_at_or_above_threshold"] > 0
 
 

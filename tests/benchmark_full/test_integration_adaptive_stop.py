@@ -4,7 +4,7 @@ Validate that the adaptive loop executes at least one iteration, produces
 artifacts, and does not exceed the configured max episodes per scenario.
 We configure small numbers so the loop should terminate quickly either due
 to hitting max_episodes or (in future) precision pass. For now precision
-pass will be immediate because placeholder metrics have zero variance for
+pass will be immediate because deterministic smoke metrics have zero variance for
 rates.
 """
 

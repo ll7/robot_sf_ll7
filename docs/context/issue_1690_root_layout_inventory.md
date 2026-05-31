@@ -25,13 +25,13 @@ current repository context stack and the earlier root-layout notes listed above.
 | Path | Current evidence | Recommendation | Follow-up shape |
 | --- | --- | --- | --- |
 | `.agent/` | `AGENTS.md`, `docs/ai/repo_overview.md`, and repo-local skills point to `.agent/PLANS.md`. | Keep. | No cleanup unless the agent planning contract is replaced everywhere. |
-| `.agents/`, `.codex/`, `.claude/`, `.opencode/`, `.gemini/` | Tracked compatibility mirrors and provider surfaces for agent workflows. | Keep. | Treat mirror changes as agent-workflow compatibility work, not root cleanup. |
+| `.agents/`, `.codex/`, `.opencode/`, `.gemini/` | Tracked compatibility mirrors and provider surfaces for currently supported agent workflows. | Keep. | Treat mirror changes as agent-workflow compatibility work, not root cleanup. |
 | `.cursorrules` | Pointer file content is `Repository instructions are canonical in AGENTS.md.`; `scripts/tools/sync_ai_config.py` and tests verify that pointer. | Keep. | Keep root-visible for editor compatibility. |
 | `.coverage` | No tracked root `.coverage` file is present; `.gitignore` ignores `/.coverage`; coverage config writes to `output/coverage/.coverage`. | Generated/ignored. | No deletion PR needed. If it reappears locally, discard it. |
 | `.pre-commit-config.yaml` | Root pre-commit entrypoint invokes `hooks/prevent_schema_duplicates.py`. | Keep. | Moving it would be a tooling migration, not cleanup. |
 | `.git-blame-ignore-revs` | Standard root Git metadata file. | Keep. | No follow-up. |
 | `CITATION.cff` | Release docs, benchmark release configs, and release-protocol tests require this root path. | Keep. | Any change needs release-protocol validation. |
-| `ACKNOWLEDGMENTS.md`, `CHANGELOG.md`, `LICENSE`, `README.md`, `CLAUDE.md`, `AGENTS.md` | Standard repository metadata and AI entrypoints. | Keep. | No cleanup. |
+| `ACKNOWLEDGMENTS.md`, `CHANGELOG.md`, `LICENSE`, `README.md`, `AGENTS.md` | Standard repository metadata and AI entrypoints. | Keep. | No cleanup. |
 | `opencode.json` | Root OpenCode configuration. | Keep. | Treat as provider tooling config. |
 | `specs/` | Broad docs, schema tests, visual contract tests, examples, scripts, and runtime comments deep-link into `specs/...`. | Keep for now. | Defer any move to a dedicated compatibility migration; see the #1598/#1599 note. |
 | `model_ped/` | Pedestrian PPO scripts, collision benchmark, adversarial-pedestrian demo, examples manifest, changelog, and `tests/test_training_ped_ppo.py` reference `model_ped/`. | Keep. | A future artifact migration would need checkpoint provenance and path-compatibility handling. |
@@ -44,7 +44,7 @@ current repository context stack and the earlier root-layout notes listed above.
 | `SLURM/` | Tracked SLURM workflow surface; many issues use SLURM/Auxme lanes. | Keep. | Treat as workflow documentation/infrastructure, not incidental clutter. |
 | `contracts/` | Small tracked contract surface. A worker suggested it may be a low-risk relocation candidate, but this issue did not inspect contract consumers deeply enough to approve a move. | Defer. | Only move under a dedicated contract-location issue with reference and schema checks. |
 | `.specify/` | Repo-local specification scaffolding and constitution memory. | Defer. | Treat as agent/specify workflow compatibility, not incidental clutter. |
-| `memory/` | Stable repo-local memory layer referenced by `CLAUDE.md`, `AGENTS.md`, and the context stack. | Keep. | Do not move unless the memory contract is replaced across agent entrypoints. |
+| `memory/` | Stable repo-local memory layer referenced by `AGENTS.md` and the context stack. | Keep. | Do not move unless the memory contract is replaced across supported agent entrypoints. |
 | `configs/`, `docker/`, `docs/`, `examples/`, `fast-pysf/`, `maps/`, `model/`, `robot_sf/`, `robot_sf_carla_bridge/`, `scripts/`, `tests/`, `third_party/` | Canonical source, docs, fixture, dependency, or workflow roots. | Keep. | Not cleanup candidates in this issue. |
 
 ## Current Deltas From Earlier Notes

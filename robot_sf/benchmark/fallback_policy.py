@@ -585,7 +585,39 @@ def _learned_policy_contract_reason(preflight: dict[str, Any]) -> str | None:
     return None
 
 
-def summarize_benchmark_availability(summary: dict[str, Any] | None) -> BenchmarkAvailability:
+def _latency_stress_availability(
+    summary: dict[str, Any],
+    *,
+    execution_mode: str,
+    readiness_status: str,
+    reason: str | None,
+) -> BenchmarkAvailability | None:
+    """Return fail-closed availability for latency-stress preflight runs."""
+    latency_stress_profile = summary.get("latency_stress_profile")
+    if latency_stress_profile is None:
+        return None
+
+    latency_stress_metrics = summary.get("latency_stress_metrics")
+    latency_reason = "latency_stress_profile is preflight/provenance-only"
+    if isinstance(latency_stress_metrics, dict):
+        unavailable_latency_metrics = {
+            str(value).strip().lower() for value in latency_stress_metrics.values()
+        }
+        if unavailable_latency_metrics == {"not_available"}:
+            latency_reason = (
+                "latency_stress_profile is preflight/provenance-only; "
+                "runtime latency metrics are not implemented"
+            )
+    return BenchmarkAvailability(
+        execution_mode=execution_mode,
+        readiness_status=readiness_status,
+        availability_status="not_available",
+        benchmark_success=False,
+        availability_reason=reason or latency_reason,
+    )
+
+
+def summarize_benchmark_availability(summary: dict[str, Any] | None) -> BenchmarkAvailability:  # noqa: C901
     """Return the canonical benchmark availability classification for one run summary."""
     if not isinstance(summary, dict):
         return BenchmarkAvailability(
@@ -647,6 +679,14 @@ def summarize_benchmark_availability(summary: dict[str, Any] | None) -> Benchmar
             benchmark_success=False,
             availability_reason=reason or "zero episodes written for scheduled jobs",
         )
+    latency_availability = _latency_stress_availability(
+        summary,
+        execution_mode=execution_mode,
+        readiness_status=readiness_status,
+        reason=reason,
+    )
+    if latency_availability is not None:
+        return latency_availability
     return BenchmarkAvailability(
         execution_mode=execution_mode,
         readiness_status=readiness_status,

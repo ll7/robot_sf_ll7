@@ -155,3 +155,32 @@ def test_topology_hypothesis_can_select_local_command_source() -> None:
         last_decision["topology_command_influence"]["selected_hypothesis_id"]
         == last_decision["route_corridor"]["topology_hypothesis"]["hypothesis_id"]
     )
+
+
+def test_topology_guided_policy_resets_stale_topology_decision() -> None:
+    """A later plan step with missing inputs must not reuse the prior topology result."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(_config())
+    planner.plan(_obs(occupied_cells=_two_gap_wall()))
+    observation = _obs(occupied_cells=[])
+    observation.pop("occupancy_grid")
+
+    command = planner.plan(observation)
+
+    assert command == (0.0, 0.0)
+    diagnostics = planner.diagnostics()
+    assert diagnostics["topology_guided"]["last_topology_decision"]["status"] == "not_available"
+    assert diagnostics["last_decision"]["selected_source"] == "topology_fail_closed"
+
+
+def test_topology_guided_policy_handles_zero_min_without_hypotheses() -> None:
+    """Empty route-hypothesis lists should return diagnostics instead of crashing."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(_config(min_hypotheses=0))
+    observation = _obs(occupied_cells=[])
+    observation["goal"]["current"] = [-1.6, 0.0]
+    observation["goal"]["next"] = [-1.6, 0.0]
+
+    decision = planner._hypotheses_for_observation(observation)
+
+    assert decision["status"] == "insufficient_hypotheses"
+    assert decision["reason"] in {"no_hypotheses_available", "fewer_than_min_distinct_routes"}
+    assert decision["hypothesis_count"] == 0

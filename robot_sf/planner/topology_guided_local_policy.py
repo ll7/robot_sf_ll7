@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
-from itertools import pairwise
 from typing import Any
 
 import numpy as np
@@ -86,9 +85,9 @@ def _path_length(path: list[tuple[int, int]], *, resolution: float) -> float:
     """Return route length in metres."""
     if len(path) < 2:
         return 0.0
-    return float(
-        sum(float(np.hypot(b[0] - a[0], b[1] - a[1])) for a, b in pairwise(path)) * resolution
-    )
+    points = np.asarray(path, dtype=float)
+    diffs = np.diff(points, axis=0)
+    return float(np.sum(np.hypot(diffs[:, 0], diffs[:, 1])) * resolution)
 
 
 def _first_float(value: Any, default: float) -> float:
@@ -345,6 +344,13 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                     "route_corridor": geometry,
                 }
             )
+        if not hypotheses:
+            return {
+                "status": "insufficient_hypotheses",
+                "reason": "no_hypotheses_available",
+                "hypothesis_count": 0,
+                "min_hypotheses": int(self.topology_config.min_hypotheses),
+            }
         selected = max(hypotheses, key=lambda item: float(item["score"]))
         return {
             "status": "ok",
@@ -559,6 +565,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         Returns:
             tuple[float, float]: Selected linear and angular velocity.
         """
+        self._last_topology_decision = None
         command = super().plan(observation)
         topology = self._last_topology_decision or {}
         status = str(topology.get("status", "unknown"))

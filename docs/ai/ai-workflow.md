@@ -20,6 +20,7 @@ validation, PR review, and follow-up cleanup.
 Read these first when working in this workflow:
 
 - [AGENTS.md](../../AGENTS.md)
+- [docs/maintainer_values.md](../maintainer_values.md)
 - [docs/dev_guide.md](../dev_guide.md)
 - [docs/README.md](../README.md)
 - [docs/ai/repo_overview.md](repo_overview.md)
@@ -45,7 +46,9 @@ Use the smallest useful routing skill first:
 - `benchmark-overview` or `experiment-context` for benchmark, planner, or training work.
 - `quality-playbook` for non-trivial work that needs risk-proportional validation planning.
 
-The goal is to avoid jumping directly into edits before the problem, scope, and validation path are clear.
+The goal is to avoid jumping directly into edits before the problem, scope, and validation path are
+clear. Do not use this as a reason to block exploratory work; label uncertainty clearly and keep
+moving when the risk is low.
 
 ### 2. Create or repair the issue
 
@@ -148,10 +151,10 @@ Use the repository gates before higher-risk PRs are opened:
 
 The standard readiness flow is fail-fast and failed-first by default. If a failure appears, assess test value first before changing or removing tests.
 
-For docs-only and low-risk instruction branches, a cheaper official path is allowed when the user
-asks for it: inspect the diff, verify referenced paths where practical, and state in the PR that the
-full readiness gate was intentionally skipped. Do not use the cheap path for benchmark, metric,
-schema, model-provenance, runtime, or paper-facing changes.
+For docs-only and low-risk instruction branches, use the cheaper official path by default: inspect
+the diff, verify referenced paths where practical, and state in the PR when the full readiness gate
+was skipped. Do not use the cheap path for benchmark, metric, schema, model-provenance, runtime, or
+paper-facing changes.
 
 The PR readiness gate also checks:
 
@@ -226,6 +229,8 @@ fix was pushed but the named thread ids remain unresolved.
 ### 9. Close the loop
 
 When work is deferred, create a follow-up issue rather than leaving the remainder hidden in chat or PR text.
+The cost of an issue is low; prefer one central collection system with better filtering over
+separate backlog stores.
 
 Keep the parent issue open until the branch is ready for merge or the repository process says otherwise.
 
@@ -237,6 +242,8 @@ Every relevant substantial step should leave a durable Markdown trace in either 
 - use `memory/` for stable cross-session facts that will be reused later.
 
 The broader `docs/context/` retrieval-architecture redesign is tracked in GitHub issue #1714.
+Priority-discussion workflow follow-up is tracked in GitHub issue #1729, and stale Claude
+compatibility cleanup is tracked in GitHub issue #1728.
 
 ## Cross-Agent Compatibility
 

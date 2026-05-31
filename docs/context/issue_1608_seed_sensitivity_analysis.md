@@ -91,6 +91,13 @@ The result also should not be reused as paper-facing significance evidence. The 
 campaign is an exploratory candidate surface, and SNQI is not used here because the source bundle
 marks SNQI ordering as diagnostic only.
 
+Observation-track metadata boundary: the source Issue #1454 bundle predates explicit
+`benchmark_track` and `track_schema_version` metadata. This derived analysis therefore inherits
+`legacy_track_unknown` status per
+[issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md). Use it
+within the historical S10/h500 surface only; do not aggregate it with track-aware result rows or use
+it for cross-observation-track comparisons.
+
 ## Validation
 
 - `uv run pytest tests/tools/test_analyze_scenario_seed_sensitivity.py -q`

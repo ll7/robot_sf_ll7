@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/learned-policy-transfer-metadata.schema.v1.json",
+  "title": "Learned Policy Transfer Benchmark Metadata v1",
+  "description": "Metadata attached at algorithm_metadata.transfer_benchmark for imported or Robot SF-native learned-policy transfer benchmark rows.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "transfer_candidate_id",
+    "policy_family",
+    "source_kind",
+    "paper_or_source",
+    "local_assessment_note",
+    "artifact_provenance",
+    "observation_contract",
+    "action_contract",
+    "transfer_stage",
+    "execution_mode",
+    "readiness_status",
+    "availability_status",
+    "availability_reason",
+    "benchmark_success",
+    "evidence_pointers"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "learned_policy_transfer_benchmark.v1"
+    },
+    "transfer_candidate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_family": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_kind": {
+      "type": "string",
+      "enum": [
+        "robot_sf_native",
+        "external_repository",
+        "external_paper",
+        "source_harness",
+        "adapter_fixture"
+      ]
+    },
+    "paper_or_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "upstream_repo_url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "upstream_commit_or_release": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_license": {
+      "type": "string",
+      "minLength": 1
+    },
+    "local_assessment_note": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifact_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_manifest_status"
+      ],
+      "properties": {
+        "artifact_manifest_status": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "not_required",
+            "missing",
+            "blocked",
+            "external_unverified"
+          ]
+        },
+        "checkpoint_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checkpoint_checksum": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalizer_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalizer_checksum": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_license_or_access": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "observation_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation_level",
+        "planner_observation_mode",
+        "deployment_observable_fields",
+        "training_only_fields",
+        "forbidden_evaluation_fields"
+      ],
+      "properties": {
+        "observation_level": {
+          "type": "string",
+          "minLength": 1
+        },
+        "planner_observation_mode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deployment_observable_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "training_only_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidden_evaluation_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "history_or_recurrent_state": {
+          "type": "string"
+        }
+      }
+    },
+    "action_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_family",
+        "raw_action_shape",
+        "raw_action_frame",
+        "adapted_action_frame",
+        "action_bounds",
+        "kinematics_compatibility",
+        "projection_policy"
+      ],
+      "properties": {
+        "action_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_action_shape": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_action_frame": {
+          "type": "string",
+          "minLength": 1
+        },
+        "adapted_action_frame": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action_bounds": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kinematics_compatibility": {
+          "type": "string",
+          "minLength": 1
+        },
+        "projection_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "guard_policy": {
+          "type": "string"
+        }
+      }
+    },
+    "transfer_stage": {
+      "type": "string",
+      "enum": [
+        "source_intake",
+        "source_reproduction",
+        "adapter_metadata",
+        "robot_sf_smoke",
+        "transfer_benchmark"
+      ]
+    },
+    "execution_mode": {
+      "type": "string",
+      "enum": [
+        "native",
+        "adapter",
+        "mixed",
+        "unknown"
+      ]
+    },
+    "readiness_status": {
+      "type": "string",
+      "enum": [
+        "native",
+        "adapter",
+        "fallback",
+        "degraded"
+      ]
+    },
+    "availability_status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "partial-failure",
+        "failed",
+        "not_available"
+      ]
+    },
+    "availability_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "benchmark_success": {
+      "type": "boolean"
+    },
+    "evidence_pointers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": "learned_policy_transfer_benchmark.v1",
+  "transfer_candidate_id": "crowdnav_height_igat_family",
+  "policy_family": "crowdnav_height",
+  "source_kind": "external_repository",
+  "paper_or_source": "https://github.com/Shuijing725/CrowdNav_HEIGHT",
+  "upstream_commit_or_release": "65451bcdd1f3fbebaf6e96a0de73aaa56d74ca05",
+  "local_assessment_note": "Source-harness metadata fixture only; not Robot SF adapter or benchmark proof.",
+  "artifact_provenance": {
+    "artifact_manifest_status": "missing",
+    "checkpoint_uri": "upstream README Google Drive pointer for 237400.pt"
+  },
+  "observation_contract": {
+    "observation_level": "lidar_human_state",
+    "planner_observation_mode": "upstream_height_lidar_human_dict",
+    "deployment_observable_fields": [
+      "robot_state",
+      "goal",
+      "lidar_rays",
+      "humans"
+    ],
+    "training_only_fields": [],
+    "forbidden_evaluation_fields": []
+  },
+  "action_contract": {
+    "action_family": "upstream_policy_action",
+    "raw_action_shape": "unknown_until_source_reproduction",
+    "raw_action_frame": "unknown",
+    "adapted_action_frame": "unresolved",
+    "action_bounds": "unknown",
+    "kinematics_compatibility": "unresolved",
+    "projection_policy": "not_declared"
+  },
+  "transfer_stage": "source_reproduction",
+  "execution_mode": "unknown",
+  "readiness_status": "degraded",
+  "availability_status": "not_available",
+  "availability_reason": "Source harness is blocked by missing legacy gym dependency and missing local checkpoint asset.",
+  "benchmark_success": false,
+  "evidence_pointers": [
+    "docs/context/policy_search/issue_1394_crowdnav_height_source_harness.md",
+    "docs/context/issue_691_benchmark_fallback_policy.md",
+    "https://github.com/ll7/robot_sf_ll7/issues/1761"
+  ]
+}

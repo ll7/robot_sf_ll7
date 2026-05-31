@@ -1,0 +1,48 @@
+{
+  "schema_version": "learned_policy_transfer_benchmark.v1",
+  "transfer_candidate_id": "ppo_issue791_best_v1",
+  "policy_family": "ppo",
+  "source_kind": "robot_sf_native",
+  "paper_or_source": "Robot SF PPO issue-791 training lineage",
+  "local_assessment_note": "Issue #1761 native metadata fixture; model artifact is not hydrated by validator tests.",
+  "artifact_provenance": {
+    "artifact_manifest_status": "complete",
+    "checkpoint_uri": "model_registry:ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+    "checkpoint_checksum": "recorded-in-model-registry",
+    "normalizer_uri": "model_registry:ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+    "normalizer_checksum": "recorded-in-model-registry"
+  },
+  "observation_contract": {
+    "observation_level": "sensor_fusion_state",
+    "planner_observation_mode": "dict",
+    "deployment_observable_fields": [
+      "robot_state",
+      "goal",
+      "lidar_rays",
+      "history"
+    ],
+    "training_only_fields": [],
+    "forbidden_evaluation_fields": []
+  },
+  "action_contract": {
+    "action_family": "unicycle",
+    "raw_action_shape": "[v, omega]",
+    "raw_action_frame": "robot_local",
+    "adapted_action_frame": "robot_local_unicycle_vw",
+    "action_bounds": "v <= 2.0 m/s; |omega| <= 1.0 rad/s",
+    "kinematics_compatibility": "differential_drive",
+    "projection_policy": "native_unicycle_no_projection"
+  },
+  "transfer_stage": "robot_sf_smoke",
+  "execution_mode": "native",
+  "readiness_status": "native",
+  "availability_status": "available",
+  "availability_reason": "Native Robot SF PPO metadata is success-capable when the model registry artifact hydrates and smoke evidence exists.",
+  "benchmark_success": true,
+  "evidence_pointers": [
+    "configs/policy_search/candidates/ppo_issue791_best_v1.yaml",
+    "configs/baselines/ppo_15m_grid_socnav.yaml",
+    "docs/context/issue_691_benchmark_fallback_policy.md",
+    "https://github.com/ll7/robot_sf_ll7/issues/1761"
+  ]
+}

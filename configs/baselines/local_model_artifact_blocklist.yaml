@@ -1,0 +1,32 @@
+version: 1
+policy: issue_1638_local_model_artifact_preflight
+follow_up_issue: https://github.com/ll7/robot_sf_ll7/issues/1764
+blocked_references:
+  - path: configs/baselines/ppo_issue_791_horizon100_12178.yaml
+    field: model_path
+    value: output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip
+    reason: Horizon-100 PPO candidate has no durable registry entry or release artifact yet.
+  - path: configs/baselines/ppo_issue_856_all_scenarios_12223.yaml
+    field: model_path
+    value: output/slurm/issue791-reward-curriculum-job-12223/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_best.zip
+    reason: Issue-856 comparison checkpoint is recorded only as a local SLURM artifact.
+  - path: configs/baselines/sac_gate_socnav_struct.yaml
+    field: model_path
+    value: output/models/sac/sac_gate_socnav_struct_v1.zip
+    reason: Experimental SAC checkpoint has no durable model registry entry.
+  - path: configs/baselines/sac_gate_socnav_struct_ego.yaml
+    field: model_path
+    value: output/models/sac/sac_gate_socnav_struct_ego_v1.zip
+    reason: Experimental ego-frame SAC checkpoint has no durable model registry entry.
+  - path: configs/baselines/sac_gate_socnav_struct_ego_multi.yaml
+    field: model_path
+    value: output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip
+    reason: Experimental multi-scenario SAC checkpoint has no durable model registry entry.
+  - path: configs/baselines/sac_gate_socnav_struct_ego_safe.yaml
+    field: model_path
+    value: output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip
+    reason: Experimental safety-shaped SAC checkpoint has no durable model registry entry.
+  - path: configs/baselines/drl_vo_default.yaml
+    field: model_path
+    value: output/model_cache/drl_vo_default.pt
+    reason: DRL-VO default checkpoint is source-side/local-only until artifact promotion.

@@ -187,6 +187,24 @@ candidates:
       - smoke
       - nominal_sanity
 
+  hybrid_rule_route_reacquire_recenter_probe:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_route_reacquire_recenter_probe.yaml
+    issue: 1905
+    hypothesis: >
+      Combining the moderate 2.4 m/s progress envelope with route-corridor
+      subgoal recovery, static recenter probes, and a narrow rotate-in-place
+      recovery path should test whether existing hybrid-rule hooks can escape
+      h500 route-local-minimum blockers without weakening hard static or
+      dynamic safety filters.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   risk_dwa_camera_ready:
     status: implemented
     family: classical_baseline

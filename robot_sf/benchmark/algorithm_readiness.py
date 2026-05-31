@@ -282,6 +282,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="topology_guided_hybrid_rule_v0",
+        tier="experimental",
+        aliases=("topology_guided_hybrid_rule_v0", "topology_hypothesis_dwa_v0"),
+        note=(
+            "Diagnostic-only masked-route hypothesis selector feeding the hybrid-rule "
+            "local scorer; not benchmark evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="lidar_social_force",
         tier="experimental",
         aliases=("lidar_social_force", "lidar_tracked_social_force"),
@@ -320,6 +330,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("hybrid_portfolio",),
         note="Risk-regime switch between risk_dwa, ORCA, and prediction planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="planner_selector_v2_diagnostic",
+        tier="experimental",
+        aliases=("planner_selector_v2_diagnostic",),
+        note=(
+            "Diagnostic-only deterministic selector over existing local planner candidates; "
+            "not benchmark-strength evidence."
+        ),
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(

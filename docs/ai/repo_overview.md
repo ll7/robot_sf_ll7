@@ -94,7 +94,8 @@ Then branch by task type:
 - Use `scripts/dev/` entrypoints where available.
 - Prefer aggressive exploration when status is clearly labeled as exploratory, diagnostic, blocked,
   or not yet benchmark evidence.
-- Add uncertainty estimates or caveats for statements below roughly 95 percent confidence.
+- Add numeric uncertainty estimates or caveats for substantive claims, recommendations, benchmark
+  conclusions, and prioritization judgments below roughly 95 percent confidence.
 - Preserve benchmark claims conservatively.
 - Treat planner provenance as part of correctness, not just documentation polish.
 - Distinguish observed evidence from hypothesis in findings and reports.

@@ -1,14 +1,15 @@
 <!--
 Sync Impact Report
-Previous Version: 1.4.1 -> New Version: 1.4.2 (PATCH bump)
-Rationale: Added maintainer-values linkage, explicit honesty/transparency/reproducibility hard rule, default cheap validation for docs/instruction-only changes, and uncertainty labeling for exploratory claims.
-Modified Principles: I, IX, XIII, Governance
+Previous Version: 1.4.2 -> New Version: 1.4.3 (PATCH bump)
+Rationale: Clarified that maintainer_values.md is higher-priority current guidance while the constitution remains strict for benchmark, metric, schema, reproducibility, and paper-facing contracts.
+Modified Principles: Governance
 Added Sections: None
 Removed Sections: None
 Templates Updated:
- - ✅ maintainer_values.md: Added compact current values and hard contracts
- - ✅ dev_guide.md: Validation language remains aligned through AGENTS/docs references
- - ✅ copilot-instructions.md: Aligned quality-playbook language with risk-proportional validation
+ - ✅ AGENTS.md: Authority order now puts maintainer_values.md first
+ - ✅ maintainer_values.md: Narrowed uncertainty labeling to substantive claims and added paper-grade checklist guidance
+ - ✅ docs/context/INDEX.md: Relaxed pruning guidance for unambiguously stale context notes
+ - ✅ gemini analyze command mirror: Matched softened constitution authority wording
 Pending Template Updates: None
 Deferred TODOs: None
 All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
@@ -20,8 +21,8 @@ This Constitution specifies WHAT the Robot SF repository delivers: a cohesive, r
 and engineering platform for social navigation of a robot among pedestrians. Treat it as contributor
 guidance plus hard contract notes. Benchmark, metric, schema, reproducibility, and paper-facing
 contracts remain strict; softer workflow guidance should support maintainer-directed research
-progress rather than override it. `docs/maintainer_values.md` is the compact current-values entry
-point.
+progress rather than override it. `docs/maintainer_values.md` is the highest-priority current
+maintainer-values entry point when workflow guidance conflicts.
 
 ## Core Principles
 
@@ -222,4 +223,4 @@ contracts, (3) migration guidance or deprecation plan, (4) version/date update b
 introduction of out-of-scope functionality must include justification aligning with Core Principles
 I-X or be rejected.
 
-**Version**: 1.4.2 | **Ratified**: 2025-09-19 | **Last Amended**: 2026-05-30
+**Version**: 1.4.3 | **Ratified**: 2025-09-19 | **Last Amended**: 2026-05-31

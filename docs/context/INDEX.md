@@ -37,7 +37,8 @@ paragraphs.
 - If two notes cover the same decision, keep the newer canonical note current and mark the older
   note `Historical` or `Superseded` near the top with a pointer to the replacement.
 - If a note is issue-local and no longer reusable, keep it linked from the relevant issue-specific
-  entry only, or remove it when the issue/PR record already preserves the needed provenance.
+  entry only, or remove it from this index when the issue/PR record already preserves the needed
+  provenance.
 - If a note supports a benchmark or paper-facing claim, preserve the evidence pointer even when the
   prose is shortened.
 - Add a note to this index only when it is a current domain entry point, a durable policy boundary,

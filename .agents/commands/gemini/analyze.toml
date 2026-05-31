@@ -61,7 +61,7 @@ Execution steps:
       - Conflicting requirements (e.g., one requires to use Next.js while other says to use Vue as the framework).
 
 5. Severity assignment heuristic:
-   - CRITICAL: Violates constitution MUST, missing core spec artifact, or requirement with zero coverage that blocks baseline functionality.
+   - CRITICAL: Violates a hard Constitution Authority requirement (for example, a constitution-level MUST), omits a required core spec artifact, or leaves baseline-blocking functionality with zero requirement coverage.
    - HIGH: Duplicate or conflicting requirement, ambiguous security/performance attribute, untestable acceptance criterion.
    - MEDIUM: Terminology drift, missing non-functional task coverage, underspecified edge case.
    - LOW: Style/wording improvements, minor redundancy not affecting execution order.

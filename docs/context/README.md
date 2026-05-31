@@ -218,6 +218,7 @@ knowledge, not every transient iteration detail.
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
 * Issue #1387 Tentabot-style value scorer spike:
   [issue_1387_tentabot_value_scorer_spike.md](issue_1387_tentabot_value_scorer_spike.md)
+  (includes the Issue #1832 progress-recovery probe boundary)
 * Issue #1344 paired AMV primary protocol report:
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * SLURM issue batch status 2026-05-21 (canonical SLURM issue-status ledger):
@@ -690,6 +691,9 @@ why a change was made rather than a full issue execution transcript.
   records the schema/dimension contract for obstacle-feature predictive datasets, training,
   checkpoints, runtime loading, and the #1218 map-derived obstacle-line data source before any
   same-seed performance comparison.
+* [Issue #1856 Predictive-v2 Coupling Objective](issue_1856_predictive_coupling_objective.md)
+  records the local closed-loop gate and planner-side coupling hypothesis that should run before
+  any renewed predictive-v2 four-way expansion.
 * [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter` .

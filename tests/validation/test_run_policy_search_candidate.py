@@ -74,6 +74,34 @@ def test_load_candidate_definition_merges_base_config_and_params(
     assert config_path == candidate_cfg.resolve()
 
 
+def test_actuation_aware_candidate_registry_links_diagnostic_config() -> None:
+    """The AMV candidate should be registered as diagnostic-only and runnable."""
+    registry = Path("docs/context/policy_search/candidate_registry.yaml")
+
+    entry, payload, merged, config_path = load_candidate_definition(
+        registry,
+        "actuation_aware_hybrid_rule_v0",
+    )
+
+    assert entry["promotion_gate"] == "tier_b"
+    assert entry["required_stages"] == ["smoke"]
+    assert entry["claim_eligibility"] == "diagnostic_only"
+    assert entry["paper_facing"] is False
+    assert entry["calibrated_hardware_evidence"] is False
+    assert entry["first_diagnostic_config"] == (
+        "configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml"
+    )
+    assert payload["algo"] == "actuation_aware_hybrid_rule_v0"
+    assert config_path.as_posix().endswith(
+        "configs/policy_search/candidates/actuation_aware_hybrid_rule_v0.yaml"
+    )
+    assert merged["allow_testing_algorithms"] is True
+    assert merged["planner_variant"] == "actuation_aware_hybrid_rule_v0"
+    assert merged["diagnostic_only"] is True
+    assert merged["calibrated_hardware_evidence"] is False
+    assert merged["claim_scope"] == "synthetic-only"
+
+
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
     """Scenario names should drive family inference when scenario_id is absent."""
     grouped = split_scenarios_by_family(

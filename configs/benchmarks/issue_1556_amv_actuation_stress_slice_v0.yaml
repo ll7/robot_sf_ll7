@@ -132,3 +132,9 @@ planners:
     planner_group: core
     benchmark_profile: baseline-safe
     socnav_missing_prereq_policy: fallback
+
+  - key: actuation_aware_hybrid_rule_v0
+    algo: actuation_aware_hybrid_rule_v0
+    planner_group: experimental
+    benchmark_profile: experimental
+    algo_config: configs/algos/actuation_aware_hybrid_rule_v0.yaml

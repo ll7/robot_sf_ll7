@@ -1,0 +1,12 @@
+name: actuation_aware_hybrid_rule_v0
+algo: actuation_aware_hybrid_rule_v0
+base_config_path: configs/algos/actuation_aware_hybrid_rule_v0.yaml
+hypothesis: >
+  Projecting the deterministic hybrid-rule local planner's command through a
+  synthetic AMV actuation envelope should expose and possibly reduce command
+  clipping, yaw-rate saturation, and braking diagnostics on the synthetic
+  actuation stress slice without changing success or collision interpretation.
+params:
+  diagnostic_only: true
+  calibrated_hardware_evidence: false
+  claim_scope: synthetic-only

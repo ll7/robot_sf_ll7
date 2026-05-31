@@ -272,6 +272,42 @@ def test_build_policy_trivial_reference_adapter_exposes_template_contract() -> N
     assert "Diagnostic adapter template only" in meta["planner_kinematics"]["limitations"]
 
 
+def test_build_policy_actuation_aware_hybrid_rule_exposes_projection_runtime() -> None:
+    """The AMV diagnostic candidate should build through the real map-runner route."""
+    policy, meta = _build_policy(
+        "actuation_aware_hybrid_rule_v0",
+        {
+            "allow_testing_algorithms": True,
+            "planner_variant": "actuation_aware_hybrid_rule_v0",
+            "max_linear_speed": 3.0,
+            "max_linear_accel_m_s2": 2.0,
+            "max_angular_accel_rad_s2": 4.0,
+            "max_yaw_rate_rad_s": 1.2,
+            "projection_dt": 0.1,
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.0]},
+        "goal": {"current": [10.0, 0.0]},
+        "pedestrians": {"positions": [], "velocities": [], "count": [0], "radius": 0.3},
+        "sim": {"timestep": 0.1},
+    }
+    linear, angular = policy(obs)
+    planner_stats = policy._planner_stats()
+
+    assert linear == pytest.approx(0.2)
+    assert abs(angular) <= 1.2
+    assert meta["canonical_algorithm"] == "actuation_aware_hybrid_rule_v0"
+    assert meta["baseline_category"] == "diagnostic"
+    assert meta["planner_kinematics"]["adapter_name"] == "ActuationAwareHybridRuleAdapter"
+    assert meta["planner_kinematics"]["diagnostic_only"] is True
+    assert meta["planner_kinematics"]["calibrated_hardware_evidence"] is False
+    assert planner_stats["actuation_projection"]["status"] == "ok"
+    assert planner_stats["actuation_projection"]["projection_fraction"] == pytest.approx(1.0)
+
+
 def test_goal_policy_supports_flat_map_runner_observation() -> None:
     """Goal baseline should work with the flat observation keys emitted by the env."""
     obs = {

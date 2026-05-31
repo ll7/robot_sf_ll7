@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-05-20
+updated_at: 2026-05-31
 freshness:
   policy: manual_registry_edit
   max_age_days: 90
@@ -193,6 +193,25 @@ candidates:
       occupancy-compatible ego grid and let the existing Risk-DWA planner consume that surface
       through the normal policy-search smoke path. This is a prototype interface proof only, not
       learned-risk model or benchmark-strength evidence.
+    required_stages:
+      - smoke
+
+  actuation_aware_hybrid_rule_v0:
+    status: experimental_spike
+    lifecycle_status: diagnostic_only
+    claim_eligibility: diagnostic_only
+    family: actuation_diagnostic_local_planner
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/actuation_aware_hybrid_rule_v0.yaml
+    first_diagnostic_config: configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml
+    paper_facing: false
+    calibrated_hardware_evidence: false
+    hypothesis: >
+      A deterministic hybrid-rule local candidate that projects commands through the synthetic
+      AMV actuation profile can expose and possibly reduce command clipping, yaw-rate saturation,
+      and braking-stress diagnostics on the Issue #1556 actuation slice. This row is
+      diagnostic-only and must not be used as calibrated hardware or paper-facing AMV evidence.
     required_stages:
       - smoke
 

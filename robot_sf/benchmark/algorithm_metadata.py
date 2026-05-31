@@ -46,6 +46,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "risk_dwa": "classical",
     "risk_surface_dwa": "classical",
     "hybrid_rule_local_planner": "classical",
+    "actuation_aware_hybrid_rule_v0": "diagnostic",
     "safety_barrier": "classical",
     "grid_route": "classical",
     "lidar_social_force": "classical",
@@ -98,6 +99,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "risk_dwa": "risk_aware_dynamic_window",
     "risk_surface_dwa": "deterministic_local_risk_surface_dwa",
     "hybrid_rule_local_planner": "hybrid_rule_deterministic_local_planner",
+    "actuation_aware_hybrid_rule_v0": "diagnostic_synthetic_actuation_projected_hybrid_rule",
     "safety_barrier": "native_barrier_style_safety_filter",
     "grid_route": "occupancy_grid_route_tracking",
     "lidar_social_force": "lidar_endpoint_tracked_social_force_adapter",
@@ -165,6 +167,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "notes": (
             "Exploratory deterministic risk-surface producer consumes structured SocNav state, "
             "derives an ego-frame occupancy-compatible risk grid, and wraps risk_dwa."
+        ),
+    },
+    "actuation_aware_hybrid_rule_v0": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians"),
+        "notes": (
+            "Diagnostic-only hybrid-rule wrapper that projects unicycle commands through "
+            "synthetic actuation limits before benchmark execution."
         ),
     },
     "mppi_social": _DEFAULT_OBSERVATION_SPEC,
@@ -802,6 +813,18 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "HybridRuleLocalPlannerAdapter",
+    },
+    "actuation_aware_hybrid_rule_v0": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "ActuationAwareHybridRuleAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "synthetic_actuation_projected_unicycle_vw",
+        "projection_documented": True,
+        "diagnostic_only": True,
+        "calibrated_hardware_evidence": False,
     },
     "safety_barrier": {
         "planner_command_space": "unicycle_vw",

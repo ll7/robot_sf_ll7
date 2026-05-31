@@ -95,8 +95,8 @@ def test_issue_1556_config_declares_synthetic_differential_drive_slice() -> None
     }
 
 
-def test_issue_1556_config_reuses_compact_primary_planner_set() -> None:
-    """The slice should stay compact and avoid broad planner expansion."""
+def test_issue_1556_config_reuses_compact_primary_and_diagnostic_planner_set() -> None:
+    """The slice should stay compact while carrying the AMV diagnostic candidate."""
     payload = _load_yaml(CONFIG_PATH)
 
     assert payload["paper_interpretation_profile"] == "issue-1556-amv-actuation-diagnostic"
@@ -119,5 +119,12 @@ def test_issue_1556_config_reuses_compact_primary_planner_set() -> None:
             "planner_group": "core",
             "benchmark_profile": "baseline-safe",
             "socnav_missing_prereq_policy": "fallback",
+        },
+        {
+            "key": "actuation_aware_hybrid_rule_v0",
+            "algo": "actuation_aware_hybrid_rule_v0",
+            "planner_group": "experimental",
+            "benchmark_profile": "experimental",
+            "algo_config": "configs/algos/actuation_aware_hybrid_rule_v0.yaml",
         },
     ]

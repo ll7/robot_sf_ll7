@@ -82,6 +82,10 @@ from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.planner.actuation_aware_hybrid_rule import (
+    ActuationAwareHybridRuleAdapter,
+    build_actuation_aware_hybrid_rule_config,
+)
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.planner.crowdnav_height import (
     CrowdNavHeightAdapter,
@@ -1476,6 +1480,23 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key == "actuation_aware_hybrid_rule_v0":
+        adapter = ActuationAwareHybridRuleAdapter(
+            config=build_actuation_aware_hybrid_rule_config(algo_config)
+        )
+        meta["diagnostic_only"] = True
+        meta["calibrated_hardware_evidence"] = False
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="ActuationAwareHybridRuleAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="diagnostic_only_synthetic_actuation_projection_not_hardware_calibrated",
         )
 
     if algo_key == "safety_barrier":

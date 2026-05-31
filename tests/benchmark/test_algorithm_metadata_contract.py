@@ -167,6 +167,28 @@ def test_risk_surface_dwa_metadata_marks_prototype_surface_adapter() -> None:
     assert planner["prototype_only"] is True
 
 
+def test_actuation_aware_hybrid_rule_metadata_marks_diagnostic_boundary() -> None:
+    """Actuation-aware hybrid-rule metadata should prevent AMV hardware overclaims."""
+    assert canonical_algorithm_name("actuation_aware_hybrid_rule_v0") == (
+        "actuation_aware_hybrid_rule_v0"
+    )
+    meta = enrich_algorithm_metadata(
+        algo="actuation_aware_hybrid_rule_v0",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "diagnostic"
+    assert meta["policy_semantics"] == "diagnostic_synthetic_actuation_projected_hybrid_rule"
+    assert meta["observation_spec"]["inputs"] == ["robot_state", "goal", "pedestrians"]
+    assert planner["adapter_name"] == "ActuationAwareHybridRuleAdapter"
+    assert planner["diagnostic_only"] is True
+    assert planner["calibrated_hardware_evidence"] is False
+    assert planner["projection_policy"] == "synthetic_actuation_projected_unicycle_vw"
+
+
 def test_safety_barrier_accepts_lidar_level_through_sensor_fusion_contract() -> None:
     """Safety-barrier LiDAR compatibility should be explicit adapter metadata, not fallback."""
     meta = enrich_algorithm_metadata(

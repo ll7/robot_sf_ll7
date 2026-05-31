@@ -251,6 +251,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="actuation_aware_hybrid_rule_v0",
+        tier="experimental",
+        aliases=("actuation_aware_hybrid_rule_v0",),
+        note=(
+            "Diagnostic-only deterministic hybrid-rule wrapper with synthetic actuation "
+            "command projection; not calibrated hardware evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="safety_barrier",
         tier="experimental",
         aliases=("safety_barrier",),

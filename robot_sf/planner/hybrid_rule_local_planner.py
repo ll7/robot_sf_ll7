@@ -29,6 +29,7 @@ _SUPPORTED_VARIANTS = {
     "hybrid_rule_v4_recovery_aware",
     "hybrid_rule_v5_ensemble_selector",
     "tentabot_value_scorer_v0",
+    "actuation_aware_hybrid_rule_v0",
 }
 _EPS = 1e-9
 

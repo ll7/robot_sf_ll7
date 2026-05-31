@@ -67,3 +67,29 @@ def test_risk_surface_dwa_requires_explicit_experimental_opt_in() -> None:
         )
         == spec
     )
+
+
+def test_actuation_aware_hybrid_rule_requires_explicit_experimental_opt_in() -> None:
+    """The AMV actuation-aware candidate should stay diagnostic and testing-gated."""
+    spec = get_algorithm_readiness("actuation_aware_hybrid_rule_v0")
+    assert spec is not None
+    assert spec.canonical_name == "actuation_aware_hybrid_rule_v0"
+    assert spec.tier == "experimental"
+    assert spec.requires_explicit_opt_in is True
+
+    with pytest.raises(ValueError, match="allow_testing_algorithms"):
+        require_algorithm_allowed(
+            algo="actuation_aware_hybrid_rule_v0",
+            benchmark_profile="experimental",
+            ppo_paper_ready=False,
+        )
+
+    assert (
+        require_algorithm_allowed(
+            algo="actuation_aware_hybrid_rule_v0",
+            benchmark_profile="experimental",
+            ppo_paper_ready=False,
+            allow_testing_algorithms=True,
+        )
+        == spec
+    )

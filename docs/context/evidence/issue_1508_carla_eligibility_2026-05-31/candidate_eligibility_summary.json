@@ -7,7 +7,8 @@
   "eligibility_contract": {
     "source": "docs/context/issue_1444_carla_coordinate_alignment_contract.md",
     "eligible_modes": ["native", "aligned"],
-    "ineligible_modes": ["adapted", "degraded", "failed", "setup-only"],
+    "ineligible_modes": ["adapted", "failed", "not-available"],
+    "non_success_statuses": ["degraded", "fallback", "setup-only", "not_available"],
     "metric_parity_required_for_benchmark_evidence": true
   },
   "candidate_rows": [

@@ -7,6 +7,7 @@ Related issues:
 - <https://github.com/ll7/robot_sf_ll7/issues/1508>
 - <https://github.com/ll7/robot_sf_ll7/issues/1491>
 - <https://github.com/ll7/robot_sf_ll7/issues/1444>
+- <https://github.com/ll7/robot_sf_ll7/issues/1442>
 - <https://github.com/ll7/robot_sf_ll7/issues/1467>
 
 Compact evidence:
@@ -27,7 +28,9 @@ The current replay-mode contract is
 [issue_1444_carla_coordinate_alignment_contract.md](issue_1444_carla_coordinate_alignment_contract.md):
 
 - `native` and `aligned` are the only replay modes eligible for metric parity comparison.
-- `adapted`, `degraded`, `failed`, and setup-only outputs are not success evidence.
+- `adapted`, `failed`, and `not-available` replay modes are not success evidence.
+- Broader benchmark statuses such as `degraded`, fallback, or setup-only outputs are also
+  non-success evidence under the fail-closed benchmark policy.
 - A candidate row still needs durable fixture provenance and comparable metrics before it can become
   benchmark-strength CARLA/native parity evidence.
 

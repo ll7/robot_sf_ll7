@@ -55,11 +55,7 @@ third_party/python-rvo2/.*
 
 # --- Understand output ---
 
-.understand-anything/intermediate/
-.understand-anything/tmp/
-.understand-anything/knowledge-graph.json
-.understand-anything/meta.json
-.understand-anything/fingerprints.json
+.understand-anything/
 
 # --- Detected directories (uncomment to exclude) ---
 

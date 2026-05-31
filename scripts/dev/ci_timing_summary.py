@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -192,9 +193,13 @@ def _escape_md_table_cell(value: str) -> str:
 def _parse_phase_end_fields(raw_fields: str) -> dict[str, str]:
     """Parse shell-style key=value fields emitted by ci_driver phase_end logs."""
     parsed: dict[str, str] = {}
-    for token in raw_fields.split():
+    try:
+        tokens = shlex.split(raw_fields, comments=False, posix=True)
+    except ValueError:
+        return parsed
+    for token in tokens:
         key, separator, value = token.partition("=")
-        if not separator:
+        if not separator or not key:
             continue
         parsed[key] = value
     return parsed
@@ -229,6 +234,8 @@ def _load_phase_timings_from_logs(paths: list[Path]) -> list[PhaseTiming]:
     """Load repository phase timings from saved CI log files."""
     timings: list[PhaseTiming] = []
     for path in paths:
+        if not path.is_file():
+            raise SystemExit(f"Log file not found: {path}")
         timings.extend(
             parse_phase_timings(
                 path.read_text(encoding="utf-8"),

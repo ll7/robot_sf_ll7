@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from scripts.dev.ci_timing_summary import (
     format_markdown,
     main,
@@ -139,6 +141,37 @@ def test_parse_phase_timings_extracts_ci_driver_phase_end_lines() -> None:
     assert phases[0].source == "fast-feedback.log"
 
 
+def test_parse_phase_timings_accepts_shell_quoted_fields() -> None:
+    """ci_driver phase_end fields may contain shell-quoted names and values."""
+    log_text = (
+        "ci_driver phase_end phase='unit tests shard 1' status='0' "
+        "duration_seconds='12.5' completed_at='2026-05-05T11:00:12Z'\n"
+    )
+
+    phases = parse_phase_timings(log_text, source="quoted.log")
+
+    assert [(phase.name, phase.duration_seconds, phase.status) for phase in phases] == [
+        ("unit tests shard 1", 12.5, 0),
+    ]
+    assert phases[0].completed_at == "2026-05-05T11:00:12Z"
+
+
+def test_parse_phase_timings_skips_malformed_shell_fields() -> None:
+    """Malformed shell syntax in one log line should not abort parsing."""
+    log_text = "\n".join(
+        [
+            "ci_driver phase_end phase='unterminated status=0 duration_seconds=12",
+            "ci_driver phase_end phase=lint status=0 duration_seconds=3 completed_at=2026-05-05T11:00:03Z",
+        ]
+    )
+
+    phases = parse_phase_timings(log_text, source="malformed.log")
+
+    assert [(phase.name, phase.duration_seconds, phase.status) for phase in phases] == [
+        ("lint", 3.0, 0),
+    ]
+
+
 def test_format_markdown_includes_repository_phase_timings() -> None:
     """Markdown summaries should surface ci_driver phase timings when logs are provided."""
     summary = summarize_run(
@@ -184,3 +217,24 @@ def test_main_accepts_log_only_timing_summary(tmp_path, capsys) -> None:
     output = capsys.readouterr().out
     assert "CI log timing summary" in output
     assert "| test | 540.0s | 0 | 2026-05-05T11:09:00Z |" in output
+
+
+def test_main_rejects_missing_log_path(tmp_path) -> None:
+    """CLI should fail cleanly before reading a missing log path."""
+    missing_log = tmp_path / "missing.log"
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--log", str(missing_log)])
+
+    assert excinfo.value.code == f"Log file not found: {missing_log}"
+
+
+def test_main_rejects_directory_log_path(tmp_path) -> None:
+    """CLI should fail cleanly when a log path points to a directory."""
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--log", str(log_dir)])
+
+    assert excinfo.value.code == f"Log file not found: {log_dir}"

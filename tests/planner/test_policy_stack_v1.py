@@ -95,6 +95,7 @@ def test_policy_stack_selects_goal_and_records_two_proposal_modes() -> None:
     assert last["proposal_status_counts"]["native"] == 1
     assert last["proposal_status_counts"]["adapter"] == 1
     assert set(last["risk_score_components"]) == {"goal", "risk_dwa"}
+    assert last["candidate_ranking"][0]["proposal_key"] == "goal"
     json.dumps(diagnostics, allow_nan=False)
 
 
@@ -119,6 +120,38 @@ def test_policy_stack_records_failed_and_not_available_without_fallback_success(
     assert last["unavailable_count"] == 1
     assert "risk solver failed" in last["rejection_reasons"]["risk_dwa"]
     assert "not available" in last["rejection_reasons"]["missing_optional"]
+
+
+def test_policy_stack_arbitration_trace_packet_contract() -> None:
+    """Trace packets should define the future arbiter contract without enabling training."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("goal", "missing_optional"),
+            optional_sources=("missing_optional",),
+        ),
+        risk_dwa=_DummyRiskDWA(),
+    )
+
+    stack.plan(_obs())
+    packet = stack.arbitration_trace_packet()
+
+    assert packet["schema_version"] == "policy_stack_v1.arbitration_trace_packet.v1"
+    assert packet["training_enabled"] is False
+    assert packet["proposal_sources"] == ["goal", "missing_optional"]
+    assert packet["command_contract"]["action_space"] == "unicycle_vw"
+    assert packet["switching_contract"]["min_dwell_steps"] == 1
+    assert "future_trajectory" in packet["observation_contract"]["leakage_exclusions"]
+    assert "not_available" in packet["status_policy"]["not_available_statuses"]
+    assert packet["status_policy"]["non_executable_statuses"] == [
+        "failed",
+        "not_available",
+        "rejected",
+    ]
+    assert packet["trace"]["last_step"]["proposal_status_counts"]["not_available"] == 1
+    assert packet["trace"]["last_step"]["candidate_ranking"][0]["proposal_key"] == "goal"
+    assert packet["trace"]["last_step"]["executed_command"] == [1.0, 0.0]
+    assert stack.last_decision() == packet["trace"]["last_step"]
+    json.dumps(packet, allow_nan=False)
 
 
 def test_policy_stack_rejects_nonfinite_adapter_command_before_scoring() -> None:
@@ -194,6 +227,13 @@ def test_policy_stack_hard_shield_stops_unsafe_moving_command_and_resets() -> No
     assert diagnostics["shield_intervention_count"] == 1
     assert diagnostics["last_step"]["shield_intervened"] is True
     assert diagnostics["last_step"]["selected_proposal_key"] == "shield_stop"
+    assert diagnostics["last_step"]["selected_command"] == [0.0, 0.0]
+    assert diagnostics["last_step"]["executed_command"] == [0.0, 0.0]
+    assert diagnostics["last_step"]["proposal_commands"]["shield_stop"] == [0.0, 0.0]
+
+    packet = stack.arbitration_trace_packet()
+    assert packet["trace"]["last_step"]["selected_proposal_key"] == "shield_stop"
+    assert packet["trace"]["last_step"]["executed_command"] == [0.0, 0.0]
 
     stack.reset()
     assert stack.diagnostics()["steps"] == 0

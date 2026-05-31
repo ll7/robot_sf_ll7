@@ -2,6 +2,8 @@
 
 `AGENTS.md` is the canonical repository instruction source. Treat this file as the Copilot-facing
 entrypoint and keep it limited to Copilot-specific pointers that are not already covered there.
+For current maintainer values and hard contracts, read
+[`docs/maintainer_values.md`](../docs/maintainer_values.md).
 
 ALWAYS use the official [dev_guide](../docs/dev_guide.md) as the primary reference for development-related tasks.
 It is everyones guide on how to use this repository effectively.
@@ -13,7 +15,7 @@ It is everyones guide on how to use this repository effectively.
   `docs/templates/local.machine.example.md`). If absent, use conservative defaults.
 
 - Use scriptable interfaces instead of cli interfaces when possible.
-- Make everything reproducible.
+- Make everything honest, transparent, and reproducible.
 - In benchmark work, use the canonical fail-closed fallback policy in
   `docs/context/issue_691_benchmark_fallback_policy.md`.
 - For GitHub issue batches and Project #5 writes, follow the batch-first workflow in

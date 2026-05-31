@@ -55,7 +55,10 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
             self.archetype = "crossing"
             self.density = "low"
             self.count = 1
-            self.metrics = {"collision_rate": _Metric("collision_rate", 0.0)}
+            self.metrics = {
+                "collision_rate": _Metric("collision_rate", 0.0),
+                "success_rate": _Metric("success_rate", 1.0),
+            }
 
     groups = [_Group()]
 
@@ -70,6 +73,9 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
     assert out_dir.exists()
     pdfs = list(out_dir.glob("*.pdf"))
     assert pdfs, "Expected at least one PDF plot in smoke mode"
+    pdf_names = {path.name for path in pdfs}
+    assert "success_collision_scatter.pdf" in pdf_names
+    assert "pareto_placeholder.pdf" not in pdf_names
     # Each artifact expected to contain minimally these keys/attributes
     for art in artifacts:
         # Accept both dict (future) or simple object with attributes
@@ -77,5 +83,11 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
         status = getattr(art, "status", None) or (
             art.get("status") if isinstance(art, dict) else None
         )
-        assert kind in {"distribution", "trajectory", "kde", "pareto", "force_heatmap"}
+        assert kind in {
+            "distribution",
+            "trajectory",
+            "path_efficiency",
+            "success_collision_scatter",
+            "episode_lengths",
+        }
         assert status in {"generated", "skipped"}

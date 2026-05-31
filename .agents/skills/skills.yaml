@@ -391,7 +391,7 @@ skills:
     output_schema: skill_run_summary.v1
     aliases: []
   gh-issue-autopilot:
-    description: Autonomous issue-to-PR workflow from next eligible issue to draft PR with consistent
+    description: Autonomous issue-to-PR workflow from next eligible issue to ready PR with consistent
       metadata handling.
     category: github-issue
     kind: orchestrator
@@ -465,7 +465,8 @@ skills:
     aliases: []
   gh-issue-priority-assessor:
     description: 'LLM-backed review workflow for Project #5 priority inputs; assess plausibility, propose
-      values with uncertainty, and optionally apply explicit opt-in updates.'
+      values with uncertainty, route maintainer-value tradeoffs to issue-audit, and optionally apply
+      explicit opt-in updates.'
     category: github-issue
     kind: atomic
     phase: context
@@ -487,7 +488,7 @@ skills:
     aliases: []
   gh-issue-sequencer:
     description: 'Maintain a clear next-work queue in GitHub Project #5 by normalizing issue status, priority,
-      and execution order.'
+      and execution order; route genuine priority tradeoffs to issue-audit.'
     category: github-issue
     kind: atomic
     phase: context
@@ -706,7 +707,7 @@ skills:
     aliases: []
   issue-audit:
     description: User-in-the-loop open-issue audit that asks one readiness-blocking question at a time
-      and updates issues as decisions are made.
+      or one priority-tradeoff question at a time and updates issues as decisions are made.
     category: github-issue
     kind: atomic
     phase: context

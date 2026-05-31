@@ -50,3 +50,6 @@ uv run python scripts/tools/analyze_scenario_seed_sensitivity.py \
 This is derived diagnostic evidence for scenario prioritization. It is not causal mechanism proof
 and is not paper-facing significance evidence. The source campaign is exploratory candidate evidence
 with `paper_facing=false`, and SNQI is not used for this issue's planner selection or classification.
+The source Issue #1454 bundle predates explicit `benchmark_track` and `track_schema_version`
+metadata, so this derived evidence inherits `legacy_track_unknown` status per
+`docs/context/issue_1721_benchmark_track_metadata_audit.md`.

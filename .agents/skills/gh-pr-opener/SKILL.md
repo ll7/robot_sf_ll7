@@ -40,8 +40,11 @@ Freshness check:
 5. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
 6. Run the review audit checklist for changed workflow/skill area.
 7. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
-8. Open draft PR using
-   `gh pr create --draft --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`.
+8. Open a ready PR by default using
+   `gh pr create --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`.
+   Use `--draft` only when the user explicitly requests draft status or when the branch is an
+   intentional handoff with incomplete validation, unresolved scope, or another clearly documented
+   reason that should block review.
 9. Keep parent issue open unless repository policy indicates closure wording in PR description.
 
 ## Proof and Artifact Rules

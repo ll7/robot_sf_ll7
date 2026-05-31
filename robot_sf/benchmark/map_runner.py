@@ -32,6 +32,11 @@ from robot_sf.benchmark.algorithm_readiness import (
     require_algorithm_allowed,
 )
 from robot_sf.benchmark.fallback_policy import availability_payload
+from robot_sf.benchmark.latency_stress import (
+    LatencyStressProfile,
+    load_latency_stress_profile,
+    not_available_latency_metrics,
+)
 from robot_sf.benchmark.metrics import (
     EpisodeData,
     compute_all_metrics,
@@ -274,6 +279,15 @@ def _load_synthetic_actuation_profile(payload: Any) -> SyntheticActuationProfile
     )
     validate_synthetic_actuation_profile(profile)
     return profile
+
+
+def _load_latency_stress_profile(payload: Any) -> LatencyStressProfile | None:
+    """Normalize optional latency-stress payloads into the typed profile contract.
+
+    Returns:
+        A validated profile, or ``None`` when the payload is absent.
+    """
+    return load_latency_stress_profile(payload)
 
 
 def _holonomic_world_velocity_command(vx: float, vy: float) -> dict[str, float | str]:
@@ -2492,6 +2506,7 @@ def _scenario_identity_payload(  # noqa: PLR0913
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
+    latency_stress_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
 
@@ -2523,6 +2538,8 @@ def _scenario_identity_payload(  # noqa: PLR0913
         payload["observation_noise_hash"] = observation_noise_hash(noise_spec)
     if synthetic_actuation_profile is not None:
         payload["synthetic_actuation_profile"] = dict(synthetic_actuation_profile)
+    if latency_stress_profile is not None:
+        payload["latency_stress_profile"] = dict(latency_stress_profile)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
     if dt is not None and float(dt) > 0.0:
@@ -2938,6 +2955,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
+    latency_stress_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -2973,9 +2991,19 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
 
     robot_kinematics = _robot_kinematics_label(config)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
+    latency_profile = _load_latency_stress_profile(latency_stress_profile)
     if actuation_profile is not None and robot_kinematics != _DEFAULT_KINEMATICS:
         raise ValueError(
             "synthetic_actuation_profile requires differential_drive scenarios; "
+            f"got {robot_kinematics!r} for scenario {scenario_id!r}"
+        )
+    if (
+        latency_profile is not None
+        and latency_profile.action_delay_steps > 0
+        and robot_kinematics != _DEFAULT_KINEMATICS
+    ):
+        raise ValueError(
+            "latency_stress_profile.action_delay_steps requires differential_drive scenarios; "
             f"got {robot_kinematics!r} for scenario {scenario_id!r}"
         )
     robot_command_mode = (
@@ -3270,6 +3298,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "profile": actuation_profile.to_metadata(),
             "summary": dict(actuation_summary),
         }
+    if latency_profile is not None:
+        algo_meta["latency_stress"] = {
+            "profile": latency_profile.to_metadata(dt=config.sim_config.time_per_step_in_secs),
+            "metrics": not_available_latency_metrics(),
+        }
     visibility_settings = getattr(config, "observation_visibility", None)
     if visibility_settings is not None and hasattr(visibility_settings, "to_metadata"):
         algo_meta["observation_visibility"] = visibility_settings.to_metadata()
@@ -3308,6 +3341,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         observation_noise=noise_spec,
         synthetic_actuation_profile=(
             actuation_profile.to_metadata() if actuation_profile is not None else None
+        ),
+        latency_stress_profile=(
+            latency_profile.to_metadata(dt=config.sim_config.time_per_step_in_secs)
+            if latency_profile is not None
+            else None
         ),
     )
     steps_taken = int(robot_pos_arr.shape[0])
@@ -3424,6 +3462,7 @@ def _run_map_job_worker(
         track_schema_version=params.get("track_schema_version"),
         observation_noise=params.get("observation_noise"),
         synthetic_actuation_profile=params.get("synthetic_actuation_profile"),
+        latency_stress_profile=params.get("latency_stress_profile"),
     )
 
 
@@ -3564,6 +3603,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
+    latency_stress_profile: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -3594,6 +3634,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
+    latency_profile = _load_latency_stress_profile(latency_stress_profile)
+    latency_metadata_dt = float(dt) if dt is not None and float(dt) > 0.0 else 0.1
     benchmark_track = normalize_track_field(benchmark_track, field_name="benchmark_track")
     track_schema_version = normalize_track_field(
         track_schema_version,
@@ -3755,6 +3797,17 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 "synthetic_actuation_profile requires differential_drive-only scenarios"
             )
         preflight["synthetic_actuation_profile"] = actuation_profile.to_metadata()
+    if latency_profile is not None:
+        latency_metadata = latency_profile.to_metadata(dt=latency_metadata_dt)
+        if latency_profile.action_delay_steps > 0 and kinematics_tag != _DEFAULT_KINEMATICS:
+            preflight["status"] = "skipped"
+            preflight["compatibility_status"] = "incompatible"
+            preflight["compatibility_reason"] = (
+                "latency_stress_profile.action_delay_steps requires "
+                "differential_drive-only scenarios"
+            )
+        preflight["latency_stress_profile"] = latency_metadata
+        preflight["latency_stress_metrics"] = not_available_latency_metrics()
     preflight["algorithm_metadata_contract"] = algo_contract
     if preflight.get("status") == "skipped":
         summary = {
@@ -3774,6 +3827,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "preflight": preflight,
             "observation_noise": noise_spec,
             "observation_noise_hash": noise_hash,
+            "latency_stress_profile": (
+                latency_profile.to_metadata(dt=latency_metadata_dt)
+                if latency_profile is not None
+                else None
+            ),
+            "latency_stress_metrics": (
+                not_available_latency_metrics() if latency_profile is not None else None
+            ),
         }
         if benchmark_track is not None:
             summary["benchmark_track"] = benchmark_track
@@ -3820,6 +3881,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     synthetic_actuation_profile=(
                         actuation_profile.to_metadata() if actuation_profile is not None else None
                     ),
+                    latency_stress_profile=(
+                        latency_profile.to_metadata(dt=latency_metadata_dt)
+                        if latency_profile is not None
+                        else None
+                    ),
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
                     filtered_jobs.append((sc, seed))
@@ -3846,6 +3912,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "track_schema_version": track_schema_version,
         "synthetic_actuation_profile": (
             actuation_profile.to_metadata() if actuation_profile is not None else None
+        ),
+        "latency_stress_profile": (
+            latency_profile.to_metadata(dt=latency_metadata_dt)
+            if latency_profile is not None
+            else None
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if latency_profile is not None else None
         ),
     }
 
@@ -4035,6 +4109,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "observation_level": active_observation_level,
         "synthetic_actuation_profile": (
             actuation_profile.to_metadata() if actuation_profile is not None else None
+        ),
+        "latency_stress_profile": (
+            latency_profile.to_metadata(dt=latency_metadata_dt)
+            if latency_profile is not None
+            else None
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if latency_profile is not None else None
         ),
     }
     if benchmark_track is not None:

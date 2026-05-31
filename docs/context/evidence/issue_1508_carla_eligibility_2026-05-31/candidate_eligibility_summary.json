@@ -1,0 +1,66 @@
+{
+  "schema_version": "carla_native_aligned_eligibility_audit.v1",
+  "issue": 1508,
+  "parent_issue": 1491,
+  "created_at": "2026-05-31",
+  "claim_boundary": "eligibility_audit_not_benchmark_evidence",
+  "eligibility_contract": {
+    "source": "docs/context/issue_1444_carla_coordinate_alignment_contract.md",
+    "eligible_modes": ["native", "aligned"],
+    "ineligible_modes": ["adapted", "degraded", "failed", "setup-only"],
+    "metric_parity_required_for_benchmark_evidence": true
+  },
+  "candidate_rows": [
+    {
+      "candidate_id": "certified_issue_1111_payload",
+      "scenario_or_fixture": "pr_promoted_planner_smoke certified T0 export payload",
+      "evidence_sources": [
+        "docs/context/issue_1430_carla_live_parity.md",
+        "docs/context/issue_1442_carla_native_spawn_probe.md",
+        "docs/context/evidence/issue_1442_carla_native_spawn_probe_2026-05-24/live_replay_certified_payload_adapted.json"
+      ],
+      "observed_replay_mode": "adapted",
+      "observed_status": "oracle-replay",
+      "eligibility_status": "not_eligible",
+      "reason": "Certified payload still needs CARLA map projection; Issue #1442 records 18.190854674447806 m robot spawn projection.",
+      "next_action": "Do not launch this row as native/aligned parity until the certified fixture has an explicit alignment contract or a native spawn."
+    },
+    {
+      "candidate_id": "issue_1442_native_spawn_probe",
+      "scenario_or_fixture": "Generated inverse-coordinate native-spawn probe",
+      "evidence_sources": [
+        "docs/context/issue_1442_carla_native_spawn_probe.md",
+        "docs/context/evidence/issue_1442_carla_native_spawn_probe_2026-05-24/live_replay_native_probe.json",
+        "docs/context/evidence/issue_1442_carla_native_spawn_probe_2026-05-24/parity_report_native_probe.json"
+      ],
+      "observed_replay_mode": "native",
+      "observed_status": "oracle-replay",
+      "eligibility_status": "runtime_native_smoke_only",
+      "reason": "Native replay was possible for a generated probe, but the parity report is unavailable because comparable CARLA metric fields were not emitted at the time.",
+      "next_action": "Use only as a seed for a durable CARLA-aligned fixture design; not enough for a multi-scenario campaign row."
+    },
+    {
+      "candidate_id": "issue_1467_native_metric_probe",
+      "scenario_or_fixture": "Generated native metric smoke probe",
+      "evidence_sources": [
+        "docs/context/issue_1467_carla_replay_metrics.md",
+        "docs/context/evidence/issue_1467_carla_replay_metrics_2026-05-24/live_replay_native_metric_probe.json",
+        "docs/context/evidence/issue_1467_carla_replay_metrics_2026-05-24/parity_report_native_metric_probe.json"
+      ],
+      "observed_replay_mode": "native",
+      "observed_status": "oracle-replay",
+      "eligibility_status": "comparable_smoke_only",
+      "reason": "The bounded native probe emitted comparable success, collision, and intervention_rate metrics, but it is a generated smoke fixture rather than a certified scenario row.",
+      "next_action": "Promote the fixture contract or create a certified native/aligned scenario before expanding beyond smoke parity."
+    }
+  ],
+  "summary": {
+    "eligible_for_multi_scenario_campaign_now": [],
+    "blocked_rows": ["certified_issue_1111_payload"],
+    "smoke_only_rows": [
+      "issue_1442_native_spawn_probe",
+      "issue_1467_native_metric_probe"
+    ],
+    "next_unlocked_child": "Create or certify a durable native/aligned CARLA fixture with metric-emitting replay before launching a campaign."
+  }
+}

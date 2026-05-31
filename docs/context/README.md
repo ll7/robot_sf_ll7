@@ -112,6 +112,8 @@ knowledge, not every transient iteration detail.
   [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
 * Issue #1550 predictive same-seed row summary schema:
   [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
+* Issue #1508 CARLA native/aligned eligibility audit:
+  [issue_1508_carla_native_aligned_eligibility.md](issue_1508_carla_native_aligned_eligibility.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):

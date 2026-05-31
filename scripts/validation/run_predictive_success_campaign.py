@@ -330,6 +330,7 @@ def _closed_loop_gate_result(
             "passed": False,
             "reason": "baseline_variant_missing",
             "baseline_variant": baseline_variant,
+            "candidate_variant": str(ranked[0].get("variant", "not_available")),
         }
 
     best = ranked[0]
@@ -397,6 +398,16 @@ def _nan_to_none(value: object) -> object:
     return value
 
 
+def _format_optional_float(value: object) -> str:
+    """Format optional numeric report fields without masking missing gate data."""
+    if value is None:
+        return "not_available"
+    try:
+        return f"{float(value):.4f}"
+    except (TypeError, ValueError):
+        return "not_available"
+
+
 def _write_success_reports(summary: dict, output_dir: Path) -> tuple[Path, Path]:
     """Write successful or gate-failed campaign reports."""
     ranked = summary["ranked"]
@@ -441,6 +452,9 @@ def _write_success_reports(summary: dict, output_dir: Path) -> tuple[Path, Path]
         )
 
     if gate is not None:
+        deltas = gate.get("deltas", {})
+        if not isinstance(deltas, dict):
+            deltas = {}
         md_lines.extend(
             [
                 "",
@@ -449,11 +463,11 @@ def _write_success_reports(summary: dict, output_dir: Path) -> tuple[Path, Path]
                 f"- Status: `{'passed' if gate['passed'] else 'failed'}`",
                 f"- Reason: `{gate['reason']}`",
                 f"- Baseline variant: `{gate['baseline_variant']}`",
-                f"- Candidate variant: `{gate['candidate_variant']}`",
-                f"- Global success delta: `{gate['deltas']['global_success']:.4f}`",
-                f"- Hard success delta: `{gate['deltas']['hard_success']:.4f}`",
+                f"- Candidate variant: `{gate.get('candidate_variant', 'not_available')}`",
+                f"- Global success delta: `{_format_optional_float(deltas.get('global_success'))}`",
+                f"- Hard success delta: `{_format_optional_float(deltas.get('hard_success'))}`",
                 f"- Global mean-min-distance delta: "
-                f"`{gate['deltas']['global_mean_min_distance']:.4f}`",
+                f"`{_format_optional_float(deltas.get('global_mean_min_distance'))}`",
             ]
         )
 

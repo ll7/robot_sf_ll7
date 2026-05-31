@@ -130,6 +130,80 @@ def test_closed_loop_gate_allows_success_gain_with_bounded_clearance_regression(
     assert gate["deltas"]["global_mean_min_distance"] == pytest.approx(-0.08)
 
 
+def test_main_writes_gate_failure_summary_for_missing_baseline(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A missing baseline variant should fail closed without crashing report rendering."""
+    output_dir = tmp_path / "campaign"
+
+    monkeypatch.setattr(
+        campaign,
+        "_load_planner_variants",
+        lambda _path: [{"name": "candidate", "params": {}}],
+    )
+    monkeypatch.setattr(campaign, "load_seed_manifest", lambda _path: {"scenario": [1]})
+    monkeypatch.setattr(
+        campaign,
+        "make_subset_scenarios",
+        lambda _matrix, _manifest: [{"name": "scenario"}],
+    )
+    monkeypatch.setattr(
+        campaign,
+        "_run_campaign_results",
+        lambda **_kwargs: [
+            {
+                "checkpoint": "predictive_model.pt",
+                "variant": "candidate",
+                "config": {},
+                "hard": {
+                    "success_rate": 0.1,
+                    "success_ci_low": 0.0,
+                    "success_ci_high": 0.2,
+                    "mean_min_distance": 1.0,
+                    "mean_avg_speed": 0.3,
+                },
+                "global": {
+                    "success_rate": 0.2,
+                    "success_ci_low": 0.1,
+                    "success_ci_high": 0.3,
+                    "mean_min_distance": 1.2,
+                    "mean_avg_speed": 0.4,
+                },
+                "ranking_key": [0.1, 0.2, 1.0, 1.2, 0.4],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        campaign,
+        "parse_args",
+        lambda: campaign.argparse.Namespace(
+            checkpoints=["predictive_model.pt"],
+            scenario_matrix=tmp_path / "scenarios.yaml",
+            hard_seed_manifest=tmp_path / "hard.yaml",
+            planner_grid=tmp_path / "grid.yaml",
+            horizon=12,
+            dt=0.1,
+            workers=1,
+            bootstrap_samples=10,
+            bootstrap_seed=1,
+            closed_loop_gate_baseline_variant="missing_baseline",
+            closed_loop_gate_min_global_success_delta=0.02,
+            closed_loop_gate_min_hard_success_delta=0.0,
+            closed_loop_gate_max_min_distance_regression=0.10,
+            output_dir=output_dir,
+        ),
+    )
+
+    assert campaign.main() == 2
+    summary = json.loads((output_dir / "campaign_summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "failed_closed_loop_gate"
+    assert summary["closed_loop_gate"]["reason"] == "baseline_variant_missing"
+    report = (output_dir / "campaign_report.md").read_text(encoding="utf-8")
+    assert "baseline_variant_missing" in report
+    assert "not_available" in report
+
+
 def test_issue_1856_coupling_grid_touches_planner_objective_not_checkpoint() -> None:
     """The #1856 grid should revise planner coupling, not pick a new model row."""
     path = (

@@ -222,6 +222,36 @@ def test_progress_2p4_static_escape_probe_candidate_is_diagnostic_only() -> None
     )
 
 
+def test_route_reacquire_recenter_probe_candidate_is_diagnostic_only() -> None:
+    """Issue #1905 candidate should keep route-local-minimum recovery exploratory."""
+    registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"
+
+    entry, payload, merged, config_path = load_candidate_definition(
+        registry_path,
+        "hybrid_rule_route_reacquire_recenter_probe",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert entry["issue"] == 1905
+    assert payload["algo"] == "hybrid_rule_local_planner"
+    assert merged["planner_variant"] == "hybrid_rule_v3_teb_like_rollout"
+    assert merged["route_guide_enabled"] is True
+    assert merged["max_linear_speed"] == pytest.approx(2.4)
+    assert merged["corridor_subgoal_enabled"] is True
+    assert merged["corridor_subgoal_route_progress_weight"] == pytest.approx(2.5)
+    assert merged["corridor_subgoal_tangent_alignment_weight"] == pytest.approx(1.4)
+    assert merged["static_recenter_enabled"] is True
+    assert merged["recovery_enabled"] is True
+    assert merged["deadlock_escape_weight"] == pytest.approx(1.0)
+    assert (
+        config_path
+        == Path(
+            "configs/policy_search/candidates/hybrid_rule_route_reacquire_recenter_probe.yaml"
+        ).resolve()
+    )
+
+
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
     """Scenario names should drive family inference when scenario_id is absent."""
     grouped = split_scenarios_by_family(

@@ -56,6 +56,7 @@ not headline promotion without a separate issue and evidence decision.
 | `adaptive_proxemic_selector_v0` | `diagnostic_only` | `diagnostic_only` | Deterministic local-context selector over the three fixed proxemic profiles; logs selected profile and trigger reason, but does not support benchmark or comfort claims. |
 | `topology_guided_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Masked-route topology-hypothesis selector feeding the existing hybrid-rule corridor scorer; missing topology inputs fail closed and selected hypotheses are not benchmark evidence. |
 | `mpc_clearance_guarded_v1` | `diagnostic_only` | `diagnostic_only` | NMPC clearance sampler with an opt-in hard first-step static-clearance guard; intended to measure whether static-collision repair only creates low-progress failures. |
+| `hybrid_rule_route_reacquire_recenter_probe` | `diagnostic_only` | `diagnostic_only` | Issue #1905 route-local-minimum probe combining corridor-subgoal recovery, static recenter, and narrow reorientation hooks; requires smoke or nominal evidence before any stronger interpretation. |
 
 ## Learned-Policy And Learned-Style Rows
 

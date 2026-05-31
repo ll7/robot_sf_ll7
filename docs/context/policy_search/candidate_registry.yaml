@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-05-20
+updated_at: 2026-05-31
 freshness:
   policy: manual_registry_edit
   max_age_days: 90
@@ -633,6 +633,21 @@ candidates:
       - smoke
       - nominal_sanity
       - stress_slice
+
+  planner_selector_v2_diagnostic:
+    status: experimental_spike
+    family: adaptive_ensemble_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/planner_selector_v2_diagnostic.yaml
+    hypothesis: >
+      A deterministic, auditable selector can choose among existing local-policy candidates using
+      predeclared topology and seed-sensitivity diagnostics plus current local pedestrian context.
+      This row is diagnostic only: smoke success proves runnable wiring and diagnostics, not
+      benchmark-strength planner-selection improvement.
+    required_stages:
+      - smoke
 
   learned_risk_model_v1:
     status: slurm_handoff_required

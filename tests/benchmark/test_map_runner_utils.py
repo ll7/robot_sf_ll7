@@ -272,6 +272,64 @@ def test_build_policy_trivial_reference_adapter_exposes_template_contract() -> N
     assert "Diagnostic adapter template only" in meta["planner_kinematics"]["limitations"]
 
 
+def test_build_policy_routes_planner_selector_v2_with_diagnostics() -> None:
+    """Map-runner policy construction should expose selector-v2 diagnostics."""
+    policy, meta = _build_policy(
+        "planner_selector_v2_diagnostic",
+        {
+            "allow_testing_algorithms": True,
+            "selector_context": {
+                "scenario_id": "planner_sanity_simple",
+                "scenario_family": "nominal",
+                "seed": 111,
+            },
+            "selector": {
+                "seed_sensitive_scenarios": ["planner_sanity_simple"],
+                "hard_seed_values": [111],
+            },
+            "candidate_config_paths": {
+                "baseline": "configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml",
+                "topology_route": "configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8.yaml",
+                "proxemic_conservative": "configs/policy_search/candidates/proxemic_profile_conservative_issue_1676.yaml",
+                "fast_progress_static_escape": "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["selector_boundary"]["diagnostic_only"] is True
+    assert meta["planner_kinematics"]["diagnostic_only"] is True
+    linear, angular = policy(
+        {
+            "robot": {
+                "position": np.asarray([0.0, 0.0], dtype=float),
+                "heading": np.asarray([0.0], dtype=float),
+                "speed": np.asarray([0.0], dtype=float),
+                "radius": np.asarray([0.25], dtype=float),
+            },
+            "goal": {
+                "current": np.asarray([2.0, 0.0], dtype=float),
+                "next": np.asarray([2.0, 0.0], dtype=float),
+            },
+            "pedestrians": {
+                "positions": np.zeros((0, 2), dtype=float),
+                "velocities": np.zeros((0, 2), dtype=float),
+                "radii": np.zeros(0, dtype=float),
+                "count": np.asarray([0], dtype=float),
+            },
+        }
+    )
+
+    assert math.isfinite(linear)
+    assert math.isfinite(angular)
+    stats = policy._planner_stats()
+    assert stats["diagnostic_only"] is True
+    assert stats["selected_candidate"] == "fast_progress_static_escape"
+    assert (
+        stats["last_decision"]["trigger_reason"] == "predeclared_seed_sensitive_low_progress_risk"
+    )
+
+
 def test_goal_policy_supports_flat_map_runner_observation() -> None:
     """Goal baseline should work with the flat observation keys emitted by the env."""
     obs = {

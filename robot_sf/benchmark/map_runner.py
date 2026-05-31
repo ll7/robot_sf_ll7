@@ -132,6 +132,10 @@ from robot_sf.planner.nmpc_social import (
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
 )
+from robot_sf.planner.planner_selector_v2_diagnostic import (
+    PlannerSelectorV2DiagnosticAdapter,
+    build_planner_selector_v2_diagnostic_config,
+)
 from robot_sf.planner.policy_stack_v1 import (
     PolicyStackV1Adapter,
     build_policy_stack_v1_build_config,
@@ -688,6 +692,72 @@ def _resolve_policy_search_candidate_runtime(
         if isinstance(scenario_cfg, dict):
             effective = _deep_merge_config(effective, scenario_cfg)
     return default_algo, effective
+
+
+def _build_planner_selector_v2_child_adapter(
+    *,
+    candidate_name: str,
+    candidate_config_path: str,
+    scenario: dict[str, Any],
+) -> Any:
+    """Build one existing local candidate adapter for planner-selector v2.
+
+    Returns:
+        Adapter instance for a supported local child candidate.
+    """
+    path = Path(candidate_config_path)
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    manifest = _parse_algo_config(str(path))
+    child_default_algo = str(manifest.get("algo", "")).strip().lower()
+    if not child_default_algo:
+        raise ValueError(f"Selector child candidate is missing algo: {candidate_name}")
+    child_algo, child_config = _resolve_policy_search_candidate_runtime(
+        default_algo=child_default_algo,
+        algo_config_path=str(path),
+        algo_config=manifest,
+        scenario=scenario,
+    )
+    if child_algo == "hybrid_rule_local_planner":
+        return HybridRuleLocalPlannerAdapter(
+            config=build_hybrid_rule_local_planner_config(child_config)
+        )
+    if child_algo == "orca":
+        return ORCAPlannerAdapter(
+            config=_build_socnav_config(child_config),
+            allow_fallback=bool(child_config.get("allow_fallback", False)),
+        )
+    raise ValueError(
+        "planner_selector_v2_diagnostic only supports existing local hybrid-rule/ORCA "
+        f"child candidates; {candidate_name!r} resolved to {child_algo!r}"
+    )
+
+
+def _build_planner_selector_v2_adapter(
+    algo_config: dict[str, Any],
+) -> PlannerSelectorV2DiagnosticAdapter:
+    """Build the diagnostic selector and all configured local child candidates.
+
+    Returns:
+        Configured planner-selector v2 adapter.
+    """
+    build = build_planner_selector_v2_diagnostic_config(algo_config)
+    scenario_stub = {
+        "name": build.selector.scenario_id,
+        "family": build.selector.scenario_family,
+    }
+    adapters = {
+        name: _build_planner_selector_v2_child_adapter(
+            candidate_name=name,
+            candidate_config_path=path,
+            scenario=scenario_stub,
+        )
+        for name, path in sorted(build.candidate_config_paths.items())
+    }
+    return PlannerSelectorV2DiagnosticAdapter(
+        config=build.selector,
+        candidate_adapters=adapters,
+    )
 
 
 def _prediction_planner_metadata_overrides(
@@ -2275,6 +2345,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 config=hybrid_cfg.socnav, allow_fallback=allow_fallback
             ),
         )
+    elif algo_key == "planner_selector_v2_diagnostic":
+        adapter = _build_planner_selector_v2_adapter(algo_config)
+        meta["selector_boundary"] = {
+            "diagnostic_only": True,
+            "benchmark_strength": False,
+            "learned_policy_used": False,
+            "claim_boundary": "diagnostic_only_not_benchmark_success",
+        }
     elif algo_key == "hybrid_orca_sampler":
         allow_fallback = bool(algo_config.get("allow_fallback", True))
         hybrid_cfg = build_hybrid_orca_sampler_build_config(algo_config)
@@ -3055,6 +3133,17 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo_config=raw_policy_cfg,
         scenario=scenario,
     )
+    if str(algo).strip().lower() == "planner_selector_v2_diagnostic":
+        policy_cfg = _deep_merge_config(
+            policy_cfg,
+            {
+                "selector_context": {
+                    "scenario_id": scenario_id,
+                    "scenario_family": _scenario_family(scenario),
+                    "seed": int(seed),
+                }
+            },
+        )
     active_observation_mode = resolve_observation_mode(
         algo,
         observation_mode,

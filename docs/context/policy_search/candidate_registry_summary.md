@@ -50,6 +50,7 @@ not headline promotion without a separate issue and evidence decision.
 | `proxemic_profile_conservative_issue_1676` | `diagnostic_only` | `diagnostic_only` | Conservative proxemic/comfort profile. |
 | `proxemic_profile_neutral_issue_1676` | `diagnostic_only` | `diagnostic_only` | Neutral profile used as middle setting. |
 | `proxemic_profile_open_issue_1676` | `diagnostic_only` | `diagnostic_only` | Open comfort profile with higher expected near-miss risk. |
+| `planner_selector_v2_diagnostic` | `diagnostic_only` | `diagnostic_only` | Deterministic selector over existing local candidates using predeclared topology/seed diagnostics and current local pedestrian context; not benchmark-strength evidence. |
 
 ## Learned-Policy And Learned-Style Rows
 

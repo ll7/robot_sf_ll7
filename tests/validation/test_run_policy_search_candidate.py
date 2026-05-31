@@ -74,6 +74,24 @@ def test_load_candidate_definition_merges_base_config_and_params(
     assert config_path == candidate_cfg.resolve()
 
 
+def test_risk_surface_candidate_uses_smoke_progress_recovery_speed() -> None:
+    """Risk-surface smoke candidate should opt into the 2 m/s local command envelope."""
+    _entry, payload, merged, config_path = load_candidate_definition(
+        Path("docs/context/policy_search/candidate_registry.yaml"),
+        "risk_surface_dwa_v0",
+    )
+
+    risk_dwa = merged["risk_dwa"]
+    assert payload["algo"] == "risk_surface_dwa"
+    assert risk_dwa["max_linear_speed"] == 2.0
+    assert max(risk_dwa["linear_candidates"]) == 2.0
+    assert risk_dwa["progress_escape_enabled"] is True
+    assert risk_dwa["progress_escape_speed"] >= 0.9
+    assert (
+        config_path == Path("configs/policy_search/candidates/risk_surface_dwa_v0.yaml").resolve()
+    )
+
+
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
     """Scenario names should drive family inference when scenario_id is absent."""
     grouped = split_scenarios_by_family(

@@ -110,6 +110,7 @@ candidates:
     family: scenario_adaptive_classical
     training_required: false
     promotion_gate: tier_b
+    benchmark_track: policy_search_full_matrix
     candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
     hypothesis: >
       The retained fast-progress static-recenter hybrid candidate is strongest on most current
@@ -127,6 +128,7 @@ candidates:
     family: scenario_adaptive_classical
     training_required: false
     promotion_gate: tier_b
+    benchmark_track: policy_search_h500_leader_collision_slice
     candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
     hypothesis: >
       The h500 leader misses the strict collision gate by one controllable merging collision plus
@@ -554,6 +556,7 @@ candidates:
     family: hybrid_model_based
     training_required: false
     promotion_gate: tier_b
+    benchmark_track: policy_search_full_matrix_if_promising
     candidate_config_path: configs/policy_search/candidates/hybrid_orca_sampler_v1.yaml
     hypothesis: >
       Keep ORCA-like safety behavior while allowing a short-horizon sampler to

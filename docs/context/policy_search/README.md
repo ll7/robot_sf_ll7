@@ -123,7 +123,8 @@ Use it for three things only:
 - Retrieval index: `docs/context/policy_search/INDEX.md`
 - Candidate lifecycle summary: `docs/context/policy_search/candidate_registry_summary.md`
 - Candidate runner: `uv run python scripts/validation/run_policy_search_candidate.py`
-- Candidate registry validator: `uv run python scripts/validation/validate_policy_search_registry.py`
+- Candidate/learned-policy registry validator:
+  `uv run python scripts/validation/validate_policy_search_registry.py`
 - Candidate portfolio overview: `uv run python scripts/tools/summarize_policy_search_portfolio.py`
 - Candidate comparison: `uv run python scripts/tools/compare_policy_search_candidates.py`
 - Failure taxonomy: `uv run python scripts/tools/build_policy_search_failure_report.py`

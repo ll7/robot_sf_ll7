@@ -79,9 +79,12 @@ def test_build_nmpc_social_config_invalid_numeric_uses_default() -> None:
 
 def test_build_nmpc_social_config_parses_boolean_strings() -> None:
     """Boolean config strings should use explicit parsing rather than Python truthiness."""
-    cfg = build_nmpc_social_config({"warm_start": "false", "fallback_to_stop": "yes"})
+    cfg = build_nmpc_social_config(
+        {"warm_start": "false", "fallback_to_stop": "yes", "hard_obstacle_guard_enabled": "on"}
+    )
     assert cfg.warm_start is False
     assert cfg.fallback_to_stop is True
+    assert cfg.hard_obstacle_guard_enabled is True
 
 
 def test_build_nmpc_social_config_invalid_boolean_uses_default() -> None:
@@ -220,3 +223,64 @@ def test_nmpc_social_optimizer_failure_without_stop_fallback_warns(monkeypatch) 
     assert stats["solver_failures"] == 1
     assert stats["fallback_stop_count"] == 0
     assert any("reusing the initial guess" in str(item.message) for item in caught)
+
+
+def test_nmpc_social_hard_obstacle_guard_stops_unsafe_forward_step(monkeypatch) -> None:
+    """Opt-in static guard should suppress a first command that enters obstacle clearance."""
+    planner = NMPCSocialPlannerAdapter(
+        NMPCSocialConfig(
+            hard_obstacle_guard_enabled=True,
+            hard_obstacle_clearance=0.3,
+            horizon_steps=4,
+            solver_max_iterations=8,
+        )
+    )
+    monkeypatch.setattr(
+        "robot_sf.planner.nmpc_social.minimize",
+        lambda *args, **kwargs: SimpleNamespace(
+            success=True,
+            x=np.asarray([0.8, 0.25, 0.8, 0.0, 0.8, 0.0, 0.8, 0.0], dtype=float),
+        ),
+    )
+    monkeypatch.setattr(
+        planner,
+        "_min_obstacle_clearance",
+        lambda point, observation: 0.2 if float(point[0]) > 0.0 else 2.0,
+    )
+
+    linear, angular = planner.plan(_obs(goal=(3.0, 0.0)))
+
+    assert linear == 0.0
+    assert angular > 0.0
+    stats = planner.diagnostics()
+    assert stats["hard_obstacle_guard_count"] == 1
+    assert stats["mean_abs_linear"] == 0.0
+
+
+def test_nmpc_social_hard_obstacle_guard_is_opt_in(monkeypatch) -> None:
+    """The guarded candidate must not change legacy NMPC behavior unless enabled."""
+    planner = NMPCSocialPlannerAdapter(
+        NMPCSocialConfig(
+            hard_obstacle_guard_enabled=False,
+            hard_obstacle_clearance=0.3,
+            horizon_steps=4,
+            solver_max_iterations=8,
+        )
+    )
+    monkeypatch.setattr(
+        "robot_sf.planner.nmpc_social.minimize",
+        lambda *args, **kwargs: SimpleNamespace(
+            success=True,
+            x=np.asarray([0.8, 0.25, 0.8, 0.0, 0.8, 0.0, 0.8, 0.0], dtype=float),
+        ),
+    )
+    monkeypatch.setattr(
+        planner,
+        "_min_obstacle_clearance",
+        lambda point, observation: 0.2 if float(point[0]) > 0.0 else 2.0,
+    )
+
+    linear, _angular = planner.plan(_obs(goal=(3.0, 0.0)))
+
+    assert linear > 0.0
+    assert planner.diagnostics()["hard_obstacle_guard_count"] == 0

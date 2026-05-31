@@ -1,0 +1,16 @@
+name: mpc_clearance_guarded_v1
+algo: nmpc_social
+base_config_path: configs/algos/nmpc_social_exploratory.yaml
+params:
+  max_linear_speed: 1.8
+  horizon_steps: 8
+  rollout_dt: 0.2
+  path_goal_weight: 2.0
+  terminal_goal_weight: 4.8
+  progress_reward_weight: 2.4
+  pedestrian_clearance_weight: 4.8
+  obstacle_clearance_weight: 4.6
+  desired_obstacle_clearance: 1.0
+  solver_max_iterations: 40
+  hard_obstacle_guard_enabled: true
+  hard_obstacle_clearance: 0.35

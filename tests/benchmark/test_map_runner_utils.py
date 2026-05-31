@@ -117,6 +117,12 @@ def test_parse_algo_config_reports_blocked_local_artifact_follow_up() -> None:
     assert "DRL-VO default checkpoint" in message
 
 
+def test_build_policy_rejects_sac_default_local_output_model_path() -> None:
+    """Benchmark SAC policy construction should fail closed on local output defaults."""
+    with pytest.raises(ValueError, match="local-only model artifact"):
+        _build_policy("sac", {}, robot_kinematics="holonomic")
+
+
 def test_resolve_policy_search_candidate_runtime_merges_base_and_scenario_override(
     tmp_path: Path,
 ) -> None:

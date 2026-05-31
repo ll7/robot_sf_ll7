@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover - runtime-only dependency
     SAC = None  # type: ignore
 
 from robot_sf.baselines.interface import Observation
+from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
 from robot_sf.sensor.socnav_observation import SOCNAV_POSITION_CAP_M
@@ -68,6 +69,11 @@ class SACPlanner:
 
     def _load_model(self) -> None:
         """Load the configured SAC checkpoint or enter explicit fallback mode."""
+        if self.config.model_id is None:
+            validate_no_local_model_path_value(
+                self.config.model_path,
+                owner="SACPlannerConfig",
+            )
         if SAC is None:  # pragma: no cover - runtime dependency
             if self.config.fallback_to_goal:
                 warn_soft_degrade(

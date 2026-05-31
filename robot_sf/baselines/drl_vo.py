@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover - envs without PyTorch
     torch = None  # type: ignore[assignment]
 
 from robot_sf.baselines.interface import Observation
+from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.models import resolve_model_path
@@ -101,6 +102,11 @@ class DrlVoPlanner:
 
     def _load_model(self) -> None:
         """Load the DRL-VO policy model or enter documented fallback mode."""
+        if self.config.model_id is None:
+            validate_no_local_model_path_value(
+                self.config.model_path,
+                owner="DrlVoPlannerConfig",
+            )
         if torch is None:
             warn_soft_degrade(
                 "DRL-VO",

@@ -6,6 +6,7 @@ offset family before any generated variant can be counted as benchmark evidence.
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Mapping
 from copy import deepcopy
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
+from jsonschema import Draft202012Validator
 
 from robot_sf.scenario_certification.v1 import (
     ScenarioCertificate,
@@ -32,6 +34,12 @@ if TYPE_CHECKING:
 
 PERTURBATION_MANIFEST_SCHEMA_VERSION = "scenario_perturbation_manifest.v1"
 PREFLIGHT_SCHEMA_VERSION = "scenario_perturbation_preflight.v1"
+_PERTURBATION_MANIFEST_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "benchmark"
+    / "schemas"
+    / "scenario_perturbation_manifest.v1.json"
+)
 
 _SUCCESS_EVIDENCE_CANDIDATE = "eligible_success_evidence_candidate"
 _EXCLUDED_FROM_SUCCESS_EVIDENCE = "excluded_from_success_evidence"
@@ -148,7 +156,20 @@ def _load_manifest(path: Path) -> Mapping[str, Any]:
         raise ValueError(f"{path}: validity must be a mapping")
     if not isinstance(data["variants"], list) or not data["variants"]:
         raise ValueError(f"{path}: variants must be a non-empty list")
+    _validate_manifest_schema(data, path=path)
     return data
+
+
+def _validate_manifest_schema(data: Mapping[str, Any], *, path: Path) -> None:
+    """Validate a perturbation manifest against the public v1 schema."""
+    schema = json.loads(_PERTURBATION_MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema)
+    errors = sorted(validator.iter_errors(data), key=lambda error: list(error.absolute_path))
+    if not errors:
+        return
+    error = errors[0]
+    location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+    raise ValueError(f"{path}: manifest schema violation at {location}: {error.message}")
 
 
 def _resolve_path(raw: Any, *, base_dir: Path, field_name: str) -> Path:

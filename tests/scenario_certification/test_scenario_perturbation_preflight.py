@@ -68,6 +68,17 @@ def test_manifest_schema_accepts_noop_and_bounded_route_offset(tmp_path: Path) -
     jsonschema.validate(manifest, schema)
 
 
+def test_preflight_rejects_manifest_that_violates_public_schema(tmp_path: Path) -> None:
+    """Runtime preflight should enforce the same schema reviewers validate."""
+    manifest_path = _write_manifest(tmp_path / "perturbations.yaml")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["validity"]["require_scenario_certification"] = False
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="validity.require_scenario_certification"):
+        preflight_perturbation_manifest(manifest_path)
+
+
 def test_preflight_certifies_noop_and_bounded_route_offset(tmp_path: Path) -> None:
     """Valid variants should carry scenario certificates and remain eligible evidence candidates."""
     manifest_path = _write_manifest(tmp_path / "perturbations.yaml")

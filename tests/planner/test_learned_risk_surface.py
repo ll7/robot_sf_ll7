@@ -71,6 +71,27 @@ def test_surface_attaches_as_occupancy_payload_consumable_by_planners() -> None:
     assert enriched["local_risk_surface_diagnostics"]["producer_id"] == ("deterministic_fixture_v0")
 
 
+def test_surface_attachment_preserves_non_origin_robot_pose_for_ego_grid() -> None:
+    """Ego-frame surface metadata should let occupancy-aware planners query world rollouts."""
+    observation = {
+        "robot": {
+            "position": [5.0, -1.0],
+            "heading": [0.0],
+            "speed": [0.0],
+            "radius": [0.3],
+        },
+        "goal": {"current": [7.0, -1.0], "next": [7.0, -1.0]},
+        "pedestrians": {"positions": [], "velocities": [], "count": [0], "radius": [0.3]},
+    }
+    spec = LocalRiskSurfaceSpec(resolution=0.5, width=3.0, height=3.0)
+    surface = deterministic_pedestrian_risk_surface(observation, spec)
+
+    enriched = attach_risk_surface_to_observation(observation, surface)
+
+    assert enriched["occupancy_grid_meta"]["robot_pose"] == [5.0, -1.0, 0.0]
+    assert enriched["local_risk_surface_diagnostics"]["robot_pose"] == [5.0, -1.0, 0.0]
+
+
 def test_risk_surface_planner_adapter_produces_bounded_command_and_diagnostics() -> None:
     """A wrapped occupancy-aware planner should consume the produced surface."""
     adapter = RiskSurfacePlannerAdapter(

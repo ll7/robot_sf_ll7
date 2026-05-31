@@ -247,10 +247,17 @@ def attach_risk_surface_to_observation(
     """
     if not isinstance(observation, dict):
         raise RiskSurfaceUnavailable("observation must be a mapping")
+    robot_position, robot_heading = _extract_robot_pose(observation)
+    robot_pose = [float(robot_position[0]), float(robot_position[1]), float(robot_heading)]
     enriched = dict(observation)
+    meta = surface.occupancy_meta()
+    if surface.spec.frame == "ego":
+        meta["robot_pose"] = robot_pose
+    diagnostics = surface.diagnostics()
+    diagnostics["robot_pose"] = robot_pose
     enriched["occupancy_grid"] = surface.occupancy_grid()
-    enriched["occupancy_grid_meta"] = surface.occupancy_meta()
-    enriched["local_risk_surface_diagnostics"] = surface.diagnostics()
+    enriched["occupancy_grid_meta"] = meta
+    enriched["local_risk_surface_diagnostics"] = diagnostics
     return enriched
 
 

@@ -77,3 +77,15 @@ for n in 1653 1771 1772 1775 1781 1782 1783 1784; do gh issue view "$n" --json n
 ```
 
 No Project #5 fields were changed in this pass. No new labels were created.
+
+## Reusable Closed-Issue Guard
+
+Issue #1833 added a read-only regression guard for the stale-label class found in this cleanup pass:
+
+```bash
+uv run python scripts/dev/closed_state_label_hygiene.py
+```
+
+The command checks closed issues carrying `state:ready`, `state:running`, or `state:blocked`,
+prints a `closed_state_label_hygiene.v1` JSON report, and returns non-zero when stale labels are
+present. It uses GitHub issue search only; it does not edit labels or write Project #5 metadata.

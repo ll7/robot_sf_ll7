@@ -11,8 +11,13 @@ Use it for three things only:
 
 ## Layout
 
+- `INDEX.md`: compact retrieval index for current authority, lifecycle routing, claim eligibility,
+  and first-stop policy-search context.
 - `candidate_registry.yaml`: canonical candidate list and config pointers for implemented or
   concrete runnable Robot SF candidates.
+- `candidate_registry_summary.md`: compact companion summary that separates active runnable,
+  diagnostic-only, learned-policy intake, SLURM-handoff, monitor/source-first, and historical
+  candidate lanes.
 - `learned_policy_registry.md`: compact learned local-navigation registry for implemented,
   staged, monitor-only, and blocked learned-policy families. Use this before adding a learned
   policy to the runnable candidate registry.
@@ -115,6 +120,8 @@ Use it for three things only:
 
 ## Reproducible Entry Points
 
+- Retrieval index: `docs/context/policy_search/INDEX.md`
+- Candidate lifecycle summary: `docs/context/policy_search/candidate_registry_summary.md`
 - Candidate runner: `uv run python scripts/validation/run_policy_search_candidate.py`
 - Candidate portfolio overview: `uv run python scripts/tools/summarize_policy_search_portfolio.py`
 - Candidate comparison: `uv run python scripts/tools/compare_policy_search_candidates.py`

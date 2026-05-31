@@ -31,6 +31,7 @@ _SUPPORTED_VARIANTS = {
     "tentabot_value_scorer_v0",
     "tentabot_value_scorer_v1_static_gated",
     "tentabot_value_scorer_v2_route_arc",
+    "tentabot_value_scorer_v3_trace_recovery",
     "actuation_aware_hybrid_rule_v0",
 }
 _EPS = 1e-9
@@ -194,6 +195,13 @@ class HybridRuleLocalPlannerConfig:
     corridor_subgoal_route_regression_1s: float = -0.05
     corridor_subgoal_min_route_remaining_distance: float = 0.5
     corridor_subgoal_max_lateral_offset: float = 0.5
+    route_trace_recovery_enabled: bool = False
+    route_trace_recovery_goal_stall_progress_3s: float = 0.05
+    route_trace_recovery_route_stall_progress_3s: float = 0.05
+    route_trace_recovery_route_regression_1s: float = -0.05
+    route_trace_recovery_min_nearest_ped_distance: float = 1.0
+    route_trace_recovery_min_route_remaining_distance: float = 0.5
+    route_trace_recovery_hold_steps: int = 2
     recovery_enabled: bool = False
     recovery_reorient_angular_speed: float = 0.6
 
@@ -312,6 +320,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         self._progress_history: deque[tuple[float, float]] = deque(maxlen=256)
         self._route_distance_history: deque[tuple[float, float]] = deque(maxlen=256)
+        self._route_trace_recovery_hold_remaining = 0
         self._selected_source_counts: Counter[str] = Counter()
         self._rejection_counts: Counter[str] = Counter()
         self._unavailable_counts: Counter[str] = Counter()
@@ -728,6 +737,169 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         diagnostics["active"] = True
         diagnostics["reason"] = "active"
         return diagnostics
+
+    def _route_trace_recovery_signal(  # noqa: C901
+        self,
+        *,
+        route_corridor: dict[str, Any] | None,
+        progress_windows: dict[str, float],
+        nearest_ped: float,
+    ) -> dict[str, Any]:
+        """Return fail-closed trace-level route recovery diagnostics."""
+        diagnostics: dict[str, Any] = {
+            "enabled": bool(self.config.route_trace_recovery_enabled),
+            "active": False,
+            "reason": "disabled",
+            "selected": False,
+            "nearest_pedestrian_distance": _finite_or_none(nearest_ped),
+            "min_nearest_pedestrian_distance": float(
+                self.config.route_trace_recovery_min_nearest_ped_distance
+            ),
+        }
+        if not bool(self.config.route_trace_recovery_enabled):
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        if self._route_guide is None:
+            diagnostics["reason"] = "route_guide_disabled"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        if not isinstance(route_corridor, dict):
+            diagnostics["reason"] = "missing_route_geometry"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        if nearest_ped < float(self.config.route_trace_recovery_min_nearest_ped_distance):
+            diagnostics["reason"] = "near_pedestrian"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        route_remaining = self._route_float(route_corridor, "route_remaining_distance")
+        diagnostics["route_remaining_distance"] = _finite_or_none(route_remaining)
+        if route_remaining is None or route_remaining < float(
+            self.config.route_trace_recovery_min_route_remaining_distance
+        ):
+            diagnostics["reason"] = "route_too_short"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        waypoint = self._route_point(route_corridor, "route_waypoint_world")
+        if tangent_heading is None or waypoint is None:
+            diagnostics["reason"] = "incomplete_route_geometry"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        lateral_offset = self._route_float(route_corridor, "robot_lateral_offset_to_corridor")
+        diagnostics["robot_lateral_offset_to_corridor"] = _finite_or_none(lateral_offset)
+        if lateral_offset is not None and lateral_offset > float(
+            self.config.corridor_subgoal_max_lateral_offset
+        ):
+            diagnostics["reason"] = "outside_corridor_band"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        route_progress_pair = self._route_progress_pair(route_corridor)
+        if route_progress_pair is None:
+            diagnostics["reason"] = "missing_route_progress"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+
+        goal_progress_3s = float(progress_windows.get("3s", 0.0))
+        route_progress_1s, route_progress_3s = route_progress_pair
+        goal_stalled = goal_progress_3s <= float(
+            self.config.route_trace_recovery_goal_stall_progress_3s
+        )
+        route_stalled = route_progress_3s <= float(
+            self.config.route_trace_recovery_route_stall_progress_3s
+        )
+        route_regressing = route_progress_1s <= float(
+            self.config.route_trace_recovery_route_regression_1s
+        )
+        trigger = bool(route_regressing or (goal_stalled and route_stalled))
+        diagnostics.update(
+            {
+                "goal_progress_3s": goal_progress_3s,
+                "route_arc_progress_1s": route_progress_1s,
+                "route_arc_progress_3s": route_progress_3s,
+                "goal_stalled": bool(goal_stalled),
+                "route_stalled": bool(route_stalled),
+                "route_regressing": bool(route_regressing),
+                "hold_remaining": int(self._route_trace_recovery_hold_remaining),
+            }
+        )
+        if trigger:
+            self._route_trace_recovery_hold_remaining = max(
+                int(self.config.route_trace_recovery_hold_steps), 0
+            )
+            diagnostics["active"] = True
+            diagnostics["reason"] = "route_regressing" if route_regressing else "route_stalled"
+            diagnostics["hold_remaining"] = int(self._route_trace_recovery_hold_remaining)
+            return diagnostics
+        if self._route_trace_recovery_hold_remaining > 0:
+            self._route_trace_recovery_hold_remaining -= 1
+            diagnostics["active"] = True
+            diagnostics["reason"] = "hold"
+            diagnostics["hold_remaining"] = int(self._route_trace_recovery_hold_remaining)
+            return diagnostics
+
+        diagnostics["reason"] = "progress_not_stalled"
+        return diagnostics
+
+    def _corridor_subgoal_activation_for_trace_recovery(
+        self,
+        corridor_subgoal: dict[str, Any],
+        route_trace_recovery: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return subgoal activation widened by a route-trace recovery signal."""
+        if bool(corridor_subgoal.get("active")) or not bool(route_trace_recovery.get("active")):
+            return corridor_subgoal
+        widened = dict(corridor_subgoal)
+        widened.update(
+            {
+                "active": True,
+                "reason": "route_trace_recovery",
+                "route_trace_recovery_reason": route_trace_recovery.get("reason"),
+            }
+        )
+        return widened
+
+    def _select_route_trace_recovery_evaluation(
+        self,
+        accepted: list[dict[str, Any]],
+        route_trace_recovery: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Select an already accepted route-recovery candidate for trace mode.
+
+        Returns:
+            dict[str, Any] | None: Selected accepted evaluation, or ``None`` when
+            trace recovery is inactive or no accepted recovery candidate exists.
+        """
+        if not bool(route_trace_recovery.get("active")):
+            return None
+        priority = {"corridor_subgoal": 0, "route_guide": 1}
+        candidates: list[dict[str, Any]] = []
+        for evaluation in accepted:
+            candidate = evaluation.get("candidate")
+            if not isinstance(candidate, HybridRuleCandidate) or candidate.source not in priority:
+                continue
+            route_progress = float(evaluation.get("terms", {}).get("route_arc_progress", 0.0))
+            if route_progress <= 0.0:
+                continue
+            candidates.append(evaluation)
+        if not candidates:
+            route_trace_recovery["selected_reason"] = "no_accepted_recovery_candidate"
+            return None
+        candidates.sort(
+            key=lambda item: (
+                priority[item["candidate"].source],
+                -float(item.get("terms", {}).get("route_arc_progress", 0.0)),
+                -float(item.get("score", 0.0)),
+            )
+        )
+        selected = candidates[0]
+        route_trace_recovery.update(
+            {
+                "selected": True,
+                "selected_source": selected["candidate"].source,
+                "selected_reason": "accepted_recovery_candidate",
+            }
+        )
+        return selected
 
     def _corridor_subgoal_candidates(
         self,
@@ -2100,6 +2272,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 progress_windows=progress_windows,
                 route_corridor=None,
                 corridor_subgoal=None,
+                route_trace_recovery=None,
             )
             return command
 
@@ -2115,11 +2288,20 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             progress_windows=progress_windows,
             nearest_ped=nearest_ped,
         )
+        route_trace_recovery = self._route_trace_recovery_signal(
+            route_corridor=route_corridor,
+            progress_windows=progress_windows,
+            nearest_ped=nearest_ped,
+        )
+        corridor_subgoal_for_candidates = self._corridor_subgoal_activation_for_trace_recovery(
+            corridor_subgoal,
+            route_trace_recovery,
+        )
         candidates = self._generate_candidates(
             state,
             speed_cap,
             route_corridor=route_corridor,
-            corridor_subgoal=corridor_subgoal,
+            corridor_subgoal=corridor_subgoal_for_candidates,
         )
         (
             accepted,
@@ -2135,16 +2317,20 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             nearest_ped=nearest_ped,
             progress_windows=progress_windows,
             route_corridor=route_corridor,
-            corridor_subgoal=corridor_subgoal,
+            corridor_subgoal=corridor_subgoal_for_candidates,
         )
 
         self._rejection_counts.update(rejection_counts)
         if accepted:
             accepted.sort(key=lambda item: float(item["score"]), reverse=True)
-            best = accepted[0]
+            recovery_best = self._select_route_trace_recovery_evaluation(
+                accepted,
+                route_trace_recovery,
+            )
+            best = recovery_best if recovery_best is not None else accepted[0]
             candidate = best["candidate"]
             command = (float(candidate.linear), float(candidate.angular))
-            mode = "NORMAL"
+            mode = "ROUTE_TRACE_RECOVERY" if recovery_best is not None else "NORMAL"
             source = candidate.source
             score = float(best["score"])
             terms = best["terms"]
@@ -2199,7 +2385,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             predicted_ttc=predicted_ttc,
             progress_windows=progress_windows,
             route_corridor=route_corridor,
-            corridor_subgoal=corridor_subgoal,
+            corridor_subgoal=corridor_subgoal_for_candidates,
+            route_trace_recovery=route_trace_recovery,
             actuation_diagnostics=actuation_diagnostics,
             static_safety_gate=static_safety_gate,
             rejected_examples=rejected_examples,
@@ -2240,6 +2427,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         progress_windows: dict[str, float],
         route_corridor: dict[str, Any] | None = None,
         corridor_subgoal: dict[str, Any] | None = None,
+        route_trace_recovery: dict[str, Any] | None = None,
         actuation_diagnostics: dict[str, Any] | None = None,
         static_safety_gate: dict[str, Any] | None = None,
         rejected_examples: list[dict[str, Any]] | None = None,
@@ -2278,6 +2466,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "progress_windows": {key: float(value) for key, value in progress_windows.items()},
             "route_corridor": route_corridor,
             "corridor_subgoal": corridor_subgoal,
+            "route_trace_recovery": route_trace_recovery,
             "selected_actuation_diagnostics": actuation_diagnostics,
             "selected_static_safety_gate": static_safety_gate,
         }
@@ -2309,6 +2498,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "training_source": str(self.config.value_scorer_training_source),
             "candidate_lattice": "hybrid_rule_local_planner",
             "static_safety_gate_enabled": bool(self.config.static_safety_gate_enabled),
+            "route_trace_recovery_enabled": bool(self.config.route_trace_recovery_enabled),
             "source_parity_claim": False,
             "upstream_code_used": False,
             "observation_scope": (

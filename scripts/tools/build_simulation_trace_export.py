@@ -76,9 +76,12 @@ def _load_source_metadata(source_path: Path) -> dict[str, Any]:
         return {}
 
     try:
-        return json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         raise ValueError(f"cannot read metadata file {metadata_path}: {exc}") from exc
+    if not isinstance(metadata, dict):
+        raise ValueError(f"metadata file {metadata_path} must contain a JSON object")
+    return metadata
 
 
 def _sha256(path: Path) -> str:
@@ -168,18 +171,15 @@ def _select_action(
                 "angular_velocity": float(selected_action[1]),
             }
 
-    if not isinstance(selected_action, dict):
-        # Fallback to pose-derived derivative.
-        action_pose = state.get("robot_pose")
-        if isinstance(action_pose, (list, tuple)) and len(action_pose) >= 2:
-            try:
-                # Use explicit position fields if present.
-                current_pose = _pose(state)
-            except ValueError:
-                return {"linear_velocity": 0.0, "angular_velocity": 0.0}
+    action_pose = state.get("robot_pose")
+    if isinstance(action_pose, (list, tuple)) and len(action_pose) >= 2:
+        try:
+            current_pose = _pose(state)
+        except ValueError:
+            return {"linear_velocity": 0.0, "angular_velocity": 0.0}
 
-            linear, angular = _derive_velocity(current_pose, previous_pose, dt)
-            return {"linear_velocity": linear, "angular_velocity": angular}
+        linear, angular = _derive_velocity(current_pose, previous_pose, dt)
+        return {"linear_velocity": linear, "angular_velocity": angular}
 
     return {"linear_velocity": 0.0, "angular_velocity": 0.0}
 
@@ -231,10 +231,10 @@ def build_simulation_trace_export(
         event = str(record.get("event", "step"))
         state = record.get("state")
 
-        if not isinstance(state, dict) or not state:
+        if event != "step":
             continue
 
-        if event == "episode_end":
+        if not isinstance(state, dict) or not state:
             continue
 
         step_idx = record.get("step_idx")
@@ -246,7 +246,7 @@ def build_simulation_trace_export(
 
         timestamp = record.get("timestamp")
         if timestamp is None:
-            timestamp = float(state.get("timestep", float(step_idx)))
+            timestamp = state.get("timestep", step_idx)
         try:
             time_s = float(timestamp)
         except (TypeError, ValueError) as exc:

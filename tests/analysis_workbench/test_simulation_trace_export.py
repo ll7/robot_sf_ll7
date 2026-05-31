@@ -12,6 +12,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     load_simulation_trace_export,
     simulation_trace_export_from_dict,
 )
+from scripts.tools.build_simulation_trace_export import build_simulation_trace_export
 
 FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -123,3 +124,100 @@ def test_materialized_trace_fixture_has_source_provenance_and_event_ids() -> Non
         "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0001",
         "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0002",
     ]
+
+
+def _write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
+    """Write compact JSONL source records for trace-export builder tests."""
+    import json
+
+    path.write_text(
+        "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+        encoding="utf-8",
+    )
+
+
+def _step_record(
+    step: int,
+    *,
+    timestep: object,
+    x: float,
+    y: float,
+    action: object | None = None,
+) -> dict[str, object]:
+    """Return one minimal step record accepted by the trace-export builder."""
+    state: dict[str, object] = {
+        "robot_pose": [[x, y], 0.0],
+        "timestep": timestep,
+        "pedestrian_positions": [],
+    }
+    if action is not None:
+        state["robot_action"] = action
+    return {"event": "step", "step_idx": step, "state": state}
+
+
+def test_build_trace_export_skips_non_step_records(tmp_path: Path) -> None:
+    """Non-step events should not create duplicate playback frames."""
+    source = tmp_path / "episode.jsonl"
+    _write_jsonl(
+        source,
+        [
+            _step_record(0, timestep=0.0, x=0.0, y=0.0),
+            {
+                "event": "entity_reset",
+                "step_idx": 0,
+                "state": {"robot_pose": [[0.0, 0.0], 0.0], "timestep": 0.0},
+            },
+            _step_record(1, timestep=1.0, x=1.0, y=0.0),
+        ],
+    )
+
+    payload = build_simulation_trace_export(source)
+
+    assert [frame["step"] for frame in payload["frames"]] == [0, 1]
+    assert [frame["time_s"] for frame in payload["frames"]] == [0.0, 1.0]
+
+
+def test_build_trace_export_rejects_non_object_metadata(tmp_path: Path) -> None:
+    """Sidecar metadata must be an object so provenance fields are explicit."""
+    source = tmp_path / "episode.jsonl"
+    _write_jsonl(source, [_step_record(0, timestep=0.0, x=0.0, y=0.0)])
+    source.with_name("episode.meta.json").write_text("[]", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="metadata file .* must contain a JSON object"):
+        build_simulation_trace_export(source)
+
+
+def test_build_trace_export_uses_pose_fallback_for_malformed_dict_action(
+    tmp_path: Path,
+) -> None:
+    """Malformed dict actions should still use pose-derived motion."""
+    source = tmp_path / "episode.jsonl"
+    _write_jsonl(
+        source,
+        [
+            _step_record(0, timestep=0.0, x=0.0, y=0.0),
+            _step_record(
+                1,
+                timestep=1.0,
+                x=2.0,
+                y=0.0,
+                action={"linear_velocity": "bad", "angular_velocity": None},
+            ),
+        ],
+    )
+
+    payload = build_simulation_trace_export(source)
+
+    assert payload["frames"][1]["planner"]["selected_action"] == {
+        "linear_velocity": 2.0,
+        "angular_velocity": 0.0,
+    }
+
+
+def test_build_trace_export_wraps_invalid_timestep_error(tmp_path: Path) -> None:
+    """Invalid fallback timestamps should report the affected step."""
+    source = tmp_path / "episode.jsonl"
+    _write_jsonl(source, [_step_record(0, timestep="not-a-time", x=0.0, y=0.0)])
+
+    with pytest.raises(ValueError, match="invalid timestamp for step 0"):
+        build_simulation_trace_export(source)

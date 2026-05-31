@@ -74,6 +74,26 @@ def test_load_candidate_definition_merges_base_config_and_params(
     assert config_path == candidate_cfg.resolve()
 
 
+def test_adaptive_proxemic_selector_candidate_is_diagnostic_only() -> None:
+    """The adaptive proxemic selector should be registered as diagnostic-only."""
+    entry, payload, merged, config_path = load_candidate_definition(
+        Path("docs/context/policy_search/candidate_registry.yaml"),
+        "adaptive_proxemic_selector_v0",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["training_required"] is False
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "adaptive_proxemic_selector_v0"
+    assert payload["params"]["diagnostic_only"] is True
+    assert merged["diagnostic_only"] is True
+    assert sorted(merged["profiles"]) == ["conservative", "neutral", "open"]
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/adaptive_proxemic_selector_v0.yaml").resolve()
+    )
+
+
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
     """Scenario names should drive family inference when scenario_id is absent."""
     grouped = split_scenarios_by_family(

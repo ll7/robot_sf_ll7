@@ -24,23 +24,15 @@ def test_runtime_config_records_mode_versions_and_overlay_labels():
     assert "persistent target velocity" in payload["control_overlay_label"]
 
 
-def test_runtime_config_rejects_unsupported_view_mode():
-    """Unsupported view modes should fail closed before a runner starts."""
-    with pytest.raises(NotImplementedError, match="robot_static"):
-        ManualControlRuntimeConfig.from_strings(
-            control_mode="keyboard_cruise",
-            view_mode="robot_static",
-        )
-
-
-def test_runtime_config_accepts_ego_up_view_mode():
-    """Ego-up is selectable now that the renderer exposes a camera transform hook."""
+@pytest.mark.parametrize("view_mode", ["ego_up", "robot_static"])
+def test_runtime_config_accepts_camera_transform_view_modes(view_mode):
+    """Camera-transform views are selectable once the renderer exposes the hook."""
     config = ManualControlRuntimeConfig.from_strings(
         control_mode="keyboard_cruise",
-        view_mode="ego_up",
+        view_mode=view_mode,
     )
 
-    assert config.view_mode == "ego_up"
+    assert config.view_mode == view_mode
     assert "robot-centered" in config.overlay_metadata()["view_overlay_label"]
 
 

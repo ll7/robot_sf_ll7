@@ -14,6 +14,7 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
 - `single/`: one scenario per file (manual fine-tuning and small edits).
 - `archetypes/`: groups of related scenarios (may contain one or many entries).
 - `sets/`: manifest files that include other scenario files.
+- `perturbations/`: perturbation manifests for validity preflight before paired criticality pilots.
 
 ## Plausibility tracking
 

@@ -176,6 +176,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[ODD Contracts](./odd_contracts.md)** - `odd_contract.v1` schema, typed loader, fixture, and boundary for benchmark and falsification evidence assumptions
 * **[Scenario Contracts](./scenario_contracts.md)** - `scenario_contract.v1` schema, typed loader, fixture, and boundary between authored intent, certification, and benchmark evidence
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
+* **[Scenario Perturbation Manifest](./scenario_perturbation_manifest.md)** - `scenario_perturbation_manifest.v1` schema, no-op and bounded route-offset preflight, and evidence boundary for perturbation pilots
 * **[Issue #1272 Safety-Oriented Validation And Falsification Strategy](./context/issue_1272_validation_falsification_strategy.md)** - Current roadmap note for positioning Robot SF as validation/falsification infrastructure without certification or proof-of-safety claims
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
 * **[Issue #1073 Robot SF Empirical-Expansion Gate](./context/issue_1073_empirical_expansion_gate_2026_06_08.md)** - June 8 checkpoint rule for deciding whether Robot SF can move beyond dissertation-floor examples into bounded empirical expansion

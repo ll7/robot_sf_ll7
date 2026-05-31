@@ -202,7 +202,9 @@ def build_simulation_trace_export(
         or metadata.get("planner_id")
         or "unknown_planner"
     )
-    scenario = scenario_id or str(metadata.get("scenario") or metadata.get("scenario_id") or "unknown_scenario")
+    scenario = scenario_id or str(
+        metadata.get("scenario") or metadata.get("scenario_id") or "unknown_scenario"
+    )
     seed = metadata.get("seed", 0)
     try:
         seed_int = int(seed)
@@ -353,7 +355,9 @@ def _build_parser() -> argparse.ArgumentParser:
     """Build CLI parser for trace-export generation."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, required=True, help="Episode JSONL recording source.")
+    parser.add_argument(
+        "--source", type=Path, required=True, help="Episode JSONL recording source."
+    )
     parser.add_argument("--output", type=Path, required=True, help="Output simulation export path.")
     parser.add_argument("--planner-id", default=None, help="Planner contract identifier override.")
     parser.add_argument("--scenario-id", default=None, help="Scenario identifier override.")

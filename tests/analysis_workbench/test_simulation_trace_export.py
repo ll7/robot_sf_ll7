@@ -118,10 +118,7 @@ def test_materialized_trace_fixture_has_source_provenance_and_event_ids() -> Non
     )
     assert [frame.step for frame in trace.frames] == [1, 2, 3]
     assert [frame.planner["event"] for frame in trace.frames] == ["step", "step", "step"]
-    assert [
-        frame.planner["event_id"]
-        for frame in trace.frames
-    ] == [
+    assert [frame.planner["event_id"] for frame in trace.frames] == [
         "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0000",
         "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0001",
         "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0002",

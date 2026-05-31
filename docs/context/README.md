@@ -3,6 +3,10 @@
 `docs/context/` is the repository's Markdown knowledge base for issue execution history, durable
 agent handoff, and reusable reasoning that should not be trapped in chat or PR text.
 
+For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-first catalog for
+current entry points, status rules, and curated context-pack scopes. This README remains the note
+maintenance workflow and full discoverability surface.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 
@@ -74,6 +78,7 @@ knowledge, not every transient iteration detail.
 
 ## Skills And Entry Points
 
+* Retrieval-first context index: [INDEX.md](INDEX.md)
 * Repository rule: [AGENTS.md](../../AGENTS.md)
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
@@ -138,6 +143,8 @@ knowledge, not every transient iteration detail.
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
 * Issue #1612 parallel observation-space benchmark tracks:
   [issue_1612_observation_track_architecture.md](issue_1612_observation_track_architecture.md)
+* Issue #1721 Legacy Benchmark-Track Metadata Audit:
+  [issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md)
 * Issue #1659 LiDAR occupancy adapter:
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:
@@ -150,10 +157,22 @@ knowledge, not every transient iteration detail.
   [issue_1614_lidar_planner_compatibility.md](issue_1614_lidar_planner_compatibility.md)
 * Issue #1685 dummy learned-policy adapter fixture (2026-05-30):
   [issue_1685_dummy_learned_policy_adapter.md](issue_1685_dummy_learned_policy_adapter.md)
+* Issue #1622 Decision Transformer Feasibility (2026-05-30):
+  [issue_1622_decision_transformer_feasibility.md](issue_1622_decision_transformer_feasibility.md)
+* Issue #1625 Learned Planner Arbitration Assessment (2026-05-30):
+  [issue_1625_learned_planner_arbitration.md](issue_1625_learned_planner_arbitration.md)
+* Issue #1624 Hybrid-Learning Navigation Architecture (2026-05-30):
+  [issue_1624_hybrid_learning_architecture.md](issue_1624_hybrid_learning_architecture.md)
 * Issue #1674 Topology-Hypothesis Diagnostics (2026-05-30):
   [issue_1674_topology_hypothesis_diagnostics.md](issue_1674_topology_hypothesis_diagnostics.md)
 * Issue #1675 learned risk-surface interface:
   [issue_1675_learned_risk_surface_interface.md](issue_1675_learned_risk_surface_interface.md)
+* Issue #1628 Actuation-Aware Learned Navigation for AMVs (2026-05-30):
+  [issue_1628_actuation_aware_learned_navigation.md](issue_1628_actuation_aware_learned_navigation.md)
+* Issue #1740 Actuation-Aware Learned-Policy Smoke Candidate (2026-05-30):
+  [issue_1740_actuation_aware_smoke_candidate.md](issue_1740_actuation_aware_smoke_candidate.md)
+* Issue #1720 learned-policy roadmap and issue routing:
+  [issue_1720_learned_policy_roadmap.md](issue_1720_learned_policy_roadmap.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:
@@ -200,6 +219,12 @@ knowledge, not every transient iteration detail.
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
 * Issue #1556 synthetic AMV actuation stress slice:
   [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
+* Issue #1606 Full Classic placeholder retirement:
+  [issue_1606_full_classic_placeholder_retirement.md](issue_1606_full_classic_placeholder_retirement.md)
+* Issue #1744 Latency Stress Preflight Contract (2026-05-30):
+  [issue_1744_latency_stress_preflight_contract.md](issue_1744_latency_stress_preflight_contract.md)
+* Issue #1629 Latency-Aware Learned Navigation Safety (2026-05-30):
+  [issue_1629_latency_aware_learned_navigation.md](issue_1629_latency_aware_learned_navigation.md)
 * Issue #1398 metric rollup reconciliation:
   [issue_1398_metric_rollup_reconciliation.md](issue_1398_metric_rollup_reconciliation.md)
 * Issue #1396 Shielded PPO Repair Launch Packet:
@@ -213,6 +238,8 @@ knowledge, not every transient iteration detail.
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1626 foundation-model local-navigation readiness (2026-05-30):
   [policy_search/2026-05-30_foundation_model_readiness_issue_1626.md](policy_search/2026-05-30_foundation_model_readiness_issue_1626.md)
+* Issue #1621 diffusion-policy local-navigation feasibility (2026-05-30):
+  [policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md](policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md)
 * Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):
   [issue_1615_lidar_learned_policy_plan.md](issue_1615_lidar_learned_policy_plan.md)
 * Issue #1618 learned local-policy adapter interface:
@@ -503,6 +530,9 @@ knowledge, not every transient iteration detail.
 * [Issue #749 BC-Preinitialized PPO Launch Packet](issue_749_bc_preinit_ppo_launch_packet.md)
   defines the config-first launch path and artifact boundary for the deferred BC warm-start PPO
   challenger experiment.
+* [Issue #1752 Decision Transformer Dataset Preflight](issue_1752_decision_transformer_dataset_preflight.md)
+  records the reward/terminal/return-to-go trajectory schema, manifest metadata, validator CLI, and
+  tiny dry-run proof needed before any future Decision Transformer training campaign.
 * [Issue #1209 Imitation Observation Contract](issue_1209_imitation_observation_contract.md)
   records the BR-06 checkpoint-compatible observation-contract fix and validation path that
   unblocks #1108's BC warm-start launch.
@@ -584,6 +614,9 @@ knowledge, not every transient iteration detail.
 * [Issue #871 Policy Stack Topology Smoke](issue_871_policy_stack_topology_smoke.md)
   records the `corridor_following` atomic topology smoke that proves `policy_stack_v1` can reach a
   topology-heavy goal through the normal map-runner path with proposal diagnostics intact.
+* [Issue #1751 Policy Stack Arbitration Trace Packet](issue_1751_policy_stack_arbitration_trace.md)
+  defines the diagnostic-only `policy_stack_v1.arbitration_trace_packet.v1` contract for future
+  learned-arbiter data collection, plus the compact validation smoke command.
 * [Issue #884 Classic Merging Diagnostics](issue_884_classic_merging_diagnostics.md)
   records source-level hybrid-rule rejection diagnostics, rejected classic-merging recovery
   mechanisms, and the later #1034 targeted recovery result.
@@ -799,6 +832,9 @@ why a change was made rather than a full issue execution transcript.
   Run-level outcome and diagnostics summary for Slurm 12159.
 * [DreamerV3 Program Close-Out (2026-04-30)](dreamerv3_program_close_out_2026_04_30.md)
   Program-level stop decision and closure rationale after the probe/gate/full sequence.
+* [Issue #1623 World-Model Navigation Feasibility](issue_1623_world_model_feasibility.md)
+  Decision note for DreamerV3, PlaNet, TD-MPC2, and DreamerNav-style candidates: monitor external
+  methods, reject another local flat-vector retrain, and require source/provenance preflights first.
 * [Issue 782: DreamerV3 world-model pretraining design](issue_782_dreamerv3_pretraining_design.md)
   Inventory of reusable rollout sources plus the recommended proof-first pretraining path.
 * [Issue #1190 DreamerV3 checkpoint import boundary probe](issue_1190_dreamerv3_checkpoint_import_boundary.md)

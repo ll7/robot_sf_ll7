@@ -257,18 +257,23 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
   - https://github.com/InternRobotics/NavDP
   - https://github.com/robodhruv/visualnav-transformer
 - Current status: `monitor only`
-- Evidence grade: `proposal`
-- Source-backed facts: The open assessment issue records NavDP as an RGB-D conditioned navigation
+- Evidence grade: `observed`
+- Source-backed facts: The issue #1356 assessment records NavDP as an RGB-D conditioned navigation
   diffusion policy with privileged critic-value supervision during training, and NoMaD as a
   goal-masked diffusion visual-navigation stack with ROS bag/topomap and GPU-oriented tooling.
+  Issue #1621 generalizes this to Diffusion Policy, Consistency Policy, Diffuser/LDP-style
+  trajectory diffusion, and Robot SF-native state/lidar diffusion options.
 - Robot SF synthesis: These methods are modern and worth tracking, but they are not fair Robot SF
   local-planner candidates until the visual/full-navigation assumptions can be reduced to a
   non-privileged 2D local action or trajectory contract without inventing a new method.
 - Related Robot SF work: #1356, #1355,
+  `docs/context/policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md`,
   `docs/context/policy_search/README.md`.
 - Reopen if: a source-side demo can run from public assets and the policy can be expressed as
   `observation_t -> action_t` or a short trajectory under Robot SF's planner contract without
-  RGB-D, Habitat/Isaac assets, or privileged future information.
+  RGB-D, Habitat/Isaac assets, or privileged future information. For Robot SF-native diffusion,
+  reopen only after a launch packet defines dataset splits, action trajectory schema, checkpoint
+  provenance, latency target, and fail-closed missing-artifact behavior.
 
 ### NeuPAN Point-Obstacle Local Planning
 

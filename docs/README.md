@@ -85,7 +85,9 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Getting Started
 
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+* **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
+* **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
 * **[Open-Issues Implementation Status](./context/open_issues_implementation_status_2026-05-12.md)** - Handoff record for the May 2026 open-issues pass, including implemented slices, blocked items, and remaining follow-up surface
 * **[Open-Issues Maintainer Input Triage](./context/open_issues_maintainer_input_triage.md)** - Consolidated maintainer-decision inventory for open issues that still need scope, contract, or prioritization guidance
@@ -162,7 +164,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Waypoint Noise For Route Generalization](./training/waypoint_noise.md)** - Configure Gaussian waypoint perturbation to reduce route memorization during training
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
-* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`,    `watch`,    `list`,    `summary`,    `export`,    `perf-tests`,    `enable-tensorboard`)
+* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
 * **[Issue #845 Slurm Utilization Probe](./context/issue_845_slurm_utilization_probe.md)** - Collect `sstat`/`sacct`/`seff` evidence for low CPU-utilization investigations without launching new jobs
 
 ### Benchmarking & Metrics
@@ -393,7 +395,6 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### 🎮 Simulation & Environment
 
 * [**Simulation View**](./SIM_VIEW.md) - Visualization and rendering system
-* [**Map Editor Usage**](./MAP_EDITOR_USAGE.md) - Creating and editing simulation maps
 * [**SVG Map Editor**](./SVG_MAP_EDITOR.md) - SVG-based map creation tools
 * [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
 * [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario

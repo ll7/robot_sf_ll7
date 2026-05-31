@@ -53,7 +53,7 @@ class StatisticalSufficiencyReport:
 
     evaluations: list[ScenarioPrecisionStatus]
     final_pass: bool
-    scaling_efficiency: dict  # placeholder, populated later (T041)
+    scaling_efficiency: dict  # populated by the orchestrator after runtime is measured
 
 
 def evaluate_precision(groups, cfg):  # T033

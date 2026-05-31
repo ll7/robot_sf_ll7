@@ -1,7 +1,8 @@
 ---
 name: gh-issue-priority-assessor
 description: 'LLM-backed review workflow for Project #5 priority inputs; assess plausibility, propose
-  values with uncertainty, and optionally apply explicit opt-in updates.'
+  values with uncertainty, route maintainer-value tradeoffs to issue-audit, and optionally apply
+  explicit opt-in updates.'
 category: github-issue
 kind: atomic
 phase: context
@@ -18,7 +19,8 @@ output_schema: skill_run_summary.v1
 
 Assess Project #5 priority fields for plausibility using the canonical rubric, and propose
 (or apply, when asked) minimal, evidence-grounded updates. Prefer GitHub MCP / GitHub app tools for
-interactive reads when available.
+interactive reads when available. Treat numeric scores as sortable approximations from coarse
+inputs, not as hard authority.
 
 ## Workflow
 
@@ -38,6 +40,8 @@ interactive reads when available.
    - use `gh project item-edit` when a CLI fallback is needed,
    - run score sync once after the batch.
 5. Keep unresolved cases labeled as uncertain with a clear condition that would change the value.
+6. When the uncertainty is a maintainer-value tradeoff rather than missing evidence, route to
+   `issue-audit` priority discussion instead of inventing a score.
 
 ## Guardrails
 

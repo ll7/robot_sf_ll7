@@ -8,7 +8,7 @@ Design notes:
  - Encoding attempted only if optional dependencies (moviepy + ffmpeg) appear
    available (checked via visual_deps.moviepy_ready()). Otherwise caller should
    treat as skip with note ``moviepy-missing``.
- - We do not yet implement memory sampling (T034); hook placeholder included.
+ - We do not yet implement memory sampling (T034); the hook is reserved.
  - Frame source contract: iterable of numpy uint8 arrays shape (H,W,3) RGB.
  - On any runtime exception during encode, a partial file (<1KB) is removed and
    a failure status returned to caller.

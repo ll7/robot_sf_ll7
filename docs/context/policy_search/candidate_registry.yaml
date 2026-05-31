@@ -168,6 +168,23 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  hybrid_rule_v3_progress_2p4_static_escape_probe:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_progress_2p4_static_escape_probe.yaml
+    issue: 1834
+    hypothesis: >
+      Keeping the 2.4 m/s progress envelope while enabling the static-escape
+      and recenter probes from the faster static-escape candidate may convert
+      some low-progress stalls without adopting the 3.0 m/s fast-progress speed
+      envelope.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   risk_dwa_camera_ready:
     status: implemented
     family: classical_baseline
@@ -193,6 +210,22 @@ candidates:
       occupancy-compatible ego grid and let the existing Risk-DWA planner consume that surface
       through the normal policy-search smoke path. This is a prototype interface proof only, not
       learned-risk model or benchmark-strength evidence.
+    required_stages:
+      - smoke
+
+  topology_guided_hybrid_rule_v0:
+    status: experimental_spike
+    family: topology_hypothesis_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml
+    hypothesis: >
+      A diagnostic masked-route selector can expose up to two local topology
+      hypotheses from the occupancy grid, select one with route length and static
+      clearance scoring, and feed it to the existing hybrid-rule corridor-subgoal
+      scorer. Missing topology inputs fail closed; single-hypothesis rows do not
+      activate the topology injection and are not benchmark evidence.
     required_stages:
       - smoke
 
@@ -650,6 +683,21 @@ candidates:
       - smoke
       - nominal_sanity
       - stress_slice
+
+  planner_selector_v2_diagnostic:
+    status: experimental_spike
+    family: adaptive_ensemble_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/planner_selector_v2_diagnostic.yaml
+    hypothesis: >
+      A deterministic, auditable selector can choose among existing local-policy candidates using
+      predeclared topology and seed-sensitivity diagnostics plus current local pedestrian context.
+      This row is diagnostic only: smoke success proves runnable wiring and diagnostics, not
+      benchmark-strength planner-selection improvement.
+    required_stages:
+      - smoke
 
   learned_risk_model_v1:
     status: slurm_handoff_required

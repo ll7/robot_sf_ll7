@@ -46,24 +46,35 @@ Choose the next issue in order:
 Within the same status, use `gh-issue-sequencer` as the source of truth for Project #5 ordering.
 Tie-breakers after sequencing: no blocker labels, no linked PR, older open issue first, stronger evidence first.
 
+Before accepting a ready candidate, inspect the issue body and recent comments for `source_pr`,
+linked PRs, `Closes`/`Refs`, and explicit prerequisite PRs. Verify the referenced implementation
+surface exists on current `origin/main` when the branch must start from clean main. If an open PR
+already covers the issue, classify it as `covered_by_pr`, route it to `state:running`, and stop
+instead of reimplementing. If the issue depends on an unmerged source PR, mark it blocked or
+unavailable for clean-main work with the unblock condition "source PR merged to origin/main",
+unless the user explicitly chooses a stacked-PR route.
+
 ## Workflow
 
 1. Refresh credentials and branch baseline (`gh auth status`, `git fetch origin`).
 2. Resolve queue candidate and re-check issue state.
-3. If issue statement is ambiguous:
+3. Check open PRs for duplicate coverage using the linked issue, head branch/scope, and title.
+   Stop or update routing when an existing PR covers the work.
+4. If issue statement is ambiguous:
    - post a short decision options note,
    - add `decision-required` (create if missing),
    - set status back to `Tracked`,
    - stop with blocker.
-4. Move the issue to `In progress` (optionally normalize priority).
-5. Create issue branch (`gh issue develop` preferred; fallback to git branch).
-6. Implement inside accepted scope.
-7. Run validation gate and rerun on failures only when fixable.
-8. Commit with conventional message; if long-running benchmark evidence appears, classify artifacts.
-9. Sync with latest `origin/main`, rerun readiness, and check artifact durability.
-10. Open a ready PR using `gh-pr-opener`; use draft only when explicitly requested or when the
+5. Move the issue to `In progress` (optionally normalize priority).
+6. Create issue branch (`gh issue develop` preferred; fallback to git branch).
+7. Implement inside accepted scope.
+8. Run validation gate and rerun on failures only when fixable.
+9. Commit with conventional message; if long-running benchmark evidence appears, classify artifacts.
+10. Sync with latest `origin/main`, rerun readiness, and check artifact durability.
+11. Re-check open PRs for the same linked issue, head scope, or title before opening a new PR.
+12. Open a ready PR using `gh-pr-opener`; use draft only when explicitly requested or when the
     PR body names a concrete reason review should be blocked.
-11. For deferred important work, create follow-up issues and link them before final handoff.
+13. For deferred important work, create follow-up issues and link them before final handoff.
 
 ## Branch and State Safety
 

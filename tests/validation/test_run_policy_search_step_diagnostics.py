@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.validation.run_policy_search_step_diagnostics import _trace_progress_summary
+from scripts.validation.run_policy_search_step_diagnostics import (
+    _diagnostics_stdout_payload,
+    _format_planner_summary_lines,
+    _trace_progress_summary,
+)
 
 
 def test_trace_progress_summary_exposes_progress_stagnation_and_risk() -> None:
@@ -149,3 +153,41 @@ def test_trace_progress_summary_missing_steps_break_stagnant_runs() -> None:
 
     assert summary["stagnant_step_count"] == 2
     assert summary["longest_stagnant_run"] == 1
+
+
+def test_planner_summary_lines_render_nested_diagnostics() -> None:
+    """Markdown reports should expose planner summaries without opening trace JSON."""
+    lines = _format_planner_summary_lines(
+        {
+            "calls": 4,
+            "selected_sources": {"route_guide": 2, "dynamic_window": 2},
+        }
+    )
+
+    assert lines == [
+        "## Planner Summary",
+        "",
+        "- `calls`: `4`",
+        '- `selected_sources`: `{"dynamic_window": 2, "route_guide": 2}`',
+    ]
+
+
+def test_stdout_payload_includes_planner_summary(tmp_path) -> None:
+    """Machine-readable stdout should surface the aggregate planner diagnostics."""
+    payload = _diagnostics_stdout_payload(
+        metadata={
+            "trace": tmp_path / "trace.json",
+            "report": tmp_path / "report.md",
+            "scenario_id": "planner_sanity_simple",
+            "family": "nominal",
+            "seed": 111,
+            "decision_counts": {"fallback": 1},
+            "selected_head_counts": {"risk_dwa": 1},
+        },
+        progress_summary={"steps_observed": 1},
+        planner_summary={"fallback_count": 1},
+        done_info={"success": False},
+    )
+
+    assert payload["planner_summary"] == {"fallback_count": 1}
+    assert payload["progress_summary"] == {"steps_observed": 1}

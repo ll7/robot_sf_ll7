@@ -259,9 +259,10 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
             else float("inf")
         )
         clear_scene = current_min_dist > float(self.hybrid_config.near_field_distance)
+        route_stalled = bool(route_state["route_stalled"])
         if (
             clear_scene
-            and not bool(route_state["route_stalled"])
+            and not route_stalled
             and bool(primary_eval["safe"])
             and float(primary_eval["progress"]) > float(self.hybrid_config.sampler_progress_margin)
         ):
@@ -292,6 +293,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
         sampler_eval = self._evaluate_command(observation, sampler_command)
         if bool(sampler_eval["safe"]) and (
             not bool(primary_eval["safe"])
+            or route_stalled
             or float(sampler_eval["progress"])
             > float(primary_eval["progress"]) + float(self.hybrid_config.sampler_progress_margin)
         ):

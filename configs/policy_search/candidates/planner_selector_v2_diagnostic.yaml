@@ -1,0 +1,63 @@
+name: planner_selector_v2_diagnostic
+algo: planner_selector_v2_diagnostic
+params:
+  allow_testing_algorithms: true
+  selector:
+    baseline_candidate: baseline
+    topology_candidate: topology_route
+    proxemic_candidate: proxemic_conservative
+    progress_candidate: fast_progress_static_escape
+    topology_scenarios:
+      - classic_realworld_double_bottleneck_high
+      - classic_bottleneck_low
+      - classic_bottleneck_medium
+      - classic_bottleneck_high
+    topology_keywords:
+      - bottleneck
+      - doorway
+      - narrow
+      - corridor
+      - hallway
+    seed_sensitive_scenarios:
+      - classic_cross_trap_high
+      - classic_cross_trap_medium
+      - classic_doorway_high
+      - classic_doorway_low
+      - classic_doorway_medium
+      - classic_group_crossing_high
+      - classic_group_crossing_low
+      - classic_group_crossing_medium
+      - classic_head_on_corridor_low
+      - classic_head_on_corridor_medium
+      - classic_merging_low
+      - classic_merging_medium
+      - classic_overtaking_low
+      - classic_overtaking_medium
+      - classic_urban_crossing_medium
+      - francis2023_blind_corner
+      - francis2023_circular_crossing
+      - francis2023_exiting_elevator
+      - francis2023_intersection_no_gesture
+      - francis2023_intersection_proceed
+      - francis2023_intersection_wait
+      - francis2023_join_group
+      - francis2023_leave_group
+      - francis2023_narrow_hallway
+      - francis2023_perpendicular_traffic
+    hard_seed_values:
+      - 116
+      - 117
+      - 111
+      - 115
+      - 112
+    dense_ped_count: 4
+    near_field_distance_m: 2.3
+    comfort_distance_m: 1.05
+    evidence_sources:
+      - docs/context/issue_1608_seed_sensitivity_analysis.md
+      - docs/context/issue_1692_topology_hypothesis_probe.md
+  candidate_config_paths:
+    baseline: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+    topology_route: configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8.yaml
+    proxemic_conservative: configs/policy_search/candidates/proxemic_profile_conservative_issue_1676.yaml
+    fast_progress_static_escape: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml

@@ -59,6 +59,27 @@ rows are omitted from the matrix. When `--output-dir` points inside the reposito
 under the ignored `output/` tree so materialized pilot inputs do not become durable provenance by
 accident.
 
+## Criticality Pilot
+
+Run the first paired no-op versus route-offset pilot with:
+
+```bash
+uv run python scripts/validation/run_scenario_perturbation_criticality_pilot.py \
+  configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml \
+  --materialized-output-dir output/scenario_perturbation_pilot/issue_1904_seed_sensitive_pilot_v1 \
+  --pilot-output-dir output/scenario_perturbation_pilot/issue_1904_seed_sensitive_pilot_v1/results \
+  --seed-limit 1 \
+  --horizon 80 \
+  --workers 1 \
+  --planner goal \
+  --planner orca \
+  --evidence-summary docs/context/evidence/issue_1904_scenario_perturbation_pilot_2026-05-31/summary.json
+```
+
+The pilot writes raw episode JSONL under `output/` and, when requested, a compact tracked summary
+under `docs/context/evidence/`. Fallback, degraded, invalid, missing, and failed rows are reported
+separately and excluded from completed-pair mean deltas.
+
 ## Boundary
 
 This is not planner execution and not paper-facing evidence. It only proves that the selected

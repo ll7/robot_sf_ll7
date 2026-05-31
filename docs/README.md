@@ -10,6 +10,19 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 [`configs/benchmarks/route_clearance_certifications_v1.yaml`](../configs/benchmarks/route_clearance_certifications_v1.yaml);
 see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_clearance_certification.md).
 
+## Static Docs Site
+
+This repository includes a lightweight Sphinx site over the existing Markdown docs. Build it from
+the repository root with:
+
+```bash
+uv run --group docs sphinx-build -b html docs docs/_build/html
+```
+
+Open `docs/_build/html/index.html` for the browsable navigation layer. The site is intentionally
+thin: existing Markdown files remain the source of truth, and generated HTML under
+`docs/_build/` is disposable local output.
+
 ## 🚀 Social Navigation Benchmark Platform (Complete)
 
 **The Social Navigation Benchmark Platform is now fully operational!**

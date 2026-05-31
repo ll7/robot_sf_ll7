@@ -55,6 +55,7 @@ dist/
 /local.machine*.md
 
 .gemini/
+.understand-anything/
 gha-creds-*.json
 
 # SocNavBench third-party datasets (local-only, license-restricted)

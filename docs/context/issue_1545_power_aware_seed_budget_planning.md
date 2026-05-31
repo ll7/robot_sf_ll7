@@ -27,6 +27,11 @@ Canonical benchmark contract references:
 - SNQI remains diagnostic-only on the cited h500 surface because the durable summary records
   `snqi_contract_status="fail"` for the S10/h500 candidate campaign and only `warn` for the Stage A
   fixed-h100 surface.
+- The cited compact benchmark bundles predate explicit `benchmark_track` and
+  `track_schema_version` metadata unless a row says otherwise. Treat them as
+  `legacy_track_unknown` per
+  [issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md), and
+  do not aggregate them with track-aware result rows.
 
 ## Evidence Basis
 

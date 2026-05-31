@@ -62,6 +62,26 @@ def test_summarize_benchmark_availability_marks_partial_failure() -> None:
     assert availability.availability_reason == "worker crash"
 
 
+def test_summarize_benchmark_availability_marks_latency_stress_as_not_available() -> None:
+    """Latency-stress preflight rows should not count as benchmark evidence yet."""
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_metadata_contract": {"execution_mode": "native"},
+        "latency_stress_profile": {"name": "learned-policy-latency-stress-v0"},
+        "latency_stress_metrics": {"held_action_ratio": "not_available"},
+    }
+
+    availability = summarize_benchmark_availability(summary)
+
+    assert availability.availability_status == "not_available"
+    assert availability.benchmark_success is False
+    assert "runtime latency metrics" in str(availability.availability_reason)
+
+
 def test_campaign_outcome_and_exit_code_distinguish_non_success_campaign_classes() -> None:
     """Campaign exit semantics should separate accepted unavailable rows from true failures."""
     success = summarize_campaign_outcome({"planner_rows": [{"status": "ok"}]})

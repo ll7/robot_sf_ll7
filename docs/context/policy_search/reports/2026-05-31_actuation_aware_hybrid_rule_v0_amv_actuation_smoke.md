@@ -16,8 +16,8 @@ A deterministic hybrid-rule local scorer can penalize command candidates that wo
 - Scenario matrix: `configs/scenarios/sets/classic_cross_trap_subset.yaml`
 - Scenario filter: `classic_cross_trap_high`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/actuation_aware_hybrid_rule_v0/amv_actuation_smoke/latest/summary.json`
-- Git commit: `f81ff02484d7c8dff60fd3295eb73add433194c6`
+- Summary JSON: `output/policy_search/actuation_aware_hybrid_rule_v0/amv_actuation_smoke/pr1828_current_head/summary.json`
+- Git commit: `bc0ff9f4011d365163e81c833ac3c5c35cc5b40a`
 - Synthetic actuation profile: `amv-actuation-stress-v0` (`synthetic-only`, diagnostic-only)
 
 ## Aggregate Results
@@ -56,7 +56,13 @@ Raw aggregate results above still include excluded rows; evidence-adjusted resul
 
 - No failures recorded.
 
+## Claim Boundary
+
+This report is diagnostic-only wiring or stage evidence. Treat aggregate metrics and baseline deltas as arithmetic context, not benchmark-strength evidence for comfort, near-miss behavior, generalization, or planner superiority.
+
 ## Baseline Deltas
+
+_Diagnostic-only arithmetic context; not a benchmark comparison claim._
 
 | Baseline | Success Delta | Collision Delta | Near-Miss Delta |
 |---|---:|---:|---:|

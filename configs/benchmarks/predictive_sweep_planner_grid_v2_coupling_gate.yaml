@@ -1,0 +1,51 @@
+# Issue #1856 planner-side coupling gate for predictive-v2 work.
+#
+# This grid is intentionally small and local-preflight oriented. It keeps the old
+# baseline-like row as the closed-loop reference, then tests one revised planner-side
+# coupling hypothesis before any four-way training expansion.
+variants:
+  - name: baseline_like
+    params:
+      predictive_goal_weight: 5.0
+      predictive_collision_weight: 0.4
+      predictive_near_miss_weight: 0.05
+      predictive_ttc_weight: 0.15
+      predictive_ttc_distance: 0.8
+      occupancy_weight: 0.3
+      predictive_candidate_speeds: [0.0, 0.4, 0.7, 1.0]
+      predictive_candidate_heading_deltas: [-0.785398, -0.392699, 0.0, 0.392699, 0.785398]
+
+  - name: phase_coupled_sequence_gate
+    params:
+      predictive_goal_weight: 6.4
+      predictive_collision_weight: 0.55
+      predictive_near_miss_weight: 0.08
+      predictive_ttc_weight: 0.25
+      predictive_ttc_distance: 0.9
+      predictive_progress_risk_weight: 2.0
+      predictive_progress_risk_distance: 1.25
+      predictive_hard_clearance_distance: 0.78
+      predictive_hard_clearance_weight: 2.8
+      predictive_speed_clearance_gain: 0.45
+      occupancy_weight: 0.22
+      predictive_adaptive_horizon_enabled: true
+      predictive_horizon_boost_steps: 5
+      predictive_sequence_search_enabled: true
+      predictive_sequence_segments: 2
+      predictive_sequence_branch_factor: 5
+      predictive_sequence_beam_width: 6
+      predictive_phase_logic_enabled: true
+      predictive_phase_commit_clearance: 1.35
+      predictive_phase_yield_clearance: 0.95
+      predictive_phase_recover_clearance: 1.65
+      predictive_phase_recover_progress: 0.18
+      predictive_phase_commit_weight: 1.6
+      predictive_phase_yield_weight: 1.8
+      predictive_phase_align_weight: 0.35
+      predictive_phase_recover_weight: 1.7
+      predictive_near_field_distance: 2.4
+      predictive_near_field_speed_cap: 0.65
+      predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5]
+      predictive_near_field_heading_deltas: [-1.047198, -0.785398, -0.523599, 0.0, 0.523599, 0.785398, 1.047198]
+      predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.75, 1.0]
+      predictive_candidate_heading_deltas: [-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398]

@@ -706,10 +706,16 @@ def test_hybrid_rule_corridor_subgoal_uses_scaled_one_second_stall_threshold() -
         progress_windows={"1s": 0.02, "3s": 0.03},
         nearest_ped=float("inf"),
     )
+    regressing = planner._corridor_subgoal_activation(
+        route_corridor=_route_corridor_payload(route_progress_1s=-0.1, route_progress_3s=0.0),
+        progress_windows={"1s": -0.02, "3s": -0.03},
+        nearest_ped=float("inf"),
+    )
 
     assert moving_recently["active"] is False
     assert moving_recently["reason"] == "progress_not_stalled"
     assert stalled["active"] is True
+    assert regressing["active"] is True
 
 
 def test_hybrid_rule_corridor_subgoal_turns_in_place_for_large_tangent_error() -> None:

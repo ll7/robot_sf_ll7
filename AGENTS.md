@@ -43,8 +43,31 @@ Treat the following files as the repository-native context stack for Agent-style
 - `.agents/prompts/`, `.agents/commands/`, and `.agents/agents/`: canonical prompt, command,
   and GitHub agent sources, mirrored into tool-specific compatibility paths when possible.
 - `docs/ai/`: AI-facing overview documents for repo structure, planner-zoo state, context packing, and deferred retrieval decisions.
+- `.understand-anything/knowledge-graph.json`: shared codebase knowledge graph for interactive
+  navigation through the Understand-Anything dashboard/chat tools; see
+  `docs/ai/understand_anything.md` before reading the raw large JSON, regenerating it, or updating
+  it.
 
 Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments, and avoid loading broad context-note indexes unless the task actually needs them.
+
+## Shared Knowledge Graph
+
+This repository tracks an Understand-Anything graph under `.understand-anything/` as a shared
+orientation artifact for agents and contributors. Use it to explore architecture, layers, files,
+functions, classes, imports, calls, inheritance, and broad test/config relationships before doing
+large discovery reads.
+
+- Install or refresh the Codex skills from upstream with
+  `curl -fsSL https://raw.githubusercontent.com/Lum1104/Understand-Anything/main/install.sh | bash -s codex`,
+  then restart Codex.
+- Launch the dashboard with `/understand-dashboard` from the repository root.
+- Ask graph-grounded questions with `/understand-chat` when available, but verify benchmark,
+  metric, schema, and paper-facing conclusions against source files and repo validation commands.
+- Keep `.understand-anything/knowledge-graph.json` and `.understand-anything/fingerprints.json`
+  in Git LFS. Do not commit `intermediate/`, `tmp/`, or `diff-overlay.json`.
+- Prefer post-commit or explicit refreshes over pre-commit graph generation; graph updates are too
+  slow and too mutating for the commit preparation path.
+- For detailed setup, update, and artifact policy, read `docs/ai/understand_anything.md`.
 
 ## Local Machine Context (Gitignored)
 

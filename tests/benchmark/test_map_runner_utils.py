@@ -231,6 +231,47 @@ def test_planner_selector_v2_context_is_applied_to_runtime_identity() -> None:
     }
 
 
+def test_build_policy_routes_adaptive_proxemic_selector_with_diagnostics() -> None:
+    """Map-runner policy construction should expose selector diagnostics."""
+    policy, meta = _build_policy(
+        "adaptive_proxemic_selector_v0",
+        {
+            "allow_testing_algorithms": True,
+            "max_linear_speed": 0.8,
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["adaptive_proxemic_selector"]["diagnostic_only"] is True
+    assert meta["adaptive_proxemic_selector"]["claim_boundary"] == "diagnostic_only"
+    linear, angular = policy(
+        {
+            "robot": {
+                "position": np.asarray([0.0, 0.0], dtype=float),
+                "heading": np.asarray([0.0], dtype=float),
+                "speed": np.asarray([0.0], dtype=float),
+                "radius": np.asarray([0.25], dtype=float),
+            },
+            "goal": {
+                "current": np.asarray([2.0, 0.0], dtype=float),
+                "next": np.asarray([2.0, 0.0], dtype=float),
+            },
+            "pedestrians": {
+                "positions": np.zeros((0, 2), dtype=float),
+                "velocities": np.zeros((0, 2), dtype=float),
+                "count": np.asarray([0.0], dtype=float),
+                "radius": 0.25,
+            },
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert isinstance(linear, float)
+    assert isinstance(angular, float)
+    diagnostics = policy._planner_stats()
+    assert diagnostics["last_selection"]["selected_profile"] == "open"
+    assert diagnostics["last_selection"]["trigger_reason"] == "clear_low_density"
+
+
 def test_scenario_with_episode_seed_defaults_fills_missing_route_spawn_seed() -> None:
     """Episode seed should drive route-spawn RNGs when scenarios leave that seed unset."""
     scenario = {

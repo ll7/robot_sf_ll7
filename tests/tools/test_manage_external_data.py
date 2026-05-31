@@ -1,0 +1,129 @@
+"""Tests for the external data setup assistant."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from typing import TYPE_CHECKING
+
+import pytest
+
+from scripts.tools import manage_external_data
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _init_git_repo(path: Path, *, gitignore: str = "") -> None:
+    """Create a small git repo for git-ignore staging checks."""
+    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
+    if gitignore:
+        (path / ".gitignore").write_text(gitignore, encoding="utf-8")
+
+
+def test_registry_covers_initial_required_asset_groups() -> None:
+    """The first slice should cover SDD and SocNavBench S3DIS/control assets."""
+    asset_ids = {asset.asset_id for asset in manage_external_data.list_assets()}
+
+    assert "sdd" in asset_ids
+    assert "socnavbench-s3dis-eth" in asset_ids
+    assert "socnavbench-control" in asset_ids
+
+
+def test_missing_license_gated_asset_fails_closed(tmp_path: Path) -> None:
+    """Missing gated data should report why without attempting fallback."""
+    report = manage_external_data.check_asset("sdd", source_path=tmp_path / "missing")
+
+    assert report["ok"] is False
+    assert report["status"] == "missing"
+    assert report["auto_download_allowed"] is False
+    assert "official acquisition" in report["action"]
+
+
+def test_download_for_gated_asset_is_rejected() -> None:
+    """Download must fail closed when redistribution/download terms are not encoded."""
+    with pytest.raises(manage_external_data.ExternalDataError, match="license-gated"):
+        manage_external_data.download_asset("sdd")
+
+
+def test_stage_rejects_unignored_repo_local_raw_data(tmp_path: Path) -> None:
+    """Repo-local raw files must be gitignored before a manifest can bless them."""
+    _init_git_repo(tmp_path)
+    source_root = tmp_path / "external" / "sdd"
+    source_root.mkdir(parents=True)
+    (source_root / "annotations.txt").write_text(
+        "1 0 0 10 10 0 0 0 0 Pedestrian\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(manage_external_data.ExternalDataError, match="not covered by gitignore"):
+        manage_external_data.stage_asset(
+            "sdd",
+            source_path=source_root,
+            manifest_out=tmp_path / "manifest.json",
+            repo_root=tmp_path,
+        )
+
+
+def test_stage_writes_small_manifest_for_ignored_sdd_path(tmp_path: Path) -> None:
+    """Manual staging should validate, checksum, and write compact provenance."""
+    _init_git_repo(tmp_path, gitignore="external/sdd/\n")
+    source_root = tmp_path / "external" / "sdd"
+    source_root.mkdir(parents=True)
+    (source_root / "annotations.txt").write_text(
+        "1 0 0 10 10 0 0 0 0 Pedestrian\n",
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "manifests" / "sdd.provenance.json"
+
+    manifest = manage_external_data.stage_asset(
+        "sdd",
+        source_path=source_root,
+        manifest_out=manifest_path,
+        repo_root=tmp_path,
+    )
+
+    assert manifest_path.is_file()
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload == manifest
+    assert payload["asset_id"] == "sdd"
+    assert payload["file_count"] == 1
+    assert payload["total_size_bytes"] > 0
+    assert payload["tree_sha256"]
+    assert payload["checksum_policy"].startswith("aggregate_tree_sha256")
+    assert payload["validation_command"].endswith(f"check sdd --source {source_root.resolve()}")
+    assert payload["sample_files"][0]["path"] == "annotations.txt"
+    assert "Pedestrian" not in json.dumps(payload)
+
+
+def test_socnavbench_control_check_accepts_wayptnav_layout(tmp_path: Path) -> None:
+    """Control-pipeline assets should validate from the expected wayptnav directory."""
+    (tmp_path / "wayptnav_data").mkdir()
+    (tmp_path / "wayptnav_data" / "README.md").write_text("local fixture\n", encoding="utf-8")
+
+    report = manage_external_data.check_asset("socnavbench-control", source_path=tmp_path)
+
+    assert report["ok"] is True
+    assert report["matched_required_paths"] == ["wayptnav_data"]
+
+
+def test_socnavbench_s3dis_rejects_empty_required_mesh_directory(tmp_path: Path) -> None:
+    """Required asset directories should not pass when only the directory shell exists."""
+    mesh_dir = tmp_path / "sd3dis" / "stanford_building_parser_dataset" / "mesh" / "ETH"
+    mesh_dir.mkdir(parents=True)
+    traversible = (
+        tmp_path
+        / "sd3dis"
+        / "stanford_building_parser_dataset"
+        / "traversibles"
+        / "ETH"
+        / "data.pkl"
+    )
+    traversible.parent.mkdir(parents=True)
+    traversible.write_bytes(b"fixture")
+
+    report = manage_external_data.check_asset("socnavbench-s3dis-eth", source_path=tmp_path)
+
+    assert report["ok"] is False
+    assert report["status"] == "incomplete"
+    assert "sd3dis/stanford_building_parser_dataset/mesh/ETH" in report["missing_required_paths"]

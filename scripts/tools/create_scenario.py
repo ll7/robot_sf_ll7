@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""Create deterministic draft scenario YAML from safe authoring templates."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from scripts.tools.scenario_authoring import (
+    add_common_seed_argument,
+    available_templates,
+    build_scenario_payload,
+    configure_authoring_tool_logging,
+    parse_seed_args,
+    validate_scenario_file,
+    write_scenario_yaml,
+)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the scenario creation CLI parser."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--template",
+        choices=available_templates(),
+        default="bottleneck",
+        help="Draft scenario template to materialize.",
+    )
+    parser.add_argument("--name", required=True, help="Stable scenario name to write.")
+    parser.add_argument("--output", type=Path, required=True, help="YAML file to create.")
+    parser.add_argument(
+        "--source-issue",
+        default="#1891",
+        help="Issue or provenance label to store in metadata.authoring.source_issue.",
+    )
+    add_common_seed_argument(parser)
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace the output path if it already exists.",
+    )
+    parser.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Write the draft without running the local authoring validator.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show loader and map-parser logs during validation.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the draft scenario generator."""
+
+    args = _build_parser().parse_args(argv)
+    configure_authoring_tool_logging(verbose=args.verbose)
+    payload = build_scenario_payload(
+        template=args.template,
+        name=args.name,
+        seeds=parse_seed_args(args.seeds),
+        source_issue=args.source_issue,
+    )
+    write_scenario_yaml(args.output, payload, overwrite=args.overwrite)
+    if args.skip_validation:
+        print(f"Wrote draft scenario: {args.output}")
+        return 0
+
+    report = validate_scenario_file(args.output)
+    if report.ok:
+        print(f"Wrote and validated {report.scenario_count} draft scenario(s): {args.output}")
+        return 0
+
+    print(f"Wrote draft scenario but validation found {len(report.issues)} issue(s): {args.output}")
+    for issue in report.issues:
+        print(f"- {issue.format()}")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -38,6 +38,31 @@ metadata:
       force_q95: null
 ```
 
+## Draft authoring workflow
+
+For a small reviewable starting point, generate a draft YAML from the v1 authoring template and
+validate it before handing the file to training or benchmark commands:
+
+```bash
+uv run python scripts/tools/create_scenario.py \
+  --template bottleneck \
+  --name draft_bottleneck_review \
+  --output configs/scenarios/single/draft_bottleneck_review.yaml
+
+uv run python scripts/tools/validate_scenario.py \
+  configs/scenarios/single/draft_bottleneck_review.yaml
+```
+
+The generator currently supports the conservative `bottleneck` template. It writes deterministic
+YAML with a `map_id`, `simulation_config`, empty `robot_config`, `metadata.authoring`, and explicit
+`seeds`. The validator is intentionally stricter than the general scenario loader for authored
+drafts: it requires a scenario name, exactly one map reference, required config/metadata sections,
+non-empty integer seeds, and then reuses the repository scenario loader plus map/config builder to
+catch map and config errors.
+
+Passing this authoring validator only means the draft is structurally reviewable and loadable. It is
+not scenario certification, benchmark promotion, or benchmark evidence.
+
 ## Scenario Contracts
 
 Versioned scenario-intent contracts live under `contracts/`. `scenario_contract.v1` captures

@@ -26,10 +26,10 @@ Use this short pointer in issue bodies or comments when reconciling duplicated s
 ```yaml
 slurm_issue_pointer:
   issue_number: 0000
-  slurm_state: not_submitted | submitted_running | completed_pending_artifact_promotion | artifact_rescue | rerun_required | failed_closed | inconclusive_close | completed_with_durable_evidence | parent_blocked | insufficient_data
+  slurm_state: "not_submitted | submitted_running | completed_pending_artifact_promotion | artifact_rescue | rerun_required | failed_closed | inconclusive_close | completed_with_durable_evidence | parent_blocked | insufficient_data"
   source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   last_verified: YYYY-MM-DD
-  artifact_status: missing | partial | durable | not_applicable
+  artifact_status: "missing | partial | durable | not_applicable"
   next_action: one short operational step
 ```
 

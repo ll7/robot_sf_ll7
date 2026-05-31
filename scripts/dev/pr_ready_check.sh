@@ -19,9 +19,11 @@ worktree_state() {
   fi
 }
 
-case "${PR_READY_MODE,,}" in
+pr_ready_mode_lower=$(printf '%s' "$PR_READY_MODE" | tr '[:upper:]' '[:lower:]')
+case "$pr_ready_mode_lower" in
   "")
-    case "${PR_READY_FINAL,,}" in
+    pr_ready_final_lower=$(printf '%s' "$PR_READY_FINAL" | tr '[:upper:]' '[:lower:]')
+    case "$pr_ready_final_lower" in
       1|true|yes|on) pr_ready_final=1 ;;
       0|false|no|off) pr_ready_final=0 ;;
       *)

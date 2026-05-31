@@ -169,6 +169,8 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
 
     assert "PR_READY_MODE" in script_text
     assert "PR_READY_FINAL" in script_text
+    assert ",," not in script_text
+    assert "tr '[:upper:]' '[:lower:]'" in script_text
     assert "final) pr_ready_final=1" in script_text
     assert "interim) pr_ready_final=0" in script_text
     assert "Final PR readiness requires a clean non-ignored worktree" in script_text

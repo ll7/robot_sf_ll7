@@ -38,7 +38,7 @@ A clean-room Tentabot-style primitive value scorer can reuse Robot SF's hybrid-r
 - `static_collision`: `1`
 - `timeout_low_progress`: `11`
 
-## Issue #1826 Comparison
+## Issue #1826 Comparison (2026-05-31)
 
 The safety retune lowers the hand-scored Tentabot-style scorer's speed/progress pressure and raises
 static-clearance, dynamic-clearance, TTC, and hard-safety margins. Against the predecessor

@@ -81,6 +81,9 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   summaries, parity tables, analyzer output, and checksums for issue #1484.
 - `issue_1501_adversarial_smoke_2026-05-28/`: compact row-status, sampler-comparison, failure
   archive, and checksum evidence for the first `crossing_ttc` adversarial smoke job.
+- `issue_1502_adversarial_two_family_2026-05-31/`: compact row-status, sampler-comparison,
+  failure-archive, guided-route, and checksum evidence for the bounded two-family adversarial
+  comparison run.
 - `camera_ready_all_planners_2026-05-04/`: compact camera-ready all-planners campaign summaries and
   reports from the May 4 run.
 - `issue_1692_topology_hypothesis_probe_2026-05-30/`: compact diagnostic-only evidence for the

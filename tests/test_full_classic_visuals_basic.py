@@ -41,7 +41,7 @@ class _Cfg:
         self.smoke_limit_jobs = True
         self.smoke_episodes = 1
         self.smoke_horizon_cap = 5
-        # Targets (unused placeholder for precision)
+        # Targets (unused coordinate sequence for precision)
         self.target_collision_half_width = 0.05
         self.target_success_half_width = 0.05
         self.target_snqi_half_width = 0.05

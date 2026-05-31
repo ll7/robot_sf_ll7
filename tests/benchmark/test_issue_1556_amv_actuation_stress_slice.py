@@ -76,6 +76,23 @@ def test_issue_1556_config_declares_synthetic_differential_drive_slice() -> None
         "latency_mode": "one-step-delay",
         "update_mode": "5hz-hold",
     }
+    assert payload["latency_stress_profile"] == {
+        "name": "learned-policy-latency-stress-v0",
+        "profile_version": "v0",
+        "claim_scope": "synthetic-only",
+        "observation_delay_steps": 1,
+        "action_delay_steps": 1,
+        "planner_update_mode": "hold-last",
+        "planner_update_period_steps": 2,
+        "inference_timeout_ms": 200.0,
+        "non_success_statuses": [
+            "fallback",
+            "degraded",
+            "timeout",
+            "not_available",
+            "failed",
+        ],
+    }
 
 
 def test_issue_1556_config_reuses_compact_primary_planner_set() -> None:

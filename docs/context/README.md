@@ -211,6 +211,8 @@ knowledge, not every transient iteration detail.
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * SLURM issue batch status 2026-05-21:
   [slurm_issue_batch_status_2026-05-21.md](slurm_issue_batch_status_2026-05-21.md)
+* Issue #1776 state-label routing:
+  [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md)
 * Issue #1397 Oracle Imitation Launch Packet:
   [issue_1397_oracle_imitation_launch_packet.md](issue_1397_oracle_imitation_launch_packet.md)
 * Issue #1353 Broader AMV Baseline Preflight:

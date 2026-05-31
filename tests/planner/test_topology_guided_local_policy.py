@@ -117,3 +117,41 @@ def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> Non
     route_corridor = diagnostics["last_decision"]["route_corridor"]
     assert route_corridor["topology_status"] == "ok"
     assert len(route_corridor["topology_hypotheses"]) == 2
+
+
+def test_topology_hypothesis_can_select_local_command_source() -> None:
+    """Available topology hypotheses should materially affect command selection."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            route_guide_enabled=False,
+            corridor_subgoal_enabled=False,
+            goal_progress_weight=0.0,
+            path_alignment_weight=0.0,
+            speed_preference_weight=0.0,
+            static_clearance_weight=0.0,
+            dynamic_clearance_weight=0.0,
+            ttc_weight=0.0,
+            heading_smoothness_weight=0.0,
+            velocity_smoothness_weight=0.0,
+            control_effort_weight=0.0,
+            freezing_weight=0.0,
+            oscillation_weight=0.0,
+            corridor_subgoal_route_progress_weight=8.0,
+            corridor_subgoal_tangent_alignment_weight=4.0,
+        )
+    )
+
+    linear, angular = planner.plan(_obs(occupied_cells=_two_gap_wall()))
+
+    diagnostics = planner.diagnostics()
+    last_decision = diagnostics["last_decision"]
+    assert np.isfinite(linear)
+    assert np.isfinite(angular)
+    assert last_decision["selected_source"] == "topology_hypothesis"
+    assert last_decision["route_corridor"]["topology_status"] == "ok"
+    assert last_decision["route_corridor"]["topology_hypothesis"]["hypothesis_id"]
+    assert last_decision["selected_terms"]["corridor_subgoal_tangent_alignment"] > 0.0
+    assert (
+        last_decision["topology_command_influence"]["selected_hypothesis_id"]
+        == last_decision["route_corridor"]["topology_hypothesis"]["hypothesis_id"]
+    )

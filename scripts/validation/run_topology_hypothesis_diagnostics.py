@@ -466,10 +466,32 @@ def _summarize_hypotheses(steps: list[dict[str, Any]]) -> dict[str, Any]:
             ),
         }
 
+    influence_examples: list[dict[str, Any]] = []
+    influence_counts: Counter[str] = Counter()
+    for row in steps:
+        influence = row.get("topology_command_influence")
+        if not isinstance(influence, dict):
+            continue
+        hypothesis_id = str(influence.get("selected_hypothesis_id") or "unknown")
+        influence_counts[hypothesis_id] += 1
+        if len(influence_examples) >= 10:
+            continue
+        influence_examples.append(
+            {
+                "step": int(row.get("step", -1)),
+                "selected_hypothesis_id": hypothesis_id,
+                "reason": influence.get("reason"),
+                "selected_score": influence.get("selected_score"),
+                "selected_terms": influence.get("selected_terms", {}),
+            }
+        )
+
     return {
         "topology_status_counts": dict(sorted(availability_counts.items())),
         "selected_source_counts": dict(sorted(selected_source_counts.items())),
         "hypothesis_progress_by_rank": progress_by_rank,
+        "topology_command_influence_counts": dict(sorted(influence_counts.items())),
+        "topology_command_influence_examples": influence_examples,
     }
 
 
@@ -487,6 +509,7 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
         f"- Trace JSON: `{trace_path}`",
         f"- Topology status counts: `{summary['topology_status_counts']}`",
         f"- Selected local command sources: `{summary['selected_source_counts']}`",
+        f"- Topology command influence counts: `{summary['topology_command_influence_counts']}`",
         "",
         "## Hypothesis Progress",
         "",
@@ -501,6 +524,28 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
             f"{row['last_remaining_distance_m']} | {row['progress_delta_m']} | "
             f"{row['min_static_clearance_m']} | {row['min_dynamic_clearance_m']} |"
         )
+
+    if summary["topology_command_influence_examples"]:
+        lines.extend(
+            [
+                "",
+                "## Topology Command Influence Examples",
+                "",
+                "| Step | Hypothesis | Reason | Selected score | Route progress term | Tangent alignment term |",
+                "|---:|---|---|---:|---:|---:|",
+            ]
+        )
+        for row in summary["topology_command_influence_examples"]:
+            terms = row.get("selected_terms", {})
+            if not isinstance(terms, dict):
+                terms = {}
+            lines.append(
+                "| "
+                f"{row['step']} | {row['selected_hypothesis_id']} | {row['reason']} | "
+                f"{row['selected_score']} | "
+                f"{terms.get('corridor_subgoal_route_progress')} | "
+                f"{terms.get('corridor_subgoal_tangent_alignment')} |"
+            )
 
     lines.extend(
         [
@@ -658,6 +703,9 @@ def main() -> int:  # noqa: C901, PLR0915
                     "selected_local_command_source": decision.get("selected_source"),
                     "planner_mode": decision.get("planner_mode"),
                     "planner_route_corridor": _json_ready(decision.get("route_corridor")),
+                    "topology_command_influence": _json_ready(
+                        decision.get("topology_command_influence")
+                    ),
                     "policy_command": _json_ready(policy_command),
                     "env_action": _json_ready(env_action),
                     "reward": float(reward),

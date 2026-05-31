@@ -54,11 +54,11 @@ cleanup() {
 trap cleanup EXIT
 
 run_in_allocation() {
-  if command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  if [[ "${ISSUE1475_USE_SRUN:-0}" == "1" ]] && command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]]; then
     log "Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
     srun --cpu_bind=cores --gpus-per-node=1 "$@"
   else
-    log "srun unavailable or not in a Slurm job; running directly."
+    log "Running directly inside the batch allocation; set ISSUE1475_USE_SRUN=1 to opt into srun."
     "$@"
   fi
 }

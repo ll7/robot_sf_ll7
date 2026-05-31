@@ -213,6 +213,8 @@ knowledge, not every transient iteration detail.
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
 * Issue #1556 synthetic AMV actuation stress slice:
   [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
+* Issue #1606 Full Classic placeholder retirement:
+  [issue_1606_full_classic_placeholder_retirement.md](issue_1606_full_classic_placeholder_retirement.md)
 * Issue #1744 Latency Stress Preflight Contract (2026-05-30):
   [issue_1744_latency_stress_preflight_contract.md](issue_1744_latency_stress_preflight_contract.md)
 * Issue #1629 Latency-Aware Learned Navigation Safety (2026-05-30):

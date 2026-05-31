@@ -1592,11 +1592,17 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             normalized_robot_command_mode=normalized_robot_command_mode,
         )
 
-    if algo_key == "adaptive_proxemic_selector_v0":
-        selector_config = build_adaptive_proxemic_selector_config(algo_config)
+    if algo_key in {"adaptive_proxemic_selector_v0", "adaptive_proxemic_selector_v1"}:
+        selector_algo_config = dict(algo_config)
+        selector_algo_config.setdefault(
+            "selector_version",
+            "v1" if algo_key == "adaptive_proxemic_selector_v1" else "v0",
+        )
+        selector_config = build_adaptive_proxemic_selector_config(selector_algo_config)
         adapter = AdaptiveProxemicSelectorAdapter(config=selector_config)
         meta["adaptive_proxemic_selector"] = {
             "status": "enabled",
+            "selector_version": selector_config.selector_version,
             "diagnostic_only": bool(selector_config.diagnostic_only),
             "claim_boundary": selector_config.claim_boundary,
             "profile_sources": [
@@ -1606,7 +1612,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         }
         return _build_adapter_policy(
             algo_key=algo_key,
-            algo_config=algo_config,
+            algo_config=selector_algo_config,
             meta=meta,
             adapter=adapter,
             adapter_name="AdaptiveProxemicSelectorAdapter",

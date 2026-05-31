@@ -251,6 +251,7 @@ def test_build_policy_routes_adaptive_proxemic_selector_with_diagnostics() -> No
 
     assert meta["adaptive_proxemic_selector"]["diagnostic_only"] is True
     assert meta["adaptive_proxemic_selector"]["claim_boundary"] == "diagnostic_only"
+    assert meta["adaptive_proxemic_selector"]["selector_version"] == "v0"
     linear, angular = policy(
         {
             "robot": {
@@ -277,6 +278,22 @@ def test_build_policy_routes_adaptive_proxemic_selector_with_diagnostics() -> No
     diagnostics = policy._planner_stats()
     assert diagnostics["last_selection"]["selected_profile"] == "open"
     assert diagnostics["last_selection"]["trigger_reason"] == "clear_low_density"
+
+
+def test_build_policy_routes_adaptive_proxemic_selector_v1_with_diagnostics() -> None:
+    """Map-runner policy construction should expose the v1 selector version."""
+    _policy, meta = _build_policy(
+        "adaptive_proxemic_selector_v1",
+        {
+            "allow_testing_algorithms": True,
+            "selector_version": "v1",
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["adaptive_proxemic_selector"]["diagnostic_only"] is True
+    assert meta["adaptive_proxemic_selector"]["claim_boundary"] == "diagnostic_only"
+    assert meta["adaptive_proxemic_selector"]["selector_version"] == "v1"
 
 
 def test_scenario_with_episode_seed_defaults_fills_missing_route_spawn_seed() -> None:

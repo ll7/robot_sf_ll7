@@ -174,6 +174,30 @@ def test_adaptive_proxemic_selector_candidate_is_diagnostic_only() -> None:
     )
 
 
+def test_adaptive_proxemic_selector_v1_candidate_is_diagnostic_only() -> None:
+    """The v1 proxemic selector should keep the diagnostic-only boundary."""
+    registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"
+
+    entry, payload, merged, config_path = load_candidate_definition(
+        registry_path,
+        "adaptive_proxemic_selector_v1",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["training_required"] is False
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "adaptive_proxemic_selector_v1"
+    assert payload["params"]["selector_version"] == "v1"
+    assert payload["params"]["diagnostic_only"] is True
+    assert merged["diagnostic_only"] is True
+    assert merged["selector_version"] == "v1"
+    assert sorted(merged["profiles"]) == ["conservative", "neutral", "open"]
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/adaptive_proxemic_selector_v1.yaml").resolve()
+    )
+
+
 def test_mpc_clearance_guarded_candidate_enables_static_guard() -> None:
     """Guarded NMPC candidate should keep the legacy sampler separate and diagnostic-only."""
     entry, payload, merged, config_path = load_candidate_definition(

@@ -517,6 +517,22 @@ candidates:
     required_stages:
       - smoke
 
+  adaptive_proxemic_selector_v1:
+    status: experimental_spike
+    family: proxemic_profile_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/adaptive_proxemic_selector_v1.yaml
+    hypothesis: >
+      A neutral-default local-context selector should avoid using the open
+      proxemic profile unless sparse low-progress context suggests
+      over-conservatism, while routing near-human, dense, or constrained
+      passage contexts to the conservative profile. This row is diagnostic
+      only until comfort and near-miss tradeoffs are reviewed.
+    required_stages:
+      - smoke
+
   hybrid_rule_v3_waypoint2_progress:
     status: implemented
     family: hybrid_rule_based

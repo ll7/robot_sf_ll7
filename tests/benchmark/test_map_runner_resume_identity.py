@@ -336,6 +336,119 @@ def test_scenario_identity_includes_observation_noise_hash() -> None:
     )
 
 
+def test_scenario_identity_includes_latency_stress_profile() -> None:
+    """Resume identity should distinguish latency-stress profile variants."""
+    scenario = _minimal_map_scenario()
+
+    one_step = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=0.1,
+        record_forces=True,
+        latency_stress_profile={
+            "name": "learned-policy-latency-stress-v0",
+            "observation_delay_steps": 1,
+            "action_delay_steps": 1,
+            "planner_update_mode": "hold-last",
+            "planner_update_period_steps": 2,
+        },
+    )
+    two_step = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=0.1,
+        record_forces=True,
+        latency_stress_profile={
+            "name": "learned-policy-latency-stress-v0",
+            "observation_delay_steps": 2,
+            "action_delay_steps": 1,
+            "planner_update_mode": "hold-last",
+            "planner_update_period_steps": 2,
+        },
+    )
+
+    assert one_step["latency_stress_profile"]["observation_delay_steps"] == 1
+    assert map_runner._compute_map_episode_id(
+        one_step,
+        seed=1,
+    ) != map_runner._compute_map_episode_id(two_step, seed=1)
+
+
+def test_resume_identity_uses_effective_latency_profile_dt(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Omitted run dt should not make latency-profile resume identities drift."""
+    written_ids: set[str] = set()
+    latency_profile = {
+        "name": "learned-policy-latency-stress-v0",
+        "observation_delay_steps": 1,
+        "action_delay_steps": 1,
+        "planner_update_mode": "hold-last",
+        "planner_update_period_steps": 2,
+    }
+
+    monkeypatch.setattr(map_runner, "validate_scenario_list", lambda _scenarios: [])
+    monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
+    monkeypatch.setattr(
+        map_runner,
+        "_compute_map_episode_id",
+        lambda payload, seed: f"{payload['latency_stress_profile']['action_delay_ms']}--{seed}",
+    )
+
+    def _fake_worker(job: tuple[dict, int, dict]) -> dict[str, str]:
+        """Compute the same latency-scoped episode identity that the real worker returns."""
+        scenario, seed, params = job
+        identity_payload = map_runner._scenario_identity_payload(
+            scenario,
+            algo=str(params.get("algo", "goal")),
+            algo_config=dict(params.get("algo_config", {})),
+            horizon=params.get("horizon"),
+            dt=params.get("dt"),
+            record_forces=bool(params.get("record_forces", True)),
+            observation_mode=params.get("observation_mode"),
+            observation_noise=params.get("observation_noise"),
+            latency_stress_profile=params.get("latency_stress_profile"),
+        )
+        return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
+
+    def _fake_write(_out: Path, _schema: dict, record: dict[str, str]) -> None:
+        """Record written episode IDs without touching JSONL output."""
+        written_ids.add(record["episode_id"])
+
+    monkeypatch.setattr(map_runner, "_run_map_job_worker", _fake_worker)
+    monkeypatch.setattr(map_runner, "_write_validated", _fake_write)
+
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text("", encoding="utf-8")
+
+    first = map_runner.run_map_batch(
+        [_minimal_map_scenario()],
+        out_path,
+        schema_path=SCHEMA_PATH,
+        latency_stress_profile=latency_profile,
+        resume=False,
+    )
+    assert first["written"] == 1
+    assert first["latency_stress_profile"]["action_delay_ms"] == 100.0
+
+    monkeypatch.setattr(map_runner, "index_existing", lambda _path: set(written_ids))
+
+    second = map_runner.run_map_batch(
+        [_minimal_map_scenario()],
+        out_path,
+        schema_path=SCHEMA_PATH,
+        latency_stress_profile=latency_profile,
+        resume=True,
+    )
+
+    assert second["written"] == 0
+
+
 def test_scenario_identity_includes_observation_mode() -> None:
     """Observation-mode parity runs should not collide in resume identity."""
     scenario = _minimal_map_scenario()

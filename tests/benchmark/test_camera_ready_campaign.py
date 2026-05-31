@@ -251,6 +251,27 @@ def test_load_campaign_config_rejects_malformed_synthetic_actuation_profile(
         load_campaign_config(config_path)
 
 
+def test_load_campaign_config_rejects_malformed_latency_stress_profile(
+    tmp_path: Path,
+) -> None:
+    """Malformed latency-stress profile payloads should fail closed."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_latency_profile",
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "latency_stress_profile": [],
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TypeError, match="latency_stress_profile must be a mapping"):
+        load_campaign_config(config_path)
+
+
 def test_load_campaign_config_rejects_non_synthetic_actuation_claim_scope(
     tmp_path: Path,
 ) -> None:
@@ -273,6 +294,38 @@ def test_load_campaign_config_rejects_non_synthetic_actuation_claim_scope(
                     "max_angular_accel_rad_s2": 4.0,
                     "latency_mode": "one-step-delay",
                     "update_mode": "5hz-hold",
+                },
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="claim_scope must be 'synthetic-only'"):
+        load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_invalid_latency_stress_scope(
+    tmp_path: Path,
+) -> None:
+    """Latency-stress diagnostics should stay synthetic-only and non-paper-facing."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "bad_latency_scope",
+                "paper_facing": False,
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "kinematics_matrix": ["differential_drive"],
+                "latency_stress_profile": {
+                    "name": "learned-policy-latency-stress-v0",
+                    "profile_version": "v0",
+                    "claim_scope": "hardware-calibrated",
+                    "observation_delay_steps": 1,
+                    "action_delay_steps": 1,
+                    "planner_update_mode": "hold-last",
+                    "planner_update_period_steps": 2,
+                    "inference_timeout_ms": 200.0,
                 },
                 "planners": [{"key": "goal", "algo": "goal"}],
             }
@@ -389,6 +442,16 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
                     "latency_mode": "one-step-delay",
                     "update_mode": "5hz-hold",
                 },
+                "latency_stress_profile": {
+                    "name": "learned-policy-latency-stress-v0",
+                    "profile_version": "v0",
+                    "claim_scope": "synthetic-only",
+                    "observation_delay_steps": 1,
+                    "action_delay_steps": 1,
+                    "planner_update_mode": "hold-last",
+                    "planner_update_period_steps": 2,
+                    "inference_timeout_ms": 200.0,
+                },
                 "planners": [{"key": "goal", "algo": "goal", "planner_group": "core"}],
             }
         ),
@@ -438,6 +501,11 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
         "francis2023_intersection_wait",
     ]
     assert manifest["synthetic_actuation_profile"]["name"] == "amv-actuation-stress-v0"
+    assert manifest["latency_stress_profile"]["name"] == "learned-policy-latency-stress-v0"
+    assert manifest["latency_stress_profile"]["observation_delay_ms"] is None
+    assert validate_payload["latency_stress_profile"]["action_delay_steps"] == 1
+    assert validate_payload["latency_stress_metrics"]["held_action_ratio"] == "not_available"
+    assert preview_payload["latency_stress_profile"]["planner_update_mode"] == "hold-last"
     assert manifest["seed_policy"]["seed_set"] == "eval"
 
 
@@ -1068,6 +1136,41 @@ def test_load_holonomic_camera_ready_campaign_config() -> None:
 
     ppo_cfg = yaml.safe_load(planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
     assert ppo_cfg["fallback_to_goal"] is False
+
+
+def test_load_campaign_config_treats_null_kinematics_matrix_as_default(
+    tmp_path: Path,
+) -> None:
+    """YAML null kinematics matrices should use the same default as an omitted matrix."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "null_kinematics.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: null_kinematics",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "kinematics_matrix:",
+                "latency_stress_profile:",
+                "  name: learned-policy-latency-stress-v0",
+                "  action_delay_steps: 1",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_campaign_config(config_path)
+
+    assert cfg.kinematics_matrix == ("differential_drive",)
 
 
 def test_load_paper_cross_kinematics_v1_campaign_config() -> None:
@@ -1779,6 +1882,16 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
                     "latency_mode": "one-step-delay",
                     "update_mode": "5hz-hold",
                 },
+                "latency_stress_profile": {
+                    "name": "learned-policy-latency-stress-v0",
+                    "profile_version": "v0",
+                    "claim_scope": "synthetic-only",
+                    "observation_delay_steps": 1,
+                    "action_delay_steps": 1,
+                    "planner_update_mode": "hold-last",
+                    "planner_update_period_steps": 2,
+                    "inference_timeout_ms": 200.0,
+                },
                 "planners": [{"key": "goal", "algo": "goal", "planner_group": "core"}],
             }
         ),
@@ -1807,6 +1920,7 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
             "scenario_params": {
                 "algo": algo,
                 "synthetic_actuation_profile": kwargs["synthetic_actuation_profile"],
+                "latency_stress_profile": kwargs["latency_stress_profile"],
             },
             "metrics": {
                 "success": 1.0,
@@ -1857,8 +1971,12 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
             "preflight": {
                 "status": "ok",
                 "synthetic_actuation_profile": kwargs["synthetic_actuation_profile"],
+                "latency_stress_profile": kwargs["latency_stress_profile"],
+                "latency_stress_metrics": {"held_action_ratio": "not_available"},
             },
             "synthetic_actuation_profile": kwargs["synthetic_actuation_profile"],
+            "latency_stress_profile": kwargs["latency_stress_profile"],
+            "latency_stress_metrics": {"held_action_ratio": "not_available"},
         }
 
     def _fake_compute_aggregates_with_ci(
@@ -1909,9 +2027,18 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
     )
 
     assert run_batch_calls[0]["synthetic_actuation_profile"]["name"] == "amv-actuation-stress-v0"
+    assert run_batch_calls[0]["latency_stress_profile"]["name"] == (
+        "learned-policy-latency-stress-v0"
+    )
     assert summary_payload["campaign"]["synthetic_actuation_profile"]["name"] == (
         "amv-actuation-stress-v0"
     )
+    assert summary_payload["campaign"]["latency_stress_profile"]["action_delay_steps"] == 1
+    assert summary_payload["campaign"]["latency_stress_metrics"]["held_action_ratio"] == (
+        "not_available"
+    )
+    assert summary_payload["campaign"]["benchmark_success"] is False
+    assert summary_payload["campaign"]["evidence_status"] == "blocked"
     assert summary_payload["artifacts"]["actuation_envelope_json"].endswith(
         "reports/actuation_envelope_summary.json"
     )

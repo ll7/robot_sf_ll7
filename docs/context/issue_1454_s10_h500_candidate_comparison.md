@@ -118,6 +118,11 @@ ahead after the S10 rerun.
 - SNQI diagnostics for this campaign report contract status `fail`, including negative rank
   alignment. Use direct success, collision, and near-miss metrics for claims; treat SNQI as
   diagnostic only.
+- The compact campaign evidence predates explicit `benchmark_track` and `track_schema_version`
+  metadata. Treat it as `legacy_track_unknown` per
+  [issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md):
+  valid for this historical S10/h500 surface, but not safe to aggregate with track-aware result rows
+  or compare across observation tracks.
 - The h500 surface should not replace fixed h100 in issue #1454 without an explicit scope decision.
   The fixed h100 Stage A gate remains failed at campaign level because `socnav_bench` failed closed.
 

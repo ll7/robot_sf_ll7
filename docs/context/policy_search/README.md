@@ -58,12 +58,25 @@ Use it for three things only:
   remaining `hybrid_rule_v3_fast_progress_static_escape` static-route and leave-group failures.
 - `2026-05-20_navdp_nomad_diffusion_assessment.md`: Issue #1356 Assessment of NavDP and NoMaD
   Diffusion-Navigation Source Contracts, with Monitor-Only Verdicts for Robot SF Local-Planner Use.
+- `2026-05-30_diffusion_policy_feasibility_issue_1621.md`: Issue #1621 broader feasibility
+  assessment for diffusion, consistency, and trajectory-diffusion local-navigation policy families;
+  current verdict is no external adapter and monitor/source-first until a Robot SF-compatible
+  observation/action contract and latency proof exist.
 - `../issue_1318_teb_corridor_deadlock_eval.md`: issue #1318 classic-merging corridor-deadlock
   comparison showing current in-repo TEB collides on the selected #1022 seeds while the hybrid-rule
   incumbent solves four of five.
 - `2026-05-20_learned_local_navigation_screen.md`: Issue #1355 Source-Backed Screening Matrix for
   learning-based local-navigation candidates, with implement/source-first/monitor/reject verdicts
   and links to existing Robot SF duplicate boundaries.
+- `issue_1758_arena_rosnav_source_assessment.md`: Arena-Rosnav source-side assessment; current
+  verdict is `source-side reproduction first` because the source requires a ROS Noetic/Gazebo
+  Arena workspace and no durable trained-policy files were bundled in the checked source.
+- `2026-05-30_external_learned_policy_ranking_issue_1620.md`: Issue #1620 ranked external
+  learned-policy shortlist across graph/social-RL, ROSNav, diffusion/visual, transformer, VLA, and
+  mapless-baseline families, with source/checkpoint/adapter-fit verdicts and follow-up routing.
+- `2026-05-30_foundation_model_readiness_issue_1626.md`: Issue #1626 readiness boundary for
+  foundation-model, VLA, and multimodal navigation policy families; current verdict is interface
+  design or monitor-only, not model integration.
 - `../issue_1368_neupan_point_obstacle_assessment.md`: source-side NeuPAN assessment; current
   verdict is monitor/source-side only because GPL-3.0, source-environment, runtime, and
   point-obstacle/social-claim boundaries block a Robot SF adapter for now.
@@ -88,6 +101,9 @@ Use it for three things only:
 - `../issue_1618_learned_policy_adapter_interface.md`: adapter-interface contract that turns the
   learned-policy eligibility checklist into runtime loading, inference, action-adaptation,
   diagnostics, and fail-closed status requirements.
+- `../issue_1627_learned_policy_transfer_benchmark.md`: benchmark design for imported learned
+  policies; defines source-intake/source-reproduction/adapter-metadata/smoke/benchmark stages,
+  required transfer metadata, fail-closed statuses, and first implementation scope.
 - `../issue_1761_learned_policy_transfer_metadata_validator.md`: metadata-only validator for
   `algorithm_metadata.transfer_benchmark`; includes native PPO and blocked CrowdNav HEIGHT fixtures
   and keeps fallback/degraded/not-available rows from claiming benchmark success.

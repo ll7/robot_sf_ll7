@@ -8,6 +8,7 @@ persists a manifest using the imitation helpers for downstream workflows.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import shlex
 import subprocess
 import sys
@@ -45,6 +46,15 @@ from scripts.training.train_ppo import _apply_env_overrides
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
+
+DEFAULT_DATASET_SPLIT = "train"
+DECISION_TRANSFORMER_REWARD_CONVENTION = "environment_step_reward"
+DECISION_TRANSFORMER_RETURN_CONVENTION = "undiscounted_future_return_to_go"
+DECISION_TRANSFORMER_STATUS_POLICY = {
+    "readiness_status_excluded": ["fallback", "degraded"],
+    "availability_status_excluded": ["not_available"],
+    "handling": "exclude_or_explicitly_label_before_training",
+}
 
 
 def _resolve_scenario_config(
@@ -119,6 +129,17 @@ def _command_line() -> str:
     return " ".join(shlex.quote(arg) for arg in sys.argv)
 
 
+def _file_sha256(path: Path) -> str | None:
+    """Return a SHA-256 checksum for a written file when it exists."""
+    if not path.exists():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _zero_action(space: Any) -> np.ndarray:
     """Create a zero-valued action compatible with an action space.
 
@@ -133,13 +154,29 @@ def _zero_action(space: Any) -> np.ndarray:
     return np.zeros(shape, dtype=dtype)
 
 
+def _return_to_go(rewards: Sequence[float]) -> list[float]:
+    """Compute undiscounted return-to-go values for one episode."""
+    running_total = 0.0
+    returns: list[float] = []
+    for reward in reversed(rewards):
+        running_total += float(reward)
+        returns.append(running_total)
+    returns.reverse()
+    return returns
+
+
+def _episode_id(dataset_id: str, scenario_label: str, episode_index: int) -> str:
+    """Build a stable episode id for dataset and manifest split metadata."""
+    return f"{dataset_id}:{scenario_label}:episode_{episode_index:06d}"
+
+
 def _record_episode(
     env: Any,
     *,
     policy: PPO | None,
     dry_run: bool,
     observation_adapter: Callable[[Mapping[str, Any]], Any] | None = None,
-) -> tuple[list[Any], list[Any], list[Any]]:
+) -> dict[str, list[Any]]:
     """Record one episode using policy-compatible observations.
 
     Args:
@@ -150,7 +187,7 @@ def _record_episode(
             policy inference and dataset storage.
 
     Returns:
-        Episode positions, actions, and adapted observations.
+        Episode trajectory fields, including Decision-Transformer-ready reward labels.
     """
     raw_obs, _ = env.reset()
     obs = observation_adapter(raw_obs) if observation_adapter is not None else raw_obs
@@ -158,6 +195,9 @@ def _record_episode(
     positions: list[Any] = []
     actions: list[Any] = []
     observations: list[Any] = []
+    rewards: list[float] = []
+    terminated_flags: list[bool] = []
+    truncated_flags: list[bool] = []
     steps = 0
     max_steps = env.state.max_sim_steps
 
@@ -166,18 +206,29 @@ def _record_episode(
             action = _zero_action(env.action_space)
         else:
             action, _ = policy.predict(obs, deterministic=True)
-        raw_next_obs, _reward, terminated, truncated, _info = env.step(action)
+        raw_next_obs, reward, terminated, truncated, _info = env.step(action)
         next_obs = (
             observation_adapter(raw_next_obs) if observation_adapter is not None else raw_next_obs
         )
         positions.append(tuple(env.state.nav.pos))
         actions.append(np.asarray(action, dtype=float))
         observations.append(next_obs)
+        rewards.append(float(reward))
+        terminated_flags.append(bool(terminated))
+        truncated_flags.append(bool(truncated))
         obs = next_obs
         done = bool(terminated or truncated)
         steps += 1
 
-    return positions, actions, observations
+    return {
+        "positions": positions,
+        "actions": actions,
+        "observations": observations,
+        "rewards": rewards,
+        "terminated": terminated_flags,
+        "truncated": truncated_flags,
+        "return_to_go": _return_to_go(rewards),
+    }
 
 
 def _record_dataset(
@@ -189,7 +240,7 @@ def _record_dataset(
     scenario: Mapping[str, Any],
     scenario_path: Path,
     observation_adapter: Callable[[Mapping[str, Any]], Any] | None = None,
-) -> tuple[dict[str, list[np.ndarray]], dict[str, int]]:
+) -> tuple[dict[str, list[np.ndarray]], dict[str, int], dict[str, Any]]:
     """Record all requested episodes for one scenario.
 
     Args:
@@ -208,8 +259,22 @@ def _record_dataset(
         "positions": [],
         "actions": [],
         "observations": [],
+        "rewards": [],
+        "terminated": [],
+        "truncated": [],
+        "return_to_go": [],
+        "episode_ids": [],
+        "scenario_ids": [],
+        "seeds": [],
     }
     coverage: dict[str, int] = {}
+    split_metadata: dict[str, Any] = {
+        DEFAULT_DATASET_SPLIT: {
+            "episode_ids": [],
+            "scenario_ids": [],
+            "seeds": [],
+        }
+    }
 
     for episode in range(config.episodes):
         seed = int(config.random_seeds[episode % len(config.random_seeds)])
@@ -217,7 +282,7 @@ def _record_dataset(
         _apply_env_overrides(env_config, config.env_overrides)
         env = make_robot_env(config=env_config, seed=seed, **config.env_factory_kwargs)
         try:
-            positions, actions, observations = _record_episode(
+            episode_record = _record_episode(
                 env,
                 policy=policy,
                 dry_run=dry_run,
@@ -225,11 +290,25 @@ def _record_dataset(
             )
         finally:
             env.close()
-        dataset["positions"].append(np.asarray(positions, dtype=object))
-        dataset["actions"].append(np.asarray(actions, dtype=object))
-        dataset["observations"].append(np.asarray(observations, dtype=object))
+        episode_id = _episode_id(config.dataset_id, scenario_label, episode)
+        dataset["positions"].append(np.asarray(episode_record["positions"], dtype=object))
+        dataset["actions"].append(np.asarray(episode_record["actions"], dtype=object))
+        dataset["observations"].append(np.asarray(episode_record["observations"], dtype=object))
+        dataset["rewards"].append(np.asarray(episode_record["rewards"], dtype=float))
+        dataset["terminated"].append(np.asarray(episode_record["terminated"], dtype=bool))
+        dataset["truncated"].append(np.asarray(episode_record["truncated"], dtype=bool))
+        dataset["return_to_go"].append(np.asarray(episode_record["return_to_go"], dtype=float))
+        dataset["episode_ids"].append(np.asarray([episode_id], dtype=object))
+        dataset["scenario_ids"].append(np.asarray([scenario_label], dtype=object))
+        dataset["seeds"].append(np.asarray([seed], dtype=int))
+        split_metadata[DEFAULT_DATASET_SPLIT]["episode_ids"].append(episode_id)
+        split_metadata[DEFAULT_DATASET_SPLIT]["scenario_ids"].append(scenario_label)
+        split_metadata[DEFAULT_DATASET_SPLIT]["seeds"].append(seed)
         coverage[scenario_label] = coverage.get(scenario_label, 0) + 1
-    return dataset, coverage
+    split_metadata[DEFAULT_DATASET_SPLIT]["scenario_ids"] = sorted(
+        set(split_metadata[DEFAULT_DATASET_SPLIT]["scenario_ids"])
+    )
+    return dataset, coverage, split_metadata
 
 
 def _write_dataset(
@@ -249,9 +328,7 @@ def _write_dataset(
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         path,
-        positions=np.array(arrays["positions"], dtype=object),
-        actions=np.array(arrays["actions"], dtype=object),
-        observations=np.array(arrays["observations"], dtype=object),
+        **{name: np.array(values, dtype=object) for name, values in sorted(arrays.items())},
         episode_count=np.array(episode_count),
         metadata=metadata,
     )
@@ -390,7 +467,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         observation_contract = observation_contract_from_space(policy.observation_space)
         observation_adapter = resolve_policy_obs_adapter(policy)
 
-    arrays, coverage = _record_dataset(
+    arrays, coverage, split_metadata = _record_dataset(
         collection_config,
         policy=policy,
         dry_run=args.dry_run,
@@ -417,6 +494,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         "env_factory_kwargs": dict(collection_config.env_factory_kwargs),
         "random_seeds": list(collection_config.random_seeds),
         "scenario_coverage": coverage,
+        "dataset_schema": "trajectory_dataset.v2.decision_transformer_preflight",
+        "trajectory_fields": sorted(arrays.keys()),
+        "splits": split_metadata,
+        "reward_convention": DECISION_TRANSFORMER_REWARD_CONVENTION,
+        "return_convention": DECISION_TRANSFORMER_RETURN_CONVENTION,
+        "status_policy": DECISION_TRANSFORMER_STATUS_POLICY,
+        "durable_artifact_uri_policy": (
+            "worktree-local output paths are not durable; promote required datasets to an "
+            "explicit artifact store and record that URI before training depends on them"
+        ),
         "training_config": str(training_config_path) if training_config_path else None,
         "observation_contract": observation_contract,
         "command": _command_line(),
@@ -426,9 +513,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
 
     _write_dataset(dataset_path, arrays, len(arrays["positions"]), metadata)
+    metadata["dataset_sha256"] = _file_sha256(dataset_path)
 
     validator = TrajectoryDatasetValidator(dataset_path)
-    validation_result = validator.validate(minimum_episodes=collection_config.episodes)
+    validation_result = validator.validate(
+        minimum_episodes=collection_config.episodes,
+        require_decision_transformer_fields=True,
+    )
 
     dataset_artifact = common.TrajectoryDatasetArtifact(
         dataset_id=collection_config.dataset_id,

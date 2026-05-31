@@ -694,6 +694,32 @@ def _resolve_policy_search_candidate_runtime(
     return default_algo, effective
 
 
+def _apply_planner_selector_v2_context(
+    algo: str,
+    policy_cfg: dict[str, Any],
+    *,
+    scenario: dict[str, Any],
+    seed: int,
+) -> dict[str, Any]:
+    """Attach selector-v2 scenario context wherever effective runtime config is materialized.
+
+    Returns:
+        Runtime config with selector context for planner-selector v2, otherwise the original config.
+    """
+    if str(algo).strip().lower() != "planner_selector_v2_diagnostic":
+        return policy_cfg
+    return _deep_merge_config(
+        policy_cfg,
+        {
+            "selector_context": {
+                "scenario_id": _scenario_id(scenario),
+                "scenario_family": _scenario_family(scenario),
+                "seed": int(seed),
+            }
+        },
+    )
+
+
 def _build_planner_selector_v2_child_adapter(
     *,
     candidate_name: str,
@@ -3133,17 +3159,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo_config=raw_policy_cfg,
         scenario=scenario,
     )
-    if str(algo).strip().lower() == "planner_selector_v2_diagnostic":
-        policy_cfg = _deep_merge_config(
-            policy_cfg,
-            {
-                "selector_context": {
-                    "scenario_id": scenario_id,
-                    "scenario_family": _scenario_family(scenario),
-                    "seed": int(seed),
-                }
-            },
-        )
+    policy_cfg = _apply_planner_selector_v2_context(
+        algo,
+        policy_cfg,
+        scenario=scenario,
+        seed=int(seed),
+    )
     active_observation_mode = resolve_observation_mode(
         algo,
         observation_mode,
@@ -3979,6 +4000,12 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     algo_config_path=algo_config_path,
                     algo_config=raw_policy_cfg,
                     scenario=sc,
+                )
+                identity_cfg = _apply_planner_selector_v2_context(
+                    identity_algo,
+                    identity_cfg,
+                    scenario=sc,
+                    seed=int(seed),
                 )
                 identity_observation_mode = resolve_observation_mode(
                     identity_algo,

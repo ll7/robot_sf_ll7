@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.map_runner import (
+    _apply_planner_selector_v2_context,
     _build_policy,
     _build_socnav_config,
     _default_robot_command_space,
@@ -193,6 +194,41 @@ def test_resolve_policy_search_candidate_runtime_switches_algo_for_scenario(
 
     assert algo == "orca"
     assert cfg == {"orca_time_horizon": 4.0, "max_linear_speed": 1.15}
+
+
+def test_planner_selector_v2_runtime_preserves_child_candidate_paths() -> None:
+    """Runtime candidate resolution should keep selector child config paths available."""
+    config_path = Path("configs/policy_search/candidates/planner_selector_v2_diagnostic.yaml")
+
+    algo, cfg = _resolve_policy_search_candidate_runtime(
+        default_algo="planner_selector_v2_diagnostic",
+        algo_config_path=str(config_path),
+        scenario={"name": "planner_sanity_simple"},
+    )
+
+    assert algo == "planner_selector_v2_diagnostic"
+    assert sorted(cfg["candidate_config_paths"]) == [
+        "baseline",
+        "fast_progress_static_escape",
+        "proxemic_conservative",
+        "topology_route",
+    ]
+
+
+def test_planner_selector_v2_context_is_applied_to_runtime_identity() -> None:
+    """Selector context used for execution should also be available for identity hashing."""
+    cfg = _apply_planner_selector_v2_context(
+        "planner_selector_v2_diagnostic",
+        {"selector": {}, "candidate_config_paths": {}},
+        scenario={"name": "planner_sanity_simple"},
+        seed=111,
+    )
+
+    assert cfg["selector_context"] == {
+        "scenario_id": "planner_sanity_simple",
+        "scenario_family": "nominal",
+        "seed": 111,
+    }
 
 
 def test_scenario_with_episode_seed_defaults_fills_missing_route_spawn_seed() -> None:

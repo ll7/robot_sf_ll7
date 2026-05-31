@@ -40,12 +40,17 @@ def _obs(
     robot: tuple[float, float] = (0.0, 0.0),
     goal: tuple[float, float] = (3.0, 0.0),
     peds: list[tuple[float, float]] | None = None,
+    ped_count: int | None = None,
 ) -> dict[str, object]:
     """Build a compact SocNav-style observation."""
+    ped_positions = [list(pos) for pos in (peds or [])]
+    pedestrians: dict[str, object] = {"positions": ped_positions}
+    if ped_count is not None:
+        pedestrians["count"] = [ped_count]
     return {
         "robot": {"position": list(robot), "heading": [0.0]},
         "goal": {"current": list(goal)},
-        "pedestrians": {"positions": [list(pos) for pos in (peds or [])]},
+        "pedestrians": pedestrians,
     }
 
 
@@ -137,6 +142,60 @@ def test_seed_sensitive_open_space_rule_selects_fast_progress_head() -> None:
     decision = selector.last_decision()
     assert decision["selected_head"] == "fast_progress_static_escape"
     assert decision["trigger_reason"] == "predeclared_seed_sensitive_low_progress_risk"
+
+
+def test_missing_robot_position_uses_default_without_leakage() -> None:
+    """Malformed current observations should fall back without reading outcome fields."""
+    selector = PlannerSelectorV2DiagnosticAdapter(
+        config=PlannerSelectorV2DiagnosticConfig(
+            scenario_id="planner_sanity_simple",
+            scenario_family="nominal",
+            dense_ped_count=2,
+            comfort_distance_m=1.1,
+        ),
+        candidate_adapters={
+            "baseline": _DummyAdapter((0.1, 0.0)),
+            "topology_route": _DummyAdapter((0.2, 0.0)),
+            "proxemic_conservative": _DummyAdapter((0.3, 0.0)),
+            "fast_progress_static_escape": _DummyAdapter((0.4, 0.0)),
+        },
+    )
+    obs = _obs(peds=[(0.7, 0.0), (0.9, 0.2)])
+    obs["robot"]["position"] = None
+    obs["outcome"] = {"success": True}
+    obs["termination_reason"] = "success"
+
+    command = selector.plan(obs)
+
+    assert command == (0.3, 0.0)
+    diagnostics = selector.diagnostics()
+    assert diagnostics["selected_candidate"] == "proxemic_conservative"
+    assert diagnostics["no_leakage"]["current_episode_outcome_fields_used"] == []
+
+
+def test_pedestrian_risk_honors_declared_count() -> None:
+    """Padded pedestrian rows beyond the declared count should not drive routing."""
+    selector = PlannerSelectorV2DiagnosticAdapter(
+        config=PlannerSelectorV2DiagnosticConfig(
+            scenario_id="planner_sanity_simple",
+            scenario_family="nominal",
+            dense_ped_count=1,
+            comfort_distance_m=1.1,
+        ),
+        candidate_adapters={
+            "baseline": _DummyAdapter((0.1, 0.0)),
+            "topology_route": _DummyAdapter((0.2, 0.0)),
+            "proxemic_conservative": _DummyAdapter((0.3, 0.0)),
+            "fast_progress_static_escape": _DummyAdapter((0.4, 0.0)),
+        },
+    )
+
+    command = selector.plan(_obs(peds=[(0.5, 0.0)], ped_count=0))
+
+    assert command == (0.1, 0.0)
+    decision = selector.last_decision()
+    assert decision["rule_inputs"]["near_pedestrian_count"] == 0
+    assert decision["rule_inputs"]["min_pedestrian_distance_m"] is None
 
 
 def test_default_rule_selects_baseline_and_reset_clears_diagnostics() -> None:

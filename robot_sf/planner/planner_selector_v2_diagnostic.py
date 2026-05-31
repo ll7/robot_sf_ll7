@@ -240,12 +240,28 @@ class PlannerSelectorV2DiagnosticAdapter:
             if isinstance(observation.get("pedestrians"), dict)
             else {}
         )
-        robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float)
+        raw_robot_pos = robot.get("position")
+        robot_pos = np.asarray(
+            [0.0, 0.0] if raw_robot_pos is None else raw_robot_pos,
+            dtype=float,
+        )
         if robot_pos.shape != (2,):
             robot_pos = np.asarray([0.0, 0.0], dtype=float)
         raw_positions = pedestrians.get("positions")
         ped_pos = np.asarray([] if raw_positions is None else raw_positions, dtype=float)
         if ped_pos.ndim != 2 or ped_pos.shape[-1] != 2 or ped_pos.shape[0] == 0:
+            return 0, None
+        count_raw = np.asarray(pedestrians.get("count", [ped_pos.shape[0]]), dtype=float).reshape(
+            -1
+        )
+        count_val = count_raw[0] if count_raw.size else float("nan")
+        ped_count = (
+            max(0, min(int(count_val), int(ped_pos.shape[0])))
+            if np.isfinite(count_val)
+            else int(ped_pos.shape[0])
+        )
+        ped_pos = ped_pos[:ped_count]
+        if ped_pos.shape[0] == 0:
             return 0, None
         distances = np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)
         finite = distances[np.isfinite(distances)]

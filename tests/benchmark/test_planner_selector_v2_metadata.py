@@ -16,6 +16,8 @@ from robot_sf.benchmark.algorithm_readiness import (
 )
 from scripts.validation.run_policy_search_candidate import load_candidate_definition
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_planner_selector_v2_is_experimental_and_requires_opt_in() -> None:
     """The diagnostic selector must stay behind the experimental testing gate."""
@@ -67,18 +69,19 @@ def test_planner_selector_v2_metadata_is_diagnostic_only() -> None:
 
 def test_planner_selector_v2_registry_config_declares_no_leakage_sources() -> None:
     """The policy-search row should expose diagnostic-only selector inputs."""
+    registry_path = REPO_ROOT / "docs/context/policy_search/candidate_registry.yaml"
     entry, payload, merged, config_path = load_candidate_definition(
-        Path("docs/context/policy_search/candidate_registry.yaml"),
+        registry_path,
         "planner_selector_v2_diagnostic",
+    )
+    expected_path = (
+        REPO_ROOT / "configs/policy_search/candidates/planner_selector_v2_diagnostic.yaml"
     )
 
     assert entry["status"] == "experimental_spike"
     assert entry["claim_scope"] == "diagnostic_only"
     assert payload["algo"] == "planner_selector_v2_diagnostic"
-    assert (
-        config_path
-        == Path("configs/policy_search/candidates/planner_selector_v2_diagnostic.yaml").resolve()
-    )
+    assert config_path == expected_path
     selector = merged["selector"]
     assert "classic_realworld_double_bottleneck_high" in selector["topology_scenarios"]
     assert "francis2023_join_group" in selector["seed_sensitive_scenarios"]

@@ -40,6 +40,7 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
     PPO = None  # type: ignore
 
 from robot_sf.baselines.interface import Observation
+from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.predictive_foresight import (
@@ -134,6 +135,11 @@ class PPOPlanner:
 
     def _load_model(self) -> None:
         """Load the PPO model from disk or enter fallback mode."""
+        if self.config.model_id is None:
+            validate_no_local_model_path_value(
+                self.config.model_path,
+                owner="PPOPlannerConfig",
+            )
         if PPO is None:  # pragma: no cover - missing sb3 at runtime
             warn_soft_degrade(
                 "PPO",

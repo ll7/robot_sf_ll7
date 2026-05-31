@@ -95,6 +95,23 @@ configs under `configs/training/ppo/ablations/`. They are not benchmark-facing b
 remain out of this first preflight gate so developer-only resume experiments are not broken. They
 should still move to `resume_model_id` if those checkpoints become durable dependencies.
 
+## Issue #1847 Centralization Update
+
+Issue #1847 centralized the scanner/runtime contract in:
+
+- `robot_sf/benchmark/local_model_artifacts.py`
+
+The standalone scanner now delegates to that module instead of carrying a second YAML traversal,
+path-prefix predicate, blocklist parser, and promoted-surface parser. Runtime benchmark config
+loaders still call `validate_no_local_model_artifacts`, but the scanner and runtime validator now
+share the same local-only artifact boundary and blocklist metadata.
+
+Direct learned-baseline planners also reject relative `output/model_cache/`, `output/models/`, and
+`output/slurm/` `model_path` values when no `model_id` is configured. This keeps fallback mode from
+turning worktree-local model dependencies into apparently usable benchmark execution. Missing
+non-`output/` paths can still use the existing fallback behavior for local diagnostics; benchmark
+configs that use local `output/` model artifacts fail before planner construction.
+
 ## Validation
 
 Validation commands:

@@ -1,0 +1,10 @@
+name: tentabot_value_scorer_v1_static_gated
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/tentabot_value_scorer_v1_static_gated.yaml
+params: {}
+# Clean-room Robot SF-native Tentabot-style primitive value scorer.
+#
+# This exploratory v1 keeps the v0 candidate lattice and hand-scored value
+# terms, then adds a static-safety demotion tier for low-clearance candidates.
+# It is not upstream Tentabot parity and not benchmark-ready evidence.
+allow_testing_algorithms: true

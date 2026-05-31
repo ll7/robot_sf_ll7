@@ -2,9 +2,9 @@
 
 ## Scope
 
-This spike adds a Robot SF-native `tentabot_value_scorer_v0` candidate without importing upstream
-Tentabot code, training data, ROS/Gazebo dependencies, OctoMap assets, or source checkpoints. It is
-an experimental candidate behind `allow_testing_algorithms: true`, not a Tentabot parity claim and
+This spike adds Robot SF-native `tentabot_value_scorer_*` candidates without importing upstream
+Tentabot code, training data, ROS/Gazebo dependencies, OctoMap assets, or source checkpoints. They
+are experimental candidates behind `allow_testing_algorithms: true`, not Tentabot parity claims and
 not benchmark-ready evidence.
 
 ## Candidate Contract
@@ -20,6 +20,9 @@ not benchmark-ready evidence.
 - V0 scorer: hand-scored linear teacher weights from Robot SF hybrid-rule diagnostics. This is a
   supervised-spike baseline in the sense that the weights imitate the repository's current safe
   hand-scored teacher, not a trained learned model.
+- V1 static-gated scorer: same clean-room lattice and value terms with an added deterministic
+  static-safety demotion tier. The retained v1 config demotes low-clearance candidates across all
+  accepted sources unless they make positive progress without worsening static clearance.
 
 ## Diagnostics
 
@@ -107,3 +110,39 @@ aggregate for the current candidate. The config retunes that reduced low-progres
 by increasing static collisions, so they were not retained. Future work should add a stronger
 route-aware progress objective or trace-level recovery policy before changing speed/clearance
 weights again.
+
+## 2026-05-31 Issue #1877 Static-Safety Gate Probe
+
+Issue #1877 tested a bounded `tentabot_value_scorer_v1_static_gated` variant after #1832 showed
+that lower low-progress timeouts were easy to buy by increasing static collisions. The new variant
+keeps the v0 hand-scored value terms and records both `raw_value_score` and
+`static_safety_gate` diagnostics, then subtracts a deterministic penalty from low-clearance
+candidates that do not make safe positive progress.
+
+Validation commands run:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- pytest tests/planner/test_hybrid_rule_local_planner.py -q
+scripts/dev/run_worktree_shared_venv.sh -- pytest tests/validation/test_validate_policy_search_registry.py -q
+scripts/dev/run_worktree_shared_venv.sh -- ruff check robot_sf/planner/hybrid_rule_local_planner.py tests/planner/test_hybrid_rule_local_planner.py
+LOGURU_LEVEL=WARNING scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v0 --stage nominal_sanity --workers 1
+LOGURU_LEVEL=WARNING scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v1_static_gated --stage smoke --workers 1
+LOGURU_LEVEL=WARNING scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v1_static_gated --stage nominal_sanity --workers 1
+```
+
+Summary:
+
+| Candidate | Stage | Episodes | Success | Collision | Near miss | Low-progress timeouts | Decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `tentabot_value_scorer_v0` | nominal_sanity | 18 | 0.2222 | 0.0556 | 0.1667 | 11 | revise |
+| `tentabot_value_scorer_v1_static_gated` | smoke | 1 | 1.0000 | 0.0000 | 0.0000 | 0 | pass |
+| `tentabot_value_scorer_v1_static_gated` | nominal_sanity | 18 | 0.2222 | 0.1111 | 0.2222 | 9 | revise |
+
+Classification: **revise / stop this static-gate lane**.
+
+Interpretation: the static-gated scorer is executable and its diagnostics make the route/safety
+tradeoff inspectable, but it is not an improvement over v0 on the same nominal-sanity slice. It
+reduced low-progress timeouts from 11 to 9 while doubling static collisions from 1 to 2 and
+increasing near-miss episodes from 3 to 4. Treat this as negative diagnostic evidence: future
+Tentabot-style work should move to trace-level recovery policy design or a genuinely learned value
+model rather than stronger hand-tuned static penalties.

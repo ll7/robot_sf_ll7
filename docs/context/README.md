@@ -216,7 +216,7 @@ knowledge, not every transient iteration detail.
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
 * Issue #1387 Tentabot-style value scorer spike:
   [issue_1387_tentabot_value_scorer_spike.md](issue_1387_tentabot_value_scorer_spike.md)
-  (includes the Issue #1832 progress-recovery probe boundary)
+  (includes the Issue #1832 progress-recovery and Issue #1877 static-gate probe boundaries)
 * Issue #1344 paired AMV primary protocol report:
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * SLURM issue batch status 2026-05-21 (canonical SLURM issue-status ledger):

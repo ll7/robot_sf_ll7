@@ -71,6 +71,7 @@ artifact provenance, and fail-closed behavior before benchmark claims.
 | `orca_primary_guarded_ppo_v1` | `learned_policy_intake` | `smoke_only` | ORCA-primary guarded variant. |
 | `orca_residual_guarded_ppo_v0` | `learned_policy_intake` | `smoke_only` | Runtime residual surface exists; training/checkpoint lineage is deferred. |
 | `tentabot_value_scorer_v0` | `learned_policy_intake` | `diagnostic_only` | Clean-room value-scorer spike; smoke-passes and #1826 reduces nominal-sanity collision/near-miss rates, but the row remains `revise` and diagnostic-only. |
+| `tentabot_value_scorer_v1_static_gated` | `learned_policy_intake` | `diagnostic_only` | Clean-room v1 scorer with a static-safety demotion tier; smoke passes, but nominal sanity increases static collisions and near misses while success stays flat, so this lane is `revise` / stop. |
 | `learned_risk_model_v1` | `slurm_handoff_only` | `not_benchmark_evidence` | Launch-packet lane only until SLURM training and durable artifacts exist. |
 
 ## SLURM Handoff-Only Lanes

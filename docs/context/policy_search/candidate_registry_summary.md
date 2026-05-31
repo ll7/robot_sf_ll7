@@ -65,7 +65,7 @@ artifact provenance, and fail-closed behavior before benchmark claims.
 | `orca_prior_guarded_ppo_v2_static_global` | `learned_policy_intake` | `smoke_only` | Global ORCA-prior guarded variant. |
 | `orca_primary_guarded_ppo_v1` | `learned_policy_intake` | `smoke_only` | ORCA-primary guarded variant. |
 | `orca_residual_guarded_ppo_v0` | `learned_policy_intake` | `smoke_only` | Runtime residual surface exists; training/checkpoint lineage is deferred. |
-| `tentabot_value_scorer_v0` | `learned_policy_intake` | `smoke_only` | Clean-room value-scorer spike; smoke-passes but nominal sanity is `revise`, so treat it as diagnostic-only until scorer safety/progress improves in #1826. |
+| `tentabot_value_scorer_v0` | `learned_policy_intake` | `diagnostic_only` | Clean-room value-scorer spike; smoke-passes but nominal sanity is `revise`, so treat it as diagnostic-only until scorer safety/progress improves in #1826. |
 | `learned_risk_model_v1` | `slurm_handoff_only` | `not_benchmark_evidence` | Launch-packet lane only until SLURM training and durable artifacts exist. |
 
 ## SLURM Handoff-Only Lanes

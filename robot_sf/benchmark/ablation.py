@@ -27,6 +27,7 @@ from robot_sf.benchmark.aggregate import (
     normalize_observation_track_mode,
     observation_track_group_label,
 )
+from robot_sf.benchmark.grouping import resolve_report_group_key
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi
 
 
@@ -60,11 +61,12 @@ def _group_by(
     mode = normalize_observation_track_mode(str(track_meta["mode"]))
     groups: dict[str, list[Mapping[str, Any]]] = {}
     for rec in record_list:
-        gid = _get_nested(rec, group_by)
-        if gid is None:
-            gid = _get_nested(rec, fallback)
-        if gid is None:
-            gid = "unknown"
+        gid = resolve_report_group_key(
+            rec,
+            group_by=group_by,
+            fallback_group_by=fallback,
+            missing="unknown",
+        )
         gid = observation_track_group_label(rec, str(gid), mode=mode)
         groups.setdefault(gid, []).append(rec)
     return groups

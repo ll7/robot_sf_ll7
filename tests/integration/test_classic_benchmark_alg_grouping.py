@@ -54,7 +54,10 @@ def test_smoke_aggregation_workflow():
 
     assert set(result.keys()) >= {"sf", "random", "_meta"}
     assert result["_meta"]["group_by"] == "scenario_params.algo"
-    assert result["_meta"]["effective_group_key"] == "scenario_params.algo | algo | scenario_id"
+    assert (
+        result["_meta"]["effective_group_key"]
+        == "scenario_params.algo | algo | algorithm_metadata.algorithm | scenario_id"
+    )
     assert result["_meta"]["missing_algorithms"] == ["ppo"]
     assert result["_meta"]["warnings"]
     assert any(

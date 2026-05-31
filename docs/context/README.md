@@ -247,6 +247,8 @@ knowledge, not every transient iteration detail.
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Issue #1638 local model path preflight:
   [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
+* Issue #1845 report grouping contracts:
+  [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1758 Arena-Rosnav Source-Side Assessment (2026-05-30):

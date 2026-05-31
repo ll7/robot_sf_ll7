@@ -20,6 +20,7 @@ from robot_sf.benchmark.aggregate import (
     normalize_observation_track_mode,
     observation_track_group_label,
 )
+from robot_sf.benchmark.grouping import resolve_report_group_key
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -86,9 +87,12 @@ def compute_ranking(
     mode = normalize_observation_track_mode(str(track_meta["mode"]))
     by_group: dict[str, list[float]] = {}
     for rec in record_list:
-        gid = _get_nested(rec, group_by)
-        if gid is None:
-            gid = _get_nested(rec, fallback_group_by)
+        gid = resolve_report_group_key(
+            rec,
+            group_by=group_by,
+            fallback_group_by=fallback_group_by,
+            missing="skip",
+        )
         if gid is None:
             continue
         gid = observation_track_group_label(rec, str(gid), mode=mode)

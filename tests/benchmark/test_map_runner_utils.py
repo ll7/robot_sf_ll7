@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.map_runner import (
+    _apply_planner_selector_v2_context,
     _build_policy,
     _build_socnav_config,
     _default_robot_command_space,
@@ -195,6 +196,41 @@ def test_resolve_policy_search_candidate_runtime_switches_algo_for_scenario(
     assert cfg == {"orca_time_horizon": 4.0, "max_linear_speed": 1.15}
 
 
+def test_planner_selector_v2_runtime_preserves_child_candidate_paths() -> None:
+    """Runtime candidate resolution should keep selector child config paths available."""
+    config_path = Path("configs/policy_search/candidates/planner_selector_v2_diagnostic.yaml")
+
+    algo, cfg = _resolve_policy_search_candidate_runtime(
+        default_algo="planner_selector_v2_diagnostic",
+        algo_config_path=str(config_path),
+        scenario={"name": "planner_sanity_simple"},
+    )
+
+    assert algo == "planner_selector_v2_diagnostic"
+    assert sorted(cfg["candidate_config_paths"]) == [
+        "baseline",
+        "fast_progress_static_escape",
+        "proxemic_conservative",
+        "topology_route",
+    ]
+
+
+def test_planner_selector_v2_context_is_applied_to_runtime_identity() -> None:
+    """Selector context used for execution should also be available for identity hashing."""
+    cfg = _apply_planner_selector_v2_context(
+        "planner_selector_v2_diagnostic",
+        {"selector": {}, "candidate_config_paths": {}},
+        scenario={"name": "planner_sanity_simple"},
+        seed=111,
+    )
+
+    assert cfg["selector_context"] == {
+        "scenario_id": "planner_sanity_simple",
+        "scenario_family": "nominal",
+        "seed": 111,
+    }
+
+
 def test_build_policy_routes_adaptive_proxemic_selector_with_diagnostics() -> None:
     """Map-runner policy construction should expose selector diagnostics."""
     policy, meta = _build_policy(
@@ -311,6 +347,64 @@ def test_build_policy_trivial_reference_adapter_exposes_template_contract() -> N
     assert meta["planner_kinematics"]["adapter_name"] == "TrivialReferencePlannerAdapter"
     assert meta["planner_kinematics"]["diagnostic_reference_only"] is True
     assert "Diagnostic adapter template only" in meta["planner_kinematics"]["limitations"]
+
+
+def test_build_policy_routes_planner_selector_v2_with_diagnostics() -> None:
+    """Map-runner policy construction should expose selector-v2 diagnostics."""
+    policy, meta = _build_policy(
+        "planner_selector_v2_diagnostic",
+        {
+            "allow_testing_algorithms": True,
+            "selector_context": {
+                "scenario_id": "planner_sanity_simple",
+                "scenario_family": "nominal",
+                "seed": 111,
+            },
+            "selector": {
+                "seed_sensitive_scenarios": ["planner_sanity_simple"],
+                "hard_seed_values": [111],
+            },
+            "candidate_config_paths": {
+                "baseline": "configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml",
+                "topology_route": "configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8.yaml",
+                "proxemic_conservative": "configs/policy_search/candidates/proxemic_profile_conservative_issue_1676.yaml",
+                "fast_progress_static_escape": "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["selector_boundary"]["diagnostic_only"] is True
+    assert meta["planner_kinematics"]["diagnostic_only"] is True
+    linear, angular = policy(
+        {
+            "robot": {
+                "position": np.asarray([0.0, 0.0], dtype=float),
+                "heading": np.asarray([0.0], dtype=float),
+                "speed": np.asarray([0.0], dtype=float),
+                "radius": np.asarray([0.25], dtype=float),
+            },
+            "goal": {
+                "current": np.asarray([2.0, 0.0], dtype=float),
+                "next": np.asarray([2.0, 0.0], dtype=float),
+            },
+            "pedestrians": {
+                "positions": np.zeros((0, 2), dtype=float),
+                "velocities": np.zeros((0, 2), dtype=float),
+                "radii": np.zeros(0, dtype=float),
+                "count": np.asarray([0], dtype=float),
+            },
+        }
+    )
+
+    assert math.isfinite(linear)
+    assert math.isfinite(angular)
+    stats = policy._planner_stats()
+    assert stats["diagnostic_only"] is True
+    assert stats["selected_candidate"] == "fast_progress_static_escape"
+    assert (
+        stats["last_decision"]["trigger_reason"] == "predeclared_seed_sensitive_low_progress_risk"
+    )
 
 
 def test_goal_policy_supports_flat_map_runner_observation() -> None:

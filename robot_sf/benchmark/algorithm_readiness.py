@@ -326,6 +326,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="planner_selector_v2_diagnostic",
+        tier="experimental",
+        aliases=("planner_selector_v2_diagnostic",),
+        note=(
+            "Diagnostic-only deterministic selector over existing local planner candidates; "
+            "not benchmark-strength evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="policy_stack_v1",
         tier="experimental",
         aliases=("policy_stack_v1",),

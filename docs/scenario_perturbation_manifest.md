@@ -55,7 +55,9 @@ uv run python scripts/tools/materialize_scenario_perturbation_pilot.py \
 
 The generated `scenario_matrix.yaml` and route override files are local execution inputs for the
 next paired planner pilot. They are not benchmark evidence by themselves, and excluded preflight
-rows are omitted from the matrix.
+rows are omitted from the matrix. When `--output-dir` points inside the repository, it must be
+under the ignored `output/` tree so materialized pilot inputs do not become durable provenance by
+accident.
 
 ## Boundary
 

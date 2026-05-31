@@ -41,6 +41,8 @@ _PERTURBATION_MANIFEST_SCHEMA_PATH = (
     / "schemas"
     / "scenario_perturbation_manifest.v1.json"
 )
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_LOCAL_OUTPUT_ROOT = _REPOSITORY_ROOT / "output"
 
 _SUCCESS_EVIDENCE_CANDIDATE = "eligible_success_evidence_candidate"
 _EXCLUDED_FROM_SUCCESS_EVIDENCE = "excluded_from_success_evidence"
@@ -164,6 +166,7 @@ def materialize_perturbation_pilot_matrix(
     """
     path = Path(manifest_path)
     out_dir = Path(output_dir)
+    _ensure_local_output_boundary(out_dir)
     manifest = _load_manifest(path)
     report = preflight_perturbation_manifest(path)
     preflight_by_variant = {result.variant_id: result for result in report.results}
@@ -174,9 +177,15 @@ def materialize_perturbation_pilot_matrix(
     )
     scenarios = load_scenarios(scenario_config)
     matrix_path = out_dir / "scenario_matrix.yaml"
+    summary_path = out_dir / "materialization_summary.json"
     routes_dir = out_dir / "route_overrides"
     out_dir.mkdir(parents=True, exist_ok=True)
     routes_dir.mkdir(parents=True, exist_ok=True)
+    _clear_previous_materialization(
+        matrix_path=matrix_path,
+        summary_path=summary_path,
+        routes_dir=routes_dir,
+    )
 
     materialized_scenarios: list[dict[str, Any]] = []
     included: list[str] = []
@@ -210,7 +219,6 @@ def materialize_perturbation_pilot_matrix(
         "scenarios": materialized_scenarios,
     }
     matrix_path.write_text(yaml.safe_dump(matrix_payload, sort_keys=False), encoding="utf-8")
-    summary_path = out_dir / "materialization_summary.json"
     summary_payload = {
         "schema_version": PILOT_MATRIX_SCHEMA_VERSION,
         "manifest_id": manifest["manifest_id"],
@@ -232,6 +240,38 @@ def materialize_perturbation_pilot_matrix(
         included_variants=tuple(included),
         excluded_variants=tuple(excluded),
     )
+
+
+def _ensure_local_output_boundary(output_dir: Path) -> None:
+    """Keep repository-local generated pilot inputs under the ignored output tree."""
+    resolved = output_dir.resolve()
+    try:
+        resolved.relative_to(_REPOSITORY_ROOT)
+    except ValueError:
+        return
+    try:
+        resolved.relative_to(_LOCAL_OUTPUT_ROOT)
+    except ValueError as exc:
+        raise ValueError(
+            "output_dir inside the repository must be under output/ so generated "
+            "pilot inputs remain local, ignored artifacts"
+        ) from exc
+
+
+def _clear_previous_materialization(
+    *,
+    matrix_path: Path,
+    summary_path: Path,
+    routes_dir: Path,
+) -> None:
+    """Remove stale materializer-owned files before writing a fresh pilot matrix."""
+    for generated_path in (matrix_path, summary_path):
+        if generated_path.exists():
+            generated_path.unlink()
+    if not routes_dir.is_dir():
+        raise ValueError(f"route_overrides path exists and is not a directory: {routes_dir}")
+    for route_path in routes_dir.glob("*.route_overrides.yaml"):
+        route_path.unlink()
 
 
 def _load_manifest(path: Path) -> Mapping[str, Any]:

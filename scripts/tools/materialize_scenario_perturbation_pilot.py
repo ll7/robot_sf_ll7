@@ -18,7 +18,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=Path,
         required=True,
-        help="Directory for the generated scenario matrix and route overrides.",
+        help=(
+            "Directory for the generated scenario matrix and route overrides. "
+            "Repository-local outputs must be under output/."
+        ),
     )
     parser.add_argument(
         "--seed-limit",

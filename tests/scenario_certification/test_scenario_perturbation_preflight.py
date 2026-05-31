@@ -177,3 +177,32 @@ def test_materialize_pilot_matrix_skips_preflight_excluded_variants(tmp_path: Pa
     assert [scenario["name"] for scenario in generated_scenarios] == ["planner_sanity_simple_noop"]
     route_files = list((tmp_path / "pilot" / "route_overrides").glob("*"))
     assert route_files == []
+
+
+def test_materialize_pilot_matrix_clears_stale_generated_routes(tmp_path: Path) -> None:
+    """A rerun should not leave old route files for newly excluded variants."""
+    manifest_path = _write_manifest(tmp_path / "perturbations.yaml")
+    output_dir = tmp_path / "pilot"
+
+    materialize_perturbation_pilot_matrix(manifest_path, output_dir=output_dir)
+    assert len(list((output_dir / "route_overrides").glob("*.route_overrides.yaml"))) == 1
+
+    _write_manifest(manifest_path, max_route_offset_m=0.2)
+    materialized = materialize_perturbation_pilot_matrix(manifest_path, output_dir=output_dir)
+
+    assert materialized.included_variants == ("planner_sanity_simple_noop",)
+    assert materialized.excluded_variants == ("planner_sanity_simple_route_offset",)
+    assert list((output_dir / "route_overrides").glob("*.route_overrides.yaml")) == []
+    generated_scenarios = load_scenarios(Path(materialized.scenario_matrix_path))
+    assert [scenario["name"] for scenario in generated_scenarios] == ["planner_sanity_simple_noop"]
+
+
+def test_materialize_pilot_matrix_rejects_tracked_repo_output_location(tmp_path: Path) -> None:
+    """Repository-local materialized pilot inputs should stay under ignored output/."""
+    manifest_path = _write_manifest(tmp_path / "perturbations.yaml")
+
+    with pytest.raises(ValueError, match="must be under output/"):
+        materialize_perturbation_pilot_matrix(
+            manifest_path,
+            output_dir=Path("docs") / "scenario_perturbation_pilot_test",
+        )

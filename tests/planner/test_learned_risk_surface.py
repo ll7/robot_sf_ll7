@@ -127,3 +127,17 @@ def test_build_local_risk_surface_spec_accepts_yaml_style_origin() -> None:
     assert spec.height == 2.0
     assert spec.origin == (-1.5, -1.0)
     assert spec.producer_id == "test_fixture"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        {"x": -1.5, "y": -1.0},
+        object(),
+        [0.0, 1.0, 2.0],
+    ],
+)
+def test_build_local_risk_surface_spec_rejects_malformed_origin(origin: object) -> None:
+    """Malformed origins should fail through the risk-surface domain exception."""
+    with pytest.raises(RiskSurfaceUnavailable, match="origin must contain two finite values"):
+        build_local_risk_surface_spec({"origin": origin})

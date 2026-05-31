@@ -265,10 +265,13 @@ def build_local_risk_surface_spec(cfg: dict[str, Any] | None) -> LocalRiskSurfac
     filtered = {key: value for key, value in payload.items() if key in allowed}
     origin = filtered.get("origin")
     if origin is not None:
-        origin_values = np.asarray(origin, dtype=float).reshape(-1)
-        if origin_values.size != 2:
-            raise RiskSurfaceUnavailable("origin must contain two finite values")
-        filtered["origin"] = (float(origin_values[0]), float(origin_values[1]))
+        try:
+            origin_values = np.asarray(origin, dtype=float).reshape(-1)
+            if origin_values.size != 2:
+                raise ValueError("origin must contain two finite values")
+            filtered["origin"] = (float(origin_values[0]), float(origin_values[1]))
+        except (KeyError, TypeError, ValueError, IndexError) as exc:
+            raise RiskSurfaceUnavailable("origin must contain two finite values") from exc
     return LocalRiskSurfaceSpec(**filtered)
 
 

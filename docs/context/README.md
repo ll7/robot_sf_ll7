@@ -157,6 +157,8 @@ knowledge, not every transient iteration detail.
   [issue_1614_lidar_planner_compatibility.md](issue_1614_lidar_planner_compatibility.md)
 * Issue #1685 dummy learned-policy adapter fixture (2026-05-30):
   [issue_1685_dummy_learned_policy_adapter.md](issue_1685_dummy_learned_policy_adapter.md)
+* Issue #1624 Hybrid-Learning Navigation Architecture (2026-05-30):
+  [issue_1624_hybrid_learning_architecture.md](issue_1624_hybrid_learning_architecture.md)
 * Issue #1674 Topology-Hypothesis Diagnostics (2026-05-30):
   [issue_1674_topology_hypothesis_diagnostics.md](issue_1674_topology_hypothesis_diagnostics.md)
 * Issue #1675 learned risk-surface interface:

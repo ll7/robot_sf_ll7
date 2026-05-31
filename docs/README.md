@@ -312,6 +312,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #1236 Optimizer Adversarial Sampler](./context/issue_1236_optimizer_adversarial_sampler.md)** - Optuna-backed adversarial sampler pilot, synthetic comparison helper, and non-paper-facing evidence boundary
 * **[Issue #1271 Seed-Sensitivity Explorer](./context/issue_1271_seed_sensitivity_explorer.md)** - API and summary contract for replaying adversarial candidates over explicit seed grids while keeping failure persistence and artifact claims bounded
 * **[Issue #1294 Seed-Sensitivity Perturbations](./context/issue_1294_seed_sensitivity_perturbations.md)** - Opt-in timing/speed perturbation grid for seed-sensitivity replays, with bounded deltas and explicit non-benchmark evidence limits
+* **[Issue #1609 Seed-Sensitive Scenario Mechanisms](./context/issue_1609_seed_sensitive_mechanisms.md)** - Diagnostic mechanism hypotheses over Issue #1608 seed-sensitive scenarios with hard-vs-easy aggregate tables and trace-review limits
 * **[Planner Quality Audit Workflow](./benchmark_planner_quality_audit.md)** - Build the planner decision table, classify headline suitability, and record paper-faithfulness parity gaps
 
 ### Tooling

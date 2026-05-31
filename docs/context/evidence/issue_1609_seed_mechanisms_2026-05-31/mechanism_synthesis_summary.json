@@ -1,0 +1,687 @@
+{
+  "claim_boundary": "diagnostic_mechanism_synthesis_not_causal_proof",
+  "created_at": "2026-05-31",
+  "issue": 1609,
+  "mechanism_counts": {
+    "artifact_limited_unresolved": 3,
+    "crossing_order_timing": 11,
+    "group_cohesion_or_gap_selection": 2,
+    "limited_lookahead_corner_timing": 1,
+    "merge_gap_timing": 2,
+    "narrow_passage_timing": 4,
+    "opposing_flow_commitment": 2
+  },
+  "rows": [
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 12.4286,
+      "easy_row_count": 28,
+      "easy_seed_sample": [
+        "113",
+        "114",
+        "116"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.7904,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 1.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 12,
+      "hard_seeds": [
+        "111",
+        "112",
+        "115"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_cross_trap_high"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 9.4688,
+      "easy_row_count": 32,
+      "easy_seed_sample": [
+        "112",
+        "113",
+        "114"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.681,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 1.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 8,
+      "hard_seeds": [
+        "111",
+        "115"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_cross_trap_medium"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 19.25,
+      "easy_row_count": 24,
+      "easy_seed_sample": [
+        "111",
+        "114",
+        "115"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.6228,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0625,
+      "hard_near_miss_mean": 118.875,
+      "hard_row_count": 16,
+      "hard_seeds": [
+        "112",
+        "113",
+        "117",
+        "118"
+      ],
+      "hard_success_mean": 0.1875,
+      "hard_time_to_goal_mean": 0.9671,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "narrow_passage_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_doorway_high"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 28.4167,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "112",
+        "113",
+        "114"
+      ],
+      "easy_success_mean": 0.9444,
+      "easy_time_to_goal_mean": 0.3491,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.75,
+      "hard_near_miss_mean": 29.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "111"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "narrow_passage_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_doorway_low"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 3.2083,
+      "easy_row_count": 24,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.6134,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 30.3125,
+      "hard_row_count": 16,
+      "hard_seeds": [
+        "114",
+        "115",
+        "117",
+        "118"
+      ],
+      "hard_success_mean": 0.0625,
+      "hard_time_to_goal_mean": 0.9976,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "narrow_passage_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_doorway_medium"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 23.6562,
+      "easy_row_count": 32,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.7199,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 83.75,
+      "hard_row_count": 8,
+      "hard_seeds": [
+        "117",
+        "119"
+      ],
+      "hard_success_mean": 0.125,
+      "hard_time_to_goal_mean": 0.9684,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_group_crossing_high"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 9.1944,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.7034,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 94.75,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "117"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_group_crossing_low"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 18.0833,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.6503,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 1.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "116"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "opposing_flow_commitment",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_head_on_corridor_low"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 23.6667,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.676,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 1.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "116"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "opposing_flow_commitment",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_head_on_corridor_medium"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 7.25,
+      "easy_row_count": 28,
+      "easy_seed_sample": [
+        "112",
+        "113",
+        "114"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.8567,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 26.0833,
+      "hard_row_count": 12,
+      "hard_seeds": [
+        "111",
+        "117",
+        "119"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "merge_gap_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_merging_low"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 0.0,
+      "easy_row_count": 32,
+      "easy_seed_sample": [
+        "111",
+        "113",
+        "114"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.716,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 24.75,
+      "hard_row_count": 8,
+      "hard_seeds": [
+        "112",
+        "116"
+      ],
+      "hard_success_mean": 0.125,
+      "hard_time_to_goal_mean": 0.9923,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_urban_crossing_medium"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 16.9167,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.7762,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "116"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "limited_lookahead_corner_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_blind_corner"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 0.5556,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "112",
+        "113",
+        "114"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.6426,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 1.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "111"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_circular_crossing"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 0.0,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.7231,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "116"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_intersection_no_gesture"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 0.0,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.7231,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "116"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_intersection_proceed"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 0.0,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.7231,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "116"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_intersection_wait"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 51.5,
+      "easy_row_count": 24,
+      "easy_seed_sample": [
+        "111",
+        "114",
+        "117"
+      ],
+      "easy_success_mean": 0.9167,
+      "easy_time_to_goal_mean": 0.6876,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 96.4375,
+      "hard_row_count": 16,
+      "hard_seeds": [
+        "112",
+        "113",
+        "115",
+        "116"
+      ],
+      "hard_success_mean": 0.125,
+      "hard_time_to_goal_mean": 0.9589,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "group_cohesion_or_gap_selection",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_join_group"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 70.3056,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.6283,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 20.25,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "116"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "narrow_passage_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_narrow_hallway"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 10.8333,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.6227,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "116"
+      ],
+      "hard_success_mean": 0.0,
+      "hard_time_to_goal_mean": 1.0,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_perpendicular_traffic"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 19.7222,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 0.9722,
+      "easy_time_to_goal_mean": 0.6752,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 110.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "117"
+      ],
+      "hard_success_mean": 0.25,
+      "hard_time_to_goal_mean": 0.9749,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "crossing_order_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_group_crossing_medium"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 35.0625,
+      "easy_row_count": 32,
+      "easy_seed_sample": [
+        "111",
+        "113",
+        "114"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.8319,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.75,
+      "hard_near_miss_mean": 70.625,
+      "hard_row_count": 8,
+      "hard_seeds": [
+        "112",
+        "115"
+      ],
+      "hard_success_mean": 0.25,
+      "hard_time_to_goal_mean": 0.9477,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "merge_gap_timing",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_merging_medium"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 26.9444,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.6358,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.75,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "120"
+      ],
+      "hard_success_mean": 0.25,
+      "hard_time_to_goal_mean": 0.8893,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "artifact_limited_unresolved",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_overtaking_low"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 27.7222,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "113"
+      ],
+      "easy_success_mean": 1.0,
+      "easy_time_to_goal_mean": 0.6264,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 0.0,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "120"
+      ],
+      "hard_success_mean": 0.25,
+      "hard_time_to_goal_mean": 0.8882,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "artifact_limited_unresolved",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "classic_overtaking_medium"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 7.0833,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "114"
+      ],
+      "easy_success_mean": 0.9444,
+      "easy_time_to_goal_mean": 0.6389,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 60.75,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "113"
+      ],
+      "hard_success_mean": 0.25,
+      "hard_time_to_goal_mean": 0.9843,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "artifact_limited_unresolved",
+      "most_brittle_planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "scenario_id": "francis2023_exiting_elevator"
+    },
+    {
+      "easy_collision_mean": 0.0,
+      "easy_near_miss_mean": 77.5,
+      "easy_row_count": 36,
+      "easy_seed_sample": [
+        "111",
+        "112",
+        "114"
+      ],
+      "easy_success_mean": 0.8056,
+      "easy_time_to_goal_mean": 0.7186,
+      "evidence_basis": "issue_1608_top_four_seed_table_plus_issue_1454_episode_rows",
+      "explanation_class": "aggregate_supported_trace_limited",
+      "hard_collision_mean": 0.0,
+      "hard_near_miss_mean": 89.5,
+      "hard_row_count": 4,
+      "hard_seeds": [
+        "113"
+      ],
+      "hard_success_mean": 0.5,
+      "hard_time_to_goal_mean": 0.8324,
+      "interpretation_limit": "aggregate metrics support prioritization only; trace/video review still needed for causal proof",
+      "mechanism_hypothesis": "group_cohesion_or_gap_selection",
+      "most_brittle_planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "scenario_id": "francis2023_leave_group"
+    }
+  ],
+  "scenario_count": 25,
+  "schema_version": "scenario-seed-mechanism-synthesis.v1",
+  "source_campaign": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23",
+  "source_issue": 1608
+}

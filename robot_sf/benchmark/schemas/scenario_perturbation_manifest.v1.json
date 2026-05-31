@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/robot-sf/scenario_perturbation_manifest.v1.json",
   "title": "RobotSF Scenario Perturbation Manifest (v1)",
-  "description": "Minimal manifest for no-op baselines and bounded route perturbation preflight. Validity preflight is not benchmark execution evidence.",
+  "description": "Minimal manifest for no-op baselines plus bounded route and pedestrian timing perturbation preflight. Validity preflight is not benchmark execution evidence.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -71,6 +71,10 @@
           "type": "number",
           "exclusiveMinimum": 0
         },
+        "max_start_delay_offset_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
         "invalid_variant_evidence_policy": {
           "const": "exclude_from_success_evidence"
         },
@@ -102,6 +106,39 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "variants": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "family": {
+                  "const": "single_pedestrian_start_delay_offset"
+                }
+              },
+              "required": [
+                "family"
+              ]
+            }
+          }
+        },
+        "required": [
+          "variants"
+        ]
+      },
+      "then": {
+        "properties": {
+          "validity": {
+            "required": [
+              "max_start_delay_offset_s"
+            ]
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "variant": {
       "type": "object",
@@ -126,7 +163,8 @@
           "enum": [
             "noop",
             "robot_route_offset",
-            "pedestrian_route_offset"
+            "pedestrian_route_offset",
+            "single_pedestrian_start_delay_offset"
           ]
         },
         "seeds": {
@@ -143,11 +181,6 @@
         "parameters": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "dx_m",
-            "dy_m",
-            "max_magnitude_m"
-          ],
           "properties": {
             "dx_m": {
               "type": "number"
@@ -168,6 +201,20 @@
               "minimum": 0
             },
             "waypoint_selector": {
+              "const": "all"
+            },
+            "dt_s": {
+              "type": "number"
+            },
+            "max_abs_dt_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "pedestrian_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "pedestrian_selector": {
               "const": "all"
             }
           }
@@ -191,7 +238,84 @@
           "then": {
             "required": [
               "parameters"
+            ],
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "dx_m",
+                  "dy_m",
+                  "max_magnitude_m"
+                ],
+                "properties": {
+                  "dx_m": {
+                    "type": "number"
+                  },
+                  "dy_m": {
+                    "type": "number"
+                  },
+                  "max_magnitude_m": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "spawn_id": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "goal_id": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "waypoint_selector": {
+                    "const": "all"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "family": {
+                "const": "single_pedestrian_start_delay_offset"
+              }
+            },
+            "required": [
+              "family"
             ]
+          },
+          "then": {
+            "required": [
+              "parameters"
+            ],
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "dt_s",
+                  "max_abs_dt_s"
+                ],
+                "properties": {
+                  "dt_s": {
+                    "type": "number"
+                  },
+                  "max_abs_dt_s": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "pedestrian_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "pedestrian_selector": {
+                    "const": "all"
+                  }
+                }
+              }
+            }
           }
         },
         {

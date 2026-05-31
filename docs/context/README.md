@@ -236,6 +236,8 @@ knowledge, not every transient iteration detail.
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Learned local-navigation policy registry:
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
+* Issue #1626 foundation-model local-navigation readiness (2026-05-30):
+  [policy_search/2026-05-30_foundation_model_readiness_issue_1626.md](policy_search/2026-05-30_foundation_model_readiness_issue_1626.md)
 * Issue #1621 diffusion-policy local-navigation feasibility (2026-05-30):
   [policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md](policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md)
 * Issue #1615 LiDAR Learned-Policy Launch Plan (2026-05-29):

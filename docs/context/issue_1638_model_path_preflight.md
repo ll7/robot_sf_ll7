@@ -9,6 +9,7 @@ Related issue:
 Follow-up:
 
 - Issue #1764: <https://github.com/ll7/robot_sf_ll7/issues/1764>
+- Issue #1775: <https://github.com/ll7/robot_sf_ll7/issues/1775>
 
 Related anchors:
 
@@ -55,6 +56,16 @@ The same fail-closed check is also called when benchmark algorithm configs are l
 map runner and lightweight runner. A benchmark launch that points at a blocked `output/` model path
 now fails before planner construction, with the blocklist reason and follow-up issue in the error
 trail.
+
+The promoted-config surface is explicit in:
+
+- `configs/benchmarks/promoted_config_surfaces.yaml`
+
+Configs listed there are treated as benchmark-promoted inputs because camera-ready, paper-facing,
+or benchmark-baseline workflows cite them as reusable benchmark surfaces. They fail the preflight
+whenever `model_path` or `resume_from` points into `output/`, even if that exact reference is
+listed in the local-artifact blocklist. Non-promoted local or experimental configs may remain
+blocklisted while Issue #1764 decides whether to promote, replace, or retire those artifacts.
 
 Strict audits can run:
 

@@ -50,6 +50,7 @@ not headline promotion without a separate issue and evidence decision.
 | `proxemic_profile_conservative_issue_1676` | `diagnostic_only` | `diagnostic_only` | Conservative proxemic/comfort profile. |
 | `proxemic_profile_neutral_issue_1676` | `diagnostic_only` | `diagnostic_only` | Neutral profile used as middle setting. |
 | `proxemic_profile_open_issue_1676` | `diagnostic_only` | `diagnostic_only` | Open comfort profile with higher expected near-miss risk. |
+| `topology_guided_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Masked-route topology-hypothesis selector feeding the existing hybrid-rule corridor scorer; missing topology inputs fail closed and selected hypotheses are not benchmark evidence. |
 
 ## Learned-Policy And Learned-Style Rows
 

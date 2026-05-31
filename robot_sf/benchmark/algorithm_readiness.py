@@ -265,6 +265,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="topology_guided_hybrid_rule_v0",
+        tier="experimental",
+        aliases=("topology_guided_hybrid_rule_v0", "topology_hypothesis_dwa_v0"),
+        note=(
+            "Diagnostic-only masked-route hypothesis selector feeding the hybrid-rule "
+            "local scorer; not benchmark evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="lidar_social_force",
         tier="experimental",
         aliases=("lidar_social_force", "lidar_tracked_social_force"),

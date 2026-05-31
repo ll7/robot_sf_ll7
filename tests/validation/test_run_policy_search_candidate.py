@@ -74,6 +74,27 @@ def test_load_candidate_definition_merges_base_config_and_params(
     assert config_path == candidate_cfg.resolve()
 
 
+def test_topology_guided_candidate_is_diagnostic_only() -> None:
+    """Topology-guided candidate should keep an explicit diagnostic claim boundary."""
+    entry, payload, merged, config_path = load_candidate_definition(
+        Path("docs/context/policy_search/candidate_registry.yaml"),
+        "topology_guided_hybrid_rule_v0",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["family"] == "topology_hypothesis_diagnostic"
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "topology_guided_hybrid_rule_v0"
+    assert merged["diagnostic_only"] is True
+    assert merged["min_hypotheses"] == 2
+    assert merged["fail_closed_on_missing_inputs"] is True
+    assert merged["fail_closed_on_insufficient_hypotheses"] is False
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml").resolve()
+    )
+
+
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
     """Scenario names should drive family inference when scenario_id is absent."""
     grouped = split_scenarios_by_family(

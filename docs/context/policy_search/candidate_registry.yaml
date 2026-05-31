@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-05-20
+updated_at: 2026-05-31
 freshness:
   policy: manual_registry_edit
   max_age_days: 90
@@ -193,6 +193,22 @@ candidates:
       occupancy-compatible ego grid and let the existing Risk-DWA planner consume that surface
       through the normal policy-search smoke path. This is a prototype interface proof only, not
       learned-risk model or benchmark-strength evidence.
+    required_stages:
+      - smoke
+
+  topology_guided_hybrid_rule_v0:
+    status: experimental_spike
+    family: topology_hypothesis_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml
+    hypothesis: >
+      A diagnostic masked-route selector can expose up to two local topology
+      hypotheses from the occupancy grid, select one with route length and static
+      clearance scoring, and feed it to the existing hybrid-rule corridor-subgoal
+      scorer. Missing topology inputs fail closed; single-hypothesis rows do not
+      activate the topology injection and are not benchmark evidence.
     required_stages:
       - smoke
 

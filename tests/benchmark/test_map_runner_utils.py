@@ -425,6 +425,27 @@ def test_build_policy_risk_surface_dwa_wires_surface_adapter(
     )
 
 
+def test_build_policy_topology_guided_hybrid_rule_wires_diagnostic_adapter() -> None:
+    """Topology-guided candidate should route through its diagnostic adapter metadata."""
+    policy, meta = _build_policy(
+        "topology_guided_hybrid_rule_v0",
+        {
+            "allow_testing_algorithms": True,
+            "route_guide_enabled": True,
+            "corridor_subgoal_enabled": True,
+            "route_hypothesis": {"obstacle_inflation_cells": 0},
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    assert hasattr(policy, "_planner_adapter")
+    assert meta["canonical_algorithm"] == "topology_guided_hybrid_rule_v0"
+    assert meta["policy_semantics"] == "diagnostic_topology_hypothesis_guided_hybrid_rule"
+    assert meta["topology_guided_hybrid_rule"]["diagnostic_only"] is True
+    assert meta["planner_kinematics"]["adapter_name"] == ("TopologyGuidedHybridRulePlannerAdapter")
+    assert meta["planner_kinematics"]["diagnostic_reference_only"] is True
+
+
 def test_build_policy_socnav_bench_forwards_allow_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

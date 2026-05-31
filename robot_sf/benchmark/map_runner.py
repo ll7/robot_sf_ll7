@@ -184,6 +184,10 @@ from robot_sf.planner.teb_commitment import (
     TEBCommitmentPlannerAdapter,
     build_teb_commitment_config,
 )
+from robot_sf.planner.topology_guided_local_policy import (
+    TopologyGuidedHybridRulePlannerAdapter,
+    build_topology_guided_local_policy_config,
+)
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
@@ -1517,6 +1521,27 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
             limitations="static_obstacle_first_testing_only",
+        )
+
+    if algo_key == "topology_guided_hybrid_rule_v0":
+        adapter = TopologyGuidedHybridRulePlannerAdapter(
+            config=build_topology_guided_local_policy_config(algo_config)
+        )
+        meta["topology_guided_hybrid_rule"] = {
+            "diagnostic_only": True,
+            "claim_boundary": "diagnostic_only",
+            "hypothesis_source": "masked_occupancy_grid_routes",
+            "wrapped_planner": "HybridRuleLocalPlannerAdapter",
+        }
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="TopologyGuidedHybridRulePlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="diagnostic_only_topology_hypothesis_selector",
         )
 
     if algo_key in {"lidar_grid_route", "lidar_occupancy_grid_route"}:

@@ -17,7 +17,7 @@ A deterministic hybrid-rule local scorer can penalize command candidates that wo
 - Scenario filter: `classic_cross_trap_high`
 - Seed manifest: `suite default`
 - Summary JSON: `output/policy_search/actuation_aware_hybrid_rule_v0/amv_actuation_smoke/latest/summary.json`
-- Git commit: `d65d33dfc6c8b6b4ab861311bb172a99783a9136`
+- Git commit: `946a91b7ce8a077f74fd0300e7a71e3f0d008a45`
 - Synthetic actuation profile: `amv-actuation-stress-v0` (`synthetic-only`, diagnostic-only)
 
 ## Aggregate Results

@@ -112,6 +112,10 @@ When working in a linked Git worktree, detect bootstrap state before running exp
   `ln -s "$MAIN_REPO_ROOT/local.machine.md" .`
 - After the machine-context symlink is in place, run `uv sync --all-extras`, then
   `source .venv/bin/activate` before using Python tooling.
+- For quick targeted validation from a sibling worktree that intentionally reuses the main
+  checkout virtualenv, prefer `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>` so
+  `PYTHONPATH` is pinned to the active worktree while `UV_PROJECT_ENVIRONMENT` points at the shared
+  `.venv`. Use a full local `.venv` and final PR readiness for merge proof.
 - If the current branch is not `main`, fetch the latest `origin/main` and merge it into the current
   branch early in the work cycle so the branch benefits from repository-wide fixes and workflow
   improvements before local changes diverge. Typical command sequence:

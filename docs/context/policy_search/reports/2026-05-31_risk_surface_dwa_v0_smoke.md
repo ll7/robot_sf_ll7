@@ -34,7 +34,7 @@ A deterministic local risk-surface producer can expose pedestrian proximity as a
 
 - No failures recorded.
 
-## Issue #1820 Progress-Recovery Check
+## Issue #1820 Progress-Recovery Check - 2026-05-31
 
 This run follows PR #1810, where the candidate first became executable through the normal
 policy-search smoke path but still ended in low-progress timeout. The #1820 change keeps the

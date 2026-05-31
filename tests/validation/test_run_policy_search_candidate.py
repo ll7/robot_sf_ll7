@@ -76,8 +76,10 @@ def test_load_candidate_definition_merges_base_config_and_params(
 
 def test_risk_surface_candidate_uses_smoke_progress_recovery_speed() -> None:
     """Risk-surface smoke candidate should opt into the 2 m/s local command envelope."""
+    repo_root = Path(__file__).resolve().parents[2]
+
     _entry, payload, merged, config_path = load_candidate_definition(
-        Path("docs/context/policy_search/candidate_registry.yaml"),
+        repo_root / "docs/context/policy_search/candidate_registry.yaml",
         "risk_surface_dwa_v0",
     )
 
@@ -88,7 +90,8 @@ def test_risk_surface_candidate_uses_smoke_progress_recovery_speed() -> None:
     assert risk_dwa["progress_escape_enabled"] is True
     assert risk_dwa["progress_escape_speed"] >= 0.9
     assert (
-        config_path == Path("configs/policy_search/candidates/risk_surface_dwa_v0.yaml").resolve()
+        config_path
+        == (repo_root / "configs/policy_search/candidates/risk_surface_dwa_v0.yaml").resolve()
     )
 
 

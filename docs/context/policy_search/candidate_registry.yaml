@@ -216,6 +216,7 @@ candidates:
     status: experimental_spike
     family: learned_style_value_scorer
     training_required: false
+    claim_scope: diagnostic_only
     promotion_gate: tier_b
     candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v0.yaml
     learned_policy_registry_id: tentabot_value_scorer_v0

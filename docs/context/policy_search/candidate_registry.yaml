@@ -223,9 +223,10 @@ candidates:
     hypothesis: >
       A diagnostic masked-route selector can expose up to two local topology
       hypotheses from the occupancy grid, select one with route length and static
-      clearance scoring, and feed it to the existing hybrid-rule corridor-subgoal
-      scorer. Missing topology inputs fail closed; single-hypothesis rows do not
-      activate the topology injection and are not benchmark evidence.
+      clearance scoring, and add a bounded selected-hypothesis local command to
+      the existing hybrid-rule safety scorer. Missing topology inputs fail closed;
+      single-hypothesis rows do not activate the topology injection and are not
+      benchmark evidence.
     required_stages:
       - smoke
 
@@ -248,6 +249,21 @@ candidates:
     required_stages:
       - smoke
       - nominal_sanity
+
+  actuation_aware_hybrid_rule_v0:
+    status: experimental_spike
+    family: amv_actuation_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/actuation_aware_hybrid_rule_v0.yaml
+    hypothesis: >
+      A deterministic hybrid-rule local scorer can penalize command candidates that would be
+      clipped by the synthetic AMV actuation envelope, exposing whether local command smoothing
+      reduces synthetic actuation stress. This is diagnostic-only synthetic evidence, not
+      calibrated hardware or paper-facing AMV performance evidence.
+    required_stages:
+      - amv_actuation_smoke
 
   hybrid_rule_v3_static_margin0:
     status: implemented
@@ -561,6 +577,21 @@ candidates:
       - smoke
       - nominal_sanity
       - stress_slice
+
+  mpc_clearance_guarded_v1:
+    status: experimental_spike
+    family: model_predictive_control
+    training_required: false
+    promotion_gate: tier_b
+    claim_scope: diagnostic_only
+    candidate_config_path: configs/policy_search/candidates/mpc_clearance_guarded_v1.yaml
+    hypothesis: >
+      A hard first-step static-clearance guard should reduce the known static-collision
+      failure mode in the NMPC clearance sampler while exposing whether the added
+      safety simply trades collisions for low-progress timeouts.
+    required_stages:
+      - smoke
+      - nominal_sanity
 
   risk_guarded_ppo_v1:
     status: implemented

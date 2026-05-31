@@ -27,9 +27,12 @@ classified.
 - Current branch head differs from stale readiness stamps (freshness required).
 
 Freshness check:
-- `uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main`
-- If stale/failing, rerun `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`; the wrapper
-  records freshness after all gates pass.
+- `uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main --require-clean-tree`
+- If stale/failing, rerun
+  `PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh`; the wrapper records
+  clean committed-HEAD freshness after all gates pass.
+- Use plain `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` only for interim dirty-tree
+  feedback before PR handoff.
 
 ## Workflow
 

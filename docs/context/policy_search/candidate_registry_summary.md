@@ -50,9 +50,12 @@ not headline promotion without a separate issue and evidence decision.
 | `proxemic_profile_conservative_issue_1676` | `diagnostic_only` | `diagnostic_only` | Conservative proxemic/comfort profile. |
 | `proxemic_profile_neutral_issue_1676` | `diagnostic_only` | `diagnostic_only` | Neutral profile used as middle setting. |
 | `proxemic_profile_open_issue_1676` | `diagnostic_only` | `diagnostic_only` | Open comfort profile with higher expected near-miss risk. |
+| `topology_guided_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Masked-route topology-hypothesis selector adding a bounded selected-hypothesis command to the existing hybrid-rule safety scorer; missing topology inputs fail closed and selected hypotheses are not benchmark evidence. |
+| `actuation_aware_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Synthetic AMV actuation scorer; not calibrated hardware evidence. |
 | `planner_selector_v2_diagnostic` | `diagnostic_only` | `diagnostic_only` | Deterministic selector over existing local candidates using predeclared topology/seed diagnostics and current local pedestrian context; not benchmark-strength evidence. |
 | `adaptive_proxemic_selector_v0` | `diagnostic_only` | `diagnostic_only` | Deterministic local-context selector over the three fixed proxemic profiles; logs selected profile and trigger reason, but does not support benchmark or comfort claims. |
 | `topology_guided_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Masked-route topology-hypothesis selector feeding the existing hybrid-rule corridor scorer; missing topology inputs fail closed and selected hypotheses are not benchmark evidence. |
+| `mpc_clearance_guarded_v1` | `diagnostic_only` | `diagnostic_only` | NMPC clearance sampler with an opt-in hard first-step static-clearance guard; intended to measure whether static-collision repair only creates low-progress failures. |
 
 ## Learned-Policy And Learned-Style Rows
 
@@ -107,7 +110,7 @@ not automatically current just because they remain in the registry.
 | --- | --- | --- |
 | Early hybrid-rule variants | `hybrid_rule_v0_minimal`, `hybrid_rule_v3_teb_like_rollout`, `hybrid_rule_v4_recovery_aware` | Read reports only when comparing mechanism history or reproducing a prior iteration. |
 | Route/waypoint sweeps | `hybrid_rule_v3_waypoint2_*`, route-lookahead and static-margin variants | Use for targeted failure analysis; start from the current anchors above. |
-| Model-based samplers | `hybrid_orca_sampler_v1`, `mpc_clearance_sampler_v1` | Useful provenance for sampler ideas; check full-matrix reports before reuse. |
+| Model-based samplers | `hybrid_orca_sampler_v1`, `mpc_clearance_sampler_v1`, `mpc_clearance_guarded_v1` | Useful provenance for sampler ideas; check full-matrix reports before reuse. |
 | Adaptive classical variants | `scenario_adaptive_orca_v1`, earlier hybrid-ORCA selectors | Use as selector baselines or comparison history. |
 | Reports before 2026-05-05 | `reports/2026-04-*`, `validation/2026-04-*` | Historical development trail; prefer the 2026-05-05 overview/analysis for current interpretation. |
 

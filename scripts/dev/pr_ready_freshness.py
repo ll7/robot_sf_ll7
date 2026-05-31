@@ -41,6 +41,17 @@ def _head_sha() -> str:
     return _run_git(["rev-parse", "HEAD"])
 
 
+def _tree_state() -> str:
+    """Return whether the current non-ignored worktree has uncommitted changes.
+
+    Returns:
+        ``"clean"`` when tracked, staged, and untracked non-ignored files are absent;
+        otherwise ``"dirty"``.
+    """
+    status = _run_git(["status", "--porcelain", "--untracked-files=normal"])
+    return "dirty" if status else "clean"
+
+
 def _sanitize_branch(branch: str) -> str:
     """Convert a branch name into a safe readiness-stamp filename stem.
 
@@ -89,19 +100,33 @@ def _write_stamp(
     branch: str,
     base_ref: str,
     head_sha: str,
+    tree_state: str,
     status: str,
+    require_clean_tree: bool,
 ) -> dict[str, Any]:
     """Write a readiness stamp for the current branch and HEAD.
 
     Returns:
         Stamp payload written to disk.
     """
+    if require_clean_tree and tree_state != "clean":
+        return {
+            "ok": False,
+            "reason": "dirty_worktree",
+            "branch": branch,
+            "base_ref": base_ref,
+            "head_sha": head_sha,
+            "tree_state": tree_state,
+            "stamp_path": str(path),
+        }
+
     payload = {
         "branch": branch,
         "base_ref": base_ref,
         "head_sha": head_sha,
         "recorded_at_utc": datetime.now(UTC).isoformat(),
         "status": status,
+        "tree_state": tree_state,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -114,6 +139,8 @@ def _freshness_result(
     branch: str,
     base_ref: str,
     head_sha: str,
+    tree_state: str | None,
+    require_clean_tree: bool,
     max_age_hours: float,
 ) -> tuple[bool, dict[str, Any]]:
     """Check whether an existing readiness stamp matches the current context.
@@ -127,8 +154,13 @@ def _freshness_result(
         "branch": branch,
         "base_ref": base_ref,
         "head_sha": head_sha,
+        "tree_state": tree_state,
+        "require_clean_tree": require_clean_tree,
         "max_age_hours": max_age_hours,
     }
+    if require_clean_tree and tree_state is not None and tree_state != "clean":
+        result["reason"] = "dirty_worktree"
+        return False, result
     if not path.exists():
         result["reason"] = "missing"
         return False, result
@@ -141,6 +173,10 @@ def _freshness_result(
         return False, result
 
     result["stamp"] = stamp
+    if require_clean_tree and stamp.get("tree_state") != "clean":
+        result["reason"] = "stamp_tree_state_not_clean"
+        return False, result
+
     checks = [
         ("status", "passed", "status_not_passed"),
         ("branch", branch, "branch_mismatch"),
@@ -191,6 +227,12 @@ def _build_parser() -> argparse.ArgumentParser:
     status_parser.add_argument("--branch")
     status_parser.add_argument("--head-sha")
     status_parser.add_argument("--stamp-path")
+    status_parser.add_argument("--tree-state", choices=("clean", "dirty"))
+    status_parser.add_argument(
+        "--require-clean-tree",
+        action="store_true",
+        help="Require both the current worktree and recorded stamp to be clean.",
+    )
     status_parser.add_argument("--max-age-hours", type=float, default=24.0)
 
     write_parser = subparsers.add_parser(
@@ -201,6 +243,12 @@ def _build_parser() -> argparse.ArgumentParser:
     write_parser.add_argument("--branch")
     write_parser.add_argument("--head-sha")
     write_parser.add_argument("--stamp-path")
+    write_parser.add_argument("--tree-state", choices=("clean", "dirty"))
+    write_parser.add_argument(
+        "--require-clean-tree",
+        action="store_true",
+        help="Fail instead of writing final readiness evidence from a dirty worktree.",
+    )
     write_parser.add_argument("--status", default="passed")
 
     return parser
@@ -213,6 +261,7 @@ def main() -> int:
 
     branch = args.branch or _current_branch()
     head_sha = args.head_sha or _head_sha()
+    tree_state = args.tree_state or _tree_state()
     stamp_path = _resolve_stamp_path(args.stamp_path, branch)
 
     if args.command == "write":
@@ -221,8 +270,13 @@ def main() -> int:
             branch=branch,
             base_ref=args.base_ref,
             head_sha=head_sha,
+            tree_state=tree_state,
             status=args.status,
+            require_clean_tree=args.require_clean_tree,
         )
+        if not payload.get("ok", True):
+            _json_dump(payload)
+            return 2
         _json_dump(
             {
                 "ok": True,
@@ -237,6 +291,8 @@ def main() -> int:
         branch=branch,
         base_ref=args.base_ref,
         head_sha=head_sha,
+        tree_state=tree_state,
+        require_clean_tree=args.require_clean_tree,
         max_age_hours=args.max_age_hours,
     )
     _json_dump(payload)

@@ -193,6 +193,7 @@ scripts/dev/run_ci_local.sh
 scripts/dev/check_docs_proof_consistency_diff.sh
 scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
+PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests
 uv run python scripts/dev/ci_timing_summary.py --run-id <github-actions-run-id> --top 10
 scripts/dev/gh_comment.sh pr --current <<'EOF'
@@ -211,9 +212,15 @@ share the same phase definitions (`lint`, `typecheck`, `test`, `smoke`, and
 `scripts/dev/run_ci_local.sh --no-setup lint test` for faster repeat local feedback.
 
 Before opening a PR, fetch the latest `origin/main`, integrate it into the feature branch with
-either merge or rebase, and only then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
-The `BASE_REF` value tells the readiness gate what to compare against; it does not update the
-feature branch by itself, so validation from before the latest-main sync is stale for PR creation.
+either merge or rebase, and only then run
+`PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
+Final mode refuses to write readiness evidence unless the non-ignored worktree is clean, so the
+stamp represents committed `HEAD` rather than an interim dirty-tree check. Plain
+`BASE_REF=origin/main scripts/dev/pr_ready_check.sh` remains useful for local feedback while edits
+are in progress; if it records a dirty-tree stamp, treat that stamp as interim and rerun final mode
+after committing. The `BASE_REF` value tells the readiness gate what to compare against; it does
+not update the feature branch by itself, so validation from before the latest-main sync is stale for
+PR creation.
 Do not wait until PR creation to pick up `main` branch improvements on long-lived feature branches;
 merge latest `origin/main` into the current branch when active work starts, then sync again before
 opening the PR.

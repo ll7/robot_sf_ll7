@@ -10,7 +10,7 @@ from copy import deepcopy
 from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 import yaml
@@ -1568,7 +1568,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             normalized_robot_command_mode=normalized_robot_command_mode,
         )
 
-    if algo_key in {"hybrid_rule_local_planner", "hybrid_rule_v0_minimal"}:
+    if algo_key in {
+        "hybrid_rule_local_planner",
+        "hybrid_rule_v0_minimal",
+        "actuation_aware_hybrid_rule_v0",
+    }:
         adapter = HybridRuleLocalPlannerAdapter(
             config=build_hybrid_rule_local_planner_config(algo_config)
         )
@@ -3713,6 +3717,46 @@ def _accumulate_batch_metadata(
     return adapter_requested_seen, adapter_native_steps, adapter_adapted_steps
 
 
+class _WorkerMetadataBridgeUpdate(NamedTuple):
+    """Normalized metadata update emitted by either direct or serialized worker paths."""
+
+    runtime_algorithm_contract: dict[str, Any]
+    adapter_requested_seen: bool
+    adapter_native_steps: int
+    adapter_adapted_steps: int
+
+
+def _apply_worker_metadata_bridge(
+    rec: dict[str, Any],
+    *,
+    feasibility_totals: dict[str, float],
+    runtime_algorithm_contract: dict[str, Any] | None,
+) -> _WorkerMetadataBridgeUpdate:
+    """Fold one worker episode record into the batch-level metadata contract.
+
+    This is the explicit bridge between per-episode worker payloads and the batch summary.  It is
+    used by both direct function-call execution and serialized worker execution so metadata-only
+    additions have one testable hop.
+
+    Returns:
+        Worker metadata update with merged runtime contract and adapter-impact deltas.
+    """
+    requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+        rec,
+        feasibility_totals=feasibility_totals,
+    )
+    merged_runtime_contract = _merge_runtime_algorithm_contract(
+        runtime_algorithm_contract or {},
+        rec.get("algorithm_metadata"),
+    )
+    return _WorkerMetadataBridgeUpdate(
+        runtime_algorithm_contract=merged_runtime_contract,
+        adapter_requested_seen=requested_seen,
+        adapter_native_steps=native_steps,
+        adapter_adapted_steps=adapted_steps,
+    )
+
+
 def _merge_runtime_algorithm_contract(  # noqa: C901
     base_contract: dict[str, Any],
     runtime_algorithm_metadata: Any,
@@ -4151,17 +4195,15 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         for scenario, seed in jobs:
             try:
                 rec = _run_map_job_worker((scenario, seed, fixed_params))
-                requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+                bridge_update = _apply_worker_metadata_bridge(
                     rec,
                     feasibility_totals=feasibility_totals,
+                    runtime_algorithm_contract=runtime_algorithm_contract,
                 )
-                adapter_samples_seen = adapter_samples_seen or requested_seen
-                adapter_native_steps += native_steps
-                adapter_adapted_steps += adapted_steps
-                runtime_algorithm_contract = _merge_runtime_algorithm_contract(
-                    runtime_algorithm_contract or {},
-                    rec.get("algorithm_metadata"),
-                )
+                adapter_samples_seen = adapter_samples_seen or bridge_update.adapter_requested_seen
+                adapter_native_steps += bridge_update.adapter_native_steps
+                adapter_adapted_steps += bridge_update.adapter_adapted_steps
+                runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
                 _write_validated(out_path, schema, rec)
                 wrote += 1
             except Exception as exc:  # pragma: no cover - error path
@@ -4183,17 +4225,17 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 idx, scenario, seed = future_to_job[fut]
                 try:
                     rec = fut.result()
-                    requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+                    bridge_update = _apply_worker_metadata_bridge(
                         rec,
                         feasibility_totals=feasibility_totals,
+                        runtime_algorithm_contract=runtime_algorithm_contract,
                     )
-                    adapter_samples_seen = adapter_samples_seen or requested_seen
-                    adapter_native_steps += native_steps
-                    adapter_adapted_steps += adapted_steps
-                    runtime_algorithm_contract = _merge_runtime_algorithm_contract(
-                        runtime_algorithm_contract or {},
-                        rec.get("algorithm_metadata"),
+                    adapter_samples_seen = (
+                        adapter_samples_seen or bridge_update.adapter_requested_seen
                     )
+                    adapter_native_steps += bridge_update.adapter_native_steps
+                    adapter_adapted_steps += bridge_update.adapter_adapted_steps
+                    runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
                     results_by_idx[idx] = rec
                 except Exception as exc:  # pragma: no cover
                     failures.append(

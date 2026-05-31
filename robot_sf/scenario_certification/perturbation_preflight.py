@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 PERTURBATION_MANIFEST_SCHEMA_VERSION = "scenario_perturbation_manifest.v1"
 PREFLIGHT_SCHEMA_VERSION = "scenario_perturbation_preflight.v1"
+PILOT_MATRIX_SCHEMA_VERSION = "scenario_perturbation_pilot_matrix.v1"
 _PERTURBATION_MANIFEST_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1]
     / "benchmark"
@@ -70,6 +71,19 @@ class PerturbationPreflightReport:
     manifest_path: str
     scenario_config: str
     results: list[PerturbationPreflightResult] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PerturbationPilotMaterialization:
+    """Local scenario matrix emitted from preflight-eligible perturbation variants."""
+
+    schema_version: str
+    manifest_id: str
+    manifest_path: str
+    scenario_matrix_path: str
+    summary_path: str
+    included_variants: tuple[str, ...]
+    excluded_variants: tuple[str, ...]
 
 
 def preflight_perturbation_manifest(manifest_path: Path | str) -> PerturbationPreflightReport:
@@ -132,6 +146,92 @@ def preflight_to_dict(report: PerturbationPreflightReport) -> dict[str, Any]:
             for result in report.results
         ],
     }
+
+
+def materialize_perturbation_pilot_matrix(
+    manifest_path: Path | str,
+    *,
+    output_dir: Path | str,
+    seed_limit: int | None = None,
+) -> PerturbationPilotMaterialization:
+    """Write a local scenario matrix for preflight-eligible perturbation variants.
+
+    The generated files are execution inputs for a later small planner pilot. They are not
+    benchmark evidence on their own, and variants excluded by the preflight are omitted.
+
+    Returns:
+        PerturbationPilotMaterialization: Paths and included/excluded variant IDs.
+    """
+    path = Path(manifest_path)
+    out_dir = Path(output_dir)
+    manifest = _load_manifest(path)
+    report = preflight_perturbation_manifest(path)
+    preflight_by_variant = {result.variant_id: result for result in report.results}
+    scenario_config = _resolve_path(
+        manifest["scenario_config"],
+        base_dir=path.parent,
+        field_name="scenario_config",
+    )
+    scenarios = load_scenarios(scenario_config)
+    matrix_path = out_dir / "scenario_matrix.yaml"
+    routes_dir = out_dir / "route_overrides"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    routes_dir.mkdir(parents=True, exist_ok=True)
+
+    materialized_scenarios: list[dict[str, Any]] = []
+    included: list[str] = []
+    excluded: list[str] = []
+    for variant in manifest["variants"]:
+        normalized = _normalize_variant(variant)
+        result = preflight_by_variant[normalized["variant_id"]]
+        if result.benchmark_evidence_status != _SUCCESS_EVIDENCE_CANDIDATE:
+            excluded.append(result.variant_id)
+            continue
+        scenario = _materialize_variant_scenario(
+            normalized,
+            result=result,
+            manifest=manifest,
+            scenario_config=scenario_config,
+            scenarios=scenarios,
+            routes_dir=routes_dir,
+            matrix_path=matrix_path,
+            seed_limit=seed_limit,
+        )
+        materialized_scenarios.append(scenario)
+        included.append(result.variant_id)
+
+    matrix_payload = {
+        "schema_version": PILOT_MATRIX_SCHEMA_VERSION,
+        "source_manifest": path.as_posix(),
+        "source_manifest_id": manifest["manifest_id"],
+        "evidence_boundary": (
+            "local pilot execution input only; not benchmark or paper-facing evidence"
+        ),
+        "scenarios": materialized_scenarios,
+    }
+    matrix_path.write_text(yaml.safe_dump(matrix_payload, sort_keys=False), encoding="utf-8")
+    summary_path = out_dir / "materialization_summary.json"
+    summary_payload = {
+        "schema_version": PILOT_MATRIX_SCHEMA_VERSION,
+        "manifest_id": manifest["manifest_id"],
+        "manifest_path": path.as_posix(),
+        "scenario_matrix_path": matrix_path.as_posix(),
+        "preflight_schema_version": report.schema_version,
+        "included_variants": included,
+        "excluded_variants": excluded,
+        "seed_limit": seed_limit,
+        "variant_count": len(materialized_scenarios),
+    }
+    summary_path.write_text(json.dumps(summary_payload, indent=2, sort_keys=True) + "\n")
+    return PerturbationPilotMaterialization(
+        schema_version=PILOT_MATRIX_SCHEMA_VERSION,
+        manifest_id=str(manifest["manifest_id"]),
+        manifest_path=path.as_posix(),
+        scenario_matrix_path=matrix_path.as_posix(),
+        summary_path=summary_path.as_posix(),
+        included_variants=tuple(included),
+        excluded_variants=tuple(excluded),
+    )
 
 
 def _load_manifest(path: Path) -> Mapping[str, Any]:
@@ -371,6 +471,138 @@ def _certify_variant(
         robot_config=config.robot_config,
         sim_config=config.sim_config,
     )
+
+
+def _materialize_variant_scenario(
+    variant: Mapping[str, Any],
+    *,
+    result: PerturbationPreflightResult,
+    manifest: Mapping[str, Any],
+    scenario_config: Path,
+    scenarios: list[Mapping[str, Any]],
+    routes_dir: Path,
+    matrix_path: Path,
+    seed_limit: int | None,
+) -> dict[str, Any]:
+    """Build one scenario entry suitable for a local paired planner pilot.
+
+    Returns:
+        dict[str, Any]: Scenario entry with variant identity, seeds, and optional route override.
+    """
+    scenario = deepcopy(dict(select_scenario(scenarios, str(variant["scenario_id"]))))
+    scenario = _resolve_materialized_scenario_paths(scenario, scenario_config=scenario_config)
+    scenario["name"] = str(variant["variant_id"])
+    scenario["scenario_id"] = str(variant["variant_id"])
+    scenario["seeds"] = _limit_seeds(result.seeds, seed_limit)
+    metadata = (
+        dict(scenario.get("metadata")) if isinstance(scenario.get("metadata"), Mapping) else {}
+    )
+    metadata["scenario_perturbation"] = {
+        "schema_version": PERTURBATION_MANIFEST_SCHEMA_VERSION,
+        "source_manifest_id": manifest["manifest_id"],
+        "source_scenario_id": variant["scenario_id"],
+        "variant_id": variant["variant_id"],
+        "family": variant["family"],
+        "validity_status": result.validity_status,
+        "benchmark_evidence_status": result.benchmark_evidence_status,
+        "perturbation_summary": dict(result.perturbation_summary),
+        "evidence_boundary": "local_pilot_input_not_benchmark_evidence",
+    }
+    scenario["metadata"] = metadata
+    if variant["family"] == "robot_route_offset":
+        route_path = routes_dir / f"{variant['variant_id']}.route_overrides.yaml"
+        _write_route_offset_override(
+            variant,
+            scenario_config=scenario_config,
+            scenarios=scenarios,
+            perturbation_summary=result.perturbation_summary,
+            route_path=route_path,
+        )
+        scenario["route_overrides_file"] = route_path.relative_to(matrix_path.parent).as_posix()
+    return scenario
+
+
+def _resolve_materialized_scenario_paths(
+    scenario: dict[str, Any],
+    *,
+    scenario_config: Path,
+) -> dict[str, Any]:
+    """Resolve source scenario asset paths before writing an out-of-tree matrix.
+
+    Returns:
+        dict[str, Any]: Scenario entry with loadable path fields.
+    """
+    updated = dict(scenario)
+    for field_name in ("map_file", "route_overrides_file"):
+        value = updated.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        candidate = Path(value)
+        if candidate.is_absolute():
+            continue
+        resolved = (scenario_config.parent / candidate).resolve()
+        if resolved.exists():
+            updated[field_name] = resolved.as_posix()
+    return updated
+
+
+def _limit_seeds(seeds: tuple[int, ...], seed_limit: int | None) -> list[int]:
+    """Apply an optional positive seed limit to a variant seed tuple.
+
+    Returns:
+        list[int]: Variant seeds, optionally truncated for a small local pilot.
+    """
+    if seed_limit is None:
+        return list(seeds)
+    if seed_limit <= 0:
+        raise ValueError("seed_limit must be positive when provided")
+    return list(seeds[:seed_limit])
+
+
+def _write_route_offset_override(
+    variant: Mapping[str, Any],
+    *,
+    scenario_config: Path,
+    scenarios: list[Mapping[str, Any]],
+    perturbation_summary: Mapping[str, Any],
+    route_path: Path,
+) -> None:
+    """Write a route override artifact for one robot-route offset variant."""
+    scenario = dict(select_scenario(scenarios, str(variant["scenario_id"])))
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_config)
+    if not config.map_pool.map_defs:
+        raise ValueError("scenario map pool is empty")
+    _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    perturbed_map = deepcopy(map_def)
+    _apply_robot_route_offset(
+        perturbed_map.robot_routes,
+        dx=float(perturbation_summary["dx_m"]),
+        dy=float(perturbation_summary["dy_m"]),
+        parameters=variant.get("parameters", {}),
+    )
+    route_payload = {
+        "schema_version": "scenario_route_overrides.v1",
+        "source": f"{scenario_config.as_posix()}#{variant['scenario_id']}",
+        "variant_id": variant["variant_id"],
+        "route_payload": {
+            "robot_routes": [_route_to_payload(route) for route in perturbed_map.robot_routes],
+            "ped_routes": [],
+        },
+    }
+    route_path.write_text(yaml.safe_dump(route_payload, sort_keys=False), encoding="utf-8")
+
+
+def _route_to_payload(route: GlobalRoute) -> dict[str, Any]:
+    """Serialize a global route into the route-override YAML surface.
+
+    Returns:
+        dict[str, Any]: Route override entry with spawn, goal, and waypoints.
+    """
+    return {
+        "spawn_id": int(route.spawn_id),
+        "goal_id": int(route.goal_id),
+        "waypoints": [[float(x), float(y)] for x, y in route.waypoints],
+    }
 
 
 def _apply_robot_route_offset(

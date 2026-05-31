@@ -82,6 +82,10 @@ from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.planner.adaptive_proxemic_selector import (
+    AdaptiveProxemicSelectorAdapter,
+    build_adaptive_proxemic_selector_config,
+)
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.planner.crowdnav_height import (
     CrowdNavHeightAdapter,
@@ -1476,6 +1480,32 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key == "adaptive_proxemic_selector_v0":
+        selector_config = build_adaptive_proxemic_selector_config(algo_config)
+        adapter = AdaptiveProxemicSelectorAdapter(config=selector_config)
+        meta["adaptive_proxemic_selector"] = {
+            "status": "enabled",
+            "diagnostic_only": bool(selector_config.diagnostic_only),
+            "claim_boundary": selector_config.claim_boundary,
+            "profile_sources": [
+                selector_config.profiles[name].source_candidate
+                for name in ("conservative", "neutral", "open")
+            ],
+        }
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="AdaptiveProxemicSelectorAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations=(
+                "diagnostic-only selector over fixed proxemic profiles; "
+                "not benchmark or comfort evidence"
+            ),
         )
 
     if algo_key == "safety_barrier":

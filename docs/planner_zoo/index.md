@@ -24,7 +24,7 @@ blocked rows are not benchmark-ready claims.
 
 | Status | Meaning |
 | --- | --- |
-| Current benchmark candidate | Runnable candidate with a registry config and local gates. Read the linked reports before making any benchmark claim. |
+| Current runnable anchor | Runnable candidate with a registry config and local gates. Read the linked reports before making any benchmark claim. |
 | Runnable historical candidate | Runnable candidate kept for ablations, regressions, and provenance. Prefer current candidates for new comparisons. |
 | Diagnostic-only | Runnable or staged probe whose purpose is mechanism inspection. Do not treat outcomes as benchmark evidence without a separate issue and proof decision. |
 | Learned-policy intake | Learned or learned-style policy row that also needs artifact, adapter, and eligibility checks. |
@@ -39,11 +39,11 @@ uv run python scripts/validation/run_policy_search_candidate.py --candidate <can
 Use `--stage amv_actuation_smoke` only for candidates whose required stage is
 `amv_actuation_smoke`.
 
-## Current Benchmark Candidates
+## Current Runnable Anchors
 
 These are the shortest current entry points for locally runnable planner comparisons. Their smoke
-commands exercise the repository runner, but the strongest supported claim still depends on the
-latest reports and promotion gates.
+commands exercise the repository runner, but not every row is benchmark-eligible. The strongest
+supported claim still depends on the latest reports and promotion gates.
 
 | Candidate | Family | Config | Local smoke command | Notes |
 | --- | --- | --- | --- | --- |
@@ -65,7 +65,7 @@ these variants.
 | --- | --- |
 | Early hybrid-rule variants | `hybrid_rule_v0_minimal`, `hybrid_rule_v3_teb_like_rollout`, `hybrid_rule_v4_recovery_aware`, `hybrid_rule_v3_dynamic_relaxed`, `hybrid_rule_v3_static_margin0` |
 | Route, waypoint, speed, and clearance sweeps | `hybrid_rule_v3_waypoint2_static_escape`, `hybrid_rule_v3_waypoint2_speed2p2`, `hybrid_rule_v3_waypoint2_route_commit`, `hybrid_rule_v3_static_margin0_waypoint3`, `hybrid_rule_v3_waypoint2_progress`, `hybrid_rule_v3_waypoint2_route_lookahead6`, `hybrid_rule_v3_waypoint2_route_lookahead8`, `hybrid_rule_v3_waypoint2_route_lookahead8_inflation4`, `hybrid_rule_v3_waypoint2_route_lookahead8_static05`, `hybrid_rule_v3_waypoint2_route_lookahead8_static02`, `hybrid_rule_v3_waypoint2_route_lookahead8_clearance1`, `hybrid_rule_v3_waypoint2_dynamic_clearance` |
-| Comfort and proxemic variants | `hybrid_rule_v3_static_margin0_comfort`, `hybrid_rule_v3_waypoint2_mild_comfort`, `proxemic_profile_conservative_issue_1676`, `proxemic_profile_neutral_issue_1676`, `proxemic_profile_open_issue_1676` |
+| Comfort variants | `hybrid_rule_v3_static_margin0_comfort`, `hybrid_rule_v3_waypoint2_mild_comfort` |
 | Model-based samplers | `hybrid_orca_sampler_v1`, `mpc_clearance_sampler_v1` |
 | Guarded learned-policy comparators | `risk_guarded_ppo_v1`, `orca_prior_guarded_ppo_v1`, `orca_prior_guarded_ppo_v2_static_global`, `orca_primary_guarded_ppo_v1`, `ppo_issue791_best_v1` |
 | Adaptive classical history | `scenario_adaptive_orca_v1` |
@@ -81,6 +81,9 @@ the claim boundary with new evidence.
 | `hybrid_rule_v3_progress_2p4_static_escape_probe` | Hybrid-rule probe | `uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_progress_2p4_static_escape_probe --stage smoke` |
 | `risk_surface_dwa_v0` | Local risk-surface diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate risk_surface_dwa_v0 --stage smoke` |
 | `topology_guided_hybrid_rule_v0` | Topology-hypothesis diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate topology_guided_hybrid_rule_v0 --stage smoke` |
+| `proxemic_profile_conservative_issue_1676` | Proxemic/comfort diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate proxemic_profile_conservative_issue_1676 --stage smoke`; comfort-profile evidence is diagnostic-only. |
+| `proxemic_profile_neutral_issue_1676` | Proxemic/comfort diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate proxemic_profile_neutral_issue_1676 --stage smoke`; comfort-profile evidence is diagnostic-only. |
+| `proxemic_profile_open_issue_1676` | Proxemic/comfort diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate proxemic_profile_open_issue_1676 --stage smoke`; comfort-profile evidence is diagnostic-only. |
 | `tentabot_value_scorer_v0` | Learned-style value-scorer spike | `uv run python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v0 --stage smoke`; upstream Tentabot remains source-side only. |
 | `actuation_aware_hybrid_rule_v0` | Synthetic AMV actuation diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate actuation_aware_hybrid_rule_v0 --stage amv_actuation_smoke`; not calibrated hardware evidence. |
 | `adaptive_proxemic_selector_v0` | Proxemic selector diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate adaptive_proxemic_selector_v0 --stage smoke` |

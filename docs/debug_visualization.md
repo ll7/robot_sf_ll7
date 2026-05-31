@@ -22,6 +22,14 @@ The JSON payload uses `schema_version: robot-sf-debug-timeline.v1` and records:
 - selected/proposed action when present,
 - TTC, PET, and clearance annotations when present in frame or episode metrics.
 
+For typed `simulation_trace_export.v1` artifacts, render a static Markdown inspection report with:
+
+```bash
+uv run python scripts/tools/render_trace_report.py \
+  --trace tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
+  --output output/debug/trace_report/report.md
+```
+
 An optional Rerun output path is available when `rerun-sdk` is installed in the active environment:
 
 ```bash

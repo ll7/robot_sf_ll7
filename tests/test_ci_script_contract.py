@@ -51,6 +51,19 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup" in script_text
 
 
+def test_run_tests_parallel_validates_dist_mode_before_resolving_workers() -> None:
+    """Invalid dist mode must fail before resolve_pytest_workers.py is invoked."""
+
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    dist_validation = "Invalid PYTEST_XDIST_DIST value"
+    worker_resolution = 'uv run python "$SCRIPT_DIR/resolve_pytest_workers.py"'
+
+    assert dist_validation in script_text
+    assert worker_resolution in script_text
+    assert script_text.find(dist_validation) < script_text.find(worker_resolution)
+
+
 def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:
     """Typecheck phase should report findings without becoming a merge gate."""
 

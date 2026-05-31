@@ -77,17 +77,6 @@ if [[ -n "$worker_override" ]]; then
   requested_args=(--requested "$worker_override")
 fi
 
-worker_spec="$(
-  uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" ${requested_args[@]+"${requested_args[@]}"} \
-    --show-reason 2> >(cat >&2)
-)"
-if [[ -z "$worker_spec" ]]; then
-  echo "Failed to resolve pytest worker count." >&2
-  exit 2
-fi
-
-echo "Resolved pytest-xdist workers: $worker_spec" >&2
-
 case "$dist_mode" in
   load|worksteal|loadscope|loadfile|loadgroup)
     ;;
@@ -98,6 +87,17 @@ case "$dist_mode" in
 esac
 
 echo "Resolved pytest-xdist distribution mode: $dist_mode" >&2
+
+worker_spec="$(
+  uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" ${requested_args[@]+"${requested_args[@]}"} \
+    --show-reason 2> >(cat >&2)
+)"
+if [[ -z "$worker_spec" ]]; then
+  echo "Failed to resolve pytest worker count." >&2
+  exit 2
+fi
+
+echo "Resolved pytest-xdist workers: $worker_spec" >&2
 
 cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
 

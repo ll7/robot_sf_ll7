@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/scenario_perturbation_manifest.v1.json",
+  "title": "RobotSF Scenario Perturbation Manifest (v1)",
+  "description": "Minimal manifest for no-op baselines and bounded robot-route perturbation preflight. Validity preflight is not benchmark execution evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "scenario_config",
+    "seed_controls",
+    "validity",
+    "variants"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "scenario_perturbation_manifest.v1"
+    },
+    "manifest_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "scenario_config": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seed_controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_seeds",
+        "replay_seed_policy"
+      ],
+      "properties": {
+        "baseline_seeds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "replay_seed_policy": {
+          "enum": [
+            "explicit"
+          ]
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_scenario_certification",
+        "max_route_offset_m",
+        "invalid_variant_evidence_policy"
+      ],
+      "properties": {
+        "require_scenario_certification": {
+          "const": true
+        },
+        "max_route_offset_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "invalid_variant_evidence_policy": {
+          "const": "exclude_from_success_evidence"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "variants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/variant"
+      }
+    },
+    "pilot_matrix_note": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parent_issue": {
+          "type": "string"
+        },
+        "next_step": {
+          "type": "string"
+        },
+        "evidence_boundary": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant_id",
+        "scenario_id",
+        "family",
+        "seeds"
+      ],
+      "properties": {
+        "variant_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$"
+        },
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family": {
+          "enum": [
+            "noop",
+            "robot_route_offset"
+          ]
+        },
+        "seeds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dx_m",
+            "dy_m",
+            "max_magnitude_m"
+          ],
+          "properties": {
+            "dx_m": {
+              "type": "number"
+            },
+            "dy_m": {
+              "type": "number"
+            },
+            "max_magnitude_m": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "spawn_id": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "goal_id": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "waypoint_selector": {
+              "const": "all"
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "family": {
+                "const": "robot_route_offset"
+              }
+            },
+            "required": [
+              "family"
+            ]
+          },
+          "then": {
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "family": {
+                "const": "noop"
+              }
+            },
+            "required": [
+              "family"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "parameters"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

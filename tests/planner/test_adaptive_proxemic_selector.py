@@ -57,6 +57,22 @@ def test_adaptive_selector_uses_open_profile_when_local_context_is_clear() -> No
     assert diagnostics["last_selection"]["source_candidate"] == "proxemic_profile_open_issue_1676"
 
 
+def test_adaptive_selector_v1_uses_neutral_profile_when_context_is_clear() -> None:
+    """The v1 selector should default to neutral instead of open in clear scenes."""
+    planner = AdaptiveProxemicSelectorAdapter(
+        build_adaptive_proxemic_selector_config({"selector_version": "v1"})
+    )
+
+    planner.plan(_obs())
+
+    diagnostics = planner.diagnostics()
+    assert diagnostics["selector"] == "adaptive_proxemic_selector_v1"
+    assert diagnostics["selector_version"] == "v1"
+    assert diagnostics["selected_profile_counts"] == {"neutral": 1}
+    assert diagnostics["last_selection"]["selected_profile"] == "neutral"
+    assert diagnostics["last_selection"]["trigger_reason"] == "stable_clear_context"
+
+
 def test_adaptive_selector_uses_conservative_profile_near_humans() -> None:
     """Immediate human proximity should select the conservative fixed profile."""
     planner = AdaptiveProxemicSelectorAdapter(build_adaptive_proxemic_selector_config({}))
@@ -109,6 +125,37 @@ def test_adaptive_selector_uses_neutral_profile_for_constrained_passage() -> Non
     )
 
 
+def test_adaptive_selector_v1_uses_conservative_profile_for_constrained_passage() -> None:
+    """The v1 selector treats constrained passages as high-risk context."""
+    planner = AdaptiveProxemicSelectorAdapter(
+        build_adaptive_proxemic_selector_config({"selector_version": "v1"})
+    )
+    obs = _obs(ped_positions=[(2.0, 0.0)])
+    obs["route_corridor"] = {"corridor_width_estimate": 0.85}
+
+    planner.plan(obs)
+
+    diagnostics = planner.diagnostics()
+    assert diagnostics["selected_profile_counts"] == {"conservative": 1}
+    assert diagnostics["last_selection"]["selected_profile"] == "conservative"
+    assert diagnostics["last_selection"]["trigger_reason"] == "constrained_passage_high_risk"
+
+
+def test_adaptive_selector_v1_reserves_open_for_sparse_low_progress() -> None:
+    """Sparse low-progress context should still allow the open recovery profile."""
+    planner = AdaptiveProxemicSelectorAdapter(
+        build_adaptive_proxemic_selector_config({"selector_version": "v1"})
+    )
+    obs = _obs(ped_positions=[(2.8, 0.0)])
+    obs["route_arc_progress_windows"] = {"3s": 0.0}
+
+    planner.plan(obs)
+
+    diagnostics = planner.diagnostics()
+    assert diagnostics["selected_profile_counts"] == {"open": 1}
+    assert diagnostics["last_selection"]["trigger_reason"] == "low_progress_clear_space"
+
+
 def test_adaptive_selector_ignores_nonfinite_pedestrian_count() -> None:
     """Nonfinite pedestrian counts should fall back to the available rows."""
     planner = AdaptiveProxemicSelectorAdapter(build_adaptive_proxemic_selector_config({}))
@@ -145,3 +192,9 @@ def test_adaptive_selector_rejects_non_diagnostic_claim_boundary() -> None:
     """The selector is diagnostic-only until a future issue promotes it."""
     with pytest.raises(ValueError, match="diagnostic-only"):
         build_adaptive_proxemic_selector_config({"claim_boundary": "benchmark_candidate"})
+
+
+def test_adaptive_selector_rejects_unknown_selector_version() -> None:
+    """Unknown selector versions should fail before planner construction."""
+    with pytest.raises(ValueError, match="selector_version"):
+        build_adaptive_proxemic_selector_config({"selector_version": "v9000"})

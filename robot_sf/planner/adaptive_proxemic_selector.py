@@ -65,10 +65,12 @@ _HYBRID_RULE_CONFIG_KEYS = {field.name for field in fields(HybridRuleLocalPlanne
 _SELECTOR_KEYS = {
     "diagnostic_only",
     "claim_boundary",
+    "selector_version",
     "selector",
     "profile_base",
     "profiles",
 }
+_SELECTOR_VERSIONS = {"v0", "v1"}
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,7 @@ class AdaptiveProxemicSelectorConfig:
 
     diagnostic_only: bool
     claim_boundary: str
+    selector_version: str
     density_radius_m: float
     close_human_distance_m: float
     neutral_human_distance_m: float
@@ -189,9 +192,15 @@ def build_adaptive_proxemic_selector_config(
     selector = _selector_settings(raw)
     diagnostic_only = bool(raw.get("diagnostic_only", True))
     claim_boundary = str(raw.get("claim_boundary") or "diagnostic_only")
+    selector_version = str(raw.get("selector_version") or "v0")
+    if selector_version not in _SELECTOR_VERSIONS:
+        raise ValueError(
+            "adaptive_proxemic_selector selector_version must be one of: "
+            f"{', '.join(sorted(_SELECTOR_VERSIONS))}"
+        )
     if not diagnostic_only or claim_boundary != "diagnostic_only":
         raise ValueError(
-            "adaptive_proxemic_selector_v0 is diagnostic-only; "
+            "adaptive_proxemic_selector is diagnostic-only; "
             "set diagnostic_only: true and claim_boundary: diagnostic_only"
         )
     profiles = _profile_defaults()
@@ -226,6 +235,7 @@ def build_adaptive_proxemic_selector_config(
     return AdaptiveProxemicSelectorConfig(
         diagnostic_only=diagnostic_only,
         claim_boundary=claim_boundary,
+        selector_version=selector_version,
         profiles=profiles,
         **selector,
     )
@@ -292,7 +302,8 @@ class AdaptiveProxemicSelectorAdapter:
         if isinstance(active_profile, str) and active_profile in self._planners:
             active_diagnostics = self._planners[active_profile].diagnostics()
         return {
-            "selector": "adaptive_proxemic_selector_v0",
+            "selector": f"adaptive_proxemic_selector_{self.config.selector_version}",
+            "selector_version": self.config.selector_version,
             "diagnostic_only": bool(self.config.diagnostic_only),
             "claim_boundary": self.config.claim_boundary,
             "steps": int(self._step_index),
@@ -325,6 +336,14 @@ class AdaptiveProxemicSelectorAdapter:
             "constrained_passage": bool(constrained),
             "low_progress_risk": bool(low_progress),
         }
+        if self.config.selector_version == "v1":
+            return self._select_profile_v1(
+                nearest=nearest,
+                local_density_count=local_density_count,
+                constrained=constrained,
+                low_progress=low_progress,
+                context=context,
+            )
         if nearest <= self.config.close_human_distance_m:
             return "conservative", "near_human", context
         if local_density_count >= self.config.high_density_count:
@@ -345,6 +364,37 @@ class AdaptiveProxemicSelectorAdapter:
         ):
             return "neutral", "moderate_density", context
         return "open", "clear_low_density", context
+
+    def _select_profile_v1(
+        self,
+        *,
+        nearest: float,
+        local_density_count: int,
+        constrained: bool,
+        low_progress: bool,
+        context: dict[str, Any],
+    ) -> tuple[str, str, dict[str, Any]]:
+        """Return the v1 profile decision with neutral default and sparse recovery."""
+        if nearest <= self.config.close_human_distance_m:
+            return "conservative", "near_human", context
+        if local_density_count >= self.config.high_density_count:
+            return "conservative", "high_local_density", context
+        if constrained:
+            return "conservative", "constrained_passage_high_risk", context
+        if (
+            low_progress
+            and local_density_count == 0
+            and nearest > self.config.neutral_human_distance_m
+        ):
+            return "open", "low_progress_clear_space", context
+        if (
+            nearest <= self.config.neutral_human_distance_m
+            or local_density_count >= self.config.moderate_density_count
+        ):
+            return "neutral", "moderate_social_context", context
+        if low_progress:
+            return "neutral", "low_progress_with_humans", context
+        return "neutral", "stable_clear_context", context
 
     def _observation_for_selected_planner(self, observation: dict[str, Any]) -> dict[str, Any]:
         """Return observation with invalid pedestrian counts normalized for profile planners."""

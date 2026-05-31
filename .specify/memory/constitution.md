@@ -1,12 +1,13 @@
 <!--
 Sync Impact Report
-Previous Version: 1.4.0 -> New Version: 1.4.1 (PATCH bump)
-Rationale: Reframed the constitution as contributor guidance with hard-contract boundaries, made research progress the leading value, and clarified low-risk validation and low-value test removal.
+Previous Version: 1.4.1 -> New Version: 1.4.2 (PATCH bump)
+Rationale: Added maintainer-values linkage, explicit honesty/transparency/reproducibility hard rule, default cheap validation for docs/instruction-only changes, and uncertainty labeling for exploratory claims.
 Modified Principles: I, IX, XIII, Governance
 Added Sections: None
 Removed Sections: None
 Templates Updated:
- - ✅ dev_guide.md: Removed stale runtime-specific guidance and aligned validation language
+ - ✅ maintainer_values.md: Added compact current values and hard contracts
+ - ✅ dev_guide.md: Validation language remains aligned through AGENTS/docs references
  - ✅ copilot-instructions.md: Aligned quality-playbook language with risk-proportional validation
 Pending Template Updates: None
 Deferred TODOs: None
@@ -19,16 +20,19 @@ This Constitution specifies WHAT the Robot SF repository delivers: a cohesive, r
 and engineering platform for social navigation of a robot among pedestrians. Treat it as contributor
 guidance plus hard contract notes. Benchmark, metric, schema, reproducibility, and paper-facing
 contracts remain strict; softer workflow guidance should support maintainer-directed research
-progress rather than override it.
+progress rather than override it. `docs/maintainer_values.md` is the compact current-values entry
+point.
 
 ## Core Principles
 
 ### I. Research Progress Through Reproducible Social Navigation
 The repository prioritizes concrete research progress on robot–pedestrian social navigation. It must
 provide a self-contained, scriptable simulation and benchmarking substrate so that progress can be
-checked, reproduced, and compared. All published or benchmark-facing artifacts (environments,
-configurations, benchmark outputs, episode logs, figures, metrics tables, weight files) must be
-derivable deterministically from versioned inputs (code + configs + seeds + model artifacts).
+checked, reproduced, and compared. The hard rule is to be honest, transparent, and reproducible:
+claims must state what ran, what did not run, and what remains uncertain. All published or
+benchmark-facing artifacts (environments, configurations, benchmark outputs, episode logs, figures,
+metrics tables, weight files) must be derivable deterministically from versioned inputs (code +
+configs + seeds + model artifacts).
 Re-running documented commands must reproduce published metrics and figures (subject only to
 stochastic variance explicitly bounded by seeds and bootstrap CIs).
 
@@ -57,7 +61,8 @@ Core guides (development guide, environment overview, benchmark docs, SNQI tooli
 Any change to public environment behavior, benchmark schema, or metrics computation must be
 accompanied by at least a smoke test (reset/step loop), and if logic-bearing, an assertion-based
 unit/integration test. Omission requires an explicit, temporary TODO with rationale and follow-up
-tracking.
+tracking. Docs-only and instruction-only changes use the cheap validation path by default unless
+they alter runtime, benchmark, metric, schema, model-provenance, or paper-facing contracts.
 
 ### X. Scope Discipline
 Out of scope: general robotics control stacks, unrelated perception models, arbitrary RL algorithm zoo, generic data science utilities, unversioned experiment notebooks. The repo remains focused strictly on social navigation simulation, evaluation, and analysis.
@@ -94,6 +99,7 @@ Before accepting test failures or implementing fixes, developers MUST verify the
 necessity of the failing test. Not all tests provide equal value; some may be outdated, overly
 brittle, or testing non-critical behavior. Test suite health requires both coverage and relevance,
 and low-value tests may be removed more readily when the rationale is documented.
+Do not assume flaky tests are common; classify each failure before broad policy changes.
 
 Verification Criteria (evaluate in order):
 1. **Core Feature Coverage**: Does the test verify a public contract (factory behavior, schema compliance, metric correctness, deterministic reproducibility)? If yes → high priority.
@@ -216,4 +222,4 @@ contracts, (3) migration guidance or deprecation plan, (4) version/date update b
 introduction of out-of-scope functionality must include justification aligning with Core Principles
 I-X or be rejected.
 
-**Version**: 1.4.1 | **Ratified**: 2025-09-19 | **Last Amended**: 2026-05-30
+**Version**: 1.4.2 | **Ratified**: 2025-09-19 | **Last Amended**: 2026-05-30

@@ -3091,6 +3091,50 @@ def test_run_map_batch_fail_closed_when_synthetic_actuation_profile_is_not_diff_
     assert result["preflight"]["synthetic_actuation_profile"]["name"] == "amv-actuation-stress-v0"
 
 
+def test_run_map_batch_fail_closed_when_latency_action_delay_is_not_diff_drive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Latency action-delay contracts should skip closed for non-differential-drive rows."""
+    scenario = {
+        "name": "holonomic_latency",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic"},
+    }
+    out_path = tmp_path / "episodes.jsonl"
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+
+    result = run_map_batch(
+        [scenario],
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        latency_stress_profile={
+            "name": "learned-policy-latency-stress-v0",
+            "profile_version": "v0",
+            "claim_scope": "synthetic-only",
+            "observation_delay_steps": 1,
+            "action_delay_steps": 1,
+            "planner_update_mode": "hold-last",
+            "planner_update_period_steps": 2,
+            "inference_timeout_ms": 200.0,
+        },
+        dt=0.1,
+        resume=False,
+    )
+
+    assert result["written"] == 0
+    assert result["preflight"]["status"] == "skipped"
+    assert result["preflight"]["compatibility_status"] == "incompatible"
+    assert "differential_drive-only" in result["preflight"]["compatibility_reason"]
+    assert result["preflight"]["latency_stress_profile"]["name"] == (
+        "learned-policy-latency-stress-v0"
+    )
+    assert result["preflight"]["latency_stress_profile"]["action_delay_ms"] == 100.0
+    assert result["preflight"]["latency_stress_metrics"]["held_action_ratio"] == "not_available"
+
+
 def test_run_map_batch_parallel_writes_results_in_job_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

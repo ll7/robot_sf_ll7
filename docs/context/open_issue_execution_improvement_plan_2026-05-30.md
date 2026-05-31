@@ -127,17 +127,18 @@ Use existing labels and issue-body metadata first:
 
 Only add new `state:*` labels after a specific automation or Project #5 need is documented.
 
-### Do Not Add A Separate Queue-Audit Schema First
+### Queue-Audit Schema Status
 
 `goal-issue-implementation` already requires a final read-only implementability audit before
-declaring the queue exhausted. Improve that output in place if needed. A separate
-`queue_audit.v1` schema is premature unless a script or dashboard will consume it.
+declaring the queue exhausted. Issue #1719 implements `queue_audit.v1` as a compact companion
+shape for that existing audit, not as a replacement database or Project #5 metadata layer.
 
-Better follow-up:
+Use the schema to:
 
-- add one fixture or example output to the existing skill docs;
-- make the exhausted-queue handoff include the issue query used, remaining issue classes, and the
-  best issue-splitting candidate.
+- keep the exhausted-queue handoff comparable across runs,
+- include the issue query used, remaining issue classes, and recommended action,
+- preserve the best issue-splitting candidate without classifying parent, epic, blocked, or
+  analysis-only issues as ready implementation work.
 
 ### Do Not Duplicate Agent-Run Self-Review Workflow
 

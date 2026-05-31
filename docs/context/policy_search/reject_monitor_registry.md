@@ -140,6 +140,26 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
 - Reopen if: durable trained policy artifacts are found, licensed, version-pinned, and loaded
   through a reproduced source command, with action projection losses explicitly bounded.
 
+### Arena-Rosnav / Rosnav Learned Navigation Stack
+
+- Source URL: https://github.com/Arena-Rosnav/arena-rosnav
+- Current status: `source-side reproduction first`
+- Evidence grade: `observed`
+- Source-backed facts: Issue #1758 cloned the MIT-metadata `Arena-Rosnav/arena-rosnav` source at
+  `5de9d38`. The checkout exposes ROS Noetic/Gazebo/Flatland launch, benchmark, training, and
+  Rosnav action-node surfaces, plus `.repos` pins for many external Arena/planner repositories.
+  Small source probes failed closed on missing `rl_utils` and `rospy`, and no `.zip`, `.pt`, `.pth`,
+  `.onnx`, `best_model*`, or `last_model*` policy files were bundled in the shallow checkout.
+- Robot SF synthesis: Arena-Rosnav is an ecosystem and benchmark-workflow reference, not a direct
+  Robot SF learned local-policy candidate. Do not add it to the runnable candidate registry or
+  open adapter work until the upstream workspace/container can run one named Rosnav agent with a
+  durable checkpoint and an observation/action contract mapped to Issue #1618.
+- Related Robot SF work: #1758, #1620, #1617, #1618,
+  `docs/context/policy_search/issue_1758_arena_rosnav_source_assessment.md`.
+- Reopen if: a source-side Arena command runs in a pinned workspace/container, a trained Rosnav
+  checkpoint is available from a durable source, and the action/observation metadata can be
+  expressed without ROS fallback or simulator-only hidden state.
+
 ### DreamerV3 / World-Model Navigation
 
 - Source URLs:
@@ -257,18 +277,23 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
   - https://github.com/InternRobotics/NavDP
   - https://github.com/robodhruv/visualnav-transformer
 - Current status: `monitor only`
-- Evidence grade: `proposal`
-- Source-backed facts: The open assessment issue records NavDP as an RGB-D conditioned navigation
+- Evidence grade: `observed`
+- Source-backed facts: The issue #1356 assessment records NavDP as an RGB-D conditioned navigation
   diffusion policy with privileged critic-value supervision during training, and NoMaD as a
   goal-masked diffusion visual-navigation stack with ROS bag/topomap and GPU-oriented tooling.
+  Issue #1621 generalizes this to Diffusion Policy, Consistency Policy, Diffuser/LDP-style
+  trajectory diffusion, and Robot SF-native state/lidar diffusion options.
 - Robot SF synthesis: These methods are modern and worth tracking, but they are not fair Robot SF
   local-planner candidates until the visual/full-navigation assumptions can be reduced to a
   non-privileged 2D local action or trajectory contract without inventing a new method.
 - Related Robot SF work: #1356, #1355,
+  `docs/context/policy_search/2026-05-30_diffusion_policy_feasibility_issue_1621.md`,
   `docs/context/policy_search/README.md`.
 - Reopen if: a source-side demo can run from public assets and the policy can be expressed as
   `observation_t -> action_t` or a short trajectory under Robot SF's planner contract without
-  RGB-D, Habitat/Isaac assets, or privileged future information.
+  RGB-D, Habitat/Isaac assets, or privileged future information. For Robot SF-native diffusion,
+  reopen only after a launch packet defines dataset splits, action trajectory schema, checkpoint
+  provenance, latency target, and fail-closed missing-artifact behavior.
 
 ### NeuPAN Point-Obstacle Local Planning
 
@@ -338,20 +363,26 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
 - Source URL: family-level reject; representative systems vary by visual-language model,
   object-goal benchmark, or embodied foundation-model stack rather than one canonical source.
 - Current status: `reject for now`
-- Evidence grade: `proposal`
+- Evidence grade: `observed`
 - Source-backed facts: The 2026-05-20 screen explicitly called out generic visual-language
   navigation, object-goal navigation, foundation-model scoring policies, and full embodied visual
-  navigation stacks as tempting but poorly bounded learned-policy follow-ups.
+  navigation stacks as tempting but poorly bounded learned-policy follow-ups. Issue #1626 records a
+  focused readiness pass over OpenVLA/Octo/RT-2-style manipulation VLAs, LM-Nav-style composed
+  navigation, ViNT/NoMaD/NavDP visual navigation, and emerging navigation VLA project surfaces.
 - Robot SF synthesis: Do not open local-planner implementation work for these families unless the
   method exposes a bounded local `observation_t -> action_t` policy under Robot SF scenario, seed,
   and metric contracts. Full embodied navigation stacks usually assume RGB/RGB-D observations,
   semantic goals, global mapping, language/object labels, or simulator assets that Robot SF's
   current AMV benchmark does not provide.
 - Related Robot SF work: #1359, #1355,
+  `docs/context/policy_search/2026-05-30_foundation_model_readiness_issue_1626.md`,
   `docs/context/policy_search/candidate_registry.yaml`.
 - Reopen if: a specific public method has reproducible source assets and a narrow reduction proof
   showing that the policy can act only from Robot SF-available local observations without semantic
-  oracle inputs, global-map leakage, or changing the benchmark task.
+  oracle inputs, global-map leakage, or changing the benchmark task. If the policy needs language
+  or visual inputs, reopen only after an observation-track contract defines image/depth/semantic
+  payloads, task-language schema, topological-memory boundary, action adapter, and fail-closed
+  missing-modality behavior.
 
 ## Maintenance Rules
 

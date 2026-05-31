@@ -47,7 +47,12 @@ agent instructions absorb upstream phrasing without explicit rationale.
 `vultuk/coding-agents` separates these three artifact types cleanly so tool-specific compatibility
 paths can be derived from a single canonical source. Robot SF already adopted this via issue `#705`:
 `.agents/` is the canonical source tree, and symlinks project it into `.codex/`, `.opencode/`,
-`.claude/`, `.github/`, and `.gemini/` compatibility paths.
+`.github/`, and `.gemini/` compatibility paths.
+
+Issue #1728 retired the old `.claude/` compatibility mirror and `CLAUDE.md` pointer because the
+active workflow no longer supports a Claude-specific repository entrypoint. Historical notes may
+still mention that path as prior validation evidence, but `scripts/tools/sync_ai_config.py` must
+not recreate it.
 
 Validation and repair:
 

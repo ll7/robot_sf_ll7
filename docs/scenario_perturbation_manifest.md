@@ -42,6 +42,23 @@ The preflight uses `scenario_cert.v1` after applying each supported perturbation
 Rows marked `excluded_from_success_evidence` or `stress_only_not_success_evidence` must be reported
 as limitations and must not count as successful benchmark evidence.
 
+## Pilot Materialization
+
+After preflight passes, materialize only eligible variants into a local scenario matrix:
+
+```bash
+uv run python scripts/tools/materialize_scenario_perturbation_pilot.py \
+  configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml \
+  --output-dir output/scenario_perturbation_pilot/issue_1610_seed_sensitive_pilot_v1 \
+  --seed-limit 1
+```
+
+The generated `scenario_matrix.yaml` and route override files are local execution inputs for the
+next paired planner pilot. They are not benchmark evidence by themselves, and excluded preflight
+rows are omitted from the matrix. When `--output-dir` points inside the repository, it must be
+under the ignored `output/` tree so materialized pilot inputs do not become durable provenance by
+accident.
+
 ## Boundary
 
 This is not planner execution and not paper-facing evidence. It only proves that the selected

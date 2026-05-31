@@ -68,6 +68,9 @@ Use it for three things only:
 - `2026-05-20_learned_local_navigation_screen.md`: Issue #1355 Source-Backed Screening Matrix for
   learning-based local-navigation candidates, with implement/source-first/monitor/reject verdicts
   and links to existing Robot SF duplicate boundaries.
+- `2026-05-30_external_learned_policy_ranking_issue_1620.md`: Issue #1620 ranked external
+  learned-policy shortlist across graph/social-RL, ROSNav, diffusion/visual, transformer, VLA, and
+  mapless-baseline families, with source/checkpoint/adapter-fit verdicts and follow-up routing.
 - `2026-05-30_foundation_model_readiness_issue_1626.md`: Issue #1626 readiness boundary for
   foundation-model, VLA, and multimodal navigation policy families; current verdict is interface
   design or monitor-only, not model integration.

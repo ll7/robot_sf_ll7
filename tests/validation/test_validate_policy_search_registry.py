@@ -233,6 +233,42 @@ def test_learned_policy_registry_duplicate_ids_are_reported(tmp_path: Path) -> N
     ]
 
 
+def test_learned_policy_registry_missing_table_is_reported(tmp_path: Path) -> None:
+    """A learned-policy registry without the policy_id table should fail closed."""
+    registry = tmp_path / "learned_policy_registry.md"
+    _write(registry, "# Learned Registry\n\nNo table yet.")
+
+    issues = validate_learned_policy_registry(registry)
+
+    assert [(issue.path, issue.message) for issue in issues] == [
+        (
+            "learned_policy_registry",
+            "must contain a Markdown table with policy_id as the first column",
+        )
+    ]
+
+
+def test_learned_policy_registry_blank_ids_are_reported(tmp_path: Path) -> None:
+    """Blank learned-policy IDs should not silently pass uniqueness checks."""
+    registry = tmp_path / "learned_policy_registry.md"
+    _write(
+        registry,
+        """
+        # Learned Registry
+
+        | `policy_id` | `policy_family` | `integration_status` |
+        | --- | --- | --- |
+        |  | `external_learned_policy` | `monitor_only` |
+        """,
+    )
+
+    issues = validate_learned_policy_registry(registry)
+
+    assert [(issue.path, issue.message) for issue in issues] == [
+        ("learned_policy_registry.entries[0].policy_id", "is required")
+    ]
+
+
 def test_runnable_candidate_rejects_worktree_local_artifact_paths(tmp_path: Path) -> None:
     """Runnable candidates should not depend only on output/ artifacts."""
     _write_support_files(tmp_path)

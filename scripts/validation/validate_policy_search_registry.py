@@ -519,7 +519,7 @@ def _is_markdown_separator(cells: list[str]) -> bool:
     return bool(cells) and all(set(cell.replace(":", "").strip()) <= {"-"} for cell in cells)
 
 
-def _iter_learned_policy_rows(path: Path) -> list[dict[str, str]]:
+def _iter_learned_policy_rows(path: Path) -> tuple[list[dict[str, str]], bool]:
     """Parse learned-policy entries from the first table with a policy_id header."""
     rows: list[dict[str, str]] = []
     headers: list[str] | None = None
@@ -539,15 +539,26 @@ def _iter_learned_policy_rows(path: Path) -> list[dict[str, str]]:
         if len(cleaned) < len(headers):
             continue
         rows.append(dict(zip(headers, cleaned, strict=False)))
-    return rows
+    return rows, headers is not None
 
 
 def validate_learned_policy_registry(
     registry_path: Path = DEFAULT_LEARNED_REGISTRY,
 ) -> list[RegistryIssue]:
     """Validate learned-policy registry table consistency."""
-    rows = _iter_learned_policy_rows(Path(registry_path))
+    rows, has_policy_table = _iter_learned_policy_rows(Path(registry_path))
     issues: list[RegistryIssue] = []
+    if not has_policy_table:
+        issues.append(
+            RegistryIssue(
+                "learned_policy_registry",
+                "must contain a Markdown table with policy_id as the first column",
+            )
+        )
+        return issues
+    if not rows:
+        issues.append(RegistryIssue("learned_policy_registry.entries", "must not be empty"))
+        return issues
     seen_policy_ids: set[str] = set()
     for index, row in enumerate(rows):
         policy_id = row.get("policy_id", "").strip()

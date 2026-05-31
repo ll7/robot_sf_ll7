@@ -1,9 +1,9 @@
 {
   "rows": [
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-1502-adversarial-two-family/output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/random/candidate_0057",
+      "best_bundle_path": "output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/random/candidate_0057",
       "best_objective_value": 25.0,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-1502-adversarial-two-family/output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/random/manifest.json",
+      "manifest_path": "output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/random/manifest.json",
       "num_candidates": 256,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 122,
@@ -11,9 +11,9 @@
       "sampler": "random"
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-1502-adversarial-two-family/output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/optuna/candidate_0015",
+      "best_bundle_path": "output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/optuna/candidate_0015",
       "best_objective_value": 21.0,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-1502-adversarial-two-family/output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/optuna/manifest.json",
+      "manifest_path": "output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/optuna/manifest.json",
       "num_candidates": 256,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 246,

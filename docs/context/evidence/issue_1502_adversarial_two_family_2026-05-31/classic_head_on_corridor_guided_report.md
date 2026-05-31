@@ -19,7 +19,7 @@
 
 ## Replay
 Add this to your scenario entry:
-- `route_overrides_file: /home/luttkule/git/robot_sf_ll7.worktrees/issue-1502-adversarial-two-family/output/adversarial/issue_1502/issue1502-two-family-d4a49b26/classic_head_on_corridor/guided_route_search/classic_head_on_corridor_low_20260531_054246_045282/route_overrides.yaml`
+- `route_overrides_file: output/adversarial/issue_1502/issue1502-two-family-d4a49b26/classic_head_on_corridor/guided_route_search/classic_head_on_corridor_low_20260531_054246_045282/route_overrides.yaml`
 
 ## Visualizations
 - `trajectories_overlay.png`

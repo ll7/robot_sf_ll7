@@ -1,6 +1,6 @@
 {
   "scenario_id": "classic_head_on_corridor_low",
-  "map_file": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-1502-adversarial-two-family/maps/svg_maps/classic_head_on_corridor.svg",
+  "map_file": "maps/svg_maps/classic_head_on_corridor.svg",
   "optimizer": "optuna_tpe",
   "seed": 123,
   "trial_count": 100,

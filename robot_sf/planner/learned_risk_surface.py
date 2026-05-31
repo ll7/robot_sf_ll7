@@ -17,6 +17,7 @@ import numpy as np
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
+from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
 
 
 class RiskSurfaceUnavailable(ValueError):
@@ -275,7 +276,7 @@ def build_local_risk_surface_spec(cfg: dict[str, Any] | None) -> LocalRiskSurfac
     return LocalRiskSurfaceSpec(**filtered)
 
 
-class RiskSurfacePlannerAdapter:
+class RiskSurfacePlannerAdapter(OccupancyAwarePlannerMixin):
     """Adapter that lets an existing local planner consume a risk surface."""
 
     def __init__(
@@ -303,15 +304,37 @@ class RiskSurfacePlannerAdapter:
         self._last_error = None
         self._last_surface = None
 
+    def _observation_for_surface(self, observation: dict[str, Any]) -> dict[str, Any]:
+        """Return an observation shape accepted by the risk-surface producer.
+
+        Returns:
+            dict[str, Any]: Original observation enriched with structured SocNav fields when
+            the caller provided the flattened benchmark observation contract.
+        """
+        if isinstance(observation.get("robot"), dict):
+            return observation
+
+        required_flat_keys = ("robot_position", "robot_heading", "goal_current")
+        if not all(key in observation for key in required_flat_keys):
+            return observation
+
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
+        normalized = dict(observation)
+        normalized["robot"] = robot_state
+        normalized["goal"] = goal_state
+        normalized["pedestrians"] = ped_state
+        return normalized
+
     def adapt_observation(self, observation: dict[str, Any]) -> dict[str, Any]:
         """Produce and attach a local risk surface for planner consumption.
 
         Returns:
             dict[str, Any]: Observation copy enriched with the surface payload.
         """
-        surface = deterministic_pedestrian_risk_surface(observation, self.spec)
+        normalized = self._observation_for_surface(observation)
+        surface = deterministic_pedestrian_risk_surface(normalized, self.spec)
         self._last_surface = surface.diagnostics()
-        return attach_risk_surface_to_observation(observation, surface)
+        return attach_risk_surface_to_observation(normalized, surface)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Plan with fail-closed behavior when the surface is unavailable.

@@ -26,6 +26,9 @@ Use it for three things only:
   variants, DRL-VO, and source-side-only candidates. Check this before proposing a new follow-up.
 - `experiment_ledger.md`: compact execution log for implemented candidates.
 - `contracts/`: project contract, gates, taxonomy, and runbook.
+  - `external_policy_intake.md`: staged source-to-benchmark intake contract for external learned
+    local-navigation policies; keeps source-side and adapter-only evidence out of benchmark claims
+    until the registry and benchmark suite support them.
   - `oracle_imitation_dataset_split.md`: train/validation/evaluation seed-split policy, hard-slice assignment rules, relabeling boundaries, and manifest schema for oracle-imitation datasets (issue #1443).
 - `reasoning/`: bounded planning and design notes.
 - `reports/`: per-run markdown reports emitted by the policy-search runner.
@@ -138,10 +141,12 @@ Use it for three things only:
 ## Learned-Policy Intake
 
 Before adding a learned local-navigation method to `candidate_registry.yaml`, apply
-`contracts/learned_local_policy_eligibility.md`. The registry is reserved for implemented or
-concrete runnable Robot SF candidates with config pointers; source-only, monitor-only, or
-privileged-evaluation methods should stay in context notes until they have a runnable adapter
-contract.
+`contracts/learned_local_policy_eligibility.md`. For external learned-policy families, first apply
+`contracts/external_policy_intake.md` so source screen, license, checkpoint, observation/action,
+source-side smoke, adapter, Robot SF smoke, and benchmark-suite evidence are not collapsed into one
+ambiguous status. The registry is reserved for implemented or concrete runnable Robot SF candidates
+with config pointers; source-only, monitor-only, adapter-only, or privileged-evaluation methods
+should stay in context notes until they have a runnable adapter contract and smoke proof.
 
 For repeatable checklist-input validation, record the candidate's learned-policy metadata as YAML or
 JSON and run:
@@ -152,6 +157,10 @@ uv run python scripts/validation/check_learned_policy_eligibility.py <candidate-
 
 This helper checks completeness and consistency of the eligibility inputs only. It does not turn a
 candidate into a benchmark-ready planner or replace adapter, smoke, or benchmark validation.
+
+`learned_policy_registry.md` remains the durable current-state registry for learned-policy
+families. The external intake contract supplies the stage checklist and status mapping; it must not
+be maintained as a parallel source of truth.
 
 ## Scope Boundary
 

@@ -1,0 +1,43 @@
+name: benchmark_evidence
+purpose: >
+  Focused context for benchmark evidence policy, fallback/degraded classification, release surfaces,
+  and compact proof artifacts without raw episode logs or generated media.
+entrypoint: docs/context/issue_691_benchmark_fallback_policy.md
+include:
+  - AGENTS.md
+  - docs/context/INDEX.md
+  - docs/code_review.md
+  - docs/context/issue_691_benchmark_fallback_policy.md
+  - docs/context/artifact_evidence_vocabulary.md
+  - docs/context/issue_1436_reproducibility_flaky_acceptance.md
+  - docs/benchmark.md
+  - docs/benchmark_spec.md
+  - docs/benchmark_camera_ready.md
+  - docs/benchmark_release_protocol.md
+  - docs/benchmark_release_reproducibility.md
+  - docs/benchmark_artifact_publication.md
+  - docs/benchmark_suites/**
+  - docs/leaderboards/README.md
+  - robot_sf/benchmark/**
+  - configs/benchmarks/**
+  - scripts/tools/run_camera_ready_benchmark.py
+  - scripts/tools/run_benchmark_release.py
+  - scripts/tools/benchmark_publication_bundle.py
+  - scripts/repro/benchmark_bundle_smoke.sh
+  - scripts/validation/check_docs_proof_consistency.py
+exclude:
+  - output/**
+  - results/**
+  - docs/context/evidence/**/episodes*.jsonl
+  - docs/context/evidence/**/*.mp4
+  - docs/context/evidence/**/coverage_html/**
+  - docs/context/policy_search/reports/**
+  - wandb/**
+  - .venv/**
+do_not_read_by_default:
+  - docs/context/evidence/**
+  - docs/context/policy_search/reports/**
+  - tests/benchmark/**
+  - specs/**
+  - output/benchmarks/**
+

@@ -31,8 +31,10 @@ Use explicit status language:
 - `not benchmark evidence`: ran outside the benchmark contract or under fallback/degraded mode.
 - `paper-grade`: fully reproducible and suitable for paper-facing claims.
 
-When a statement is not at least 95 percent certain, include a short uncertainty estimate, caveat,
-or condition that would change the conclusion.
+For substantive claims, recommendations, benchmark conclusions, and prioritization judgments below
+roughly 95 percent confidence, include a short numeric uncertainty estimate, caveat, or condition
+that would change the conclusion. Do not spend reasoning effort quantifying ordinary status updates
+or low-impact implementation narration.
 
 ## Validation
 
@@ -43,8 +45,11 @@ Use validation proportional to risk.
 - Runtime, benchmark, metric, schema, model-provenance, and paper-facing changes need executable
   proof appropriate to the claim.
 - Low-value tests may be removed without maintainer approval when the reason is unambiguous and
-  documented. Do not assume flaky tests are common; classify each failure before broad policy
-  changes.
+  documented, provided repository coverage expectations still hold or the remaining gap is tracked.
+  Do not assume flaky tests are common; classify each failure before broad policy changes.
+- Paper-grade or benchmark-strength claims should name the exact claim, command/config/seed path,
+  artifact provenance, metric/schema mode, sample size or statistics, fallback/degraded exclusions,
+  limitations, and reproduction path before they are treated as established.
 
 ## Work Collection
 

@@ -36,11 +36,14 @@ or the normal diff wrapper.
 
 ## Pruning And Refactoring Rules
 
-- Do not delete or rewrite the full context corpus in the first pass.
+- Prune, rewrite, rename, or delete stale notes more aggressively when the reason is unambiguous,
+  the note no longer provides reusable value, and benchmark or paper-facing evidence pointers are
+  preserved.
 - If two notes cover the same decision, keep the newer canonical note current and mark the older
   note `Historical` or `Superseded` near the top with a pointer to the replacement.
 - If a note is issue-local and no longer reusable, keep it linked from the relevant issue-specific
-  entry only; do not promote it into this index.
+  entry only, or remove it from this index when the issue/PR record already preserves the needed
+  provenance.
 - If a note supports a benchmark or paper-facing claim, preserve the evidence pointer even when the
   prose is shortened.
 - Add a note to this index only when it is a current domain entry point, a durable policy boundary,

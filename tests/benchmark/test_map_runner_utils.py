@@ -379,6 +379,52 @@ def test_build_policy_nmpc_social_wires_nmpc_adapter(
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
 
 
+def test_build_policy_risk_surface_dwa_wires_surface_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exploratory risk-surface key should wrap Risk-DWA through the surface adapter."""
+
+    class _DummyAdapter:
+        """Planner adapter test double for policy wiring."""
+
+        def __init__(self, *, spec, planner) -> None:
+            self.spec = spec
+            self.planner = planner
+
+        def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
+            return (0.25, 0.15)
+
+        def diagnostics(self):
+            """Return diagnostics preserving the prototype claim boundary."""
+            return {"benchmark_strength": False, "status": "ok"}
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.RiskSurfacePlannerAdapter", _DummyAdapter)
+    policy, meta = _build_policy(
+        "risk_surface_dwa_v0",
+        {
+            "risk_surface": {"resolution": 0.5, "producer_id": "test_surface"},
+            "risk_dwa": {"max_linear_speed": 0.5},
+        },
+    )
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [1.0, 0.0]},
+            "pedestrians": {"positions": [[0.5, 0.0]], "count": [1]},
+        }
+    )
+
+    assert (linear, angular) == (0.25, 0.15)
+    assert meta["canonical_algorithm"] == "risk_surface_dwa"
+    assert meta["policy_semantics"] == "deterministic_local_risk_surface_dwa"
+    assert meta["risk_surface_planner"]["benchmark_strength"] is False
+    assert meta["planner_kinematics"]["adapter_name"] == "RiskSurfacePlannerAdapter"
+    assert meta["planner_kinematics"]["limitations"] == (
+        "deterministic_risk_surface_fixture_not_benchmark_evidence"
+    )
+
+
 def test_build_policy_socnav_bench_forwards_allow_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

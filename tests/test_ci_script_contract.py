@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 PYPROJECT = ROOT / "pyproject.toml"
+RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
 
@@ -37,6 +40,57 @@ def test_ci_driver_test_phase_uses_shared_parallel_test_wrapper() -> None:
     assert "tests" in testpaths
     assert "fast-pysf/tests" in testpaths
     assert "uv run pytest -q -n auto --max-worker-restart=0" not in script_text
+
+
+def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
+    """Keep test scheduling configurable without changing the collected test paths."""
+
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    assert 'dist_mode="${PYTEST_XDIST_DIST:-load}"' in script_text
+    assert "Invalid PYTEST_XDIST_DIST value" in script_text
+    assert 'cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")' in script_text
+    assert "PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup" in script_text
+
+
+def test_run_tests_parallel_validates_dist_mode_before_resolving_workers() -> None:
+    """Invalid dist mode must fail before resolve_pytest_workers.py is invoked."""
+
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    dist_validation = "Invalid PYTEST_XDIST_DIST value"
+    worker_resolution = 'uv run python "$SCRIPT_DIR/resolve_pytest_workers.py"'
+
+    assert dist_validation in script_text
+    assert worker_resolution in script_text
+    assert script_text.find(dist_validation) < script_text.find(worker_resolution)
+
+
+def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> None:
+    """Invalid dist mode should exit before validating or resolving worker count."""
+
+    env = {
+        **os.environ,
+        "PYTEST_XDIST_DIST": "invalid-mode",
+        "PYTEST_NUM_WORKERS": "definitely-not-a-worker-count",
+    }
+    result = subprocess.run(
+        [str(RUN_TESTS_PARALLEL), "tests/test_ci_script_contract.py"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert (
+        "Invalid PYTEST_XDIST_DIST value 'invalid-mode' "
+        "(expected load|worksteal|loadscope|loadfile|loadgroup)."
+    ) in result.stderr
+    assert "Resolved pytest-xdist workers" not in result.stderr
+    assert "resolve_pytest_workers.py" not in result.stderr
 
 
 def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:

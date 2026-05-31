@@ -44,6 +44,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "prediction_planner": "learning",
     "predictive_mppi": "learning",
     "risk_dwa": "classical",
+    "risk_surface_dwa": "classical",
     "hybrid_rule_local_planner": "classical",
     "safety_barrier": "classical",
     "grid_route": "classical",
@@ -95,6 +96,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "prediction_planner": "predictive_model_based_adapter",
     "predictive_mppi": "predictive_sequence_optimizer",
     "risk_dwa": "risk_aware_dynamic_window",
+    "risk_surface_dwa": "deterministic_local_risk_surface_dwa",
     "hybrid_rule_local_planner": "hybrid_rule_deterministic_local_planner",
     "safety_barrier": "native_barrier_style_safety_filter",
     "grid_route": "occupancy_grid_route_tracking",
@@ -156,6 +158,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "stream_gap": _DEFAULT_OBSERVATION_SPEC,
     "gap_prediction": _DEFAULT_OBSERVATION_SPEC,
     "risk_dwa": _DEFAULT_OBSERVATION_SPEC,
+    "risk_surface_dwa": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians", "local_risk_surface"),
+        "notes": (
+            "Exploratory deterministic risk-surface producer consumes structured SocNav state, "
+            "derives an ego-frame occupancy-compatible risk grid, and wraps risk_dwa."
+        ),
+    },
     "mppi_social": _DEFAULT_OBSERVATION_SPEC,
     "hybrid_portfolio": _DEFAULT_OBSERVATION_SPEC,
     "hybrid_orca_sampler": _DEFAULT_OBSERVATION_SPEC,
@@ -772,6 +783,18 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "RiskDWAPlannerAdapter",
+    },
+    "risk_surface_dwa": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "RiskSurfacePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "deterministic_local_risk_surface_to_risk_dwa_unicycle_vw",
+        "projection_documented": True,
+        "testing_only_adapter": True,
+        "prototype_only": True,
     },
     "hybrid_rule_local_planner": {
         "planner_command_space": "unicycle_vw",

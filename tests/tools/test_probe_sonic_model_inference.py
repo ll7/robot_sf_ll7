@@ -203,8 +203,8 @@ def test_run_model_probe_restores_import_state(
     original_path = sys.path[:]
     sentinel_gym = object()
     sentinel_envs = object()
-    sys.modules["gym"] = sentinel_gym  # type: ignore[assignment]
-    sys.modules["rl.networks.envs"] = sentinel_envs  # type: ignore[assignment]
+    monkeypatch.setitem(sys.modules, "gym", sentinel_gym)
+    monkeypatch.setitem(sys.modules, "rl.networks.envs", sentinel_envs)
 
     args = SimpleNamespace(
         env_name="CrowdSimPredRealGST-v0", num_processes=1, no_cuda=True, cuda=False
@@ -259,12 +259,8 @@ def test_run_model_probe_restores_import_state(
         lambda *_args, **_kwargs: {"weights": torch.tensor([1.0])},
     )
 
-    try:
-        run_model_probe(repo_root=repo_root, model_name="SoNIC_GST", checkpoint="05207.pt")
-        assert sys.modules["gym"] is sentinel_gym
-        assert sys.modules["rl.networks.envs"] is sentinel_envs
-        assert str(repo_root) not in sys.path
-        assert sys.path == original_path
-    finally:
-        sys.modules["gym"] = sentinel_gym  # type: ignore[assignment]
-        sys.modules["rl.networks.envs"] = sentinel_envs  # type: ignore[assignment]
+    run_model_probe(repo_root=repo_root, model_name="SoNIC_GST", checkpoint="05207.pt")
+    assert sys.modules["gym"] is sentinel_gym
+    assert sys.modules["rl.networks.envs"] is sentinel_envs
+    assert str(repo_root) not in sys.path
+    assert sys.path == original_path

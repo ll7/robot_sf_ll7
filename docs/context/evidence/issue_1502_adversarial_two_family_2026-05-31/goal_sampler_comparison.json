@@ -1,0 +1,25 @@
+{
+  "rows": [
+    {
+      "best_bundle_path": "output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/random/candidate_0057",
+      "best_objective_value": 25.0,
+      "manifest_path": "output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/random/manifest.json",
+      "num_candidates": 256,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 122,
+      "num_valid_candidates": 134,
+      "sampler": "random"
+    },
+    {
+      "best_bundle_path": "output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/optuna/candidate_0015",
+      "best_objective_value": 21.0,
+      "manifest_path": "output/adversarial/issue_1502/issue1502-two-family-d4a49b26/crossing_ttc/goal/optuna/manifest.json",
+      "num_candidates": 256,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 246,
+      "num_valid_candidates": 10,
+      "sampler": "optuna"
+    }
+  ],
+  "schema_version": "adversarial-sampler-comparison.v1"
+}

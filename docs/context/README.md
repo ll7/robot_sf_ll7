@@ -198,6 +198,8 @@ knowledge, not every transient iteration detail.
   [issue_1500_adversarial_manifest.md](issue_1500_adversarial_manifest.md)
 * Issue #1571 Adversarial Smoke Packet Sharpening (2026-05-27):
   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
+* Issue #1502 Adversarial Two-Family Run (2026-05-31):
+  [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:

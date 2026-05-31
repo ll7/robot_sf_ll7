@@ -1,7 +1,7 @@
 # Repository Guidelines
 
-Use `AGENTS.md`, `docs/maintainer_values.md`, `.specify/memory/constitution.md`, and
-`docs/dev_guide.md` to guide AI assistants.
+Use `docs/maintainer_values.md` as the highest-level current maintainer guidance, then `AGENTS.md`,
+`.specify/memory/constitution.md`, and `docs/dev_guide.md` for repository execution details.
 This document covers briefly the repository structure, coding style, testing workflow, and contributor conventions.
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
@@ -20,8 +20,9 @@ documentation, and process in proportion to risk:
   exploratory, diagnostic, blocked, or not yet benchmark evidence;
 - low-risk docs, metadata, and instruction changes use the cheaper validation path by default:
   inspect the diff and verify changed links or referenced paths where practical;
-- statements below roughly 95 percent confidence should include an uncertainty estimate, caveat, or
-  condition that would change the conclusion;
+- substantive claims, recommendations, benchmark conclusions, and prioritization judgments below
+  roughly 95 percent confidence should include a numeric uncertainty estimate, caveat, or condition
+  that would change the conclusion;
 - current maintainer direction overrides stale workflow prose. When an instruction appears to
   conflict with the user's current priority, follow the current priority, call out the conflict, and
   propose or make the smallest doc update needed to remove the drift.
@@ -29,8 +30,8 @@ documentation, and process in proportion to risk:
 ## Agent Context Stack
 Treat the following files as the repository-native context stack for Agent-style agents:
 
-- `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
 - `docs/maintainer_values.md`: compact current values and hard contracts.
+- `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
 - `memory/MEMORY.md`: concise repo-local memory index for stable cross-session facts and links to
   detailed topic files under `memory/`.
 - `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.

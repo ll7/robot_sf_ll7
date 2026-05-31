@@ -77,5 +77,8 @@ local_preflight_command: >
   uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config
   configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml --json
 slurm_command_shape: >
-  Submit dataset collection only from a follow-up issue after local preflight passes and
-  concrete durable artifact aliases are assigned; do not submit Slurm from #1397.
+  scripts/dev/sbatch_oracle_imitation_traces_issue1470.sh --dry-run --no-status
+  prepares the issue #1470 train-split source-candidate trace collection job. This trace
+  job is executable Slurm work, but it is not the final imitation NPZ dataset; downstream
+  imitation training still requires durable dataset materialization and concrete artifact
+  aliases after the trace run completes.

@@ -1,0 +1,100 @@
+algo: hybrid_rule_local_planner
+planner_variant: tentabot_value_scorer_v3_trace_recovery
+
+# Clean-room Robot SF-native Tentabot-style primitive value scorer.
+#
+# V3 keeps the v1 static-safety gate and adds trace-level route recovery:
+# recent route regression or combined goal/route stall may temporarily select
+# an already accepted corridor-subgoal or route-guide command. It does not
+# relax hard static/dynamic rejection, speed, clearance, or static-gate knobs.
+allow_testing_algorithms: true
+
+# Candidate lattice and route-corridor probes.
+max_linear_speed: 2.4
+max_angular_speed: 1.2
+max_linear_accel: 2.4
+max_linear_decel: 2.5
+max_angular_accel: 4.0
+control_period: 0.6
+rollout_dt: 0.2
+rollout_horizon: 1.8
+hard_collision_horizon: 1.2
+soft_prediction_horizon: 3.0
+goal_tolerance: 0.25
+waypoint_switch_distance: 2.0
+linear_samples: 7
+angular_samples: 9
+lookahead_distances: [0.5, 1.0, 1.5, 2.0]
+route_guide_enabled: true
+route_guide_waypoint_lookahead_cells: 8
+route_guide_obstacle_inflation_cells: 3
+route_guide_clearance_penalty_weight: 0.5
+corridor_subgoal_enabled: true
+corridor_subgoal_speed: 0.25
+corridor_subgoal_min_nearest_ped_distance: 1.0
+corridor_subgoal_use_continuous_static_check: true
+continuous_static_clearance_enabled: true
+
+# Trace-level recovery selector. These thresholds mirror the earlier
+# corridor-subgoal stall signal, but the selection policy is explicit and only
+# chooses already accepted route-recovery candidates.
+route_trace_recovery_enabled: true
+route_trace_recovery_goal_stall_progress_3s: 0.05
+route_trace_recovery_route_stall_progress_3s: 0.05
+route_trace_recovery_route_regression_1s: -0.05
+route_trace_recovery_min_nearest_ped_distance: 1.0
+route_trace_recovery_min_route_remaining_distance: 0.5
+route_trace_recovery_hold_steps: 2
+
+# Linear value terms inherited from v1. Deliberately do not keep the v2
+# route-arc scalar weight; this branch tests trace recovery rather than a
+# larger route-progress score.
+value_scorer_profile: hand_scored_linear_teacher_v3_trace_recovery
+value_scorer_training_source: robot_sf_hybrid_rule_teacher_only
+goal_progress_weight: 4.2
+path_alignment_weight: 0.9
+speed_preference_weight: 0.45
+static_clearance_weight: 1.8
+dynamic_clearance_weight: 2.0
+ttc_weight: 1.0
+heading_smoothness_weight: 0.5
+velocity_smoothness_weight: 0.35
+control_effort_weight: 0.2
+deadlock_escape_weight: 0.2
+route_guide_commitment_weight: 0.2
+corridor_subgoal_route_progress_weight: 1.0
+corridor_subgoal_centering_weight: 0.4
+corridor_subgoal_tangent_alignment_weight: 0.5
+corridor_subgoal_clearance_weight: 0.3
+corridor_subgoal_continuity_weight: 0.2
+freezing_weight: 0.8
+oscillation_weight: 0.5
+
+# Preserve the v1 static-safety tier without retuning.
+static_safety_gate_enabled: true
+static_safety_gate_min_clearance: 0.55
+static_safety_gate_progress_threshold: 0.15
+static_safety_gate_clearance_tolerance: 0.02
+static_safety_gate_penalty: 24.0
+static_safety_gate_all_sources: true
+
+# Conservative human/static gates inherited from the hybrid-rule contract.
+robot_radius_default: 0.3
+pedestrian_radius_default: 0.3
+hard_safety_margin: 0.05
+static_hard_safety_margin: 0.0
+desired_static_clearance: 0.7
+desired_dynamic_clearance: 0.9
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+stop_distance_human: 0.5
+slow_distance_human: 1.0
+moderate_distance_human: 2.0
+very_slow_speed: 0.15
+moderate_speed: 0.6
+near_human_angular_limit_distance: 0.8
+near_human_max_angular_speed: 0.7
+freezing_speed_threshold: 0.05
+goal_far_distance: 0.8
+oscillation_window: 6
+top_k_diagnostics: 5

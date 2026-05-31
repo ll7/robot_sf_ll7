@@ -383,6 +383,120 @@ def test_tentabot_value_scorer_v2_scores_route_arc_progress_over_goal_shortcut(
     assert forward_eval["score"] > stop_eval["score"]
 
 
+def test_tentabot_trace_recovery_activates_on_route_regression_despite_goal_progress() -> None:
+    """Trace recovery should notice route regression even if goal distance improved."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v3_trace_recovery",
+            "route_guide_enabled": True,
+            "route_trace_recovery_enabled": True,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+
+    signal = planner._route_trace_recovery_signal(
+        route_corridor=_route_corridor_payload(route_progress_1s=-0.1, route_progress_3s=0.4),
+        progress_windows={"1s": 0.1, "3s": 0.4},
+        nearest_ped=float("inf"),
+    )
+
+    assert signal["active"] is True
+    assert signal["reason"] == "route_regressing"
+    assert signal["goal_stalled"] is False
+    assert signal["route_regressing"] is True
+
+
+def test_tentabot_trace_recovery_selects_accepted_corridor_subgoal() -> None:
+    """Trace recovery may only override with an already accepted recovery candidate."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(route_trace_recovery_enabled=True)
+    )
+    signal = {"active": True, "selected": False}
+    accepted = [
+        {
+            "candidate": HybridRuleCandidate(0.0, 0.0, "stop"),
+            "score": 99.0,
+            "terms": {"route_arc_progress": 0.0},
+        },
+        {
+            "candidate": HybridRuleCandidate(0.2, 0.0, "corridor_subgoal"),
+            "score": 1.0,
+            "terms": {"route_arc_progress": 0.2},
+        },
+        {
+            "candidate": HybridRuleCandidate(0.2, 0.0, "route_guide"),
+            "score": 2.0,
+            "terms": {"route_arc_progress": 0.3},
+        },
+    ]
+
+    selected = planner._select_route_trace_recovery_evaluation(accepted, signal)
+
+    assert selected is accepted[1]
+    assert signal["selected"] is True
+    assert signal["selected_source"] == "corridor_subgoal"
+
+
+def test_tentabot_trace_recovery_does_not_select_rejected_recovery_candidate() -> None:
+    """A trace signal must not convert rejected recovery candidates into commands."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(route_trace_recovery_enabled=True)
+    )
+    signal = {"active": True, "selected": False}
+    accepted = [
+        {
+            "candidate": HybridRuleCandidate(0.0, 0.0, "stop"),
+            "score": 99.0,
+            "terms": {"route_arc_progress": 0.0},
+        }
+    ]
+
+    selected = planner._select_route_trace_recovery_evaluation(accepted, signal)
+
+    assert selected is None
+    assert signal["selected"] is False
+    assert signal["selected_reason"] == "no_accepted_recovery_candidate"
+
+
+def test_tentabot_trace_recovery_records_blocked_diagnostics() -> None:
+    """Decision diagnostics should explain why trace recovery was unavailable."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v3_trace_recovery",
+            "route_guide_enabled": True,
+            "route_trace_recovery_enabled": True,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+
+    planner.plan(_obs())
+
+    last = planner.last_decision()
+    assert last is not None
+    assert last["route_trace_recovery"]["enabled"] is True
+    assert last["route_trace_recovery"]["active"] is False
+    assert last["route_trace_recovery"]["reason"] == "missing_route_geometry"
+
+
+def test_tentabot_trace_recovery_reset_clears_hold_state() -> None:
+    """Episode reset should clear any active trace-recovery hold window."""
+    config = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        route_trace_recovery_enabled=True,
+        route_trace_recovery_hold_steps=3,
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    planner._route_trace_recovery_signal(
+        route_corridor=_route_corridor_payload(route_progress_1s=-0.1),
+        progress_windows={"3s": 0.5},
+        nearest_ped=float("inf"),
+    )
+
+    assert planner._route_trace_recovery_hold_remaining == 3
+    planner.reset()
+    assert planner._route_trace_recovery_hold_remaining == 0
+
+
 def test_actuation_aware_variant_penalizes_synthetic_clip_risk() -> None:
     """Actuation-aware scoring should expose and penalize synthetic envelope risk."""
     config = build_hybrid_rule_local_planner_config(

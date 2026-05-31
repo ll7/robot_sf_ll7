@@ -1,0 +1,4 @@
+name: tentabot_value_scorer_v3_trace_recovery
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/tentabot_value_scorer_v3_trace_recovery.yaml
+params: {}

@@ -308,6 +308,26 @@ candidates:
       - smoke
       - nominal_sanity
 
+  tentabot_value_scorer_v3_trace_recovery:
+    status: experimental_spike
+    family: learned_style_value_scorer
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v3_trace_recovery.yaml
+    learned_policy_registry_id: tentabot_value_scorer_v3_trace_recovery
+    adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+    hypothesis: >
+      A clean-room Tentabot-style primitive value scorer can keep the v1 static
+      safety gate while adding an explicit trace-level route recovery selector
+      that only chooses already accepted corridor-subgoal or route-guide
+      candidates under recent route regression or combined route/goal stall.
+      This tests route-recovery policy rather than another speed, clearance,
+      static-gate, or scalar route-progress retune.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   actuation_aware_hybrid_rule_v0:
     status: experimental_spike
     family: amv_actuation_diagnostic

@@ -178,3 +178,37 @@ issue acceptance rule: low-progress timeouts drop from the #1832 retained baseli
 but static collisions rise from 1/18 to 2/18 and near misses rise from 3/18 to 5/18. Treat this as
 negative diagnostic evidence for hand-scored route-progress weighting. Further Tentabot-style work
 should be trace-level recovery policy or learned value estimation, not larger route-progress weights.
+
+## 2026-05-31 Issue #1908 Trace-Recovery Probe
+
+Issue #1908 tested `tentabot_value_scorer_v3_trace_recovery`, a clean-room scorer variant that keeps
+the v1 static-safety gate unchanged and adds an explicit trace-level recovery selector. The selector
+only chooses already accepted `corridor_subgoal` or `route_guide` candidates when recent route
+diagnostics show route regression or combined route/goal stall. It does not relax hard static or
+dynamic rejection, speed, clearance, static-gate, or scalar route-progress weights.
+
+Validation commands run:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- pytest tests/planner/test_hybrid_rule_local_planner.py -q
+scripts/dev/run_worktree_shared_venv.sh -- pytest tests/validation/test_run_policy_search_candidate.py tests/validation/test_validate_policy_search_registry.py -q
+LOGURU_LEVEL=WARNING DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v3_trace_recovery --stage smoke --workers 1 --output-dir output/policy_search/tentabot_value_scorer_v3_trace_recovery/smoke/issue1908_v3
+LOGURU_LEVEL=WARNING DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v3_trace_recovery --stage nominal_sanity --workers 2 --output-dir output/policy_search/tentabot_value_scorer_v3_trace_recovery/nominal_sanity/issue1908_v3
+```
+
+Summary:
+
+| Candidate | Stage | Episodes | Success | Collision | Near miss | Low-progress timeouts | Decision |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `tentabot_value_scorer_v3_trace_recovery` | smoke | 1 | 0.0000 | 0.0000 | 0.0000 | 1 | pass |
+| `tentabot_value_scorer_v3_trace_recovery` | nominal_sanity | 18 | 0.2222 | 0.1111 | 0.1667 | 9 | revise |
+
+Classification: **revise / stop this trace-recovery lane**.
+
+Interpretation: trace recovery is executable and diagnostics show when it activates, is held, or is
+blocked. It does not satisfy the issue acceptance rule. The smoke stage times out from low progress,
+and nominal sanity matches v1's 9/18 low-progress timeouts while keeping the same 2/18 static
+collisions. Near misses return to the #1832 retained baseline level at 3/18, but the static-collision
+regression remains. Treat this as negative diagnostic evidence for hand-authored Tentabot recovery
+logic. The next meaningful lane is a learned value estimator or a different planner family, not
+another hand-tuned Tentabot recovery variant.

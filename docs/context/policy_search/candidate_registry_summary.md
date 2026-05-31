@@ -74,6 +74,7 @@ artifact provenance, and fail-closed behavior before benchmark claims.
 | `tentabot_value_scorer_v0` | `learned_policy_intake` | `diagnostic_only` | Clean-room value-scorer spike; smoke-passes and #1826 reduces nominal-sanity collision/near-miss rates, but the row remains `revise` and diagnostic-only. |
 | `tentabot_value_scorer_v1_static_gated` | `learned_policy_intake` | `diagnostic_only` | Clean-room v1 scorer with a static-safety demotion tier; smoke passes, but nominal sanity increases static collisions and near misses while success stays flat, so this lane is `revise` / stop. |
 | `tentabot_value_scorer_v2_route_arc` | `learned_policy_intake` | `diagnostic_only` | Clean-room v2 scorer keeps the v1 static gate and adds a route-arc progress value term; smoke passes, but nominal sanity still revises with 2/18 collisions, 5/18 near misses, and 8 low-progress timeouts. |
+| `tentabot_value_scorer_v3_trace_recovery` | `learned_policy_intake` | `diagnostic_only` | Clean-room v3 scorer keeps the v1 static gate and adds trace-level route recovery; smoke does not solve the simple route, and nominal sanity revises with 2/18 collisions, 3/18 near misses, and 9 low-progress timeouts. |
 | `learned_risk_model_v1` | `slurm_handoff_only` | `not_benchmark_evidence` | Launch-packet lane only until SLURM training and durable artifacts exist. |
 
 ## SLURM Handoff-Only Lanes

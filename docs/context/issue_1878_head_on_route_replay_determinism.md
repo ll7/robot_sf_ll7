@@ -17,7 +17,7 @@ The selected route was already present in compact #1502 evidence, but the genera
 fixture and runs a two-pass replay determinism check from tracked inputs.
 
 This is development stress-test evidence only. It is not paper-facing benchmark evidence and does
-not broaden the #1502 or #1488 campaign claims.
+not broaden the Issue #1502 or Issue #1488 campaign claims.
 
 ## Durable Inputs
 
@@ -46,7 +46,7 @@ The two replay runs matched on the stable replay signature:
 - status: `collision`
 - termination: `collision`
 - steps: `335`
-- stable signature SHA-256: `008e7ea7f67c942928041bf1900a00eb3edc1298f689faafcc988bdd3fb8547f`
+- stable signature SHA-256: `360057895f1e6f5a04fa045141ae26b961184367a8a3d854e7437f52f48dc78a`
 
 The raw JSONL files have different raw SHA-256 values because volatile run metadata is present, so
 they remain ignored under `output/`. The compact tracked summary records the raw hashes and the
@@ -78,5 +78,5 @@ Observed results:
   not coverage across seeds.
 - Force-based metrics were excluded from the stable signature because the replay emitted missing
   pedestrian force data warnings.
-- #1488 still needs a remote issue update or PR text after this branch is reviewed, because this
+- Issue #1488 still needs a remote issue update or PR text after this branch is reviewed, because this
   worker did not push or open a PR.

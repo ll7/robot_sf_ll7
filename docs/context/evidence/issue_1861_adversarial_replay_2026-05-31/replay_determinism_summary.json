@@ -1,0 +1,60 @@
+{
+  "schema_version": "adversarial-replay-determinism-summary.v1",
+  "created_at": "2026-05-31",
+  "issue": 1861,
+  "parent_issue": 1488,
+  "source_evidence": {
+    "archive": "docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/archive.json",
+    "synthesis_note": "docs/context/issue_1503_adversarial_stress_synthesis.md",
+    "source_slurm_job": "12664"
+  },
+  "method": {
+    "selection": "one representative archived crossing/TTC failure from each #1502 failure cluster",
+    "input_policy": "regenerated scenario.yaml and route_overrides.yaml from tracked archive candidate payloads plus committed crossing/TTC template and search-space config",
+    "raw_output_root": "ignored local adversarial replay directory",
+    "raw_output_tracked": false,
+    "repeat_count": 2
+  },
+  "rows": [
+    {
+      "archive_id": "failure_0015",
+      "cluster_id": "cluster_0000",
+      "policy": "goal",
+      "classification": "deterministic",
+      "execution_mode": "native",
+      "adapter": null,
+      "expected_status": "collision",
+      "observed_status": "collision",
+      "observed_termination_reason": "collision",
+      "seed": 308,
+      "steps": 1,
+      "min_distance": 1.2752941558555615,
+      "signature_equal_across_replays": true,
+      "signature_sha256": "dee5cb239dcb744b"
+    },
+    {
+      "archive_id": "failure_0045",
+      "cluster_id": "cluster_0001",
+      "policy": "orca",
+      "classification": "deterministic_adapter",
+      "execution_mode": "adapter",
+      "adapter": "ORCAPlannerAdapter",
+      "expected_status": "collision",
+      "observed_status": "collision",
+      "observed_termination_reason": "collision",
+      "seed": 308,
+      "steps": 1,
+      "min_distance": 1.2828772089929081,
+      "signature_equal_across_replays": true,
+      "signature_sha256": "aedd42c0c97a0a9a"
+    }
+  ],
+  "unsupported_rows": [
+    {
+      "row": "classic_head_on_corridor guided route search best route",
+      "classification": "blocked",
+      "reason": "tracked #1502 evidence records only a local route_overrides.yaml path; the route override YAML itself is not tracked or regenerable from the compact report"
+    }
+  ],
+  "recommendation": "continue, but only for crossing/TTC representative failures; promote or regenerate head-on route overrides before treating route-search replay determinism as covered"
+}

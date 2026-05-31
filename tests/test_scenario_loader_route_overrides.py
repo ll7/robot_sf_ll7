@@ -122,8 +122,7 @@ def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() 
 def test_issue_1878_head_on_route_override_matches_issue_1502_summary() -> None:
     """The tracked head-on replay fixture should preserve the selected #1502 route payload."""
     override_path = Path(
-        "configs/scenarios/route_overrides/issue_1878/"
-        "classic_head_on_corridor_low_guided_1502.yaml"
+        "configs/scenarios/route_overrides/issue_1878/classic_head_on_corridor_low_guided_1502.yaml"
     )
     summary_path = Path(
         "docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/"
@@ -146,8 +145,7 @@ def test_issue_1878_head_on_replay_matrix_resolves_tracked_override() -> None:
     route_path = Path(str(scenario["route_overrides_file"]))
     assert route_path.is_absolute()
     assert route_path.as_posix().endswith(
-        "configs/scenarios/route_overrides/issue_1878/"
-        "classic_head_on_corridor_low_guided_1502.yaml"
+        "configs/scenarios/route_overrides/issue_1878/classic_head_on_corridor_low_guided_1502.yaml"
     )
     assert route_path.exists()
 

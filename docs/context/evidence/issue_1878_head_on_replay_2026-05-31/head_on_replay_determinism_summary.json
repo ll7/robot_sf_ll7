@@ -21,26 +21,26 @@
     "planner_mapping_note": "Current benchmark CLI goal policy is the local replay mapping used for the frozen classic_global_theta_star row; this is native execution evidence, not a broad planner benchmark claim."
   },
   "commands": [
-    "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_1878_head_on_replay.yaml --algo goal --out output/adversarial/issue_1878/head_on_replay_a.jsonl --horizon 500 --workers 1 --no-resume --no-video --structured-output json",
-    "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_1878_head_on_replay.yaml --algo goal --out output/adversarial/issue_1878/head_on_replay_b.jsonl --horizon 500 --workers 1 --no-resume --no-video --structured-output json"
+    "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_1878_head_on_replay.yaml --algo goal --out <ignored-output-root>/adversarial/issue_1878/head_on_replay_a.jsonl --horizon 500 --workers 1 --no-resume --no-video --structured-output json",
+    "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_1878_head_on_replay.yaml --algo goal --out <ignored-output-root>/adversarial/issue_1878/head_on_replay_b.jsonl --horizon 500 --workers 1 --no-resume --no-video --structured-output json"
   ],
   "raw_outputs": [
     {
-      "path": "output/adversarial/issue_1878/head_on_replay_a.jsonl",
-      "sha256": "44446f16876d125a91675e383e89432554ebadf16cf712847368194679457e40",
+      "ignored_artifact": "adversarial/issue_1878/head_on_replay_a.jsonl",
+      "sha256": "26c96bd1cefef93070f477eb4924581083df9d90438815398f788cada545b80b",
       "tracked": false
     },
     {
-      "path": "output/adversarial/issue_1878/head_on_replay_b.jsonl",
-      "sha256": "5047de6800db10aebf3848b9be77054211db47c94371fd3e2488daf8d2923c8e",
+      "ignored_artifact": "adversarial/issue_1878/head_on_replay_b.jsonl",
+      "sha256": "6774ea84f36812d15ce7a4e07c3224076ac464db927b3b86dea185e9eb29cbcb",
       "tracked": false
     }
   ],
   "stable_signature": {
-    "sha256": "008e7ea7f67c942928041bf1900a00eb3edc1298f689faafcc988bdd3fb8547f",
+    "sha256": "360057895f1e6f5a04fa045141ae26b961184367a8a3d854e7437f52f48dc78a",
     "matched_across_replays": true,
     "fields": {
-      "git_hash": "63980260bcbcd5cc6868610b9763a9348fc5ca43",
+      "git_hash": "25427f7705978866afe179f9d388110586a25840",
       "status": "collision",
       "termination_reason": "collision",
       "steps": 335,

@@ -90,15 +90,18 @@ execution_boundary:
   dataset_command_shape: >-
     uv run python scripts/training/collect_expert_trajectories.py --policy-id
     ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
-    --dataset-id issue_1428_orca_residual_bc_dataset --episodes <bounded-smoke-episodes>
-    --training-config configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+    --dataset-id issue_1428_orca_residual_bc_smoke --episodes 3
+    --scenario-config configs/scenarios/single/planner_sanity_simple.yaml
+    --training-config
+    configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+    --env-config configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml
+    --seeds 111 112 113
   bc_training_command_shape: >-
     uv run python scripts/training/pretrain_from_expert.py --config
-    configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+    configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml
   smoke_candidate_command_shape: >-
     LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 uv run python
     scripts/validation/run_policy_search_candidate.py --candidate orca_residual_guarded_ppo_v0
-    --stage smoke --workers 1
+    --candidate-registry <materialized-runtime-registry> --stage smoke --workers 1
   slurm_command_shape: >-
-    scripts/dev/sbatch_policy_search_sweep.sh --candidate orca_residual_guarded_ppo_v0
-    --stage nominal_sanity --config configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+    scripts/dev/sbatch_orca_residual_bc_issue1475.sh --dry-run --no-status

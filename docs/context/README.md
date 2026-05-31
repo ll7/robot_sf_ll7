@@ -208,6 +208,8 @@ knowledge, not every transient iteration detail.
   [issue_1878_head_on_route_replay_determinism.md](issue_1878_head_on_route_replay_determinism.md)
 * Issue #1503 Adversarial Stress-Coverage Synthesis (2026-05-31):
   [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md)
+* Issue #1861 Adversarial Replay Determinism Gate (2026-05-31):
+  [issue_1861_adversarial_replay_determinism_gate.md](issue_1861_adversarial_replay_determinism_gate.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:

@@ -69,5 +69,5 @@ def test_plots_skipped_when_matplotlib_missing(monkeypatch, tmp_path):
     data = _read_json(plot_manifest)
     assert data, "expected some artifacts"
     assert all(a["status"] == "skipped" for a in data if a["note"] == "matplotlib missing")
-    # Ensure every artifact either skipped or generated depending on placeholder logic
+    # Ensure every artifact is either skipped or generated depending on optional deps
     assert any(a.get("note") == "matplotlib missing" for a in data)

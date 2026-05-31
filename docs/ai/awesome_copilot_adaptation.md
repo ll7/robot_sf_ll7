@@ -11,6 +11,7 @@ The repository does **not** adopt a new marketplace, retrieval layer, or Copilot
 assumption. The existing repo-native stack remains the source of truth:
 
 - `AGENTS.md`
+- `docs/maintainer_values.md`
 - `.specify/memory/constitution.md`
 - `docs/dev_guide.md`
 - `.agents/skills/`

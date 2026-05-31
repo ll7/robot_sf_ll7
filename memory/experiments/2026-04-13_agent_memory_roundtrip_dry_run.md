@@ -6,25 +6,30 @@ Status: **live validated** — issue #816
 ## Goal
 
 Show the intended write → index → recall loop for repo-local memory entries, then confirm the
-loop with a real Claude Code session.
+loop with the then-supported Claude Code startup path.
+
+Current note: Issue #1728 retired the Claude-specific repository entrypoint. This file is a
+historical validation record for the memory layout; current agents should start from `AGENTS.md`
+and then load `memory/MEMORY.md` on demand.
 
 ## Steps
 
 1. Write or update a topic note in `memory/experiments/`.
 2. Add a one-line entry for it in `memory/MEMORY.md`.
-3. Ensure `CLAUDE.md` imports `memory/MEMORY.md`.
-4. In a fresh agent session, start from `CLAUDE.md` or `memory/MEMORY.md`, then open the linked
+3. Ensure the active agent entrypoint references `memory/MEMORY.md`.
+4. In a fresh agent session, start from `AGENTS.md` or `memory/MEMORY.md`, then open the linked
    experiment note on demand.
 
 ## Live Round-Trip Result (2026-04-14, issue #816)
 
-Session: Claude Code, model `claude-sonnet-4-6`, invoked via Codex worktree
+Session: Claude Code, model `claude-sonnet-4-6`, invoked via Codex worktree; this was the supported
+Claude-specific path at the time and is now historical.
 Branch: `816-validate-live-agent-round-trip-for-repo-local-memory-layer`
 
-**What was loaded at startup:**
-- `CLAUDE.md` — visible in `system-reminder` startup context
-- `@AGENTS.md` — imported via CLAUDE.md; content confirmed in session context
-- `@memory/MEMORY.md` — imported via CLAUDE.md; index confirmed readable
+**What was loaded at startup in the retired path:**
+- the then-supported Claude-specific pointer was visible in startup context
+- `AGENTS.md` content was imported and confirmed in session context
+- `memory/MEMORY.md` content was imported and confirmed readable
 
 **What was validated during the session:**
 - All five typed topic files (`architecture/`, `decisions/`, `experiments/`, `failures/`,
@@ -47,7 +52,6 @@ on-demand topic files rather than a monolithic instruction file.
 
 ## Boundary
 
-The live round-trip proves that the Claude Code startup path correctly loads `memory/MEMORY.md`
-and that topic files are reachable. Automated memory capture and non-Claude agent live tests
-remain future work. See `memory/architecture/layered_agent_memory_architecture.md` for the
-multi-agent coverage map.
+The live round-trip proved that the memory index and topic files were reachable through the
+then-supported startup path. Current startup guidance lives in `AGENTS.md`; see
+`memory/architecture/layered_agent_memory_architecture.md` for the multi-agent coverage map.

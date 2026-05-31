@@ -22,11 +22,12 @@ support that progress, not displace it.
 Start here before expanding:
 
 1. `AGENTS.md`
-2. `memory/MEMORY.md` for stable repo-local memory
-3. `.specify/memory/constitution.md`
-4. `docs/dev_guide.md`
-5. `docs/code_review.md`
-6. `.agent/PLANS.md` for non-trivial work
+2. `docs/maintainer_values.md`
+3. `memory/MEMORY.md` for stable repo-local memory
+4. `.specify/memory/constitution.md`
+5. `docs/dev_guide.md`
+6. `docs/code_review.md`
+7. `.agent/PLANS.md` for non-trivial work
 
 Then branch by task type:
 
@@ -54,6 +55,8 @@ Then branch by task type:
 - `output/`: git-ignored canonical artifact root
 - `docs/context/evidence/`: small tracked evidence bundles promoted from generated outputs when
   they support durable benchmark or context decisions
+- `docs/context/INDEX.md`: retrieval-first catalog for current context-note entry points, status
+  rules, optional context tools, and curated context-pack scopes
 - `docs/context/`: linked execution notes, issue-specific evidence logs, and agent handoff context;
   keep this tree indexed, pruned, and treated as a retrieval surface rather than a bulk dump
 - `memory/`: repo-local Markdown memory tree for stable cross-session facts and concise retrieval
@@ -91,6 +94,7 @@ Then branch by task type:
 - Use `scripts/dev/` entrypoints where available.
 - Prefer aggressive exploration when status is clearly labeled as exploratory, diagnostic, blocked,
   or not yet benchmark evidence.
+- Add uncertainty estimates or caveats for statements below roughly 95 percent confidence.
 - Preserve benchmark claims conservatively.
 - Treat planner provenance as part of correctness, not just documentation polish.
 - Distinguish observed evidence from hypothesis in findings and reports.

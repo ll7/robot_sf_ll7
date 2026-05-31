@@ -39,6 +39,12 @@ from robot_sf.benchmark.fallback_policy import (
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
 )
+from robot_sf.benchmark.latency_stress import (
+    LatencyStressProfile,
+    load_latency_stress_profile,
+    not_available_latency_metrics,
+    validate_latency_stress_profile,
+)
 from robot_sf.benchmark.observation_noise import (
     load_observation_noise_spec,
     normalize_observation_noise_spec,
@@ -199,6 +205,27 @@ def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
     return normalized
 
 
+def _normalize_kinematics_matrix(raw: Any) -> tuple[str, ...]:
+    """Return the campaign kinematics matrix while rejecting null entries."""
+    if raw is None:
+        return ("differential_drive",)
+    if isinstance(raw, str):
+        values = [raw]
+    elif isinstance(raw, list | tuple):
+        values = list(raw)
+    else:
+        raise TypeError("kinematics_matrix must be a string or list of strings")
+
+    normalized: list[str] = []
+    for value in values:
+        if value is None:
+            raise TypeError("kinematics_matrix entries must be strings")
+        text = str(value).strip()
+        if text:
+            normalized.append(text)
+    return tuple(normalized)
+
+
 @dataclass(frozen=True)
 class AmvProfileConfig:
     """AMV paper-profile scope contract settings."""
@@ -305,6 +332,7 @@ class CampaignConfig:
     paper_profile_version: str | None = None
     amv_profile: AmvProfileConfig = field(default_factory=AmvProfileConfig)
     synthetic_actuation_profile: SyntheticActuationProfile | None = None
+    latency_stress_profile: LatencyStressProfile | None = None
     comparability_mapping_path: Path | None = None
     snqi_contract: SnqiContractConfig = field(default_factory=SnqiContractConfig)
     route_clearance_certifications_path: Path | None = None
@@ -1258,7 +1286,7 @@ def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | 
     raise ValueError("observation_noise must be a mapping or YAML file path")
 
 
-def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912
+def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912, PLR0915
     """Validate campaign-level invariants after config parsing."""
     if cfg.scenario_horizons_path is not None and not cfg.scenario_horizons_path.is_file():
         raise FileNotFoundError(
@@ -1313,6 +1341,19 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError(
                 "synthetic_actuation_profile requires kinematics_matrix=['differential_drive']"
             )
+    if cfg.latency_stress_profile is not None:
+        validate_latency_stress_profile(cfg.latency_stress_profile)
+        if cfg.paper_facing:
+            raise ValueError("latency_stress_profile requires paper_facing=false")
+        if cfg.latency_stress_profile.action_delay_steps > 0:
+            normalized_kinematics = tuple(
+                str(value).strip().lower() for value in cfg.kinematics_matrix
+            )
+            if normalized_kinematics != ("differential_drive",):
+                raise ValueError(
+                    "latency_stress_profile.action_delay_steps requires "
+                    "kinematics_matrix=['differential_drive']"
+                )
     if cfg.snqi_contract.enforcement not in _SNQI_CONTRACT_ENFORCEMENT:
         known = ", ".join(sorted(_SNQI_CONTRACT_ENFORCEMENT))
         raise ValueError(
@@ -1578,6 +1619,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
     synthetic_actuation_raw = payload.get("synthetic_actuation_profile")
     if synthetic_actuation_raw is not None and not isinstance(synthetic_actuation_raw, dict):
         raise TypeError("synthetic_actuation_profile must be a mapping when provided")
+    latency_stress_raw = payload.get("latency_stress_profile")
+    kinematics_matrix = _normalize_kinematics_matrix(
+        payload.get("kinematics_matrix", ["differential_drive"])
+    )
 
     cfg = CampaignConfig(
         name=name,
@@ -1613,11 +1658,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
             payload.get("paper_interpretation_profile", "baseline-ready-core")
         ),
         preview_scenario_limit=int(payload.get("preview_scenario_limit", 100)),
-        kinematics_matrix=tuple(
-            str(value).strip()
-            for value in payload.get("kinematics_matrix", ["differential_drive"])
-            if str(value).strip()
-        ),
+        kinematics_matrix=kinematics_matrix,
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
         observation_mode=_normalize_observation_mode(
             payload.get("observation_mode"),
@@ -1669,6 +1710,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
             if synthetic_actuation_raw is not None
             else None
         ),
+        latency_stress_profile=load_latency_stress_profile(latency_stress_raw),
         comparability_mapping_path=comparability_mapping_path,
         route_clearance_certifications_path=route_clearance_certifications_path,
         snqi_contract=SnqiContractConfig(
@@ -1719,6 +1761,17 @@ def _synthetic_actuation_metadata(
     if profile is None:
         return None
     return profile.to_metadata()
+
+
+def _latency_stress_metadata(
+    profile: LatencyStressProfile | None,
+    *,
+    dt: float | None = None,
+) -> dict[str, Any] | None:
+    """Return a JSON-safe latency-stress metadata payload when configured."""
+    if profile is None:
+        return None
+    return profile.to_metadata(dt=dt)
 
 
 def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple[str, ...]) -> None:
@@ -1804,6 +1857,10 @@ def _build_matrix_summary_rows(
                     "scenario_candidates": list(cfg.scenario_candidates.names),
                     "synthetic_actuation_profile": _synthetic_actuation_metadata(
                         cfg.synthetic_actuation_profile
+                    ),
+                    "latency_stress_profile": _latency_stress_metadata(
+                        cfg.latency_stress_profile,
+                        dt=cfg.dt,
                     ),
                     "planner_key": planner.key,
                     "algo": planner.algo,
@@ -2753,6 +2810,13 @@ def prepare_campaign_preflight(
         "synthetic_actuation_profile": _synthetic_actuation_metadata(
             cfg.synthetic_actuation_profile
         ),
+        "latency_stress_profile": _latency_stress_metadata(
+            cfg.latency_stress_profile,
+            dt=cfg.dt,
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
+        ),
         "comparability_mapping": (
             _repo_relative(cfg.comparability_mapping_path)
             if cfg.comparability_mapping_path is not None
@@ -2803,6 +2867,13 @@ def prepare_campaign_preflight(
         "scenario_candidates": list(cfg.scenario_candidates.names),
         "synthetic_actuation_profile": _synthetic_actuation_metadata(
             cfg.synthetic_actuation_profile
+        ),
+        "latency_stress_profile": _latency_stress_metadata(
+            cfg.latency_stress_profile,
+            dt=cfg.dt,
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
         ),
         "route_clearance_warnings": route_clearance_warnings,
         "route_clearance_warning_count": len(route_clearance_warnings),
@@ -2915,6 +2986,13 @@ def prepare_campaign_preflight(
         "amv_coverage_status": amv_summary.get("status", "unknown"),
         "synthetic_actuation_profile": _synthetic_actuation_metadata(
             cfg.synthetic_actuation_profile
+        ),
+        "latency_stress_profile": _latency_stress_metadata(
+            cfg.latency_stress_profile,
+            dt=cfg.dt,
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
         ),
         "comparability_mapping_path": (
             _repo_relative(comparability_mapping_path) if comparability_mapping_path else None
@@ -3837,6 +3915,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
                     synthetic_actuation_profile=_synthetic_actuation_metadata(
                         cfg.synthetic_actuation_profile
                     ),
+                    latency_stress_profile=_latency_stress_metadata(
+                        cfg.latency_stress_profile,
+                        dt=effective_dt,
+                    ),
                     workers=effective_workers,
                     resume=cfg.resume,
                 )
@@ -4531,6 +4613,13 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             "synthetic_actuation_profile": _synthetic_actuation_metadata(
                 cfg.synthetic_actuation_profile
             ),
+            "latency_stress_profile": _latency_stress_metadata(
+                cfg.latency_stress_profile,
+                dt=cfg.dt,
+            ),
+            "latency_stress_metrics": (
+                not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
+            ),
             "comparability_mapping_path": manifest_payload.get("comparability_mapping_path"),
             "comparability_mapping_version": manifest_payload.get("comparability_mapping_version"),
             "comparability_mapping_hash": manifest_payload.get("comparability_mapping_hash"),
@@ -4626,6 +4715,10 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         },
         "matrix_path": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
+        "latency_stress_profile": _latency_stress_metadata(
+            cfg.latency_stress_profile,
+            dt=cfg.dt,
+        ),
         "seed_policy": {
             "mode": cfg.seed_policy.mode,
             "seed_set": cfg.seed_policy.seed_set,

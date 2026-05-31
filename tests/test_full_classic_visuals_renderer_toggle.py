@@ -50,7 +50,7 @@ class _Cfg:
         self.max_videos = 1
         self.capture_replay = capture_replay
         self.video_renderer = video_renderer
-        # Targets placeholders
+        # Targets coordinates for lightweight diagnostics
         self.target_collision_half_width = 0.05
         self.target_success_half_width = 0.05
         self.target_snqi_half_width = 0.05

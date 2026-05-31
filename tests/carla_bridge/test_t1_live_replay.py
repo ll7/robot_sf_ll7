@@ -371,6 +371,21 @@ def test_live_replay_spawns_replays_and_cleans_up_actors(tmp_path: Path) -> None
     assert summary["carla"]["client_version"] == "0.9.16"
     assert summary["carla"]["server_version"] == "0.9.16"
     assert summary["carla"]["map"] == "Town01"
+    assert summary["coordinate_alignment"] == {
+        "bridge_version": "carla-t1-oracle-live-replay.v1",
+        "carla_map_name": "Town01",
+        "carla_server_version": "0.9.16",
+        "eligible_for_metric_parity": True,
+        "end": summary["coordinate_alignment"]["end"],
+        "projection_meters": 0.0,
+        "projection_rationale": "none",
+        "replay_mode": "native",
+        "robot_sf_commit": "abc123",
+        "scenario_cert_id": "unit_crossing",
+        "scenario_certificate_source": "output/cert.json",
+        "start": summary["coordinate_alignment"]["start"],
+    }
+    assert summary["replay_metadata"]["coordinate_alignment"] == summary["coordinate_alignment"]
     assert summary["actors"] == {"static_obstacles": 0, "robot": 1, "pedestrians": 1}
     assert summary["trajectory"]["steps"] == 3
     assert summary["trajectory"]["truncated_by_max_steps"] is True
@@ -567,6 +582,12 @@ def test_live_replay_records_robot_spawn_projection_fallback_metadata(tmp_path: 
     assert summary["status"] == "oracle-replay"
     assert summary["replay_metadata"]["robot_spawn"]["strategy"] == "carla-map-projection"
     assert summary["replay_metadata"]["robot_spawn"]["adapted"] is True
+    assert summary["coordinate_alignment"]["replay_mode"] == "adapted"
+    assert summary["coordinate_alignment"]["eligible_for_metric_parity"] is False
+    assert summary["coordinate_alignment"]["projection_meters"] == pytest.approx(
+        (0.25**2 + 0.5**2 + 0.05**2) ** 0.5
+    )
+    assert "exclusion_reason" in summary["coordinate_alignment"]
     assert summary["replay_metadata"]["robot_spawn"]["projection_source"] == (
         "world.get_map().get_waypoint(project_to_road=True)"
     )

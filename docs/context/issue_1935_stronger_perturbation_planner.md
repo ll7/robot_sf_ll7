@@ -3,6 +3,7 @@
 Issue: [#1935](https://github.com/ll7/robot_sf_ll7/issues/1935)
 Parent: [#1610](https://github.com/ll7/robot_sf_ll7/issues/1610)
 Predecessor: [#1933](https://github.com/ll7/robot_sf_ll7/issues/1933)
+Successor: [#1937](https://github.com/ll7/robot_sf_ll7/issues/1937)
 
 ## Goal
 
@@ -94,3 +95,6 @@ The next #1610 child should change exactly one dimension again. Useful next opti
 - add a second perturbation family while keeping this three-planner, four-seed pilot budget fixed,
 - or keep route-offset fixed and use a targeted trace-level review for the candidate's larger
   clearance response before treating that mechanism as robust.
+
+Successor [issue_1937_ped_route_offset.md](issue_1937_ped_route_offset.md) added the pedestrian
+route-offset perturbation family while keeping the #1935 planner and seed budget fixed.

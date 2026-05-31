@@ -1,0 +1,1908 @@
+{
+  "claim_boundary": "diagnostic local pilot only; not benchmark-strength or paper-facing evidence",
+  "dt": 0.1,
+  "horizon": 80,
+  "manifest": "configs/scenarios/perturbations/issue_1610_ped_route_offset_pilot_v1.yaml",
+  "materialization": {
+    "excluded_variants": [
+      "francis2023_join_group_ped_route_offset_x025"
+    ],
+    "included_variants": [
+      "classic_group_crossing_high_noop",
+      "classic_group_crossing_high_route_offset_x025",
+      "classic_group_crossing_high_ped_route_offset_x025",
+      "classic_head_on_corridor_low_noop",
+      "classic_head_on_corridor_low_route_offset_y025",
+      "classic_head_on_corridor_low_ped_route_offset_y025",
+      "francis2023_join_group_noop",
+      "francis2023_join_group_route_offset_x025"
+    ],
+    "local_artifact_boundary": "materialized scenario matrix, route overrides, and raw episode JSONL remain ignored local outputs reproducible from the tracked manifest and command",
+    "manifest_id": "issue_1610_ped_route_offset_pilot_v1",
+    "schema_version": "scenario_perturbation_pilot_matrix.v1",
+    "variant_count": 8
+  },
+  "pair_rows": [
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.007052846392564538,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.81814067199887,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.8251935183914345,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "goal",
+      "seed": 111,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.10269651497095333,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.1577979198433974,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.2604944348143508,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "goal",
+      "seed": 112,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.07168970886744841,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.1655053423048587,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.237195051172307,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "goal",
+      "seed": 117,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.010528522844411192,
+      "noop": {
+        "collision": 1,
+        "min_distance": 1.3737888643178642,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 1.3843173871622754,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "goal",
+      "seed": 119,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.005904823674986126,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.81814067199887,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.8122358483238838,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "goal",
+      "seed": 111,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0005392180203078745,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.1577979198433974,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.1583371378637053,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "goal",
+      "seed": 112,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.016263523668517355,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.1655053423048587,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.181768865973376,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "goal",
+      "seed": 117,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0033433728518068584,
+      "noop": {
+        "collision": 1,
+        "min_distance": 1.3737888643178642,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 1.377132237169671,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "goal",
+      "seed": 119,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.22833490261207778,
+      "noop": {
+        "collision": 0,
+        "min_distance": 5.061020535696914,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 5.289355438308991,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "goal",
+      "seed": 111,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.18322703806555385,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.717274301619378,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 7.900501339684932,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "goal",
+      "seed": 112,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.23436541417552625,
+      "noop": {
+        "collision": 1,
+        "min_distance": 7.653239894206032,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 7.887605308381558,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "goal",
+      "seed": 116,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.006290964134153754,
+      "noop": {
+        "collision": 0,
+        "min_distance": 4.093522415831196,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 4.0872314516970425,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "goal",
+      "seed": 117,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.021713990718757792,
+      "noop": {
+        "collision": 0,
+        "min_distance": 5.061020535696914,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 5.082734526415671,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "goal",
+      "seed": 111,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.000557703564545875,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.717274301619378,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 7.717832005183924,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "goal",
+      "seed": 112,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -7.196379763918515e-05,
+      "noop": {
+        "collision": 1,
+        "min_distance": 7.653239894206032,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 7.653167930408393,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "goal",
+      "seed": 116,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.07110674939792894,
+      "noop": {
+        "collision": 0,
+        "min_distance": 4.093522415831196,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 4.164629165229125,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "goal",
+      "seed": 117,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.0013309335961251278,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.489627078493282,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.488296144897157,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "goal",
+      "seed": 112,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.007726294013136403,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.860499164278315,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.8527728702651785,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "goal",
+      "seed": 113,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.010253463936579443,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5542955250491202,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.5645489889856996,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "goal",
+      "seed": 115,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.014492410844535453,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.1354041290479486,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.149896539892484,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "goal",
+      "seed": 116,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.007971813618113055,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5256092818038434,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.5335810954219564,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "orca",
+      "seed": 111,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.04466706787720809,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5082689511439706,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4636018832667625,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "orca",
+      "seed": 112,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.009801023952351606,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.751918317314495,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.7617193412668466,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "orca",
+      "seed": 117,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.09594679582890131,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5686344810856916,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.664581276914593,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "orca",
+      "seed": 119,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.004412621133507821,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5256092818038434,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.5300219029373512,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "orca",
+      "seed": 111,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.015595208918059322,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5082689511439706,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.52386416006203,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "orca",
+      "seed": 112,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.005007133364269611,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.751918317314495,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.7569254506787646,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "orca",
+      "seed": 117,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.14942324998977163,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5686344810856916,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.41921123109592,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "orca",
+      "seed": 119,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.0022520568709183397,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6702469202849204,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.667994863414002,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "orca",
+      "seed": 111,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.17920069751043055,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.438003009020353,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 7.617203706530783,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "orca",
+      "seed": 112,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.2352839224950367,
+      "noop": {
+        "collision": 1,
+        "min_distance": 7.644056905954665,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 7.879340828449702,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "orca",
+      "seed": 116,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.2167104544684597,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.596850415524658,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.813560869993118,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "orca",
+      "seed": 117,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.003176856884758772,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6702469202849204,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.6734237771696792,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "orca",
+      "seed": 111,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.00031026205209894187,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.438003009020353,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 7.4383132710724515,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "orca",
+      "seed": 112,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 1,
+        "min_distance": 7.644056905954665,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 7.644056905954665,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "orca",
+      "seed": 116,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.0019146783323962246,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.596850415524658,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.594935737192262,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "orca",
+      "seed": 117,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 7.814638987357903e-05,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4492909863429455,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.449369132732819,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "orca",
+      "seed": 112,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.00038332177099031917,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.439309677641443,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4389263558704526,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "orca",
+      "seed": 113,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.0018904396798549161,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4397620085044152,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4378715688245602,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "orca",
+      "seed": 115,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.017795915649092997,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4741467753802409,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4919426910293339,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "orca",
+      "seed": 116,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.008589813326184803,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.7712804098209374,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.7798702231471222,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 111,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.00611240603003349,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.7405926443056539,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.7467050503356873,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 112,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.23734892916992,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6816418613895783,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.9189907905594983,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 117,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.007491903822575807,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6164124997727183,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.6089205959501425,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_ped_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 119,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.02008164086251707,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.7712804098209374,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.7511987689584203,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 111,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.004206575664204015,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.7405926443056539,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.7363860686414498,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 112,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.23033119896274634,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6816418613895783,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.9119730603523246,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 117,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.009253339699012209,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6164124997727183,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.607159160073706,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 119,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.01353731987277973,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6535262814479124,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.6399889615751326,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 111,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.17920168719108887,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.42854255272526,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 7.607744239916349,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 112,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.23428652331575694,
+      "noop": {
+        "collision": 1,
+        "min_distance": 7.608894934521786,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 7.8431814578375425,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 116,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.17333619995817395,
+      "noop": {
+        "collision": 0,
+        "min_distance": 3.173033586227894,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 3.346369786186068,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 117,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.09212939589392599,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6535262814479124,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.7456556773418384,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 111,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.001973518298978405,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.42854255272526,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 7.430516071024239,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 112,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 1,
+        "min_distance": 7.608894934521786,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 7.608894934521786,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 116,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.094992939324821,
+      "noop": {
+        "collision": 0,
+        "min_distance": 3.173033586227894,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 3.268026525552715,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 117,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.012436719169913735,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4482470133949672,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.460683732564881,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 112,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.00036280770293406484,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4487350475219367,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4490978552248708,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 113,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.0006689005401632198,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4494315390472794,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4487626385071162,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 115,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.00395470243900542,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4477641505470757,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4517188529860812,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "robot_route_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 116,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    }
+  ],
+  "pair_summary": {
+    "by_perturbation_family": {
+      "pedestrian_route_offset": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.09781024592563962,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 24,
+        "status_counts": {
+          "completed": 24
+        }
+      },
+      "robot_route_offset": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.011610324932393588,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 36,
+        "status_counts": {
+          "completed": 36
+        }
+      }
+    },
+    "by_planner": {
+      "goal": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.04774202008577372,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 20,
+        "status_counts": {
+          "completed": 20
+        }
+      },
+      "orca": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.029538001887190725,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 20,
+        "status_counts": {
+          "completed": 20
+        }
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.06099085801611155,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 20,
+        "status_counts": {
+          "completed": 20
+        }
+      }
+    },
+    "by_source_scenario": {
+      "classic_group_crossing_high": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.02467508543040925,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 24,
+        "status_counts": {
+          "completed": 24
+        }
+      },
+      "classic_head_on_corridor_low": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.08857671970500137,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 24,
+        "status_counts": {
+          "completed": 24
+        }
+      },
+      "francis2023_join_group": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.003947856377638725,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 12,
+        "status_counts": {
+          "completed": 12
+        }
+      }
+    },
+    "mean_deltas_completed_pairs": {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.04609029332969199,
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    "pairs": 60,
+    "status_counts": {
+      "completed": 60
+    }
+  },
+  "planner_runs": {
+    "goal": {
+      "algo": "goal",
+      "algo_config_path": null,
+      "episodes": 32,
+      "source": "raw_algo"
+    },
+    "orca": {
+      "algo": "orca",
+      "algo_config_path": null,
+      "episodes": 32,
+      "source": "raw_algo"
+    },
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": {
+      "algo": "hybrid_rule_local_planner",
+      "algo_config_path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml",
+      "episodes": 32,
+      "source": "policy_search_candidate"
+    }
+  },
+  "planners": [
+    "goal",
+    "orca",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard"
+  ],
+  "schema_version": "scenario_perturbation_criticality_pilot.v1",
+  "seed_limit": 4
+}

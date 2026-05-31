@@ -1,7 +1,7 @@
 """Scenario perturbation manifest preflight helpers.
 
-The v1 surface is intentionally small: it certifies no-op baselines and one bounded robot-route
-offset family before any generated variant can be counted as benchmark evidence.
+The v1 surface is intentionally small: it certifies no-op baselines and bounded route-offset
+families before any generated variant can be counted as benchmark evidence.
 """
 
 from __future__ import annotations
@@ -406,7 +406,7 @@ def _normalize_variant(variant: Any) -> Mapping[str, Any]:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"variant.{field_name} must be a non-empty string")
     family = str(variant["family"])
-    if family not in {"noop", "robot_route_offset"}:
+    if family not in {"noop", "robot_route_offset", "pedestrian_route_offset"}:
         raise ValueError(f"unsupported perturbation family: {family}")
     return variant
 
@@ -440,7 +440,7 @@ def _validate_perturbation_bounds(
 
     parameters = variant.get("parameters")
     if not isinstance(parameters, Mapping):
-        raise ValueError("robot_route_offset variants require a parameters mapping")
+        raise ValueError(f"{family} variants require a parameters mapping")
     dx = _finite_float(parameters.get("dx_m", 0.0), field_name="parameters.dx_m")
     dy = _finite_float(parameters.get("dy_m", 0.0), field_name="parameters.dy_m")
     magnitude = math.hypot(dx, dy)
@@ -467,8 +467,7 @@ def _validate_perturbation_bounds(
     }
     if magnitude > bound:
         return [
-            f"robot_route_offset magnitude {magnitude:.6f} m exceeds "
-            f"variant max_magnitude_m {bound:.6f} m"
+            f"{family} magnitude {magnitude:.6f} m exceeds variant max_magnitude_m {bound:.6f} m"
         ], summary
     return [], summary
 
@@ -494,11 +493,12 @@ def _certify_variant(
         raise ValueError("scenario map pool is empty")
     _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
     perturbed_map = deepcopy(map_def)
-    _apply_robot_route_offset(
-        perturbed_map.robot_routes,
+    _apply_route_offset(
+        _routes_for_family(perturbed_map, str(variant["family"])),
         dx=float(perturbation_summary["dx_m"]),
         dy=float(perturbation_summary["dy_m"]),
         parameters=variant.get("parameters", {}),
+        family=str(variant["family"]),
     )
     perturbed_map.__post_init__()
     scenario["metadata"] = _variant_metadata(
@@ -549,7 +549,7 @@ def _materialize_variant_scenario(
         "evidence_boundary": "local_pilot_input_not_benchmark_evidence",
     }
     scenario["metadata"] = metadata
-    if variant["family"] == "robot_route_offset":
+    if variant["family"] in {"robot_route_offset", "pedestrian_route_offset"}:
         route_path = routes_dir / f"{variant['variant_id']}.route_overrides.yaml"
         _write_route_offset_override(
             variant,
@@ -607,29 +607,47 @@ def _write_route_offset_override(
     perturbation_summary: Mapping[str, Any],
     route_path: Path,
 ) -> None:
-    """Write a route override artifact for one robot-route offset variant."""
+    """Write a route override artifact for one route-offset variant."""
     scenario = dict(select_scenario(scenarios, str(variant["scenario_id"])))
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_config)
     if not config.map_pool.map_defs:
         raise ValueError("scenario map pool is empty")
     _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
     perturbed_map = deepcopy(map_def)
-    _apply_robot_route_offset(
-        perturbed_map.robot_routes,
+    _apply_route_offset(
+        _routes_for_family(perturbed_map, str(variant["family"])),
         dx=float(perturbation_summary["dx_m"]),
         dy=float(perturbation_summary["dy_m"]),
         parameters=variant.get("parameters", {}),
+        family=str(variant["family"]),
     )
     route_payload = {
         "schema_version": "scenario_route_overrides.v1",
         "source": f"{scenario_config.as_posix()}#{variant['scenario_id']}",
         "variant_id": variant["variant_id"],
         "route_payload": {
-            "robot_routes": [_route_to_payload(route) for route in perturbed_map.robot_routes],
-            "ped_routes": [],
+            "robot_routes": (
+                [_route_to_payload(route) for route in perturbed_map.robot_routes]
+                if variant["family"] == "robot_route_offset"
+                else []
+            ),
+            "ped_routes": (
+                [_route_to_payload(route) for route in perturbed_map.ped_routes]
+                if variant["family"] == "pedestrian_route_offset"
+                else []
+            ),
         },
     }
     route_path.write_text(yaml.safe_dump(route_payload, sort_keys=False), encoding="utf-8")
+
+
+def _routes_for_family(map_def: Any, family: str) -> list[GlobalRoute]:
+    """Return the route collection targeted by a perturbation family."""
+    if family == "robot_route_offset":
+        return map_def.robot_routes
+    if family == "pedestrian_route_offset":
+        return map_def.ped_routes
+    raise ValueError(f"unsupported route-offset family: {family}")
 
 
 def _route_to_payload(route: GlobalRoute) -> dict[str, Any]:
@@ -645,21 +663,22 @@ def _route_to_payload(route: GlobalRoute) -> dict[str, Any]:
     }
 
 
-def _apply_robot_route_offset(
+def _apply_route_offset(
     routes: list[GlobalRoute],
     *,
     dx: float,
     dy: float,
     parameters: Any,
+    family: str,
 ) -> None:
-    """Offset selected robot-route waypoints in place."""
+    """Offset selected route waypoints in place."""
     if not isinstance(parameters, Mapping):
         raise ValueError("parameters must be a mapping")
     spawn_id = parameters.get("spawn_id")
     goal_id = parameters.get("goal_id")
     selector = str(parameters.get("waypoint_selector", "all"))
     if selector != "all":
-        raise ValueError("robot_route_offset currently supports waypoint_selector='all' only")
+        raise ValueError(f"{family} currently supports waypoint_selector='all' only")
     selected = [
         route
         for route in routes
@@ -667,10 +686,11 @@ def _apply_robot_route_offset(
         and (goal_id is None or route.goal_id == int(goal_id))
     ]
     if not selected:
-        raise ValueError("robot_route_offset selected no robot routes")
+        route_kind = "pedestrian" if family == "pedestrian_route_offset" else "robot"
+        raise ValueError(f"{family} selected no {route_kind} routes")
     for route in selected:
         route.waypoints = [(float(x) + dx, float(y) + dy) for x, y in route.waypoints]
-        route.source_label = f"{route.source_label or 'robot_route'}|robot_route_offset"
+        route.source_label = f"{route.source_label or family}|{family}"
 
 
 def _variant_metadata(

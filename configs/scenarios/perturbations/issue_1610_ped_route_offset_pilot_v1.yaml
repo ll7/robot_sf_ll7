@@ -1,0 +1,112 @@
+# Issue #1937 follow-up perturbation manifest for parent issue #1610.
+#
+# This manifest adds exactly one new perturbation family, pedestrian_route_offset, while retaining
+# the #1935 planner/seed/horizon pilot boundary. It is a validity-preflight and local-pilot input
+# only; it does not make benchmark-strength or paper-facing claims.
+
+schema_version: scenario_perturbation_manifest.v1
+manifest_id: issue_1610_ped_route_offset_pilot_v1
+description: >-
+  Bounded #1610 follow-up manifest that keeps the previous route-offset source scenarios and seeds
+  fixed while adding pedestrian route waypoint offsets as the only new perturbation family.
+scenario_config: ../classic_interactions_francis2023.yaml
+seed_controls:
+  baseline_seeds: [111, 112, 113, 116]
+  replay_seed_policy: explicit
+  source: docs/context/evidence/issue_1608_seed_sensitivity_2026-05-30/scenario_seed_sensitivity.csv
+validity:
+  require_scenario_certification: true
+  max_route_offset_m: 0.5
+  invalid_variant_evidence_policy: exclude_from_success_evidence
+  notes: >-
+    The v1 preflight supports no-op baselines plus bounded robot and pedestrian route waypoint
+    offsets. Planner execution must consume only variants that remain certification-eligible.
+variants:
+  - variant_id: classic_group_crossing_high_noop
+    scenario_id: classic_group_crossing_high
+    family: noop
+    seeds: [111, 112, 117, 119]
+    rationale: Baseline row for a certification-eligible seed-sensitive scenario from issue #1608.
+  - variant_id: classic_group_crossing_high_route_offset_x025
+    scenario_id: classic_group_crossing_high
+    family: robot_route_offset
+    seeds: [111, 112, 117, 119]
+    rationale: Retained robot-route shift from the previous #1610 pilot for family comparison.
+    parameters:
+      dx_m: 0.25
+      dy_m: 0.0
+      max_magnitude_m: 0.5
+      waypoint_selector: all
+  - variant_id: classic_group_crossing_high_ped_route_offset_x025
+    scenario_id: classic_group_crossing_high
+    family: pedestrian_route_offset
+    seeds: [111, 112, 117, 119]
+    rationale: Small bounded pedestrian-route shift for crossing-interaction sensitivity.
+    parameters:
+      dx_m: 0.25
+      dy_m: 0.0
+      max_magnitude_m: 0.5
+      waypoint_selector: all
+
+  - variant_id: classic_head_on_corridor_low_noop
+    scenario_id: classic_head_on_corridor_low
+    family: noop
+    seeds: [111, 112, 116, 117]
+    rationale: Baseline row for a hard-but-solvable seed-sensitive corridor scenario.
+  - variant_id: classic_head_on_corridor_low_route_offset_y025
+    scenario_id: classic_head_on_corridor_low
+    family: robot_route_offset
+    seeds: [111, 112, 116, 117]
+    rationale: Retained robot-route shift from the previous #1610 pilot for family comparison.
+    parameters:
+      dx_m: 0.0
+      dy_m: 0.25
+      max_magnitude_m: 0.5
+      waypoint_selector: all
+  - variant_id: classic_head_on_corridor_low_ped_route_offset_y025
+    scenario_id: classic_head_on_corridor_low
+    family: pedestrian_route_offset
+    seeds: [111, 112, 116, 117]
+    rationale: Small bounded pedestrian-route shift for corridor-interaction sensitivity.
+    parameters:
+      dx_m: 0.0
+      dy_m: 0.25
+      max_magnitude_m: 0.5
+      waypoint_selector: all
+
+  - variant_id: francis2023_join_group_noop
+    scenario_id: francis2023_join_group
+    family: noop
+    seeds: [112, 113, 115, 116]
+    rationale: Baseline row for a Francis social-interaction scenario flagged by issue #1608.
+  - variant_id: francis2023_join_group_route_offset_x025
+    scenario_id: francis2023_join_group
+    family: robot_route_offset
+    seeds: [112, 113, 115, 116]
+    rationale: Retained robot-route shift from the previous #1610 pilot for family comparison.
+    parameters:
+      dx_m: 0.25
+      dy_m: 0.0
+      max_magnitude_m: 0.5
+      waypoint_selector: all
+  - variant_id: francis2023_join_group_ped_route_offset_x025
+    scenario_id: francis2023_join_group
+    family: pedestrian_route_offset
+    seeds: [112, 113, 115, 116]
+    rationale: >-
+      Fail-closed probe for whether this Francis scenario exposes route-based pedestrian
+      trajectories; certification should exclude it if the scenario uses single-pedestrian circles
+      rather than pedestrian routes.
+    parameters:
+      dx_m: 0.25
+      dy_m: 0.0
+      max_magnitude_m: 0.5
+      waypoint_selector: all
+pilot_matrix_note:
+  parent_issue: "#1610"
+  next_step: >-
+    Run a tiny paired planner pilot over eligible no-op, robot-route-offset, and
+    pedestrian-route-offset rows using the same planner/config/seed controls except for variant_id.
+  evidence_boundary: >-
+    Preflight validity is necessary but not sufficient benchmark evidence; invalid, fallback,
+    degraded, missing, or stress-only rows are limitations rather than success evidence.

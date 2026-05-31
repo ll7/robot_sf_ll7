@@ -119,6 +119,47 @@ def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() 
     assert route_path.exists()
 
 
+def test_issue_1878_head_on_route_override_matches_issue_1502_summary() -> None:
+    """The tracked head-on replay fixture should preserve the selected #1502 route payload."""
+    override_path = Path(
+        "configs/scenarios/route_overrides/issue_1878/"
+        "classic_head_on_corridor_low_guided_1502.yaml"
+    )
+    summary_path = Path(
+        "docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/"
+        "classic_head_on_corridor_guided_summary.json"
+    )
+
+    override_data = yaml.safe_load(override_path.read_text(encoding="utf-8"))
+    summary_data = yaml.safe_load(summary_path.read_text(encoding="utf-8"))
+
+    assert override_data["source_evidence"]["issue"] == 1502
+    assert override_data["route_payload"] == summary_data["route_payload"]
+
+
+def test_issue_1878_head_on_replay_matrix_resolves_tracked_override() -> None:
+    """The issue-1878 replay matrix should be runnable from tracked route evidence."""
+    scenarios = load_scenarios(Path("configs/scenarios/sets/issue_1878_head_on_replay.yaml"))
+    assert len(scenarios) == 1
+
+    scenario = scenarios[0]
+    route_path = Path(str(scenario["route_overrides_file"]))
+    assert route_path.is_absolute()
+    assert route_path.as_posix().endswith(
+        "configs/scenarios/route_overrides/issue_1878/"
+        "classic_head_on_corridor_low_guided_1502.yaml"
+    )
+    assert route_path.exists()
+
+    config = build_robot_config_from_scenario(
+        scenario,
+        scenario_path=Path("configs/scenarios/sets/issue_1878_head_on_replay.yaml").resolve(),
+    )
+    _map_name, updated_map = next(iter(config.map_pool.map_defs.items()))
+    assert updated_map.robot_routes[0].waypoints == [(22.25, 5.75), (13.25, 34.25)]
+    assert updated_map.ped_routes[0].waypoints == [(13.25, 2.25), (23.25, 24.75)]
+
+
 def test_load_scenarios_rebases_map_path_after_manifest_override(tmp_path: Path) -> None:
     """Manifest-level map_id overrides should rerun path rebasing on merged scenarios."""
     manifest_path = tmp_path / "override_manifest.yaml"

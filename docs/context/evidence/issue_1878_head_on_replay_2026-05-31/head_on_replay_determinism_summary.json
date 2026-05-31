@@ -1,0 +1,76 @@
+{
+  "schema_version": "adversarial_head_on_replay_determinism.v1",
+  "issue": 1878,
+  "related_issues": [1488, 1502, 1861],
+  "created_at": "2026-05-31",
+  "status": "deterministic",
+  "claim_boundary": "development_stress_test_not_benchmark_evidence",
+  "source_route": {
+    "fixture": "configs/scenarios/route_overrides/issue_1878/classic_head_on_corridor_low_guided_1502.yaml",
+    "fixture_sha256": "adaa945cc76f7637605e4f8cb4435561312a0f241e467e2ca37a6dfc3922d621",
+    "source_summary": "docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/classic_head_on_corridor_guided_summary.json",
+    "source_summary_sha256": "3391f8e5d9997388cbd31a0507fdec6a540a8f99a4f471167312a0f2631f17d1"
+  },
+  "replay_matrix": {
+    "path": "configs/scenarios/sets/issue_1878_head_on_replay.yaml",
+    "sha256": "e3a9e15cb3fc8c41fb7a33c14161e26e29bd2c80937cde9f7ded22e9e40ee9be",
+    "scenario_id": "issue_1878_classic_head_on_corridor_low_guided_1502",
+    "seed": 123,
+    "horizon": 500,
+    "algo": "goal",
+    "planner_mapping_note": "Current benchmark CLI goal policy is the local replay mapping used for the frozen classic_global_theta_star row; this is native execution evidence, not a broad planner benchmark claim."
+  },
+  "commands": [
+    "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_1878_head_on_replay.yaml --algo goal --out output/adversarial/issue_1878/head_on_replay_a.jsonl --horizon 500 --workers 1 --no-resume --no-video --structured-output json",
+    "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_1878_head_on_replay.yaml --algo goal --out output/adversarial/issue_1878/head_on_replay_b.jsonl --horizon 500 --workers 1 --no-resume --no-video --structured-output json"
+  ],
+  "raw_outputs": [
+    {
+      "path": "output/adversarial/issue_1878/head_on_replay_a.jsonl",
+      "sha256": "44446f16876d125a91675e383e89432554ebadf16cf712847368194679457e40",
+      "tracked": false
+    },
+    {
+      "path": "output/adversarial/issue_1878/head_on_replay_b.jsonl",
+      "sha256": "5047de6800db10aebf3848b9be77054211db47c94371fd3e2488daf8d2923c8e",
+      "tracked": false
+    }
+  ],
+  "stable_signature": {
+    "sha256": "008e7ea7f67c942928041bf1900a00eb3edc1298f689faafcc988bdd3fb8547f",
+    "matched_across_replays": true,
+    "fields": {
+      "git_hash": "63980260bcbcd5cc6868610b9763a9348fc5ca43",
+      "status": "collision",
+      "termination_reason": "collision",
+      "steps": 335,
+      "outcome": {
+        "collision_event": true,
+        "route_complete": false,
+        "timeout_event": false
+      },
+      "metrics": {
+        "success": false,
+        "collisions": 1,
+        "total_collision_count": 1,
+        "ped_collision_count": 1,
+        "wall_collisions": 0.0,
+        "near_misses": 9,
+        "time_to_goal_norm": 1.0,
+        "path_efficiency": 0.9525669838473421,
+        "socnavbench_path_length": 32.08751085168228,
+        "socnavbench_path_length_ratio": 1.0574416993031848,
+        "min_clearance": -0.017259162971714037,
+        "mean_clearance": 2.9744068017215803,
+        "min_distance": 1.3827408370282859,
+        "robot_ped_within_5m_frac": 0.6238805970149254,
+        "avg_speed": 0.9599984830256046,
+        "energy": 31.854395141107872
+      }
+    }
+  },
+  "warnings": [
+    "validate-config warns that the replay matrix carries one seed; this is intentional for a fixed-seed determinism gate and is not a coverage sweep.",
+    "The replay emitted a missing pedestrian force data warning, so force-based metrics are not part of the stable signature."
+  ]
+}

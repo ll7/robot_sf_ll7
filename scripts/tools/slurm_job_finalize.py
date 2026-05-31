@@ -1,0 +1,333 @@
+#!/usr/bin/env python3
+"""Finalize a completed SLURM job into compact artifact evidence.
+
+The helper is intentionally metadata-only: it classifies a known job state,
+checks expected artifact paths, computes checksums for present files, and
+writes small JSON/Markdown summaries. It does not submit jobs, upload
+artifacts, or copy raw ``output/`` trees into git.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCHEMA_VERSION = "robot-sf-slurm-job-finalization.v1"
+
+SUCCESS_STATES = {"COMPLETED", "COMPLETING"}
+FAILED_STATES = {"FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY", "PREEMPTED"}
+INCOMPLETE_STATES = {"PENDING", "CONFIGURING", "RUNNING", "SUSPENDED", "REQUEUED"}
+UNAVAILABLE_STATES = {"NOT_AVAILABLE", "UNKNOWN", "MISSING"}
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactRecord:
+    """Compact metadata for one expected or optional artifact path."""
+
+    path: str
+    role: str
+    required: bool
+    exists: bool
+    kind: str
+    size_bytes: int | None
+    sha256: str | None
+
+
+def _repo_relative(path: Path, *, repo_root: Path) -> str:
+    """Return a stable display path relative to the repository when possible."""
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _resolve_path(path: str | Path, *, repo_root: Path) -> Path:
+    """Resolve an artifact path relative to the repository root."""
+    value = Path(path)
+    return value if value.is_absolute() else repo_root / value
+
+
+def _sha256_file(path: Path) -> str:
+    """Compute a streaming SHA256 checksum for one file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _directory_digest(path: Path) -> tuple[int, str]:
+    """Compute total byte size and deterministic digest for a directory tree."""
+    digest = hashlib.sha256()
+    total_size = 0
+    for child in sorted(item for item in path.rglob("*") if item.is_file()):
+        relative = child.relative_to(path).as_posix()
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        with child.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                total_size += len(chunk)
+                digest.update(chunk)
+        digest.update(b"\0")
+    return total_size, digest.hexdigest()
+
+
+def artifact_record(
+    path: str | Path,
+    *,
+    repo_root: Path,
+    role: str = "artifact",
+    required: bool = True,
+) -> ArtifactRecord:
+    """Build compact metadata for one artifact path without copying it."""
+    resolved = _resolve_path(path, repo_root=repo_root)
+    display_path = _repo_relative(resolved, repo_root=repo_root)
+    if not resolved.exists():
+        return ArtifactRecord(
+            path=display_path,
+            role=role,
+            required=required,
+            exists=False,
+            kind="missing",
+            size_bytes=None,
+            sha256=None,
+        )
+    if resolved.is_file():
+        return ArtifactRecord(
+            path=display_path,
+            role=role,
+            required=required,
+            exists=True,
+            kind="file",
+            size_bytes=resolved.stat().st_size,
+            sha256=_sha256_file(resolved),
+        )
+    if resolved.is_dir():
+        size_bytes, digest = _directory_digest(resolved)
+        return ArtifactRecord(
+            path=display_path,
+            role=role,
+            required=required,
+            exists=True,
+            kind="directory",
+            size_bytes=size_bytes,
+            sha256=digest,
+        )
+    return ArtifactRecord(
+        path=display_path,
+        role=role,
+        required=required,
+        exists=True,
+        kind="other",
+        size_bytes=None,
+        sha256=None,
+    )
+
+
+def normalize_job_state(job_state: str) -> str:
+    """Normalize a SLURM-like job state token."""
+    return job_state.strip().upper().replace("-", "_") or "UNKNOWN"
+
+
+def classify_finalization(
+    *,
+    job_state: str,
+    artifacts: list[ArtifactRecord],
+    manual_decision: bool = False,
+) -> str:
+    """Classify a SLURM job finalization using fail-closed artifact checks."""
+    state = normalize_job_state(job_state)
+    if manual_decision:
+        return "manual_decision_required"
+    if state in INCOMPLETE_STATES:
+        return "incomplete"
+    if state in FAILED_STATES:
+        return "failed"
+    if state in UNAVAILABLE_STATES:
+        return "not_available"
+    required = [artifact for artifact in artifacts if artifact.required]
+    if not required:
+        return "manual_decision_required"
+    if any(not artifact.exists for artifact in required):
+        return "missing_artifacts"
+    if state in SUCCESS_STATES:
+        return "success"
+    return "manual_decision_required"
+
+
+def _artifact_status(artifacts: list[ArtifactRecord]) -> str:
+    """Summarize artifact availability."""
+    required = [artifact for artifact in artifacts if artifact.required]
+    if not required:
+        return "no_required_artifacts_declared"
+    if all(artifact.exists for artifact in required):
+        return "all_required_present"
+    if any(artifact.exists for artifact in required):
+        return "partial_required_present"
+    return "required_missing"
+
+
+def issue_update_markdown(report: dict[str, Any]) -> str:
+    """Return issue-ready Markdown summarizing the finalization result."""
+    lines = [
+        f"SLURM finalization for job `{report['job_id']}`:",
+        "",
+        f"- classification: `{report['classification']}`",
+        f"- job state: `{report['job_state']}`",
+        f"- artifact status: `{report['artifact_status']}`",
+        f"- claim boundary: {report['claim_boundary']}",
+        "",
+        "| Artifact | Required | Status | SHA256 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for artifact in report["artifacts"]:
+        status = "present" if artifact["exists"] else "missing"
+        digest = artifact["sha256"] or "n/a"
+        lines.append(
+            f"| `{artifact['path']}` | {str(artifact['required']).lower()} | {status} | `{digest}` |"
+        )
+    lines.extend(["", f"Next action: {report['next_action']}"])
+    return "\n".join(lines)
+
+
+def ledger_update_markdown(report: dict[str, Any]) -> str:
+    """Return one compact ledger row for context notes or issue comments."""
+    return (
+        f"| #{report['issue_number']} | `{report['job_id']}` | "
+        f"`{report['classification']}` | `{report['artifact_status']}` | "
+        f"{report['next_action']} |"
+    )
+
+
+def _next_action(classification: str) -> str:
+    """Return conservative next-action text for a classification."""
+    return {
+        "success": (
+            "Review checksums, promote artifacts to a durable store if downstream work depends on "
+            "them, and cite only this compact manifest until durable URIs exist."
+        ),
+        "missing_artifacts": (
+            "Do not close as successful; locate or rerun the job so all required artifacts exist."
+        ),
+        "failed": "Record the failure reason, keep artifacts caveated, and decide rerun versus revise.",
+        "incomplete": "Wait for completion before classifying artifacts or closing the issue.",
+        "not_available": "Record the unavailable job state and avoid treating local outputs as evidence.",
+        "manual_decision_required": (
+            "A maintainer or follow-up issue must decide whether available files are sufficient."
+        ),
+    }[classification]
+
+
+def build_finalization_report(
+    *,
+    issue_number: int,
+    job_id: str,
+    job_state: str,
+    expected_artifacts: list[str | Path],
+    optional_artifacts: list[str | Path] | None = None,
+    repo_root: Path = REPO_ROOT,
+    manual_decision: bool = False,
+    notes: str = "",
+) -> dict[str, Any]:
+    """Build a compact SLURM finalization report."""
+    artifacts = [
+        artifact_record(path, repo_root=repo_root, role="expected", required=True)
+        for path in expected_artifacts
+    ]
+    artifacts.extend(
+        artifact_record(path, repo_root=repo_root, role="optional", required=False)
+        for path in (optional_artifacts or [])
+    )
+    classification = classify_finalization(
+        job_state=job_state,
+        artifacts=artifacts,
+        manual_decision=manual_decision,
+    )
+    report: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "issue_number": int(issue_number),
+        "job_id": str(job_id),
+        "job_state": normalize_job_state(job_state),
+        "classification": classification,
+        "artifact_status": _artifact_status(artifacts),
+        "artifacts": [asdict(artifact) for artifact in artifacts],
+        "claim_boundary": (
+            "compact local finalization manifest only; not durable benchmark evidence until "
+            "artifacts have durable retrieval URIs and policy-specific validation"
+        ),
+        "next_action": _next_action(classification),
+        "notes": notes,
+    }
+    report["issue_update_markdown"] = issue_update_markdown(report)
+    report["ledger_update_markdown"] = ledger_update_markdown(report)
+    return report
+
+
+def write_report(
+    report: dict[str, Any], output: Path, *, markdown_output: Path | None = None
+) -> None:
+    """Write JSON and optional Markdown finalization reports."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if markdown_output is not None:
+        markdown_output.parent.mkdir(parents=True, exist_ok=True)
+        markdown_output.write_text(report["issue_update_markdown"] + "\n", encoding="utf-8")
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments."""
+    parser = argparse.ArgumentParser(description="Finalize a SLURM job into compact evidence.")
+    parser.add_argument("--issue", type=int, required=True, help="GitHub issue number.")
+    parser.add_argument("--job-id", required=True, help="SLURM job id or external run id.")
+    parser.add_argument("--job-state", required=True, help="Observed SLURM job state.")
+    parser.add_argument(
+        "--expected-artifact",
+        action="append",
+        default=[],
+        help="Required artifact path, relative to repo root unless absolute. May be repeated.",
+    )
+    parser.add_argument(
+        "--optional-artifact",
+        action="append",
+        default=[],
+        help="Optional artifact path, relative to repo root unless absolute. May be repeated.",
+    )
+    parser.add_argument("--output", type=Path, required=True, help="JSON report output path.")
+    parser.add_argument("--markdown-output", type=Path, help="Optional issue-update Markdown path.")
+    parser.add_argument("--repo-root", type=Path, default=REPO_ROOT, help="Repository root.")
+    parser.add_argument(
+        "--manual-decision",
+        action="store_true",
+        help="Force manual_decision_required even if artifacts are present.",
+    )
+    parser.add_argument("--notes", default="", help="Optional short note copied into the report.")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point."""
+    args = _parse_args(argv)
+    report = build_finalization_report(
+        issue_number=args.issue,
+        job_id=args.job_id,
+        job_state=args.job_state,
+        expected_artifacts=args.expected_artifact,
+        optional_artifacts=args.optional_artifact,
+        repo_root=args.repo_root,
+        manual_decision=args.manual_decision,
+        notes=args.notes,
+    )
+    write_report(report, args.output, markdown_output=args.markdown_output)
+    print(report["issue_update_markdown"])
+    return 0 if report["classification"] == "success" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,59 @@
+name: adaptive_proxemic_selector_v1
+algo: adaptive_proxemic_selector_v1
+params:
+  allow_testing_algorithms: true
+  diagnostic_only: true
+  claim_boundary: diagnostic_only
+  selector_version: v1
+  selector:
+    density_radius_m: 2.0
+    close_human_distance_m: 0.85
+    neutral_human_distance_m: 1.7
+    high_density_count: 3
+    moderate_density_count: 2
+    constrained_width_m: 1.15
+    low_progress_3s_m: 0.05
+  profile_base: &profile_base
+    allow_testing_algorithms: true
+    planner_variant: hybrid_rule_v3_teb_like_rollout
+    route_guide_enabled: true
+  profiles:
+    conservative:
+      source_candidate: proxemic_profile_conservative_issue_1676
+      params:
+        <<: *profile_base
+        desired_dynamic_clearance: 1.25
+        dynamic_clearance_weight: 2.4
+        ttc_weight: 1.2
+        stop_distance_human: 0.65
+        slow_distance_human: 1.25
+        moderate_distance_human: 2.6
+        moderate_speed: 0.45
+        near_human_angular_limit_distance: 1.0
+        near_human_max_angular_speed: 0.55
+    neutral:
+      source_candidate: proxemic_profile_neutral_issue_1676
+      params:
+        <<: *profile_base
+        desired_dynamic_clearance: 0.9
+        dynamic_clearance_weight: 1.8
+        ttc_weight: 0.8
+        stop_distance_human: 0.5
+        slow_distance_human: 1.0
+        moderate_distance_human: 2.0
+        moderate_speed: 0.6
+        near_human_angular_limit_distance: 0.8
+        near_human_max_angular_speed: 0.7
+    open:
+      source_candidate: proxemic_profile_open_issue_1676
+      params:
+        <<: *profile_base
+        desired_dynamic_clearance: 0.75
+        dynamic_clearance_weight: 1.2
+        ttc_weight: 0.55
+        stop_distance_human: 0.4
+        slow_distance_human: 0.8
+        moderate_distance_human: 1.5
+        moderate_speed: 0.85
+        near_human_angular_limit_distance: 0.65
+        near_human_max_angular_speed: 0.9

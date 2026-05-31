@@ -175,6 +175,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Benchmarking & Metrics
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
+* **[Scenario Zoo Index](./scenario_zoo/index.md)** - Family-oriented scenario catalog with links to source configs, maps, benchmark surfaces, and caveats
 * **[Hazard Traceability](./hazard_traceability.md)** - `hazard_traceability.v1` schema, typed loader, fixture, and coverage summary for scenario-to-hazard evidence caveats
 * **[ODD Contracts](./odd_contracts.md)** - `odd_contract.v1` schema, typed loader, fixture, and boundary for benchmark and falsification evidence assumptions
 * **[Scenario Contracts](./scenario_contracts.md)** - `scenario_contract.v1` schema, typed loader, fixture, and boundary between authored intent, certification, and benchmark evidence

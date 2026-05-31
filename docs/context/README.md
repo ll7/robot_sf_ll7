@@ -148,6 +148,8 @@ knowledge, not every transient iteration detail.
   [issue_1612_observation_track_architecture.md](issue_1612_observation_track_architecture.md)
 * Issue #1721 Legacy Benchmark-Track Metadata Audit:
   [issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md)
+* Issue #1846 metadata worker bridge:
+  [issue_1846_metadata_worker_bridge.md](issue_1846_metadata_worker_bridge.md)
 * Issue #1659 LiDAR occupancy adapter:
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:

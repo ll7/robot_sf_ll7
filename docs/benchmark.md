@@ -12,6 +12,29 @@ The RobotSF benchmark system uses a consolidated schema management approach to e
 
 **See also**: [SNQI Weight Tools](./snqi-weight-tools/README.md) for weight recomputation and optimization, and [Distribution Plots](./distribution_plots.md) for visualization guidance.
 
+## Local Smoke Benchmark Demo
+
+For a quick local sanity check that the benchmark runner can execute a small map scenario with two
+low-cost planners, run:
+
+```bash
+uv run python scripts/demo/run_robot_sf_smoke.py
+```
+
+The command runs `configs/scenarios/single/planner_sanity_simple.yaml` with `simple_policy` and
+`social_force`, then writes disposable local artifacts under
+`output/demo/smoke_benchmark/`:
+
+- `summary.json`: machine-readable planner status and aggregate metrics.
+- `report.md`: short human-readable result table and artifact pointers.
+- `episodes/*.jsonl`: per-planner episode records used to build the summary.
+
+Pass `--verbose` when debugging simulator or map-runner logs.
+
+These outputs are a local demo only. They are not durable benchmark evidence and should not be used
+for paper-facing or promotion claims unless promoted separately with the repository's normal
+artifact provenance and validation process.
+
 Benchmark outcomes are separate from dense training rewards. Benchmark claims must rely on
 schema-checked episode records, deterministic metrics, termination/outcome fields, and explicit
 runtime/readiness metadata; training reward totals are not benchmark-success evidence. See

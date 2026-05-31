@@ -100,6 +100,8 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
 * **[AI Repo Overview](./ai/repo_overview.md)** - Short orientation for Codex-style agents: where to read first, core repo areas, and common failure modes
+* **[Understand-Anything Knowledge Graph](./ai/understand_anything.md)** - Shared graph artifact,
+  Codex setup, dashboard usage, update flow, and Git LFS policy
 * **[Issue #1181/#1191 `ml-intern` Workflow Extraction](./context/issue_1181_ml_intern_experiment_assistant.md)** -
   Safe-use boundary and 2026-05-15 decision to extract `ml-intern` workflow ideas into Robot SF's
   Codex-native proof-first practice instead of running the CLI smoke by default

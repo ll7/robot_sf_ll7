@@ -57,6 +57,13 @@ dist/
 .gemini/
 gha-creds-*.json
 
+# Understand-Anything shared graph artifacts.
+# Commit knowledge-graph.json, fingerprints.json, meta.json, config.json, and .understandignore.
+# Keep scratch/intermediate dashboard overlays local.
+.understand-anything/intermediate/
+.understand-anything/tmp/
+.understand-anything/diff-overlay.json
+
 # SocNavBench third-party datasets (local-only, license-restricted)
 third_party/socnavbench/wayptnav_data/
 third_party/socnavbench/sd3dis/stanford_building_parser_dataset/

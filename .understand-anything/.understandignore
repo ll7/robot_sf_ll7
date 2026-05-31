@@ -1,0 +1,51 @@
+# Understand-Anything scan exclusions for this repository.
+#
+# Keep generated outputs, local caches, secrets, machine-specific files, and large third-party
+# datasets out of the shared graph. Do not exclude source, tests, docs, configs, or repo-local agent
+# instructions; those are the primary reason this graph is useful.
+
+/.coverage
+.pytest_cache/
+.scannerwork/
+.github/cache/
+__pycache__/
+file.log
+images/
+logs/
+SLURM/model/
+/slurm-*.out
+/slurm-*.err
+model/**/model.zip
+profile.json
+profiles/
+pysf_tests/
+robot_sf/data_analysis/plots/*.png
+robot_sf/data_analysis/datasets/*.json
+*.DS_Store
+output/
+wandb/
+.venv/
+venv/
+env/
+ENV/
+dist/
+*.egg-info/
+.idea/
+*.swp
+*.swo
+*~
+.env
+.env.*
+!.env.example
+.vscode/mcp.json
+/local.machine*.md
+.gemini/
+gha-creds-*.json
+third_party/socnavbench/wayptnav_data/
+third_party/socnavbench/sd3dis/stanford_building_parser_dataset/
+third_party/socnavbench/surreal/code/human_meshes/
+third_party/socnavbench/surreal/code/human_textures/
+third_party/external_mpc_repos/
+third_party/python-rvo2/.*
+
+.understand-anything/

@@ -53,3 +53,6 @@ Every populated row should include these visible fields:
 Update these pages when a tracked evidence bundle, policy-search report, benchmark release, or
 claim-map decision changes the row status. For bulk population or automation, preserve the row
 contract above so generated tables retain the same evidence boundary.
+
+Run `uv run python scripts/validation/validate_platform_docs.py` before publishing leaderboard,
+planner-zoo, policy-card, or benchmark-suite catalog updates.

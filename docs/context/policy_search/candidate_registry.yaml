@@ -196,6 +196,22 @@ candidates:
     required_stages:
       - smoke
 
+  topology_guided_hybrid_rule_v0:
+    status: experimental_spike
+    family: topology_hypothesis_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml
+    hypothesis: >
+      A diagnostic masked-route selector can expose up to two local topology
+      hypotheses from the occupancy grid, select one with route length and static
+      clearance scoring, and feed it to the existing hybrid-rule corridor-subgoal
+      scorer. Missing topology inputs fail closed; single-hypothesis rows do not
+      activate the topology injection and are not benchmark evidence.
+    required_stages:
+      - smoke
+
   tentabot_value_scorer_v0:
     status: experimental_spike
     family: learned_style_value_scorer

@@ -51,6 +51,7 @@ not headline promotion without a separate issue and evidence decision.
 | `proxemic_profile_neutral_issue_1676` | `diagnostic_only` | `diagnostic_only` | Neutral profile used as middle setting. |
 | `proxemic_profile_open_issue_1676` | `diagnostic_only` | `diagnostic_only` | Open comfort profile with higher expected near-miss risk. |
 | `adaptive_proxemic_selector_v0` | `diagnostic_only` | `diagnostic_only` | Deterministic local-context selector over the three fixed proxemic profiles; logs selected profile and trigger reason, but does not support benchmark or comfort claims. |
+| `topology_guided_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Masked-route topology-hypothesis selector feeding the existing hybrid-rule corridor scorer; missing topology inputs fail closed and selected hypotheses are not benchmark evidence. |
 
 ## Learned-Policy And Learned-Style Rows
 

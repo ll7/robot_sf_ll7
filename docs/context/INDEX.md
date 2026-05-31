@@ -69,18 +69,21 @@ or the normal diff wrapper.
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as
-`output/context_packs/`.
+`output/context_packs/`. Source-controlled pack definitions live in
+[../context_packs/](../context_packs/README.md).
 
 Use [../ai/context_packing.md](../ai/context_packing.md) for the Repomix decision and command
-patterns. Start with these curated pack scopes:
+patterns. Start with these curated manifests:
 
-| Pack | Include globs | Exclude notes |
+| Pack | Entry point | Use for |
 |---|---|---|
-| `learned_policy_integration` | `AGENTS.md`, `docs/context/INDEX.md`, `docs/context/policy_search/**`, `docs/context/issue_1618_learned_policy_adapter_interface.md`, `robot_sf/nav/**`, `configs/training/**`, `scripts/training/**` | Exclude checkpoints and raw run output. |
-| `benchmark_campaign_evidence` | `AGENTS.md`, `docs/code_review.md`, `docs/context/INDEX.md`, `docs/context/issue_691_benchmark_fallback_policy.md`, `docs/context/artifact_evidence_vocabulary.md`, `docs/benchmark*.md`, `robot_sf/benchmark/**`, `configs/benchmarks/**`, `scripts/validation/**` | Exclude raw episode JSONL, videos, and coverage HTML. |
-| `slurm_artifact_rescue` | `AGENTS.md`, `local.machine.md` when local-only use is safe, `docs/dev/slurm*.md`, `docs/context/slurm_issue_batch_status_2026-05-21.md`, `docs/context/open_issues_training_split_audit_2026-05-30.md`, `model/registry.md` | Do not publish machine-local secrets or raw Slurm logs. |
-| `root_layout_cleanup` | `AGENTS.md`, `docs/context/issue_1690_root_layout_inventory.md`, `docs/context/issue_1583_high_risk_root_boundaries.md`, `docs/context/issue_1598_1599_root_compatibility_decisions.md`, `.github/**`, `scripts/dev/**` | Keep generated inventories under `output/` unless promoted as compact evidence. |
-| `adversarial_search` | `AGENTS.md`, `.agents/skills/adversarial-search-campaign/**`, `docs/context/issue_1457_adversarial_generation_protocol.md`, `docs/context/issue_1500_adversarial_manifest.md`, `docs/context/issue_1571_adversarial_smoke_packet_sharpening.md`, `configs/**`, `scripts/**` | Exclude large campaign bundles unless replaced by tracked summaries. |
+| [`learned_policy_integration`](../context_packs/learned_policy_integration.yaml) | `docs/context/policy_search/learned_policy_registry.md` | Learned-policy eligibility, adapter contracts, policy cards, and durable model metadata. |
+| [`policy_search`](../context_packs/policy_search.yaml) | `docs/context/policy_search/INDEX.md` | Candidate lifecycle routing, stage-gated execution, promotion gates, and policy-search tooling. |
+| [`benchmark_evidence`](../context_packs/benchmark_evidence.yaml) | `docs/context/issue_691_benchmark_fallback_policy.md` | Benchmark fallback policy, review/evidence vocabulary, release surfaces, and compact proof boundaries. |
+| [`visualization_workbench`](../context_packs/visualization_workbench.yaml) | `docs/debug_visualization.md` | Diagnostic trace export, analysis-workbench schemas, and benchmark visualization boundaries. |
+
+If an older ad hoc pack scope is still useful, add it under `docs/context_packs/` before relying on
+it as a repeatable workflow.
 
 ## Optional Tool Boundary
 

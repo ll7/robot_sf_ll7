@@ -17,6 +17,7 @@ DEFAULT_CANDIDATE = "orca_residual_guarded_ppo_v0"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load a YAML file as a mapping, failing when the top-level value is not a dict."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise TypeError(f"Expected YAML mapping: {path}")
@@ -24,6 +25,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _resolve_repo_path(raw: str) -> Path:
+    """Resolve a possibly repository-relative path against ``REPO_ROOT``."""
     path = Path(raw)
     return path if path.is_absolute() else REPO_ROOT / path
 

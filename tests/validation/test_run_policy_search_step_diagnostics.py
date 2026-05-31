@@ -96,3 +96,56 @@ def test_trace_progress_summary_handles_empty_trace() -> None:
             "robot": 0,
         },
     }
+
+
+def test_trace_progress_summary_ignores_invalid_numeric_values() -> None:
+    """Invalid diagnostic numbers should not poison progress or clearance summaries."""
+    rows = [
+        {
+            "step": 0,
+            "goal_distance": 10.0,
+            "post_step_goal_distance": 9.0,
+            "min_robot_ped_distance": 2.0,
+            "post_step_min_robot_ped_distance": 1.5,
+        },
+        {
+            "step": True,
+            "goal_distance": float("nan"),
+            "post_step_goal_distance": float("inf"),
+            "min_robot_ped_distance": True,
+            "post_step_min_robot_ped_distance": "",
+        },
+        {
+            "step": 2,
+            "goal_distance": None,
+            "post_step_goal_distance": None,
+            "min_robot_ped_distance": 1.2,
+            "post_step_min_robot_ped_distance": 1.1,
+        },
+    ]
+
+    summary = _trace_progress_summary(rows)
+
+    assert summary["initial_goal_distance"] == pytest.approx(10.0)
+    assert summary["final_goal_distance"] == pytest.approx(9.0)
+    assert summary["best_goal_distance"] == pytest.approx(9.0)
+    assert summary["progress_step_count"] == 1
+    assert summary["regression_step_count"] == 0
+    assert summary["stagnant_step_count"] == 0
+    assert summary["longest_stagnant_run"] == 0
+    assert summary["closest_robot_ped_distance"] == pytest.approx(1.1)
+    assert summary["closest_robot_ped_step"] == 2
+
+
+def test_trace_progress_summary_missing_steps_break_stagnant_runs() -> None:
+    """Unavailable progress data should split contiguous stagnant step runs."""
+    rows = [
+        {"step": 0, "goal_distance": 5.0, "post_step_goal_distance": 5.0},
+        {"step": 1, "goal_distance": None, "post_step_goal_distance": None},
+        {"step": 2, "goal_distance": 4.0, "post_step_goal_distance": 4.0},
+    ]
+
+    summary = _trace_progress_summary(rows)
+
+    assert summary["stagnant_step_count"] == 2
+    assert summary["longest_stagnant_run"] == 1

@@ -59,10 +59,13 @@ def _json_ready(value: Any) -> Any:
 
 def _optional_float(value: Any) -> float | None:
     """Return a float for numeric diagnostic values, preserving missing values."""
+    if value is None or value == "" or isinstance(value, bool):
+        return None
     try:
-        if value is None or value == "":
+        number = float(value)
+        if not np.isfinite(number):
             return None
-        return float(value)
+        return number
     except (TypeError, ValueError):
         return None
 
@@ -112,7 +115,7 @@ def _progress_bucket(
 def _step_index(row: dict[str, Any]) -> int | None:
     """Return a row's integer step index when available."""
     step = row.get("step")
-    return int(step) if isinstance(step, int) else None
+    return step if isinstance(step, int) and not isinstance(step, bool) else None
 
 
 def _collision_flag_counts(trace_rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -139,7 +142,9 @@ def _goal_distance_summary(trace_rows: list[dict[str, Any]]) -> dict[str, float 
             goal_distance_values.append(pre_goal)
         if post_goal is not None:
             goal_distance_values.append(post_goal)
-        final_goal_distance = post_goal if post_goal is not None else pre_goal
+        last_goal_distance = post_goal if post_goal is not None else pre_goal
+        if last_goal_distance is not None:
+            final_goal_distance = last_goal_distance
 
     best_goal_distance = min(goal_distance_values) if goal_distance_values else None
     net_goal_progress = (
@@ -189,6 +194,8 @@ def _progress_step_summary(
             stagnant_step_count += 1
             current_stagnant_run += 1
             longest_stagnant_run = max(longest_stagnant_run, current_stagnant_run)
+        else:
+            current_stagnant_run = 0
 
     return {
         "progress_step_count": progress_step_count,

@@ -7,8 +7,47 @@ import pytest
 from scripts.validation.run_scenario_perturbation_criticality_pilot import (
     build_pair_table,
     classify_episode_status,
+    resolve_planner_run_spec,
     summarize_pairs,
 )
+
+
+def test_resolve_planner_run_spec_uses_policy_search_candidate_registry(tmp_path) -> None:
+    """Registry-backed candidate keys should preserve labels while running their base algo."""
+    candidate_config = tmp_path / "candidate.yaml"
+    candidate_config.write_text("algo: hybrid_rule_local_planner\n", encoding="utf-8")
+    registry = tmp_path / "candidate_registry.yaml"
+    registry.write_text(
+        "\n".join(
+            [
+                "candidates:",
+                "  scenario_adaptive_demo:",
+                "    candidate_config_path: candidate.yaml",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    spec = resolve_planner_run_spec("scenario_adaptive_demo", candidate_registry_path=registry)
+
+    assert spec.label == "scenario_adaptive_demo"
+    assert spec.algo == "hybrid_rule_local_planner"
+    assert spec.algo_config_path == candidate_config
+    assert spec.source == "policy_search_candidate"
+
+
+def test_resolve_planner_run_spec_keeps_unknown_planner_as_raw_algo(tmp_path) -> None:
+    """Plain planner algos should remain usable without registry entries."""
+    registry = tmp_path / "candidate_registry.yaml"
+    registry.write_text("candidates: {}\n", encoding="utf-8")
+
+    spec = resolve_planner_run_spec("goal", candidate_registry_path=registry)
+
+    assert spec.label == "goal"
+    assert spec.algo == "goal"
+    assert spec.algo_config_path is None
+    assert spec.source == "raw_algo"
 
 
 def test_classify_episode_status_separates_fallback_and_invalid_rows() -> None:

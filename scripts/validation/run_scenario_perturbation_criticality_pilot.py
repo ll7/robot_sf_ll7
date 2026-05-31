@@ -6,8 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.scenario_certification import materialize_perturbation_pilot_matrix
@@ -15,6 +18,17 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 SCHEMA_VERSION = "scenario_perturbation_criticality_pilot.v1"
 _EPISODE_SCHEMA = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
+_DEFAULT_CANDIDATE_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
+
+
+@dataclass(frozen=True)
+class PlannerRunSpec:
+    """Resolved planner execution contract for one pilot label."""
+
+    label: str
+    algo: str
+    source: str
+    algo_config_path: Path | None = None
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -37,7 +51,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--planner",
         action="append",
         dest="planners",
-        help="Planner algorithm to run. Repeat for multiple planners. Defaults to goal and orca.",
+        help=(
+            "Planner algorithm or policy-search candidate key to run. Repeat for multiple "
+            "planners. Defaults to goal and orca."
+        ),
+    )
+    parser.add_argument(
+        "--planner-candidate-registry",
+        type=Path,
+        default=_DEFAULT_CANDIDATE_REGISTRY,
+        help=(
+            "Policy-search candidate registry used to resolve planner keys with "
+            "candidate_config_path entries."
+        ),
     )
     parser.add_argument(
         "--seed-limit",
@@ -65,6 +91,55 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
         if line.strip():
             rows.append(json.loads(line))
     return rows
+
+
+def _load_yaml_mapping(path: Path) -> dict[str, Any]:
+    """Load a YAML mapping from disk."""
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected YAML mapping in {path}")
+    return payload
+
+
+def resolve_planner_run_spec(
+    planner: str,
+    *,
+    candidate_registry_path: Path = _DEFAULT_CANDIDATE_REGISTRY,
+) -> PlannerRunSpec:
+    """Resolve a CLI planner token to a raw algo or policy-search candidate config."""
+    if not candidate_registry_path.exists():
+        return PlannerRunSpec(label=planner, algo=planner, source="raw_algo")
+
+    registry = _load_yaml_mapping(candidate_registry_path)
+    candidates = registry.get("candidates")
+    candidate = candidates.get(planner) if isinstance(candidates, dict) else None
+    if not isinstance(candidate, dict):
+        return PlannerRunSpec(label=planner, algo=planner, source="raw_algo")
+
+    candidate_config_raw = candidate.get("candidate_config_path")
+    if not isinstance(candidate_config_raw, str) or not candidate_config_raw.strip():
+        return PlannerRunSpec(label=planner, algo=planner, source="raw_algo")
+
+    candidate_config_path = Path(candidate_config_raw)
+    if not candidate_config_path.exists() and not candidate_config_path.is_absolute():
+        candidate_config_path = candidate_registry_path.parent / candidate_config_path
+    candidate_config = _load_yaml_mapping(candidate_config_path)
+    algo = candidate_config.get("algo")
+    if not isinstance(algo, str) or not algo.strip():
+        raise ValueError(
+            f"Policy-search candidate {planner!r} in {candidate_config_path} lacks algo"
+        )
+    return PlannerRunSpec(
+        label=planner,
+        algo=algo,
+        algo_config_path=candidate_config_path,
+        source="policy_search_candidate",
+    )
+
+
+def _planner_output_stem(label: str) -> str:
+    """Return a filesystem-safe output stem for a planner label."""
+    return "".join(char if char.isalnum() or char in {"-", "_", "."} else "_" for char in label)
 
 
 def _scenario_metadata(scenarios: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -376,6 +451,15 @@ def _compact_tracked_summary(summary: dict[str, Any]) -> dict[str, Any]:
         "dt": summary["dt"],
         "seed_limit": summary["seed_limit"],
         "materialization": materialization,
+        "planner_runs": {
+            planner: {
+                "algo": run["algo"],
+                "algo_config_path": run["algo_config_path"],
+                "source": run["source"],
+                "episodes": run["episodes"],
+            }
+            for planner, run in summary["planner_runs"].items()
+        },
         "pair_summary": summary["pair_summary"],
         "pair_rows": summary["pair_rows"],
         "claim_boundary": summary["claim_boundary"],
@@ -386,6 +470,10 @@ def main() -> int:
     """Run the scenario perturbation pilot."""
     args = _build_parser().parse_args()
     planners = args.planners or ["goal", "orca"]
+    planner_specs = [
+        resolve_planner_run_spec(planner, candidate_registry_path=args.planner_candidate_registry)
+        for planner in planners
+    ]
     materialized = materialize_perturbation_pilot_matrix(
         args.manifest,
         output_dir=args.materialized_output_dir,
@@ -398,15 +486,22 @@ def main() -> int:
     args.pilot_output_dir.mkdir(parents=True, exist_ok=True)
     records_by_planner: dict[str, list[dict[str, Any]]] = {}
     planner_runs: dict[str, dict[str, Any]] = {}
-    for planner in planners:
-        jsonl_path = args.pilot_output_dir / f"{planner}.episodes.jsonl"
+    for planner_spec in planner_specs:
+        jsonl_path = (
+            args.pilot_output_dir / f"{_planner_output_stem(planner_spec.label)}.episodes.jsonl"
+        )
         if jsonl_path.exists():
             jsonl_path.unlink()
         batch_summary = run_map_batch(
             matrix_path,
             jsonl_path,
             schema_path=_EPISODE_SCHEMA,
-            algo=planner,
+            algo=planner_spec.algo,
+            algo_config_path=(
+                planner_spec.algo_config_path.as_posix()
+                if planner_spec.algo_config_path is not None
+                else None
+            ),
             horizon=args.horizon,
             dt=args.dt,
             workers=args.workers,
@@ -414,8 +509,15 @@ def main() -> int:
             benchmark_profile="experimental",
         )
         records = _load_jsonl(jsonl_path)
-        records_by_planner[planner] = records
-        planner_runs[planner] = {
+        records_by_planner[planner_spec.label] = records
+        planner_runs[planner_spec.label] = {
+            "algo": planner_spec.algo,
+            "algo_config_path": (
+                planner_spec.algo_config_path.as_posix()
+                if planner_spec.algo_config_path is not None
+                else None
+            ),
+            "source": planner_spec.source,
             "jsonl_path": jsonl_path.as_posix(),
             "episodes": len(records),
             "batch_summary": batch_summary,
@@ -425,7 +527,7 @@ def main() -> int:
     summary = {
         "schema_version": SCHEMA_VERSION,
         "manifest": args.manifest.as_posix(),
-        "planners": planners,
+        "planners": [planner_spec.label for planner_spec in planner_specs],
         "horizon": args.horizon,
         "dt": args.dt,
         "seed_limit": args.seed_limit,

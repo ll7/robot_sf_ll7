@@ -68,6 +68,7 @@ metadata from Issue #1618, smoke proof, and fail-closed handling before benchmar
 | `neupan_family` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | Point-obstacle model-based learning source is not social-navigation benchmark evidence without source-side proof and adapter contract. |
 | `sage_mpc_transfer_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | MPC-transfer/GNN source lane remains blocked after legacy dependency smoke; checkpoint/inference path is not proven. |
 | `navdp_nomad_visual_family` | `external_visual_policy` | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | RGB-D/topomap/visual-goal assumptions do not reduce cleanly to the current 2D local-planner contract. |
+| `arena_rosnav_stack` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | ROS Noetic/Gazebo/Flatland workspace and Rosnav checkpoint proof are required before any Robot SF adapter or benchmark row. |
 | `diffusion_policy_family` | `external_learned_policy` | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | Diffusion/consistency/diffuser sources are design references, not current Robot SF local-navigation adapters. |
 | `decision_transformer_local_nav_family` | `external_learned_policy` | `monitor_only` | `proposal` | `blocked` | Local trajectory-data preflight exists, but no external local-navigation checkpoint or runnable adapter is selected. |
 | `foundation_vla_navigation_family` | `external_visual_policy` | `rejected` | `monitor_only` | `rejected_for_current_adapter` | VLA/foundation-model sources require missing RGB/RGB-D, language-task, semantic-map, and action-interface contracts. |
@@ -179,6 +180,8 @@ metadata before entering the runnable candidate registry.
 - NavDP / NoMaD visual navigation:
   `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
   `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md`.
+- Arena-Rosnav learned navigation stack:
+  `docs/context/policy_search/issue_1758_arena_rosnav_source_assessment.md`.
 - Diffusion Policy / Consistency Policy / Diffuser families:
   `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
 - Foundation-model / VLA / multimodal navigation:

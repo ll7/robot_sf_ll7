@@ -140,6 +140,26 @@ the repository-specific decision about benchmark fit, fairness, and reopen crite
 - Reopen if: durable trained policy artifacts are found, licensed, version-pinned, and loaded
   through a reproduced source command, with action projection losses explicitly bounded.
 
+### Arena-Rosnav / Rosnav Learned Navigation Stack
+
+- Source URL: https://github.com/Arena-Rosnav/arena-rosnav
+- Current status: `source-side reproduction first`
+- Evidence grade: `observed`
+- Source-backed facts: Issue #1758 cloned the MIT-metadata `Arena-Rosnav/arena-rosnav` source at
+  `5de9d38`. The checkout exposes ROS Noetic/Gazebo/Flatland launch, benchmark, training, and
+  Rosnav action-node surfaces, plus `.repos` pins for many external Arena/planner repositories.
+  Small source probes failed closed on missing `rl_utils` and `rospy`, and no `.zip`, `.pt`, `.pth`,
+  `.onnx`, `best_model*`, or `last_model*` policy files were bundled in the shallow checkout.
+- Robot SF synthesis: Arena-Rosnav is an ecosystem and benchmark-workflow reference, not a direct
+  Robot SF learned local-policy candidate. Do not add it to the runnable candidate registry or
+  open adapter work until the upstream workspace/container can run one named Rosnav agent with a
+  durable checkpoint and an observation/action contract mapped to Issue #1618.
+- Related Robot SF work: #1758, #1620, #1617, #1618,
+  `docs/context/policy_search/issue_1758_arena_rosnav_source_assessment.md`.
+- Reopen if: a source-side Arena command runs in a pinned workspace/container, a trained Rosnav
+  checkpoint is available from a durable source, and the action/observation metadata can be
+  expressed without ROS fallback or simulator-only hidden state.
+
 ### DreamerV3 / World-Model Navigation
 
 - Source URLs:

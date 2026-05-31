@@ -68,6 +68,9 @@ Use it for three things only:
 - `2026-05-20_learned_local_navigation_screen.md`: Issue #1355 Source-Backed Screening Matrix for
   learning-based local-navigation candidates, with implement/source-first/monitor/reject verdicts
   and links to existing Robot SF duplicate boundaries.
+- `issue_1758_arena_rosnav_source_assessment.md`: Arena-Rosnav source-side assessment; current
+  verdict is `source-side reproduction first` because the source requires a ROS Noetic/Gazebo
+  Arena workspace and no durable trained-policy files were bundled in the checked source.
 - `2026-05-30_external_learned_policy_ranking_issue_1620.md`: Issue #1620 ranked external
   learned-policy shortlist across graph/social-RL, ROSNav, diffusion/visual, transformer, VLA, and
   mapless-baseline families, with source/checkpoint/adapter-fit verdicts and follow-up routing.

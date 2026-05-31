@@ -18,6 +18,19 @@ or concrete runnable Robot SF policy-search candidates with config pointers. Thi
 it includes proposal, launch-packet, monitor-only, and blocked learned-policy families so future
 agents do not recreate one-off learned-policy assessments without comparable metadata.
 
+Ownership boundary:
+
+- This learned-policy registry owns the current planning state for learned-policy families:
+  whether a family is implemented, staged, adapter-needed, monitor-only, or rejected for the current
+  Robot SF adapter contract.
+- `docs/context/policy_search/reject_monitor_registry.md` owns historical negative, deferred,
+  monitor-only, and source-side-first rationale plus reopen criteria. When both files mention the
+  same family, this registry should keep one current-state row and link to the reject/monitor entry
+  for detailed source-side evidence.
+- `docs/context/policy_search/candidate_registry.yaml` owns runnable Robot SF candidate configs and
+  validation gates. A learned-policy row here is not runnable or benchmark-ready until the
+  candidate registry and eligibility checklist say so.
+
 ## Registry Schema
 
 ```yaml
@@ -49,6 +62,22 @@ Passing this registry screen does not make a policy benchmark-ready. Any learned
 the checklist in `docs/context/policy_search/contracts/learned_local_policy_eligibility.md`, adapter
 metadata from Issue #1618, smoke proof, and fail-closed handling before benchmark claims.
 
+## Status Crosswalk
+
+Use this crosswalk when moving between the current-state learned-policy registry and the
+reject/monitor registry. The mapping is intentionally conservative: when statuses disagree, the
+stricter benchmark-readiness interpretation wins.
+
+| Learned-policy current state | Reject/monitor vocabulary | Benchmark-readiness interpretation |
+| --- | --- | --- |
+| `implemented` with `comparison_available` | Usually not a reject/monitor row | Runnable only for the specific config and proof named in `candidate_registry.yaml`; not a general learned-policy promotion. |
+| `staged` or `adapter_needed` with `launch_packet` or `proposal` | `defer` until prerequisite lands | Not benchmark evidence; implement only the named prerequisite or smoke path. |
+| `monitor_only` with `source_harness_required` | `source-side reproduction first` | No Robot SF adapter or benchmark row until an upstream/source command, checkpoint, and observation/action contract are proven. |
+| `monitor_only` with `prototype_only` | `prototype only` | Prototype or metadata surface only; keep out of main benchmark tables unless a follow-up proves adapter eligibility. |
+| `monitor_only` with `monitor_only` | `monitor only` or `defer` | Track for future review; do not open implementation work without materially new source or contract evidence. |
+| `blocked` benchmark status | `defer`, `source-side reproduction first`, or `prototype only` | Treat as blocked for benchmark use; the row may still guide a narrow prerequisite issue. |
+| `rejected` or `rejected_for_current_adapter` | `reject for now` | Not compatible with the current local-planner adapter contract; reopen only with new public assets or a narrower reduction proof. |
+
 ## Entries
 
 | `policy_id` | `policy_family` | `integration_status` | `reproducibility_status` | `benchmark_status` | Boundary |
@@ -62,13 +91,12 @@ metadata from Issue #1618, smoke proof, and fail-closed handling before benchmar
 | `lidar_ppo_mlp_gate_v1` | `lidar_policy` | `adapter_needed` | `proposal` | `blocked` | Planned LiDAR learned-policy smoke from Issues #1615/#1662; not available on `main` until launch-packet work lands and smoke training runs. |
 | `tentabot_value_scorer_v0` | `external_learned_policy` | `staged` | `proposal` | `smoke_only` | Clean-room Robot SF scorer spike is staged in `candidate_registry.yaml`; upstream Tentabot remains source-side only and the staged candidate still needs required smoke/nominal-sanity validation before evidence use. |
 | `crowdnav_height_igat_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | Source/checkpoint and graph-observation parity must be proven before a Robot SF adapter or benchmark row. |
-| `arena_rosnav_stack` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | ROSNav stack is a source-side reproduction target only; no single Robot SF-compatible policy checkpoint or adapter contract is claimed. |
+| `arena_rosnav_stack` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | ROS Noetic/Gazebo/Flatland stack is a source-side reproduction target only; no single Robot SF-compatible policy checkpoint or adapter contract is claimed, and a named Rosnav agent must run from durable source assets before adapter work. |
 | `drl_vo_family` | `external_learned_policy` | `monitor_only` | `prototype_only` | `blocked` | Tracked-agent diagnostic/prototype boundary only; not main-table ready and not a leakage-free benchmark policy. |
 | `gensafenav_sonic_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | Safety-aware crowd-navigation source family remains behind source-harness and conformal-contract gates; no Robot SF benchmark parity claim. |
 | `neupan_family` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | Point-obstacle model-based learning source is not social-navigation benchmark evidence without source-side proof and adapter contract. |
 | `sage_mpc_transfer_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | MPC-transfer/GNN source lane remains blocked after legacy dependency smoke; checkpoint/inference path is not proven. |
 | `navdp_nomad_visual_family` | `external_visual_policy` | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | RGB-D/topomap/visual-goal assumptions do not reduce cleanly to the current 2D local-planner contract. |
-| `arena_rosnav_stack` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | ROS Noetic/Gazebo/Flatland workspace and Rosnav checkpoint proof are required before any Robot SF adapter or benchmark row. |
 | `diffusion_policy_family` | `external_learned_policy` | `monitor_only` | `monitor_only` | `rejected_for_current_adapter` | Diffusion/consistency/diffuser sources are design references, not current Robot SF local-navigation adapters. |
 | `decision_transformer_local_nav_family` | `external_learned_policy` | `monitor_only` | `proposal` | `blocked` | Local trajectory-data preflight exists, but no external local-navigation checkpoint or runnable adapter is selected. |
 | `foundation_vla_navigation_family` | `external_visual_policy` | `rejected` | `monitor_only` | `rejected_for_current_adapter` | VLA/foundation-model sources require missing RGB/RGB-D, language-task, semantic-map, and action-interface contracts. |
@@ -170,7 +198,7 @@ metadata before entering the runnable candidate registry.
   `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
   `docs/context/policy_search/issue_1367_crowdnav_family_verdict.md`,
   `docs/context/policy_search/issue_1394_crowdnav_height_source_harness.md`.
-- Arena-Rosnav stack:
+- Arena-Rosnav stack / Rosnav learned navigation:
   `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
   `docs/context/policy_search/issue_1758_arena_rosnav_source_assessment.md`.
 - DRL-VO family: `docs/context/issue_769_drl_vo_assessment.md`.
@@ -180,8 +208,6 @@ metadata before entering the runnable candidate registry.
 - NavDP / NoMaD visual navigation:
   `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
   `docs/context/policy_search/2026-05-20_navdp_nomad_diffusion_assessment.md`.
-- Arena-Rosnav learned navigation stack:
-  `docs/context/policy_search/issue_1758_arena_rosnav_source_assessment.md`.
 - Diffusion Policy / Consistency Policy / Diffuser families:
   `docs/context/policy_search/2026-05-30_external_learned_policy_ranking_issue_1620.md`,
 - Foundation-model / VLA / multimodal navigation:

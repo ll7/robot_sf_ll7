@@ -2,6 +2,7 @@ name: hybrid_orca_sampler_v1
 algo: hybrid_orca_sampler
 base_config_path: configs/algos/hybrid_orca_sampler_base.yaml
 params:
+  max_linear_speed: 2.0
   hybrid_guard:
     progress_margin: 0.04
     near_field_distance: 2.1
@@ -9,6 +10,7 @@ params:
     first_step_ped_clearance: 0.74
     min_ttc: 0.75
   mppi_social:
+    max_linear_speed: 2.0
     sample_count: 48
     iterations: 2
     horizon_steps: 8

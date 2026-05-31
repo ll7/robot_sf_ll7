@@ -138,8 +138,19 @@ Prioritize by:
 
 ## Queue Exhaustion Audit
 
-Before declaring the implementation queue exhausted, run one final read-only implementability audit
-over:
+Before declaring the implementation queue exhausted, first run the closed-issue state-label hygiene
+guard:
+
+```bash
+uv run python scripts/dev/closed_state_label_hygiene.py
+```
+
+This guard is read-only, avoids Project #5 writes, and exits non-zero with a
+`closed_state_label_hygiene.v1` JSON report when any closed issue still carries `state:ready`,
+`state:running`, or `state:blocked`. Treat failures as stale queue metadata to clean up or report
+before claiming that the active implementation queue is exhausted.
+
+Then run one final read-only implementability audit over:
 - open issues labeled `state:ready`,
 - open issues that lack any `state:*` label.
 

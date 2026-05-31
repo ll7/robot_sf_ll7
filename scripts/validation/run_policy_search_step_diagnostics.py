@@ -247,6 +247,41 @@ def _trace_progress_summary(
     }
 
 
+def _format_planner_summary_lines(planner_summary: Any) -> list[str]:
+    """Return Markdown lines for the aggregate planner diagnostics summary."""
+    summary = _json_ready(planner_summary)
+    lines = ["## Planner Summary", ""]
+    if summary is None:
+        return [*lines, "- Planner summary: `null`"]
+    if not isinstance(summary, dict):
+        return [*lines, f"- Planner summary: `{summary}`"]
+    if not summary:
+        return [*lines, "- Planner summary: `{}`"]
+    for key, value in sorted(summary.items()):
+        if isinstance(value, (dict, list)):
+            rendered = json.dumps(value, sort_keys=True)
+        else:
+            rendered = str(value)
+        lines.append(f"- `{key}`: `{rendered}`")
+    return lines
+
+
+def _diagnostics_stdout_payload(
+    *,
+    metadata: dict[str, Any],
+    progress_summary: dict[str, Any],
+    planner_summary: Any,
+    done_info: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the stable machine-readable diagnostics CLI payload."""
+    return {
+        **_json_ready(metadata),
+        "progress_summary": _json_ready(progress_summary),
+        "planner_summary": _json_ready(planner_summary),
+        "done_info": _json_ready(done_info),
+    }
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -525,6 +560,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "",
         f"- Done info: `{_json_ready(done_info)}`",
         "",
+        *_format_planner_summary_lines(planner_summary),
+        "",
         "## Progress/Risk Summary",
         "",
         f"- Net goal progress: `{_format_summary_float(progress_summary['net_goal_progress'])}`",
@@ -564,22 +601,21 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     report_path = output_dir / "report.md"
     report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
 
-    print(
-        json.dumps(
-            {
-                "trace": str(trace_path),
-                "report": str(report_path),
-                "scenario_id": _scenario_id(scenario),
-                "family": family,
-                "seed": seed,
-                "decision_counts": dict(decision_counter),
-                "selected_head_counts": dict(selected_head_counter),
-                "progress_summary": _json_ready(progress_summary),
-                "done_info": _json_ready(done_info),
-            },
-            indent=2,
-        )
+    payload = _diagnostics_stdout_payload(
+        metadata={
+            "trace": trace_path,
+            "report": report_path,
+            "scenario_id": _scenario_id(scenario),
+            "family": family,
+            "seed": seed,
+            "decision_counts": dict(decision_counter),
+            "selected_head_counts": dict(selected_head_counter),
+        },
+        progress_summary=progress_summary,
+        planner_summary=planner_summary,
+        done_info=done_info,
     )
+    print(json.dumps(payload, indent=2))
     return 0
 
 

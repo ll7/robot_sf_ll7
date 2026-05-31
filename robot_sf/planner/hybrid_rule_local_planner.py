@@ -231,8 +231,7 @@ class HybridRuleLocalPlannerConfig:
     actuation_max_linear_decel: float = 2.5
     actuation_max_yaw_rate: float = 1.2
     actuation_max_angular_accel: float = 4.0
-    actuation_feasibility_weight: float = 0.0
-    actuation_projection_weight: float = 0.0
+    actuation_clip_risk_weight: float = 0.0
 
 
 class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -1792,8 +1791,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             * terms["corridor_subgoal_clearance_margin"]
             + float(self.config.corridor_subgoal_continuity_weight)
             * terms["corridor_subgoal_continuity"]
-            + float(self.config.actuation_feasibility_weight) * terms["actuation_feasibility"]
-            - float(self.config.actuation_projection_weight) * terms["actuation_clip_risk"]
+            - float(self.config.actuation_clip_risk_weight) * terms["actuation_clip_risk"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )

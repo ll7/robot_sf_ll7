@@ -10,6 +10,7 @@
 .github/cache/
 __pycache__/
 build
+docs/_build/
 file.log
 images
 logs

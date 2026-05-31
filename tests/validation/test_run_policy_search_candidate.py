@@ -74,6 +74,27 @@ def test_load_candidate_definition_merges_base_config_and_params(
     assert config_path == candidate_cfg.resolve()
 
 
+def test_risk_surface_candidate_uses_smoke_progress_recovery_speed() -> None:
+    """Risk-surface smoke candidate should opt into the 2 m/s local command envelope."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    _entry, payload, merged, config_path = load_candidate_definition(
+        repo_root / "docs/context/policy_search/candidate_registry.yaml",
+        "risk_surface_dwa_v0",
+    )
+
+    risk_dwa = merged["risk_dwa"]
+    assert payload["algo"] == "risk_surface_dwa"
+    assert risk_dwa["max_linear_speed"] == 2.0
+    assert max(risk_dwa["linear_candidates"]) == 2.0
+    assert risk_dwa["progress_escape_enabled"] is True
+    assert risk_dwa["progress_escape_speed"] >= 0.9
+    assert (
+        config_path
+        == (repo_root / "configs/policy_search/candidates/risk_surface_dwa_v0.yaml").resolve()
+    )
+
+
 def test_topology_guided_candidate_is_diagnostic_only() -> None:
     """Topology-guided candidate should keep an explicit diagnostic claim boundary."""
     entry, payload, merged, config_path = load_candidate_definition(

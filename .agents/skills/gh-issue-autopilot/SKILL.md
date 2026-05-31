@@ -51,8 +51,8 @@ linked PRs, `Closes`/`Refs`, and explicit prerequisite PRs. Verify the reference
 surface exists on current `origin/main` when the branch must start from clean main. If an open PR
 already covers the issue, classify it as `covered_by_pr`, route it to `state:running`, and stop
 instead of reimplementing. If the issue depends on an unmerged source PR, mark it blocked or
-unavailable for clean-main work with the unblock condition, unless the user explicitly chooses a
-stacked-PR route.
+unavailable for clean-main work with the unblock condition "source PR merged to origin/main",
+unless the user explicitly chooses a stacked-PR route.
 
 ## Workflow
 

@@ -249,6 +249,21 @@ candidates:
       - smoke
       - nominal_sanity
 
+  actuation_aware_hybrid_rule_v0:
+    status: experimental_spike
+    family: amv_actuation_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/actuation_aware_hybrid_rule_v0.yaml
+    hypothesis: >
+      A deterministic hybrid-rule local scorer can penalize command candidates that would be
+      clipped by the synthetic AMV actuation envelope, exposing whether local command smoothing
+      reduces synthetic actuation stress. This is diagnostic-only synthetic evidence, not
+      calibrated hardware or paper-facing AMV performance evidence.
+    required_stages:
+      - amv_actuation_smoke
+
   hybrid_rule_v3_static_margin0:
     status: implemented
     family: hybrid_rule_based

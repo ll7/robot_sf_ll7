@@ -179,6 +179,11 @@ def summarize_policy_search_records(  # noqa: C901
     near_miss_count = 0
     min_distance_values: list[float] = []
     avg_speed_values: list[float] = []
+    actuation_metric_values: dict[str, list[float]] = {
+        "command_clip_fraction": [],
+        "yaw_rate_saturation_fraction": [],
+        "signed_braking_peak_m_s2": [],
+    }
     exclusions: list[dict[str, Any]] = []
 
     for row in records:
@@ -195,6 +200,10 @@ def summarize_policy_search_records(  # noqa: C901
         near_misses = _as_float(metrics.get("near_misses")) or 0.0
         min_distance = _as_float(metrics.get("min_distance"))
         avg_speed = _as_float(metrics.get("avg_speed"))
+        for metric_name, values in actuation_metric_values.items():
+            metric_value = _as_float(metrics.get(metric_name))
+            if metric_value is not None:
+                values.append(metric_value)
 
         if near_misses > 0.0:
             near_miss_count += 1
@@ -272,6 +281,10 @@ def summarize_policy_search_records(  # noqa: C901
         "mean_avg_speed": sum(avg_speed_values) / len(avg_speed_values)
         if avg_speed_values
         else None,
+        "synthetic_actuation": {
+            f"{metric_name}_mean": sum(values) / len(values) if values else None
+            for metric_name, values in actuation_metric_values.items()
+        },
     }
 
 

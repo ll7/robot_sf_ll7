@@ -246,8 +246,15 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     AlgorithmReadiness(
         canonical_name="hybrid_rule_local_planner",
         tier="experimental",
-        aliases=("hybrid_rule_local_planner", "hybrid_rule_v0_minimal"),
-        note="Deterministic hybrid-rule local planner family; v0 is minimal DWA-style.",
+        aliases=(
+            "hybrid_rule_local_planner",
+            "hybrid_rule_v0_minimal",
+            "actuation_aware_hybrid_rule_v0",
+        ),
+        note=(
+            "Deterministic hybrid-rule local planner family; v0 is minimal DWA-style. "
+            "Actuation-aware aliases are synthetic diagnostic-only candidates."
+        ),
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(

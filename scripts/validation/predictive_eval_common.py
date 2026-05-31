@@ -21,17 +21,24 @@ def load_seed_manifest(path: Path) -> dict[str, list[int]]:
     return out
 
 
+def _scenario_id(scenario: dict) -> str:
+    """Return the stable scenario identifier used by seed manifests."""
+    return str(
+        scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
+    )
+
+
 def make_subset_scenarios(scenario_matrix: Path, seed_manifest: dict[str, list[int]]) -> list[dict]:
     """Load scenarios and apply explicit seed lists for selected entries."""
     scenarios = load_scenarios(scenario_matrix)
     selected: list[dict] = []
+    matched_ids: set[str] = set()
     base_dir = scenario_matrix.parent.resolve()
     for scenario in scenarios:
-        scenario_id = str(
-            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
-        )
+        scenario_id = _scenario_id(scenario)
         if scenario_id not in seed_manifest:
             continue
+        matched_ids.add(scenario_id)
         scenario_copy = dict(scenario)
         map_file = scenario_copy.get("map_file")
         if isinstance(map_file, str):
@@ -40,4 +47,13 @@ def make_subset_scenarios(scenario_matrix: Path, seed_manifest: dict[str, list[i
                 scenario_copy["map_file"] = str((base_dir / map_path).resolve())
         scenario_copy["seeds"] = list(seed_manifest[scenario_id])
         selected.append(scenario_copy)
+    missing_ids = sorted(set(seed_manifest) - matched_ids)
+    if missing_ids:
+        available_ids = sorted(_scenario_id(scenario) for scenario in scenarios)
+        raise ValueError(
+            f"Seed manifest references scenario ids not present in {scenario_matrix}: "
+            f"{', '.join(missing_ids)}. Available scenario ids: {', '.join(available_ids)}"
+        )
+    if not selected:
+        raise ValueError(f"Seed manifest selected no scenarios from {scenario_matrix}")
     return selected

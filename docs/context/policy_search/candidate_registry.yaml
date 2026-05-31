@@ -168,6 +168,23 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  hybrid_rule_v3_progress_2p4_static_escape_probe:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_progress_2p4_static_escape_probe.yaml
+    issue: 1834
+    hypothesis: >
+      Keeping the 2.4 m/s progress envelope while enabling the static-escape
+      and recenter probes from the faster static-escape candidate may convert
+      some low-progress stalls without adopting the 3.0 m/s fast-progress speed
+      envelope.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   risk_dwa_camera_ready:
     status: implemented
     family: classical_baseline
@@ -216,6 +233,7 @@ candidates:
     status: experimental_spike
     family: learned_style_value_scorer
     training_required: false
+    claim_scope: diagnostic_only
     promotion_gate: tier_b
     candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v0.yaml
     learned_policy_registry_id: tentabot_value_scorer_v0

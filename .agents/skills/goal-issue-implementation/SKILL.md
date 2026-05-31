@@ -104,11 +104,21 @@ Process only when all are true:
 - scope is clear and bounded,
 - acceptance criteria are inferable without changing intent,
 - proof path is available or has a documented fallback that preserves contract,
+- no open PR already covers the issue,
+- any issue body/comment `source_pr`, linked PR, `Closes`/`Refs`, or explicit prerequisite PR is
+  merged or otherwise available on current `origin/main` when the run must start from clean main,
 - implementation can fit in one coherent PR.
 
 If not eligible:
 - send to `issue-audit` or `gh-issue-clarifier`,
 - or create follow-up issue via `gh-issue-creator`.
+
+Before selecting or branching for a ready issue, inspect the issue body and recent comments for
+`source_pr`, linked PRs, `Closes`/`Refs`, and explicit prerequisite PRs. If an open PR already
+covers the issue, classify it as `covered_by_pr`, route it to `state:running`, and do not
+reimplement. If the issue is a follow-up that depends on an unmerged source PR, classify it
+blocked/unavailable for clean-main work with the unblock condition "source PR merged to
+`origin/main`", unless the user explicitly chooses a stacked-PR route.
 
 ## Queue Policy
 
@@ -128,8 +138,19 @@ Prioritize by:
 
 ## Queue Exhaustion Audit
 
-Before declaring the implementation queue exhausted, run one final read-only implementability audit
-over:
+Before declaring the implementation queue exhausted, first run the closed-issue state-label hygiene
+guard:
+
+```bash
+uv run python scripts/dev/closed_state_label_hygiene.py
+```
+
+This guard is read-only, avoids Project #5 writes, and exits non-zero with a
+`closed_state_label_hygiene.v1` JSON report when any closed issue still carries `state:ready`,
+`state:running`, or `state:blocked`. Treat failures as stale queue metadata to clean up or report
+before claiming that the active implementation queue is exhausted.
+
+Then run one final read-only implementability audit over:
 - open issues labeled `state:ready`,
 - open issues that lack any `state:*` label.
 
@@ -156,10 +177,11 @@ Allowed classifications:
   or non-local credentials,
 - `blocked_slurm`: requires SLURM/Auxme or another unavailable execution environment,
 - `covered_by_pr`: already has an open PR or merged change covering the scope,
+- `blocked_other`: blocked for a reason not covered above, with rationale; use for follow-up work
+  that depends on an unmerged source PR when the run requires clean-main branching,
 - `ready_local`: clear, bounded, locally implementable issue,
 - `ambiguous`: needs one clarification before implementation routing,
 - `too_broad`: mixes multiple independently validatable PRs,
-- `blocked_other`: blocked for a reason not covered above, with rationale.
 
 Parent, epic, and analysis-only issues must not be reported as ready implementation work unless the
 run explicitly targets clarification, splitting, or synthesis. Blocked-external and blocked-SLURM
@@ -265,12 +287,14 @@ Route remaining issues by their blocker:
 ## Process
 
 1. Select one issue (`gh-issue-sequencer` output or explicit user target).
-2. Create/checkout isolated implementation branch.
-3. Implement only in-scope behavior and required tests/docs.
-4. Validate using the narrowest meaningful level first, then expand.
-5. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
-6. Prepare proof and branch handoff via `gh-pr-opener`.
-7. Open PR, then report and move to next queue item.
+2. Re-check issue body/comments and open PRs for source-PR dependencies, active coverage, and
+   duplicate branch/PR risk before branching.
+3. Create/checkout isolated implementation branch.
+4. Implement only in-scope behavior and required tests/docs.
+5. Validate using the narrowest meaningful level first, then expand.
+6. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
+7. Prepare proof and branch handoff via `gh-pr-opener`.
+8. Open PR, then report and move to next queue item.
 
 Never run unrelated refactors or paper-facing claims in this loop.
 

@@ -109,6 +109,27 @@ def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -
     assert stage["paper_facing"] is False
 
 
+def test_risk_surface_candidate_uses_smoke_progress_recovery_speed() -> None:
+    """Risk-surface smoke candidate should opt into the 2 m/s local command envelope."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    _entry, payload, merged, config_path = load_candidate_definition(
+        repo_root / "docs/context/policy_search/candidate_registry.yaml",
+        "risk_surface_dwa_v0",
+    )
+
+    risk_dwa = merged["risk_dwa"]
+    assert payload["algo"] == "risk_surface_dwa"
+    assert risk_dwa["max_linear_speed"] == 2.0
+    assert max(risk_dwa["linear_candidates"]) == 2.0
+    assert risk_dwa["progress_escape_enabled"] is True
+    assert risk_dwa["progress_escape_speed"] >= 0.9
+    assert (
+        config_path
+        == (repo_root / "configs/policy_search/candidates/risk_surface_dwa_v0.yaml").resolve()
+    )
+
+
 def test_topology_guided_candidate_is_diagnostic_only() -> None:
     """Topology-guided candidate should keep an explicit diagnostic claim boundary."""
     entry, payload, merged, config_path = load_candidate_definition(
@@ -149,6 +170,36 @@ def test_adaptive_proxemic_selector_candidate_is_diagnostic_only() -> None:
     assert (
         config_path
         == Path("configs/policy_search/candidates/adaptive_proxemic_selector_v0.yaml").resolve()
+    )
+
+
+def test_progress_2p4_static_escape_probe_candidate_is_diagnostic_only() -> None:
+    """Issue #1834 candidate should merge 2.4 m/s progress with static-escape probes."""
+    registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"
+
+    entry, payload, merged, config_path = load_candidate_definition(
+        registry_path,
+        "hybrid_rule_v3_progress_2p4_static_escape_probe",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert entry["issue"] == 1834
+    assert payload["algo"] == "hybrid_rule_local_planner"
+    assert merged["planner_variant"] == "hybrid_rule_v3_teb_like_rollout"
+    assert merged["route_guide_enabled"] is True
+    assert merged["max_linear_speed"] == pytest.approx(2.4)
+    assert merged["max_linear_accel"] == pytest.approx(2.4)
+    assert merged["static_clearance_escape_enabled"] is True
+    assert merged["static_recenter_enabled"] is True
+    assert merged["static_corridor_transit_enabled"] is True
+    assert merged["static_clearance_escape_max_speed"] == pytest.approx(0.3)
+    assert merged["static_recenter_weight"] == pytest.approx(0.7)
+    assert (
+        config_path
+        == Path(
+            "configs/policy_search/candidates/hybrid_rule_v3_progress_2p4_static_escape_probe.yaml"
+        ).resolve()
     )
 
 

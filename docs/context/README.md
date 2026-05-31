@@ -98,6 +98,8 @@ knowledge, not every transient iteration detail.
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
 * Open-issues training split audit 2026-05-30:
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
+  (historical snapshot; current queue routing is superseded by live GitHub labels and
+  [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md)).
 * Open-issue execution improvement plan 2026-05-30:
   [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md)
 * Thursday development review 2026-05-21:

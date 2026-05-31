@@ -1,0 +1,24 @@
+name: hybrid_rule_v3_progress_2p4_static_escape_probe
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  max_linear_speed: 2.4
+  max_linear_accel: 2.4
+  goal_progress_weight: 5.0
+  speed_preference_weight: 0.9
+  static_clearance_escape_enabled: true
+  static_clearance_escape_min_clearance: 1.0
+  static_clearance_escape_max_speed: 0.3
+  static_clearance_escape_tolerance: 0.05
+  static_recenter_enabled: true
+  static_recenter_weight: 0.7
+  static_recenter_probe_speed: 0.3
+  static_corridor_transit_enabled: true
+  static_corridor_transit_initial_band: 0.08
+  static_corridor_transit_tolerance: 0.08
+  static_corridor_transit_min_progress_3s: 0.1
+  static_corridor_transit_weight: 0.5
+scenario_overrides:
+  francis2023_perpendicular_traffic:
+    very_slow_speed: 0.6
+    static_clearance_escape_max_speed: 0.6

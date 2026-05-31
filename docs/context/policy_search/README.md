@@ -98,6 +98,9 @@ Use it for three things only:
 - `../issue_1618_learned_policy_adapter_interface.md`: adapter-interface contract that turns the
   learned-policy eligibility checklist into runtime loading, inference, action-adaptation,
   diagnostics, and fail-closed status requirements.
+- `../issue_1627_learned_policy_transfer_benchmark.md`: benchmark design for imported learned
+  policies; defines source-intake/source-reproduction/adapter-metadata/smoke/benchmark stages,
+  required transfer metadata, fail-closed statuses, and first implementation scope.
 - `reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md`: issue #1358 ORCA-residual guarded
   PPO benchmark-surface smoke; validates the bounded residual action path for unsafe PPO proposals
   before the deferred training campaign.

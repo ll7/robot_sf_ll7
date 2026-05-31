@@ -51,8 +51,6 @@ the reward-curriculum wrapper in this worktree.
 
 ## Follow-Up
 
-The issue-791 reward-curriculum wrapper fix was committed locally as:
+This PR carries the issue-791 reward-curriculum wrapper fix originally committed locally as:
 
 `f32677bb fix: let issue 791 run without srun by default`
-
-Consider opening a small PR for that wrapper fix if issue-791 style jobs may be submitted again.

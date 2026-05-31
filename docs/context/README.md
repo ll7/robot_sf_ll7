@@ -234,6 +234,8 @@ knowledge, not every transient iteration detail.
 * Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md) and
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
+* Issue #1638 local model path preflight:
+  [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
 * Learned local-navigation policy registry:
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1758 Arena-Rosnav Source-Side Assessment (2026-05-30):
@@ -250,6 +252,8 @@ knowledge, not every transient iteration detail.
   [issue_1618_learned_policy_adapter_interface.md](issue_1618_learned_policy_adapter_interface.md)
 * Issue #1627 learned-policy transfer benchmark design:
   [issue_1627_learned_policy_transfer_benchmark.md](issue_1627_learned_policy_transfer_benchmark.md)
+* Issue #1761 learned-policy transfer metadata validator:
+  [issue_1761_learned_policy_transfer_metadata_validator.md](issue_1761_learned_policy_transfer_metadata_validator.md)
 * Issue #1677 SiT Dataset Terms Audit (2026-05-29):
   [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
 * Issue #1689 Simulation Trace Export Schema (2026-05-30):

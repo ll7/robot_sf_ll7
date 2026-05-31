@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 
-readonly PHASES=("lint" "typecheck" "test" "smoke" "artifact-policy")
+readonly PHASES=("lint" "typecheck" "test" "examples-smoke" "smoke" "artifact-policy")
 
 show_help() {
   cat <<'EOF'
@@ -16,7 +16,8 @@ Run one or more canonical CI validation phases.
 Phases:
   lint             Ruff lint + format check
   typecheck        Ty type check (advisory; reports findings but exits zero)
-  test             Main pytest suite
+  test             Main pytest suite, excluding example smoke tests
+  examples-smoke   Example script smoke tests
   smoke            Validation and benchmark smoke checks
   artifact-policy  Canonical artifact root policy guard
 
@@ -203,6 +204,10 @@ YAML
   fi
 }
 
+run_examples_smoke_phase() {
+  uv run python scripts/validation/run_examples_smoke.py --skip-perf-tests
+}
+
 run_phase() {
   local phase="$1"
   local event_name="$2"
@@ -218,7 +223,10 @@ run_phase() {
       uvx ty check . --exit-zero
       ;;
     test)
-      "$SCRIPT_DIR/run_tests_parallel.sh"
+      "$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples
+      ;;
+    examples-smoke)
+      run_examples_smoke_phase
       ;;
     smoke)
       run_smoke_phase "$event_name" "$github_ref"

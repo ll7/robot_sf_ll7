@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -62,6 +64,33 @@ def test_run_tests_parallel_validates_dist_mode_before_resolving_workers() -> No
     assert dist_validation in script_text
     assert worker_resolution in script_text
     assert script_text.find(dist_validation) < script_text.find(worker_resolution)
+
+
+def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> None:
+    """Invalid dist mode should exit before validating or resolving worker count."""
+
+    env = {
+        **os.environ,
+        "PYTEST_XDIST_DIST": "invalid-mode",
+        "PYTEST_NUM_WORKERS": "definitely-not-a-worker-count",
+    }
+    result = subprocess.run(
+        [str(RUN_TESTS_PARALLEL), "tests/test_ci_script_contract.py"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert (
+        "Invalid PYTEST_XDIST_DIST value 'invalid-mode' "
+        "(expected load|worksteal|loadscope|loadfile|loadgroup)."
+    ) in result.stderr
+    assert "Resolved pytest-xdist workers" not in result.stderr
+    assert "resolve_pytest_workers.py" not in result.stderr
 
 
 def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:

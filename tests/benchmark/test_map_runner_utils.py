@@ -97,6 +97,25 @@ def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:
         _parse_algo_config(str(list_path))
 
 
+def test_parse_algo_config_rejects_local_output_model_path(tmp_path: Path) -> None:
+    """Benchmark launch config loading should fail closed on local model artifacts."""
+    cfg_path = tmp_path / "algo.yaml"
+    cfg_path.write_text("model_path: output/model_cache/demo/model.zip\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="local-only model artifact"):
+        _parse_algo_config(str(cfg_path))
+
+
+def test_parse_algo_config_reports_blocked_local_artifact_follow_up() -> None:
+    """Known blockers should fail with the artifact-promotion follow-up visible."""
+    with pytest.raises(ValueError) as exc_info:
+        _parse_algo_config("configs/baselines/drl_vo_default.yaml")
+
+    message = str(exc_info.value)
+    assert "https://github.com/ll7/robot_sf_ll7/issues/1764" in message
+    assert "DRL-VO default checkpoint" in message
+
+
 def test_resolve_policy_search_candidate_runtime_merges_base_and_scenario_override(
     tmp_path: Path,
 ) -> None:

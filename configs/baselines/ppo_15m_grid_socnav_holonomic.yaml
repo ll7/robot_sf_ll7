@@ -1,10 +1,10 @@
 # PPO baseline config for the strict holonomic camera-ready profile.
 #
-# This keeps the promoted BR-06 v3 PPO policy as the runtime model, but disables
-# goal-seeking fallback so benchmark runs fail closed when the policy or model
-# contract is not available.
+# This keeps the promoted BR-06 v3 PPO policy as the runtime model through the
+# model registry, but disables goal-seeking fallback so benchmark runs fail
+# closed when the policy or model contract is not available.
 
-model_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip  # Source run: ll7/robot_sf/b60iopxt (see model/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/training_analysis.md).
+model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 
 # Device selection for SB3
 device: auto

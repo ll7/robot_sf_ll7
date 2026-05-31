@@ -72,11 +72,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-requested_args=()
-if [[ -n "$worker_override" ]]; then
-  requested_args=(--requested "$worker_override")
-fi
-
 case "$dist_mode" in
   load|worksteal|loadscope|loadfile|loadgroup)
     ;;
@@ -87,6 +82,11 @@ case "$dist_mode" in
 esac
 
 echo "Resolved pytest-xdist distribution mode: $dist_mode" >&2
+
+requested_args=()
+if [[ -n "$worker_override" ]]; then
+  requested_args=(--requested "$worker_override")
+fi
 
 worker_spec="$(
   uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" ${requested_args[@]+"${requested_args[@]}"} \

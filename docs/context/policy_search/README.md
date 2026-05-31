@@ -104,6 +104,9 @@ Use it for three things only:
 - `../issue_1627_learned_policy_transfer_benchmark.md`: benchmark design for imported learned
   policies; defines source-intake/source-reproduction/adapter-metadata/smoke/benchmark stages,
   required transfer metadata, fail-closed statuses, and first implementation scope.
+- `../issue_1761_learned_policy_transfer_metadata_validator.md`: metadata-only validator for
+  `algorithm_metadata.transfer_benchmark`; includes native PPO and blocked CrowdNav HEIGHT fixtures
+  and keeps fallback/degraded/not-available rows from claiming benchmark success.
 - `reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md`: issue #1358 ORCA-residual guarded
   PPO benchmark-surface smoke; validates the bounded residual action path for unsafe PPO proposals
   before the deferred training campaign.

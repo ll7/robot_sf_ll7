@@ -5,8 +5,9 @@ Status: xdist scheduler slice
 ## Scope
 
 This note records the conservative #1653 timing slice after the initial artifact-upload trim landed
-on `main` in PR [#1681](https://github.com/ll7/robot_sf_ll7/pull/1681). It does not change test
-selection, benchmark semantics, branch-protection job names, or required validation phases.
+on `main` in PR [#1681](https://github.com/ll7/robot_sf_ll7/pull/1681). Issue #1766 adds a new
+`examples-smoke` CI job to make example smoke tests separately visible/timed while keeping them
+required by the aggregate `ci` job.
 
 ## Baseline Timing
 
@@ -19,18 +20,18 @@ uv run python scripts/dev/ci_timing_summary.py --run-id <run-id> --top 8 --json
 The post-#1681 sample below covers ten successful runs from 2026-05-30 after
 `ci: report job timings and trim PR artifacts (#1681)` reached `main`.
 
-| run id | title | event | total | job span | queue | fast-feedback | smoke-artifacts |
-| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 26676909707 | docs: define learned policy artifact manifests (#1686) | pull_request | 832s | 829s | 2s | 813s | 263s |
-| 26676725258 | docs: add queue exhaustion audit example (#1688) | pull_request | 931s | 928s | 2s | 920s | 260s |
-| 26676578865 | docs: add root layout inventory (#1690) | pull_request | 935s | 931s | 3s | 927s | 228s |
-| 26676471223 | feat: add learned risk surface interface (#1675) | pull_request | 940s | 904s | 35s | 899s | 264s |
-| 26676440525 | docs: add proxemic comfort profile slice (#1676) | pull_request | 894s | 891s | 2s | 886s | 253s |
-| 26676440608 | docs: record open issue execution audit | pull_request | 925s | 901s | 24s | 897s | 249s |
-| 26676322034 | docs: add topology hypothesis diagnostic audit (#1674) | pull_request | 793s | 790s | 2s | 785s | 251s |
-| 26676034847 | feat: add learned risk surface interface (#1675) | pull_request | 882s | 881s | 1s | 875s | 244s |
-| 26675734525 | docs: add proxemic comfort profile slice (#1676) | pull_request | 916s | 913s | 2s | 906s | 253s |
-| 26675563950 | ci: report job timings and trim PR artifacts (#1681) | push | 974s | 897s | 76s | 891s | 279s |
+| run id | title | event | total | job span | queue | fast-feedback | smoke-artifacts | examples-smoke |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 26676909707 | docs: define learned policy artifact manifests (#1686) | pull_request | 832s | 829s | 2s | 813s | 263s | n/a |
+| 26676725258 | docs: add queue exhaustion audit example (#1688) | pull_request | 931s | 928s | 2s | 920s | 260s | n/a |
+| 26676578865 | docs: add root layout inventory (#1690) | pull_request | 935s | 931s | 3s | 927s | 228s | n/a |
+| 26676471223 | feat: add learned risk surface interface (#1675) | pull_request | 940s | 904s | 35s | 899s | 264s | n/a |
+| 26676440525 | docs: add proxemic comfort profile slice (#1676) | pull_request | 894s | 891s | 2s | 886s | 253s | n/a |
+| 26676440608 | docs: record open issue execution audit | pull_request | 925s | 901s | 24s | 897s | 249s | n/a |
+| 26676322034 | docs: add topology hypothesis diagnostic audit (#1674) | pull_request | 793s | 790s | 2s | 785s | 251s | n/a |
+| 26676034847 | feat: add learned risk surface interface (#1675) | pull_request | 882s | 881s | 1s | 875s | 244s | n/a |
+| 26675734525 | docs: add proxemic comfort profile slice (#1676) | pull_request | 916s | 913s | 2s | 906s | 253s | n/a |
+| 26675563950 | ci: report job timings and trim PR artifacts (#1681) | push | 974s | 897s | 76s | 891s | 279s | n/a |
 
 Observed post-trim sample medians:
 
@@ -105,8 +106,12 @@ maintenance happens.
 The validation contract is preserved because the coverage comparison still runs on every pull
 request; PR #1681 only removed the ordinary success-path upload of bulky coverage artifacts.
 
-The aggregate `ci` job remains unchanged. It still gates on both `fast-feedback` and
-`smoke-artifacts`, preserving the branch-protection-facing job name and split-job semantics.
+The aggregate `ci` job remains unchanged in structure and still gates on `fast-feedback`,
+`smoke-artifacts`, and the new `examples-smoke` job, preserving the branch-protection-facing job
+name and split-job semantics. The `test` CI phase now excludes `tests/examples`; the required
+`examples-smoke` job runs the same manifest-driven example smoke harness separately so example
+coverage remains required while its timing is no longer hidden inside the monolithic
+`fast-feedback` test phase.
 
 ## Candidate Quick Wins
 
@@ -114,7 +119,7 @@ The aggregate `ci` job remains unchanged. It still gates on both `fast-feedback`
 | --- | --- | --- |
 | Add phase timing around `lint`, `typecheck`, `test`, `smoke`, and `artifact-policy` in `scripts/dev/ci_driver.sh` | low, implemented in this branch | CI log shows per-phase durations without changing pass/fail semantics |
 | Add timing around dependency sync and artifact migration in both CI jobs | low, **done** | CI log identifies whether repeated setup is material compared with test time |
-| Split slow example smoke tests into a separately timed subgroup while keeping them required | medium | Before/after CI run shows earlier failure signal or lower p90 without reducing coverage |
+| Split slow example smoke tests into a separately timed subgroup while keeping them required | low, **done** | CI run shows earlier failure signal or lower p90 without reducing coverage |
 | Evaluate xdist `worksteal` scheduling for hosted `fast-feedback` tests | low as an experiment, rejected as a CI default in #1768 | PR CI showed no timing win and exposed test-order dependencies |
 | Investigate whether docs-only PRs can use a reduced gate | medium-high | Maintainer decision plus path filter proof that benchmark, planner, workflow, config, and code changes still run full gates |
 
@@ -169,6 +174,23 @@ The accepted #1768 outcome is therefore:
   experiments,
 - do not set `PYTEST_XDIST_DIST=worksteal` in hosted CI by default,
 - keep the two test-isolation fixes because they remove real xdist-order coupling.
+
+## Issue #1766 Local Proof
+
+The example-smoke split was locally checked before PR handoff with:
+
+```bash
+scripts/dev/ci_driver.sh examples-smoke
+```
+
+Local result on 2026-05-30:
+
+- `26 passed in 214.96s`
+- `ci_driver phase_end phase=examples-smoke status=0 duration_seconds=226`
+
+This proves the new CI phase exercises the manifest-driven examples harness locally. The required
+before/after CI timing still needs to come from the PR run because the new `examples-smoke` job only
+exists on this branch.
 
 ## Follow-Up
 

@@ -101,6 +101,8 @@ Use it for three things only:
 - `2026-05-20_tentabot_motion_primitive_assessment.md`: issue #1357 assessment of Tentabot-style
   motion-primitive value policies, recommending a Robot SF-native scorer spike without source-code
   reuse.
+- `../issue_1387_tentabot_value_scorer_spike.md`: clean-room Tentabot-style value-scorer spike
+  history, including #1832 and #1877 negative progress-recovery/static-gate probe boundaries.
 - `contracts/learned_local_policy_eligibility.md`: learned-policy eligibility checklist for
   observation/action leakage, registry entry, and required raw/adapted/guarded action logging.
 - `../issue_1618_learned_policy_adapter_interface.md`: adapter-interface contract that turns the

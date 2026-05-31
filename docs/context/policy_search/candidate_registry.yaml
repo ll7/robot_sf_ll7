@@ -250,6 +250,25 @@ candidates:
       - smoke
       - nominal_sanity
 
+  tentabot_value_scorer_v1_static_gated:
+    status: experimental_spike
+    family: learned_style_value_scorer
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v1_static_gated.yaml
+    learned_policy_registry_id: tentabot_value_scorer_v1_static_gated
+    adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+    hypothesis: >
+      A clean-room Tentabot-style primitive value scorer can preserve the v0
+      candidate lattice and auditable value terms while demoting low-clearance
+      commands unless they make positive progress without worsening static
+      clearance. The static gate is an exploratory Robot SF safety tier, not
+      upstream Tentabot parity or benchmark evidence.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   actuation_aware_hybrid_rule_v0:
     status: experimental_spike
     family: amv_actuation_diagnostic

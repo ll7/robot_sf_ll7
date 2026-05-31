@@ -182,6 +182,153 @@ def test_tentabot_value_scorer_v0_exposes_clean_room_diagnostics() -> None:
     ]
 
 
+def test_tentabot_value_scorer_v1_static_gate_demotes_unsafe_route_candidates(
+    monkeypatch,
+) -> None:
+    """V1 should keep raw value diagnostics while demoting low-clearance route commands."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "route_guide_enabled": True,
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_min_clearance": 0.55,
+            "static_safety_gate_penalty": 12.0,
+            "static_safety_gate_all_sources": True,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.0, 0.0, "route_guide")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["raw_value_score"] > evaluation["score"]
+    assert evaluation["terms"]["static_safety_gate_penalty"] == pytest.approx(12.0)
+    assert evaluation["static_safety_gate"]["tier"] == "low_clearance_demoted"
+    row = planner._candidate_diagnostic(evaluation)
+    assert row["raw_value_score"] == pytest.approx(evaluation["raw_value_score"])
+    assert row["static_safety_gate"]["reason"] == "low_clearance_without_safe_progress"
+
+
+def test_tentabot_value_scorer_v1_static_gate_allows_low_clearance_progress(
+    monkeypatch,
+) -> None:
+    """Low-clearance route candidates can remain eligible when they progress safely."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "route_guide_enabled": True,
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_min_clearance": 0.55,
+            "static_safety_gate_progress_threshold": 0.05,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.25, 0.0, "route_guide")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["score"] == pytest.approx(evaluation["raw_value_score"])
+    assert evaluation["terms"]["static_safety_gate_penalty"] == 0.0
+    assert evaluation["static_safety_gate"]["tier"] == "guarded_progress"
+    assert evaluation["static_safety_gate"]["progress_metric"] == "goal_distance"
+
+
+def test_tentabot_value_scorer_v1_static_gate_uses_route_local_progress(
+    monkeypatch,
+) -> None:
+    """Route-aware gate progress should follow corridor direction, not Euclidean goal progress."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "route_guide_enabled": True,
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_min_clearance": 0.55,
+            "static_safety_gate_progress_threshold": 0.05,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.25, 0.0, "route_guide")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(tangent_heading=np.pi),
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["terms"]["goal_progress"] > 0.0
+    assert evaluation["terms"]["static_safety_gate_penalty"] == pytest.approx(12.0)
+    assert evaluation["static_safety_gate"]["tier"] == "low_clearance_demoted"
+    assert evaluation["static_safety_gate"]["progress_metric"] == "route_local"
+    assert evaluation["static_safety_gate"]["progress"] < 0.0
+
+
+def test_tentabot_value_scorer_v1_static_gate_can_cover_all_sources(monkeypatch) -> None:
+    """The exploratory v1 config can apply the static gate beyond route-only primitives."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_all_sources": True,
+            "static_safety_gate_min_clearance": 0.55,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.0, 0.0, "dynamic_window")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert evaluation["static_safety_gate"]["source_gated"] is True
+    assert evaluation["static_safety_gate"]["tier"] == "low_clearance_demoted"
+
+
 def test_actuation_aware_variant_penalizes_synthetic_clip_risk() -> None:
     """Actuation-aware scoring should expose and penalize synthetic envelope risk."""
     config = build_hybrid_rule_local_planner_config(

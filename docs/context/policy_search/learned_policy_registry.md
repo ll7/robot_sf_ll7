@@ -236,9 +236,9 @@ metadata before entering the runnable candidate registry.
 
 ## Validation
 
-This note is documentation and registry metadata only. Validate changes with:
+This note is documentation and registry metadata only. Validate candidate and learned-policy
+registry consistency with:
 
 ```bash
-git diff --check origin/main...HEAD
-BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
+uv run python scripts/validation/validate_policy_search_registry.py
 ```

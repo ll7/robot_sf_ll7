@@ -17,6 +17,7 @@ from typing import Any
 import yaml
 
 DEFAULT_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
+DEFAULT_LEARNED_REGISTRY = Path("docs/context/policy_search/learned_policy_registry.md")
 IMPLEMENTED_STATUSES = {"implemented", "experimental_spike", "prototype"}
 SLURM_STATUSES = {"slurm_handoff_required"}
 LEARNED_FAMILIES = {
@@ -24,6 +25,16 @@ LEARNED_FAMILIES = {
     "learned_policy_network",
     "learned_style_value_scorer",
 }
+LOCAL_ONLY_ARTIFACT_PREFIXES = (
+    "output/",
+    "results/",
+    ".git/",
+    ".venv/",
+    "/tmp/",
+    "/var/tmp/",
+    "/home/",
+)
+BENCHMARK_STAGES = {"full_matrix", "leader_collision_slice_h500"}
 
 
 @dataclass(frozen=True)
@@ -94,6 +105,36 @@ def _validate_path_field(
         return
     if not path.exists():
         issues.append(RegistryIssue(f"{prefix}.{field}", f"path does not exist: {row[field]}"))
+
+
+def _is_worktree_local_artifact_path(value: str) -> bool:
+    """Return whether a string names a disposable/local-only artifact path."""
+    stripped = value.strip()
+    return stripped.startswith(LOCAL_ONLY_ARTIFACT_PREFIXES) or ".worktrees/" in stripped
+
+
+def _walk_local_artifact_paths(value: Any, *, prefix: str) -> list[RegistryIssue]:
+    """Find local-only artifact paths in nested registry/config metadata."""
+    issues: list[RegistryIssue] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key)
+            child_prefix = f"{prefix}.{key_text}" if prefix else key_text
+            issues.extend(_walk_local_artifact_paths(child, prefix=child_prefix))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            issues.extend(_walk_local_artifact_paths(child, prefix=f"{prefix}[{index}]"))
+    elif isinstance(value, str) and _is_worktree_local_artifact_path(value):
+        issues.append(
+            RegistryIssue(
+                prefix,
+                (
+                    f"worktree-local artifact path is not durable: {value}; use a durable "
+                    "artifact URI or tracked manifest pointer"
+                ),
+            )
+        )
+    return issues
 
 
 def _parse_registry_date(value: Any) -> date | None:
@@ -243,6 +284,47 @@ def _validate_required_stages(
             )
 
 
+def _benchmark_stages(stages: Any) -> list[str]:
+    """Return benchmark-track stages from a candidate's required stages."""
+    if not isinstance(stages, list):
+        return []
+    benchmark_stages: list[str] = []
+    for stage in stages:
+        if not isinstance(stage, str):
+            continue
+        base_stage = stage.removesuffix("_if_promising")
+        if base_stage in BENCHMARK_STAGES or base_stage.endswith("_h500"):
+            benchmark_stages.append(stage)
+    return benchmark_stages
+
+
+def _validate_benchmark_boundary(
+    issues: list[RegistryIssue],
+    row: dict[str, Any],
+    *,
+    prefix: str,
+) -> None:
+    """Require benchmark-track metadata for benchmark-routed candidates."""
+    stages = _benchmark_stages(row.get("required_stages"))
+    if not stages:
+        return
+    if not _is_missing(row.get("benchmark_track")):
+        return
+    if not _is_missing(row.get("non_benchmark_boundary")):
+        return
+    if row.get("claim_scope") == "diagnostic_only":
+        return
+    issues.append(
+        RegistryIssue(
+            f"{prefix}.benchmark_track",
+            (
+                "is required for benchmark stages "
+                f"{', '.join(stages)} unless non_benchmark_boundary is set"
+            ),
+        )
+    )
+
+
 def _validate_learned_link(
     issues: list[RegistryIssue],
     row: dict[str, Any],
@@ -353,11 +435,24 @@ def _validate_candidate(
             field="candidate_config_path",
             repo_root=repo_root,
         )
+        candidate_config_path = _resolve_repo_path(repo_root, row.get("candidate_config_path"))
+        if candidate_config_path is not None and candidate_config_path.exists():
+            candidate_config = _load_yaml(candidate_config_path)
+            issues.extend(
+                _walk_local_artifact_paths(
+                    candidate_config,
+                    prefix=f"{prefix}.candidate_config_path",
+                )
+            )
         _validate_required_stages(issues, row, prefix=prefix, known_stages=known_stages)
     elif status in SLURM_STATUSES:
         _validate_slurm_row(issues, row, prefix=prefix, repo_root=repo_root)
     else:
         issues.append(RegistryIssue(f"{prefix}.status", f"unknown status: {status}"))
+
+    if status in IMPLEMENTED_STATUSES:
+        issues.extend(_walk_local_artifact_paths(row, prefix=prefix))
+        _validate_benchmark_boundary(issues, row, prefix=prefix)
 
     gate = row.get("promotion_gate")
     if isinstance(gate, str) and known_gates and gate not in known_gates:
@@ -406,6 +501,77 @@ def validate_registry(
     return issues
 
 
+def _split_markdown_table_row(line: str) -> list[str]:
+    """Split a simple Markdown table row into cells."""
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return []
+    return [cell.strip() for cell in stripped.strip("|").split("|")]
+
+
+def _clean_markdown_cell(value: str) -> str:
+    """Normalize a Markdown table cell for validation."""
+    return value.strip().strip("`").strip()
+
+
+def _is_markdown_separator(cells: list[str]) -> bool:
+    """Return whether table cells are the Markdown separator row."""
+    return bool(cells) and all(set(cell.replace(":", "").strip()) <= {"-"} for cell in cells)
+
+
+def _iter_learned_policy_rows(path: Path) -> tuple[list[dict[str, str]], bool]:
+    """Parse learned-policy entries from the first table with a policy_id header."""
+    rows: list[dict[str, str]] = []
+    headers: list[str] | None = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        cells = _split_markdown_table_row(line)
+        if not cells:
+            if headers is not None and rows:
+                break
+            continue
+        cleaned = [_clean_markdown_cell(cell) for cell in cells]
+        if headers is None:
+            if cleaned and cleaned[0] == "policy_id":
+                headers = cleaned
+            continue
+        if _is_markdown_separator(cleaned):
+            continue
+        if len(cleaned) < len(headers):
+            continue
+        rows.append(dict(zip(headers, cleaned, strict=False)))
+    return rows, headers is not None
+
+
+def validate_learned_policy_registry(
+    registry_path: Path = DEFAULT_LEARNED_REGISTRY,
+) -> list[RegistryIssue]:
+    """Validate learned-policy registry table consistency."""
+    rows, has_policy_table = _iter_learned_policy_rows(Path(registry_path))
+    issues: list[RegistryIssue] = []
+    if not has_policy_table:
+        issues.append(
+            RegistryIssue(
+                "learned_policy_registry",
+                "must contain a Markdown table with policy_id as the first column",
+            )
+        )
+        return issues
+    if not rows:
+        issues.append(RegistryIssue("learned_policy_registry.entries", "must not be empty"))
+        return issues
+    seen_policy_ids: set[str] = set()
+    for index, row in enumerate(rows):
+        policy_id = row.get("policy_id", "").strip()
+        path = f"learned_policy_registry.entries[{index}].policy_id"
+        if not policy_id:
+            issues.append(RegistryIssue(path, "is required"))
+            continue
+        if policy_id in seen_policy_ids:
+            issues.append(RegistryIssue(path, f"duplicate policy_id: {policy_id}"))
+        seen_policy_ids.add(policy_id)
+    return issues
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -415,6 +581,12 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_REGISTRY,
         help="Policy-search candidate registry YAML.",
+    )
+    parser.add_argument(
+        "--learned-policy-registry",
+        type=Path,
+        default=DEFAULT_LEARNED_REGISTRY,
+        help="Learned-policy registry Markdown table.",
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON issues.")
     parser.add_argument(
@@ -440,11 +612,15 @@ def main() -> int:
         as_of=args.as_of,
         max_age_days=args.max_age_days,
     )
+    issues.extend(validate_learned_policy_registry(args.learned_policy_registry))
     if args.json:
         print(json.dumps([issue.__dict__ for issue in issues], indent=2, sort_keys=True))
     else:
         if not issues:
-            print(f"OK: {args.registry} satisfies the policy-search registry contract.")
+            print(
+                f"OK: {args.registry} and {args.learned_policy_registry} satisfy "
+                "the policy-search registry contract."
+            )
         for issue in issues:
             print(f"ERROR: {issue.path}: {issue.message}")
     return 1 if issues else 0

@@ -89,3 +89,4 @@ review_notes:
    issue explicitly measures that mode.
 6. Update the card when the learned-policy registry, candidate registry, model registry, or linked
    report changes the policy's status.
+7. Run `uv run python scripts/validation/validate_platform_docs.py` before publishing card changes.

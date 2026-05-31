@@ -39,6 +39,12 @@ uv run python scripts/validation/run_policy_search_candidate.py --candidate <can
 Use `--stage amv_actuation_smoke` only for candidates whose required stage is
 `amv_actuation_smoke`.
 
+Before publishing planner-zoo, policy-card, leaderboard, or benchmark-suite doc updates, run:
+
+```bash
+uv run python scripts/validation/validate_platform_docs.py
+```
+
 ## Current Runnable Anchors
 
 These are the shortest current entry points for locally runnable planner comparisons. Their smoke

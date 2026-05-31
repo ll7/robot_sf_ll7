@@ -9,8 +9,8 @@ database, vector store, or background service that needs operational ownership.
 
 1. `AGENTS.md`, `docs/dev_guide.md`, and other repo instructions define workflow rules.
    These are human-readable first; agents are secondary consumers.
-2. `CLAUDE.md` imports `AGENTS.md` and `memory/MEMORY.md` so Claude Code gets both startup
-   instructions and the memory index at session start.
+2. `AGENTS.md` lists `memory/MEMORY.md` in the repo-native context stack so supported agents can
+   load the memory index on demand after the top-level workflow guide.
 3. `memory/` stores reusable cross-session facts:
    - architecture summaries,
    - stable decisions,
@@ -24,11 +24,11 @@ database, vector store, or background service that needs operational ownership.
 
 | Agent         | Primary instruction entrypoint             | memory/MEMORY.md path                        | Status             |
 |---------------|--------------------------------------------|----------------------------------------------|--------------------|
-| Claude Code   | `CLAUDE.md` (`@AGENTS.md`, `@memory/MEMORY.md`) | direct import at startup                 | ✅ live validated   |
 | Copilot       | `.github/copilot-instructions.md`          | explicit pointer in instructions file        | ✅ documented       |
 | Codex         | `AGENTS.md` (Codex Context Stack section)  | listed in stack; agent reads on demand       | ✅ documented       |
 | GitHub agents | `.agents/agents/github/` agent files       | not directly referenced; reads `AGENTS.md`   | ⚠️ indirect only   |
 | Opencode      | `opencode.json` (imports `AGENTS.md`)     | listed in "First Files To Read"              | ⚠️ indirect only   |
+| Gemini        | `.gemini/commands` and `AGENTS.md`         | listed in stack; agent reads on demand       | ✅ documented       |
 
 **Opencode gap**: Opencode uses `opencode.json` (repository root) as its configuration
 entrypoint, which currently imports `AGENTS.md` but does not explicitly list
@@ -37,18 +37,12 @@ entrypoint, which currently imports `AGENTS.md` but does not explicitly list
 `opencode.json`'s instructions would make the startup path explicit. Tracked as a known gap,
 not a critical failure.
 
-## Auto-Memory Distinction
+## Local Memory Distinction
 
-Claude Code's user-level auto-memory (written to `~/.claude/projects/<repo-slug>/memory/`) is
-**separate** from this repo-local `memory/` layer:
-
-- **User-level auto-memory**: private to the user's local Claude Code install; contains session
-  notes, preferences, and per-user context. Not committed to the repository.
-- **Repo-local memory** (`memory/`): committed to the repository; shared across all agents and
-  contributors; authoritative for stable cross-session facts.
-
-Both layers can coexist. The repo-local layer is the canonical shared source; user-level memory
-adds personal context on top. Do not duplicate repo-level decisions in user-level memory.
+Repo-local memory (`memory/`) is committed to the repository, shared across supported agents and
+contributors, and authoritative for stable cross-session facts. User- or tool-local memories may
+exist outside the repository, but they are private caches and must not replace repo-local decisions
+or be treated as reviewable project evidence.
 
 ## Optional MCP Integration Path
 

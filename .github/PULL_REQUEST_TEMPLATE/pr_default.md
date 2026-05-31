@@ -37,11 +37,11 @@ What changed, in one or two sentences.
 - Any assumptions that need to be preserved:
 
 ## Downstream Propagation
-- Parent issue updated or not applicable:
-- Claim map / benchmark report updated or not applicable:
-- Registry or config index updated or not applicable:
-- Context index / memory note updated or not applicable:
-- Follow-up issue opened for deferred propagation or not applicable:
+- Parent issue updated (yes/no/NA):
+- Claim map / benchmark report updated (yes/no/NA):
+- Registry or config index updated (yes/no/NA):
+- Context index / memory note updated (yes/no/NA):
+- Follow-up issue opened for deferred propagation (yes/no/NA):
 - Not-applicable rationale:
 
 For benchmark, registry, claim-map, or paper-facing changes, explicitly say when downstream

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.validation import run_policy_search_candidate as candidate_runner
 from scripts.validation.run_policy_search_candidate import (
     _annotate_initial_overlap_exclusions,
     _baseline_deltas,
@@ -477,6 +478,60 @@ def test_decide_stage_status_treats_named_smoke_stages_as_smoke() -> None:
         )
         == "excluded"
     )
+
+
+def test_run_stage_eval_records_missing_jsonl_as_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A skipped batch without JSONL should produce a recorded non-pass smoke result."""
+
+    def fake_run_map_batch(*args: object, **kwargs: object) -> dict[str, object]:
+        jsonl_path = Path(args[1])
+        assert jsonl_path.name == "smoke__cand.jsonl"
+        assert not jsonl_path.exists()
+        return {
+            "total_jobs": 0,
+            "written": 0,
+            "successful_jobs": 0,
+            "failed_jobs": 0,
+            "skipped_jobs": 1,
+            "out_path": str(jsonl_path),
+            "preflight": {
+                "status": "skipped",
+                "compatibility_status": "incompatible",
+                "compatibility_reason": "ORCA residual model unavailable",
+            },
+            "benchmark_availability": {
+                "status": "not_available",
+                "reason": "planner_prerequisite_unavailable",
+            },
+        }
+
+    monkeypatch.setattr(candidate_runner, "run_map_batch", fake_run_map_batch)
+
+    result = candidate_runner._run_stage_eval(
+        scenarios_or_path=[{"name": "planner_sanity_simple", "map_file": "unused.svg"}],
+        algo="orca_residual_guarded_ppo",
+        algo_cfg={"model_path": "/tmp/missing.zip"},
+        out_dir=tmp_path,
+        tag="smoke__cand",
+        horizon=1,
+        dt=0.1,
+        workers=1,
+        benchmark_profile="experimental",
+    )
+
+    jsonl_path = Path(result["jsonl_path"])
+    summary = result["summary"]
+    assert jsonl_path.exists()
+    assert result["records"] == []
+    assert summary["episodes"] == 0
+    assert summary["stage_artifact_status"]["status"] == "not_available"
+    assert summary["stage_artifact_status"]["reason"] == "missing_jsonl"
+    assert summary["preflight"]["compatibility_status"] == "incompatible"
+    assert summary["benchmark_availability"]["status"] == "not_available"
+    assert decide_stage_status("smoke", {}, summary) == "revise"
 
 
 def test_annotate_initial_overlap_exclusions_requires_first_step_evidence() -> None:

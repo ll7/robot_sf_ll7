@@ -1,0 +1,132 @@
+{
+  "artifact_policy": {
+    "benchmark_evidence": false,
+    "claim_scope": "bounded two-family development stress comparison",
+    "fallback_or_degraded_success": false
+  },
+  "classic_head_on_corridor_route_trials": 100,
+  "commit": "d4a49b26772f72ad082a62d1485611c22034a6d9",
+  "counts": {
+    "failed_trial": 60,
+    "invalid_candidate": 736,
+    "not_available": 3,
+    "valid_failure": 60,
+    "valid_non_failure": 228,
+    "valid_route_trial": 40
+  },
+  "crossing_budget_per_sampler": 256,
+  "crossing_seed": 42,
+  "executed_samplers": [
+    "random",
+    "optuna_tpe",
+    "guided_route_search"
+  ],
+  "families": [
+    "crossing_ttc",
+    "classic_head_on_corridor"
+  ],
+  "issue": 1502,
+  "parent_issue": 1488,
+  "predecessor_issue": 1501,
+  "route_seed": 123,
+  "rows": [
+    {
+      "availability_status": "available",
+      "counts": {
+        "invalid_candidate": 122,
+        "valid_failure": 26,
+        "valid_non_failure": 108
+      },
+      "execution_mode": "candidate_spec",
+      "family": "crossing_ttc",
+      "manifest_path": "crossing_ttc/goal/random/manifest.json",
+      "policy": "goal",
+      "sampler": "random"
+    },
+    {
+      "availability_status": "available",
+      "counts": {
+        "invalid_candidate": 246,
+        "valid_failure": 5,
+        "valid_non_failure": 5
+      },
+      "execution_mode": "candidate_spec",
+      "family": "crossing_ttc",
+      "manifest_path": "crossing_ttc/goal/optuna/manifest.json",
+      "policy": "goal",
+      "sampler": "optuna"
+    },
+    {
+      "availability_status": "available",
+      "counts": {
+        "invalid_candidate": 122,
+        "valid_failure": 24,
+        "valid_non_failure": 110
+      },
+      "execution_mode": "candidate_spec",
+      "family": "crossing_ttc",
+      "manifest_path": "crossing_ttc/orca/random/manifest.json",
+      "policy": "orca",
+      "sampler": "random"
+    },
+    {
+      "availability_status": "available",
+      "counts": {
+        "invalid_candidate": 246,
+        "valid_failure": 5,
+        "valid_non_failure": 5
+      },
+      "execution_mode": "candidate_spec",
+      "family": "crossing_ttc",
+      "manifest_path": "crossing_ttc/orca/optuna/manifest.json",
+      "policy": "orca",
+      "sampler": "optuna"
+    },
+    {
+      "availability_status": "not_available",
+      "counts": {
+        "not_available": 1
+      },
+      "family": "crossing_ttc",
+      "policy": "all",
+      "reason": "Route-level guided search is a design exclusion for the parametric crossing_ttc CandidateSpec family.",
+      "sampler": "guided_route_search"
+    },
+    {
+      "availability_status": "available",
+      "best_score": 0.3876022791660954,
+      "counts": {
+        "failed_trial": 60,
+        "valid_route_trial": 40
+      },
+      "execution_mode": "route_search",
+      "family": "classic_head_on_corridor",
+      "policy": "classic_global_theta_star",
+      "route_override_path": "classic_head_on_corridor/guided_route_search/classic_head_on_corridor_low_20260531_054246_045282/route_overrides.yaml",
+      "sampler": "guided_route_search",
+      "summary_path": "classic_head_on_corridor/guided_route_search/classic_head_on_corridor_low_20260531_054246_045282/summary.json"
+    },
+    {
+      "availability_status": "not_available",
+      "counts": {
+        "not_available": 1
+      },
+      "family": "classic_head_on_corridor",
+      "policy": "all",
+      "reason": "Parametric CandidateSpec search is not applicable to route-level head-on corridor optimization.",
+      "sampler": "random"
+    },
+    {
+      "availability_status": "not_available",
+      "counts": {
+        "not_available": 1
+      },
+      "family": "classic_head_on_corridor",
+      "policy": "all",
+      "reason": "Parametric CandidateSpec search is not applicable to route-level head-on corridor optimization.",
+      "sampler": "optuna_tpe"
+    }
+  ],
+  "schema_version": "issue-1502-adversarial-two-family-summary.v1",
+  "synthetic": false
+}

@@ -96,6 +96,18 @@ def test_drl_vo_fallback_to_goal_action() -> None:
     assert abs(action["vy"]) < 1e-6
 
 
+def test_drl_vo_rejects_local_output_model_path_even_with_fallback() -> None:
+    """Direct DRL-VO construction should share the benchmark local-artifact boundary."""
+    with pytest.raises(ValueError, match="local-only model artifact"):
+        DrlVoPlanner(
+            {
+                "model_path": "output/model_cache/drl_vo_default.pt",
+                "fallback_to_goal": True,
+            },
+            seed=0,
+        )
+
+
 def test_drl_vo_unicycle_fallback_steers_toward_goal() -> None:
     """Unicycle fallback should turn toward the goal instead of always driving straight."""
     planner = DrlVoPlanner(

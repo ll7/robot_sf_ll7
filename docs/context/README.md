@@ -686,6 +686,9 @@ why a change was made rather than a full issue execution transcript.
   records the schema/dimension contract for obstacle-feature predictive datasets, training,
   checkpoints, runtime loading, and the #1218 map-derived obstacle-line data source before any
   same-seed performance comparison.
+* [Issue #1856 Predictive-v2 Coupling Objective](issue_1856_predictive_coupling_objective.md)
+  records the local closed-loop gate and planner-side coupling hypothesis that should run before
+  any renewed predictive-v2 four-way expansion.
 * [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter` .

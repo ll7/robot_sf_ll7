@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.validation import run_predictive_success_campaign as campaign
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def test_checkpoint_token_is_path_sensitive() -> None:
@@ -73,6 +71,86 @@ def test_rank_key_prefers_global_success_before_clearance_when_hard_tied() -> No
         jsonl_path="b.jsonl",
     )
     assert campaign._rank_key(hard_b, global_b) > campaign._rank_key(hard_a, global_a)
+
+
+def test_closed_loop_gate_rejects_success_neutral_clearance_candidate() -> None:
+    """#1856 gate should reject candidates that only improve clearance signals."""
+    ranked = [
+        {
+            "variant": "clearance_only",
+            "hard": {"success_rate": 0.0},
+            "global": {"success_rate": 0.10, "mean_min_distance": 2.4},
+        },
+        {
+            "variant": "baseline_like",
+            "hard": {"success_rate": 0.0},
+            "global": {"success_rate": 0.10, "mean_min_distance": 2.1},
+        },
+    ]
+
+    gate = campaign._closed_loop_gate_result(
+        ranked,
+        baseline_variant="baseline_like",
+        min_global_success_delta=0.02,
+        min_hard_success_delta=0.0,
+        max_min_distance_regression=0.10,
+    )
+
+    assert gate is not None
+    assert gate["passed"] is False
+    assert "global_success_delta_below_gate" in str(gate["reason"])
+
+
+def test_closed_loop_gate_allows_success_gain_with_bounded_clearance_regression() -> None:
+    """#1856 gate should permit a candidate that improves closed-loop success."""
+    ranked = [
+        {
+            "variant": "phase_coupled_sequence_gate",
+            "hard": {"success_rate": 0.1},
+            "global": {"success_rate": 0.14, "mean_min_distance": 2.02},
+        },
+        {
+            "variant": "baseline_like",
+            "hard": {"success_rate": 0.0},
+            "global": {"success_rate": 0.10, "mean_min_distance": 2.1},
+        },
+    ]
+
+    gate = campaign._closed_loop_gate_result(
+        ranked,
+        baseline_variant="baseline_like",
+        min_global_success_delta=0.02,
+        min_hard_success_delta=0.0,
+        max_min_distance_regression=0.10,
+    )
+
+    assert gate is not None
+    assert gate["passed"] is True
+    assert gate["deltas"]["global_success"] == pytest.approx(0.04)
+    assert gate["deltas"]["global_mean_min_distance"] == pytest.approx(-0.08)
+
+
+def test_issue_1856_coupling_grid_touches_planner_objective_not_checkpoint() -> None:
+    """The #1856 grid should revise planner coupling, not pick a new model row."""
+    path = (
+        Path(__file__).parents[2]
+        / "configs"
+        / "benchmarks"
+        / "predictive_sweep_planner_grid_v2_coupling_gate.yaml"
+    )
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    variants = {item["name"]: item["params"] for item in payload["variants"]}
+
+    assert set(variants) == {"baseline_like", "phase_coupled_sequence_gate"}
+    revised = variants["phase_coupled_sequence_gate"]
+    assert revised["predictive_sequence_search_enabled"] is True
+    assert revised["predictive_phase_logic_enabled"] is True
+    assert revised["predictive_progress_risk_weight"] > variants["baseline_like"].get(
+        "predictive_progress_risk_weight",
+        0.0,
+    )
+    assert "predictive_checkpoint_path" not in revised
+    assert "predictive_model_id" not in revised
 
 
 def test_run_eval_fails_when_jsonl_artifact_missing(monkeypatch, tmp_path: Path) -> None:

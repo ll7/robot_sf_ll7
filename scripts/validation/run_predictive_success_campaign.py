@@ -100,6 +100,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bootstrap-samples", type=int, default=1000)
     parser.add_argument("--bootstrap-seed", type=int, default=42)
     parser.add_argument(
+        "--closed-loop-gate-baseline-variant",
+        type=str,
+        default=None,
+        help=(
+            "Optional baseline planner-grid variant for a fail-closed local gate. "
+            "When set, the best ranked variant must improve closed-loop success over this row."
+        ),
+    )
+    parser.add_argument(
+        "--closed-loop-gate-min-global-success-delta",
+        type=float,
+        default=0.0,
+        help="Minimum best-minus-baseline global success-rate delta for the closed-loop gate.",
+    )
+    parser.add_argument(
+        "--closed-loop-gate-min-hard-success-delta",
+        type=float,
+        default=0.0,
+        help="Minimum best-minus-baseline hard-suite success-rate delta for the closed-loop gate.",
+    )
+    parser.add_argument(
+        "--closed-loop-gate-max-min-distance-regression",
+        type=float,
+        default=float("inf"),
+        help=(
+            "Maximum allowed global mean-min-distance regression in meters. "
+            "Use a finite value to reject success gains that give back too much clearance."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("output/tmp/predictive_planner/campaigns/latest_success_campaign"),
@@ -273,6 +303,75 @@ def _rank_key(hard: EvalResult, global_res: EvalResult) -> tuple[float, float, f
     )
 
 
+def _closed_loop_gate_result(
+    ranked: list[dict],
+    *,
+    baseline_variant: str | None,
+    min_global_success_delta: float,
+    min_hard_success_delta: float,
+    max_min_distance_regression: float,
+) -> dict[str, object] | None:
+    """Evaluate an optional closed-loop gate over ranked campaign results."""
+    if not baseline_variant:
+        return None
+    if not ranked:
+        return {
+            "passed": False,
+            "reason": "no_ranked_results",
+            "baseline_variant": baseline_variant,
+        }
+
+    baseline = next(
+        (row for row in ranked if str(row.get("variant")) == str(baseline_variant)),
+        None,
+    )
+    if baseline is None:
+        return {
+            "passed": False,
+            "reason": "baseline_variant_missing",
+            "baseline_variant": baseline_variant,
+        }
+
+    best = ranked[0]
+    hard_delta = float(best["hard"]["success_rate"]) - float(baseline["hard"]["success_rate"])
+    global_delta = float(best["global"]["success_rate"]) - float(baseline["global"]["success_rate"])
+    best_global_min_distance = float(best["global"]["mean_min_distance"])
+    baseline_global_min_distance = float(baseline["global"]["mean_min_distance"])
+    min_distance_delta = best_global_min_distance - baseline_global_min_distance
+
+    reasons: list[str] = []
+    if global_delta < float(min_global_success_delta):
+        reasons.append("global_success_delta_below_gate")
+    if hard_delta < float(min_hard_success_delta):
+        reasons.append("hard_success_delta_below_gate")
+    if math.isfinite(float(max_min_distance_regression)):
+        if not (
+            math.isfinite(best_global_min_distance) and math.isfinite(baseline_global_min_distance)
+        ):
+            reasons.append("global_min_distance_not_finite")
+        elif min_distance_delta < -float(max_min_distance_regression):
+            reasons.append("global_min_distance_regression_above_gate")
+
+    return {
+        "passed": not reasons,
+        "reason": "passed" if not reasons else ",".join(reasons),
+        "baseline_variant": baseline_variant,
+        "candidate_variant": best["variant"],
+        "thresholds": {
+            "min_global_success_delta": float(min_global_success_delta),
+            "min_hard_success_delta": float(min_hard_success_delta),
+            "max_min_distance_regression": float(max_min_distance_regression),
+        },
+        "deltas": {
+            "hard_success": hard_delta,
+            "global_success": global_delta,
+            "global_mean_min_distance": min_distance_delta,
+        },
+        "baseline": baseline,
+        "candidate": best,
+    }
+
+
 def _checkpoint_token(checkpoint: str) -> str:
     """Return collision-resistant token for checkpoint artifact naming."""
     ckpt_hash = hashlib.sha1(str(Path(checkpoint).resolve()).encode("utf-8")).hexdigest()[:10]
@@ -298,6 +397,117 @@ def _nan_to_none(value: object) -> object:
     return value
 
 
+def _write_success_reports(summary: dict, output_dir: Path) -> tuple[Path, Path]:
+    """Write successful or gate-failed campaign reports."""
+    ranked = summary["ranked"]
+    top = summary["best"]
+    gate = summary.get("closed_loop_gate")
+
+    json_path = output_dir / "campaign_summary.json"
+    json_path.write_text(json.dumps(_nan_to_none(summary), indent=2), encoding="utf-8")
+
+    md_lines = [
+        "# Predictive Success Campaign",
+        "",
+        f"- Generated: `{summary['generated_at']}`",
+        f"- Scenario matrix: `{summary['scenario_matrix']}`",
+        f"- Hard manifest: `{summary['hard_seed_manifest']}`",
+        f"- Planner grid: `{summary['planner_grid']}`",
+        f"- Candidates: `{summary['num_candidates']}`",
+        "",
+        "## Best Candidate",
+        "",
+        f"- Checkpoint: `{top['checkpoint']}`",
+        f"- Variant: `{top['variant']}`",
+        f"- Hard success: `{top['hard']['success_rate']:.4f}` "
+        f"(95% CI `{top['hard']['success_ci_low']:.4f}`..`{top['hard']['success_ci_high']:.4f}`)",
+        f"- Hard mean min-distance: `{top['hard']['mean_min_distance']:.4f}`",
+        f"- Global success: `{top['global']['success_rate']:.4f}` "
+        f"(95% CI `{top['global']['success_ci_low']:.4f}`.."
+        f"`{top['global']['success_ci_high']:.4f}`)",
+        f"- Global mean min-distance: `{top['global']['mean_min_distance']:.4f}`",
+        "",
+        "## Ranking (top 10)",
+        "",
+        "| Rank | Variant | Checkpoint | Hard SR | Hard MinDist | Global SR | Global MinDist |",
+        "|---:|---|---|---:|---:|---:|---:|",
+    ]
+    for i, row in enumerate(ranked[:10], start=1):
+        md_lines.append(
+            "| "
+            f"{i} | {row['variant']} | {_checkpoint_label(row['checkpoint'])} | "
+            f"{row['hard']['success_rate']:.4f} | {row['hard']['mean_min_distance']:.4f} | "
+            f"{row['global']['success_rate']:.4f} | {row['global']['mean_min_distance']:.4f} |"
+        )
+
+    if gate is not None:
+        md_lines.extend(
+            [
+                "",
+                "## Closed-Loop Gate",
+                "",
+                f"- Status: `{'passed' if gate['passed'] else 'failed'}`",
+                f"- Reason: `{gate['reason']}`",
+                f"- Baseline variant: `{gate['baseline_variant']}`",
+                f"- Candidate variant: `{gate['candidate_variant']}`",
+                f"- Global success delta: `{gate['deltas']['global_success']:.4f}`",
+                f"- Hard success delta: `{gate['deltas']['hard_success']:.4f}`",
+                f"- Global mean-min-distance delta: "
+                f"`{gate['deltas']['global_mean_min_distance']:.4f}`",
+            ]
+        )
+
+    md_path = output_dir / "campaign_report.md"
+    md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+    return json_path, md_path
+
+
+def _run_campaign_results(
+    *,
+    args: argparse.Namespace,
+    variants: list[dict],
+    hard_scenarios: list[dict],
+) -> list[dict]:
+    """Run each checkpoint and planner-grid variant pair."""
+    results: list[dict] = []
+    for checkpoint in args.checkpoints:
+        if not Path(checkpoint).exists():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
+        for variant in variants:
+            name = str(variant["name"])
+            cfg = _base_algo_cfg(checkpoint)
+            cfg.update(dict(variant.get("params", {})))
+            hard_res = _run_eval(
+                scenarios_or_path=hard_scenarios,
+                suite_name="hard",
+                checkpoint=checkpoint,
+                variant_name=name,
+                algo_cfg=cfg,
+                args=args,
+                output_dir=args.output_dir,
+            )
+            global_res = _run_eval(
+                scenarios_or_path=args.scenario_matrix,
+                suite_name="global",
+                checkpoint=checkpoint,
+                variant_name=name,
+                algo_cfg=cfg,
+                args=args,
+                output_dir=args.output_dir,
+            )
+            results.append(
+                {
+                    "checkpoint": checkpoint,
+                    "variant": name,
+                    "config": cfg,
+                    "hard": hard_res.__dict__,
+                    "global": global_res.__dict__,
+                    "ranking_key": list(_rank_key(hard_res, global_res)),
+                }
+            )
+    return results
+
+
 def main() -> int:
     """Execute full campaign and write machine + human-readable reports."""
     args = parse_args()
@@ -311,41 +521,11 @@ def main() -> int:
     results: list[dict] = []
 
     try:
-        for checkpoint in args.checkpoints:
-            if not Path(checkpoint).exists():
-                raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
-            for variant in variants:
-                name = str(variant["name"])
-                cfg = _base_algo_cfg(checkpoint)
-                cfg.update(dict(variant.get("params", {})))
-                hard_res = _run_eval(
-                    scenarios_or_path=hard_scenarios,
-                    suite_name="hard",
-                    checkpoint=checkpoint,
-                    variant_name=name,
-                    algo_cfg=cfg,
-                    args=args,
-                    output_dir=args.output_dir,
-                )
-                global_res = _run_eval(
-                    scenarios_or_path=args.scenario_matrix,
-                    suite_name="global",
-                    checkpoint=checkpoint,
-                    variant_name=name,
-                    algo_cfg=cfg,
-                    args=args,
-                    output_dir=args.output_dir,
-                )
-                results.append(
-                    {
-                        "checkpoint": checkpoint,
-                        "variant": name,
-                        "config": cfg,
-                        "hard": hard_res.__dict__,
-                        "global": global_res.__dict__,
-                        "ranking_key": list(_rank_key(hard_res, global_res)),
-                    }
-                )
+        results = _run_campaign_results(
+            args=args,
+            variants=variants,
+            hard_scenarios=hard_scenarios,
+        )
     except (Exception, SystemExit) as exc:
         if isinstance(exc, MissingCampaignArtifactError):
             failure = exc.to_failure_payload()
@@ -415,47 +595,22 @@ def main() -> int:
         "best": top,
         "ranked": ranked,
     }
+    gate = _closed_loop_gate_result(
+        ranked,
+        baseline_variant=args.closed_loop_gate_baseline_variant,
+        min_global_success_delta=float(args.closed_loop_gate_min_global_success_delta),
+        min_hard_success_delta=float(args.closed_loop_gate_min_hard_success_delta),
+        max_min_distance_regression=float(args.closed_loop_gate_max_min_distance_regression),
+    )
+    if gate is not None:
+        summary["closed_loop_gate"] = gate
+    if gate is not None and not bool(gate["passed"]):
+        summary["status"] = "failed_closed_loop_gate"
 
-    json_path = args.output_dir / "campaign_summary.json"
-    json_path.write_text(json.dumps(_nan_to_none(summary), indent=2), encoding="utf-8")
-
-    md_lines = [
-        "# Predictive Success Campaign",
-        "",
-        f"- Generated: `{summary['generated_at']}`",
-        f"- Scenario matrix: `{summary['scenario_matrix']}`",
-        f"- Hard manifest: `{summary['hard_seed_manifest']}`",
-        f"- Planner grid: `{summary['planner_grid']}`",
-        f"- Candidates: `{summary['num_candidates']}`",
-        "",
-        "## Best Candidate",
-        "",
-        f"- Checkpoint: `{top['checkpoint']}`",
-        f"- Variant: `{top['variant']}`",
-        f"- Hard success: `{top['hard']['success_rate']:.4f}` "
-        f"(95% CI `{top['hard']['success_ci_low']:.4f}`..`{top['hard']['success_ci_high']:.4f}`)",
-        f"- Hard mean min-distance: `{top['hard']['mean_min_distance']:.4f}`",
-        f"- Global success: `{top['global']['success_rate']:.4f}` "
-        f"(95% CI `{top['global']['success_ci_low']:.4f}`..`{top['global']['success_ci_high']:.4f}`)",
-        f"- Global mean min-distance: `{top['global']['mean_min_distance']:.4f}`",
-        "",
-        "## Ranking (top 10)",
-        "",
-        "| Rank | Variant | Checkpoint | Hard SR | Hard MinDist | Global SR | Global MinDist |",
-        "|---:|---|---|---:|---:|---:|---:|",
-    ]
-    for i, row in enumerate(ranked[:10], start=1):
-        md_lines.append(
-            "| "
-            f"{i} | {row['variant']} | {_checkpoint_label(row['checkpoint'])} | "
-            f"{row['hard']['success_rate']:.4f} | {row['hard']['mean_min_distance']:.4f} | "
-            f"{row['global']['success_rate']:.4f} | {row['global']['mean_min_distance']:.4f} |"
-        )
-
-    md_path = args.output_dir / "campaign_report.md"
-    md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
-
+    json_path, md_path = _write_success_reports(summary, args.output_dir)
     print(json.dumps({"summary": str(json_path), "report": str(md_path)}, indent=2))
+    if gate is not None and not bool(gate["passed"]):
+        return 2
     return 0
 
 

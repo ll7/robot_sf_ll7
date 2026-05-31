@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from scripts.validation.check_local_model_artifacts import (
+    REPO_ROOT,
     check_local_model_artifacts,
     main,
 )
@@ -30,6 +31,58 @@ def test_checked_in_promoted_surfaces_have_no_local_output_model_paths() -> None
     rows = check_local_model_artifacts([])
 
     assert rows == []
+
+
+def test_default_cli_paths_are_stable_from_subdirectory(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Default repo config surfaces should resolve even when invoked below the repo root."""
+    monkeypatch.chdir(REPO_ROOT / "scripts")
+    monkeypatch.setattr("sys.argv", ["check_local_model_artifacts.py"])
+
+    assert main() == 0
+    stdout = capsys.readouterr().out
+    assert "configs/baselines/" in stdout
+    assert "../configs" not in stdout
+
+
+def test_promoted_surface_paths_expand_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Repo-relative promoted surfaces should not depend on the caller's current directory."""
+    config = tmp_path / "configs" / "promoted.yaml"
+    promoted_surfaces = tmp_path / "configs" / "promoted_config_surfaces.yaml"
+    caller_cwd = tmp_path / "scripts"
+    config.parent.mkdir()
+    caller_cwd.mkdir()
+    config.write_text("model_path: output/model_cache/demo/model.zip\n", encoding="utf-8")
+    promoted_surfaces.write_text(
+        """
+version: 1
+promoted_configs:
+  - path: configs/promoted.yaml
+    reason: Synthetic promoted config.
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(caller_cwd)
+    monkeypatch.setattr(
+        "scripts.validation.check_local_model_artifacts.REPO_ROOT",
+        tmp_path,
+    )
+
+    rows = check_local_model_artifacts(
+        [],
+        blocklist_path=tmp_path / "missing.yaml",
+        promoted_surfaces_path=promoted_surfaces,
+    )
+
+    assert len(rows) == 1
+    assert rows[0].path == "configs/promoted.yaml"
+    assert rows[0].status == "promoted_blocked"
 
 
 def test_unblocked_local_model_path_fails_preflight(tmp_path: Path) -> None:

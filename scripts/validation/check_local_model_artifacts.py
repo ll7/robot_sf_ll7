@@ -16,9 +16,10 @@ from typing import Any
 
 import yaml
 
-DEFAULT_SCAN_ROOTS = (Path("configs/baselines"),)
-DEFAULT_BLOCKLIST = Path("configs/baselines/local_model_artifact_blocklist.yaml")
-DEFAULT_PROMOTED_SURFACES = Path("configs/benchmarks/promoted_config_surfaces.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SCAN_ROOTS = (REPO_ROOT / "configs/baselines",)
+DEFAULT_BLOCKLIST = REPO_ROOT / "configs/baselines/local_model_artifact_blocklist.yaml"
+DEFAULT_PROMOTED_SURFACES = REPO_ROOT / "configs/benchmarks/promoted_config_surfaces.yaml"
 LOCAL_MODEL_KEYS = {"model_path", "resume_from"}
 PROMOTED_BLOCKED_STATUS = "promoted_blocked"
 
@@ -67,9 +68,14 @@ def _iter_yaml_files(paths: list[Path]) -> list[Path]:
 def _path_lookup_candidates(path: Path) -> list[str]:
     """Return stable path spellings for config-surface matching."""
     candidates = [path.as_posix()]
+    resolved = path.resolve()
+    try:
+        candidates.append(resolved.relative_to(REPO_ROOT).as_posix())
+    except ValueError:
+        pass
     if path.is_absolute():
         try:
-            candidates.append(path.relative_to(Path.cwd()).as_posix())
+            candidates.append(resolved.relative_to(Path.cwd().resolve()).as_posix())
         except ValueError:
             pass
     candidates.append(path.name)
@@ -79,7 +85,7 @@ def _path_lookup_candidates(path: Path) -> list[str]:
 def _display_path(path: Path) -> str:
     """Return the repository-relative path when available."""
     try:
-        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+        return path.resolve().relative_to(REPO_ROOT).as_posix()
     except ValueError:
         return path.as_posix()
 
@@ -179,7 +185,10 @@ def check_local_model_artifacts(
     blocklist = _load_blocklist(blocklist_path)
     promoted_surfaces = _load_promoted_surfaces(promoted_surfaces_path)
     expanded_scan_paths = list(scan_paths)
-    expanded_scan_paths.extend(Path(path) for path in promoted_surfaces)
+    expanded_scan_paths.extend(
+        path if path.is_absolute() else REPO_ROOT / path
+        for path in (Path(path) for path in promoted_surfaces)
+    )
     rows: list[LocalModelReference] = []
     for yaml_path in _iter_yaml_files(expanded_scan_paths):
         if yaml_path == blocklist_path:

@@ -50,6 +50,13 @@ files that agents read on demand.
   Wave-5/6 attribution: eval-aligned training explains ~97% of the 0.586→0.929 PPO lift;
   curriculum/capacity/foresight add only a small foresight-gated residual.
 
+### `workflows/`
+
+- [Agent Workflow Lessons 2026-05-31](workflows/2026-05-31_agent_workflow_lessons.md)
+  Durable issue/PR workflow lessons: re-query live GitHub state before writes, inspect delegated
+  worker relevance before treating results as proof, treat provider rate-limit metadata as no
+  evidence, and bind final PR readiness to committed branch `HEAD`.
+
 ### `failures/`
 
 - [Failure Patterns: Memory Misuse And Staleness](failures/2026-04-13_memory_misuse_and_staleness.md)

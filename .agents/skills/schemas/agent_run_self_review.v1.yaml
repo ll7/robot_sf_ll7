@@ -1,0 +1,27 @@
+agent_run_self_review:
+  schema: agent_run_self_review.v1
+  objective: string
+  run_scope:
+    issues:
+    - '#1234'
+    files:
+    - path
+    agents:
+    - name-or-id
+  outcome: useful | mixed | failed | incomplete
+  validation:
+  - command: string
+    result: pass | fail | skipped
+    note: string
+  blockers:
+  - string
+  reusable_lessons:
+  - class: routing | prompt-contract | skill-overhead | validation | file-scope | tooling
+    confidence: low | medium | high
+    lesson: string
+    promotion: inbox-only | promote-to-skill | promote-to-doc | no-action
+  artifact_review:
+    compact_artifacts_checked: true | false
+    local_validation_overrode_agent_summary: true | false
+    note_path: optional
+  next_action: string

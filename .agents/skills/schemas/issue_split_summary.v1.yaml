@@ -1,0 +1,27 @@
+issue_split_summary:
+  schema: issue_split_summary.v1
+  parent_issue: '#1234'
+  mode: draft-only | created | duplicate-found | blocked
+  duplicate_check:
+    queries:
+    - gh issue list ...
+    matches:
+    - issue: '#1235'
+      reason: equivalent child scope already exists
+  proposed_children:
+  - title: string
+    issue: '#optional'
+    url: optional
+    readiness: ready_local | blocked_external | blocked_slurm | decision_required | duplicate | too_broad
+    blocker: none | string
+    scope: string
+    non_goals:
+    - string
+    validation:
+    - command-or-evidence-path
+  recommendation:
+    action: create_child | use_existing_child | clarify_parent | stop_blocked
+    rationale: string
+  parent_update:
+    next_implementable_child: added | skipped
+    note: string

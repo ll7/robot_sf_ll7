@@ -140,6 +140,10 @@ Use the schema to:
 - preserve the best issue-splitting candidate without classifying parent, epic, blocked, or
   analysis-only issues as ready implementation work.
 
+Issue splitting now has the narrower `issue_split_summary.v1` companion shape. Use it only for
+parent-to-child decomposition outputs: parent issue, duplicate-check queries, proposed child
+readiness, blockers, validation paths, and the recommended follow-up action.
+
 ### Do Not Duplicate Agent-Run Self-Review Workflow
 
 Agent workflow self-review already exists as a reusable skill and `docs/context/` is the durable
@@ -149,6 +153,11 @@ Better follow-up:
 
 - document when a self-review note is required after delegated runs;
 - keep compact lessons in existing context notes or workflow-improvement inboxes.
+
+Issue #1783 adds `agent_run_self_review.v1` for compact self-review handoffs. Use it as a
+comparison-friendly summary for objective, issue/file scope, validation, blockers, reusable lessons,
+and whether local validation overrode sparse agent output; it does not replace the existing inbox
+or context-note surfaces.
 
 ### Treat Research Priority As Maintainer Decision, Not Workflow Fact
 

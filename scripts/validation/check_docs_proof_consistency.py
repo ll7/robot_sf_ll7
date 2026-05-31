@@ -30,6 +30,7 @@ _ABSOLUTE_LOCAL_PATH_RE = re.compile(r"(?<!\w)(/home/[^\s`'\"<>)\]}]+|/Users/[^\
 _OUTPUT_PATH_RE = re.compile(
     r"(?<!\w)(?:output/[^\s`'\"<>)\]}]+|/home/[^\s`'\"<>)\]}]*/output/[^\s`'\"<>)\]}]+|/Users/[^\s`'\"<>)\]}]*/output/[^\s`'\"<>)\]}]+)"
 )
+_TEXT_EVIDENCE_SUFFIXES = {".md", ".json", ".yaml", ".yml", ".txt"}
 _VALIDATION_SKIP_RE = re.compile(r"\bno validation commands were run\b", re.IGNORECASE)
 _COMMAND_HINT_RE = re.compile(
     r"(`[^`\n]*(?:uv run|pytest|ruff|scripts/dev/|python )[^`\n]*`|```(?:bash|sh)?[\s\S]*?(?:uv run|pytest|ruff|scripts/dev/|python )[\s\S]*?```)",
@@ -368,8 +369,13 @@ def _catalog_entry_evidence_diagnostics(
     """Validate durable evidence paths referenced by catalog evidence rows."""
     if entry.get("status") != "evidence" or path is None or not (repo_root / path).is_file():
         return []
+    if path.suffix not in _TEXT_EVIDENCE_SUFFIXES:
+        return []
 
-    text = _read_text(repo_root / path)
+    try:
+        text = _read_text(repo_root / path)
+    except UnicodeDecodeError:
+        return []
     scan_text = _strip_fenced_code_blocks(text) if path.suffix == ".md" else text
     diagnostics: list[Diagnostic] = []
     if _OUTPUT_PATH_RE.search(scan_text):
@@ -396,7 +402,10 @@ def _context_catalog_diagnostics(catalog_path: Path, *, repo_root: Path) -> list
     if not full_catalog_path.exists():
         return diagnostics
 
-    payload = _load_yaml(full_catalog_path)
+    try:
+        payload = _load_yaml(full_catalog_path)
+    except yaml.YAMLError as exc:
+        return [Diagnostic(catalog_path, f"context catalog is not a valid YAML file: {exc}")]
     if not isinstance(payload, dict):
         return [Diagnostic(catalog_path, "context catalog must be a YAML mapping")]
     if payload.get("version") != 1:

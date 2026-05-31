@@ -518,3 +518,46 @@ entries:
     )
 
     assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_context_catalog_skips_binary_evidence_scan(tmp_path: Path) -> None:
+    """Binary evidence entries should not crash text-only provenance checks."""
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+    evidence = repo_root / "docs/context/evidence/frame.png"
+    evidence.write_bytes(b"\x89PNG\r\n\x1a\n\x80\x81")
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        """
+version: 1
+entries:
+  - path: docs/context/evidence/frame.png
+    status: evidence
+    freshness: evidence
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == []
+
+
+def test_context_catalog_reports_malformed_yaml(tmp_path: Path) -> None:
+    """Malformed catalog YAML should return a diagnostic instead of a traceback."""
+    repo_root = tmp_path
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text("version: [\n", encoding="utf-8")
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    assert len(diagnostics) == 1
+    assert "context catalog is not a valid YAML file" in diagnostics[0].message

@@ -106,6 +106,28 @@ def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -
     assert stage["paper_facing"] is False
 
 
+def test_adaptive_proxemic_selector_candidate_is_diagnostic_only() -> None:
+    """The adaptive proxemic selector should be registered as diagnostic-only."""
+    registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"
+
+    entry, payload, merged, config_path = load_candidate_definition(
+        registry_path,
+        "adaptive_proxemic_selector_v0",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["training_required"] is False
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "adaptive_proxemic_selector_v0"
+    assert payload["params"]["diagnostic_only"] is True
+    assert merged["diagnostic_only"] is True
+    assert sorted(merged["profiles"]) == ["conservative", "neutral", "open"]
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/adaptive_proxemic_selector_v0.yaml").resolve()
+    )
+
+
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
     """Scenario names should drive family inference when scenario_id is absent."""
     grouped = split_scenarios_by_family(

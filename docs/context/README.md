@@ -200,6 +200,8 @@ knowledge, not every transient iteration detail.
   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
 * Issue #1502 Adversarial Two-Family Run (2026-05-31):
   [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md)
+* Issue #1503 Adversarial Stress-Coverage Synthesis (2026-05-31):
+  [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:
@@ -212,6 +214,8 @@ knowledge, not every transient iteration detail.
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * SLURM issue batch status 2026-05-21 (canonical SLURM issue-status ledger):
   [slurm_issue_batch_status_2026-05-21.md](slurm_issue_batch_status_2026-05-21.md)
+* SLURM job discovery snapshot 2026-05-31:
+  [slurm_job_discovery_2026-05-31.md](slurm_job_discovery_2026-05-31.md)
 * Issue #1776 State-Label Routing:
   [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md)
 * Issue #1397 Oracle Imitation Launch Packet:

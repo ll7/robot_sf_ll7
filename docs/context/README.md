@@ -222,6 +222,8 @@ knowledge, not every transient iteration detail.
   [issue_1933_perturbation_seed_coverage.md](issue_1933_perturbation_seed_coverage.md)
 * Issue #1935 Stronger Perturbation Planner (2026-05-31):
   [issue_1935_stronger_perturbation_planner.md](issue_1935_stronger_perturbation_planner.md)
+* Issue #1937 Pedestrian Route Offset Pilot (2026-05-31):
+  [issue_1937_ped_route_offset.md](issue_1937_ped_route_offset.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:

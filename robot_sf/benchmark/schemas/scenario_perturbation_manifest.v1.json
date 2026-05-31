@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/robot-sf/scenario_perturbation_manifest.v1.json",
   "title": "RobotSF Scenario Perturbation Manifest (v1)",
-  "description": "Minimal manifest for no-op baselines and bounded robot-route perturbation preflight. Validity preflight is not benchmark execution evidence.",
+  "description": "Minimal manifest for no-op baselines and bounded route perturbation preflight. Validity preflight is not benchmark execution evidence.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -125,7 +125,8 @@
         "family": {
           "enum": [
             "noop",
-            "robot_route_offset"
+            "robot_route_offset",
+            "pedestrian_route_offset"
           ]
         },
         "seeds": {
@@ -177,7 +178,10 @@
           "if": {
             "properties": {
               "family": {
-                "const": "robot_route_offset"
+                "enum": [
+                  "robot_route_offset",
+                  "pedestrian_route_offset"
+                ]
               }
             },
             "required": [

@@ -20,6 +20,13 @@ FIXTURE_PATH = (
     / "simulation_trace_export_v1"
     / "minimal_trace.json"
 )
+MATERIALIZED_FIXTURE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "analysis_workbench"
+    / "simulation_trace_export_v1"
+    / "planner_sanity_open_episode_0000.json"
+)
 
 
 def test_load_minimal_simulation_trace_export_fixture() -> None:
@@ -93,3 +100,29 @@ def test_simulation_trace_export_schema_errors_keep_numeric_frame_order() -> Non
     assert next(
         index for index, error in enumerate(errors) if error.startswith("/frames/2:")
     ) < next(index for index, error in enumerate(errors) if error.startswith("/frames/10:"))
+
+
+def test_materialized_trace_fixture_has_source_provenance_and_event_ids() -> None:
+    """Materialized campaign slice keeps provenance and stable event identifiers."""
+
+    trace = load_simulation_trace_export(MATERIALIZED_FIXTURE_PATH)
+
+    assert trace.trace_id == "planner_sanity_open-ep0-seed7-source-f6b33f7c"
+    assert trace.source.scenario_id == "planner_sanity_open"
+    assert trace.source.planner_id == "trace_fixture_gen"
+    assert trace.source.seed == 7
+    assert (
+        "scripts.tools.build_simulation_trace_export from "
+        "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000.jsonl "
+        "source_sha256:f6b33f7c4a67" in trace.source.generated_by
+    )
+    assert [frame.step for frame in trace.frames] == [1, 2, 3]
+    assert [frame.planner["event"] for frame in trace.frames] == ["step", "step", "step"]
+    assert [
+        frame.planner["event_id"]
+        for frame in trace.frames
+    ] == [
+        "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0000",
+        "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0001",
+        "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0002",
+    ]

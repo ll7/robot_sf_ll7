@@ -14,6 +14,7 @@ from robot_sf.manual_control.modes import (
     ensure_supported_mvp_mode,
     view_mode_spec,
 )
+from robot_sf.render import sim_view as sim_view_module
 from robot_sf.render.sim_view import SimulationView
 
 
@@ -117,6 +118,37 @@ def test_sim_view_robot_static_camera_centers_robot_without_rotating_heading():
 
     assert view._scale_tuple((2.0, 3.0)) == pytest.approx((50.0, 40.0))
     assert view._scale_tuple((3.0, 3.0)) == pytest.approx((60.0, 40.0))
+
+
+def test_sim_view_robot_static_grid_uses_centered_camera_transform(monkeypatch):
+    """Robot-static grid should stay aligned with robot-centered world coordinates."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.set_manual_view_mode(ManualViewMode.ROBOT_STATIC)
+    view._move_camera(SimpleNamespace(robot_pose=((50.0, 50.0), 0.0)))
+    line_calls = []
+    blit_calls = []
+
+    class _Screen:
+        def blit(self, source, dest):
+            blit_calls.append((source, dest))
+
+    class _Font:
+        def render(self, text, *_args):
+            return f"label:{text}"
+
+    view.screen = _Screen()
+    monkeypatch.setattr(
+        sim_view_module.pygame.draw,
+        "line",
+        lambda _screen, _color, start, end: line_calls.append((start, end)),
+    )
+    monkeypatch.setattr(sim_view_module.pygame.font, "Font", lambda *_args: _Font())
+
+    view._draw_grid(grid_increment=5)
+
+    assert ((0, 40.0), (100, 40.0)) in line_calls
+    assert ((50.0, 0), (50.0, 80)) in line_calls
+    assert blit_calls
 
 
 def test_ensure_supported_mvp_mode_accepts_supported_string_inputs():

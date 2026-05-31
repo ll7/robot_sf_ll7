@@ -3,7 +3,7 @@
 import os
 import sys
 from dataclasses import dataclass, field
-from math import cos, pi, sin
+from math import ceil, cos, floor, pi, sin
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
@@ -1715,6 +1715,9 @@ class SimulationView:
         """
         if self.manual_view_mode == "ego_up":
             return
+        if self._camera_center_world is not None and self._camera_rotation_rad is not None:
+            self._draw_camera_aligned_grid(grid_increment, grid_color)
+            return
         scaled_grid_size = grid_increment * self.scaling
         font = pygame.font.Font(None, 24)
         # draw the vertical lines
@@ -1740,3 +1743,49 @@ class SimulationView:
             )
             label = font.render(str(int(y / self.scaling)), 1, grid_color)
             self.screen.blit(label, (0, y + self.offset[1]))
+
+    def _draw_camera_aligned_grid(
+        self,
+        grid_increment: int,
+        grid_color: RgbColor,
+    ) -> None:
+        """Draw an unrotated grid through the active camera transform."""
+        if self._camera_center_world is None:
+            return
+        step_world = float(grid_increment)
+        if step_world <= 0.0:
+            return
+        center_x, center_y = self._camera_center_world
+        world_left = center_x - self.width / (2.0 * self.scaling)
+        world_right = center_x + self.width / (2.0 * self.scaling)
+        world_top = center_y - self.height / (2.0 * self.scaling)
+        world_bottom = center_y + self.height / (2.0 * self.scaling)
+
+        font = pygame.font.Font(None, 24)
+        x = floor(world_left / step_world) * step_world
+        end_x = ceil(world_right / step_world) * step_world
+        while x <= end_x + 1e-9:
+            screen_x, _ = self._scale_tuple((x, center_y))
+            pygame.draw.line(
+                self.screen,
+                grid_color,
+                (screen_x, 0),
+                (screen_x, self.height),
+            )
+            label = font.render(str(int(x)), 1, grid_color)
+            self.screen.blit(label, (screen_x, 0))
+            x += step_world
+
+        y = floor(world_top / step_world) * step_world
+        end_y = ceil(world_bottom / step_world) * step_world
+        while y <= end_y + 1e-9:
+            _, screen_y = self._scale_tuple((center_x, y))
+            pygame.draw.line(
+                self.screen,
+                grid_color,
+                (0, screen_y),
+                (self.width, screen_y),
+            )
+            label = font.render(str(int(y)), 1, grid_color)
+            self.screen.blit(label, (0, screen_y))
+            y += step_world

@@ -76,6 +76,7 @@ from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationProfile,
     not_available_saturation_metrics,
+    validate_actuation_profile_claim_boundary,
     validate_synthetic_actuation_profile,
 )
 from robot_sf.benchmark.utils import (
@@ -1619,6 +1620,8 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
     synthetic_actuation_raw = payload.get("synthetic_actuation_profile")
     if synthetic_actuation_raw is not None and not isinstance(synthetic_actuation_raw, dict):
         raise TypeError("synthetic_actuation_profile must be a mapping when provided")
+    if synthetic_actuation_raw is not None:
+        validate_actuation_profile_claim_boundary(synthetic_actuation_raw)
     latency_stress_raw = payload.get("latency_stress_profile")
     kinematics_matrix = _normalize_kinematics_matrix(
         payload.get("kinematics_matrix", ["differential_drive"])
@@ -1688,6 +1691,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                     str(synthetic_actuation_raw.get("claim_scope", "synthetic-only")).strip()
                     or "synthetic-only"
                 ),
+                claim_boundary=str(synthetic_actuation_raw.get("claim_boundary", "")).strip(),
                 max_linear_accel_m_s2=float(
                     synthetic_actuation_raw.get("max_linear_accel_m_s2", 0.0)
                 ),

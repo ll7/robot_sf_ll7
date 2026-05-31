@@ -3,8 +3,22 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+
+SYNTHETIC_ACTUATION_CLAIM_SCOPE = "synthetic-only"
+SYNTHETIC_ACTUATION_CLAIM_BOUNDARY = "diagnostic-only"
+CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS = (
+    "source_id",
+    "source_uri",
+    "source_type",
+    "profile_version",
+    "measurement_date",
+    "supported_actuation_fields",
+    "units",
+    "claim_boundary",
+)
 
 _LATENCY_MODE_TO_STEPS = {
     "zero-step-delay": 0,
@@ -30,7 +44,8 @@ class SyntheticActuationProfile:
     latency_mode: str
     update_mode: str
     profile_version: str = "v0"
-    claim_scope: str = "synthetic-only"
+    claim_scope: str = SYNTHETIC_ACTUATION_CLAIM_SCOPE
+    claim_boundary: str = SYNTHETIC_ACTUATION_CLAIM_BOUNDARY
 
     def to_metadata(self) -> dict[str, Any]:
         """Return a JSON-safe metadata payload."""
@@ -38,6 +53,7 @@ class SyntheticActuationProfile:
             "name": self.name,
             "profile_version": self.profile_version,
             "claim_scope": self.claim_scope,
+            "claim_boundary": self.claim_boundary,
             "max_linear_accel_m_s2": float(self.max_linear_accel_m_s2),
             "max_linear_decel_m_s2": float(self.max_linear_decel_m_s2),
             "max_yaw_rate_rad_s": float(self.max_yaw_rate_rad_s),
@@ -57,34 +73,140 @@ def known_update_modes() -> tuple[str, ...]:
     return tuple(_UPDATE_MODE_TO_STEPS)
 
 
+def _non_empty_string(value: Any) -> bool:
+    """Return whether a value is a non-empty string after stripping whitespace."""
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _non_empty_sequence(value: Any) -> bool:
+    """Return whether a value is a non-empty list/tuple of non-empty strings."""
+    return (
+        isinstance(value, list | tuple)
+        and bool(value)
+        and all(_non_empty_string(item) for item in value)
+    )
+
+
+def _looks_calibrated_actuation_profile(payload: Mapping[str, Any]) -> bool:
+    """Return whether profile metadata is labeled as calibrated or hardware-aligned."""
+    calibrated_markers = ("calibrated", "hardware", "measured")
+    fields = (
+        payload.get("name"),
+        payload.get("claim_scope"),
+        payload.get("claim_boundary"),
+        payload.get("calibration_status"),
+        payload.get("profile_family"),
+    )
+    return any(
+        marker in str(value).strip().lower() for value in fields for marker in calibrated_markers
+    )
+
+
+def _validate_calibrated_actuation_provenance(
+    payload: Mapping[str, Any],
+    *,
+    label: str,
+) -> None:
+    """Validate required provenance fields for calibrated-labeled actuation profiles."""
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, Mapping):
+        fields = ", ".join(CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS)
+        raise ValueError(
+            f"{label} calibrated actuation profile requires provenance fields: {fields}"
+        )
+
+    missing: list[str] = []
+    for field_name in CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS:
+        value = provenance.get(field_name)
+        if field_name == "supported_actuation_fields":
+            if not _non_empty_sequence(value):
+                missing.append(field_name)
+        elif field_name == "units":
+            if not isinstance(value, Mapping) or not value:
+                missing.append(field_name)
+        elif not _non_empty_string(value):
+            missing.append(field_name)
+    if missing:
+        raise ValueError(
+            f"{label} calibrated actuation profile missing provenance fields: {', '.join(missing)}"
+        )
+
+
+def validate_actuation_profile_claim_boundary(
+    payload: Mapping[str, Any],
+    *,
+    label: str = "synthetic_actuation_profile",
+) -> None:
+    """Validate synthetic-vs-calibrated AMV actuation claim-boundary metadata.
+
+    Synthetic profiles must explicitly remain diagnostic-only. Any profile labeled as calibrated,
+    hardware-aligned, or measured must carry the minimum provenance fields needed for a future
+    calibrated profile before downstream code may inspect numeric limits.
+    """
+    if not isinstance(payload, Mapping):
+        raise TypeError(f"{label} must be a mapping when provided")
+    if _looks_calibrated_actuation_profile(payload):
+        _validate_calibrated_actuation_provenance(payload, label=label)
+        return
+
+    claim_scope = str(payload.get("claim_scope", "")).strip()
+    if claim_scope == SYNTHETIC_ACTUATION_CLAIM_SCOPE:
+        claim_boundary = str(payload.get("claim_boundary", "")).strip()
+        if claim_boundary != SYNTHETIC_ACTUATION_CLAIM_BOUNDARY:
+            raise ValueError(
+                f"{label}.claim_boundary must be '{SYNTHETIC_ACTUATION_CLAIM_BOUNDARY}'"
+            )
+
+
+def _validate_synthetic_positive_bounds(profile: SyntheticActuationProfile) -> None:
+    """Validate positive numeric limits for a synthetic actuation profile."""
+    bounds = {
+        "max_linear_accel_m_s2": profile.max_linear_accel_m_s2,
+        "max_linear_decel_m_s2": profile.max_linear_decel_m_s2,
+        "max_yaw_rate_rad_s": profile.max_yaw_rate_rad_s,
+        "max_angular_accel_rad_s2": profile.max_angular_accel_rad_s2,
+    }
+    for field_name, value in bounds.items():
+        if value <= 0.0:
+            raise ValueError(f"synthetic_actuation_profile.{field_name} must be > 0")
+
+
+def _validate_mode(value: str, *, field_name: str, known: tuple[str, ...]) -> None:
+    """Validate one synthetic profile mode label."""
+    if value not in known:
+        joined = ", ".join(known)
+        raise ValueError(
+            f"Unsupported synthetic_actuation_profile.{field_name} '{value}'. "
+            f"Expected one of: {joined}"
+        )
+
+
 def validate_synthetic_actuation_profile(profile: SyntheticActuationProfile) -> None:
     """Validate that one synthetic profile is usable for differential-drive diagnostics."""
     if not profile.name.strip():
         raise ValueError("synthetic_actuation_profile.name must be non-empty")
     if not profile.profile_version.strip():
         raise ValueError("synthetic_actuation_profile.profile_version must be non-empty")
-    if profile.claim_scope.strip() != "synthetic-only":
-        raise ValueError("synthetic_actuation_profile.claim_scope must be 'synthetic-only'")
-    if profile.max_linear_accel_m_s2 <= 0.0:
-        raise ValueError("synthetic_actuation_profile.max_linear_accel_m_s2 must be > 0")
-    if profile.max_linear_decel_m_s2 <= 0.0:
-        raise ValueError("synthetic_actuation_profile.max_linear_decel_m_s2 must be > 0")
-    if profile.max_yaw_rate_rad_s <= 0.0:
-        raise ValueError("synthetic_actuation_profile.max_yaw_rate_rad_s must be > 0")
-    if profile.max_angular_accel_rad_s2 <= 0.0:
-        raise ValueError("synthetic_actuation_profile.max_angular_accel_rad_s2 must be > 0")
-    if profile.latency_mode not in _LATENCY_MODE_TO_STEPS:
-        known = ", ".join(known_latency_modes())
+    if profile.claim_scope.strip() != SYNTHETIC_ACTUATION_CLAIM_SCOPE:
         raise ValueError(
-            "Unsupported synthetic_actuation_profile.latency_mode "
-            f"'{profile.latency_mode}'. Expected one of: {known}"
+            f"synthetic_actuation_profile.claim_scope must be '{SYNTHETIC_ACTUATION_CLAIM_SCOPE}'"
         )
-    if profile.update_mode not in _UPDATE_MODE_TO_STEPS:
-        known = ", ".join(known_update_modes())
+    if profile.claim_boundary.strip() != SYNTHETIC_ACTUATION_CLAIM_BOUNDARY:
         raise ValueError(
-            "Unsupported synthetic_actuation_profile.update_mode "
-            f"'{profile.update_mode}'. Expected one of: {known}"
+            "synthetic_actuation_profile.claim_boundary must be "
+            f"'{SYNTHETIC_ACTUATION_CLAIM_BOUNDARY}'"
         )
+    _validate_synthetic_positive_bounds(profile)
+    _validate_mode(
+        profile.latency_mode,
+        field_name="latency_mode",
+        known=known_latency_modes(),
+    )
+    _validate_mode(
+        profile.update_mode,
+        field_name="update_mode",
+        known=known_update_modes(),
+    )
 
 
 @dataclass(frozen=True)

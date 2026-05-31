@@ -24,6 +24,9 @@ benchmark gates or making paper-facing or hardware-calibration claims.
 - Synthetic profile provenance is carried in preflight output, campaign manifests, episode
   `scenario_params`, planner-row summaries, and the diagnostic
   `reports/actuation_envelope_summary.{json,md}` artifacts.
+- The synthetic profile now carries both `claim_scope: synthetic-only` and
+  `claim_boundary: diagnostic-only`; config loading and map execution reject synthetic profiles
+  that omit the explicit diagnostic boundary.
 - The diagnostic actuation summary now also records AMV coverage status, compact scenario-level AMV
   rows, and planner command-space/projection-policy metadata so issue-1572-style evidence review can
   distinguish scenario taxonomy gaps from adapter metadata gaps without reopening raw campaign rows.
@@ -36,6 +39,10 @@ benchmark gates or making paper-facing or hardware-calibration claims.
 
 - This is a synthetic software stress slice only.
 - The profile values are not a real AMV hardware specification and are not a calibration claim.
+- Any future calibrated-labeled actuation profile must use a distinct profile path and provide
+  source provenance before numeric limits are accepted: `source_id`, `source_uri`, `source_type`,
+  `profile_version`, `measurement_date`, `supported_actuation_fields`, `units`, and
+  `claim_boundary`.
 - The added actuation report is a diagnostic supplement; it does not redefine benchmark success.
 - Fallback, degraded, unavailable, skipped, and failed rows remain non-success evidence under
   [`docs/context/issue_691_benchmark_fallback_policy.md`](issue_691_benchmark_fallback_policy.md).
@@ -65,8 +72,10 @@ The key contract checks are:
 3. campaign-summary/report artifact emission for the actuation supplement,
 4. slice-local scenario AMV override propagation into preflight and compact actuation artifacts,
 5. map-runner episode metrics and fail-closed behavior for non-differential-drive scenarios.
-6. config-loader fail-closed behavior for malformed scenario candidate, scenario AMV override, and synthetic profile
-   payloads.
+6. config-loader fail-closed behavior for malformed scenario candidate, scenario AMV override, and
+   synthetic profile payloads.
+7. calibrated-labeled actuation profile metadata failing closed when required provenance fields are
+   absent.
 
 ## Issue #1569 Local Smoke Result (2026-05-27)
 

@@ -108,6 +108,28 @@ def test_socnavbench_control_check_accepts_wayptnav_layout(tmp_path: Path) -> No
     assert report["matched_required_paths"] == ["wayptnav_data"]
 
 
+def test_socnavbench_s3dis_rejects_empty_required_mesh_directory(tmp_path: Path) -> None:
+    """Required asset directories should not pass when only the directory shell exists."""
+    mesh_dir = tmp_path / "sd3dis" / "stanford_building_parser_dataset" / "mesh" / "ETH"
+    mesh_dir.mkdir(parents=True)
+    traversible = (
+        tmp_path
+        / "sd3dis"
+        / "stanford_building_parser_dataset"
+        / "traversibles"
+        / "ETH"
+        / "data.pkl"
+    )
+    traversible.parent.mkdir(parents=True)
+    traversible.write_bytes(b"fixture")
+
+    report = manage_external_data.check_asset("socnavbench-s3dis-eth", source_path=tmp_path)
+
+    assert report["ok"] is False
+    assert report["status"] == "incomplete"
+    assert "sd3dis/stanford_building_parser_dataset/mesh/ETH" in report["missing_required_paths"]
+
+
 def test_amv_calibration_check_accepts_one_source_format(tmp_path: Path) -> None:
     """AMV calibration provenance can be represented by one accepted local source file."""
     (tmp_path / "accepted_source.json").write_text(

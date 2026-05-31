@@ -207,7 +207,11 @@ def _match_required_path(source_root: Path, required: RequiredPath) -> list[Path
     if required.kind == "file":
         return [path for path in matches if path.is_file()]
     if required.kind == "directory":
-        return [path for path in matches if path.is_dir()]
+        return [
+            path
+            for path in matches
+            if path.is_dir() and any(child.is_file() for child in path.rglob("*"))
+        ]
     raise ExternalDataError(f"Unsupported required path kind: {required.kind}")
 
 

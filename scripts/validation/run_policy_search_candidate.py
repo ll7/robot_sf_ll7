@@ -485,6 +485,26 @@ def _format_signed_optional_float(value: Any) -> str:
         return "n/a"
 
 
+def _diagnostic_claim_boundary(
+    candidate_entry: Mapping[str, Any],
+    candidate_payload: Mapping[str, Any],
+) -> str | None:
+    """Return a conservative report caveat for diagnostic-only candidates."""
+    params = candidate_payload.get("params")
+    params = params if isinstance(params, dict) else {}
+    if (
+        candidate_entry.get("claim_scope") != "diagnostic_only"
+        and params.get("diagnostic_only") is not True
+        and params.get("claim_boundary") != "diagnostic_only"
+    ):
+        return None
+    return (
+        "This report is diagnostic-only wiring or stage evidence. Treat aggregate metrics and "
+        "baseline deltas as arithmetic context, not benchmark-strength evidence for comfort, "
+        "near-miss behavior, generalization, or planner superiority."
+    )
+
+
 def _write_markdown_report(  # noqa: PLR0913
     *,
     docs_root: Path,
@@ -573,8 +593,14 @@ def _write_markdown_report(  # noqa: PLR0913
             lines.append(f"- `{key}`: `{value}`")
     else:
         lines.append("- No failures recorded.")
+    claim_boundary = _diagnostic_claim_boundary(candidate_entry, candidate_payload)
+    if claim_boundary is not None:
+        lines.extend(["", "## Claim Boundary", "", claim_boundary])
     lines.extend(["", "## Baseline Deltas", ""])
     if deltas:
+        if claim_boundary is not None:
+            lines.append("_Diagnostic-only arithmetic context; not a benchmark comparison claim._")
+            lines.append("")
         lines.append("| Baseline | Success Delta | Collision Delta | Near-Miss Delta |")
         lines.append("|---|---:|---:|---:|")
         for name, row in sorted(deltas.items()):

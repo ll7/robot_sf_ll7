@@ -389,6 +389,22 @@ candidates:
       - smoke
       - nominal_sanity
 
+  adaptive_proxemic_selector_v0:
+    status: experimental_spike
+    family: proxemic_profile_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/adaptive_proxemic_selector_v0.yaml
+    hypothesis: >
+      A deterministic local-context selector can switch among the existing
+      conservative, neutral, and open proxemic profile parameterizations to
+      expose when each profile would be chosen. This row is diagnostic only:
+      progress gains are not success evidence unless near-miss and comfort
+      exposure tradeoffs are reviewed separately.
+    required_stages:
+      - smoke
+
   hybrid_rule_v3_waypoint2_progress:
     status: implemented
     family: hybrid_rule_based

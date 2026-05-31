@@ -1,0 +1,42 @@
+name: learned_policy_integration
+purpose: >
+  Focused context for learned local-policy eligibility, adapter integration, policy-card status,
+  and durable checkpoint metadata without pulling raw model artifacts or full training history.
+entrypoint: docs/context/policy_search/learned_policy_registry.md
+include:
+  - AGENTS.md
+  - docs/context/INDEX.md
+  - docs/context/policy_search/INDEX.md
+  - docs/context/policy_search/learned_policy_registry.md
+  - docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+  - docs/context/policy_search/contracts/external_policy_intake.md
+  - docs/context/issue_1618_learned_policy_adapter_interface.md
+  - docs/context/issue_1685_dummy_learned_policy_adapter.md
+  - docs/context/issue_1720_learned_policy_roadmap.md
+  - docs/policy_cards/README.md
+  - docs/training/environment_contract.md
+  - docs/training/ppo_training_workflow.md
+  - model/registry.md
+  - model/registry.yaml
+  - robot_sf/models/**
+  - robot_sf/planner/learned_policy_adapter.py
+  - robot_sf/benchmark/learned_policy_transfer_metadata.py
+  - robot_sf/benchmark/schemas/learned-policy-transfer-metadata.schema.v1.json
+  - scripts/validation/check_learned_policy_eligibility.py
+exclude:
+  - output/**
+  - results/**
+  - model/**/*.zip
+  - model/**/*.pt
+  - model/**/*.pth
+  - model/**/*.ckpt
+  - model/**/*.onnx
+  - wandb/**
+  - .venv/**
+do_not_read_by_default:
+  - docs/context/policy_search/reports/**
+  - docs/context/policy_search/validation/**
+  - docs/context/policy_search/SLURM/**
+  - docs/training/**
+  - tests/**
+

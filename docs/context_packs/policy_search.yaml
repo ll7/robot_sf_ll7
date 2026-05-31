@@ -1,0 +1,44 @@
+name: policy_search
+purpose: >
+  Focused context for policy-search candidate routing, staged evaluation commands, promotion gates,
+  and candidate registry maintenance without loading every historical candidate report.
+entrypoint: docs/context/policy_search/INDEX.md
+include:
+  - AGENTS.md
+  - docs/context/INDEX.md
+  - docs/context/policy_search/INDEX.md
+  - docs/context/policy_search/README.md
+  - docs/context/policy_search/candidate_registry.yaml
+  - docs/context/policy_search/candidate_registry_summary.md
+  - docs/context/policy_search/contracts/agent_runbook.md
+  - docs/context/policy_search/contracts/failure_taxonomy.md
+  - docs/context/policy_search/contracts/promotion_gates.md
+  - docs/context/policy_search/portfolio_overview_2026-05-05.md
+  - docs/benchmark_suites/README.md
+  - docs/benchmark_suites/smoke.md
+  - docs/benchmark_suites/nominal_sanity.md
+  - docs/benchmark_suites/stress_slice.md
+  - configs/policy_search/**
+  - scripts/validation/run_policy_search_candidate.py
+  - scripts/validation/policy_search_common.py
+  - scripts/validation/validate_policy_search_registry.py
+  - scripts/dev/sbatch_policy_search_sweep.sh
+  - scripts/tools/summarize_policy_search_portfolio.py
+  - scripts/tools/promote_policy_search_candidate.py
+  - scripts/tools/compare_policy_search_candidates.py
+  - scripts/tools/build_policy_search_failure_report.py
+exclude:
+  - output/**
+  - results/**
+  - docs/context/policy_search/reports/**
+  - docs/context/policy_search/validation/**
+  - docs/context/policy_search/SLURM/**
+  - wandb/**
+  - .venv/**
+do_not_read_by_default:
+  - docs/context/policy_search/reports/**
+  - docs/context/policy_search/validation/**
+  - docs/context/policy_search/reasoning/**
+  - tests/benchmark/**
+  - output/policy_search/**
+

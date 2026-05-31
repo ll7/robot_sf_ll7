@@ -58,22 +58,20 @@ Weaknesses:
 
 ## Recommended Usage In This Repository
 
-Start with a documented Repomix workflow for focused bundles such as:
+Start with the curated manifests in [docs/context_packs](../context_packs/README.md) for recurring
+bundles such as:
 
-- benchmark core (`robot_sf/benchmark`, `configs/benchmarks`, key docs),
-- planner integration (`robot_sf/nav`, planner docs, planner quality audit docs),
-- training/eval context (`scripts/training`, `configs/training`, relevant runbooks).
+- learned-policy integration,
+- policy search,
+- benchmark evidence,
+- visualization workbench.
 
 Only add automation around this after a few manual bundle workflows prove useful.
 
-Use [docs/context/INDEX.md](../context/INDEX.md) as the maintained manifest source for recurring
-packs. It currently defines scoped starting points for:
-
-- `learned_policy_integration`,
-- `benchmark_campaign_evidence`,
-- `slurm_artifact_rescue`,
-- `root_layout_cleanup`,
-- `adversarial_search`.
+Use [docs/context/INDEX.md](../context/INDEX.md) as the retrieval index and
+[docs/context_packs](../context_packs/README.md) as the maintained manifest source for recurring
+pack scopes. Promote additional ad hoc scopes to manifests before treating them as repeatable
+workflows.
 
 Generated bundles should live under ignored paths such as `output/context_packs/`. Do not commit
 packed repository dumps, raw benchmark output, checkpoints, videos, or local machine context unless
@@ -84,7 +82,7 @@ Example command shape:
 ```bash
 repomix \
   --include "AGENTS.md,docs/context/INDEX.md,docs/context/issue_691_benchmark_fallback_policy.md,docs/benchmark*.md,robot_sf/benchmark/**,configs/benchmarks/**,scripts/validation/**" \
-  --output output/context_packs/benchmark_campaign_evidence.txt
+  --output output/context_packs/benchmark_evidence.txt
 ```
 
 ## Source Note

@@ -78,12 +78,12 @@
   "schema_version": "simulation_trace_export.v1",
   "source": {
     "episode_id": "0",
-    "generated_by": "scripts.tools.build_simulation_trace_export from issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000.jsonl source_sha256:f6b33f7c4a67",
+    "generated_by": "scripts.tools.build_simulation_trace_export from issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000.jsonl source_sha256:aae87cf69fbf",
     "planner_id": "trace_fixture_gen",
     "scenario_id": "planner_sanity_open",
     "seed": 7
   },
-  "trace_id": "planner_sanity_open-ep0-seed7-source-f6b33f7c",
+  "trace_id": "planner_sanity_open-ep0-seed7-source-aae87cf6",
   "units": {
     "heading": "rad",
     "position": "m",

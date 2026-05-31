@@ -104,6 +104,7 @@ def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -
     stage = funnel["stages"]["amv_actuation_smoke"]
     assert stage["scenario_matrix"] == "configs/scenarios/sets/classic_cross_trap_subset.yaml"
     assert stage["scenario_filter"] == ["classic_cross_trap_high"]
+    assert stage["seed_list"] == [101]
     assert stage["synthetic_actuation_profile"]["claim_scope"] == "synthetic-only"
     assert stage["fail_closed_initial_overlap_exclusion"] is True
     assert stage["paper_facing"] is False

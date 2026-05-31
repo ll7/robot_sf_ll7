@@ -1,0 +1,3 @@
+{"event":"step","episode_id":0,"state":{"pedestrian_positions":[],"robot_pose":[[3.156921863555908,5.2030253410339355],0.04605550691485405],"timestep":1.0},"step_idx":1}
+{"event":"step","episode_id":0,"state":{"pedestrian_positions":[],"robot_pose":[[3.340054750442505,5.2176361083984375],0.1131734549999237],"timestep":2.0},"step_idx":2}
+{"event":"step","episode_id":0,"state":{"pedestrian_positions":[],"robot_pose":[[3.5387051105499268,5.240832328796387],0.11931054294109344],"timestep":3.0},"step_idx":3}

@@ -1,0 +1,41 @@
+name: visualization_workbench
+purpose: >
+  Focused context for diagnostic trace export, analysis-workbench report rendering, benchmark
+  visualization manifests, and the boundary between debug visuals and benchmark evidence.
+entrypoint: docs/debug_visualization.md
+include:
+  - AGENTS.md
+  - docs/context/INDEX.md
+  - docs/debug_visualization.md
+  - docs/benchmark_visuals.md
+  - docs/benchmark_static_dashboard.md
+  - docs/context/issue_1151_manual_control_mvp_foundation.md
+  - docs/context/issue_1689_simulation_trace_export_schema.md
+  - robot_sf/analysis_workbench/**
+  - robot_sf/benchmark/full_classic/plots.py
+  - robot_sf/benchmark/full_classic/videos.py
+  - robot_sf/benchmark/full_classic/visuals.py
+  - robot_sf/benchmark/full_classic/validation.py
+  - robot_sf/benchmark/visualization.py
+  - scripts/tools/build_simulation_trace_export.py
+  - scripts/tools/render_trace_report.py
+  - scripts/tools/rerun_debug_export.py
+  - scripts/tools/generate_benchmark_dashboard.py
+  - tests/analysis_workbench/**
+  - tests/fixtures/analysis_workbench/**
+exclude:
+  - output/**
+  - results/**
+  - "**/*.mp4"
+  - "**/*.rrd"
+  - "**/*.pdf"
+  - "**/coverage_html/**"
+  - wandb/**
+  - .venv/**
+do_not_read_by_default:
+  - tests/visuals/**
+  - specs/127-enhance-benchmark-visual/**
+  - output/debug/**
+  - output/benchmarks/**
+  - docs/context/evidence/**
+

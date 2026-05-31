@@ -95,12 +95,45 @@ Interpretation Boundary:
   mean any planner solved the slice.
 - This result is still **synthetic diagnostic only**. It does not promote the slice to a
   paper-facing claim, and it does not support hardware-calibration language.
-- The AMV claim map is **unchanged**. The smoke confirms that the issue-1556 slice is runnable and
-  emits the intended actuation diagnostics locally, but it does not strengthen any AMV performance
-  claim.
+- The AMV claim map remained **unchanged as a paper-facing claim**. The smoke confirms that the
+  issue-1556 slice is runnable and emits the intended actuation diagnostics locally, but it does not
+  strengthen any AMV performance claim.
 - `amv_coverage_status` remained `warn` because the resolved scenario rows in
   `configs/scenarios/classic_interactions_francis2023.yaml` still expose empty `amv` metadata
   blocks for this slice.
 - Adapter diagnostics remain part of the caveat surface: ORCA reported a high command projection
   rate (`0.8018`), and the smoke evidence records this without downgrading the row from accepted
-  adapter execution. Follow-up issue #1572 owns the remaining scenario and adapter metadata gaps.
+  adapter execution.
+
+## Issue #1572 / #1582 Metadata Contract Closure (2026-05-31)
+
+Issue #1572 and its decision split #1582 are now closed. Merged PR #1580 accepted the conservative
+metadata contract for future synthetic actuation diagnostics:
+
+1. The checked-in config may use slice-local synthetic AMV taxonomy overrides when those fields
+   remain tied to the versioned synthetic profile and diagnostic-only claim scope.
+2. Compact actuation summaries should expose scenario AMV rows plus planner command-space and
+   projection-policy metadata.
+3. Unknown, unavailable, fallback, degraded, skipped, and failed rows remain caveats and must not
+   count as actuation-envelope success evidence.
+
+This closure improves the interpretability of future `actuation_envelope_summary.*` artifacts. It
+does not change the Issue #1569 smoke's historical raw-campaign caveats, and it does not create
+calibrated or paper-facing actuation evidence.
+
+## Issue #1570 Claim-Map Verdict (2026-05-31)
+
+The claim-map boundary after the smoke verdict is:
+
+- **Synthetic diagnostics:** supported as a software stress diagnostic from Issue #1556. The profile
+  is `amv-actuation-stress-v0`, `paper_facing: false`, and `claim_scope: synthetic-only`.
+- **Compact smoke evidence:** supported only as non-paper-facing local evidence that the slice runs
+  and emits clip/yaw/braking diagnostics. The Issue #1569 smoke had valid executable rows but
+  `success_mean=0.0` for all planners, so it is not an AMV performance claim.
+- **Calibrated/paper-facing evidence:** still blocked. Issue
+  [#1559](https://github.com/ll7/robot_sf_ll7/issues/1559) remains the gate for a durable AMV
+  calibration source, calibrated-vs-synthetic profile separation, and validation that prevents
+  synthetic values from being reported as hardware evidence.
+
+Updated claim map:
+[`issue_1542_manuscript_claim_evidence_map.md`](issue_1542_manuscript_claim_evidence_map.md).

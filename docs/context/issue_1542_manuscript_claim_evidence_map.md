@@ -1,8 +1,13 @@
 # Issue #1542 Manuscript Claim Evidence Map
 
-Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1542>
+Related issues:
+
+- <https://github.com/ll7/robot_sf_ll7/issues/1542>
+- AMV actuation boundary update: <https://github.com/ll7/robot_sf_ll7/issues/1570>
 
 Date: 2026-05-26
+
+Latest AMV claim-boundary update: Issue #1570 on 2026-05-31.
 
 ## Purpose
 
@@ -44,6 +49,14 @@ tracks. See
   [issue_1353_broader_amv_preflight.md](issue_1353_broader_amv_preflight.md)
 - Broader baseline evidence:
   [issue_1353_broader_amv_2026-05-26/](evidence/issue_1353_broader_amv_2026-05-26/)
+- Synthetic actuation stress design:
+  [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
+- Synthetic actuation implementation and smoke verdict:
+  [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
+- Compact actuation smoke evidence:
+  [issue_1569_amv_actuation_smoke_2026-05-27/](evidence/issue_1569_amv_actuation_smoke_2026-05-27/)
+- Paper-facing actuation calibration gate: issue
+  [#1559](https://github.com/ll7/robot_sf_ll7/issues/1559)
 - Primary configs:
   - `configs/benchmarks/issue_1344_paired_nominal_v1_primary.yaml`
   - `configs/benchmarks/issue_1344_paired_stress_primary.yaml`
@@ -56,6 +69,11 @@ tracks. See
 
 `stress` + `full_matrix` (broader baselines)
 
+Synthetic actuation slice tier: `diagnostic_smoke` / `not paper-facing`. The Issue #1569 compact
+smoke proves that the synthetic actuation-envelope slice is executable locally and emits actuation
+diagnostics, but it is not calibrated AMV evidence and does not upgrade this claim area to
+paper-facing.
+
 ### Metrics Used
 
 - Success rate
@@ -63,11 +81,15 @@ tracks. See
 - Near-miss rate (implicitly tracked, not durably preserved in all summaries)
 - SNQI v3 (baseline, weights, diagnostics)
 - Mean minimum distance
-- AMV coverage dimensions (observed as unavailable/missing in #1344 and #1353 nominal/stress)
+- AMV coverage dimensions (observed as unavailable/missing in Issue #1344 and Issue #1353
+  nominal/stress)
+- Synthetic actuation diagnostics for Issue #1556/Issue #1569 only: `command_clip_fraction`,
+  `yaw_rate_saturation_fraction`, `signed_braking_peak_m_s2`, planner command-space/projection
+  metadata, and compact scenario AMV rows.
 
 ### Key Results
 
-**Primary protocol (#1344):**
+**Primary protocol (Issue #1344):**
 
 | Planner | Nominal success | Stress success | Nominal collisions | Stress collisions | Nominal SNQI | Stress SNQI |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -75,7 +97,7 @@ tracks. See
 | `orca` | 0.2500 | 0.1667 | 0.0833 | 0.0764 | -0.2999 | -0.2466 |
 | `social_force` | 0.0000 | 0.0000 | 0.0000 | 0.2500 | -1.0435 | -0.8591 |
 
-**Broader baselines (#1353 2026-05-26):**
+**Broader baselines (Issue #1353, 2026-05-26):**
 
 | Surface | Total runs | Successful rows | Core rows | Episodes | Campaign success | AMV coverage | SNQI contract |
 | --- | ---: | ---: | ---: | ---: | --- | --- | --- |
@@ -89,28 +111,59 @@ tracks. See
 - `socnav_bench` is `not_available` in both surfaces (accepted unavailable row, not successful
   evidence)
 
-**Cross-kinematics (#1354 compact, 2026-05-26):**
+**Cross-kinematics (Issue #1354 compact, 2026-05-26):**
 
 - 9/9 successful rows, `benchmark_success=true`, `amv_coverage_status=pass`,
   `snqi_contract_status=warn`
 
+**Synthetic actuation smoke (Issue #1569 with Issue #1572/Issue #1582 metadata contract):**
+
+- Verdict: `compact smoke run`, local and non-paper-facing.
+- Evidence bundle:
+  [evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json](evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json)
+  plus the Issue #1556 context note.
+- Campaign contract status: `campaign_execution_status=completed`, `evidence_status=valid`,
+  `successful_evidence_rows=3`, `accepted_unavailable_rows=0`, `unexpected_failed_rows=0`, and
+  `fallback_or_degraded_rows=0`.
+- Planner episode success remained `0.0000` for all three smoke rows (`goal`, `orca`,
+  `social_force`), so the smoke is executable diagnostics, not a performance result.
+- Command clipping was observed (`goal=0.0407`, `orca=0.1047`, `social_force=0.2346`), while
+  `yaw_rate_saturation_fraction` stayed `0.0000` for all rows.
+- Issue #1572/Issue #1582 closed the metadata-contract gap after the smoke by accepting slice-local
+  synthetic AMV overrides with explicit synthetic provenance and planner command-space/projection
+  metadata.
+  Unknown, unavailable, fallback, degraded, and failed rows remain caveats and must not count as
+  actuation-envelope success evidence.
+
+### AMV Actuation Claim Boundary
+
+| Evidence level | Current status | Claim use |
+| --- | --- | --- |
+| Synthetic diagnostics | Implemented by Issue #1556 using `amv-actuation-stress-v0` and `paper_facing: false`. | May describe a software stress diagnostic and artifact/provenance contract only. |
+| Compact smoke evidence | Issue #1569 produced a valid local 45-episode smoke; Issue #1572/Issue #1582 later repaired the metadata contract for future summaries. | May say the diagnostic slice runs and emits actuation metrics locally; must also state that task success was 0.0 and the evidence is non-paper-facing. |
+| Calibrated/paper-facing evidence | Blocked on Issue #1559 and its source/provenance follow-ups. | No paper-facing AMV actuation claim yet; no hardware, deployment, safety, or real-AMV envelope language from synthetic-only evidence. |
+
 ### Known Caveats
 
-1. **AMV coverage gap**: Both #1344 primary and #1353 broader nominal/stress campaigns report
+1. **AMV coverage gap**: Both Issue #1344 primary and Issue #1353 broader nominal/stress campaigns report
    `amv_coverage_status=warn`. Coverage summaries show `Observed = -` for all required AMV
    dimensions, meaning all required dimension values are missing from source scenario metadata. This
    is not partial coverage—it is zero observed coverage against required dimensions.
-2. **SNQI contract status**: #1353 stress reports `snqi_contract_status=fail`, preserving #1344's
-   caution. SNQI should not be promoted into paper-facing claims without an explicit claim-scope
-   decision.
+2. **SNQI contract status**: Issue #1353 stress reports `snqi_contract_status=fail`, preserving
+   Issue #1344's caution. SNQI should not be promoted into paper-facing claims without an explicit
+   claim-scope decision.
 3. **Low absolute success**: Even the best broader-baseline stress row (`ppo=0.2222`) shows modest
    success; many rows remain at or near zero.
-4. **SocNav unavailable**: `socnav_bench` is `not_available` in #1353 nominal/stress because
+4. **SocNav unavailable**: `socnav_bench` is `not_available` in Issue #1353 nominal/stress because
    SocNavBench control-pipeline assets are missing. This is caveated evidence, not a successful
    benchmark row.
-5. **Paper-facing status**: #1344 campaigns are `paper_facing=false`. #1353 campaigns use
+5. **Paper-facing status**: Issue #1344 campaigns are `paper_facing=false`. Issue #1353 campaigns use
    `paper_interpretation_profile=issue-1353-broader-amv-preflight`, explicitly non-paper-facing.
-6. **Runtime hotspot**: `prediction_planner` shows the longest runtime (`59.1s` nominal, `613.4s`
+6. **Synthetic actuation boundary**: Issue #1556/Issue #1569 add a useful synthetic diagnostic
+   slice, not a calibrated AMV actuation claim. Issue #1572/Issue #1582 resolved the compact
+   metadata contract, but that contract only makes future diagnostics clearer; it does not provide a
+   real hardware envelope, controller trace, or paper-facing calibration source.
+7. **Runtime hotspot**: `prediction_planner` shows the longest runtime (`59.1s` nominal, `613.4s`
    stress).
 
 ### Blocker / Next Action
@@ -125,11 +178,15 @@ tracks. See
    revise the SNQI contract before paper-facing promotion.
 3. Determine whether the low absolute success rates are acceptable for comparative claims or whether
    a tighter success gate is needed.
+4. Keep synthetic actuation diagnostics out of paper-facing claims until Issue #1559 identifies a
+   durable calibration source/profile and validates calibrated-vs-synthetic separation.
 
 ### Verdict
 
-`blocked` — AMV coverage gap and SNQI contract cautions block direct paper-facing promotion without
-a maintainer decision on acceptable evidence boundaries.
+`blocked` — AMV coverage gap, SNQI contract cautions, and missing calibrated actuation evidence
+block direct paper-facing promotion. The Issue #1569 smoke plus Issue #1572/Issue #1582 metadata
+repair make a future diagnostic or thesis-method subsection plausible, but only as explicitly
+synthetic diagnostics; a paper-facing AMV actuation subsection remains blocked on Issue #1559.
 
 ---
 

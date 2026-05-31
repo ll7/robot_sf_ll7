@@ -1,0 +1,10 @@
+{
+  "algorithm": "trace_fixture_gen",
+  "boundary": "analysis_workbench_only",
+  "episode_id": 0,
+  "issue": 1859,
+  "notes": "Compact three-frame source slice for regenerating the renderer-neutral timeline fixture. This is not a raw campaign dump or benchmark result.",
+  "scenario": "planner_sanity_open",
+  "seed": 7,
+  "source_kind": "tracked_compact_trace_fixture"
+}

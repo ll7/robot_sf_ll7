@@ -3,11 +3,13 @@
 Related workflow: [issue_713_batch_first_issue_workflow.md](issue_713_batch_first_issue_workflow.md)
 Related policy: [issue_1512_issue_archetypes.md](issue_1512_issue_archetypes.md)
 
-Status note: the issue-state tables below are a 2026-05-30 routing snapshot. Later state-label
-cleanup superseded some `state:ready` queue rows, so do not use this historical audit as the
-current implementation queue. For current queue routing, use
-[issue_1776_state_label_routing.md](issue_1776_state_label_routing.md) and live GitHub issue
-labels.
+> Status: superseded by `docs/context/issue_1776_state_label_routing.md` on 2026-05-30.
+> Keep this note only for historical context.
+
+The issue-state tables below are a 2026-05-30 routing snapshot. Later state-label cleanup
+superseded some `state:ready` queue rows, so do not use this historical audit as the current
+implementation queue. For current queue routing, use
+[issue_1776_state_label_routing.md](issue_1776_state_label_routing.md) and live GitHub issue labels.
 
 ## Goal
 

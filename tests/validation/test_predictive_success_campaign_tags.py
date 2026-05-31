@@ -240,12 +240,13 @@ def test_default_hard_seed_manifest_matches_default_scenario_matrix() -> None:
     )
 
     scenario_ids = {scenario["name"] for scenario in scenarios}
-    assert {
+    assert scenario_ids == {
         "classic_cross_trap_high",
         "classic_cross_trap_medium",
         "classic_cross_trap_low",
         "classic_group_crossing_high",
-    }.issubset(scenario_ids)
+    }
+    assert sum(len(scenario["seeds"]) for scenario in scenarios) == 7
 
 
 def test_run_eval_fails_when_jsonl_artifact_missing(monkeypatch, tmp_path: Path) -> None:

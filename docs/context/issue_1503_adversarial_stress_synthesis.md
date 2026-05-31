@@ -101,8 +101,8 @@ failure counts because the search object and validity filters differ.
 ## Replay And Determinism
 
 The archive entries preserve replay commands for crossing/TTC failure cases. That satisfies the
-#1503 minimum for replayable compact evidence, but it does not prove replay determinism because the
-#1502 job did not run a separate replay-repeat sweep.
+Issue #1503 minimum for replayable compact evidence, but it does not prove replay determinism because
+Issue #1502 did not run a separate replay-repeat sweep.
 
 Current status:
 

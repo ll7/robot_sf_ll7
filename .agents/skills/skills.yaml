@@ -391,7 +391,7 @@ skills:
     output_schema: skill_run_summary.v1
     aliases: []
   gh-issue-autopilot:
-    description: Autonomous issue-to-PR workflow from next eligible issue to draft PR with consistent
+    description: Autonomous issue-to-PR workflow from next eligible issue to ready PR with consistent
       metadata handling.
     category: github-issue
     kind: orchestrator

@@ -7,6 +7,8 @@ Related issues:
   <https://github.com/ll7/robot_sf_ll7/issues/1618>
 - Issue #1363 learned-policy eligibility checklist:
   <https://github.com/ll7/robot_sf_ll7/issues/1363>
+- Issue #1870 external learned-policy intake:
+  <https://github.com/ll7/robot_sf_ll7/issues/1870>
 
 ## Purpose
 
@@ -49,7 +51,8 @@ checkpoint_availability: local_registry | wandb_artifact | pending | source_clai
 expected_dependencies: local_repo | slurm | external_legacy_env | source_harness |
   unknown
 reproducibility_status: smoke_proven | launch_packet | source_harness_required |
-  comparison_available | proposal | prototype_only | monitor_only | blocked | rejected
+  source_smoke_proven | comparison_available | proposal | prototype_only | monitor_only |
+  blocked | rejected
 integration_status: implemented | staged | adapter_needed | monitor_only | rejected
 benchmark_status: smoke_only | comparison_available | not_benchmark_evidence |
   blocked | rejected | rejected_for_current_adapter
@@ -61,6 +64,12 @@ local_anchors: local docs, configs, tests, issues, or model registry paths
 Passing this registry screen does not make a policy benchmark-ready. Any learned policy still needs
 the checklist in `docs/context/policy_search/contracts/learned_local_policy_eligibility.md`, adapter
 metadata from Issue #1618, smoke proof, and fail-closed handling before benchmark claims.
+
+External learned-policy families must also follow
+`docs/context/policy_search/contracts/external_policy_intake.md`. That contract defines the
+source-screen, license, checkpoint, observation/action, source-side-smoke, Robot SF adapter,
+Robot SF smoke, and benchmark-suite stages. This registry owns only the durable roll-up status; do
+not maintain a second current-state table in the intake contract or family notes.
 
 ## Status Crosswalk
 
@@ -78,6 +87,22 @@ stricter benchmark-readiness interpretation wins.
 | `blocked` benchmark status | `defer`, `source-side reproduction first`, or `prototype only` | Treat as blocked for benchmark use; the row may still guide a narrow prerequisite issue. |
 | `rejected` or `rejected_for_current_adapter` | `reject for now` | Not compatible with the current local-planner adapter contract; reopen only with new public assets or a narrower reduction proof. |
 
+## External Intake Crosswalk
+
+Use this crosswalk with `contracts/external_policy_intake.md` when an external family moves through
+source-side and Robot SF adapter intake. The mapping is fail-closed: source-side proof and
+adapter-only proof are useful planning evidence, but they are not benchmark evidence.
+
+| External intake roll-up | Registry fields | Benchmark-readiness interpretation |
+| --- | --- | --- |
+| `source_screened` | `integration_status: monitor_only`; `reproducibility_status: monitor_only` or `source_harness_required`; `benchmark_status: blocked` or `not_benchmark_evidence` | Interesting enough to track, not enough to implement or benchmark. |
+| `license_or_checkpoint_blocked` | `integration_status: monitor_only` or `rejected`; `reproducibility_status: blocked` or `source_harness_required`; `benchmark_status: blocked` or `rejected_for_current_adapter` | Do not start adapter work until license and durable artifact blockers are cleared. |
+| `contract_blocked` | `integration_status: monitor_only` or `adapter_needed`; `reproducibility_status: source_harness_required` or `monitor_only`; `benchmark_status: blocked` or `rejected_for_current_adapter` | Observation/action mismatch blocks Robot SF benchmark use even if the source looks promising. |
+| `source_smoke_only` | `integration_status: monitor_only` or `adapter_needed`; `reproducibility_status: source_smoke_proven`; `benchmark_status: not_benchmark_evidence` | Native upstream/source-harness inference worked, but no Robot SF benchmark claim is allowed. |
+| `adapter_only` | `integration_status: staged` or `adapter_needed`; `reproducibility_status: launch_packet` or `source_smoke_proven`; `benchmark_status: not_benchmark_evidence` | Adapter import or metadata exists, but the Robot SF runtime path has not produced smoke evidence. |
+| `robot_sf_smoke_only` | `integration_status: staged` or `implemented`; `reproducibility_status: smoke_proven`; `benchmark_status: smoke_only` | Local smoke supports adapter viability only, not ranking or paper-facing comparison. |
+| `benchmark_suite_complete` | `integration_status: implemented`; `reproducibility_status: comparison_available`; `benchmark_status: comparison_available` | Benchmark evidence is available only for the named config, checkpoint, stage, and promotion gate. |
+
 ## Entries
 
 | `policy_id` | `policy_family` | `integration_status` | `reproducibility_status` | `benchmark_status` | Boundary |
@@ -89,7 +114,10 @@ stricter benchmark-readiness interpretation wins.
 | `predictive_planner_v1` | `predictive_model` | `implemented` | `comparison_available` | `comparison_available` | Uses a learned pedestrian predictor inside a planner stack; evidence applies to the configured predictive planner, not a general learned local policy. |
 | `predictive_mppi` | `predictive_model` | `implemented` | `comparison_available` | `comparison_available` | Learned prediction informs MPPI-style rollout scoring; integration depends on predictive model/config provenance. |
 | `lidar_ppo_mlp_gate_v1` | `lidar_policy` | `adapter_needed` | `proposal` | `blocked` | Planned LiDAR learned-policy smoke from Issues #1615/#1662; not available on `main` until launch-packet work lands and smoke training runs. |
-| `tentabot_value_scorer_v0` | `external_learned_policy` | `staged` | `smoke_and_nominal_diagnostic` | `smoke_only` | Clean-room Robot SF scorer spike is executable and smoke-passes on `planner_sanity_simple`; #1826 lowers nominal-sanity collision and near-miss rates but the row remains `revise` with low success and additional low-progress timeouts. Upstream Tentabot remains source-side only. |
+| `tentabot_value_scorer_v0` | `external_learned_policy` | `staged` | `smoke_and_nominal_diagnostic` | `not_benchmark_evidence` | Clean-room Robot SF scorer spike is executable, but the hand-authored recovery lane is stopped after Issues #1832, #1877, and #1908: scalar and trace-rule changes did not preserve the Issue #1832 collision baseline when reducing low-progress timeouts. Keep only as diagnostic baseline unless a separate learned-value-estimator contract is opened. |
+| `tentabot_value_scorer_v1_static_gated` | `external_learned_policy` | `staged` | `smoke_and_nominal_diagnostic` | `not_benchmark_evidence` | Clean-room v1 static-gate lane is stopped: nominal sanity stayed at 4/18 success while collisions rose to 2/18 and near misses to 4/18. Do not extend this hand static-gate mechanism. |
+| `tentabot_value_scorer_v2_route_arc` | `external_learned_policy` | `staged` | `smoke_and_nominal_diagnostic` | `not_benchmark_evidence` | Clean-room v2 route-arc lane is stopped: nominal sanity reduced low-progress to 8/18 but kept 2/18 static collisions and raised near misses to 5/18. Do not extend scalar route-progress weighting. |
+| `tentabot_value_scorer_v3_trace_recovery` | `external_learned_policy` | `staged` | `smoke_and_nominal_diagnostic` | `not_benchmark_evidence` | Clean-room v3 trace-recovery lane is stopped: the smoke route low-progress timed out, and nominal sanity kept 2/18 static collisions with 9/18 low-progress timeouts. A future Tentabot-style attempt must be a learned-value/data-derived ranking experiment with explicit provenance, not another hand-authored recovery retune. |
 | `crowdnav_height_igat_family` | `external_graph_policy` | `monitor_only` | `source_harness_required` | `blocked` | Source/checkpoint and graph-observation parity must be proven before a Robot SF adapter or benchmark row. |
 | `arena_rosnav_stack` | `external_learned_policy` | `monitor_only` | `source_harness_required` | `blocked` | ROS Noetic/Gazebo/Flatland stack is a source-side reproduction target only; no single Robot SF-compatible policy checkpoint or adapter contract is claimed, and a named Rosnav agent must run from durable source assets before adapter work. |
 | `drl_vo_family` | `external_learned_policy` | `monitor_only` | `prototype_only` | `blocked` | Tracked-agent diagnostic/prototype boundary only; not main-table ready and not a leakage-free benchmark policy. |
@@ -235,9 +263,9 @@ metadata before entering the runnable candidate registry.
 
 ## Validation
 
-This note is documentation and registry metadata only. Validate changes with:
+This note is documentation and registry metadata only. Validate candidate and learned-policy
+registry consistency with:
 
 ```bash
-git diff --check origin/main...HEAD
-BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
+uv run python scripts/validation/validate_policy_search_registry.py
 ```

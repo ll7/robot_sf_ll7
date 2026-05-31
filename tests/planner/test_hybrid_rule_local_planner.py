@@ -182,6 +182,321 @@ def test_tentabot_value_scorer_v0_exposes_clean_room_diagnostics() -> None:
     ]
 
 
+def test_tentabot_value_scorer_v1_static_gate_demotes_unsafe_route_candidates(
+    monkeypatch,
+) -> None:
+    """V1 should keep raw value diagnostics while demoting low-clearance route commands."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "route_guide_enabled": True,
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_min_clearance": 0.55,
+            "static_safety_gate_penalty": 12.0,
+            "static_safety_gate_all_sources": True,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.0, 0.0, "route_guide")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["raw_value_score"] > evaluation["score"]
+    assert evaluation["terms"]["static_safety_gate_penalty"] == pytest.approx(12.0)
+    assert evaluation["static_safety_gate"]["tier"] == "low_clearance_demoted"
+    row = planner._candidate_diagnostic(evaluation)
+    assert row["raw_value_score"] == pytest.approx(evaluation["raw_value_score"])
+    assert row["static_safety_gate"]["reason"] == "low_clearance_without_safe_progress"
+
+
+def test_tentabot_value_scorer_v1_static_gate_allows_low_clearance_progress(
+    monkeypatch,
+) -> None:
+    """Low-clearance route candidates can remain eligible when they progress safely."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "route_guide_enabled": True,
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_min_clearance": 0.55,
+            "static_safety_gate_progress_threshold": 0.05,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.25, 0.0, "route_guide")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["score"] == pytest.approx(evaluation["raw_value_score"])
+    assert evaluation["terms"]["static_safety_gate_penalty"] == 0.0
+    assert evaluation["static_safety_gate"]["tier"] == "guarded_progress"
+    assert evaluation["static_safety_gate"]["progress_metric"] == "goal_distance"
+
+
+def test_tentabot_value_scorer_v1_static_gate_uses_route_local_progress(
+    monkeypatch,
+) -> None:
+    """Route-aware gate progress should follow corridor direction, not Euclidean goal progress."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "route_guide_enabled": True,
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_min_clearance": 0.55,
+            "static_safety_gate_progress_threshold": 0.05,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.25, 0.0, "route_guide")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=_route_corridor_payload(tangent_heading=np.pi),
+    )
+
+    assert evaluation["accepted"] is True
+    assert evaluation["terms"]["goal_progress"] > 0.0
+    assert evaluation["terms"]["static_safety_gate_penalty"] == pytest.approx(12.0)
+    assert evaluation["static_safety_gate"]["tier"] == "low_clearance_demoted"
+    assert evaluation["static_safety_gate"]["progress_metric"] == "route_local"
+    assert evaluation["static_safety_gate"]["progress"] < 0.0
+
+
+def test_tentabot_value_scorer_v1_static_gate_can_cover_all_sources(monkeypatch) -> None:
+    """The exploratory v1 config can apply the static gate beyond route-only primitives."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v1_static_gated",
+            "static_safety_gate_enabled": True,
+            "static_safety_gate_all_sources": True,
+            "static_safety_gate_min_clearance": 0.55,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.0, 0.0, "dynamic_window")
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.4)
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+    )
+
+    assert evaluation["static_safety_gate"]["source_gated"] is True
+    assert evaluation["static_safety_gate"]["tier"] == "low_clearance_demoted"
+
+
+def test_tentabot_value_scorer_v2_scores_route_arc_progress_over_goal_shortcut(
+    monkeypatch,
+) -> None:
+    """V2 should reward route-local progress even when Euclidean goal distance regresses."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v2_route_arc",
+            "goal_progress_weight": 1.0,
+            "route_arc_progress_weight": 4.0,
+            "path_alignment_weight": 0.0,
+            "speed_preference_weight": 0.0,
+            "static_clearance_weight": 0.0,
+            "dynamic_clearance_weight": 0.0,
+            "ttc_weight": 0.0,
+            "heading_smoothness_weight": 0.0,
+            "velocity_smoothness_weight": 0.0,
+            "control_effort_weight": 0.0,
+            "freezing_weight": 0.0,
+            "oscillation_weight": 0.0,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    observation = _obs(heading=np.pi, goal=(4.0, 0.0))
+    state = planner._extract_state(observation)
+    route_corridor = _route_corridor_payload(tangent_heading=np.pi)
+
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
+
+    forward_eval = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(0.25, 0.0, "route_guide"),
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=route_corridor,
+    )
+    stop_eval = planner._evaluate_candidate(
+        candidate=HybridRuleCandidate(0.0, 0.0, "stop"),
+        observation=observation,
+        state=state,
+        speed_cap=config.max_linear_speed,
+        nearest_ped=float("inf"),
+        progress_windows={"3s": 0.0},
+        route_corridor=route_corridor,
+    )
+
+    assert forward_eval["accepted"] is True
+    assert stop_eval["accepted"] is True
+    assert forward_eval["terms"]["goal_progress"] < 0.0
+    assert forward_eval["terms"]["route_arc_progress"] > 0.0
+    assert forward_eval["score"] > stop_eval["score"]
+
+
+def test_tentabot_trace_recovery_activates_on_route_regression_despite_goal_progress() -> None:
+    """Trace recovery should notice route regression even if goal distance improved."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v3_trace_recovery",
+            "route_guide_enabled": True,
+            "route_trace_recovery_enabled": True,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+
+    signal = planner._route_trace_recovery_signal(
+        route_corridor=_route_corridor_payload(route_progress_1s=-0.1, route_progress_3s=0.4),
+        progress_windows={"1s": 0.1, "3s": 0.4},
+        nearest_ped=float("inf"),
+    )
+
+    assert signal["active"] is True
+    assert signal["reason"] == "route_regressing"
+    assert signal["goal_stalled"] is False
+    assert signal["route_regressing"] is True
+
+
+def test_tentabot_trace_recovery_selects_accepted_corridor_subgoal() -> None:
+    """Trace recovery may only override with an already accepted recovery candidate."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(route_trace_recovery_enabled=True)
+    )
+    signal = {"active": True, "selected": False}
+    accepted = [
+        {
+            "candidate": HybridRuleCandidate(0.0, 0.0, "stop"),
+            "score": 99.0,
+            "terms": {"route_arc_progress": 0.0},
+        },
+        {
+            "candidate": HybridRuleCandidate(0.2, 0.0, "corridor_subgoal"),
+            "score": 1.0,
+            "terms": {"route_arc_progress": 0.2},
+        },
+        {
+            "candidate": HybridRuleCandidate(0.2, 0.0, "route_guide"),
+            "score": 2.0,
+            "terms": {"route_arc_progress": 0.3},
+        },
+    ]
+
+    selected = planner._select_route_trace_recovery_evaluation(accepted, signal)
+
+    assert selected is accepted[1]
+    assert signal["selected"] is True
+    assert signal["selected_source"] == "corridor_subgoal"
+
+
+def test_tentabot_trace_recovery_does_not_select_rejected_recovery_candidate() -> None:
+    """A trace signal must not convert rejected recovery candidates into commands."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(route_trace_recovery_enabled=True)
+    )
+    signal = {"active": True, "selected": False}
+    accepted = [
+        {
+            "candidate": HybridRuleCandidate(0.0, 0.0, "stop"),
+            "score": 99.0,
+            "terms": {"route_arc_progress": 0.0},
+        }
+    ]
+
+    selected = planner._select_route_trace_recovery_evaluation(accepted, signal)
+
+    assert selected is None
+    assert signal["selected"] is False
+    assert signal["selected_reason"] == "no_accepted_recovery_candidate"
+
+
+def test_tentabot_trace_recovery_records_blocked_diagnostics() -> None:
+    """Decision diagnostics should explain why trace recovery was unavailable."""
+    config = build_hybrid_rule_local_planner_config(
+        {
+            "planner_variant": "tentabot_value_scorer_v3_trace_recovery",
+            "route_guide_enabled": True,
+            "route_trace_recovery_enabled": True,
+        }
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+
+    planner.plan(_obs())
+
+    last = planner.last_decision()
+    assert last is not None
+    assert last["route_trace_recovery"]["enabled"] is True
+    assert last["route_trace_recovery"]["active"] is False
+    assert last["route_trace_recovery"]["reason"] == "missing_route_geometry"
+
+
+def test_tentabot_trace_recovery_reset_clears_hold_state() -> None:
+    """Episode reset should clear any active trace-recovery hold window."""
+    config = HybridRuleLocalPlannerConfig(
+        route_guide_enabled=True,
+        route_trace_recovery_enabled=True,
+        route_trace_recovery_hold_steps=3,
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    planner._route_trace_recovery_signal(
+        route_corridor=_route_corridor_payload(route_progress_1s=-0.1),
+        progress_windows={"3s": 0.5},
+        nearest_ped=float("inf"),
+    )
+
+    assert planner._route_trace_recovery_hold_remaining == 3
+    planner.reset()
+    assert planner._route_trace_recovery_hold_remaining == 0
+
+
 def test_actuation_aware_variant_penalizes_synthetic_clip_risk() -> None:
     """Actuation-aware scoring should expose and penalize synthetic envelope risk."""
     config = build_hybrid_rule_local_planner_config(
@@ -706,10 +1021,16 @@ def test_hybrid_rule_corridor_subgoal_uses_scaled_one_second_stall_threshold() -
         progress_windows={"1s": 0.02, "3s": 0.03},
         nearest_ped=float("inf"),
     )
+    regressing = planner._corridor_subgoal_activation(
+        route_corridor=_route_corridor_payload(route_progress_1s=-0.1, route_progress_3s=0.0),
+        progress_windows={"1s": -0.02, "3s": -0.03},
+        nearest_ped=float("inf"),
+    )
 
     assert moving_recently["active"] is False
     assert moving_recently["reason"] == "progress_not_stalled"
     assert stalled["active"] is True
+    assert regressing["active"] is True
 
 
 def test_hybrid_rule_corridor_subgoal_turns_in_place_for_large_tangent_error() -> None:

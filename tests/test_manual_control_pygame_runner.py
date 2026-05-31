@@ -273,8 +273,9 @@ def test_pygame_runner_countdown_render_overlay_and_keyup(tmp_path):
     assert _FakeClock.ticks
 
 
-def test_pygame_runner_configures_ego_up_renderer_view(tmp_path):
-    """Ego-up sessions should configure the env renderer before rendering."""
+@pytest.mark.parametrize("view_mode", ["ego_up", "robot_static"])
+def test_pygame_runner_configures_camera_transform_renderer_view(tmp_path, view_mode):
+    """Camera-transform sessions should configure the env renderer before rendering."""
     _FakeClock.ticks.clear()
     sim_ui = _FakeManualView()
     env = _FakeEnv(terminal_after=1, success=True, sim_ui=sim_ui)
@@ -288,7 +289,7 @@ def test_pygame_runner_configures_ego_up_renderer_view(tmp_path):
         countdown_steps=0,
         max_steps=1,
         render=True,
-        view_mode="ego_up",
+        view_mode=view_mode,
     )
 
     ManualPygameRunner(
@@ -298,7 +299,7 @@ def test_pygame_runner_configures_ego_up_renderer_view(tmp_path):
         event_source=lambda: [],
     ).run()
 
-    assert sim_ui.configured_mode == "ego_up"
+    assert sim_ui.configured_mode == view_mode
     assert all(target_fps == settings.target_fps for target_fps in _FakeClock.ticks)
 
 

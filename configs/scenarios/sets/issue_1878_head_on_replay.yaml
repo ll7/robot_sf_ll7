@@ -1,0 +1,23 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+  - name: issue_1878_classic_head_on_corridor_low_guided_1502
+    map_file: ../../../maps/svg_maps/classic_head_on_corridor.svg
+    route_overrides_file: ../route_overrides/issue_1878/classic_head_on_corridor_low_guided_1502.yaml
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: head_on_corridor
+      density: low
+      flow: bi
+      groups: 0.0
+      source_issue: 1878
+      source_evidence: docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/classic_head_on_corridor_guided_summary.json
+      evidence_class: development_stress_test
+      claim_boundary: not_benchmark_evidence
+      purpose: Replay the selected issue-1502 guided head-on route from tracked inputs.
+      expected_behavior: Deterministic replay signatures for the same seed and planner mapping.
+      expected_pass_criteria: Matching stable replay signatures across repeated runs.
+      determinism: deterministic
+    seeds: [123]

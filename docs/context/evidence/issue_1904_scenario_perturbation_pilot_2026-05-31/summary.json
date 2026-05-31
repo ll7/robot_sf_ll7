@@ -1,0 +1,209 @@
+{
+  "claim_boundary": "diagnostic local pilot only; not benchmark-strength or paper-facing evidence",
+  "dt": 0.1,
+  "horizon": 80,
+  "manifest": "configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml",
+  "materialization": {
+    "excluded_variants": [],
+    "included_variants": [
+      "classic_group_crossing_high_noop",
+      "classic_group_crossing_high_route_offset_x025",
+      "classic_head_on_corridor_low_noop",
+      "classic_head_on_corridor_low_route_offset_y025",
+      "francis2023_join_group_noop",
+      "francis2023_join_group_route_offset_x025"
+    ],
+    "local_artifact_boundary": "materialized scenario matrix, route overrides, and raw episode JSONL remain ignored local outputs reproducible from the tracked manifest and command",
+    "manifest_id": "issue_1858_seed_sensitive_pilot_v1",
+    "schema_version": "scenario_perturbation_pilot_matrix.v1",
+    "variant_count": 6
+  },
+  "pair_rows": [
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.005904823674986126,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.81814067199887,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.8122358483238838,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "goal",
+      "seed": 111,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.021713990718757792,
+      "noop": {
+        "collision": 0,
+        "min_distance": 5.061020535696914,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 5.082734526415671,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "goal",
+      "seed": 111,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.0013309335961251278,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.489627078493282,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.488296144897157,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "goal",
+      "seed": 112,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.004412621133507821,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5256092818038434,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_high_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.5300219029373512,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_high_route_offset_x025",
+      "planner": "orca",
+      "seed": 111,
+      "source_scenario_id": "classic_group_crossing_high",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.003176856884758772,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.6702469202849204,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_head_on_corridor_low_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.6734237771696792,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_head_on_corridor_low_route_offset_y025",
+      "planner": "orca",
+      "seed": 111,
+      "source_scenario_id": "classic_head_on_corridor_low",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 7.814638987357903e-05,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4492909863429455,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.449369132732819,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_route_offset_x025",
+      "planner": "orca",
+      "seed": 112,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    }
+  ],
+  "pair_summary": {
+    "mean_deltas_completed_pairs": {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.003690976309297785,
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    "pairs": 6,
+    "status_counts": {
+      "completed": 6
+    }
+  },
+  "planners": [
+    "goal",
+    "orca"
+  ],
+  "schema_version": "scenario_perturbation_criticality_pilot.v1",
+  "seed_limit": 1
+}

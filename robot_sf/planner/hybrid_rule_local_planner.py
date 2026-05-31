@@ -29,6 +29,9 @@ _SUPPORTED_VARIANTS = {
     "hybrid_rule_v4_recovery_aware",
     "hybrid_rule_v5_ensemble_selector",
     "tentabot_value_scorer_v0",
+    "tentabot_value_scorer_v1_static_gated",
+    "tentabot_value_scorer_v2_route_arc",
+    "tentabot_value_scorer_v3_trace_recovery",
     "actuation_aware_hybrid_rule_v0",
 }
 _EPS = 1e-9
@@ -159,6 +162,7 @@ class HybridRuleLocalPlannerConfig:
     velocity_smoothness_weight: float = 0.3
     control_effort_weight: float = 0.2
     deadlock_escape_weight: float = 0.0
+    route_arc_progress_weight: float = 0.0
     route_guide_commitment_weight: float = 0.0
     corridor_subgoal_route_progress_weight: float = 0.0
     corridor_subgoal_centering_weight: float = 0.0
@@ -191,6 +195,13 @@ class HybridRuleLocalPlannerConfig:
     corridor_subgoal_route_regression_1s: float = -0.05
     corridor_subgoal_min_route_remaining_distance: float = 0.5
     corridor_subgoal_max_lateral_offset: float = 0.5
+    route_trace_recovery_enabled: bool = False
+    route_trace_recovery_goal_stall_progress_3s: float = 0.05
+    route_trace_recovery_route_stall_progress_3s: float = 0.05
+    route_trace_recovery_route_regression_1s: float = -0.05
+    route_trace_recovery_min_nearest_ped_distance: float = 1.0
+    route_trace_recovery_min_route_remaining_distance: float = 0.5
+    route_trace_recovery_hold_steps: int = 2
     recovery_enabled: bool = False
     recovery_reorient_angular_speed: float = 0.6
 
@@ -220,6 +231,12 @@ class HybridRuleLocalPlannerConfig:
     # weights.
     value_scorer_profile: str = "manual_linear"
     value_scorer_training_source: str = "hand_scored_hybrid_rule_teacher"
+    static_safety_gate_enabled: bool = False
+    static_safety_gate_min_clearance: float = 0.55
+    static_safety_gate_progress_threshold: float = 0.05
+    static_safety_gate_clearance_tolerance: float = 0.02
+    static_safety_gate_penalty: float = 12.0
+    static_safety_gate_all_sources: bool = False
 
     # Experimental AMV synthetic-actuation scoring for issue #1807. These
     # values intentionally mirror the diagnostic profile shape used by issue
@@ -303,6 +320,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         self._progress_history: deque[tuple[float, float]] = deque(maxlen=256)
         self._route_distance_history: deque[tuple[float, float]] = deque(maxlen=256)
+        self._route_trace_recovery_hold_remaining = 0
         self._selected_source_counts: Counter[str] = Counter()
         self._rejection_counts: Counter[str] = Counter()
         self._unavailable_counts: Counter[str] = Counter()
@@ -697,8 +715,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         goal_progress_3s_threshold = float(self.config.corridor_subgoal_goal_stall_progress_3s)
         goal_progress_1s_threshold = goal_progress_3s_threshold / 3.0
         goal_stalled = (
-            0.0 <= goal_progress_1s <= goal_progress_1s_threshold
-            and 0.0 <= goal_progress_3s <= goal_progress_3s_threshold
+            goal_progress_1s <= goal_progress_1s_threshold
+            and goal_progress_3s <= goal_progress_3s_threshold
         )
         route_stalled = route_progress_3s <= float(
             self.config.corridor_subgoal_route_stall_progress_3s
@@ -719,6 +737,169 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         diagnostics["active"] = True
         diagnostics["reason"] = "active"
         return diagnostics
+
+    def _route_trace_recovery_signal(  # noqa: C901
+        self,
+        *,
+        route_corridor: dict[str, Any] | None,
+        progress_windows: dict[str, float],
+        nearest_ped: float,
+    ) -> dict[str, Any]:
+        """Return fail-closed trace-level route recovery diagnostics."""
+        diagnostics: dict[str, Any] = {
+            "enabled": bool(self.config.route_trace_recovery_enabled),
+            "active": False,
+            "reason": "disabled",
+            "selected": False,
+            "nearest_pedestrian_distance": _finite_or_none(nearest_ped),
+            "min_nearest_pedestrian_distance": float(
+                self.config.route_trace_recovery_min_nearest_ped_distance
+            ),
+        }
+        if not bool(self.config.route_trace_recovery_enabled):
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        if self._route_guide is None:
+            diagnostics["reason"] = "route_guide_disabled"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        if not isinstance(route_corridor, dict):
+            diagnostics["reason"] = "missing_route_geometry"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        if nearest_ped < float(self.config.route_trace_recovery_min_nearest_ped_distance):
+            diagnostics["reason"] = "near_pedestrian"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        route_remaining = self._route_float(route_corridor, "route_remaining_distance")
+        diagnostics["route_remaining_distance"] = _finite_or_none(route_remaining)
+        if route_remaining is None or route_remaining < float(
+            self.config.route_trace_recovery_min_route_remaining_distance
+        ):
+            diagnostics["reason"] = "route_too_short"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        waypoint = self._route_point(route_corridor, "route_waypoint_world")
+        if tangent_heading is None or waypoint is None:
+            diagnostics["reason"] = "incomplete_route_geometry"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        lateral_offset = self._route_float(route_corridor, "robot_lateral_offset_to_corridor")
+        diagnostics["robot_lateral_offset_to_corridor"] = _finite_or_none(lateral_offset)
+        if lateral_offset is not None and lateral_offset > float(
+            self.config.corridor_subgoal_max_lateral_offset
+        ):
+            diagnostics["reason"] = "outside_corridor_band"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+        route_progress_pair = self._route_progress_pair(route_corridor)
+        if route_progress_pair is None:
+            diagnostics["reason"] = "missing_route_progress"
+            self._route_trace_recovery_hold_remaining = 0
+            return diagnostics
+
+        goal_progress_3s = float(progress_windows.get("3s", 0.0))
+        route_progress_1s, route_progress_3s = route_progress_pair
+        goal_stalled = goal_progress_3s <= float(
+            self.config.route_trace_recovery_goal_stall_progress_3s
+        )
+        route_stalled = route_progress_3s <= float(
+            self.config.route_trace_recovery_route_stall_progress_3s
+        )
+        route_regressing = route_progress_1s <= float(
+            self.config.route_trace_recovery_route_regression_1s
+        )
+        trigger = bool(route_regressing or (goal_stalled and route_stalled))
+        diagnostics.update(
+            {
+                "goal_progress_3s": goal_progress_3s,
+                "route_arc_progress_1s": route_progress_1s,
+                "route_arc_progress_3s": route_progress_3s,
+                "goal_stalled": bool(goal_stalled),
+                "route_stalled": bool(route_stalled),
+                "route_regressing": bool(route_regressing),
+                "hold_remaining": int(self._route_trace_recovery_hold_remaining),
+            }
+        )
+        if trigger:
+            self._route_trace_recovery_hold_remaining = max(
+                int(self.config.route_trace_recovery_hold_steps), 0
+            )
+            diagnostics["active"] = True
+            diagnostics["reason"] = "route_regressing" if route_regressing else "route_stalled"
+            diagnostics["hold_remaining"] = int(self._route_trace_recovery_hold_remaining)
+            return diagnostics
+        if self._route_trace_recovery_hold_remaining > 0:
+            self._route_trace_recovery_hold_remaining -= 1
+            diagnostics["active"] = True
+            diagnostics["reason"] = "hold"
+            diagnostics["hold_remaining"] = int(self._route_trace_recovery_hold_remaining)
+            return diagnostics
+
+        diagnostics["reason"] = "progress_not_stalled"
+        return diagnostics
+
+    def _corridor_subgoal_activation_for_trace_recovery(
+        self,
+        corridor_subgoal: dict[str, Any],
+        route_trace_recovery: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return subgoal activation widened by a route-trace recovery signal."""
+        if bool(corridor_subgoal.get("active")) or not bool(route_trace_recovery.get("active")):
+            return corridor_subgoal
+        widened = dict(corridor_subgoal)
+        widened.update(
+            {
+                "active": True,
+                "reason": "route_trace_recovery",
+                "route_trace_recovery_reason": route_trace_recovery.get("reason"),
+            }
+        )
+        return widened
+
+    def _select_route_trace_recovery_evaluation(
+        self,
+        accepted: list[dict[str, Any]],
+        route_trace_recovery: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Select an already accepted route-recovery candidate for trace mode.
+
+        Returns:
+            dict[str, Any] | None: Selected accepted evaluation, or ``None`` when
+            trace recovery is inactive or no accepted recovery candidate exists.
+        """
+        if not bool(route_trace_recovery.get("active")):
+            return None
+        priority = {"corridor_subgoal": 0, "route_guide": 1}
+        candidates: list[dict[str, Any]] = []
+        for evaluation in accepted:
+            candidate = evaluation.get("candidate")
+            if not isinstance(candidate, HybridRuleCandidate) or candidate.source not in priority:
+                continue
+            route_progress = float(evaluation.get("terms", {}).get("route_arc_progress", 0.0))
+            if route_progress <= 0.0:
+                continue
+            candidates.append(evaluation)
+        if not candidates:
+            route_trace_recovery["selected_reason"] = "no_accepted_recovery_candidate"
+            return None
+        candidates.sort(
+            key=lambda item: (
+                priority[item["candidate"].source],
+                -float(item.get("terms", {}).get("route_arc_progress", 0.0)),
+                -float(item.get("score", 0.0)),
+            )
+        )
+        selected = candidates[0]
+        route_trace_recovery.update(
+            {
+                "selected": True,
+                "selected_source": selected["candidate"].source,
+                "selected_reason": "accepted_recovery_candidate",
+            }
+        )
+        return selected
 
     def _corridor_subgoal_candidates(
         self,
@@ -1503,7 +1684,115 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "actuation_clip_risk": float(clip_risk),
         }, diagnostics
 
-    def _evaluate_candidate(
+    def _static_safety_gate(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        progress: float,
+        progress_metric: str,
+        initial_static_clearance: float,
+        min_static_clearance: float,
+    ) -> dict[str, Any] | None:
+        """Return optional static-safety demotion diagnostics for value-scorer variants."""
+        if not bool(self.config.static_safety_gate_enabled):
+            return None
+        gated_sources = {"route_guide", "corridor_subgoal"}
+        source_gated = bool(self.config.static_safety_gate_all_sources) or (
+            candidate.source in gated_sources
+        )
+        if not source_gated:
+            return {
+                "enabled": True,
+                "source_gated": False,
+                "tier": "not_applicable",
+                "reason": "source_not_gated",
+                "penalty": 0.0,
+            }
+
+        min_clearance = _finite_or_none(min_static_clearance)
+        initial_clearance = _finite_or_none(initial_static_clearance)
+        if min_clearance is None:
+            return {
+                "enabled": True,
+                "source_gated": True,
+                "tier": "clear",
+                "reason": "no_static_obstacle_clearance_limit",
+                "penalty": 0.0,
+            }
+
+        low_clearance = min_clearance < float(self.config.static_safety_gate_min_clearance)
+        if not low_clearance:
+            return {
+                "enabled": True,
+                "source_gated": True,
+                "tier": "clear",
+                "reason": "above_min_clearance",
+                "min_static_clearance": min_clearance,
+                "penalty": 0.0,
+            }
+
+        positive_progress = progress > float(self.config.static_safety_gate_progress_threshold)
+        non_worsening_clearance = (
+            initial_clearance is None
+            or min_clearance + float(self.config.static_safety_gate_clearance_tolerance)
+            >= initial_clearance
+        )
+        if positive_progress and non_worsening_clearance:
+            return {
+                "enabled": True,
+                "source_gated": True,
+                "tier": "guarded_progress",
+                "reason": "low_clearance_progress_nonworsening",
+                "min_static_clearance": min_clearance,
+                "initial_static_clearance": initial_clearance,
+                "progress": float(progress),
+                "progress_metric": progress_metric,
+                "penalty": 0.0,
+            }
+        return {
+            "enabled": True,
+            "source_gated": True,
+            "tier": "low_clearance_demoted",
+            "reason": "low_clearance_without_safe_progress",
+            "min_static_clearance": min_clearance,
+            "initial_static_clearance": initial_clearance,
+            "progress": float(progress),
+            "progress_metric": progress_metric,
+            "penalty": float(self.config.static_safety_gate_penalty),
+        }
+
+    def _static_safety_gate_progress(
+        self,
+        *,
+        route_corridor: dict[str, Any] | None,
+        start_pos: np.ndarray,
+        end_pos: np.ndarray,
+        fallback_goal_progress: float,
+    ) -> tuple[float, str]:
+        """Return route-local static-gate progress when route geometry is available."""
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        if tangent_heading is None:
+            return float(fallback_goal_progress), "goal_distance"
+        route_dir = np.array([np.cos(tangent_heading), np.sin(tangent_heading)], dtype=float)
+        return float(np.dot(end_pos - start_pos, route_dir)), "route_local"
+
+    def _route_arc_progress_term(
+        self,
+        *,
+        route_corridor: dict[str, Any] | None,
+        start_pos: np.ndarray,
+        end_pos: np.ndarray,
+        max_progress: float,
+    ) -> float:
+        """Return normalized route-tangent progress for any accepted candidate."""
+        tangent_heading = self._route_tangent_heading(route_corridor)
+        if tangent_heading is None:
+            return 0.0
+        route_dir = np.array([np.cos(tangent_heading), np.sin(tangent_heading)], dtype=float)
+        route_progress = float(np.dot(end_pos - start_pos, route_dir))
+        return float(np.clip(route_progress / max(max_progress, _EPS), -1.0, 1.0))
+
+    def _evaluate_candidate(  # noqa: PLR0915
         self,
         *,
         candidate: HybridRuleCandidate,
@@ -1530,7 +1819,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             }
 
         dt, _steps, rollout_commands = self._candidate_rollout_plan(candidate)
-        robot_pos = np.array(state["robot_pos"], dtype=float)
+        start_pos = np.array(state["robot_pos"], dtype=float)
+        robot_pos = np.array(start_pos, dtype=float)
         heading = float(state["heading"])
         goal = state["goal"]
         ped_pos = state["ped_pos"]
@@ -1655,6 +1945,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
 
         end_dist = float(np.linalg.norm(goal - robot_pos))
         progress = start_dist - end_dist
+        static_gate_progress, static_gate_progress_metric = self._static_safety_gate_progress(
+            route_corridor=route_corridor,
+            start_pos=start_pos,
+            end_pos=robot_pos,
+            fallback_goal_progress=progress,
+        )
         max_progress = max(
             float(self.config.max_linear_speed) * float(self.config.rollout_horizon), _EPS
         )
@@ -1733,8 +2029,26 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             candidate=candidate,
             state=state,
         )
+        static_safety_gate = self._static_safety_gate(
+            candidate=candidate,
+            progress=static_gate_progress,
+            progress_metric=static_gate_progress_metric,
+            initial_static_clearance=initial_static_clearance,
+            min_static_clearance=min_static_clearance,
+        )
+        static_safety_gate_penalty = (
+            float(static_safety_gate.get("penalty", 0.0))
+            if isinstance(static_safety_gate, dict)
+            else 0.0
+        )
         terms = {
             "goal_progress": float(np.clip(progress / max_progress, -1.0, 1.0)),
+            "route_arc_progress": self._route_arc_progress_term(
+                route_corridor=route_corridor,
+                start_pos=start_pos,
+                end_pos=robot_pos,
+                max_progress=max_progress,
+            ),
             "path_alignment": float(np.cos(heading_error)),
             "speed_preference": _clip01(rollout_mean_linear / max(speed_cap, _EPS)),
             "static_clearance": static_clearance,
@@ -1764,10 +2078,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             if "corridor_transit" in static_clearance_exception_terms
             else 0.0,
             "route_guide_commitment": route_guide_commitment,
+            "static_safety_gate_penalty": static_safety_gate_penalty,
             **corridor_subgoal_terms,
             **actuation_terms,
         }
-        score = (
+        raw_value_score = (
             float(self.config.goal_progress_weight) * terms["goal_progress"]
             + float(self.config.path_alignment_weight) * terms["path_alignment"]
             + float(self.config.speed_preference_weight) * terms["speed_preference"]
@@ -1778,6 +2093,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.velocity_smoothness_weight) * terms["velocity_smoothness"]
             + float(self.config.control_effort_weight) * terms["control_effort"]
             + float(self.config.deadlock_escape_weight) * terms["deadlock_escape"]
+            + float(self.config.route_arc_progress_weight) * terms["route_arc_progress"]
             + float(self.config.static_recenter_weight) * terms["static_recenter"]
             + float(self.config.static_corridor_transit_weight) * terms["static_corridor_transit"]
             + float(self.config.route_guide_commitment_weight) * terms["route_guide_commitment"]
@@ -1795,16 +2111,19 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )
+        score = raw_value_score - static_safety_gate_penalty
         return {
             "accepted": True,
             "candidate": candidate,
             "score": float(score),
+            "raw_value_score": float(raw_value_score),
             "terms": terms,
             "min_static_clearance": min_static_clearance,
             "min_dynamic_clearance": min_dynamic_clearance,
             "predicted_ttc": ttc,
             "continuous_static_checked": bool(use_continuous_static_check),
             "actuation_diagnostics": actuation_diagnostics,
+            "static_safety_gate": static_safety_gate,
         }
 
     def _candidate_diagnostic(self, evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -1814,6 +2133,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "command": [float(candidate.linear), float(candidate.angular)],
             "source": candidate.source,
             "score": float(evaluation["score"]),
+            "raw_value_score": float(evaluation.get("raw_value_score", evaluation["score"])),
             "terms": {key: float(value) for key, value in evaluation["terms"].items()},
             "min_static_clearance": _finite_or_none(evaluation.get("min_static_clearance")),
             "min_dynamic_clearance": _finite_or_none(evaluation.get("min_dynamic_clearance")),
@@ -1828,6 +2148,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             row["continuous_static_checked"] = bool(evaluation.get("continuous_static_checked"))
         if isinstance(evaluation.get("actuation_diagnostics"), dict):
             row["actuation_diagnostics"] = dict(evaluation["actuation_diagnostics"])
+        if isinstance(evaluation.get("static_safety_gate"), dict):
+            row["static_safety_gate"] = dict(evaluation["static_safety_gate"])
         return row
 
     def _rejection_diagnostic(self, evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -1950,6 +2272,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 progress_windows=progress_windows,
                 route_corridor=None,
                 corridor_subgoal=None,
+                route_trace_recovery=None,
             )
             return command
 
@@ -1965,11 +2288,20 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             progress_windows=progress_windows,
             nearest_ped=nearest_ped,
         )
+        route_trace_recovery = self._route_trace_recovery_signal(
+            route_corridor=route_corridor,
+            progress_windows=progress_windows,
+            nearest_ped=nearest_ped,
+        )
+        corridor_subgoal_for_candidates = self._corridor_subgoal_activation_for_trace_recovery(
+            corridor_subgoal,
+            route_trace_recovery,
+        )
         candidates = self._generate_candidates(
             state,
             speed_cap,
             route_corridor=route_corridor,
-            corridor_subgoal=corridor_subgoal,
+            corridor_subgoal=corridor_subgoal_for_candidates,
         )
         (
             accepted,
@@ -1985,22 +2317,27 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             nearest_ped=nearest_ped,
             progress_windows=progress_windows,
             route_corridor=route_corridor,
-            corridor_subgoal=corridor_subgoal,
+            corridor_subgoal=corridor_subgoal_for_candidates,
         )
 
         self._rejection_counts.update(rejection_counts)
         if accepted:
             accepted.sort(key=lambda item: float(item["score"]), reverse=True)
-            best = accepted[0]
+            recovery_best = self._select_route_trace_recovery_evaluation(
+                accepted,
+                route_trace_recovery,
+            )
+            best = recovery_best if recovery_best is not None else accepted[0]
             candidate = best["candidate"]
             command = (float(candidate.linear), float(candidate.angular))
-            mode = "NORMAL"
+            mode = "ROUTE_TRACE_RECOVERY" if recovery_best is not None else "NORMAL"
             source = candidate.source
             score = float(best["score"])
             terms = best["terms"]
             nearest_static = best["min_static_clearance"]
             predicted_ttc = best["predicted_ttc"]
             actuation_diagnostics = best.get("actuation_diagnostics")
+            static_safety_gate = best.get("static_safety_gate")
             top_k = [
                 self._candidate_diagnostic(item)
                 for item in accepted[: max(int(self.config.top_k_diagnostics), 1)]
@@ -2025,6 +2362,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             terms = {"freezing_penalty": 1.0}
             nearest_static = self._min_obstacle_clearance(robot_pos, observation)
             actuation_diagnostics = None
+            static_safety_gate = None
             predicted_ttc = self._ttc_proxy(
                 robot_pos=robot_pos,
                 heading=float(state["heading"]),
@@ -2047,8 +2385,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             predicted_ttc=predicted_ttc,
             progress_windows=progress_windows,
             route_corridor=route_corridor,
-            corridor_subgoal=corridor_subgoal,
+            corridor_subgoal=corridor_subgoal_for_candidates,
+            route_trace_recovery=route_trace_recovery,
             actuation_diagnostics=actuation_diagnostics,
+            static_safety_gate=static_safety_gate,
             rejected_examples=rejected_examples,
             moving_rejection_counts=dict(moving_rejection_counts),
             rejection_counts_by_source=rejection_counts_by_source,
@@ -2087,7 +2427,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         progress_windows: dict[str, float],
         route_corridor: dict[str, Any] | None = None,
         corridor_subgoal: dict[str, Any] | None = None,
+        route_trace_recovery: dict[str, Any] | None = None,
         actuation_diagnostics: dict[str, Any] | None = None,
+        static_safety_gate: dict[str, Any] | None = None,
         rejected_examples: list[dict[str, Any]] | None = None,
         moving_rejection_counts: dict[str, int] | None = None,
         rejection_counts_by_source: dict[str, dict[str, int]] | None = None,
@@ -2124,7 +2466,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "progress_windows": {key: float(value) for key, value in progress_windows.items()},
             "route_corridor": route_corridor,
             "corridor_subgoal": corridor_subgoal,
+            "route_trace_recovery": route_trace_recovery,
             "selected_actuation_diagnostics": actuation_diagnostics,
+            "selected_static_safety_gate": static_safety_gate,
         }
 
     def diagnostics(self) -> dict[str, Any]:
@@ -2153,11 +2497,13 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "profile": str(self.config.value_scorer_profile),
             "training_source": str(self.config.value_scorer_training_source),
             "candidate_lattice": "hybrid_rule_local_planner",
+            "static_safety_gate_enabled": bool(self.config.static_safety_gate_enabled),
+            "route_trace_recovery_enabled": bool(self.config.route_trace_recovery_enabled),
             "source_parity_claim": False,
             "upstream_code_used": False,
             "observation_scope": (
                 "route_progress, static_clearance, pedestrian_distance_ttc, "
-                "smoothness, and command_bounds"
+                "route_arc_progress, smoothness, and command_bounds"
             ),
         }
 

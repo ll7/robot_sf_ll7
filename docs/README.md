@@ -90,6 +90,8 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for SDD, SocNavBench, and AMV calibration-source assets
 * **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
+* **[Planner Contribution Guide](./contributing_planner.md)** - Minimum path for adding a planner with adapter/protocol metadata, config-first invocation, smoke proof, registry status, and benchmark boundaries
+* **[Planner Zoo](./planner_zoo/index.md)** - User-facing index of runnable, diagnostic-only, learned-policy, monitor-only, and blocked planner rows from the policy-search registries
 * **[Open-Issues Implementation Status](./context/open_issues_implementation_status_2026-05-12.md)** - Handoff record for the May 2026 open-issues pass, including implemented slices, blocked items, and remaining follow-up surface
 * **[Open-Issues Maintainer Input Triage](./context/open_issues_maintainer_input_triage.md)** - Consolidated maintainer-decision inventory for open issues that still need scope, contract, or prioritization guidance
 * **[Open-Issues PR Split Strategy](./context/open_issues_pr_split_strategy_2026-05-13.md)** - PR packaging strategy and validation grouping for the open-issues implementation pass
@@ -173,15 +175,20 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 ### Benchmarking & Metrics
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
+* **[Scenario Zoo Index](./scenario_zoo/index.md)** - Family-oriented scenario catalog with links to source configs, maps, benchmark surfaces, and caveats
 * **[Hazard Traceability](./hazard_traceability.md)** - `hazard_traceability.v1` schema, typed loader, fixture, and coverage summary for scenario-to-hazard evidence caveats
 * **[ODD Contracts](./odd_contracts.md)** - `odd_contract.v1` schema, typed loader, fixture, and boundary for benchmark and falsification evidence assumptions
 * **[Scenario Contracts](./scenario_contracts.md)** - `scenario_contract.v1` schema, typed loader, fixture, and boundary between authored intent, certification, and benchmark evidence
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
+* **[Scenario Perturbation Manifest](./scenario_perturbation_manifest.md)** - `scenario_perturbation_manifest.v1` schema, no-op and bounded route-offset preflight, and evidence boundary for perturbation pilots
 * **[Issue #1272 Safety-Oriented Validation And Falsification Strategy](./context/issue_1272_validation_falsification_strategy.md)** - Current roadmap note for positioning Robot SF as validation/falsification infrastructure without certification or proof-of-safety claims
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
+* **[Benchmark Suite Catalog](./benchmark_suites/README.md)** - Named suite IDs, canonical commands, runtimes, eligible planners, and claim boundaries for smoke, nominal, stress, AMV, LiDAR, and adversarial surfaces
 * **[Issue #1073 Robot SF Empirical-Expansion Gate](./context/issue_1073_empirical_expansion_gate_2026_06_08.md)** - June 8 checkpoint rule for deciding whether Robot SF can move beyond dissertation-floor examples into bounded empirical expansion
 * **[Benchmark Static Dashboard](./benchmark_static_dashboard.md)** - Self-contained static HTML dashboard generation from camera-ready benchmark bundles
+* **[Static Leaderboards](./leaderboards/README.md)** - Markdown leaderboard row contract and first evidence-bound smoke, nominal-sanity, AMV, and LiDAR result surfaces
 * **[Trajectory Debug Visualization](./debug_visualization.md)** - Optional JSON/Rerun timeline export for inspecting one episode JSONL without treating debug artifacts as benchmark evidence
+* **[Learned-Policy Cards](./policy_cards/README.md)** - Human-readable learned-policy summaries that separate existence, smoke proof, benchmark comparison, and promotion boundaries
 * **[PR Promoted Planner Smoke](./benchmark_pr_promoted_planner_smoke.md)** - Pull-request micro-benchmark workflow, runtime target, and fail-closed summary contract
 * **[Issue #1065 Route-Clearance Warning Audit](./context/issue_1065_route_clearance_warning_audit.md)** - Paper and h500 route-clearance warning classification, planner-attribution boundary, and repair/certification follow-up
 * **[Issue #595 Seed-Variability Contract](./context/issue_595_seed_variability_contract.md)** - Frozen camera-ready artifact contract and pilot slice for paper-side seed variability analysis
@@ -238,6 +245,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Goal Sequence Spec (2026-05-07)](./superpowers/specs/2026-05-07_goal_sequence.md)** - Issue sequencing rationale that keeps paper evidence first, h500 mechanism interpretation next, and deferred strategic alternatives explicit
 * **[Issue #872 CARLA Oracle Replay Bridge Status](./context/issue_872_carla_oracle_replay_bridge_status.md)** - Closure record for the bounded CARLA replay/parity parent and the current setup/adapted/native/metric-parity claim boundaries
 * **[Issue #1485 CARLA Transfer-Boundary Follow-Up](./context/issue_1485_carla_transfer_boundary_follow_up.md)** - Post-closure CARLA transfer-boundary taxonomy, deferred multi-scenario replay boundary, and artifact-discipline reminder
+* **[Issue #1508 CARLA Native/Aligned Eligibility Audit](./context/issue_1508_carla_native_aligned_eligibility.md)** - Pre-campaign table classifying certified, native-spawn, and native-metric CARLA replay candidates before any multi-scenario launch
 * **[Issue #1444 CARLA Coordinate Alignment Contract (2026-05-22)](./context/issue_1444_carla_coordinate_alignment_contract.md)** - Conservative replay-mode taxonomy and projection tolerances required before any Robot-SF/CARLA metric parity claim
 * **[Issue #1110 CARLA Oracle Replay Parity Adapter](./context/issue_1110_carla_oracle_replay_parity_adapter.md)** - Conservative metric-parity report format, fail-closed degraded-mode handling, and CLI validation boundary before live CARLA evidence exists
 * **[Camera-Ready All-Planners SLURM Check (2026-05-04)](./context/camera_ready_all_planners_slurm_2026-05-04.md)** - Failed `rsf-allbench` job, partial all-planners evidence, asset blocker, and rerun boundary
@@ -290,6 +298,8 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #593 Predictive Ego-Conditioned v2 Note](./context/issue_593_predictive_ego_conditioned_v2.md)** - Collector-parity closeout for the 9D ego-conditioned predictive-planner path, plus staged evidence showing much better ADE/FDE but no hard-seed outcome gain yet
 * **[Issue #591 Prediction Planner Probabilistic Search](./context/issue_591_prediction_planner_probabilistic_search.md)** - Probabilistic CVaR and MCTS-lite predictive modes improve safety/SNQI slightly but reduce success and impose a large runtime penalty, so they remain experimental only
 * **[Issue #669 Prediction Planner v2 Benchmark Comparison](./context/issue_669_predictive_v2_benchmark_comparison.md)** - Hard-seed and full paper-surface comparison showing the ego-conditioned v2 checkpoint is only a mild tradeoff improvement over the current predictive baseline, not a headline planner-quality win
+* **[Issue #1856 Predictive-v2 Coupling Objective](./context/issue_1856_predictive_coupling_objective.md)** - Proposal/preflight note for testing a phase-coupled planner objective and closed-loop success gate before any renewed four-way predictive-v2 expansion
+* **[Issue #1897 Predictive Coupling Gate Preflight](./context/issue_1897_predictive_coupling_gate_preflight.md)** - Local closed-loop gate execution showing the phase-coupled row only improved clearance, not success, so predictive-v2 expansion stays blocked
 * **[Issue #671 Gap Prediction Benchmark Note](./context/issue_671_gap_prediction_benchmark.md)** - Paper-surface comparison showing `gap_prediction` is safer and faster than the predictive baselines but completely fails on goal-reaching, so it remains testing-only
 * **[Issue #673 Hybrid Portfolio Benchmark Note](./context/issue_673_hybrid_portfolio_benchmark.md)** - Paper-surface comparison showing `hybrid_portfolio` is slower and weaker than both predictive baselines, so it remains testing-only
 * **[Issue #675 Predictive MPPI Benchmark Note](./context/issue_675_predictive_mppi_benchmark.md)** - Paper-surface comparison showing `predictive_mppi` is much slower and weaker than the predictive baselines, so it remains testing-only
@@ -309,6 +319,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Issue #1236 Optimizer Adversarial Sampler](./context/issue_1236_optimizer_adversarial_sampler.md)** - Optuna-backed adversarial sampler pilot, synthetic comparison helper, and non-paper-facing evidence boundary
 * **[Issue #1271 Seed-Sensitivity Explorer](./context/issue_1271_seed_sensitivity_explorer.md)** - API and summary contract for replaying adversarial candidates over explicit seed grids while keeping failure persistence and artifact claims bounded
 * **[Issue #1294 Seed-Sensitivity Perturbations](./context/issue_1294_seed_sensitivity_perturbations.md)** - Opt-in timing/speed perturbation grid for seed-sensitivity replays, with bounded deltas and explicit non-benchmark evidence limits
+* **[Issue #1609 Seed-Sensitive Scenario Mechanisms](./context/issue_1609_seed_sensitive_mechanisms.md)** - Diagnostic mechanism hypotheses over Issue #1608 seed-sensitive scenarios with hard-vs-easy aggregate tables and trace-review limits
 * **[Planner Quality Audit Workflow](./benchmark_planner_quality_audit.md)** - Build the planner decision table, classify headline suitability, and record paper-faithfulness parity gaps
 
 ### Tooling
@@ -657,8 +668,9 @@ When contributing to the project:
 
 1. **Use the new factory pattern** for environment creation
 2. **Follow the unified configuration system** for settings
-3. **Check the migration guide** when updating existing code
-4. **Run tests** to ensure compatibility with both old and new patterns
+3. **Use the [planner contribution guide](./contributing_planner.md)** when adding planner or adapter surfaces
+4. **Check the migration guide** when updating existing code
+5. **Run tests** to ensure compatibility with both old and new patterns
 
 ## 📞 Support
 
@@ -669,6 +681,7 @@ When contributing to the project:
 
 ## Planner Documentation
 
+* **Planner contribution guide**: See `docs/contributing_planner.md` for the minimum planner/adapter contribution flow, metadata, config-first invocation, smoke proof, registry, and benchmark-boundary checklist.
 * **Global Planner**: See `specs/342-svg-global-planner/quickstart.md` for the visibility-graph planner API, POI routing, and integration guidance.
 * **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide.md#planner-selection-visibility-vs-classic-grid`.
 * **MPC social-navigation spike**: See `docs/context/issue_771_drmpscnav_assessment.md` and `docs/context/issue_771_drmpscnav_implementation_guide.md` for the SICNav / DR-MPC assessment boundary, implementation guardrails, and verified-simple gate plan.

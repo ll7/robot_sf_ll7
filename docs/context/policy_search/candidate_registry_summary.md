@@ -56,6 +56,7 @@ not headline promotion without a separate issue and evidence decision.
 | `adaptive_proxemic_selector_v0` | `diagnostic_only` | `diagnostic_only` | Deterministic local-context selector over the three fixed proxemic profiles; logs selected profile and trigger reason, but does not support benchmark or comfort claims. |
 | `topology_guided_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Masked-route topology-hypothesis selector feeding the existing hybrid-rule corridor scorer; missing topology inputs fail closed and selected hypotheses are not benchmark evidence. |
 | `mpc_clearance_guarded_v1` | `diagnostic_only` | `diagnostic_only` | NMPC clearance sampler with an opt-in hard first-step static-clearance guard; intended to measure whether static-collision repair only creates low-progress failures. |
+| `hybrid_rule_route_reacquire_recenter_probe` | `diagnostic_only` | `diagnostic_only` | Issue #1905 route-local-minimum probe combining corridor-subgoal recovery, static recenter, and narrow reorientation hooks; smoke passes, but nominal sanity remains `revise`, so keep it diagnostic-only. |
 
 ## Learned-Policy And Learned-Style Rows
 
@@ -70,7 +71,10 @@ artifact provenance, and fail-closed behavior before benchmark claims.
 | `orca_prior_guarded_ppo_v2_static_global` | `learned_policy_intake` | `smoke_only` | Global ORCA-prior guarded variant. |
 | `orca_primary_guarded_ppo_v1` | `learned_policy_intake` | `smoke_only` | ORCA-primary guarded variant. |
 | `orca_residual_guarded_ppo_v0` | `learned_policy_intake` | `smoke_only` | Runtime residual surface exists; training/checkpoint lineage is deferred. |
-| `tentabot_value_scorer_v0` | `learned_policy_intake` | `diagnostic_only` | Clean-room value-scorer spike; smoke-passes and #1826 reduces nominal-sanity collision/near-miss rates, but the row remains `revise` and diagnostic-only. |
+| `tentabot_value_scorer_v0` | `learned_policy_intake` | `diagnostic_only` | Clean-room value-scorer baseline; hand-authored Tentabot-style recovery is stopped after Issue #1910 unless a separate learned-value-estimator contract is opened. |
+| `tentabot_value_scorer_v1_static_gated` | `learned_policy_intake` | `diagnostic_only` | Stopped diagnostic lane; the static-safety demotion tier reduced low-progress only with worse collisions/near misses. |
+| `tentabot_value_scorer_v2_route_arc` | `learned_policy_intake` | `diagnostic_only` | Stopped diagnostic lane; scalar route-arc progress reduced low-progress only with worse static-collision/near-miss behavior. |
+| `tentabot_value_scorer_v3_trace_recovery` | `learned_policy_intake` | `diagnostic_only` | Stopped diagnostic lane; trace-level recovery was executable but did not preserve the Issue #1832 static-collision baseline. |
 | `learned_risk_model_v1` | `slurm_handoff_only` | `not_benchmark_evidence` | Launch-packet lane only until SLURM training and durable artifacts exist. |
 
 ## SLURM Handoff-Only Lanes

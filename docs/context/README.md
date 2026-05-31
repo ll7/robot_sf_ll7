@@ -112,6 +112,8 @@ knowledge, not every transient iteration detail.
   [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
 * Issue #1550 predictive same-seed row summary schema:
   [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
+* Issue #1508 CARLA native/aligned eligibility audit:
+  [issue_1508_carla_native_aligned_eligibility.md](issue_1508_carla_native_aligned_eligibility.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):
@@ -204,10 +206,14 @@ knowledge, not every transient iteration detail.
   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
 * Issue #1502 Adversarial Two-Family Run (2026-05-31):
   [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md)
+* Issue #1878 Head-On Route Replay Determinism (2026-05-31):
+  [issue_1878_head_on_route_replay_determinism.md](issue_1878_head_on_route_replay_determinism.md)
 * Issue #1503 Adversarial Stress-Coverage Synthesis (2026-05-31):
   [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md)
 * Issue #1861 Adversarial Replay Determinism Gate (2026-05-31):
   [issue_1861_adversarial_replay_determinism_gate.md](issue_1861_adversarial_replay_determinism_gate.md)
+* Issue #1904 Scenario Perturbation Criticality Pilot (2026-05-31):
+  [issue_1904_scenario_perturbation_criticality_pilot.md](issue_1904_scenario_perturbation_criticality_pilot.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:
@@ -216,6 +222,7 @@ knowledge, not every transient iteration detail.
   [issue_1342_gh_act_runtime_requirements.md](issue_1342_gh_act_runtime_requirements.md)
 * Issue #1387 Tentabot-style value scorer spike:
   [issue_1387_tentabot_value_scorer_spike.md](issue_1387_tentabot_value_scorer_spike.md)
+  (includes the Issue #1832 progress-recovery and Issue #1877 static-gate probe boundaries)
 * Issue #1344 paired AMV primary protocol report:
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * SLURM issue batch status 2026-05-21 (canonical SLURM issue-status ledger):
@@ -232,7 +239,7 @@ knowledge, not every transient iteration detail.
   [issue_1484_broader_cross_kinematics_launch.md](issue_1484_broader_cross_kinematics_launch.md)
 * Issue #1546 AMV actuation-envelope stress slice:
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
-* Issue #1556 synthetic AMV actuation stress slice:
+* Issue #1556 synthetic AMV actuation stress slice and #1570 claim boundary:
   [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
 * Issue #1606 Full Classic placeholder retirement:
   [issue_1606_full_classic_placeholder_retirement.md](issue_1606_full_classic_placeholder_retirement.md)
@@ -285,6 +292,8 @@ knowledge, not every transient iteration detail.
   [issue_1294_seed_sensitivity_perturbations.md](issue_1294_seed_sensitivity_perturbations.md)
 * Issue #1608 scenario seed sensitivity:
   [issue_1608_seed_sensitivity_analysis.md](issue_1608_seed_sensitivity_analysis.md)
+* Issue #1609 seed-sensitive scenario mechanisms:
+  [issue_1609_seed_sensitive_mechanisms.md](issue_1609_seed_sensitive_mechanisms.md)
 * Issue archetypes and evidence tiers:
   [issue_1512_issue_archetypes.md](issue_1512_issue_archetypes.md)
 * Issue #1532 archetype metadata sync decision:
@@ -688,6 +697,12 @@ why a change was made rather than a full issue execution transcript.
   records the schema/dimension contract for obstacle-feature predictive datasets, training,
   checkpoints, runtime loading, and the #1218 map-derived obstacle-line data source before any
   same-seed performance comparison.
+* [Issue #1856 Predictive-v2 Coupling Objective](issue_1856_predictive_coupling_objective.md)
+  records the local closed-loop gate and planner-side coupling hypothesis that should run before
+  any renewed predictive-v2 four-way expansion.
+* [Issue #1897 Predictive Coupling Gate Preflight](issue_1897_predictive_coupling_gate_preflight.md)
+  records the local closed-loop gate execution, its fail-closed result, and why the old predictive-v2
+  four-way expansion should remain blocked.
 * [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter` .

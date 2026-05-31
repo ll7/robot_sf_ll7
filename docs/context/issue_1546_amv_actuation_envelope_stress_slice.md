@@ -75,7 +75,9 @@ false**, and explicitly synthetic.
 - The profile should be reported as **constraint provenance**, not as a benchmark-quality AMV
   certification.
 - Any later hardware-aligned profile should use a different profile name and cite the calibration
-  source explicitly.
+  source explicitly. Calibrated-labeled profiles must fail closed unless they include source
+  provenance fields for `source_id`, `source_uri`, `source_type`, `profile_version`,
+  `measurement_date`, `supported_actuation_fields`, `units`, and `claim_boundary`.
 
 ## Metrics
 
@@ -154,6 +156,9 @@ kinematics_matrix:
   - differential_drive
 synthetic_actuation_profile:
   name: amv-actuation-stress-v0
+  profile_version: v0
+  claim_scope: synthetic-only
+  claim_boundary: diagnostic-only
   max_linear_accel_m_s2: 2.0
   max_linear_decel_m_s2: 2.5
   max_yaw_rate_rad_s: 1.2

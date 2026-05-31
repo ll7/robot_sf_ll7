@@ -110,6 +110,7 @@ candidates:
     family: scenario_adaptive_classical
     training_required: false
     promotion_gate: tier_b
+    benchmark_track: policy_search_full_matrix
     candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
     hypothesis: >
       The retained fast-progress static-recenter hybrid candidate is strongest on most current
@@ -127,6 +128,7 @@ candidates:
     family: scenario_adaptive_classical
     training_required: false
     promotion_gate: tier_b
+    benchmark_track: policy_search_h500_leader_collision_slice
     candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
     hypothesis: >
       The h500 leader misses the strict collision gate by one controllable merging collision plus
@@ -181,6 +183,24 @@ candidates:
       and recenter probes from the faster static-escape candidate may convert
       some low-progress stalls without adopting the 3.0 m/s fast-progress speed
       envelope.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  hybrid_rule_route_reacquire_recenter_probe:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_route_reacquire_recenter_probe.yaml
+    issue: 1905
+    hypothesis: >
+      Combining the moderate 2.4 m/s progress envelope with route-corridor
+      subgoal recovery, static recenter probes, and a narrow rotate-in-place
+      recovery path should test whether existing hybrid-rule hooks can escape
+      h500 route-local-minimum blockers without weakening hard static or
+      dynamic safety filters.
     required_stages:
       - smoke
       - nominal_sanity
@@ -246,6 +266,64 @@ candidates:
       Tentabot code, ROS/Gazebo dependencies, source assets, or hidden future
       state. The v0 scorer uses hand-scored teacher weights as a supervised
       spike baseline before any learned model is considered.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  tentabot_value_scorer_v1_static_gated:
+    status: experimental_spike
+    family: learned_style_value_scorer
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v1_static_gated.yaml
+    learned_policy_registry_id: tentabot_value_scorer_v1_static_gated
+    adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+    hypothesis: >
+      A clean-room Tentabot-style primitive value scorer can preserve the v0
+      candidate lattice and auditable value terms while demoting low-clearance
+      commands unless they make positive progress without worsening static
+      clearance. The static gate is an exploratory Robot SF safety tier, not
+      upstream Tentabot parity or benchmark evidence.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  tentabot_value_scorer_v2_route_arc:
+    status: experimental_spike
+    family: learned_style_value_scorer
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v2_route_arc.yaml
+    learned_policy_registry_id: tentabot_value_scorer_v2_route_arc
+    adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+    hypothesis: >
+      A clean-room Tentabot-style primitive value scorer can keep the v1 static
+      safety gate while making route-arc progress a first-class value term for
+      all accepted candidates. This tests whether route-local progress can
+      reduce low-progress timeouts without buying that gain through more static
+      collisions.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
+  tentabot_value_scorer_v3_trace_recovery:
+    status: experimental_spike
+    family: learned_style_value_scorer
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v3_trace_recovery.yaml
+    learned_policy_registry_id: tentabot_value_scorer_v3_trace_recovery
+    adapter_contract: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
+    hypothesis: >
+      A clean-room Tentabot-style primitive value scorer can keep the v1 static
+      safety gate while adding an explicit trace-level route recovery selector
+      that only chooses already accepted corridor-subgoal or route-guide
+      candidates under recent route regression or combined route/goal stall.
+      This tests route-recovery policy rather than another speed, clearance,
+      static-gate, or scalar route-progress retune.
     required_stages:
       - smoke
       - nominal_sanity
@@ -554,6 +632,7 @@ candidates:
     family: hybrid_model_based
     training_required: false
     promotion_gate: tier_b
+    benchmark_track: policy_search_full_matrix_if_promising
     candidate_config_path: configs/policy_search/candidates/hybrid_orca_sampler_v1.yaml
     hypothesis: >
       Keep ORCA-like safety behavior while allowing a short-horizon sampler to

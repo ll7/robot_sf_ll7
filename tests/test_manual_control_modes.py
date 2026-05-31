@@ -1,5 +1,7 @@
 """Tests for manual-control mode identifiers."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from robot_sf.manual_control.modes import (
@@ -12,6 +14,8 @@ from robot_sf.manual_control.modes import (
     ensure_supported_mvp_mode,
     view_mode_spec,
 )
+from robot_sf.render import sim_view as sim_view_module
+from robot_sf.render.sim_view import SimulationView
 
 
 def test_ensure_supported_mvp_mode_accepts_keyboard_hold_fixed_map():
@@ -29,15 +33,6 @@ def test_ensure_supported_mvp_mode_rejects_unimplemented_control_mode():
             control_mode=ManualControlMode.MOUSE_TARGET,
             view_mode=ManualViewMode.FIXED_MAP,
             robot_action_space="holonomic",
-        )
-
-
-def test_ensure_supported_mvp_mode_rejects_robot_static_until_camera_hook_exists():
-    """Stretch view modes should fail closed until implemented."""
-    with pytest.raises(NotImplementedError, match="robot_static"):
-        ensure_supported_mvp_mode(
-            control_mode=ManualControlMode.KEYBOARD_HOLD,
-            view_mode=ManualViewMode.ROBOT_STATIC,
         )
 
 
@@ -74,10 +69,24 @@ def test_ego_up_view_is_supported_by_mode_registry():
     )
 
 
-def test_ego_up_renderer_adapter_requires_camera_transform_hook():
-    """Ego-up should still fail closed when a renderer cannot apply the camera transform."""
+def test_robot_static_view_is_supported_by_mode_registry():
+    """Robot-static should be selectable now that the renderer exposes camera hooks."""
+    spec = view_mode_spec(ManualViewMode.ROBOT_STATIC)
+
+    assert spec.implemented is True
+    assert spec.blocker is None
+    assert "robot-centered" in spec.overlay_label
+    ensure_supported_manual_mode(
+        control_mode=ManualControlMode.KEYBOARD_CRUISE,
+        view_mode=ManualViewMode.ROBOT_STATIC,
+    )
+
+
+@pytest.mark.parametrize("view_mode", [ManualViewMode.EGO_UP, ManualViewMode.ROBOT_STATIC])
+def test_camera_transform_renderer_adapter_requires_camera_transform_hook(view_mode):
+    """Camera-transform modes should fail closed when the renderer cannot apply them."""
     with pytest.raises(NotImplementedError, match="camera transform hook"):
-        configure_manual_view_renderer(object(), ManualViewMode.EGO_UP)
+        configure_manual_view_renderer(object(), view_mode)
 
 
 def test_fixed_map_renderer_adapter_allows_renderers_without_camera_hook():
@@ -85,7 +94,8 @@ def test_fixed_map_renderer_adapter_allows_renderers_without_camera_hook():
     configure_manual_view_renderer(object(), ManualViewMode.FIXED_MAP)
 
 
-def test_ego_up_renderer_adapter_configures_supported_renderer():
+@pytest.mark.parametrize("view_mode", [ManualViewMode.EGO_UP, ManualViewMode.ROBOT_STATIC])
+def test_camera_transform_renderer_adapter_configures_supported_renderer(view_mode):
     """Supported renderers receive the selected manual view mode."""
 
     class _Renderer:
@@ -95,9 +105,50 @@ def test_ego_up_renderer_adapter_configures_supported_renderer():
             self.configured_mode = mode
 
     renderer = _Renderer()
-    configure_manual_view_renderer(renderer, ManualViewMode.EGO_UP)
+    configure_manual_view_renderer(renderer, view_mode)
 
-    assert renderer.configured_mode == ManualViewMode.EGO_UP
+    assert renderer.configured_mode == view_mode
+
+
+def test_sim_view_robot_static_camera_centers_robot_without_rotating_heading():
+    """Robot-static keeps the robot centered while preserving world-up orientation."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.set_manual_view_mode(ManualViewMode.ROBOT_STATIC)
+    view._move_camera(SimpleNamespace(robot_pose=((2.0, 3.0), 0.75)))
+
+    assert view._scale_tuple((2.0, 3.0)) == pytest.approx((50.0, 40.0))
+    assert view._scale_tuple((3.0, 3.0)) == pytest.approx((60.0, 40.0))
+
+
+def test_sim_view_robot_static_grid_uses_centered_camera_transform(monkeypatch):
+    """Robot-static grid should stay aligned with robot-centered world coordinates."""
+    view = SimulationView(record_video=False, width=100, height=80, scaling=10)
+    view.set_manual_view_mode(ManualViewMode.ROBOT_STATIC)
+    view._move_camera(SimpleNamespace(robot_pose=((50.0, 50.0), 0.0)))
+    line_calls = []
+    blit_calls = []
+
+    class _Screen:
+        def blit(self, source, dest):
+            blit_calls.append((source, dest))
+
+    class _Font:
+        def render(self, text, *_args):
+            return f"label:{text}"
+
+    view.screen = _Screen()
+    monkeypatch.setattr(
+        sim_view_module.pygame.draw,
+        "line",
+        lambda _screen, _color, start, end: line_calls.append((start, end)),
+    )
+    monkeypatch.setattr(sim_view_module.pygame.font, "Font", lambda *_args: _Font())
+
+    view._draw_grid(grid_increment=5)
+
+    assert ((0, 40.0), (100, 40.0)) in line_calls
+    assert ((50.0, 0), (50.0, 80)) in line_calls
+    assert blit_calls
 
 
 def test_ensure_supported_mvp_mode_accepts_supported_string_inputs():

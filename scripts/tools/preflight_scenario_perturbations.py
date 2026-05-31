@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Preflight a scenario perturbation manifest with fail-closed validity checks."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from robot_sf.scenario_certification import (
+    preflight_perturbation_manifest,
+    preflight_to_dict,
+)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the scenario perturbation preflight parser."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("manifest", type=Path, help="Scenario perturbation manifest YAML.")
+    parser.add_argument("--output", type=Path, help="Write the JSON preflight report to this path.")
+    parser.add_argument(
+        "--fail-on-excluded",
+        action="store_true",
+        help="Exit non-zero when any variant is excluded from success evidence.",
+    )
+    return parser
+
+
+def main() -> int:
+    """Run scenario perturbation preflight."""
+    args = _build_parser().parse_args()
+    report = preflight_perturbation_manifest(args.manifest)
+    payload = preflight_to_dict(report)
+    output = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(output, encoding="utf-8")
+    else:
+        print(output, end="")
+    if args.fail_on_excluded and any(
+        result["benchmark_evidence_status"] != "eligible_success_evidence_candidate"
+        for result in payload["results"]
+    ):
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

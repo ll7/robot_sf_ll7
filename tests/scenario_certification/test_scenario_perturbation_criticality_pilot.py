@@ -63,6 +63,7 @@ def test_build_pair_table_computes_completed_pair_deltas() -> None:
     assert len(pairs) == 1
     pair = pairs[0]
     assert pair["pair_status"] == "completed"
+    assert pair["perturbed_family"] == "robot_route_offset"
     assert pair["success_delta"] == pytest.approx(-1.0)
     assert pair["timeout_delta"] == pytest.approx(1.0)
     assert pair["collision_delta"] == pytest.approx(0.0)
@@ -70,6 +71,14 @@ def test_build_pair_table_computes_completed_pair_deltas() -> None:
     assert summarize_pairs(pairs)["mean_deltas_completed_pairs"]["success_delta"] == pytest.approx(
         -1.0
     )
+    summary = summarize_pairs(pairs)
+    assert summary["by_planner"]["goal"]["mean_deltas_completed_pairs"][
+        "success_delta"
+    ] == pytest.approx(-1.0)
+    assert summary["by_source_scenario"]["demo"]["pairs"] == 1
+    assert summary["by_perturbation_family"]["robot_route_offset"]["status_counts"] == {
+        "completed": 1
+    }
 
 
 def test_build_pair_table_excludes_fallback_rows_from_completed_deltas() -> None:

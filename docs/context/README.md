@@ -218,6 +218,8 @@ knowledge, not every transient iteration detail.
   [issue_1861_adversarial_replay_determinism_gate.md](issue_1861_adversarial_replay_determinism_gate.md)
 * Issue #1904 Scenario Perturbation Criticality Pilot (2026-05-31):
   [issue_1904_scenario_perturbation_criticality_pilot.md](issue_1904_scenario_perturbation_criticality_pilot.md)
+* Issue #1933 Perturbation Seed Coverage (2026-05-31):
+  [issue_1933_perturbation_seed_coverage.md](issue_1933_perturbation_seed_coverage.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:

@@ -64,3 +64,6 @@ pairing logic to compare only seeds observed for each no-op/perturbed source pai
 Continue #1610 only with a larger, still bounded pilot if the next question needs sensitivity
 power. The next slice should add either more seeds or a stronger local planner candidate before
 spending effort on broader criticality statistics.
+
+Successor: [issue_1933_perturbation_seed_coverage.md](issue_1933_perturbation_seed_coverage.md)
+expanded the same manifest and planner set to four seeds per variant.

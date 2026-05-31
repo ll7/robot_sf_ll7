@@ -244,12 +244,14 @@ def build_pair_table(
                     )
                     noop_values = _episode_values(noop_row)
                     perturbed_values = _episode_values(perturbed_row)
+                    perturbed_metadata = scenario_metadata.get(variant_id, {})
                     pair_rows.append(
                         {
                             "planner": planner,
                             "source_scenario_id": source_scenario_id,
                             "noop_variant_id": noop_id,
                             "perturbed_variant_id": variant_id,
+                            "perturbed_family": str(perturbed_metadata.get("family") or "unknown"),
                             "seed": seed,
                             "pair_status": pair_status,
                             "noop_status": noop_status,
@@ -273,8 +275,8 @@ def build_pair_table(
     return pair_rows
 
 
-def summarize_pairs(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate pair-table status counts and mean deltas."""
+def _summarize_pair_subset(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate one pair-table subset."""
     status_counts: dict[str, int] = defaultdict(int)
     delta_values: dict[str, list[float]] = defaultdict(list)
     for row in pair_rows:
@@ -299,6 +301,34 @@ def summarize_pairs(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
             if values
         },
     }
+
+
+def _grouped_pair_summaries(
+    pair_rows: list[dict[str, Any]],
+    *,
+    field: str,
+) -> dict[str, dict[str, Any]]:
+    """Aggregate pair rows by one categorical field."""
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in pair_rows:
+        key = str(row.get(field) or "unknown")
+        grouped[key].append(row)
+    return {key: _summarize_pair_subset(rows) for key, rows in sorted(grouped.items())}
+
+
+def summarize_pairs(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate pair-table status counts and mean deltas."""
+    summary = _summarize_pair_subset(pair_rows)
+    summary["by_planner"] = _grouped_pair_summaries(pair_rows, field="planner")
+    summary["by_source_scenario"] = _grouped_pair_summaries(
+        pair_rows,
+        field="source_scenario_id",
+    )
+    summary["by_perturbation_family"] = _grouped_pair_summaries(
+        pair_rows,
+        field="perturbed_family",
+    )
+    return summary
 
 
 def _write_markdown(summary: dict[str, Any], path: Path) -> None:

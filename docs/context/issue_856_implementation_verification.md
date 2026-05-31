@@ -3,7 +3,7 @@
 Date: 2026-05-02
 Branch: `856-ppo-all-scenarios`
 Base: `origin/main`
-Verification skill: `.claude/skills/implementation-verification/SKILL.md`
+Verification skill: `.agents/skills/implementation-verification/SKILL.md`
 
 This note records the pre-PR implementation verification for the issue-856 broad-training
 campaign. It complements the campaign log at

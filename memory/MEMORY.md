@@ -3,8 +3,8 @@
 This directory is the repo-local memory layer for stable cross-session agent context in
 `robot_sf_ll7`.
 
-It mirrors Claude Code's auto-memory shape on purpose: keep this `MEMORY.md` file short and use it
-as the startup index, then put details in linked topic files that agents read on demand.
+Keep this `MEMORY.md` file short and use it as the startup index, then put details in linked topic
+files that agents read on demand.
 
 ## Retrieval Order
 
@@ -19,8 +19,7 @@ as the startup index, then put details in linked topic files that agents read on
 - Use `memory/` for reusable knowledge that should survive across sessions.
 - Use `docs/context/` for issue execution history, validation notes, and handoff details that are
   specific to one change or investigation.
-- Keep this file under Claude-style startup limits in practice: concise, under roughly 200 lines,
-  and free of duplicated detail.
+- Keep this file concise, under roughly 200 lines, and free of duplicated detail.
 - Prefer updating an existing memory note over creating a near-duplicate.
 - When a memory note becomes stale, update it or remove its index entry instead of stacking
   contradictory summaries.
@@ -30,8 +29,8 @@ as the startup index, then put details in linked topic files that agents read on
 ### `architecture/`
 
 - [Layered Agent Memory Architecture](architecture/layered_agent_memory_architecture.md)
-  Layer boundaries, `CLAUDE.md` import path, optional MCP exposure, and the retrieval-deferral
-  boundary.
+  Layer boundaries, supported agent startup paths, optional MCP exposure, and the
+  retrieval-deferral boundary.
 
 ### `decisions/`
 
@@ -70,7 +69,6 @@ as the startup index, then put details in linked topic files that agents read on
 
 ## Maintenance
 
-- `CLAUDE.md` imports this file so Claude Code can see the index at session start.
-- Other agents should treat this directory as optional but preferred startup context for durable
-  repo facts.
+- Agents should treat this directory as optional but preferred startup context for durable repo
+  facts after reading `AGENTS.md`.
 - If the tree grows large, keep this index concise and move detail into additional topic files.

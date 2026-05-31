@@ -57,10 +57,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
 
       - name: Sync dependencies (locked)
-        run: uv sync --all-extras --frozen
+        run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
 
       - name: Migrate legacy artifacts into canonical root
-        run: uv run python scripts/tools/migrate_artifacts.py
+        run: bash scripts/dev/ci_step_timer.sh "Migrate legacy artifacts into canonical root" uv run python scripts/tools/migrate_artifacts.py
 
       - name: Lint
         run: scripts/dev/ci_driver.sh lint
@@ -146,10 +146,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
 
       - name: Sync dependencies (locked)
-        run: uv sync --all-extras --frozen
+        run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
 
       - name: Migrate legacy artifacts into canonical root
-        run: uv run python scripts/tools/migrate_artifacts.py
+        run: bash scripts/dev/ci_step_timer.sh "Migrate legacy artifacts into canonical root" uv run python scripts/tools/migrate_artifacts.py
 
       - name: Validation smoke tests
         run: scripts/dev/ci_driver.sh smoke
@@ -241,10 +241,10 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
 
       - name: Sync dependencies (locked)
-        run: uv sync --all-extras --frozen
+        run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
 
       - name: Migrate legacy artifacts into canonical root
-        run: uv run python scripts/tools/migrate_artifacts.py
+        run: bash scripts/dev/ci_step_timer.sh "Migrate legacy artifacts into canonical root" uv run python scripts/tools/migrate_artifacts.py
 
       - name: Example smoke tests
         run: scripts/dev/ci_driver.sh examples-smoke

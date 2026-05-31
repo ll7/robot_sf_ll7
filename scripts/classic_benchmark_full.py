@@ -38,7 +38,7 @@ except (ImportError, ModuleNotFoundError) as _run_full_benchmark_import_error:
         _run_full_benchmark_import_error
     )
 
-    def run_full_benchmark(cfg):  # fallback placeholder
+    def run_full_benchmark(cfg):
         """Fail closed when the full-classic benchmark backend is unavailable.
 
         Args:
@@ -140,7 +140,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--smoke",
         action="store_true",
-        help="Smoke mode (fast placeholders, minimal output)",
+        help="Smoke mode (fast smoke-only diagnostics, minimal output)",
     )
     parser.add_argument(
         "--capture-replay",

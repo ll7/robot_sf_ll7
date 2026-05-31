@@ -108,6 +108,15 @@ def test_trajectory_manifest_serialization_handles_metadata() -> None:
         "collected_at": datetime(2025, 11, 14, 12, 30, tzinfo=UTC),
         "source_path": Path("logs/collector.log"),
         "notes": ["steady", Path("calibration.csv")],
+        "dataset_sha256": "abc123",
+        "reward_convention": "environment_step_reward",
+        "return_convention": "undiscounted_future_return_to_go",
+        "splits": {"train": {"episode_ids": ["traj_v1:demo:episode_000000"]}},
+        "status_policy": {
+            "handling": "exclude_or_explicitly_label_before_training",
+            "readiness_status_excluded": ["fallback", "degraded"],
+            "availability_status_excluded": ["not_available"],
+        },
     }
     artifact = TrajectoryDatasetArtifact(
         dataset_id="traj_v1",
@@ -128,6 +137,13 @@ def test_trajectory_manifest_serialization_handles_metadata() -> None:
     assert record["metadata"]["collected_at"].startswith("2025-11-14T12:30")
     assert record["metadata"]["source_path"] == "logs/collector.log"
     assert record["metadata"]["notes"][1] == "calibration.csv"
+    assert record["metadata"]["dataset_sha256"] == "abc123"
+    assert record["metadata"]["reward_convention"] == "environment_step_reward"
+    assert record["metadata"]["splits"]["train"]["episode_ids"][0].startswith("traj_v1:")
+    assert record["metadata"]["status_policy"]["readiness_status_excluded"] == [
+        "fallback",
+        "degraded",
+    ]
 
 
 def test_training_run_manifest_writes_to_runs_folder(

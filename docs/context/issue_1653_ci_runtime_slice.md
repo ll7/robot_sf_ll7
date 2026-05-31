@@ -54,15 +54,17 @@ for sampled runs do not include step timestamps. The timing helper therefore pro
 
 PR #1681 updated `scripts/dev/ci_timing_summary.py` to report slowest jobs as a fallback and to
 make missing step timestamps explicit in Markdown output. The post-trim sample still has no
-step-level durations, so this branch adds explicit phase timing emitted by
+step-level durations, so PR #1700 added explicit phase timing emitted by
 `scripts/dev/ci_driver.sh` instead of relying on GitHub's step payload.
 
 `fast-feedback` and `smoke-artifacts` both repeat checkout, uv setup, Python setup, system package
 installation, dependency sync, and artifact migration. Because GitHub did not expose step durations
 for the sampled runs, the current evidence cannot yet quantify repeated setup or artifact-generation
-cost. The new phase timing covers the repository-owned `ci_driver.sh` phases first; setup-step
-timing should be added at workflow level only if the next CI logs show that repository phases are
-not the main cost.
+cost. The new phase timing covers the repository-owned `ci_driver.sh` phases first. This branch also
+adds workflow-level timing around dependency sync and artifact migration in both `fast-feedback` and
+`smoke-artifacts` using `scripts/dev/ci_step_timer.sh` so repeated setup costs surface directly in
+CI logs. If repository phases remain dominant, the next probe should inspect required test grouping
+or sharding without weakening coverage.
 
 ## Local Slowest Tests
 
@@ -116,8 +118,8 @@ coverage remains required while its timing is no longer hidden inside the monoli
 | candidate | risk | evidence needed before implementation |
 | --- | --- | --- |
 | Add phase timing around `lint`, `typecheck`, `test`, `smoke`, and `artifact-policy` in `scripts/dev/ci_driver.sh` | low, implemented in this branch | CI log shows per-phase durations without changing pass/fail semantics |
-| Add timing around dependency sync and artifact migration in both CI jobs | low | CI log identifies whether repeated setup is material compared with test time |
-| Split slow example smoke tests into a separately timed subgroup while keeping them required | low, implemented in this branch | CI run shows earlier failure signal or lower p90 without reducing coverage |
+| Add timing around dependency sync and artifact migration in both CI jobs | low, **done** | CI log identifies whether repeated setup is material compared with test time |
+| Split slow example smoke tests into a separately timed subgroup while keeping them required | low, **done** | CI run shows earlier failure signal or lower p90 without reducing coverage |
 | Investigate whether docs-only PRs can use a reduced gate | medium-high | Maintainer decision plus path filter proof that benchmark, planner, workflow, config, and code changes still run full gates |
 
 The recommended starting point is instrumentation, not deselection: use the new phase timestamps,

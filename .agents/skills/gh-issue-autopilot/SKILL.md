@@ -1,6 +1,6 @@
 ---
 name: gh-issue-autopilot
-description: Autonomous issue-to-PR workflow from next eligible issue to draft PR with consistent metadata
+description: Autonomous issue-to-PR workflow from next eligible issue to ready PR with consistent metadata
   handling.
 category: github-issue
 kind: orchestrator
@@ -22,7 +22,7 @@ aliases:
 
 # GH Issue Autopilot
 
-Use this when the user asks to "take the next issue" and execute through to draft PR.
+Use this when the user asks to "take the next issue" and execute through to a ready PR.
 
 Primary integration is with repo project state and PR opening; details of branch validation and detailed
 issue creation are handled by child skills.
@@ -61,7 +61,8 @@ Tie-breakers after sequencing: no blocker labels, no linked PR, older open issue
 7. Run validation gate and rerun on failures only when fixable.
 8. Commit with conventional message; if long-running benchmark evidence appears, classify artifacts.
 9. Sync with latest `origin/main`, rerun readiness, and check artifact durability.
-10. Open draft PR using `gh-pr-opener`.
+10. Open a ready PR using `gh-pr-opener`; use draft only when explicitly requested or when the
+    PR body names a concrete reason review should be blocked.
 11. For deferred important work, create follow-up issues and link them before final handoff.
 
 ## Branch and State Safety

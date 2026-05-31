@@ -445,27 +445,27 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
         d.mkdir(parents=True, exist_ok=True)
 
     # Fast-path: in smoke mode we avoid heavy encoding work but still emit
-    # lightweight placeholder manifests so downstream tooling and tests can
+    # lightweight non-evidence manifests so downstream tooling and tests can
     # observe per-episode degradation notes (e.g. 'matplotlib missing' or
     # 'smoke mode'). This keeps smoke tests fast while preserving expected
     # artifact metadata.
     if bool(getattr(cfg, "smoke", False)):
         smoke = True
         # Generate lightweight plots (these will be marked 'skipped' when
-        # matplotlib is not available) and video placeholders (skipped with
+        # matplotlib is not available) and video entries (skipped with
         # NOTE_SMOKE_MODE). Times are zeroed to indicate the fast-path.
         t0 = time.perf_counter()
         raw_plots = generate_plots(groups, records, plots_dir, cfg)
         t1 = time.perf_counter()
         plot_artifacts = _convert_plot_artifacts(raw_plots)
         # Defensive fallback: ensure tests and downstream consumers always
-        # observe at least one plot artifact entry (skipped placeholder)
+        # observe at least one plot artifact entry (skipped diagnostic)
         # when plot generation produces nothing (e.g. optional deps absent
         # or unexpected exception in upstream generator).
         if not plot_artifacts:
             plot_artifacts = [
                 {
-                    "kind": "placeholder",
+                    "kind": "diagnostic_unavailable",
                     "path_pdf": "",
                     "status": "skipped",
                     "note": "plots-unavailable",

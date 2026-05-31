@@ -357,7 +357,7 @@ def test_collect_trajectories_filters_to_policy_observation_space(tmp_path, monk
         collector,
         "TrajectoryDatasetValidator",
         lambda _path: SimpleNamespace(
-            validate=lambda minimum_episodes: SimpleNamespace(
+            validate=lambda minimum_episodes, **_kwargs: SimpleNamespace(
                 episode_count=minimum_episodes,
                 scenario_coverage={"demo": minimum_episodes},
                 integrity_report={},
@@ -470,7 +470,7 @@ def test_collect_trajectories_merges_training_then_env_contract(tmp_path, monkey
         collector,
         "TrajectoryDatasetValidator",
         lambda _path: SimpleNamespace(
-            validate=lambda minimum_episodes: SimpleNamespace(
+            validate=lambda minimum_episodes, **_kwargs: SimpleNamespace(
                 episode_count=minimum_episodes,
                 scenario_coverage={"demo": minimum_episodes},
                 integrity_report={},

@@ -155,8 +155,23 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     for gate in expected_gates:
         assert gate in script_text
 
-    freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" write'
+    freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"'
+    assert 'freshness_args=(write --base-ref "$BASE_REF")' in script_text
     assert freshness_call in script_text
     assert script_text.rfind(freshness_call) > max(
         script_text.rfind(gate) for gate in expected_gates
     )
+
+
+def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
+    """Final PR proof should fail closed on dirty trees and mark clean-tree stamps."""
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert "PR_READY_MODE" in script_text
+    assert "PR_READY_FINAL" in script_text
+    assert "final) pr_ready_final=1" in script_text
+    assert "interim) pr_ready_final=0" in script_text
+    assert "Final PR readiness requires a clean non-ignored worktree" in script_text
+    assert "recording interim PR readiness from a dirty non-ignored worktree" in script_text
+    assert "--require-clean-tree" in script_text
+    assert "pr_ready_freshness.py" in script_text

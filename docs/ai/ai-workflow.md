@@ -148,8 +148,12 @@ Use the repository gates before higher-risk PRs are opened:
 - `scripts/dev/ruff_fix_format.sh`
 - `scripts/dev/run_tests_parallel.sh`
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
+- `PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 
-The standard readiness flow is fail-fast and failed-first by default. If a failure appears, assess test value first before changing or removing tests.
+The standard readiness flow is fail-fast and failed-first by default. Use the plain command for
+interim feedback while the tree may still be dirty. Use `PR_READY_MODE=final` before PR handoff;
+it fails instead of recording final readiness when non-ignored files are uncommitted. If a failure
+appears, assess test value first before changing or removing tests.
 
 For docs-only and low-risk instruction branches, use the cheaper official path by default: inspect
 the diff, verify referenced paths where practical, and state in the PR when the full readiness gate

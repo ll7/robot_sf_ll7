@@ -1,0 +1,75 @@
+# .understandignore - patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+# Lines below are suggestions - uncomment to activate.
+# Use ! prefix to force-include something excluded by defaults.
+#
+# Built-in defaults (always excluded unless negated):
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+# --- From .gitignore (uncomment to exclude) ---
+
+# *.c
+# *.egg-info
+# *.o
+# *.so
+# *training*.zip
+# *.pyc
+/.coverage
+.pytest_cache
+.scannerwork
+.github/cache/
+file.log
+images
+logs
+SLURM/model
+/slurm-*.out
+/slurm-*.err
+model/**/model.zip
+profile.json
+profiles
+pysf_tests
+robot_sf/data_analysis/plots/*.png
+robot_sf/data_analysis/datasets/*.json
+*.DS_Store
+output/
+wandb
+env/
+ENV/
+# *.egg-info/
+# *.swp
+# *.swo
+# *~
+.env
+.env.*
+# !.env.example
+.vscode/mcp.json
+/local.machine*.md
+.gemini/
+gha-creds-*.json
+third_party/socnavbench/wayptnav_data/
+third_party/socnavbench/sd3dis/stanford_building_parser_dataset/
+third_party/socnavbench/surreal/code/human_meshes/
+third_party/socnavbench/surreal/code/human_textures/
+third_party/external_mpc_repos/
+third_party/python-rvo2/.*
+
+# --- Understand output ---
+
+.understand-anything/intermediate/
+.understand-anything/tmp/
+.understand-anything/knowledge-graph.json
+.understand-anything/meta.json
+.understand-anything/fingerprints.json
+
+# --- Detected directories (uncomment to exclude) ---
+
+# tests/
+# docs/
+# examples/
+# scripts/
+
+# --- Test file patterns (uncomment to exclude) ---
+
+# *.test.*
+# *.spec.*
+# *.snap

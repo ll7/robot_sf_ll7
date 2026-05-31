@@ -90,6 +90,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for SDD and SocNavBench assets
 * **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
+* **[Planner Contribution Guide](./contributing_planner.md)** - Minimum path for adding a planner with adapter/protocol metadata, config-first invocation, smoke proof, registry status, and benchmark boundaries
 * **[Planner Zoo](./planner_zoo/index.md)** - User-facing index of runnable, diagnostic-only, learned-policy, monitor-only, and blocked planner rows from the policy-search registries
 * **[Open-Issues Implementation Status](./context/open_issues_implementation_status_2026-05-12.md)** - Handoff record for the May 2026 open-issues pass, including implemented slices, blocked items, and remaining follow-up surface
 * **[Open-Issues Maintainer Input Triage](./context/open_issues_maintainer_input_triage.md)** - Consolidated maintainer-decision inventory for open issues that still need scope, contract, or prioritization guidance
@@ -663,8 +664,9 @@ When contributing to the project:
 
 1. **Use the new factory pattern** for environment creation
 2. **Follow the unified configuration system** for settings
-3. **Check the migration guide** when updating existing code
-4. **Run tests** to ensure compatibility with both old and new patterns
+3. **Use the [planner contribution guide](./contributing_planner.md)** when adding planner or adapter surfaces
+4. **Check the migration guide** when updating existing code
+5. **Run tests** to ensure compatibility with both old and new patterns
 
 ## 📞 Support
 
@@ -675,6 +677,7 @@ When contributing to the project:
 
 ## Planner Documentation
 
+* **Planner contribution guide**: See `docs/contributing_planner.md` for the minimum planner/adapter contribution flow, metadata, config-first invocation, smoke proof, registry, and benchmark-boundary checklist.
 * **Global Planner**: See `specs/342-svg-global-planner/quickstart.md` for the visibility-graph planner API, POI routing, and integration guidance.
 * **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide.md#planner-selection-visibility-vs-classic-grid`.
 * **MPC social-navigation spike**: See `docs/context/issue_771_drmpscnav_assessment.md` and `docs/context/issue_771_drmpscnav_implementation_guide.md` for the SICNav / DR-MPC assessment boundary, implementation guardrails, and verified-simple gate plan.

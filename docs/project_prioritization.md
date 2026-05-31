@@ -6,9 +6,9 @@ This note defines the lightweight task-scoring model used to advise GitHub
 Project #5 issue ordering for the AMV benchmark program.
 
 The LLM-backed priority-assessment skill uses this document as the static
-rubric for plausibility checks and proposed field values. The score is an
-advisory planning signal; current maintainer direction and fresh evidence can
-override it.
+rubric for plausibility checks and proposed field values. The score is an advisory planning signal,
+not false precision: inputs should be coarse buckets and the precise-looking output is only a
+sortable approximation. Current maintainer direction and fresh evidence can override it.
 
 ## Score Model
 
@@ -63,6 +63,10 @@ Use REST (`gh api repos/...`) for ordinary issue/PR/label/comment operations and
 repository state. Reserve GraphQL for Projects v2 writes and review-thread operations.
 Keep `scripts/tools/project_priority_score.py` as the deterministic `gh` fallback for scripted
 batch sync and local/manual score recomputation.
+
+When API quota is tight, prefer local issue exports, cached Project field IDs, REST issue reads, and
+dry-run score recomputation before doing GraphQL writes. The goal is reliable prioritization with
+bounded API cost, not constant Project churn.
 
 Canonical workflow note:
 

@@ -3,6 +3,7 @@
 Issue: [#1933](https://github.com/ll7/robot_sf_ll7/issues/1933)
 Parent: [#1610](https://github.com/ll7/robot_sf_ll7/issues/1610)
 Predecessor: [#1904](https://github.com/ll7/robot_sf_ll7/issues/1904)
+Successor: [#1935](https://github.com/ll7/robot_sf_ll7/issues/1935)
 
 ## Goal
 
@@ -69,6 +70,8 @@ and excluded from completed-pair means. This run had no such rows.
 
 ## Routing
 
-The next #1610 child should change exactly one dimension: either add a stronger local planner
-candidate to this same route-offset slice, or add a second perturbation family while keeping the
-planner/seed budget fixed. Do not broaden both at once.
+Successor [issue_1935_stronger_perturbation_planner.md](issue_1935_stronger_perturbation_planner.md)
+added one stronger local planner candidate to this same route-offset slice. The next #1610 child
+should again change exactly one dimension: add a second perturbation family while keeping the
+planner/seed budget fixed, or keep route-offset fixed and inspect the stronger candidate's
+trace-level clearance mechanism. Do not broaden both at once.

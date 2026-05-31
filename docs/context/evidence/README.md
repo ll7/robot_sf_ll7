@@ -93,3 +93,6 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   slice.
 - `issue_1933_perturbation_seed_coverage_2026-05-31/`: compact diagnostic-only seed-limit-4
   paired no-op-versus-route-offset summary for the #1610 scenario perturbation criticality pilot.
+- `issue_1935_stronger_perturbation_planner_2026-05-31/`: compact diagnostic-only seed-limit-4
+  paired no-op-versus-route-offset summary with one stronger policy-search local planner added to
+  the #1610 scenario perturbation criticality pilot.

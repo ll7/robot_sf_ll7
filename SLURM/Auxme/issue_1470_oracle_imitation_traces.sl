@@ -64,7 +64,7 @@ ensure_module_command() {
 }
 
 run_in_allocation() {
-  if [[ "${ISSUE1470_USE_SRUN:-0}" == "1" ]] && command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  if [[ "${ISSUE1470_USE_SRUN:-0}" == "1" ]] && command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]] && srun --version >/dev/null 2>&1; then
     echo "[issue1470] Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
     srun --cpu_bind=cores --gpus-per-node=1 "$@"
   else

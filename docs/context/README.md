@@ -163,6 +163,8 @@ knowledge, not every transient iteration detail.
   [issue_1675_learned_risk_surface_interface.md](issue_1675_learned_risk_surface_interface.md)
 * Issue #1628 Actuation-Aware Learned Navigation for AMVs (2026-05-30):
   [issue_1628_actuation_aware_learned_navigation.md](issue_1628_actuation_aware_learned_navigation.md)
+* Issue #1740 Actuation-Aware Learned-Policy Smoke Candidate (2026-05-30):
+  [issue_1740_actuation_aware_smoke_candidate.md](issue_1740_actuation_aware_smoke_candidate.md)
 * Issue #1720 learned-policy roadmap and issue routing:
   [issue_1720_learned_policy_roadmap.md](issue_1720_learned_policy_roadmap.md)
 * Issue #1239 human-model transfer robustness:

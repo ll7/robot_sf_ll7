@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.validation import predictive_eval_common
 from scripts.validation import run_predictive_success_campaign as campaign
 
 
@@ -225,6 +226,27 @@ def test_issue_1856_coupling_grid_touches_planner_objective_not_checkpoint() -> 
     )
     assert "predictive_checkpoint_path" not in revised
     assert "predictive_model_id" not in revised
+
+
+def test_default_hard_seed_manifest_matches_default_scenario_matrix() -> None:
+    """The success campaign defaults should produce a non-empty hard-case subset."""
+    root = Path(__file__).parents[2]
+    manifest = predictive_eval_common.load_seed_manifest(
+        root / "configs" / "benchmarks" / "predictive_hard_seeds_v1.yaml"
+    )
+    scenarios = predictive_eval_common.make_subset_scenarios(
+        root / "configs" / "scenarios" / "classic_interactions.yaml",
+        manifest,
+    )
+
+    scenario_ids = {scenario["name"] for scenario in scenarios}
+    assert scenario_ids == {
+        "classic_cross_trap_high",
+        "classic_cross_trap_medium",
+        "classic_cross_trap_low",
+        "classic_group_crossing_high",
+    }
+    assert sum(len(scenario["seeds"]) for scenario in scenarios) == 7
 
 
 def test_run_eval_fails_when_jsonl_artifact_missing(monkeypatch, tmp_path: Path) -> None:

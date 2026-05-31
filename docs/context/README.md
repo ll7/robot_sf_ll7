@@ -698,6 +698,9 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #1856 Predictive-v2 Coupling Objective](issue_1856_predictive_coupling_objective.md)
   records the local closed-loop gate and planner-side coupling hypothesis that should run before
   any renewed predictive-v2 four-way expansion.
+* [Issue #1897 Predictive Coupling Gate Preflight](issue_1897_predictive_coupling_gate_preflight.md)
+  records the local closed-loop gate execution, its fail-closed result, and why the old predictive-v2
+  four-way expansion should remain blocked.
 * [Issue #932 Hybrid Portfolio Diagnostics](./issue_932_hybrid_portfolio_diagnostics.md)
   records the first small policy-stack runtime diagnostics slice: selected-head counts, fallback
   counts, and last-decision metadata on `HybridPortfolioAdapter` .

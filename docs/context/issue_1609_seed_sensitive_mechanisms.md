@@ -31,7 +31,7 @@ For every Issue #1608 `seed_sensitive` scenario, the derived table computes top-
 averages over:
 
 - hard seeds reported by Issue #1608,
-- a sample of easier seeds,
+- all easier seeds, with compact outputs listing only a sample of easier seed IDs,
 - success,
 - collision,
 - near-miss count,
@@ -77,7 +77,7 @@ The clearest aggregate-supported mechanisms are:
   with `0.0000` mean success and `1.0000` mean collision, consistent with opposing-flow commitment
   sensitivity. Issue #1878 now provides one durable head-on replay determinism fixture for a related
   route, but it is fixed-seed replay evidence rather than broad seed-mechanism proof.
-- `francis2023_join_group`: hard seeds `112 113 115 116` have `0.0000` mean success and high
+- `francis2023_join_group`: hard seeds `112 113 115 116` have `0.1250` mean success and high
   near-miss pressure relative to easier seeds, consistent with group-cohesion or gap-selection
   sensitivity.
 

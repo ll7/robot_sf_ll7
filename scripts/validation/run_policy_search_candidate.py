@@ -581,8 +581,29 @@ def _run_stage_eval(  # noqa: PLR0913
         benchmark_profile=str(benchmark_profile),
         synthetic_actuation_profile=synthetic_actuation_profile,
     )
+    missing_jsonl = not jsonl_path.exists()
+    if missing_jsonl:
+        jsonl_path.write_text("", encoding="utf-8")
     rows = _load_records(jsonl_path)
     summary = summarize_policy_search_records(rows)
+    if missing_jsonl or not rows:
+        reason = "missing_jsonl" if missing_jsonl else "empty_jsonl"
+        summary["stage_artifact_status"] = {
+            "status": "not_available",
+            "reason": reason,
+            "jsonl_path": str(jsonl_path),
+            "message": (
+                "run_map_batch did not produce policy-search episode records; "
+                "this stage is recorded as fail-closed and cannot pass."
+            ),
+        }
+        if isinstance(batch_summary, Mapping):
+            preflight = batch_summary.get("preflight")
+            if isinstance(preflight, Mapping):
+                summary["preflight"] = dict(preflight)
+            availability = batch_summary.get("benchmark_availability")
+            if isinstance(availability, Mapping):
+                summary["benchmark_availability"] = dict(availability)
     summary["runtime_sec"] = float(max(time.perf_counter() - started, 0.0))
     return {
         "records": rows,
@@ -827,6 +848,20 @@ def _write_markdown_report(  # noqa: C901, PLR0913
         f"{float(summary.get('collision_rate', 0.0)):.4f} | {float(summary.get('near_miss_rate', 0.0)):.4f} | "
         f"{_format_optional_float(mean_min_distance)} | {_format_optional_float(mean_avg_speed)} |"
     )
+    artifact_status_raw = summary.get("stage_artifact_status")
+    artifact_status = artifact_status_raw if isinstance(artifact_status_raw, Mapping) else {}
+    if artifact_status:
+        lines.extend(
+            [
+                "",
+                "## Stage Artifact Status",
+                "",
+                f"- JSONL: `{artifact_status.get('status', 'unknown')}` "
+                f"(`{artifact_status.get('reason', 'unknown')}`)",
+                f"- Path: `{artifact_status.get('jsonl_path', 'unknown')}`",
+                f"- Note: {artifact_status.get('message', 'n/a')}",
+            ]
+        )
     evidence_adjusted_raw = summary.get("evidence_adjusted")
     evidence_adjusted = evidence_adjusted_raw if isinstance(evidence_adjusted_raw, dict) else {}
     if int(evidence_adjusted.get("excluded_episodes", 0) or 0) > 0:
@@ -1047,6 +1082,7 @@ def main() -> int:
         "synthetic_actuation_profile": synthetic_actuation_profile,
         "git_hash": git_hash,
         "summary": summary_payload["summary"],
+        "batch_summary": summary_payload.get("batch_summary"),
         "decision": decision,
         "jsonl_path": summary_payload["jsonl_path"],
         "family_runs": family_runs,

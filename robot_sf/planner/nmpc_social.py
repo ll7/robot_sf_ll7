@@ -59,6 +59,8 @@ class NMPCSocialConfig:
     desired_obstacle_clearance: float = 0.9
     min_turn_speed_scale: float = 0.3
     min_obstacle_speed_scale: float = 0.25
+    hard_obstacle_guard_enabled: bool = False
+    hard_obstacle_clearance: float = 0.35
 
     obstacle_threshold: float = 0.5
     obstacle_search_cells: int = 12
@@ -105,6 +107,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             "solver_successes": 0,
             "solver_failures": 0,
             "fallback_stop_count": 0,
+            "hard_obstacle_guard_count": 0,
             "sum_abs_linear": 0.0,
             "sum_abs_angular": 0.0,
             "nonzero_command_count": 0,
@@ -312,6 +315,45 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         return float(
             1.0 / (1.0 + np.exp(float(self.config.collision_cost_kappa) * (clearance - margin)))
         )
+
+    def _guarded_first_step_command(
+        self,
+        *,
+        linear: float,
+        angular: float,
+        robot_pos: np.ndarray,
+        heading: float,
+        robot_radius: float,
+        observation: dict[str, Any],
+    ) -> tuple[float, float]:
+        """Fail closed on first-step static obstacle clearance violations.
+
+        Returns:
+            tuple[float, float]: Possibly adjusted `(linear, angular)` command.
+        """
+        if not bool(self.config.hard_obstacle_guard_enabled) or linear <= self._EPS:
+            return linear, angular
+
+        next_heading = _wrap_angle(heading + angular * float(self.config.rollout_dt))
+        next_pos = robot_pos + np.asarray(
+            [
+                linear * np.cos(next_heading) * float(self.config.rollout_dt),
+                linear * np.sin(next_heading) * float(self.config.rollout_dt),
+            ],
+            dtype=float,
+        )
+        next_clearance = self._min_obstacle_clearance(next_pos, observation) - robot_radius
+        if not np.isfinite(next_clearance) or next_clearance >= float(
+            self.config.hard_obstacle_clearance
+        ):
+            return linear, angular
+
+        self._stats["hard_obstacle_guard_count"] = (
+            int(self._stats.get("hard_obstacle_guard_count", 0)) + 1
+        )
+        if self._last_solution is not None and self._last_solution.size >= 1:
+            self._last_solution[0] = 0.0
+        return 0.0, angular
 
     def _preferred_avoidance_turn(
         self,
@@ -529,6 +571,14 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 float(self.config.max_angular_speed),
             )
         )
+        linear, angular = self._guarded_first_step_command(
+            linear=linear,
+            angular=angular,
+            robot_pos=robot_pos,
+            heading=heading,
+            robot_radius=robot_radius,
+            observation=observation,
+        )
         self._record_command(linear, angular)
         return (linear, angular)
 
@@ -555,6 +605,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             "solver_successes": int(self._stats.get("solver_successes", 0)),
             "solver_failures": int(self._stats.get("solver_failures", 0)),
             "fallback_stop_count": int(self._stats.get("fallback_stop_count", 0)),
+            "hard_obstacle_guard_count": int(self._stats.get("hard_obstacle_guard_count", 0)),
             "nonzero_command_count": int(self._stats.get("nonzero_command_count", 0)),
             "mean_abs_linear": float(self._stats.get("sum_abs_linear", 0.0)) / calls,
             "mean_abs_angular": float(self._stats.get("sum_abs_angular", 0.0)) / calls,
@@ -592,6 +643,8 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
         "desired_obstacle_clearance": float,
         "min_turn_speed_scale": float,
         "min_obstacle_speed_scale": float,
+        "hard_obstacle_guard_enabled": _parse_bool,
+        "hard_obstacle_clearance": float,
         "obstacle_threshold": float,
         "obstacle_search_cells": int,
         "avoidance_turn_bias_weight": float,

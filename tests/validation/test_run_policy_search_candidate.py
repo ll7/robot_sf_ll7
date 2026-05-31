@@ -173,6 +173,25 @@ def test_adaptive_proxemic_selector_candidate_is_diagnostic_only() -> None:
     )
 
 
+def test_mpc_clearance_guarded_candidate_enables_static_guard() -> None:
+    """Guarded NMPC candidate should keep the legacy sampler separate and diagnostic-only."""
+    entry, payload, merged, config_path = load_candidate_definition(
+        Path("docs/context/policy_search/candidate_registry.yaml"),
+        "mpc_clearance_guarded_v1",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["family"] == "model_predictive_control"
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "nmpc_social"
+    assert merged["hard_obstacle_guard_enabled"] is True
+    assert merged["hard_obstacle_clearance"] == pytest.approx(0.35)
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/mpc_clearance_guarded_v1.yaml").resolve()
+    )
+
+
 def test_progress_2p4_static_escape_probe_candidate_is_diagnostic_only() -> None:
     """Issue #1834 candidate should merge 2.4 m/s progress with static-escape probes."""
     registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"

@@ -311,7 +311,7 @@ def _group_scenarios_by_config_overrides(
 
 def decide_stage_status(stage_name: str, stage_cfg: dict[str, Any], summary: dict[str, Any]) -> str:
     """Convert a stage summary into the registry/report decision label."""
-    episodes = int(summary.get("episodes", 0))
+    episodes = int(summary.get("episodes") or 0)
     exclusions = summary.get("scenario_exclusions")
     if isinstance(exclusions, Mapping) and episodes > 0:
         excluded_count = int(exclusions.get("count", 0) or 0)
@@ -728,17 +728,44 @@ def _scenario_exclusion_lines(summary: Mapping[str, Any]) -> list[str]:
     ]
     for record_raw in records:
         record = record_raw if isinstance(record_raw, Mapping) else {}
+        scenario_id = record.get("scenario_id")
+        scenario_id = scenario_id if scenario_id is not None else "unknown"
+        seed = record.get("seed")
+        seed = seed if seed is not None else "n/a"
+        status = record.get("status")
+        status = status if status is not None else "unknown"
+        reason = record.get("reason")
+        reason = reason if reason is not None else "unknown"
         evidence_raw = record.get("evidence")
         evidence = evidence_raw if isinstance(evidence_raw, list) else []
         lines.append(
-            f"| {record.get('scenario_id', 'unknown')} | {record.get('seed', 'n/a')} | "
-            f"{record.get('status', 'unknown')} | {record.get('reason', 'unknown')} | "
+            f"| {scenario_id} | {seed} | {status} | {reason} | "
             f"{'; '.join(str(item) for item in evidence)} |"
         )
     return lines
 
 
-def _write_markdown_report(  # noqa: PLR0913
+def _diagnostic_claim_boundary(
+    candidate_entry: Mapping[str, Any],
+    candidate_payload: Mapping[str, Any],
+) -> str | None:
+    """Return a conservative report caveat for diagnostic-only candidates."""
+    params = candidate_payload.get("params")
+    params = params if isinstance(params, dict) else {}
+    if (
+        candidate_entry.get("claim_scope") != "diagnostic_only"
+        and params.get("diagnostic_only") is not True
+        and params.get("claim_boundary") != "diagnostic_only"
+    ):
+        return None
+    return (
+        "This report is diagnostic-only wiring or stage evidence. Treat aggregate metrics and "
+        "baseline deltas as arithmetic context, not benchmark-strength evidence for comfort, "
+        "near-miss behavior, generalization, or planner superiority."
+    )
+
+
+def _write_markdown_report(  # noqa: C901, PLR0913
     *,
     docs_root: Path,
     candidate_name: str,
@@ -846,8 +873,14 @@ def _write_markdown_report(  # noqa: PLR0913
             lines.append(f"- `{key}`: `{value}`")
     else:
         lines.append("- No failures recorded.")
+    claim_boundary = _diagnostic_claim_boundary(candidate_entry, candidate_payload)
+    if claim_boundary is not None:
+        lines.extend(["", "## Claim Boundary", "", claim_boundary])
     lines.extend(["", "## Baseline Deltas", ""])
     if deltas:
+        if claim_boundary is not None:
+            lines.append("_Diagnostic-only arithmetic context; not a benchmark comparison claim._")
+            lines.append("")
         lines.append("| Baseline | Success Delta | Collision Delta | Near-Miss Delta |")
         lines.append("|---|---:|---:|---:|")
         for name, row in sorted(deltas.items()):

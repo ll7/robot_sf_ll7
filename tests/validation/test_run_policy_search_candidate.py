@@ -17,6 +17,7 @@ from scripts.validation.run_policy_search_candidate import (
     _format_signed_optional_float,
     _load_stage_scenarios,
     _prepare_scenarios_for_inline_run,
+    _scenario_exclusion_lines,
     decide_stage_status,
     load_candidate_definition,
     split_scenarios_by_family,
@@ -105,6 +106,28 @@ def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -
     assert stage["synthetic_actuation_profile"]["claim_scope"] == "synthetic-only"
     assert stage["fail_closed_initial_overlap_exclusion"] is True
     assert stage["paper_facing"] is False
+
+
+def test_adaptive_proxemic_selector_candidate_is_diagnostic_only() -> None:
+    """The adaptive proxemic selector should be registered as diagnostic-only."""
+    registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"
+
+    entry, payload, merged, config_path = load_candidate_definition(
+        registry_path,
+        "adaptive_proxemic_selector_v0",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["training_required"] is False
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "adaptive_proxemic_selector_v0"
+    assert payload["params"]["diagnostic_only"] is True
+    assert merged["diagnostic_only"] is True
+    assert sorted(merged["profiles"]) == ["conservative", "neutral", "open"]
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/adaptive_proxemic_selector_v0.yaml").resolve()
+    )
 
 
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
@@ -295,6 +318,14 @@ def test_decide_stage_status_treats_named_smoke_stages_as_smoke() -> None:
         decide_stage_status(
             "amv_actuation_smoke",
             {},
+            {"episodes": None, "scenario_exclusions": {"count": ""}},
+        )
+        == "revise"
+    )
+    assert (
+        decide_stage_status(
+            "amv_actuation_smoke",
+            {},
             {"episodes": 1, "scenario_exclusions": {"count": 1}},
         )
         == "excluded"
@@ -350,6 +381,27 @@ def test_annotate_initial_overlap_exclusions_requires_first_step_evidence() -> N
         ],
     }
     assert "scenario_exclusion" not in rows[0]
+
+
+def test_scenario_exclusion_lines_normalize_missing_values() -> None:
+    """Scenario-exclusion report rows should not render explicit nulls as strings."""
+    lines = _scenario_exclusion_lines(
+        {
+            "scenario_exclusions": {
+                "records": [
+                    {
+                        "scenario_id": None,
+                        "seed": None,
+                        "status": None,
+                        "reason": None,
+                        "evidence": None,
+                    }
+                ]
+            }
+        }
+    )
+
+    assert "| unknown | n/a | unknown | unknown |  |" in lines
 
 
 def test_format_optional_float_keeps_present_values() -> None:

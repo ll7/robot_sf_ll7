@@ -258,6 +258,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="adaptive_proxemic_selector_v0",
+        tier="experimental",
+        aliases=("adaptive_proxemic_selector_v0",),
+        note=(
+            "Diagnostic selector over fixed conservative, neutral, and open proxemic "
+            "hybrid-rule profile candidates."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="safety_barrier",
         tier="experimental",
         aliases=("safety_barrier",),

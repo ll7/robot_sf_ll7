@@ -1,0 +1,2 @@
+.understand-anything/knowledge-graph.json filter=lfs diff=lfs merge=lfs -text
+.understand-anything/fingerprints.json filter=lfs diff=lfs merge=lfs -text

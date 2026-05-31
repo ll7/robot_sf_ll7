@@ -38,6 +38,9 @@ Combining the moderate 2.4 m/s progress envelope with route-corridor subgoal rec
 
 This report is diagnostic-only wiring or stage evidence. Treat aggregate metrics and baseline deltas as arithmetic context, not benchmark-strength evidence for comfort, near-miss behavior, generalization, or planner superiority.
 
+The raw summary JSON stayed in ignored local `output/`; this tracked report is the compact durable
+diagnostic evidence for the smoke result.
+
 ## Baseline Deltas
 
 _Diagnostic-only arithmetic context; not a benchmark comparison claim._

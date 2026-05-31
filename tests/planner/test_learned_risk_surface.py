@@ -73,6 +73,7 @@ def test_surface_attaches_as_occupancy_payload_consumable_by_planners() -> None:
 
 def test_surface_attachment_preserves_non_origin_robot_pose_for_ego_grid() -> None:
     """Ego-frame surface metadata should let occupancy-aware planners query world rollouts."""
+    expected_robot_pose = [5.0, -1.0, 0.0]
     observation = {
         "robot": {
             "position": [5.0, -1.0],
@@ -88,8 +89,16 @@ def test_surface_attachment_preserves_non_origin_robot_pose_for_ego_grid() -> No
 
     enriched = attach_risk_surface_to_observation(observation, surface)
 
-    assert enriched["occupancy_grid_meta"]["robot_pose"] == [5.0, -1.0, 0.0]
-    assert enriched["local_risk_surface_diagnostics"]["robot_pose"] == [5.0, -1.0, 0.0]
+    assert enriched["occupancy_grid_meta"]["robot_pose"] == expected_robot_pose
+    assert enriched["local_risk_surface_diagnostics"]["robot_pose"] == expected_robot_pose
+
+    adapter = RiskSurfacePlannerAdapter(spec=spec)
+    adapter.plan(observation)
+    adapter_robot_pose = (adapter.diagnostics().get("surface") or {}).get("robot_pose")
+    assert adapter_robot_pose == expected_robot_pose, (
+        "adapter diagnostics should preserve the attached non-origin robot_pose; "
+        f"got {adapter_robot_pose}"
+    )
 
 
 def test_risk_surface_planner_adapter_produces_bounded_command_and_diagnostics() -> None:

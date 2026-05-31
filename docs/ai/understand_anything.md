@@ -43,7 +43,13 @@ Then restart Codex so it sees the installed skills. The upstream installer links
 Install Git LFS before pulling or updating shared graph artifacts:
 
 ```bash
+# macOS
 brew install git-lfs
+
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install git-lfs
+
 git lfs install
 git lfs pull
 ```
@@ -54,10 +60,10 @@ For this repository, LFS tracking is declared in `.gitattributes`.
 
 Use the graph for orientation before broad repo reads:
 
-- launch the dashboard with `/understand-dashboard` from the repository root,
-- inspect layers and tour steps to identify likely files,
-- use `/understand-chat` for graph-grounded questions when available,
-- use `/understand-diff` when a diff overlay is useful for local review.
+- Launch the dashboard with `/understand-dashboard` from the repository root.
+- Inspect layers and tour steps to identify likely files.
+- Use `/understand-chat` for graph-grounded questions when available.
+- Use `/understand-diff` when a diff overlay is useful for local review.
 
 Prefer the dashboard and chat tools over reading `knowledge-graph.json` directly; the raw graph is a
 large LFS artifact and is usually too noisy for normal context loading.

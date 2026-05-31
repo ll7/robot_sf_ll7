@@ -3,6 +3,10 @@
 `docs/context/` is the repository's Markdown knowledge base for issue execution history, durable
 agent handoff, and reusable reasoning that should not be trapped in chat or PR text.
 
+For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-first catalog for
+current entry points, status rules, and curated context-pack scopes. This README remains the note
+maintenance workflow and full discoverability surface.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 
@@ -74,6 +78,7 @@ knowledge, not every transient iteration detail.
 
 ## Skills And Entry Points
 
+* Retrieval-first context index: [INDEX.md](INDEX.md)
 * Repository rule: [AGENTS.md](../../AGENTS.md)
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
@@ -138,6 +143,8 @@ knowledge, not every transient iteration detail.
   [issue_1246_observation_levels.md](issue_1246_observation_levels.md)
 * Issue #1612 parallel observation-space benchmark tracks:
   [issue_1612_observation_track_architecture.md](issue_1612_observation_track_architecture.md)
+* Issue #1721 Legacy Benchmark-Track Metadata Audit:
+  [issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md)
 * Issue #1659 LiDAR occupancy adapter:
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:
@@ -154,6 +161,12 @@ knowledge, not every transient iteration detail.
   [issue_1674_topology_hypothesis_diagnostics.md](issue_1674_topology_hypothesis_diagnostics.md)
 * Issue #1675 learned risk-surface interface:
   [issue_1675_learned_risk_surface_interface.md](issue_1675_learned_risk_surface_interface.md)
+* Issue #1628 Actuation-Aware Learned Navigation for AMVs (2026-05-30):
+  [issue_1628_actuation_aware_learned_navigation.md](issue_1628_actuation_aware_learned_navigation.md)
+* Issue #1740 Actuation-Aware Learned-Policy Smoke Candidate (2026-05-30):
+  [issue_1740_actuation_aware_smoke_candidate.md](issue_1740_actuation_aware_smoke_candidate.md)
+* Issue #1720 learned-policy roadmap and issue routing:
+  [issue_1720_learned_policy_roadmap.md](issue_1720_learned_policy_roadmap.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:
@@ -202,6 +215,8 @@ knowledge, not every transient iteration detail.
   [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
 * Issue #1744 Latency Stress Preflight Contract (2026-05-30):
   [issue_1744_latency_stress_preflight_contract.md](issue_1744_latency_stress_preflight_contract.md)
+* Issue #1629 Latency-Aware Learned Navigation Safety (2026-05-30):
+  [issue_1629_latency_aware_learned_navigation.md](issue_1629_latency_aware_learned_navigation.md)
 * Issue #1398 metric rollup reconciliation:
   [issue_1398_metric_rollup_reconciliation.md](issue_1398_metric_rollup_reconciliation.md)
 * Issue #1396 Shielded PPO Repair Launch Packet:

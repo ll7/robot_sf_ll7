@@ -1,6 +1,7 @@
 # Repository Guidelines
 
-Use `AGENTS.md`, `.specify/memory/constitution.md`, and `docs/dev_guide.md` to guide AI assistants.
+Use `AGENTS.md`, `docs/maintainer_values.md`, `.specify/memory/constitution.md`, and
+`docs/dev_guide.md` to guide AI assistants.
 This document covers briefly the repository structure, coding style, testing workflow, and contributor conventions.
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
@@ -8,15 +9,19 @@ Keep prompts, instructions, and handoff notes as streamlined and token-efficient
 
 ## Maintainer Value Hierarchy
 
-Optimize first for concrete research progress on social-navigation simulation, benchmarking, and
-planner exploration. Apply proof, documentation, and process in proportion to risk:
+`docs/maintainer_values.md` is the compact source of truth for current maintainer values. Optimize
+first for concrete research progress on social-navigation simulation, benchmarking, and planner
+exploration. The hard rule is to be honest, transparent, and reproducible. Apply proof,
+documentation, and process in proportion to risk:
 
 - benchmark, metric, schema, model-provenance, and paper-facing claims still require strong,
   reproducible evidence before they are treated as established;
 - exploratory planner or research work may move faster when its status is clearly labeled as
   exploratory, diagnostic, blocked, or not yet benchmark evidence;
-- low-risk docs, metadata, and instruction changes may use a cheaper validation path when the user
-  explicitly asks for it, as long as the skipped checks are named in the PR or handoff;
+- low-risk docs, metadata, and instruction changes use the cheaper validation path by default:
+  inspect the diff and verify changed links or referenced paths where practical;
+- statements below roughly 95 percent confidence should include an uncertainty estimate, caveat, or
+  condition that would change the conclusion;
 - current maintainer direction overrides stale workflow prose. When an instruction appears to
   conflict with the user's current priority, follow the current priority, call out the conflict, and
   propose or make the smallest doc update needed to remove the drift.
@@ -25,9 +30,12 @@ planner exploration. Apply proof, documentation, and process in proportion to ri
 Treat the following files as the repository-native context stack for Agent-style agents:
 
 - `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
+- `docs/maintainer_values.md`: compact current values and hard contracts.
 - `memory/MEMORY.md`: concise repo-local memory index for stable cross-session facts and links to
   detailed topic files under `memory/`.
 - `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
+- `docs/context/INDEX.md`: retrieval-first catalog for current context-note entry points, status
+  rules, optional context tools, and curated context-pack scopes.
 - `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
   mirrored at `.codex/skills/` and `.opencode/skills/` for compatibility.
@@ -110,9 +118,9 @@ detail instead of turning the index into another full instruction document.
   or successor note when a document is superseded.
 - If a touched note contains outdated or superseded statements, update them, remove them, or mark
   them clearly with a pointer to the current source of truth.
-- Keep note names and links discoverable from normal contributor entry points. Start with
-  `docs/context/README.md` and use `.agents/skills/context-note-maintainer/SKILL.md` when creating
-  or refreshing context notes.
+- Keep note names and links discoverable from normal contributor entry points. Start broad reads
+  from `docs/context/INDEX.md`; use `docs/context/README.md` and
+  `.agents/skills/context-note-maintainer/SKILL.md` when creating or refreshing context notes.
 
 ## Cross-Agent Compatibility
 
@@ -162,7 +170,7 @@ Prefer a config-first workflow for reproducibility and reviewability. Add or upd
 The project enforces Ruff with a 4-space indent, 100-character lines, and double-quoted strings (`pyproject.toml`). Prefer type-annotated interfaces and keep factory functions (`environment_factory.make_*`) as the public entry point. Modules and files use `snake_case`; classes and dataclasses follow `PascalCase`. Name tests `test_<feature>.py` and keep fixtures under `conftest.py`. Avoid ad-hoc prints in library code—use the existing structured logging. Prefer to use more docstrings (for private methods also) and inline comments for clarity, especially in complex algorithms or data flows.
 
 ## Testing Guidelines
-Target the full `tests/` suite before pushing changes and rerun targeted slow markers when behavior or performance may shift. GUI and physics suites are mandatory for changes touching rendering, SocialForce integration, or pedestrian dynamics. Record notable validation runs in `docs/context/` or other tracked notes when benchmarks change, and only keep small explicit manifests or reviewable artifacts under version control. Do not treat worktree-local `output/` as the durable record. Update or add smoke tests under `scripts/validation/` when introducing new critical workflows.
+Target the full `tests/` suite before pushing changes and rerun targeted slow markers when behavior or performance may shift. GUI and physics suites are mandatory for changes touching rendering, SocialForce integration, or pedestrian dynamics. Record notable validation runs in `docs/context/` or other tracked notes when benchmarks change, and only keep small explicit manifests or reviewable artifacts under version control. Do not treat worktree-local `output/` as the durable record. Update or add smoke tests under `scripts/validation/` when introducing new critical workflows. Agents may remove low-value tests without maintainer approval when the reason is unambiguous and documented; do not assume flaky tests are common without evidence.
 
 ## Research-Progress-First Validation
 
@@ -203,8 +211,8 @@ Prefer proof that matches the risk:
 
 Do not present benchmark, metric, schema, model-provenance, or paper-facing changes as complete
 until the proof is recorded in the validation notes, PR text, or issue follow-up. For docs-only or
-low-risk instruction changes, it is acceptable to skip expensive gates when the skipped checks are
-explicitly named.
+low-risk instruction changes, use the cheap validation path by default and name any skipped
+expensive gates in the PR or handoff.
 
 ## Commit & Pull Request Workflow
 Adopt the conventional commit style seen in history (e.g., `refactor: adjust observation scaling`).
@@ -214,9 +222,8 @@ screenshots or short GIFs when UI or playback output changes, and note any new a
 the feature branch, and then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`; readiness
 proof from before that sync is stale and must not be used for PR creation. Ensure CI stays green by
 resolving lint or test failures locally before requesting review.
-- Docs-only and low-risk instruction branches may use a cheaper official path when the user asks for
-  it: inspect the diff, verify referenced paths where practical, and state that the full readiness
-  gate was intentionally not run.
+- Docs-only and low-risk instruction branches use a cheaper official path by default: inspect the
+  diff, verify referenced paths where practical, and state when the full readiness gate was not run.
 - Do not wait until PR creation to pick up `main` branch improvements on long-lived branches.
   Merge the latest `origin/main` into the current branch at the start of active work, and repeat
   that sync before PR creation so validation covers the newest shared baseline.
@@ -286,7 +293,7 @@ For issue management and delivery, use these local skills:
 - `.agents/skills/goal-pr-review/SKILL.md`
   - Autonomous PR review loop that fixes scoped writable gaps before applying `merge-ready` after the full proof bar passes.
 - `.agents/skills/gh-issue-autopilot/SKILL.md`
-  - Autonomous issue-to-PR workflow: select next best issue, branch, implement, validate, push, and open draft PR.
+  - Autonomous issue-to-PR workflow: select next best issue, branch, implement, validate, push, and open a ready PR.
 - `.agents/skills/gh-issue-clarifier/SKILL.md`
   - Tightens ambiguous issues with pros/cons/recommendation and applies `decision-required` when maintainer input is needed.
 - `.agents/skills/gh-issue-priority-assessor/SKILL.md`

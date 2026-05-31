@@ -182,6 +182,7 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 * **[Scenario Perturbation Manifest](./scenario_perturbation_manifest.md)** - `scenario_perturbation_manifest.v1` schema, no-op and bounded route-offset preflight, and evidence boundary for perturbation pilots
 * **[Issue #1272 Safety-Oriented Validation And Falsification Strategy](./context/issue_1272_validation_falsification_strategy.md)** - Current roadmap note for positioning Robot SF as validation/falsification infrastructure without certification or proof-of-safety claims
 * **[Benchmark: Camera-ready / Scenario Reports](./benchmark_camera_ready.md)** - Camera-ready campaign workflow, planner report partitions, and publication-grade artifact contract
+* **[Benchmark Suite Catalog](./benchmark_suites/README.md)** - Named suite IDs, canonical commands, runtimes, eligible planners, and claim boundaries for smoke, nominal, stress, AMV, LiDAR, and adversarial surfaces
 * **[Issue #1073 Robot SF Empirical-Expansion Gate](./context/issue_1073_empirical_expansion_gate_2026_06_08.md)** - June 8 checkpoint rule for deciding whether Robot SF can move beyond dissertation-floor examples into bounded empirical expansion
 * **[Benchmark Static Dashboard](./benchmark_static_dashboard.md)** - Self-contained static HTML dashboard generation from camera-ready benchmark bundles
 * **[Static Leaderboards](./leaderboards/README.md)** - Markdown leaderboard row contract and first evidence-bound smoke, nominal-sanity, AMV, and LiDAR result surfaces

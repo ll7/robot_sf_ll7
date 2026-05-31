@@ -83,6 +83,9 @@ def compare_oracle_replay_metrics(
         (value for value in (carla_mode, carla_status) if value in DEGRADED_MODES),
         None,
     )
+    coordinate_replay_mode = _coordinate_replay_mode(carla_record)
+    if degraded is None and coordinate_replay_mode in DEGRADED_MODES:
+        degraded = coordinate_replay_mode
     if degraded is not None:
         return {
             "comparison_schema": "carla_oracle_replay_parity_v1",
@@ -128,6 +131,20 @@ def _metrics(record: dict[str, Any]) -> dict[str, Any]:
         if isinstance(nested_metrics, dict):
             return nested_metrics
     return metrics if isinstance(metrics, dict) else {}
+
+
+def _coordinate_replay_mode(record: dict[str, Any]) -> str | None:
+    """Return the #1444 coordinate replay mode from top-level or nested runtime output."""
+
+    coordinate_alignment = record.get("coordinate_alignment")
+    if isinstance(coordinate_alignment, dict):
+        mode = coordinate_alignment.get("replay_mode")
+        if isinstance(mode, str):
+            return mode.lower()
+    nested_replay = record.get("replay")
+    if isinstance(nested_replay, dict):
+        return _coordinate_replay_mode(nested_replay)
+    return None
 
 
 def _compare_metric(

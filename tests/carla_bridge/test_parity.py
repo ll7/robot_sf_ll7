@@ -61,6 +61,22 @@ def test_compare_oracle_replay_metrics_rejects_adapted_carla_mode():
     assert report["metrics"][0]["status"] == "unavailable"
 
 
+def test_compare_oracle_replay_metrics_rejects_adapted_coordinate_metadata():
+    """#1444 coordinate metadata should fail closed even if legacy mode is ambiguous."""
+    report = compare_oracle_replay_metrics(
+        {"metrics": {"success": True}},
+        {
+            "mode": "oracle-replay",
+            "coordinate_alignment": {"replay_mode": "adapted"},
+            "metrics": {"success": True},
+        },
+        metric_names=("success",),
+    )
+
+    assert report["status"] == "unavailable"
+    assert "adapted" in report["reason"]
+
+
 def test_compare_oracle_replay_metrics_rejects_degraded_status_even_with_native_mode():
     """A degraded CARLA status should fail closed even when mode still says native."""
     report = compare_oracle_replay_metrics(

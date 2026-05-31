@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -91,11 +92,14 @@ def run_t1_oracle_live_replay_against_server(
 
     carla_api = carla_module if carla_module is not None else require_carla()
     actors: list[_Actor] = []
+    started_at_utc = _utc_now_iso()
     try:
         client = carla_api.Client(host, port)
         client.set_timeout(timeout_s)
         world = client.get_world()
         carla_map = world.get_map()
+        carla_map_name = getattr(carla_map, "name", None)
+        carla_server_version = client.get_server_version()
         actor_summary = _spawn_replay_actors(carla_api, world, payload)
         actors.extend(actor_summary.pop("_actors"))
         trajectory = _replay_oracle_transforms(
@@ -106,6 +110,14 @@ def run_t1_oracle_live_replay_against_server(
             max_steps=max_steps,
         )
         adaptations = cast("list[dict[str, Any]]", actor_summary.get("adaptations", []))
+        coordinate_alignment = _coordinate_alignment_metadata(
+            adaptations,
+            payload=payload,
+            carla_map_name=carla_map_name,
+            carla_server_version=carla_server_version,
+            started_at_utc=started_at_utc,
+            ended_at_utc=_utc_now_iso(),
+        )
         mode = "oracle-replay-adapted" if adaptations else "oracle-replay"
         reason = (
             "Oracle transforms were replayed against a live CARLA world with explicit spawn adaptation"
@@ -122,12 +134,16 @@ def run_t1_oracle_live_replay_against_server(
                 "host": host,
                 "port": port,
                 "client_version": client.get_client_version(),
-                "server_version": client.get_server_version(),
-                "map": getattr(carla_map, "name", None),
+                "server_version": carla_server_version,
+                "map": carla_map_name,
             },
             "actors": _actor_counts(payload),
             "adaptations": adaptations,
-            "replay_metadata": _replay_metadata(adaptations),
+            "coordinate_alignment": coordinate_alignment,
+            "replay_metadata": _replay_metadata(
+                adaptations,
+                coordinate_alignment=coordinate_alignment,
+            ),
             "trajectory": trajectory,
             "metrics": trajectory["metrics"],
             "boundary": _live_replay_boundary(),
@@ -539,8 +555,78 @@ def _transform_summary(transform: Any) -> dict[str, float]:
     }
 
 
-def _replay_metadata(adaptations: list[dict[str, Any]]) -> dict[str, Any]:
-    metadata: dict[str, Any] = {"robot_spawn": {"strategy": "exact", "adapted": False}}
+def _utc_now_iso() -> str:
+    """Return an ISO-8601 UTC timestamp for replay provenance."""
+
+    return datetime.now(tz=UTC).isoformat().replace("+00:00", "Z")
+
+
+def _coordinate_alignment_metadata(
+    adaptations: list[dict[str, Any]],
+    *,
+    payload: dict[str, Any],
+    carla_map_name: str | None,
+    carla_server_version: str,
+    started_at_utc: str,
+    ended_at_utc: str,
+) -> dict[str, Any]:
+    """Return #1444-style coordinate-alignment metadata for one live replay."""
+
+    robot_spawn = next(
+        (adaptation for adaptation in adaptations if adaptation.get("actor") == "robot"),
+        None,
+    )
+    provenance = cast("dict[str, Any]", payload.get("provenance", {}))
+    scenario = cast("dict[str, Any]", payload["scenario"])
+    if robot_spawn is None:
+        return {
+            "replay_mode": "native",
+            "projection_meters": 0.0,
+            "projection_rationale": "none",
+            "carla_map_name": carla_map_name,
+            "carla_server_version": carla_server_version,
+            "robot_sf_commit": provenance.get("robot_sf_commit"),
+            "scenario_cert_id": scenario["id"],
+            "scenario_certificate_source": cast("dict[str, Any]", scenario["certificate"]).get(
+                "source"
+            ),
+            "start": started_at_utc,
+            "end": ended_at_utc,
+            "bridge_version": T1_ORACLE_LIVE_REPLAY_SCHEMA_VERSION,
+            "eligible_for_metric_parity": True,
+        }
+
+    return {
+        "replay_mode": "adapted",
+        "projection_meters": float(robot_spawn.get("distance_m", 0.0)),
+        "projection_rationale": str(robot_spawn.get("method") or "carla map spawn projection"),
+        "carla_map_name": carla_map_name,
+        "carla_server_version": carla_server_version,
+        "robot_sf_commit": provenance.get("robot_sf_commit"),
+        "scenario_cert_id": scenario["id"],
+        "scenario_certificate_source": cast("dict[str, Any]", scenario["certificate"]).get(
+            "source"
+        ),
+        "start": started_at_utc,
+        "end": ended_at_utc,
+        "bridge_version": T1_ORACLE_LIVE_REPLAY_SCHEMA_VERSION,
+        "eligible_for_metric_parity": False,
+        "exclusion_reason": (
+            "robot actor spawn used CARLA map projection; adapted replay is not native/aligned "
+            "metric-parity evidence"
+        ),
+    }
+
+
+def _replay_metadata(
+    adaptations: list[dict[str, Any]],
+    *,
+    coordinate_alignment: dict[str, Any],
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "coordinate_alignment": coordinate_alignment,
+        "robot_spawn": {"strategy": "exact", "adapted": False},
+    }
     robot_spawn = next(
         (adaptation for adaptation in adaptations if adaptation.get("actor") == "robot"),
         None,

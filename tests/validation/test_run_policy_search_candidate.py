@@ -98,6 +98,7 @@ def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -
     assert config["planner_variant"] == "actuation_aware_hybrid_rule_v0"
     assert config["actuation_profile_name"] == "amv-actuation-stress-v0"
     assert config["actuation_score_enabled"] is True
+    assert config["actuation_clip_risk_weight"] == pytest.approx(2.2)
     stage = funnel["stages"]["amv_actuation_smoke"]
     assert stage["scenario_matrix"] == "configs/scenarios/sets/classic_cross_trap_subset.yaml"
     assert stage["scenario_filter"] == ["classic_cross_trap_high"]

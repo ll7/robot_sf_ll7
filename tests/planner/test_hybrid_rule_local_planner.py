@@ -193,8 +193,7 @@ def test_actuation_aware_variant_penalizes_synthetic_clip_risk() -> None:
             "actuation_max_linear_decel": 1.0,
             "actuation_max_yaw_rate": 0.6,
             "actuation_max_angular_accel": 1.0,
-            "actuation_feasibility_weight": 3.0,
-            "actuation_projection_weight": 1.0,
+            "actuation_clip_risk_weight": 4.0,
         }
     )
     planner = HybridRuleLocalPlannerAdapter(config)

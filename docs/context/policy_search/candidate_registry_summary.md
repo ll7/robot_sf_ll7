@@ -51,6 +51,7 @@ not headline promotion without a separate issue and evidence decision.
 | `proxemic_profile_neutral_issue_1676` | `diagnostic_only` | `diagnostic_only` | Neutral profile used as middle setting. |
 | `proxemic_profile_open_issue_1676` | `diagnostic_only` | `diagnostic_only` | Open comfort profile with higher expected near-miss risk. |
 | `topology_guided_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Masked-route topology-hypothesis selector adding a bounded selected-hypothesis command to the existing hybrid-rule safety scorer; missing topology inputs fail closed and selected hypotheses are not benchmark evidence. |
+| `actuation_aware_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Synthetic AMV actuation scorer; not calibrated hardware evidence. |
 | `planner_selector_v2_diagnostic` | `diagnostic_only` | `diagnostic_only` | Deterministic selector over existing local candidates using predeclared topology/seed diagnostics and current local pedestrian context; not benchmark-strength evidence. |
 | `adaptive_proxemic_selector_v0` | `diagnostic_only` | `diagnostic_only` | Deterministic local-context selector over the three fixed proxemic profiles; logs selected profile and trigger reason, but does not support benchmark or comfort claims. |
 
@@ -67,7 +68,7 @@ artifact provenance, and fail-closed behavior before benchmark claims.
 | `orca_prior_guarded_ppo_v2_static_global` | `learned_policy_intake` | `smoke_only` | Global ORCA-prior guarded variant. |
 | `orca_primary_guarded_ppo_v1` | `learned_policy_intake` | `smoke_only` | ORCA-primary guarded variant. |
 | `orca_residual_guarded_ppo_v0` | `learned_policy_intake` | `smoke_only` | Runtime residual surface exists; training/checkpoint lineage is deferred. |
-| `tentabot_value_scorer_v0` | `learned_policy_intake` | `diagnostic_only` | Clean-room value-scorer spike; smoke-passes but nominal sanity is `revise`, so treat it as diagnostic-only until scorer safety/progress improves in #1826. |
+| `tentabot_value_scorer_v0` | `learned_policy_intake` | `diagnostic_only` | Clean-room value-scorer spike; smoke-passes and #1826 reduces nominal-sanity collision/near-miss rates, but the row remains `revise` and diagnostic-only. |
 | `learned_risk_model_v1` | `slurm_handoff_only` | `not_benchmark_evidence` | Launch-packet lane only until SLURM training and durable artifacts exist. |
 
 ## SLURM Handoff-Only Lanes

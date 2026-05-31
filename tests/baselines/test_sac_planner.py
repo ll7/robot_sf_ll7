@@ -47,7 +47,7 @@ def _planner_without_model(*, relative_obs: bool = True) -> SACPlanner:
     """Create a SAC planner with fallback enabled and no loaded model."""
     planner = SACPlanner(
         {
-            "model_path": "output/models/sac/does_not_exist.zip",
+            "model_path": "model/does_not_exist_sac.zip",
             "fallback_to_goal": True,
             "relative_obs": relative_obs,
         }
@@ -101,7 +101,7 @@ def test_planner_handles_missing_sb3_with_fallback(monkeypatch: pytest.MonkeyPat
 
     planner = SACPlanner(
         {
-            "model_path": "output/models/sac/does_not_exist.zip",
+            "model_path": "model/does_not_exist_sac.zip",
             "fallback_to_goal": True,
         }
     )
@@ -109,6 +109,17 @@ def test_planner_handles_missing_sb3_with_fallback(monkeypatch: pytest.MonkeyPat
     meta = planner.get_metadata()
     assert meta["status"] == "fallback"
     assert meta["fallback_reason"] == "sb3_missing"
+
+
+def test_planner_rejects_local_output_model_path_even_with_fallback() -> None:
+    """Direct SAC construction should share the benchmark local-artifact boundary."""
+    with pytest.raises(ValueError, match="local-only model artifact"):
+        SACPlanner(
+            {
+                "model_path": "output/models/sac/does_not_exist.zip",
+                "fallback_to_goal": True,
+            }
+        )
 
 
 def test_planner_missing_model_fails_closed_without_fallback(

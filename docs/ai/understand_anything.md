@@ -16,6 +16,10 @@ Tracked under `.understand-anything/`:
 - `config.json`: project-level Understand-Anything settings.
 - `.understandignore`: graph-specific ignore rules.
 
+`meta.json` records the source tree commit used for analysis, not necessarily the final artifact
+commit that stores the graph. Embedding the final graph commit hash into the graph would change the
+graph file and therefore change the commit hash again.
+
 Ignored under `.understand-anything/`:
 
 - `intermediate/`
@@ -60,6 +64,9 @@ Use the graph for orientation before broad repo reads:
 - Inspect layers and tour steps to identify likely files.
 - Use `/understand-chat` for graph-grounded questions when available.
 - Use `/understand-diff` when a diff overlay is useful for local review.
+
+Prefer the dashboard and chat tools over reading `knowledge-graph.json` directly; the raw graph is a
+large LFS artifact and is usually too noisy for normal context loading.
 
 Good graph questions:
 

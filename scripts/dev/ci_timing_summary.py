@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -12,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 _GH_RUN_FIELDS = "databaseId,displayTitle,headBranch,status,conclusion,createdAt,updatedAt,jobs"
+_CI_PHASE_END_RE = re.compile(r"\bci_driver phase_end (?P<fields>.+)$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +38,17 @@ class JobTiming:
 
 
 @dataclass(frozen=True, slots=True)
+class PhaseTiming:
+    """Duration for one repository-owned CI driver phase."""
+
+    name: str
+    duration_seconds: float
+    status: int
+    completed_at: str
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
 class RunTimingSummary:
     """Compact timing summary for one GitHub Actions workflow run."""
 
@@ -45,6 +59,7 @@ class RunTimingSummary:
     total_seconds: float
     slowest_jobs: list[JobTiming]
     slowest_steps: list[StepTiming]
+    slowest_phases: list[PhaseTiming]
 
     def to_json(self) -> str:
         """Serialize the summary as deterministic JSON."""
@@ -104,7 +119,12 @@ def _completed_job_timings(payload: dict[str, Any]) -> list[JobTiming]:
     return timings
 
 
-def summarize_run(payload: dict[str, Any], *, top: int = 10) -> RunTimingSummary:
+def summarize_run(
+    payload: dict[str, Any],
+    *,
+    top: int = 10,
+    phase_timings: list[PhaseTiming] | None = None,
+) -> RunTimingSummary:
     """Summarize queue, job, total, slowest-job, and slowest-step durations."""
     jobs = _iter_dicts(payload.get("jobs"))
     created = _parse_timestamp(payload.get("createdAt"))
@@ -136,6 +156,10 @@ def summarize_run(payload: dict[str, Any], *, top: int = 10) -> RunTimingSummary
         _completed_job_timings(payload),
         key=lambda job: (-job.duration_seconds, job.name),
     )[:top]
+    slowest_phases = sorted(
+        phase_timings or [],
+        key=lambda phase: (-phase.duration_seconds, phase.name, phase.source),
+    )[:top]
 
     return RunTimingSummary(
         run_id=int(payload.get("databaseId") or 0),
@@ -145,6 +169,7 @@ def summarize_run(payload: dict[str, Any], *, top: int = 10) -> RunTimingSummary
         total_seconds=total_seconds,
         slowest_jobs=slowest_jobs,
         slowest_steps=slowest_steps,
+        slowest_phases=slowest_phases,
     )
 
 
@@ -165,6 +190,61 @@ def _escape_md_table_cell(value: str) -> str:
     return value.replace("|", r"\|")
 
 
+def _parse_phase_end_fields(raw_fields: str) -> dict[str, str]:
+    """Parse shell-style key=value fields emitted by ci_driver phase_end logs."""
+    parsed: dict[str, str] = {}
+    try:
+        tokens = shlex.split(raw_fields, comments=False, posix=True)
+    except ValueError:
+        return parsed
+    for token in tokens:
+        key, separator, value = token.partition("=")
+        if not separator or not key:
+            continue
+        parsed[key] = value
+    return parsed
+
+
+def parse_phase_timings(text: str, *, source: str = "log") -> list[PhaseTiming]:
+    """Extract repository phase timings from ci_driver log text."""
+    timings: list[PhaseTiming] = []
+    for line in text.splitlines():
+        match = _CI_PHASE_END_RE.search(line)
+        if match is None:
+            continue
+        fields = _parse_phase_end_fields(match.group("fields"))
+        try:
+            duration = float(fields["duration_seconds"])
+            status = int(fields.get("status", "0"))
+        except (KeyError, ValueError):
+            continue
+        timings.append(
+            PhaseTiming(
+                name=fields.get("phase", ""),
+                duration_seconds=duration,
+                status=status,
+                completed_at=fields.get("completed_at", ""),
+                source=source,
+            )
+        )
+    return timings
+
+
+def _load_phase_timings_from_logs(paths: list[Path]) -> list[PhaseTiming]:
+    """Load repository phase timings from saved CI log files."""
+    timings: list[PhaseTiming] = []
+    for path in paths:
+        if not path.is_file():
+            raise SystemExit(f"Log file not found: {path}")
+        timings.extend(
+            parse_phase_timings(
+                path.read_text(encoding="utf-8"),
+                source=path.as_posix(),
+            )
+        )
+    return timings
+
+
 def format_markdown(summary: RunTimingSummary) -> str:
     """Format a timing summary as Markdown for issues and PR comments."""
     lines = [
@@ -178,10 +258,32 @@ def format_markdown(summary: RunTimingSummary) -> str:
         f"| job | {_format_seconds(summary.job_seconds)} |",
         f"| total | {_format_seconds(summary.total_seconds)} |",
         "",
-        "## Slowest jobs",
-        "| job | duration | started | completed |",
-        "| --- | --- | --- | --- |",
     ]
+    if summary.slowest_phases:
+        lines.extend(
+            [
+                "## Slowest repository phases",
+                "| phase | duration | status | completed | source |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        for phase in summary.slowest_phases:
+            lines.append(
+                "| "
+                f"{_escape_md_table_cell(phase.name)} | "
+                f"{_format_seconds(phase.duration_seconds)} | "
+                f"{phase.status} | {phase.completed_at} | "
+                f"{_escape_md_table_cell(phase.source)} |",
+            )
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Slowest jobs",
+            "| job | duration | started | completed |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
     for job in summary.slowest_jobs:
         lines.append(
             "| "
@@ -222,9 +324,16 @@ def _load_payload_from_gh(run_id: str) -> dict[str, Any]:
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     """Parse command-line arguments for the timing summary tool."""
     parser = argparse.ArgumentParser(description="Summarize GitHub Actions CI timing.")
-    source = parser.add_mutually_exclusive_group(required=True)
+    source = parser.add_mutually_exclusive_group()
     source.add_argument("--run-id", help="GitHub Actions run id to fetch through gh.")
     source.add_argument("--run-json", type=Path, help="Saved gh run view JSON payload.")
+    parser.add_argument(
+        "--log",
+        action="append",
+        default=[],
+        type=Path,
+        help="Saved CI job log containing ci_driver phase_end lines. May be repeated.",
+    )
     parser.add_argument("--top", type=int, default=10, help="Number of slowest steps to report.")
     parser.add_argument("--json", action="store_true", help="Print deterministic JSON.")
     return parser.parse_args(argv)
@@ -235,12 +344,20 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if args.top <= 0:
         raise SystemExit("--top must be a positive integer")
-    payload = (
-        json.loads(args.run_json.read_text(encoding="utf-8"))
-        if args.run_json is not None
-        else _load_payload_from_gh(args.run_id)
+    if args.run_json is None and args.run_id is None and not args.log:
+        raise SystemExit("provide --run-id, --run-json, or --log")
+    if args.run_json is not None:
+        payload = json.loads(args.run_json.read_text(encoding="utf-8"))
+    elif args.run_id is not None:
+        payload = _load_payload_from_gh(args.run_id)
+    else:
+        payload = {"databaseId": 0, "displayTitle": "CI log timing summary", "jobs": []}
+
+    summary = summarize_run(
+        payload,
+        top=args.top,
+        phase_timings=_load_phase_timings_from_logs(args.log),
     )
-    summary = summarize_run(payload, top=args.top)
     sys.stdout.write(summary.to_json() if args.json else format_markdown(summary))
     sys.stdout.write("\n")
     return 0

@@ -7,7 +7,7 @@ allow_testing_algorithms: true
 planner_variant: tentabot_value_scorer_v0
 
 # Candidate lattice and route-corridor probes.
-max_linear_speed: 2.4
+max_linear_speed: 2.0
 max_angular_speed: 1.2
 max_linear_accel: 2.4
 max_linear_decel: 2.5
@@ -37,12 +37,12 @@ continuous_static_clearance_enabled: true
 # than trained upstream weights.
 value_scorer_profile: hand_scored_linear_teacher_v0
 value_scorer_training_source: robot_sf_hybrid_rule_teacher_only
-goal_progress_weight: 4.2
+goal_progress_weight: 3.4
 path_alignment_weight: 0.9
-speed_preference_weight: 0.45
-static_clearance_weight: 1.8
-dynamic_clearance_weight: 2.0
-ttc_weight: 1.0
+speed_preference_weight: 0.2
+static_clearance_weight: 2.6
+dynamic_clearance_weight: 3.0
+ttc_weight: 1.8
 heading_smoothness_weight: 0.5
 velocity_smoothness_weight: 0.35
 control_effort_weight: 0.2
@@ -59,10 +59,10 @@ oscillation_weight: 0.5
 # Conservative human/static gates inherited from the hybrid-rule contract.
 robot_radius_default: 0.3
 pedestrian_radius_default: 0.3
-hard_safety_margin: 0.05
+hard_safety_margin: 0.08
 static_hard_safety_margin: 0.0
-desired_static_clearance: 0.7
-desired_dynamic_clearance: 0.9
+desired_static_clearance: 0.85
+desired_dynamic_clearance: 1.1
 obstacle_threshold: 0.5
 obstacle_search_cells: 12
 stop_distance_human: 0.5

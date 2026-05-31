@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.map_runner import (
+    _apply_planner_selector_v2_context,
     _build_policy,
     _build_socnav_config,
     _default_robot_command_space,
@@ -34,6 +35,7 @@ from robot_sf.benchmark.map_runner import (
     _robot_kinematics_label,
     _robot_max_speed,
     _run_map_episode,
+    _run_map_job_worker,
     _scenario_robot_kinematics_label,
     _scenario_with_episode_seed_defaults,
     _select_seeds,
@@ -116,6 +118,12 @@ def test_parse_algo_config_reports_blocked_local_artifact_follow_up() -> None:
     assert "DRL-VO default checkpoint" in message
 
 
+def test_build_policy_rejects_sac_default_local_output_model_path() -> None:
+    """Benchmark SAC policy construction should fail closed on local output defaults."""
+    with pytest.raises(ValueError, match="local-only model artifact"):
+        _build_policy("sac", {}, robot_kinematics="holonomic")
+
+
 def test_resolve_policy_search_candidate_runtime_merges_base_and_scenario_override(
     tmp_path: Path,
 ) -> None:
@@ -195,6 +203,82 @@ def test_resolve_policy_search_candidate_runtime_switches_algo_for_scenario(
     assert cfg == {"orca_time_horizon": 4.0, "max_linear_speed": 1.15}
 
 
+def test_planner_selector_v2_runtime_preserves_child_candidate_paths() -> None:
+    """Runtime candidate resolution should keep selector child config paths available."""
+    config_path = Path("configs/policy_search/candidates/planner_selector_v2_diagnostic.yaml")
+
+    algo, cfg = _resolve_policy_search_candidate_runtime(
+        default_algo="planner_selector_v2_diagnostic",
+        algo_config_path=str(config_path),
+        scenario={"name": "planner_sanity_simple"},
+    )
+
+    assert algo == "planner_selector_v2_diagnostic"
+    assert sorted(cfg["candidate_config_paths"]) == [
+        "baseline",
+        "fast_progress_static_escape",
+        "proxemic_conservative",
+        "topology_route",
+    ]
+
+
+def test_planner_selector_v2_context_is_applied_to_runtime_identity() -> None:
+    """Selector context used for execution should also be available for identity hashing."""
+    cfg = _apply_planner_selector_v2_context(
+        "planner_selector_v2_diagnostic",
+        {"selector": {}, "candidate_config_paths": {}},
+        scenario={"name": "planner_sanity_simple"},
+        seed=111,
+    )
+
+    assert cfg["selector_context"] == {
+        "scenario_id": "planner_sanity_simple",
+        "scenario_family": "nominal",
+        "seed": 111,
+    }
+
+
+def test_build_policy_routes_adaptive_proxemic_selector_with_diagnostics() -> None:
+    """Map-runner policy construction should expose selector diagnostics."""
+    policy, meta = _build_policy(
+        "adaptive_proxemic_selector_v0",
+        {
+            "allow_testing_algorithms": True,
+            "max_linear_speed": 0.8,
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["adaptive_proxemic_selector"]["diagnostic_only"] is True
+    assert meta["adaptive_proxemic_selector"]["claim_boundary"] == "diagnostic_only"
+    linear, angular = policy(
+        {
+            "robot": {
+                "position": np.asarray([0.0, 0.0], dtype=float),
+                "heading": np.asarray([0.0], dtype=float),
+                "speed": np.asarray([0.0], dtype=float),
+                "radius": np.asarray([0.25], dtype=float),
+            },
+            "goal": {
+                "current": np.asarray([2.0, 0.0], dtype=float),
+                "next": np.asarray([2.0, 0.0], dtype=float),
+            },
+            "pedestrians": {
+                "positions": np.zeros((0, 2), dtype=float),
+                "velocities": np.zeros((0, 2), dtype=float),
+                "count": np.asarray([0.0], dtype=float),
+                "radius": 0.25,
+            },
+            "sim": {"timestep": 0.1},
+        }
+    )
+    assert isinstance(linear, float)
+    assert isinstance(angular, float)
+    diagnostics = policy._planner_stats()
+    assert diagnostics["last_selection"]["selected_profile"] == "open"
+    assert diagnostics["last_selection"]["trigger_reason"] == "clear_low_density"
+
+
 def test_scenario_with_episode_seed_defaults_fills_missing_route_spawn_seed() -> None:
     """Episode seed should drive route-spawn RNGs when scenarios leave that seed unset."""
     scenario = {
@@ -270,6 +354,64 @@ def test_build_policy_trivial_reference_adapter_exposes_template_contract() -> N
     assert meta["planner_kinematics"]["adapter_name"] == "TrivialReferencePlannerAdapter"
     assert meta["planner_kinematics"]["diagnostic_reference_only"] is True
     assert "Diagnostic adapter template only" in meta["planner_kinematics"]["limitations"]
+
+
+def test_build_policy_routes_planner_selector_v2_with_diagnostics() -> None:
+    """Map-runner policy construction should expose selector-v2 diagnostics."""
+    policy, meta = _build_policy(
+        "planner_selector_v2_diagnostic",
+        {
+            "allow_testing_algorithms": True,
+            "selector_context": {
+                "scenario_id": "planner_sanity_simple",
+                "scenario_family": "nominal",
+                "seed": 111,
+            },
+            "selector": {
+                "seed_sensitive_scenarios": ["planner_sanity_simple"],
+                "hard_seed_values": [111],
+            },
+            "candidate_config_paths": {
+                "baseline": "configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml",
+                "topology_route": "configs/policy_search/candidates/hybrid_rule_v3_waypoint2_route_lookahead8.yaml",
+                "proxemic_conservative": "configs/policy_search/candidates/proxemic_profile_conservative_issue_1676.yaml",
+                "fast_progress_static_escape": "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml",
+            },
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    assert meta["selector_boundary"]["diagnostic_only"] is True
+    assert meta["planner_kinematics"]["diagnostic_only"] is True
+    linear, angular = policy(
+        {
+            "robot": {
+                "position": np.asarray([0.0, 0.0], dtype=float),
+                "heading": np.asarray([0.0], dtype=float),
+                "speed": np.asarray([0.0], dtype=float),
+                "radius": np.asarray([0.25], dtype=float),
+            },
+            "goal": {
+                "current": np.asarray([2.0, 0.0], dtype=float),
+                "next": np.asarray([2.0, 0.0], dtype=float),
+            },
+            "pedestrians": {
+                "positions": np.zeros((0, 2), dtype=float),
+                "velocities": np.zeros((0, 2), dtype=float),
+                "radii": np.zeros(0, dtype=float),
+                "count": np.asarray([0], dtype=float),
+            },
+        }
+    )
+
+    assert math.isfinite(linear)
+    assert math.isfinite(angular)
+    stats = policy._planner_stats()
+    assert stats["diagnostic_only"] is True
+    assert stats["selected_candidate"] == "fast_progress_static_escape"
+    assert (
+        stats["last_decision"]["trigger_reason"] == "predeclared_seed_sensitive_low_progress_risk"
+    )
 
 
 def test_goal_policy_supports_flat_map_runner_observation() -> None:
@@ -423,6 +565,27 @@ def test_build_policy_risk_surface_dwa_wires_surface_adapter(
     assert meta["planner_kinematics"]["limitations"] == (
         "deterministic_risk_surface_fixture_not_benchmark_evidence"
     )
+
+
+def test_build_policy_topology_guided_hybrid_rule_wires_diagnostic_adapter() -> None:
+    """Topology-guided candidate should route through its diagnostic adapter metadata."""
+    policy, meta = _build_policy(
+        "topology_guided_hybrid_rule_v0",
+        {
+            "allow_testing_algorithms": True,
+            "route_guide_enabled": True,
+            "corridor_subgoal_enabled": True,
+            "route_hypothesis": {"obstacle_inflation_cells": 0},
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    assert hasattr(policy, "_planner_adapter")
+    assert meta["canonical_algorithm"] == "topology_guided_hybrid_rule_v0"
+    assert meta["policy_semantics"] == "diagnostic_topology_hypothesis_guided_hybrid_rule"
+    assert meta["topology_guided_hybrid_rule"]["diagnostic_only"] is True
+    assert meta["planner_kinematics"]["adapter_name"] == ("TopologyGuidedHybridRulePlannerAdapter")
+    assert meta["planner_kinematics"]["diagnostic_reference_only"] is True
 
 
 def test_build_policy_socnav_bench_forwards_allow_fallback(
@@ -3567,6 +3730,164 @@ def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
         result["algorithm_metadata_contract"]["upstream_reference"]["adapter_boundary"]
         == "runtime direct world velocity passthrough"
     )
+
+
+def test_run_map_batch_parallel_preserves_runtime_metadata_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Serialized worker results should feed the same batch metadata bridge as serial runs."""
+    scenarios = [
+        {
+            "name": "slow",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        },
+        {
+            "name": "fast",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        },
+    ]
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        ThreadPoolExecutor,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._write_validated",
+        lambda *args, **kwargs: None,
+    )
+
+    def _fake_worker(job):
+        """Return worker metadata out of completion order to exercise the serialized bridge."""
+        scenario, seed, _params = job
+        if scenario["name"] == "slow":
+            time.sleep(0.05)
+        return {
+            "episode_id": f"{scenario['name']}-{seed}",
+            "algorithm_metadata": {
+                "adapter_impact": {
+                    "requested": True,
+                    "native_steps": 2 if scenario["name"] == "slow" else 1,
+                    "adapted_steps": 1,
+                },
+                "kinematics_feasibility": {
+                    "commands_evaluated": 3,
+                    "infeasible_native_count": 1,
+                    "projected_count": 1,
+                    "mean_abs_delta_linear": 0.2,
+                    "mean_abs_delta_angular": 0.4,
+                    "max_abs_delta_linear": 0.5,
+                    "max_abs_delta_angular": 0.7,
+                },
+                "planner_kinematics": {
+                    "robot_kinematics": "holonomic",
+                    "execution_mode": "adapter",
+                    "planner_command_space": "holonomic_vxy_world",
+                    "benchmark_command_space": "holonomic_vxy_world",
+                    "projection_policy": "world_velocity_passthrough",
+                    "execution_detail": "direct_holonomic_world_velocity",
+                },
+                "upstream_reference": {
+                    "adapter_boundary": "parallel runtime direct world velocity passthrough"
+                },
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", _fake_worker)
+
+    result = run_map_batch(
+        scenarios,
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        algo="orca",
+        adapter_impact_eval=True,
+        workers=2,
+        resume=False,
+    )
+
+    meta = result["algorithm_metadata_contract"]
+    planner_meta = meta["planner_kinematics"]
+    assert planner_meta["planner_command_space"] == "holonomic_vxy_world"
+    assert planner_meta["benchmark_command_space"] == "holonomic_vxy_world"
+    assert planner_meta["projection_policy"] == "world_velocity_passthrough"
+    assert planner_meta["execution_detail"] == "direct_holonomic_world_velocity"
+    assert meta["upstream_reference"]["adapter_boundary"] == (
+        "parallel runtime direct world velocity passthrough"
+    )
+    assert meta["adapter_impact"]["status"] == "complete"
+    assert meta["adapter_impact"]["native_steps"] == 3
+    assert meta["adapter_impact"]["adapted_steps"] == 2
+    assert meta["kinematics_feasibility"]["commands_evaluated"] == 6
+    assert meta["kinematics_feasibility"]["projected_count"] == 2
+    assert meta["kinematics_feasibility"]["mean_abs_delta_linear"] == pytest.approx(0.2)
+
+
+def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serialized map jobs should forward benchmark metadata fields into episode execution."""
+    captured: dict[str, object] = {}
+
+    def _fake_run_map_episode(scenario, seed, **kwargs):
+        """Capture worker-forwarded keyword arguments."""
+        captured["scenario"] = scenario
+        captured["seed"] = seed
+        captured.update(kwargs)
+        return {
+            "episode_id": "forwarded",
+            "algorithm_metadata": {
+                "benchmark_track": {
+                    "benchmark_track": kwargs["benchmark_track"],
+                    "track_schema_version": kwargs["track_schema_version"],
+                    "observation_level": kwargs["observation_level"],
+                    "observation_mode": kwargs["observation_mode"],
+                }
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_episode", _fake_run_map_episode)
+
+    record = _run_map_job_worker(
+        (
+            {"name": "metadata-forwarding"},
+            7,
+            {
+                "horizon": 3,
+                "dt": 0.1,
+                "record_forces": False,
+                "snqi_weights": None,
+                "snqi_baseline": None,
+                "algo": "goal",
+                "algo_config": {"max_speed": 1.0},
+                "algo_config_path": None,
+                "scenario_path": "configs/scenarios/demo.yaml",
+                "adapter_impact_eval": True,
+                "experimental_ped_impact": False,
+                "ped_impact_radius_m": 2.0,
+                "ped_impact_window_steps": 5,
+                "observation_noise": {"enabled": False},
+                "observation_mode": "socnav_state",
+                "observation_level": "tracked_agents_no_noise",
+                "benchmark_track": "lidar",
+                "track_schema_version": "track-v1",
+                "synthetic_actuation_profile": None,
+                "latency_stress_profile": None,
+            },
+        )
+    )
+
+    assert captured["scenario"] == {"name": "metadata-forwarding"}
+    assert captured["seed"] == 7
+    assert captured["observation_mode"] == "socnav_state"
+    assert captured["observation_level"] == "tracked_agents_no_noise"
+    assert captured["benchmark_track"] == "lidar"
+    assert captured["track_schema_version"] == "track-v1"
+    assert record["algorithm_metadata"]["benchmark_track"]["benchmark_track"] == "lidar"
 
 
 def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(

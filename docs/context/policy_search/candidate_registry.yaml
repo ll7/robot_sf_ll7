@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-05-20
+updated_at: 2026-05-31
 freshness:
   policy: manual_registry_edit
   max_age_days: 90
@@ -168,6 +168,23 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  hybrid_rule_v3_progress_2p4_static_escape_probe:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v3_progress_2p4_static_escape_probe.yaml
+    issue: 1834
+    hypothesis: >
+      Keeping the 2.4 m/s progress envelope while enabling the static-escape
+      and recenter probes from the faster static-escape candidate may convert
+      some low-progress stalls without adopting the 3.0 m/s fast-progress speed
+      envelope.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   risk_dwa_camera_ready:
     status: implemented
     family: classical_baseline
@@ -196,10 +213,28 @@ candidates:
     required_stages:
       - smoke
 
+  topology_guided_hybrid_rule_v0:
+    status: experimental_spike
+    family: topology_hypothesis_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml
+    hypothesis: >
+      A diagnostic masked-route selector can expose up to two local topology
+      hypotheses from the occupancy grid, select one with route length and static
+      clearance scoring, and add a bounded selected-hypothesis local command to
+      the existing hybrid-rule safety scorer. Missing topology inputs fail closed;
+      single-hypothesis rows do not activate the topology injection and are not
+      benchmark evidence.
+    required_stages:
+      - smoke
+
   tentabot_value_scorer_v0:
     status: experimental_spike
     family: learned_style_value_scorer
     training_required: false
+    claim_scope: diagnostic_only
     promotion_gate: tier_b
     candidate_config_path: configs/policy_search/candidates/tentabot_value_scorer_v0.yaml
     learned_policy_registry_id: tentabot_value_scorer_v0
@@ -214,6 +249,21 @@ candidates:
     required_stages:
       - smoke
       - nominal_sanity
+
+  actuation_aware_hybrid_rule_v0:
+    status: experimental_spike
+    family: amv_actuation_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/actuation_aware_hybrid_rule_v0.yaml
+    hypothesis: >
+      A deterministic hybrid-rule local scorer can penalize command candidates that would be
+      clipped by the synthetic AMV actuation envelope, exposing whether local command smoothing
+      reduces synthetic actuation stress. This is diagnostic-only synthetic evidence, not
+      calibrated hardware or paper-facing AMV performance evidence.
+    required_stages:
+      - amv_actuation_smoke
 
   hybrid_rule_v3_static_margin0:
     status: implemented
@@ -373,6 +423,22 @@ candidates:
       - smoke
       - nominal_sanity
 
+  adaptive_proxemic_selector_v0:
+    status: experimental_spike
+    family: proxemic_profile_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/adaptive_proxemic_selector_v0.yaml
+    hypothesis: >
+      A deterministic local-context selector can switch among the existing
+      conservative, neutral, and open proxemic profile parameterizations to
+      expose when each profile would be chosen. This row is diagnostic only:
+      progress gains are not success evidence unless near-miss and comfort
+      exposure tradeoffs are reviewed separately.
+    required_stages:
+      - smoke
+
   hybrid_rule_v3_waypoint2_progress:
     status: implemented
     family: hybrid_rule_based
@@ -512,6 +578,21 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  mpc_clearance_guarded_v1:
+    status: experimental_spike
+    family: model_predictive_control
+    training_required: false
+    promotion_gate: tier_b
+    claim_scope: diagnostic_only
+    candidate_config_path: configs/policy_search/candidates/mpc_clearance_guarded_v1.yaml
+    hypothesis: >
+      A hard first-step static-clearance guard should reduce the known static-collision
+      failure mode in the NMPC clearance sampler while exposing whether the added
+      safety simply trades collisions for low-progress timeouts.
+    required_stages:
+      - smoke
+      - nominal_sanity
+
   risk_guarded_ppo_v1:
     status: implemented
     family: guarded_learning_policy
@@ -633,6 +714,21 @@ candidates:
       - smoke
       - nominal_sanity
       - stress_slice
+
+  planner_selector_v2_diagnostic:
+    status: experimental_spike
+    family: adaptive_ensemble_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/planner_selector_v2_diagnostic.yaml
+    hypothesis: >
+      A deterministic, auditable selector can choose among existing local-policy candidates using
+      predeclared topology and seed-sensitivity diagnostics plus current local pedestrian context.
+      This row is diagnostic only: smoke success proves runnable wiring and diagnostics, not
+      benchmark-strength planner-selection improvement.
+    required_stages:
+      - smoke
 
   learned_risk_model_v1:
     status: slurm_handoff_required

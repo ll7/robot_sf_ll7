@@ -10,7 +10,7 @@ from copy import deepcopy
 from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 import yaml
@@ -82,6 +82,10 @@ from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+from robot_sf.planner.adaptive_proxemic_selector import (
+    AdaptiveProxemicSelectorAdapter,
+    build_adaptive_proxemic_selector_config,
+)
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
 from robot_sf.planner.crowdnav_height import (
     CrowdNavHeightAdapter,
@@ -131,6 +135,10 @@ from robot_sf.planner.mppi_social import (
 from robot_sf.planner.nmpc_social import (
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
+)
+from robot_sf.planner.planner_selector_v2_diagnostic import (
+    PlannerSelectorV2DiagnosticAdapter,
+    build_planner_selector_v2_diagnostic_config,
 )
 from robot_sf.planner.policy_stack_v1 import (
     PolicyStackV1Adapter,
@@ -183,6 +191,10 @@ from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_ga
 from robot_sf.planner.teb_commitment import (
     TEBCommitmentPlannerAdapter,
     build_teb_commitment_config,
+)
+from robot_sf.planner.topology_guided_local_policy import (
+    TopologyGuidedHybridRulePlannerAdapter,
+    build_topology_guided_local_policy_config,
 )
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
 from robot_sf.training.scenario_loader import (
@@ -688,6 +700,98 @@ def _resolve_policy_search_candidate_runtime(
         if isinstance(scenario_cfg, dict):
             effective = _deep_merge_config(effective, scenario_cfg)
     return default_algo, effective
+
+
+def _apply_planner_selector_v2_context(
+    algo: str,
+    policy_cfg: dict[str, Any],
+    *,
+    scenario: dict[str, Any],
+    seed: int,
+) -> dict[str, Any]:
+    """Attach selector-v2 scenario context wherever effective runtime config is materialized.
+
+    Returns:
+        Runtime config with selector context for planner-selector v2, otherwise the original config.
+    """
+    if str(algo).strip().lower() != "planner_selector_v2_diagnostic":
+        return policy_cfg
+    return _deep_merge_config(
+        policy_cfg,
+        {
+            "selector_context": {
+                "scenario_id": _scenario_id(scenario),
+                "scenario_family": _scenario_family(scenario),
+                "seed": int(seed),
+            }
+        },
+    )
+
+
+def _build_planner_selector_v2_child_adapter(
+    *,
+    candidate_name: str,
+    candidate_config_path: str,
+    scenario: dict[str, Any],
+) -> Any:
+    """Build one existing local candidate adapter for planner-selector v2.
+
+    Returns:
+        Adapter instance for a supported local child candidate.
+    """
+    path = Path(candidate_config_path)
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    manifest = _parse_algo_config(str(path))
+    child_default_algo = str(manifest.get("algo", "")).strip().lower()
+    if not child_default_algo:
+        raise ValueError(f"Selector child candidate is missing algo: {candidate_name}")
+    child_algo, child_config = _resolve_policy_search_candidate_runtime(
+        default_algo=child_default_algo,
+        algo_config_path=str(path),
+        algo_config=manifest,
+        scenario=scenario,
+    )
+    if child_algo == "hybrid_rule_local_planner":
+        return HybridRuleLocalPlannerAdapter(
+            config=build_hybrid_rule_local_planner_config(child_config)
+        )
+    if child_algo == "orca":
+        return ORCAPlannerAdapter(
+            config=_build_socnav_config(child_config),
+            allow_fallback=bool(child_config.get("allow_fallback", False)),
+        )
+    raise ValueError(
+        "planner_selector_v2_diagnostic only supports existing local hybrid-rule/ORCA "
+        f"child candidates; {candidate_name!r} resolved to {child_algo!r}"
+    )
+
+
+def _build_planner_selector_v2_adapter(
+    algo_config: dict[str, Any],
+) -> PlannerSelectorV2DiagnosticAdapter:
+    """Build the diagnostic selector and all configured local child candidates.
+
+    Returns:
+        Configured planner-selector v2 adapter.
+    """
+    build = build_planner_selector_v2_diagnostic_config(algo_config)
+    scenario_stub = {
+        "name": build.selector.scenario_id,
+        "family": build.selector.scenario_family,
+    }
+    adapters = {
+        name: _build_planner_selector_v2_child_adapter(
+            candidate_name=name,
+            candidate_config_path=path,
+            scenario=scenario_stub,
+        )
+        for name, path in sorted(build.candidate_config_paths.items())
+    }
+    return PlannerSelectorV2DiagnosticAdapter(
+        config=build.selector,
+        candidate_adapters=adapters,
+    )
 
 
 def _prediction_planner_metadata_overrides(
@@ -1464,7 +1568,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             normalized_robot_command_mode=normalized_robot_command_mode,
         )
 
-    if algo_key in {"hybrid_rule_local_planner", "hybrid_rule_v0_minimal"}:
+    if algo_key in {
+        "hybrid_rule_local_planner",
+        "hybrid_rule_v0_minimal",
+        "actuation_aware_hybrid_rule_v0",
+    }:
         adapter = HybridRuleLocalPlannerAdapter(
             config=build_hybrid_rule_local_planner_config(algo_config)
         )
@@ -1476,6 +1584,32 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key == "adaptive_proxemic_selector_v0":
+        selector_config = build_adaptive_proxemic_selector_config(algo_config)
+        adapter = AdaptiveProxemicSelectorAdapter(config=selector_config)
+        meta["adaptive_proxemic_selector"] = {
+            "status": "enabled",
+            "diagnostic_only": bool(selector_config.diagnostic_only),
+            "claim_boundary": selector_config.claim_boundary,
+            "profile_sources": [
+                selector_config.profiles[name].source_candidate
+                for name in ("conservative", "neutral", "open")
+            ],
+        }
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="AdaptiveProxemicSelectorAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations=(
+                "diagnostic-only selector over fixed proxemic profiles; "
+                "not benchmark or comfort evidence"
+            ),
         )
 
     if algo_key == "safety_barrier":
@@ -1517,6 +1651,27 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
             limitations="static_obstacle_first_testing_only",
+        )
+
+    if algo_key == "topology_guided_hybrid_rule_v0":
+        adapter = TopologyGuidedHybridRulePlannerAdapter(
+            config=build_topology_guided_local_policy_config(algo_config)
+        )
+        meta["topology_guided_hybrid_rule"] = {
+            "diagnostic_only": True,
+            "claim_boundary": "diagnostic_only",
+            "hypothesis_source": "masked_occupancy_grid_routes",
+            "wrapped_planner": "HybridRuleLocalPlannerAdapter",
+        }
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="TopologyGuidedHybridRulePlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations="diagnostic_only_topology_hypothesis_selector",
         )
 
     if algo_key in {"lidar_grid_route", "lidar_occupancy_grid_route"}:
@@ -2275,6 +2430,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 config=hybrid_cfg.socnav, allow_fallback=allow_fallback
             ),
         )
+    elif algo_key == "planner_selector_v2_diagnostic":
+        adapter = _build_planner_selector_v2_adapter(algo_config)
+        meta["selector_boundary"] = {
+            "diagnostic_only": True,
+            "benchmark_strength": False,
+            "learned_policy_used": False,
+            "claim_boundary": "diagnostic_only_not_benchmark_success",
+        }
     elif algo_key == "hybrid_orca_sampler":
         allow_fallback = bool(algo_config.get("allow_fallback", True))
         hybrid_cfg = build_hybrid_orca_sampler_build_config(algo_config)
@@ -3055,6 +3218,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo_config=raw_policy_cfg,
         scenario=scenario,
     )
+    policy_cfg = _apply_planner_selector_v2_context(
+        algo,
+        policy_cfg,
+        scenario=scenario,
+        seed=int(seed),
+    )
     active_observation_mode = resolve_observation_mode(
         algo,
         observation_mode,
@@ -3548,6 +3717,46 @@ def _accumulate_batch_metadata(
     return adapter_requested_seen, adapter_native_steps, adapter_adapted_steps
 
 
+class _WorkerMetadataBridgeUpdate(NamedTuple):
+    """Normalized metadata update emitted by either direct or serialized worker paths."""
+
+    runtime_algorithm_contract: dict[str, Any]
+    adapter_requested_seen: bool
+    adapter_native_steps: int
+    adapter_adapted_steps: int
+
+
+def _apply_worker_metadata_bridge(
+    rec: dict[str, Any],
+    *,
+    feasibility_totals: dict[str, float],
+    runtime_algorithm_contract: dict[str, Any] | None,
+) -> _WorkerMetadataBridgeUpdate:
+    """Fold one worker episode record into the batch-level metadata contract.
+
+    This is the explicit bridge between per-episode worker payloads and the batch summary.  It is
+    used by both direct function-call execution and serialized worker execution so metadata-only
+    additions have one testable hop.
+
+    Returns:
+        Worker metadata update with merged runtime contract and adapter-impact deltas.
+    """
+    requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+        rec,
+        feasibility_totals=feasibility_totals,
+    )
+    merged_runtime_contract = _merge_runtime_algorithm_contract(
+        runtime_algorithm_contract or {},
+        rec.get("algorithm_metadata"),
+    )
+    return _WorkerMetadataBridgeUpdate(
+        runtime_algorithm_contract=merged_runtime_contract,
+        adapter_requested_seen=requested_seen,
+        adapter_native_steps=native_steps,
+        adapter_adapted_steps=adapted_steps,
+    )
+
+
 def _merge_runtime_algorithm_contract(  # noqa: C901
     base_contract: dict[str, Any],
     runtime_algorithm_metadata: Any,
@@ -3891,6 +4100,12 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     algo_config=raw_policy_cfg,
                     scenario=sc,
                 )
+                identity_cfg = _apply_planner_selector_v2_context(
+                    identity_algo,
+                    identity_cfg,
+                    scenario=sc,
+                    seed=int(seed),
+                )
                 identity_observation_mode = resolve_observation_mode(
                     identity_algo,
                     batch_observation_mode,
@@ -3980,17 +4195,15 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         for scenario, seed in jobs:
             try:
                 rec = _run_map_job_worker((scenario, seed, fixed_params))
-                requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+                bridge_update = _apply_worker_metadata_bridge(
                     rec,
                     feasibility_totals=feasibility_totals,
+                    runtime_algorithm_contract=runtime_algorithm_contract,
                 )
-                adapter_samples_seen = adapter_samples_seen or requested_seen
-                adapter_native_steps += native_steps
-                adapter_adapted_steps += adapted_steps
-                runtime_algorithm_contract = _merge_runtime_algorithm_contract(
-                    runtime_algorithm_contract or {},
-                    rec.get("algorithm_metadata"),
-                )
+                adapter_samples_seen = adapter_samples_seen or bridge_update.adapter_requested_seen
+                adapter_native_steps += bridge_update.adapter_native_steps
+                adapter_adapted_steps += bridge_update.adapter_adapted_steps
+                runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
                 _write_validated(out_path, schema, rec)
                 wrote += 1
             except Exception as exc:  # pragma: no cover - error path
@@ -4012,17 +4225,17 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 idx, scenario, seed = future_to_job[fut]
                 try:
                     rec = fut.result()
-                    requested_seen, native_steps, adapted_steps = _accumulate_batch_metadata(
+                    bridge_update = _apply_worker_metadata_bridge(
                         rec,
                         feasibility_totals=feasibility_totals,
+                        runtime_algorithm_contract=runtime_algorithm_contract,
                     )
-                    adapter_samples_seen = adapter_samples_seen or requested_seen
-                    adapter_native_steps += native_steps
-                    adapter_adapted_steps += adapted_steps
-                    runtime_algorithm_contract = _merge_runtime_algorithm_contract(
-                        runtime_algorithm_contract or {},
-                        rec.get("algorithm_metadata"),
+                    adapter_samples_seen = (
+                        adapter_samples_seen or bridge_update.adapter_requested_seen
                     )
+                    adapter_native_steps += bridge_update.adapter_native_steps
+                    adapter_adapted_steps += bridge_update.adapter_adapted_steps
+                    runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
                     results_by_idx[idx] = rec
                 except Exception as exc:  # pragma: no cover
                     failures.append(

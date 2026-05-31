@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from scripts.validation.run_policy_search_candidate import (
+    _annotate_initial_overlap_exclusions,
     _baseline_deltas,
     _deep_merge,
     _effective_candidate_config_for_scenario,
@@ -16,6 +17,7 @@ from scripts.validation.run_policy_search_candidate import (
     _format_signed_optional_float,
     _load_stage_scenarios,
     _prepare_scenarios_for_inline_run,
+    _scenario_exclusion_lines,
     decide_stage_status,
     load_candidate_definition,
     split_scenarios_by_family,
@@ -72,6 +74,152 @@ def test_load_candidate_definition_merges_base_config_and_params(
     assert payload["algo"] == "orca"
     assert merged == {"foo": {"a": 7, "b": 8}, "bar": 2}
     assert config_path == candidate_cfg.resolve()
+
+
+def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -> None:
+    """Issue #1807 candidate routing should stay diagnostic-only and synthetic-slice first."""
+    repo_root = Path(__file__).parents[2]
+
+    entry, payload, config, config_path = load_candidate_definition(
+        repo_root / "docs/context/policy_search/candidate_registry.yaml",
+        "actuation_aware_hybrid_rule_v0",
+    )
+    funnel = yaml.safe_load(
+        (repo_root / "configs/policy_search/funnel.yaml").read_text(encoding="utf-8")
+    )
+
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert entry["required_stages"] == ["amv_actuation_smoke"]
+    assert payload["algo"] == "actuation_aware_hybrid_rule_v0"
+    assert (
+        config_path
+        == (
+            repo_root / "configs/policy_search/candidates/actuation_aware_hybrid_rule_v0.yaml"
+        ).resolve()
+    )
+    assert config["planner_variant"] == "actuation_aware_hybrid_rule_v0"
+    assert config["actuation_profile_name"] == "amv-actuation-stress-v0"
+    assert config["actuation_score_enabled"] is True
+    assert config["actuation_clip_risk_weight"] == pytest.approx(2.2)
+    stage = funnel["stages"]["amv_actuation_smoke"]
+    assert stage["scenario_matrix"] == "configs/scenarios/sets/classic_cross_trap_subset.yaml"
+    assert stage["scenario_filter"] == ["classic_cross_trap_high"]
+    assert stage["synthetic_actuation_profile"]["claim_scope"] == "synthetic-only"
+    assert stage["fail_closed_initial_overlap_exclusion"] is True
+    assert stage["paper_facing"] is False
+
+
+def test_risk_surface_candidate_uses_smoke_progress_recovery_speed() -> None:
+    """Risk-surface smoke candidate should opt into the 2 m/s local command envelope."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    _entry, payload, merged, config_path = load_candidate_definition(
+        repo_root / "docs/context/policy_search/candidate_registry.yaml",
+        "risk_surface_dwa_v0",
+    )
+
+    risk_dwa = merged["risk_dwa"]
+    assert payload["algo"] == "risk_surface_dwa"
+    assert risk_dwa["max_linear_speed"] == 2.0
+    assert max(risk_dwa["linear_candidates"]) == 2.0
+    assert risk_dwa["progress_escape_enabled"] is True
+    assert risk_dwa["progress_escape_speed"] >= 0.9
+    assert (
+        config_path
+        == (repo_root / "configs/policy_search/candidates/risk_surface_dwa_v0.yaml").resolve()
+    )
+
+
+def test_topology_guided_candidate_is_diagnostic_only() -> None:
+    """Topology-guided candidate should keep an explicit diagnostic claim boundary."""
+    entry, payload, merged, config_path = load_candidate_definition(
+        Path("docs/context/policy_search/candidate_registry.yaml"),
+        "topology_guided_hybrid_rule_v0",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["family"] == "topology_hypothesis_diagnostic"
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "topology_guided_hybrid_rule_v0"
+    assert merged["diagnostic_only"] is True
+    assert merged["min_hypotheses"] == 2
+    assert merged["fail_closed_on_missing_inputs"] is True
+    assert merged["fail_closed_on_insufficient_hypotheses"] is False
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml").resolve()
+    )
+
+
+def test_adaptive_proxemic_selector_candidate_is_diagnostic_only() -> None:
+    """The adaptive proxemic selector should be registered as diagnostic-only."""
+    registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"
+
+    entry, payload, merged, config_path = load_candidate_definition(
+        registry_path,
+        "adaptive_proxemic_selector_v0",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["training_required"] is False
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "adaptive_proxemic_selector_v0"
+    assert payload["params"]["diagnostic_only"] is True
+    assert merged["diagnostic_only"] is True
+    assert sorted(merged["profiles"]) == ["conservative", "neutral", "open"]
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/adaptive_proxemic_selector_v0.yaml").resolve()
+    )
+
+
+def test_mpc_clearance_guarded_candidate_enables_static_guard() -> None:
+    """Guarded NMPC candidate should keep the legacy sampler separate and diagnostic-only."""
+    entry, payload, merged, config_path = load_candidate_definition(
+        Path("docs/context/policy_search/candidate_registry.yaml"),
+        "mpc_clearance_guarded_v1",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["family"] == "model_predictive_control"
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert payload["algo"] == "nmpc_social"
+    assert merged["hard_obstacle_guard_enabled"] is True
+    assert merged["hard_obstacle_clearance"] == pytest.approx(0.35)
+    assert (
+        config_path
+        == Path("configs/policy_search/candidates/mpc_clearance_guarded_v1.yaml").resolve()
+    )
+
+
+def test_progress_2p4_static_escape_probe_candidate_is_diagnostic_only() -> None:
+    """Issue #1834 candidate should merge 2.4 m/s progress with static-escape probes."""
+    registry_path = Path(__file__).parents[2] / "docs/context/policy_search/candidate_registry.yaml"
+
+    entry, payload, merged, config_path = load_candidate_definition(
+        registry_path,
+        "hybrid_rule_v3_progress_2p4_static_escape_probe",
+    )
+
+    assert entry["status"] == "experimental_spike"
+    assert entry["claim_scope"] == "diagnostic_only"
+    assert entry["issue"] == 1834
+    assert payload["algo"] == "hybrid_rule_local_planner"
+    assert merged["planner_variant"] == "hybrid_rule_v3_teb_like_rollout"
+    assert merged["route_guide_enabled"] is True
+    assert merged["max_linear_speed"] == pytest.approx(2.4)
+    assert merged["max_linear_accel"] == pytest.approx(2.4)
+    assert merged["static_clearance_escape_enabled"] is True
+    assert merged["static_recenter_enabled"] is True
+    assert merged["static_corridor_transit_enabled"] is True
+    assert merged["static_clearance_escape_max_speed"] == pytest.approx(0.3)
+    assert merged["static_recenter_weight"] == pytest.approx(0.7)
+    assert (
+        config_path
+        == Path(
+            "configs/policy_search/candidates/hybrid_rule_v3_progress_2p4_static_escape_probe.yaml"
+        ).resolve()
+    )
 
 
 def test_split_scenarios_by_family_uses_name_when_scenario_id_is_missing() -> None:
@@ -194,6 +342,36 @@ def test_load_stage_scenarios_applies_inline_seed_list(tmp_path: Path) -> None:
     assert Path(scenarios[0]["map_file"]) == map_path.resolve()
 
 
+def test_load_stage_scenarios_applies_scenario_filter(tmp_path: Path) -> None:
+    """Stage-level scenario_filter should narrow inline smoke runs."""
+    matrix = tmp_path / "matrix.yaml"
+    map_path = tmp_path / "maps" / "open.svg"
+    map_path.parent.mkdir()
+    map_path.write_text("<svg />", encoding="utf-8")
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {"name": "classic_cross_trap_low", "map_file": "maps/open.svg"},
+                    {"name": "classic_cross_trap_high", "map_file": "maps/open.svg"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    scenarios = _load_stage_scenarios(
+        matrix,
+        seed_manifest=None,
+        seed_list=[111],
+        scenario_filter=["classic_cross_trap_high"],
+    )
+
+    assert isinstance(scenarios, list)
+    assert [scenario["name"] for scenario in scenarios] == ["classic_cross_trap_high"]
+    assert scenarios[0]["seeds"] == [111]
+
+
 def test_load_stage_scenarios_preserves_path_without_seed_override(tmp_path: Path) -> None:
     """Stages without inline seed overrides can keep the matrix path fast path."""
     matrix = tmp_path / "matrix.yaml"
@@ -222,6 +400,100 @@ def test_decide_stage_status_enforces_nominal_gate() -> None:
         )
         == "revise"
     )
+
+
+def test_decide_stage_status_treats_named_smoke_stages_as_smoke() -> None:
+    """Diagnostic smoke stages should pass only when they run at least one episode."""
+    assert decide_stage_status("amv_actuation_smoke", {}, {"episodes": 1}) == "pass"
+    assert decide_stage_status("amv_actuation_smoke", {}, {"episodes": 0}) == "revise"
+    assert (
+        decide_stage_status(
+            "amv_actuation_smoke",
+            {},
+            {"episodes": None, "scenario_exclusions": {"count": ""}},
+        )
+        == "revise"
+    )
+    assert (
+        decide_stage_status(
+            "amv_actuation_smoke",
+            {},
+            {"episodes": 1, "scenario_exclusions": {"count": 1}},
+        )
+        == "excluded"
+    )
+
+
+def test_annotate_initial_overlap_exclusions_requires_first_step_evidence() -> None:
+    """Initial-overlap rows need explicit evidence before adjusted reporting excludes them."""
+    rows = [
+        {
+            "scenario_id": "classic_cross_trap_high",
+            "seed": 111,
+            "steps": 1,
+            "termination_reason": "collision",
+            "metrics": {
+                "avg_speed": 0.0,
+                "min_clearance": -0.3882961911,
+                "ped_collision_count": 1,
+            },
+            "algorithm_metadata": {
+                "planner_runtime": {
+                    "last_decision": {
+                        "planner_mode": "EMERGENCY_STOP",
+                        "selected_source": "all_candidates_rejected",
+                        "nearest_pedestrian_distance": 1.0117035253,
+                        "rejection_counts": {"dynamic_collision": 67},
+                        "rejected_examples": [
+                            {
+                                "reason": "dynamic_collision",
+                                "command": [0.0, 0.0],
+                                "min_dynamic_clearance": 0.9159010834,
+                                "collision_radius": 1.450000006,
+                                "time": 0.2,
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+    ]
+
+    annotated = _annotate_initial_overlap_exclusions(rows)
+
+    assert annotated[0]["scenario_exclusion"] == {
+        "status": "impossible",
+        "reason": "initial_robot_pedestrian_overlap",
+        "evidence": [
+            "first_step_collision_with_zero_progress",
+            "min_clearance_m=-0.3883",
+            "nearest_pedestrian_distance_m=1.0117",
+            "candidate_collision_radius_m=1.4500",
+            "all_first_step_candidates_rejected_for_dynamic_collision",
+        ],
+    }
+    assert "scenario_exclusion" not in rows[0]
+
+
+def test_scenario_exclusion_lines_normalize_missing_values() -> None:
+    """Scenario-exclusion report rows should not render explicit nulls as strings."""
+    lines = _scenario_exclusion_lines(
+        {
+            "scenario_exclusions": {
+                "records": [
+                    {
+                        "scenario_id": None,
+                        "seed": None,
+                        "status": None,
+                        "reason": None,
+                        "evidence": None,
+                    }
+                ]
+            }
+        }
+    )
+
+    assert "| unknown | n/a | unknown | unknown |  |" in lines
 
 
 def test_format_optional_float_keeps_present_values() -> None:

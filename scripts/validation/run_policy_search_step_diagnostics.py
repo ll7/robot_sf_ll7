@@ -57,6 +57,231 @@ def _json_ready(value: Any) -> Any:
     return str(value)
 
 
+def _optional_float(value: Any) -> float | None:
+    """Return a float for numeric diagnostic values, preserving missing values."""
+    if value is None or value == "" or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+        if not np.isfinite(number):
+            return None
+        return number
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_summary_float(value: Any) -> str:
+    """Format optional floats for the Markdown report."""
+    number = _optional_float(value)
+    return "n/a" if number is None else f"{number:.4f}"
+
+
+def _empty_trace_progress_summary() -> dict[str, Any]:
+    """Return the stable progress-summary shape for an empty trace."""
+    return {
+        "steps_observed": 0,
+        "initial_goal_distance": None,
+        "final_goal_distance": None,
+        "best_goal_distance": None,
+        "net_goal_progress": None,
+        "best_goal_progress": None,
+        "progress_step_count": 0,
+        "regression_step_count": 0,
+        "stagnant_step_count": 0,
+        "longest_stagnant_run": 0,
+        "closest_robot_ped_distance": None,
+        "closest_robot_ped_step": None,
+        "collision_flag_counts": {"pedestrian": 0, "obstacle": 0, "robot": 0},
+    }
+
+
+def _progress_bucket(
+    pre_goal: float | None,
+    post_goal: float | None,
+    *,
+    stagnation_epsilon: float,
+) -> str | None:
+    """Classify one step as progress, regression, stagnant, or unavailable."""
+    if pre_goal is None or post_goal is None:
+        return None
+    step_progress = pre_goal - post_goal
+    if step_progress > stagnation_epsilon:
+        return "progress"
+    if step_progress < -stagnation_epsilon:
+        return "regression"
+    return "stagnant"
+
+
+def _step_index(row: dict[str, Any]) -> int | None:
+    """Return a row's integer step index when available."""
+    step = row.get("step")
+    return step if isinstance(step, int) and not isinstance(step, bool) else None
+
+
+def _collision_flag_counts(trace_rows: list[dict[str, Any]]) -> dict[str, int]:
+    """Count per-step collision flags emitted by the environment."""
+    return {
+        "pedestrian": sum(1 for row in trace_rows if row.get("is_pedestrian_collision")),
+        "obstacle": sum(1 for row in trace_rows if row.get("is_obstacle_collision")),
+        "robot": sum(1 for row in trace_rows if row.get("is_robot_collision")),
+    }
+
+
+def _goal_distance_summary(trace_rows: list[dict[str, Any]]) -> dict[str, float | None]:
+    """Summarize initial, final, best, and derived goal-distance progress."""
+    goal_distance_values: list[float] = []
+    initial_goal_distance: float | None = None
+    final_goal_distance: float | None = None
+
+    for row in trace_rows:
+        pre_goal = _optional_float(row.get("goal_distance"))
+        post_goal = _optional_float(row.get("post_step_goal_distance"))
+        if initial_goal_distance is None:
+            initial_goal_distance = pre_goal if pre_goal is not None else post_goal
+        if pre_goal is not None:
+            goal_distance_values.append(pre_goal)
+        if post_goal is not None:
+            goal_distance_values.append(post_goal)
+        last_goal_distance = post_goal if post_goal is not None else pre_goal
+        if last_goal_distance is not None:
+            final_goal_distance = last_goal_distance
+
+    best_goal_distance = min(goal_distance_values) if goal_distance_values else None
+    net_goal_progress = (
+        initial_goal_distance - final_goal_distance
+        if initial_goal_distance is not None and final_goal_distance is not None
+        else None
+    )
+    best_goal_progress = (
+        initial_goal_distance - best_goal_distance
+        if initial_goal_distance is not None and best_goal_distance is not None
+        else None
+    )
+    return {
+        "initial_goal_distance": initial_goal_distance,
+        "final_goal_distance": final_goal_distance,
+        "best_goal_distance": best_goal_distance,
+        "net_goal_progress": net_goal_progress,
+        "best_goal_progress": best_goal_progress,
+    }
+
+
+def _progress_step_summary(
+    trace_rows: list[dict[str, Any]],
+    *,
+    stagnation_epsilon: float,
+) -> dict[str, int]:
+    """Count step-level progress, regression, and stagnation streaks."""
+    progress_step_count = 0
+    regression_step_count = 0
+    stagnant_step_count = 0
+    current_stagnant_run = 0
+    longest_stagnant_run = 0
+
+    for row in trace_rows:
+        bucket = _progress_bucket(
+            _optional_float(row.get("goal_distance")),
+            _optional_float(row.get("post_step_goal_distance")),
+            stagnation_epsilon=stagnation_epsilon,
+        )
+        if bucket == "progress":
+            progress_step_count += 1
+            current_stagnant_run = 0
+        elif bucket == "regression":
+            regression_step_count += 1
+            current_stagnant_run = 0
+        elif bucket == "stagnant":
+            stagnant_step_count += 1
+            current_stagnant_run += 1
+            longest_stagnant_run = max(longest_stagnant_run, current_stagnant_run)
+        else:
+            current_stagnant_run = 0
+
+    return {
+        "progress_step_count": progress_step_count,
+        "regression_step_count": regression_step_count,
+        "stagnant_step_count": stagnant_step_count,
+        "longest_stagnant_run": longest_stagnant_run,
+    }
+
+
+def _closest_robot_ped_summary(trace_rows: list[dict[str, Any]]) -> dict[str, float | int | None]:
+    """Find the closest robot-pedestrian clearance observed in a trace."""
+    closest_robot_ped_distance: float | None = None
+    closest_robot_ped_step: int | None = None
+
+    for row in trace_rows:
+        step_index = _step_index(row)
+        for field in ("min_robot_ped_distance", "post_step_min_robot_ped_distance"):
+            distance = _optional_float(row.get(field))
+            if distance is None:
+                continue
+            if closest_robot_ped_distance is None or distance < closest_robot_ped_distance:
+                closest_robot_ped_distance = distance
+                closest_robot_ped_step = step_index
+
+    return {
+        "closest_robot_ped_distance": closest_robot_ped_distance,
+        "closest_robot_ped_step": closest_robot_ped_step,
+    }
+
+
+def _trace_progress_summary(
+    trace_rows: list[dict[str, Any]],
+    *,
+    stagnation_epsilon: float = 1e-6,
+) -> dict[str, Any]:
+    """Summarize per-step progress, stagnation, clearance, and collision flags."""
+    if not trace_rows:
+        return _empty_trace_progress_summary()
+
+    return {
+        "steps_observed": len(trace_rows),
+        **_goal_distance_summary(trace_rows),
+        **_progress_step_summary(
+            trace_rows,
+            stagnation_epsilon=stagnation_epsilon,
+        ),
+        **_closest_robot_ped_summary(trace_rows),
+        "collision_flag_counts": _collision_flag_counts(trace_rows),
+    }
+
+
+def _format_planner_summary_lines(planner_summary: Any) -> list[str]:
+    """Return Markdown lines for the aggregate planner diagnostics summary."""
+    summary = _json_ready(planner_summary)
+    lines = ["## Planner Summary", ""]
+    if summary is None:
+        return [*lines, "- Planner summary: `null`"]
+    if not isinstance(summary, dict):
+        return [*lines, f"- Planner summary: `{summary}`"]
+    if not summary:
+        return [*lines, "- Planner summary: `{}`"]
+    for key, value in sorted(summary.items()):
+        if isinstance(value, (dict, list)):
+            rendered = json.dumps(value, sort_keys=True)
+        else:
+            rendered = str(value)
+        lines.append(f"- `{key}`: `{rendered}`")
+    return lines
+
+
+def _diagnostics_stdout_payload(
+    *,
+    metadata: dict[str, Any],
+    progress_summary: dict[str, Any],
+    planner_summary: Any,
+    done_info: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the stable machine-readable diagnostics CLI payload."""
+    return {
+        **_json_ready(metadata),
+        "progress_summary": _json_ready(progress_summary),
+        "planner_summary": _json_ready(planner_summary),
+        "done_info": _json_ready(done_info),
+    }
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -291,6 +516,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 planner_summary = diagnostics()
         env.close()
 
+    progress_summary = _trace_progress_summary(trace_rows)
     trace_payload = {
         "candidate": args.candidate,
         "stage": args.stage,
@@ -302,6 +528,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "algo_config": _json_ready(effective_cfg),
         "algorithm_metadata": _json_ready(algo_meta),
         "planner_summary": _json_ready(planner_summary),
+        "progress_summary": _json_ready(progress_summary),
         "done_info": _json_ready(done_info),
         "steps": trace_rows,
     }
@@ -333,6 +560,25 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "",
         f"- Done info: `{_json_ready(done_info)}`",
         "",
+        *_format_planner_summary_lines(planner_summary),
+        "",
+        "## Progress/Risk Summary",
+        "",
+        f"- Net goal progress: `{_format_summary_float(progress_summary['net_goal_progress'])}`",
+        f"- Best goal progress: `{_format_summary_float(progress_summary['best_goal_progress'])}`",
+        f"- Initial goal distance: `{_format_summary_float(progress_summary['initial_goal_distance'])}`",
+        f"- Final goal distance: `{_format_summary_float(progress_summary['final_goal_distance'])}`",
+        f"- Best goal distance: `{_format_summary_float(progress_summary['best_goal_distance'])}`",
+        f"- Progress/regression/stagnant steps: "
+        f"`{progress_summary['progress_step_count']}` / "
+        f"`{progress_summary['regression_step_count']}` / "
+        f"`{progress_summary['stagnant_step_count']}`",
+        f"- Longest stagnant run: `{progress_summary['longest_stagnant_run']}`",
+        f"- Closest robot-ped distance: "
+        f"`{_format_summary_float(progress_summary['closest_robot_ped_distance'])}` "
+        f"at step `{progress_summary['closest_robot_ped_step']}`",
+        f"- Collision flag counts: `{progress_summary['collision_flag_counts']}`",
+        "",
         "## Step Summary",
         "",
         "| Step | Decision | Head | Goal Dist | Min Robot-Ped Dist | Command | Success |",
@@ -355,21 +601,21 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     report_path = output_dir / "report.md"
     report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
 
-    print(
-        json.dumps(
-            {
-                "trace": str(trace_path),
-                "report": str(report_path),
-                "scenario_id": _scenario_id(scenario),
-                "family": family,
-                "seed": seed,
-                "decision_counts": dict(decision_counter),
-                "selected_head_counts": dict(selected_head_counter),
-                "done_info": _json_ready(done_info),
-            },
-            indent=2,
-        )
+    payload = _diagnostics_stdout_payload(
+        metadata={
+            "trace": trace_path,
+            "report": report_path,
+            "scenario_id": _scenario_id(scenario),
+            "family": family,
+            "seed": seed,
+            "decision_counts": dict(decision_counter),
+            "selected_head_counts": dict(selected_head_counter),
+        },
+        progress_summary=progress_summary,
+        planner_summary=planner_summary,
+        done_info=done_info,
     )
+    print(json.dumps(payload, indent=2))
     return 0
 
 

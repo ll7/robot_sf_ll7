@@ -42,6 +42,17 @@ def test_parse_config_rejects_invalid_type():
         PPOPlanner(123)  # type: ignore[arg-type]
 
 
+def test_planner_rejects_local_output_model_path_even_with_fallback() -> None:
+    """Direct PPO construction should share the benchmark local-artifact boundary."""
+    with pytest.raises(ValueError, match="local-only model artifact"):
+        PPOPlanner(
+            {
+                "model_path": "output/model_cache/ppo/model.zip",
+                "fallback_to_goal": True,
+            }
+        )
+
+
 def test_step_dict_mode_fallback_unicycle_sets_status_and_reason():
     """Dict obs mode should fallback to goal action when model inference is unavailable."""
     planner = PPOPlanner(_planner_config(obs_mode="dict", action_space="unicycle", v_max=1.5))

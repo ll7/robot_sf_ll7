@@ -10,164 +10,18 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-import yaml
+from robot_sf.benchmark.local_model_artifacts import (
+    PROMOTED_BLOCKED_STATUS,
+    LocalModelReference,
+    classify_local_model_references,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCAN_ROOTS = (REPO_ROOT / "configs/baselines",)
 DEFAULT_BLOCKLIST = REPO_ROOT / "configs/baselines/local_model_artifact_blocklist.yaml"
 DEFAULT_PROMOTED_SURFACES = REPO_ROOT / "configs/benchmarks/promoted_config_surfaces.yaml"
-LOCAL_MODEL_KEYS = {"model_path", "resume_from"}
-PROMOTED_BLOCKED_STATUS = "promoted_blocked"
-
-
-@dataclass(frozen=True)
-class LocalModelReference:
-    """One local model path found in a YAML config."""
-
-    path: str
-    field: str
-    value: str
-    status: str
-    reason: str
-    surface: str = "local_experimental"
-
-
-def _load_yaml(path: Path) -> Any:
-    """Load a YAML file and return the parsed payload."""
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
-
-
-def _is_output_model_path(value: Any) -> bool:
-    """Return whether a scalar points at a local output model artifact."""
-    if not isinstance(value, str):
-        return False
-    normalized = value.strip()
-    return normalized.startswith(("output/model_cache/", "output/models/", "output/slurm/"))
-
-
-def _iter_yaml_files(paths: list[Path]) -> list[Path]:
-    """Expand scan roots into sorted YAML files.
-
-    Returns:
-        list[Path]: YAML files to inspect.
-    """
-    files: set[Path] = set()
-    for path in paths:
-        if path.is_dir():
-            files.update(path.rglob("*.yaml"))
-            files.update(path.rglob("*.yml"))
-        elif path.suffix.lower() in {".yaml", ".yml"}:
-            files.add(path)
-    return sorted(files)
-
-
-def _path_lookup_candidates(path: Path) -> list[str]:
-    """Return stable path spellings for config-surface matching."""
-    candidates = [path.as_posix()]
-    resolved = path.resolve()
-    try:
-        candidates.append(resolved.relative_to(REPO_ROOT).as_posix())
-    except ValueError:
-        pass
-    if path.is_absolute():
-        try:
-            candidates.append(resolved.relative_to(Path.cwd().resolve()).as_posix())
-        except ValueError:
-            pass
-    candidates.append(path.name)
-    return list(dict.fromkeys(candidates))
-
-
-def _display_path(path: Path) -> str:
-    """Return the repository-relative path when available."""
-    try:
-        return path.resolve().relative_to(REPO_ROOT).as_posix()
-    except ValueError:
-        return path.as_posix()
-
-
-def _load_promoted_surfaces(path: Path) -> dict[str, str]:
-    """Load benchmark-promoted config paths and their reasons."""
-    if not path.exists():
-        return {}
-    payload = _load_yaml(path)
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path}: expected top-level mapping")
-    if payload.get("version") != 1:
-        raise ValueError(f"{path}: version must be 1")
-    entries = payload.get("promoted_configs")
-    if not isinstance(entries, list):
-        raise ValueError(f"{path}: promoted_configs must be a list")
-
-    surfaces: dict[str, str] = {}
-    for index, entry in enumerate(entries):
-        if isinstance(entry, str):
-            config_path = entry.strip()
-            reason = "Benchmark-promoted config surface."
-        elif isinstance(entry, dict):
-            config_path = str(entry.get("path") or "").strip()
-            reason = str(entry.get("reason") or "").strip()
-        else:
-            raise ValueError(f"{path}: promoted_configs[{index}] must be a mapping or string")
-        if not config_path or not reason:
-            raise ValueError(f"{path}: promoted_configs[{index}] requires path and reason")
-        surfaces[config_path] = reason
-    return surfaces
-
-
-def _find_local_references(
-    payload: Any, *, path_parts: tuple[str, ...] = ()
-) -> list[tuple[str, str]]:
-    """Return dotted-field/value pairs for local model references."""
-    references: list[tuple[str, str]] = []
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            key_str = str(key)
-            next_parts = (*path_parts, key_str)
-            if key_str in LOCAL_MODEL_KEYS and _is_output_model_path(value):
-                references.append((".".join(next_parts), str(value).strip()))
-            references.extend(_find_local_references(value, path_parts=next_parts))
-    elif isinstance(payload, list):
-        for index, value in enumerate(payload):
-            references.extend(_find_local_references(value, path_parts=(*path_parts, str(index))))
-    return references
-
-
-def _load_blocklist(path: Path) -> dict[tuple[str, str, str], str]:
-    """Load the explicit local-artifact blocklist.
-
-    Returns:
-        dict[tuple[str, str, str], str]: Mapping from ``(path, field, value)`` to reason.
-    """
-    if not path.exists():
-        return {}
-    payload = _load_yaml(path)
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path}: expected top-level mapping")
-    if payload.get("version") != 1:
-        raise ValueError(f"{path}: version must be 1")
-    entries = payload.get("blocked_references")
-    if not isinstance(entries, list):
-        raise ValueError(f"{path}: blocked_references must be a list")
-
-    blocklist: dict[tuple[str, str, str], str] = {}
-    for index, entry in enumerate(entries):
-        if not isinstance(entry, dict):
-            raise ValueError(f"{path}: blocked_references[{index}] must be a mapping")
-        config_path = str(entry.get("path") or "").strip()
-        field = str(entry.get("field") or "").strip()
-        value = str(entry.get("value") or "").strip()
-        reason = str(entry.get("reason") or "").strip()
-        if not config_path or not field or not value or not reason:
-            raise ValueError(
-                f"{path}: blocked_references[{index}] requires path, field, value, and reason"
-            )
-        blocklist[(config_path, field, value)] = reason
-    return blocklist
 
 
 def check_local_model_artifacts(
@@ -182,61 +36,12 @@ def check_local_model_artifacts(
         list[LocalModelReference]: Classified references. ``status=unblocked`` rows should fail
         preflight; ``status=blocked`` rows are intentionally explicit follow-up work.
     """
-    blocklist = _load_blocklist(blocklist_path)
-    promoted_surfaces = _load_promoted_surfaces(promoted_surfaces_path)
-    expanded_scan_paths = list(scan_paths)
-    expanded_scan_paths.extend(
-        path if path.is_absolute() else REPO_ROOT / path
-        for path in (Path(path) for path in promoted_surfaces)
+    return classify_local_model_references(
+        scan_paths,
+        repo_root=REPO_ROOT,
+        blocklist_path=blocklist_path,
+        promoted_surfaces_path=promoted_surfaces_path,
     )
-    rows: list[LocalModelReference] = []
-    for yaml_path in _iter_yaml_files(expanded_scan_paths):
-        if yaml_path == blocklist_path:
-            continue
-        rel_path = _display_path(yaml_path)
-        lookup_paths = _path_lookup_candidates(yaml_path)
-        promoted_reason = next(
-            (
-                promoted_surfaces[candidate]
-                for candidate in lookup_paths
-                if candidate in promoted_surfaces
-            ),
-            "",
-        )
-        payload = _load_yaml(yaml_path)
-        for field, value in _find_local_references(payload):
-            if promoted_reason:
-                rows.append(
-                    LocalModelReference(
-                        rel_path,
-                        field,
-                        value,
-                        PROMOTED_BLOCKED_STATUS,
-                        (
-                            f"{promoted_reason} Replace the local output/ reference with a "
-                            "durable model_id or artifact pointer before using it as a promoted "
-                            "benchmark config. Follow-up: "
-                            "https://github.com/ll7/robot_sf_ll7/issues/1764"
-                        ),
-                        "benchmark_promoted",
-                    )
-                )
-                continue
-            reason = blocklist.get((rel_path, field, value))
-            if reason:
-                rows.append(LocalModelReference(rel_path, field, value, "blocked", reason))
-            else:
-                rows.append(
-                    LocalModelReference(
-                        rel_path,
-                        field,
-                        value,
-                        "unblocked",
-                        "replace with model_id or add an explicit artifact-promotion blocker",
-                        "local_experimental",
-                    )
-                )
-    return rows
 
 
 def _parse_args() -> argparse.Namespace:

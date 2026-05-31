@@ -7,10 +7,11 @@ import argparse
 import json
 import subprocess
 import time
+from collections.abc import Mapping
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import yaml
 
@@ -32,9 +33,6 @@ _DEFAULT_FUNNEL = Path("configs/policy_search/funnel.yaml")
 _DEFAULT_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
 _DEFAULT_DOCS_ROOT = Path("docs/context/policy_search")
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for one candidate-stage run."""
@@ -45,6 +43,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         choices=(
             "smoke",
+            "amv_actuation_smoke",
             "nominal_sanity",
             "stress_slice",
             "full_matrix",
@@ -162,6 +161,20 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
     return str(
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )
+
+
+def _filter_scenarios(
+    scenarios: list[dict[str, Any]],
+    scenario_filter: list[str] | None,
+) -> list[dict[str, Any]]:
+    """Return only scenarios named by a stage filter when one is configured."""
+    if not scenario_filter:
+        return scenarios
+    allowed = {str(item) for item in scenario_filter}
+    filtered = [scenario for scenario in scenarios if _scenario_id(scenario) in allowed]
+    if not filtered:
+        raise ValueError(f"Stage scenario_filter matched no scenarios: {sorted(allowed)}")
+    return filtered
 
 
 def _effective_candidate_config_for_scenario(
@@ -298,8 +311,14 @@ def _group_scenarios_by_config_overrides(
 
 def decide_stage_status(stage_name: str, stage_cfg: dict[str, Any], summary: dict[str, Any]) -> str:
     """Convert a stage summary into the registry/report decision label."""
-    if stage_name == "smoke":
-        return "pass" if int(summary.get("episodes", 0)) > 0 else "revise"
+    episodes = int(summary.get("episodes") or 0)
+    exclusions = summary.get("scenario_exclusions")
+    if isinstance(exclusions, Mapping) and episodes > 0:
+        excluded_count = int(exclusions.get("count", 0) or 0)
+        if excluded_count >= episodes:
+            return "excluded"
+    if stage_name == "smoke" or stage_name.endswith("_smoke"):
+        return "pass" if episodes > 0 else "revise"
     gate = stage_cfg.get("gate")
     if not isinstance(gate, dict):
         return "tracked"
@@ -336,19 +355,43 @@ def _load_stage_scenarios(
     stage_matrix: Path,
     seed_manifest: Path | None,
     seed_list: list[int] | None = None,
+    scenario_filter: list[str] | None = None,
 ) -> Path | list[dict[str, Any]]:
     """Resolve the scenario surface for a stage, including explicit seed overrides."""
     if seed_manifest is None:
-        if seed_list:
-            scenarios = load_scenarios(stage_matrix)
+        if seed_list or scenario_filter:
+            scenarios = _filter_scenarios(load_scenarios(stage_matrix), scenario_filter)
             base_dir = stage_matrix.parent.resolve()
             prepared = _prepare_scenarios_for_inline_run(scenarios, scenario_root=base_dir)
-            for scenario in prepared:
-                scenario["seeds"] = list(seed_list)
+            if seed_list:
+                for scenario in prepared:
+                    scenario["seeds"] = list(seed_list)
             return prepared
         return stage_matrix
     manifest = load_seed_manifest(seed_manifest)
-    return make_subset_scenarios(stage_matrix, manifest)
+    return _filter_scenarios(make_subset_scenarios(stage_matrix, manifest), scenario_filter)
+
+
+def _stage_scenario_filter(stage_cfg: Mapping[str, Any]) -> list[str] | None:
+    """Return a normalized stage scenario filter."""
+    scenario_filter_raw = stage_cfg.get("scenario_filter")
+    if isinstance(scenario_filter_raw, list) and scenario_filter_raw:
+        return [str(item) for item in scenario_filter_raw]
+    return None
+
+
+def _stage_synthetic_actuation_profile(
+    stage_cfg: Mapping[str, Any],
+    *,
+    stage_name: str,
+) -> dict[str, Any] | None:
+    """Return a validated synthetic-actuation profile payload for a stage."""
+    synthetic_actuation_profile = stage_cfg.get("synthetic_actuation_profile")
+    if synthetic_actuation_profile is None:
+        return None
+    if not isinstance(synthetic_actuation_profile, dict):
+        raise TypeError(f"Stage synthetic_actuation_profile must be a mapping: {stage_name}")
+    return synthetic_actuation_profile
 
 
 def _load_records(path: Path) -> list[dict[str, Any]]:
@@ -375,6 +418,129 @@ def _write_records(path: Path, rows: list[dict[str, Any]]) -> None:
     )
 
 
+def _optional_float(value: Any) -> float | None:
+    """Return a float value when one can be parsed."""
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _planner_last_decision(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return the planner runtime last-decision mapping from an episode row."""
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        return {}
+    runtime = metadata.get("planner_runtime")
+    if not isinstance(runtime, Mapping):
+        return {}
+    last_decision = runtime.get("last_decision")
+    return last_decision if isinstance(last_decision, Mapping) else {}
+
+
+def _first_dynamic_collision_example(last_decision: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return the first dynamic-collision rejected-candidate diagnostic."""
+    examples = last_decision.get("rejected_examples")
+    if not isinstance(examples, list):
+        return {}
+    for example in examples:
+        if isinstance(example, Mapping) and example.get("reason") == "dynamic_collision":
+            return example
+    return {}
+
+
+def _is_initial_overlap_collision(row: Mapping[str, Any]) -> bool:
+    """Return whether a row proves a collision was already unavoidable at step one."""
+    metrics = row.get("metrics")
+    metrics = metrics if isinstance(metrics, Mapping) else {}
+    last_decision = _planner_last_decision(row)
+    example = _first_dynamic_collision_example(last_decision)
+    min_clearance = _optional_float(metrics.get("min_clearance"))
+    ped_collisions = _optional_float(metrics.get("ped_collision_count")) or 0.0
+    avg_speed = _optional_float(metrics.get("avg_speed"))
+    nearest_ped = _optional_float(last_decision.get("nearest_pedestrian_distance"))
+    collision_radius = _optional_float(example.get("collision_radius"))
+    rejection_counts = last_decision.get("rejection_counts")
+    dynamic_rejections = (
+        int(rejection_counts.get("dynamic_collision", 0))
+        if isinstance(rejection_counts, Mapping)
+        else 0
+    )
+    return (
+        str(row.get("termination_reason", "")).strip().lower() == "collision"
+        and int(row.get("steps", 0) or 0) <= 1
+        and min_clearance is not None
+        and min_clearance < 0.0
+        and ped_collisions > 0.0
+        and avg_speed == 0.0
+        and str(last_decision.get("planner_mode", "")).strip() == "EMERGENCY_STOP"
+        and str(last_decision.get("selected_source", "")).strip() == "all_candidates_rejected"
+        and dynamic_rejections > 0
+        and nearest_ped is not None
+        and collision_radius is not None
+        and nearest_ped < collision_radius
+    )
+
+
+def _annotate_initial_overlap_exclusions(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Annotate reset-time robot/pedestrian overlaps as explicit scenario exclusions.
+
+    The raw episode remains a collision. The additive ``scenario_exclusion`` block lets
+    policy-search summaries report an evidence-adjusted view when the first state is already
+    geometrically impossible for any first-step planner command to repair.
+    """
+    annotated: list[dict[str, Any]] = []
+    for row in rows:
+        updated = deepcopy(row)
+        if "scenario_exclusion" not in updated and _is_initial_overlap_collision(row):
+            metrics = row.get("metrics")
+            metrics = metrics if isinstance(metrics, Mapping) else {}
+            last_decision = _planner_last_decision(row)
+            example = _first_dynamic_collision_example(last_decision)
+            min_clearance = _optional_float(metrics.get("min_clearance"))
+            nearest_ped = _optional_float(last_decision.get("nearest_pedestrian_distance"))
+            collision_radius = _optional_float(example.get("collision_radius"))
+            updated["scenario_exclusion"] = {
+                "status": "impossible",
+                "reason": "initial_robot_pedestrian_overlap",
+                "evidence": [
+                    "first_step_collision_with_zero_progress",
+                    f"min_clearance_m={min_clearance:.4f}",
+                    f"nearest_pedestrian_distance_m={nearest_ped:.4f}",
+                    f"candidate_collision_radius_m={collision_radius:.4f}",
+                    "all_first_step_candidates_rejected_for_dynamic_collision",
+                ],
+            }
+        annotated.append(updated)
+    return annotated
+
+
+def _apply_stage_exclusions(
+    *,
+    stage_cfg: Mapping[str, Any],
+    summary_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply explicit stage-level exclusion annotations to records and summaries."""
+    if not bool(stage_cfg.get("fail_closed_initial_overlap_exclusion", False)):
+        return summary_payload
+    rows = summary_payload.get("records")
+    if not isinstance(rows, list):
+        return summary_payload
+    annotated = _annotate_initial_overlap_exclusions(rows)
+    if annotated == rows:
+        return summary_payload
+    jsonl_path = Path(str(summary_payload["jsonl_path"]))
+    _write_records(jsonl_path, annotated)
+    updated = dict(summary_payload)
+    updated["records"] = annotated
+    updated["summary"] = summarize_policy_search_records(annotated)
+    return updated
+
+
 def _run_stage_eval(  # noqa: PLR0913
     *,
     scenarios_or_path: Path | list[dict[str, Any]],
@@ -386,6 +552,7 @@ def _run_stage_eval(  # noqa: PLR0913
     dt: float,
     workers: int,
     benchmark_profile: str,
+    synthetic_actuation_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one stage evaluation and collect records plus summary metadata.
 
@@ -412,6 +579,7 @@ def _run_stage_eval(  # noqa: PLR0913
         workers=int(workers),
         resume=False,
         benchmark_profile=str(benchmark_profile),
+        synthetic_actuation_profile=synthetic_actuation_profile,
     )
     rows = _load_records(jsonl_path)
     summary = summarize_policy_search_records(rows)
@@ -485,7 +653,119 @@ def _format_signed_optional_float(value: Any) -> str:
         return "n/a"
 
 
-def _write_markdown_report(  # noqa: PLR0913
+def _evaluation_scope_lines(
+    *,
+    stage_name: str,
+    candidate_payload: Mapping[str, Any],
+    stage_cfg: Mapping[str, Any],
+    stage_matrix: Path,
+    seed_manifest: Path | None,
+    summary_json_path: Path,
+    git_hash: str | None,
+) -> list[str]:
+    """Return Markdown lines that describe one candidate-stage run scope."""
+    lines = [
+        "## Evaluation Scope",
+        "",
+        f"- Stage: `{stage_name}`",
+        f"- Algorithm: `{candidate_payload.get('algo', 'unknown')}`",
+        f"- Scenario matrix: `{_display_path(stage_matrix)}`",
+    ]
+    scenario_filter = stage_cfg.get("scenario_filter")
+    if isinstance(scenario_filter, list) and scenario_filter:
+        lines.append(f"- Scenario filter: `{', '.join(str(item) for item in scenario_filter)}`")
+    lines.extend(
+        [
+            f"- Seed manifest: `{_display_path(seed_manifest)}`"
+            if seed_manifest is not None
+            else "- Seed manifest: `suite default`",
+            f"- Summary JSON: `{_display_path(summary_json_path)}`",
+            f"- Git commit: `{git_hash}`" if git_hash else "- Git commit: `unavailable`",
+        ]
+    )
+    synthetic_profile = stage_cfg.get("synthetic_actuation_profile")
+    if isinstance(synthetic_profile, dict):
+        profile_name = str(synthetic_profile.get("name", "unknown"))
+        claim_scope = str(synthetic_profile.get("claim_scope", "unknown"))
+        lines.append(
+            f"- Synthetic actuation profile: `{profile_name}` (`{claim_scope}`, diagnostic-only)"
+        )
+    return lines
+
+
+def _actuation_diagnostics_lines(summary: Mapping[str, Any]) -> list[str]:
+    """Return optional Markdown rows for synthetic actuation diagnostics."""
+    actuation_summary_raw = summary.get("synthetic_actuation")
+    actuation_summary = actuation_summary_raw if isinstance(actuation_summary_raw, dict) else {}
+    if not any(value is not None for value in actuation_summary.values()):
+        return []
+    return [
+        "",
+        "## Synthetic Actuation Diagnostics",
+        "",
+        "| Command Clip | Yaw Saturation | Signed Braking Peak |",
+        "|---:|---:|---:|",
+        f"| {_format_optional_float(actuation_summary.get('command_clip_fraction_mean'))} | "
+        f"{_format_optional_float(actuation_summary.get('yaw_rate_saturation_fraction_mean'))} | "
+        f"{_format_optional_float(actuation_summary.get('signed_braking_peak_m_s2_mean'))} |",
+    ]
+
+
+def _scenario_exclusion_lines(summary: Mapping[str, Any]) -> list[str]:
+    """Return Markdown rows for explicit scenario exclusions."""
+    exclusions_raw = summary.get("scenario_exclusions")
+    exclusions = exclusions_raw if isinstance(exclusions_raw, Mapping) else {}
+    records_raw = exclusions.get("records")
+    records = records_raw if isinstance(records_raw, list) else []
+    if not records:
+        return []
+    lines = [
+        "",
+        "## Scenario Exclusions",
+        "",
+        "| Scenario | Seed | Status | Reason | Evidence |",
+        "|---|---:|---|---|---|",
+    ]
+    for record_raw in records:
+        record = record_raw if isinstance(record_raw, Mapping) else {}
+        scenario_id = record.get("scenario_id")
+        scenario_id = scenario_id if scenario_id is not None else "unknown"
+        seed = record.get("seed")
+        seed = seed if seed is not None else "n/a"
+        status = record.get("status")
+        status = status if status is not None else "unknown"
+        reason = record.get("reason")
+        reason = reason if reason is not None else "unknown"
+        evidence_raw = record.get("evidence")
+        evidence = evidence_raw if isinstance(evidence_raw, list) else []
+        lines.append(
+            f"| {scenario_id} | {seed} | {status} | {reason} | "
+            f"{'; '.join(str(item) for item in evidence)} |"
+        )
+    return lines
+
+
+def _diagnostic_claim_boundary(
+    candidate_entry: Mapping[str, Any],
+    candidate_payload: Mapping[str, Any],
+) -> str | None:
+    """Return a conservative report caveat for diagnostic-only candidates."""
+    params = candidate_payload.get("params")
+    params = params if isinstance(params, dict) else {}
+    if (
+        candidate_entry.get("claim_scope") != "diagnostic_only"
+        and params.get("diagnostic_only") is not True
+        and params.get("claim_boundary") != "diagnostic_only"
+    ):
+        return None
+    return (
+        "This report is diagnostic-only wiring or stage evidence. Treat aggregate metrics and "
+        "baseline deltas as arithmetic context, not benchmark-strength evidence for comfort, "
+        "near-miss behavior, generalization, or planner superiority."
+    )
+
+
+def _write_markdown_report(  # noqa: C901, PLR0913
     *,
     docs_root: Path,
     candidate_name: str,
@@ -525,16 +805,15 @@ def _write_markdown_report(  # noqa: PLR0913
         "",
         str(candidate_entry.get("hypothesis") or candidate_payload.get("hypothesis") or "n/a"),
         "",
-        "## Evaluation Scope",
-        "",
-        f"- Stage: `{stage_name}`",
-        f"- Algorithm: `{candidate_payload.get('algo', 'unknown')}`",
-        f"- Scenario matrix: `{_display_path(stage_matrix)}`",
-        f"- Seed manifest: `{_display_path(seed_manifest)}`"
-        if seed_manifest is not None
-        else "- Seed manifest: `suite default`",
-        f"- Summary JSON: `{_display_path(summary_json_path)}`",
-        f"- Git commit: `{git_hash}`" if git_hash else "- Git commit: `unavailable`",
+        *_evaluation_scope_lines(
+            stage_name=stage_name,
+            candidate_payload=candidate_payload,
+            stage_cfg=stage_cfg,
+            stage_matrix=stage_matrix,
+            seed_manifest=seed_manifest,
+            summary_json_path=summary_json_path,
+            git_hash=git_hash,
+        ),
         "",
         "## Aggregate Results",
         "",
@@ -548,6 +827,27 @@ def _write_markdown_report(  # noqa: PLR0913
         f"{float(summary.get('collision_rate', 0.0)):.4f} | {float(summary.get('near_miss_rate', 0.0)):.4f} | "
         f"{_format_optional_float(mean_min_distance)} | {_format_optional_float(mean_avg_speed)} |"
     )
+    evidence_adjusted_raw = summary.get("evidence_adjusted")
+    evidence_adjusted = evidence_adjusted_raw if isinstance(evidence_adjusted_raw, dict) else {}
+    if int(evidence_adjusted.get("excluded_episodes", 0) or 0) > 0:
+        lines.extend(
+            [
+                "",
+                "## Evidence-Adjusted Results",
+                "",
+                "| Episodes | Excluded | Success | Collision | Near Miss |",
+                "|---:|---:|---:|---:|---:|",
+                f"| {evidence_adjusted.get('episodes', 0)} | "
+                f"{evidence_adjusted.get('excluded_episodes', 0)} | "
+                f"{float(evidence_adjusted.get('success_rate', 0.0)):.4f} | "
+                f"{float(evidence_adjusted.get('collision_rate', 0.0)):.4f} | "
+                f"{float(evidence_adjusted.get('near_miss_rate', 0.0)):.4f} |",
+                "",
+                "Raw aggregate results above still include excluded rows; evidence-adjusted results only remove rows with explicit exclusion metadata.",
+            ]
+        )
+    lines.extend(_actuation_diagnostics_lines(summary))
+    lines.extend(_scenario_exclusion_lines(summary))
     lines.extend(
         [
             "",
@@ -573,8 +873,14 @@ def _write_markdown_report(  # noqa: PLR0913
             lines.append(f"- `{key}`: `{value}`")
     else:
         lines.append("- No failures recorded.")
+    claim_boundary = _diagnostic_claim_boundary(candidate_entry, candidate_payload)
+    if claim_boundary is not None:
+        lines.extend(["", "## Claim Boundary", "", claim_boundary])
     lines.extend(["", "## Baseline Deltas", ""])
     if deltas:
+        if claim_boundary is not None:
+            lines.append("_Diagnostic-only arithmetic context; not a benchmark comparison claim._")
+            lines.append("")
         lines.append("| Baseline | Success Delta | Collision Delta | Near-Miss Delta |")
         lines.append("|---|---:|---:|---:|")
         for name, row in sorted(deltas.items()):
@@ -633,16 +939,26 @@ def main() -> int:
         if isinstance(seed_list_raw, list) and seed_list_raw
         else None
     )
+    scenario_filter = _stage_scenario_filter(stage_cfg)
     horizon = int(args.horizon if args.horizon is not None else stage_cfg.get("horizon", 120))
     dt = float(args.dt if args.dt is not None else stage_cfg.get("dt", 0.1))
     workers = int(args.workers if args.workers is not None else stage_cfg.get("workers", 1))
     benchmark_profile = str(stage_cfg.get("benchmark_profile", "experimental"))
+    synthetic_actuation_profile = _stage_synthetic_actuation_profile(
+        stage_cfg,
+        stage_name=args.stage,
+    )
 
     output_dir = (
         args.output_dir or Path("output/policy_search") / args.candidate / args.stage / "latest"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
-    scenarios_or_path = _load_stage_scenarios(stage_matrix, seed_manifest, seed_list)
+    scenarios_or_path = _load_stage_scenarios(
+        stage_matrix,
+        seed_manifest,
+        seed_list,
+        scenario_filter,
+    )
 
     family_overrides = candidate_payload.get("family_overrides")
     scenario_overrides = candidate_payload.get("scenario_overrides")
@@ -685,6 +1001,7 @@ def main() -> int:
                 dt=dt,
                 workers=workers,
                 benchmark_profile=benchmark_profile,
+                synthetic_actuation_profile=synthetic_actuation_profile,
             )
             family_runs[tag] = {key: value for key, value in run.items() if key != "records"}
             combined_records.extend(run["records"])
@@ -707,10 +1024,14 @@ def main() -> int:
             dt=dt,
             workers=workers,
             benchmark_profile=benchmark_profile,
+            synthetic_actuation_profile=synthetic_actuation_profile,
         )
 
-    stage_summary = summary_payload["summary"]
-    decision = decide_stage_status(args.stage, stage_cfg, stage_summary)
+    summary_payload = _apply_stage_exclusions(
+        stage_cfg=stage_cfg,
+        summary_payload=summary_payload,
+    )
+    decision = decide_stage_status(args.stage, stage_cfg, summary_payload["summary"])
     git_hash = _git_hash()
     summary_doc = {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -721,9 +1042,11 @@ def main() -> int:
         "candidate_config_path": str(candidate_config_path),
         "scenario_matrix": str(stage_matrix),
         "seed_manifest": str(seed_manifest) if seed_manifest is not None else None,
+        "scenario_filter": scenario_filter,
         "benchmark_profile": benchmark_profile,
+        "synthetic_actuation_profile": synthetic_actuation_profile,
         "git_hash": git_hash,
-        "summary": stage_summary,
+        "summary": summary_payload["summary"],
         "decision": decision,
         "jsonl_path": summary_payload["jsonl_path"],
         "family_runs": family_runs,
@@ -739,7 +1062,7 @@ def main() -> int:
         stage_cfg=stage_cfg,
         stage_matrix=stage_matrix,
         seed_manifest=seed_manifest,
-        summary=stage_summary,
+        summary=summary_payload["summary"],
         family_runs=family_runs,
         decision=decision,
         git_hash=git_hash,

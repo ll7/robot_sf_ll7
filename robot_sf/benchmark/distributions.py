@@ -24,6 +24,7 @@ from robot_sf.benchmark.aggregate import (
     normalize_observation_track_mode,
     observation_track_group_label,
 )
+from robot_sf.benchmark.grouping import resolve_report_group_key
 from robot_sf.benchmark.plotting_style import apply_latex_style
 
 Record = Mapping[str, object]
@@ -75,7 +76,12 @@ def collect_grouped_values(
     mode = normalize_observation_track_mode(str(track_meta["mode"]))
     out: dict[str, dict[str, list[float]]] = {}
     for r in record_list:
-        g = _get_dotted(r, group_by) or _get_dotted(r, fallback_group_by)
+        g = resolve_report_group_key(
+            r,
+            group_by=group_by,
+            fallback_group_by=fallback_group_by,
+            missing="skip",
+        )
         if g is None:
             continue
         g = observation_track_group_label(r, str(g), mode=mode)

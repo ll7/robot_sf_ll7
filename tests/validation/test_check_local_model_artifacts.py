@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
+from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
 from scripts.validation.check_local_model_artifacts import (
     REPO_ROOT,
     check_local_model_artifacts,
@@ -95,6 +97,44 @@ def test_unblocked_local_model_path_fails_preflight(tmp_path: Path) -> None:
     assert len(rows) == 1
     assert rows[0].status == "unblocked"
     assert rows[0].field == "model_path"
+
+
+def test_scanner_and_runtime_validator_share_blocklist_contract(tmp_path: Path) -> None:
+    """Scanner rows and benchmark runtime errors should agree on local-artifact blockers."""
+    config = tmp_path / "candidate.yaml"
+    blocklist = tmp_path / "blocklist.yaml"
+    promoted_surfaces = tmp_path / "promoted_surfaces.yaml"
+    config.write_text("model_path: output/model_cache/demo/model.zip\n", encoding="utf-8")
+    blocklist.write_text(
+        f"""
+version: 1
+follow_up_issue: https://github.com/ll7/robot_sf_ll7/issues/1764
+blocked_references:
+  - path: {config.as_posix()}
+    field: model_path
+    value: output/model_cache/demo/model.zip
+    reason: Synthetic local artifact is not durable.
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    promoted_surfaces.write_text("version: 1\npromoted_configs: []\n", encoding="utf-8")
+
+    rows = check_local_model_artifacts(
+        [config],
+        blocklist_path=blocklist,
+        promoted_surfaces_path=promoted_surfaces,
+    )
+
+    assert rows[0].status == "blocked"
+    assert rows[0].reason == "Synthetic local artifact is not durable."
+    with pytest.raises(ValueError, match="Synthetic local artifact is not durable") as exc_info:
+        validate_no_local_model_artifacts(
+            yaml.safe_load(config.read_text(encoding="utf-8")),
+            config_path=config,
+            blocklist_path=blocklist,
+        )
+    assert "https://github.com/ll7/robot_sf_ll7/issues/1764" in str(exc_info.value)
 
 
 def test_promoted_local_model_path_fails_even_when_blocklisted(tmp_path: Path) -> None:

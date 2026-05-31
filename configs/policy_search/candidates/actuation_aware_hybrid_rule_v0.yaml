@@ -1,0 +1,17 @@
+name: actuation_aware_hybrid_rule_v0
+algo: actuation_aware_hybrid_rule_v0
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  allow_testing_algorithms: true
+  planner_variant: actuation_aware_hybrid_rule_v0
+
+  # Synthetic AMV diagnostic scoring only. These limits mirror the issue #1556
+  # profile shape and must not be read as calibrated hardware evidence.
+  actuation_score_enabled: true
+  actuation_profile_name: amv-actuation-stress-v0
+  actuation_claim_scope: synthetic-diagnostic-only
+  actuation_max_linear_accel: 2.0
+  actuation_max_linear_decel: 2.5
+  actuation_max_yaw_rate: 1.2
+  actuation_max_angular_accel: 4.0
+  actuation_clip_risk_weight: 2.2

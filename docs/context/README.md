@@ -98,6 +98,8 @@ knowledge, not every transient iteration detail.
   [open_issues_pr_split_strategy_2026-05-13.md](open_issues_pr_split_strategy_2026-05-13.md)
 * Open-issues training split audit 2026-05-30:
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
+  (historical snapshot; current queue routing is superseded by live GitHub labels and
+  [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md)).
 * Open-issue execution improvement plan 2026-05-30:
   [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md)
 * Thursday development review 2026-05-21:
@@ -146,6 +148,8 @@ knowledge, not every transient iteration detail.
   [issue_1612_observation_track_architecture.md](issue_1612_observation_track_architecture.md)
 * Issue #1721 Legacy Benchmark-Track Metadata Audit:
   [issue_1721_benchmark_track_metadata_audit.md](issue_1721_benchmark_track_metadata_audit.md)
+* Issue #1846 metadata worker bridge:
+  [issue_1846_metadata_worker_bridge.md](issue_1846_metadata_worker_bridge.md)
 * Issue #1659 LiDAR occupancy adapter:
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:
@@ -200,6 +204,8 @@ knowledge, not every transient iteration detail.
   [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md)
 * Issue #1502 Adversarial Two-Family Run (2026-05-31):
   [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md)
+* Issue #1503 Adversarial Stress-Coverage Synthesis (2026-05-31):
+  [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:
@@ -212,6 +218,10 @@ knowledge, not every transient iteration detail.
   [issue_1344_paired_amv_protocol_report.md](issue_1344_paired_amv_protocol_report.md)
 * SLURM issue batch status 2026-05-21 (canonical SLURM issue-status ledger):
   [slurm_issue_batch_status_2026-05-21.md](slurm_issue_batch_status_2026-05-21.md)
+* SLURM job discovery snapshot 2026-05-31:
+  [slurm_job_discovery_2026-05-31.md](slurm_job_discovery_2026-05-31.md)
+* Issue #1776 State-Label Routing:
+  [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md)
 * Issue #1397 Oracle Imitation Launch Packet:
   [issue_1397_oracle_imitation_launch_packet.md](issue_1397_oracle_imitation_launch_packet.md)
 * Issue #1353 Broader AMV Baseline Preflight:
@@ -239,6 +249,8 @@ knowledge, not every transient iteration detail.
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Issue #1638 local model path preflight:
   [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
+* Issue #1845 report grouping contracts:
+  [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:
   [policy_search/learned_policy_registry.md](policy_search/learned_policy_registry.md)
 * Issue #1758 Arena-Rosnav Source-Side Assessment (2026-05-30):

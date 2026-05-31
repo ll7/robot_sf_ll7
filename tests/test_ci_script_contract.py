@@ -115,6 +115,26 @@ def test_run_ci_local_loads_default_phases_from_ci_driver() -> None:
     assert 'phases=("lint" "typecheck" "test" "smoke" "artifact-policy")' not in script_text
 
 
+def test_run_ci_local_exposes_fast_repeat_mode_with_timed_setup() -> None:
+    """Local CI repeats should be able to skip setup after dependencies are current."""
+
+    script_text = RUN_CI_LOCAL.read_text(encoding="utf-8")
+    normalized_script = " ".join(script_text.replace("\\\n", " ").split())
+
+    assert "--no-setup" in script_text
+    assert 'run_setup="1"' in script_text
+    assert 'run_setup="0"' in script_text
+    assert 'if [[ "$run_setup" == "1" ]]' in script_text
+    assert (
+        'bash "$SCRIPT_DIR/ci_step_timer.sh" "Sync dependencies (locked)" '
+        "uv sync --all-extras --frozen"
+    ) in normalized_script
+    assert (
+        'bash "$SCRIPT_DIR/ci_step_timer.sh" "Migrate legacy artifacts into canonical root" '
+        "uv run python scripts/tools/migrate_artifacts.py"
+    ) in normalized_script
+
+
 def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     """The PR-ready wrapper should record the freshness stamp its consumers require.
 
@@ -135,8 +155,25 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     for gate in expected_gates:
         assert gate in script_text
 
-    freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" write'
+    freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"'
+    assert 'freshness_args=(write --base-ref "$BASE_REF")' in script_text
     assert freshness_call in script_text
     assert script_text.rfind(freshness_call) > max(
         script_text.rfind(gate) for gate in expected_gates
     )
+
+
+def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
+    """Final PR proof should fail closed on dirty trees and mark clean-tree stamps."""
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert "PR_READY_MODE" in script_text
+    assert "PR_READY_FINAL" in script_text
+    assert ",," not in script_text
+    assert "tr '[:upper:]' '[:lower:]'" in script_text
+    assert "final) pr_ready_final=1" in script_text
+    assert "interim) pr_ready_final=0" in script_text
+    assert "Final PR readiness requires a clean non-ignored worktree" in script_text
+    assert "recording interim PR readiness from a dirty non-ignored worktree" in script_text
+    assert "--require-clean-tree" in script_text
+    assert "pr_ready_freshness.py" in script_text

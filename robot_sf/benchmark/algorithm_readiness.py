@@ -246,8 +246,25 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     AlgorithmReadiness(
         canonical_name="hybrid_rule_local_planner",
         tier="experimental",
-        aliases=("hybrid_rule_local_planner", "hybrid_rule_v0_minimal"),
-        note="Deterministic hybrid-rule local planner family; v0 is minimal DWA-style.",
+        aliases=(
+            "hybrid_rule_local_planner",
+            "hybrid_rule_v0_minimal",
+            "actuation_aware_hybrid_rule_v0",
+        ),
+        note=(
+            "Deterministic hybrid-rule local planner family; v0 is minimal DWA-style. "
+            "Actuation-aware aliases are synthetic diagnostic-only candidates."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="adaptive_proxemic_selector_v0",
+        tier="experimental",
+        aliases=("adaptive_proxemic_selector_v0",),
+        note=(
+            "Diagnostic selector over fixed conservative, neutral, and open proxemic "
+            "hybrid-rule profile candidates."
+        ),
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
@@ -262,6 +279,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("grid_route",),
         note="Testing-only occupancy-grid route planner for static obstacle slices.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="topology_guided_hybrid_rule_v0",
+        tier="experimental",
+        aliases=("topology_guided_hybrid_rule_v0", "topology_hypothesis_dwa_v0"),
+        note=(
+            "Diagnostic-only masked-route hypothesis selector feeding the hybrid-rule "
+            "local scorer; not benchmark evidence."
+        ),
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
@@ -303,6 +330,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         tier="experimental",
         aliases=("hybrid_portfolio",),
         note="Risk-regime switch between risk_dwa, ORCA, and prediction planner.",
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="planner_selector_v2_diagnostic",
+        tier="experimental",
+        aliases=("planner_selector_v2_diagnostic",),
+        note=(
+            "Diagnostic-only deterministic selector over existing local planner candidates; "
+            "not benchmark-strength evidence."
+        ),
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(

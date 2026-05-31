@@ -128,6 +128,17 @@ Prioritize by:
 
 ## Queue Exhaustion Audit
 
+First run the read-only closed-issue state-label hygiene guard:
+
+```bash
+uv run python scripts/tools/closed_issue_state_label_audit.py
+```
+
+It emits `closed_issue_state_label_audit.v1` JSON and exits non-zero when any closed issue still
+has `state:ready`, `state:running`, or `state:blocked`. Do not treat closed issues as available
+queue work. If the guard fails, report the stale labels and route a separate explicit cleanup
+action; the audit command itself does not delete labels.
+
 Before declaring the implementation queue exhausted, run one final read-only implementability audit
 over:
 - open issues labeled `state:ready`,

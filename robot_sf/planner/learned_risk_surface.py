@@ -318,7 +318,28 @@ class RiskSurfacePlannerAdapter(OccupancyAwarePlannerMixin):
         if not all(key in observation for key in required_flat_keys):
             return observation
 
-        robot_state, goal_state, ped_state = self._socnav_fields(observation)
+        pos_arr = self._as_1d_float(observation.get("robot_position", [0.0, 0.0]), pad=2)
+        robot_state = {
+            "position": pos_arr,
+            "heading": self._as_1d_float(observation.get("robot_heading", [0.0]), pad=1),
+            "speed": self._as_1d_float(observation.get("robot_speed", [0.0]), pad=1),
+            "radius": self._as_1d_float(observation.get("robot_radius", [0.0]), pad=1),
+        }
+        goal_state = {
+            "current": self._as_1d_float(observation.get("goal_current", [0.0, 0.0]), pad=2),
+            "next": self._as_1d_float(observation.get("goal_next", [0.0, 0.0]), pad=2),
+        }
+
+        pos_key = "pedestrians_positions"
+        vel_key = "pedestrians_velocities"
+        count_key = "pedestrians_count"
+        radius_key = "pedestrians_radius"
+        ped_state = {
+            "positions": observation.get(pos_key),
+            "velocities": observation.get(vel_key),
+            "count": self._as_1d_float(observation.get(count_key, [0]), pad=1),
+            "radius": self._as_1d_float(observation.get(radius_key, [0.0]), pad=1)[0],
+        }
         normalized = dict(observation)
         normalized["robot"] = robot_state
         normalized["goal"] = goal_state

@@ -15,8 +15,11 @@ A clean-room Tentabot-style primitive value scorer can reuse Robot SF's hybrid-r
 - Algorithm: `hybrid_rule_local_planner`
 - Scenario matrix: `configs/policy_search/nominal_sanity_matrix.yaml`
 - Seed manifest: `configs/policy_search/nominal_sanity_seeds.yaml`
-- Summary JSON: `output/policy_search/tentabot_value_scorer_v0/nominal_sanity/issue1832_final/summary.json`
-- Git commit: `39e6417e783504cb6873b4b9bfae73f458f0a2f5`
+- Summary JSON: local ignored output at
+  `output/policy_search/tentabot_value_scorer_v0/nominal_sanity/issue1832_final/summary.json`
+- Git commit recorded by the local run: `39e6417e783504cb6873b4b9bfae73f458f0a2f5`
+  (not present on `origin`; use the tracked tables below as compact diagnostic evidence, not as
+  benchmark-grade reproducibility provenance)
 
 ## Aggregate Results
 
@@ -56,7 +59,10 @@ change aggregate outcomes relative to the #1831/#1826 baseline, so the candidate
 
 ## Claim Boundary
 
-This report is diagnostic-only wiring or stage evidence. Treat aggregate metrics and baseline deltas as arithmetic context, not benchmark-strength evidence for comfort, near-miss behavior, generalization, or planner superiority.
+This report is diagnostic-only wiring or stage evidence. Treat aggregate metrics and baseline deltas
+as arithmetic context, not benchmark-strength evidence for comfort, near-miss behavior,
+generalization, or planner superiority. The raw summary JSON stayed in ignored local output; the
+tracked tables in this file are the durable compact evidence for this stop/revise boundary.
 
 ## Baseline Deltas
 

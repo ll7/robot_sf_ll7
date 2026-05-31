@@ -223,9 +223,10 @@ candidates:
     hypothesis: >
       A diagnostic masked-route selector can expose up to two local topology
       hypotheses from the occupancy grid, select one with route length and static
-      clearance scoring, and feed it to the existing hybrid-rule corridor-subgoal
-      scorer. Missing topology inputs fail closed; single-hypothesis rows do not
-      activate the topology injection and are not benchmark evidence.
+      clearance scoring, and add a bounded selected-hypothesis local command to
+      the existing hybrid-rule safety scorer. Missing topology inputs fail closed;
+      single-hypothesis rows do not activate the topology injection and are not
+      benchmark evidence.
     required_stages:
       - smoke
 

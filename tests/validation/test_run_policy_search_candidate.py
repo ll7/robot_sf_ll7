@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from scripts.validation.run_policy_search_candidate import (
+    _annotate_initial_overlap_exclusions,
     _baseline_deltas,
     _deep_merge,
     _effective_candidate_config_for_scenario,
@@ -16,6 +17,7 @@ from scripts.validation.run_policy_search_candidate import (
     _format_signed_optional_float,
     _load_stage_scenarios,
     _prepare_scenarios_for_inline_run,
+    _scenario_exclusion_lines,
     decide_stage_status,
     load_candidate_definition,
     split_scenarios_by_family,
@@ -103,6 +105,7 @@ def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -
     assert stage["scenario_matrix"] == "configs/scenarios/sets/classic_cross_trap_subset.yaml"
     assert stage["scenario_filter"] == ["classic_cross_trap_high"]
     assert stage["synthetic_actuation_profile"]["claim_scope"] == "synthetic-only"
+    assert stage["fail_closed_initial_overlap_exclusion"] is True
     assert stage["paper_facing"] is False
 
 
@@ -333,6 +336,94 @@ def test_decide_stage_status_treats_named_smoke_stages_as_smoke() -> None:
     """Diagnostic smoke stages should pass only when they run at least one episode."""
     assert decide_stage_status("amv_actuation_smoke", {}, {"episodes": 1}) == "pass"
     assert decide_stage_status("amv_actuation_smoke", {}, {"episodes": 0}) == "revise"
+    assert (
+        decide_stage_status(
+            "amv_actuation_smoke",
+            {},
+            {"episodes": None, "scenario_exclusions": {"count": ""}},
+        )
+        == "revise"
+    )
+    assert (
+        decide_stage_status(
+            "amv_actuation_smoke",
+            {},
+            {"episodes": 1, "scenario_exclusions": {"count": 1}},
+        )
+        == "excluded"
+    )
+
+
+def test_annotate_initial_overlap_exclusions_requires_first_step_evidence() -> None:
+    """Initial-overlap rows need explicit evidence before adjusted reporting excludes them."""
+    rows = [
+        {
+            "scenario_id": "classic_cross_trap_high",
+            "seed": 111,
+            "steps": 1,
+            "termination_reason": "collision",
+            "metrics": {
+                "avg_speed": 0.0,
+                "min_clearance": -0.3882961911,
+                "ped_collision_count": 1,
+            },
+            "algorithm_metadata": {
+                "planner_runtime": {
+                    "last_decision": {
+                        "planner_mode": "EMERGENCY_STOP",
+                        "selected_source": "all_candidates_rejected",
+                        "nearest_pedestrian_distance": 1.0117035253,
+                        "rejection_counts": {"dynamic_collision": 67},
+                        "rejected_examples": [
+                            {
+                                "reason": "dynamic_collision",
+                                "command": [0.0, 0.0],
+                                "min_dynamic_clearance": 0.9159010834,
+                                "collision_radius": 1.450000006,
+                                "time": 0.2,
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+    ]
+
+    annotated = _annotate_initial_overlap_exclusions(rows)
+
+    assert annotated[0]["scenario_exclusion"] == {
+        "status": "impossible",
+        "reason": "initial_robot_pedestrian_overlap",
+        "evidence": [
+            "first_step_collision_with_zero_progress",
+            "min_clearance_m=-0.3883",
+            "nearest_pedestrian_distance_m=1.0117",
+            "candidate_collision_radius_m=1.4500",
+            "all_first_step_candidates_rejected_for_dynamic_collision",
+        ],
+    }
+    assert "scenario_exclusion" not in rows[0]
+
+
+def test_scenario_exclusion_lines_normalize_missing_values() -> None:
+    """Scenario-exclusion report rows should not render explicit nulls as strings."""
+    lines = _scenario_exclusion_lines(
+        {
+            "scenario_exclusions": {
+                "records": [
+                    {
+                        "scenario_id": None,
+                        "seed": None,
+                        "status": None,
+                        "reason": None,
+                        "evidence": None,
+                    }
+                ]
+            }
+        }
+    )
+
+    assert "| unknown | n/a | unknown | unknown |  |" in lines
 
 
 def test_format_optional_float_keeps_present_values() -> None:

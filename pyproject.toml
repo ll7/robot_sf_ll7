@@ -69,6 +69,7 @@ gpu = [
     "torch[cuda]>=2.5.1",
 ]
 docs = [
+    "myst-parser>=4.0.0",
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",
 ]
@@ -481,6 +482,7 @@ dev = [
     "pytest-xdist>=3.6.1",
 ]
 docs = [
+    "myst-parser>=4.0.0",
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",
 ]

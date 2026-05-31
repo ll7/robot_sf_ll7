@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -40,7 +41,12 @@ from robot_sf.benchmark.camera_ready_campaign import (
     write_campaign_report,
 )
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
-from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
+from robot_sf.benchmark.synthetic_actuation import (
+    CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS,
+    SyntheticActuationProfile,
+    validate_actuation_profile_claim_boundary,
+    validate_synthetic_actuation_profile,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 
 
@@ -288,6 +294,31 @@ def test_load_campaign_config_rejects_non_synthetic_actuation_claim_scope(
                     "name": "amv-actuation-stress-v0",
                     "profile_version": "v0",
                     "claim_scope": "hardware-calibrated",
+                    "claim_boundary": "calibrated-amv-actuation",
+                    "provenance": {
+                        "source_id": "issue-1585-placeholder",
+                        "source_uri": "https://github.com/ll7/robot_sf_ll7/issues/1585",
+                        "source_type": "maintainer-approved-calibration-source",
+                        "profile_version": "v0",
+                        "measurement_date": "2026-05-31",
+                        "supported_actuation_fields": [
+                            "max_linear_accel_m_s2",
+                            "max_linear_decel_m_s2",
+                            "max_yaw_rate_rad_s",
+                            "max_angular_accel_rad_s2",
+                            "latency_mode",
+                            "update_mode",
+                        ],
+                        "units": {
+                            "max_linear_accel_m_s2": "m/s^2",
+                            "max_linear_decel_m_s2": "m/s^2",
+                            "max_yaw_rate_rad_s": "rad/s",
+                            "max_angular_accel_rad_s2": "rad/s^2",
+                            "latency_mode": "profile-label",
+                            "update_mode": "profile-label",
+                        },
+                        "claim_boundary": "calibrated-profile-contract-only",
+                    },
                     "max_linear_accel_m_s2": 2.0,
                     "max_linear_decel_m_s2": 2.5,
                     "max_yaw_rate_rad_s": 1.2,
@@ -303,6 +334,125 @@ def test_load_campaign_config_rejects_non_synthetic_actuation_claim_scope(
 
     with pytest.raises(ValueError, match="claim_scope must be 'synthetic-only'"):
         load_campaign_config(config_path)
+
+
+def test_load_campaign_config_rejects_synthetic_profile_without_diagnostic_boundary(
+    tmp_path: Path,
+) -> None:
+    """Synthetic AMV actuation profiles must explicitly stay diagnostic-only."""
+    config_path = tmp_path / "campaign.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "missing_actuation_boundary",
+                "paper_facing": False,
+                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+                "kinematics_matrix": ["differential_drive"],
+                "synthetic_actuation_profile": {
+                    "name": "amv-actuation-stress-v0",
+                    "profile_version": "v0",
+                    "claim_scope": "synthetic-only",
+                    "max_linear_accel_m_s2": 2.0,
+                    "max_linear_decel_m_s2": 2.5,
+                    "max_yaw_rate_rad_s": 1.2,
+                    "max_angular_accel_rad_s2": 4.0,
+                    "latency_mode": "one-step-delay",
+                    "update_mode": "5hz-hold",
+                },
+                "planners": [{"key": "goal", "algo": "goal"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="claim_boundary must be 'diagnostic-only'"):
+        load_campaign_config(config_path)
+
+
+def test_calibrated_labeled_actuation_profile_requires_provenance_fields() -> None:
+    """Future calibrated profiles should fail closed until source provenance is explicit."""
+    with pytest.raises(ValueError, match="requires provenance fields"):
+        validate_actuation_profile_claim_boundary(
+            {
+                "name": "amv-actuation-calibrated-v0",
+                "profile_version": "v0",
+                "claim_scope": "hardware-calibrated",
+                "claim_boundary": "calibrated-amv-actuation",
+                "max_linear_accel_m_s2": 1.5,
+                "max_linear_decel_m_s2": 2.0,
+                "max_yaw_rate_rad_s": 0.9,
+                "max_angular_accel_rad_s2": 2.5,
+                "latency_mode": "one-step-delay",
+                "update_mode": "5hz-hold",
+            },
+            label="calibrated_actuation_profile",
+        )
+
+
+def test_uncalibrated_label_does_not_trigger_calibrated_profile_gate() -> None:
+    """Exact calibrated marker matching should not reject ordinary uncalibrated labels."""
+    validate_actuation_profile_claim_boundary(
+        {
+            "name": "uncalibrated-synthetic-amv-v0",
+            "profile_version": "v0",
+            "claim_scope": "synthetic-only",
+            "claim_boundary": "diagnostic-only",
+            "calibration_status": "uncalibrated",
+        }
+    )
+
+
+def test_typed_synthetic_profile_rejects_calibrated_label_without_provenance() -> None:
+    """Direct SyntheticActuationProfile callers must not bypass calibrated-claim provenance."""
+    profile = SyntheticActuationProfile(
+        name="amv-actuation-calibrated-v0",
+        profile_version="v0",
+        claim_scope="hardware-calibrated",
+        claim_boundary="calibrated-amv-actuation",
+        max_linear_accel_m_s2=1.5,
+        max_linear_decel_m_s2=2.0,
+        max_yaw_rate_rad_s=0.9,
+        max_angular_accel_rad_s2=2.5,
+        latency_mode="one-step-delay",
+        update_mode="5hz-hold",
+    )
+
+    with pytest.raises(ValueError, match="requires provenance fields"):
+        validate_synthetic_actuation_profile(profile)
+
+
+@pytest.mark.parametrize("bad_bound", [math.nan, math.inf, -math.inf])
+def test_typed_synthetic_profile_rejects_non_finite_bounds(bad_bound: float) -> None:
+    """Synthetic actuation bounds must be finite before controller math uses them."""
+    profile = SyntheticActuationProfile(
+        name="amv-actuation-stress-v0",
+        profile_version="v0",
+        claim_scope="synthetic-only",
+        claim_boundary="diagnostic-only",
+        max_linear_accel_m_s2=bad_bound,
+        max_linear_decel_m_s2=2.0,
+        max_yaw_rate_rad_s=0.9,
+        max_angular_accel_rad_s2=2.5,
+        latency_mode="one-step-delay",
+        update_mode="5hz-hold",
+    )
+
+    with pytest.raises(ValueError, match="max_linear_accel_m_s2 must be > 0"):
+        validate_synthetic_actuation_profile(profile)
+
+
+def test_calibrated_actuation_profile_provenance_contract_names_required_fields() -> None:
+    """The calibrated provenance contract should be inspectable by tests and docs."""
+    assert CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS == (
+        "source_id",
+        "source_uri",
+        "source_type",
+        "profile_version",
+        "measurement_date",
+        "supported_actuation_fields",
+        "units",
+        "claim_boundary",
+    )
 
 
 def test_load_campaign_config_rejects_invalid_latency_stress_scope(
@@ -435,6 +585,7 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
                     "name": "amv-actuation-stress-v0",
                     "profile_version": "v0",
                     "claim_scope": "synthetic-only",
+                    "claim_boundary": "diagnostic-only",
                     "max_linear_accel_m_s2": 2.0,
                     "max_linear_decel_m_s2": 2.5,
                     "max_yaw_rate_rad_s": 1.2,
@@ -1875,6 +2026,7 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
                     "name": "amv-actuation-stress-v0",
                     "profile_version": "v0",
                     "claim_scope": "synthetic-only",
+                    "claim_boundary": "diagnostic-only",
                     "max_linear_accel_m_s2": 2.0,
                     "max_linear_decel_m_s2": 2.5,
                     "max_yaw_rate_rad_s": 1.2,
@@ -2642,6 +2794,7 @@ def test_build_actuation_envelope_summary_carries_amv_and_projection_metadata() 
             name="amv-actuation-stress-v0",
             profile_version="v0",
             claim_scope="synthetic-only",
+            claim_boundary="diagnostic-only",
             max_linear_accel_m_s2=2.0,
             max_linear_decel_m_s2=2.5,
             max_yaw_rate_rad_s=1.2,

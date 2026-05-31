@@ -58,6 +58,7 @@ synthetic_actuation_profile:
   name: amv-actuation-stress-v0
   profile_version: v0
   claim_scope: synthetic-only
+  claim_boundary: diagnostic-only
   max_linear_accel_m_s2: 2.0
   max_linear_decel_m_s2: 2.5
   max_yaw_rate_rad_s: 1.2

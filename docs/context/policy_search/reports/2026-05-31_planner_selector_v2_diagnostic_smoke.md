@@ -15,8 +15,11 @@ A deterministic, auditable selector can choose among existing local-policy candi
 - Algorithm: `planner_selector_v2_diagnostic`
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/policy_search/planner_selector_v2_diagnostic/smoke/issue1806_local/summary.json`
-- Git commit: `9e0c2170de35397edc7202f110d041439c1163fc`
+- Summary JSON: `output/policy_search/planner_selector_v2_diagnostic/smoke/pr1817_postmerge_c554/summary.json`
+- Smoke run commit: `c554f8bae3c1c84291febe691db5bc7464c124c3`
+- Reviewed PR head: `f3ec446f833687db9fe0122c333370f2475aec5a`
+- Artifact durability: raw run output is ignored/worktree-local; this tracked report is the
+  durable review evidence.
 
 ## Aggregate Results
 

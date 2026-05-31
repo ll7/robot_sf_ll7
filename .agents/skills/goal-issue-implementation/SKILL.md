@@ -169,7 +169,8 @@ credential, or execution environment is actually available.
 If the final audit leaves only parent, epic, decision, or research issues that are not directly
 implementable, hand exactly one parent to `issue-splitter` instead of stopping with a prose-only
 report. The splitter should produce or create one `Next Implementable Child` only after duplicate
-checks show that no equivalent child already exists.
+checks show that no equivalent child already exists. Include the companion
+`issue_split_summary.v1` shape when issue splitting determines the next route.
 
 Example compact exhausted-queue audit:
 
@@ -336,6 +337,11 @@ When the queue exhausts, also report the final implementability audit result: re
 issues, remaining open issues missing `state:*`, any labels/body updates applied after review, and
 the command or query used to confirm the queue state. Include `queue_audit.v1` rows for exhausted
 or nearly exhausted queues so future agents can compare classifications across runs.
+
+When delegated agent or worker behavior produced a reusable workflow lesson, include an
+`agent_run_self_review.v1` companion summary or link the inbox note that follows that shape. Do not
+promote a lesson into durable skill text unless the evidence is repeated, high-confidence, or
+directly explains a costly failure.
 
 ## When to use
 

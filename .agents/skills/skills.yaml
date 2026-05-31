@@ -775,7 +775,7 @@ skills:
     - git
     delegates_to:
     - gh-issue-creator
-    output_schema: skill_run_summary.v1
+    output_schema: issue_split_summary.v1
     aliases:
     - parent-to-child-issue
   oracle-imitation-campaign:

@@ -208,10 +208,10 @@ def _scenarios_by_source(
     """
     grouped: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
     for scenario_id, meta in scenario_metadata.items():
-        source = meta["source_scenario_id"]
-        family = meta["family"]
+        source = meta.get("source_scenario_id")
+        family = meta.get("family")
         if source and family:
-            grouped[source][family].append(scenario_id)
+            grouped[str(source)][str(family)].append(scenario_id)
     return grouped
 
 
@@ -360,8 +360,8 @@ def build_criticality_summary_from_compact_evidence(
         CriticalitySummaryV1: Enriched summary with explicit row status counts.
     """
     evidence = dict(compact_evidence)
-    raw_pair_summary = dict(evidence.get("pair_summary", {}))
-    pair_rows = list(evidence.get("pair_rows", []))
+    raw_pair_summary = dict(evidence.get("pair_summary") or {})
+    pair_rows = list(evidence.get("pair_rows") or [])
     status_counts = _extract_row_statuses(pair_rows)
     pair_summary = build_pair_summary_with_statuses(pair_rows, status_counts)
     for group_field in (
@@ -379,14 +379,14 @@ def build_criticality_summary_from_compact_evidence(
             pair_summary[group_field] = mapped
     return CriticalitySummaryV1(
         schema_version=CRITICALITY_SUMMARY_SCHEMA_VERSION,
-        manifest=str(evidence.get("manifest", "")),
-        manifest_id=str(evidence.get("materialization", {}).get("manifest_id", "")),
-        planners=list(evidence.get("planners", [])),
-        horizon=int(evidence.get("horizon", 0)),
-        dt=float(evidence.get("dt", 0.0)),
-        seed_limit=int(evidence.get("seed_limit", 0)),
-        materialization=dict(evidence.get("materialization", {})),
-        planner_runs=dict(evidence.get("planner_runs", {})),
+        manifest=str(evidence.get("manifest") or ""),
+        manifest_id=str((evidence.get("materialization") or {}).get("manifest_id") or ""),
+        planners=list(evidence.get("planners") or []),
+        horizon=int(evidence.get("horizon") or 0),
+        dt=float(evidence.get("dt") or 0.0),
+        seed_limit=int(evidence.get("seed_limit") or 0),
+        materialization=dict(evidence.get("materialization") or {}),
+        planner_runs=dict(evidence.get("planner_runs") or {}),
         pair_summary=pair_summary,
         pair_rows=pair_rows,
         description=str(evidence.get("description") or "") or None,
@@ -425,10 +425,10 @@ def _upgrade_to_row_status_counts(
             if key in combined:
                 combined[key] = int(count)
         return {
-            "pairs": int(group_payload.get("pairs", 0)),
+            "pairs": int(group_payload.get("pairs") or 0),
             "row_status_counts": combined,
             "mean_deltas_completed_pairs": dict(
-                group_payload.get("mean_deltas_completed_pairs", {})
+                group_payload.get("mean_deltas_completed_pairs") or {}
             ),
         }
     combined = dict(_zero_row_status_counts())
@@ -437,9 +437,9 @@ def _upgrade_to_row_status_counts(
             if key in combined:
                 combined[key] = int(count)
     return {
-        "pairs": int(group_payload.get("pairs", 0)),
+        "pairs": int(group_payload.get("pairs") or 0),
         "row_status_counts": combined,
-        "mean_deltas_completed_pairs": dict(group_payload.get("mean_deltas_completed_pairs", {})),
+        "mean_deltas_completed_pairs": dict(group_payload.get("mean_deltas_completed_pairs") or {}),
     }
 
 

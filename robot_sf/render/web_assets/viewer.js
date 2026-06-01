@@ -3,6 +3,7 @@ import * as THREE from "https://unpkg.com/three@0.164.1/build/three.module.js";
 const root = document.querySelector("#viewer");
 const hud = document.querySelector("#hud");
 const timeline = document.querySelector("#timeline");
+const markers = document.querySelector("#markers");
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111827);
@@ -39,6 +40,7 @@ fetch("./scene.json")
     buildStaticMap(scenePayload.map);
     timeline.max = Math.max(scenePayload.frames.length - 1, 0);
     fitCamera(scenePayload.map);
+    buildTimelineMarkers(scenePayload);
     drawFrame(0);
     animate();
   })
@@ -62,12 +64,13 @@ window.addEventListener("resize", resize);
 resize();
 
 function buildStaticMap(map) {
+  const origin = map.origin || [0, 0];
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(map.width, map.height),
     new THREE.MeshBasicMaterial({ color: 0x243041 })
   );
   floor.rotation.x = -Math.PI / 2;
-  floor.position.set(map.width / 2, -0.02, map.height / 2);
+  floor.position.set(origin[0] + map.width / 2, -0.02, origin[1] + map.height / 2);
   world.add(floor);
 
   map.bounds.forEach((line) => world.add(makeLine(line, 0xe5e7eb)));
@@ -92,6 +95,59 @@ function addZones(zones, color) {
   });
 }
 
+function buildTimelineMarkers(scenePayload) {
+  const numFrames = scenePayload.frames.length;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(numFrames, 2);
+  canvas.height = 40;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  let hasMarkers = false;
+
+  for (let i = 0; i < numFrames; i++) {
+    const frame = scenePayload.frames[i];
+    if (frame.event && i > 0 && frame.event !== scenePayload.frames[i - 1].event) {
+      ctx.fillStyle = "#fbbf24";
+      ctx.fillRect(i, 0, 1, 40);
+      hasMarkers = true;
+    }
+    if (frame.event_id) {
+      ctx.fillStyle = "#60a5fa";
+      ctx.fillRect(i, 30, 1, 4);
+      hasMarkers = true;
+    }
+    if (frame.planner_action) {
+      ctx.fillStyle = "#a78bfa";
+      ctx.fillRect(i, 34, 1, 4);
+      hasMarkers = true;
+    }
+  }
+
+  const annotations = scenePayload.annotations || [];
+  const annotationColors = ["#f97316", "#ec4899", "#14b8a6", "#eab308", "#8b5cf6"];
+  annotations.forEach((ann, idx) => {
+    const [start, end] = annotationFrameRange(scenePayload, ann);
+    if (start === null || end === null) return;
+    const color = annotationColors[idx % annotationColors.length];
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(start, 0, end - start + 1, 40);
+    ctx.globalAlpha = 1.0;
+    ctx.fillRect(start, 24, end - start + 1, 2);
+    hasMarkers = true;
+  });
+
+  if (!hasMarkers) return;
+
+  markers.style.backgroundImage = `url(${canvas.toDataURL()})`;
+  markers.style.backgroundRepeat = "no-repeat";
+  markers.style.backgroundSize = "100% 40px";
+
+  const slider = document.querySelector("#timeline");
+  slider.style.marginTop = "0";
+  markers.style.display = "block";
+}
+
 function drawFrame(index) {
   if (!payload) return;
   currentFrame = Math.max(0, Math.min(index, payload.frames.length - 1));
@@ -105,10 +161,68 @@ function drawFrame(index) {
     setAgent(marker, { position: ped.position, heading: 0 });
     return marker;
   }));
-  replaceChildren(trajectory, [makePolyline(payload.trajectory.slice(0, currentFrame + 1), 0x86efac)]);
-  replaceChildren(rays, frame.rays.map((ray) => makeLine([ray[0][0], ray[1][0], ray[0][1], ray[1][1]], 0xf8fafc)));
+  const trajectoryPoints = (payload.trajectory || []).slice(0, currentFrame + 1);
+  replaceChildren(trajectory, [makePolyline(trajectoryPoints, 0x86efac)]);
+  replaceChildren(rays, (frame.rays || []).map((ray) => makeLine([ray[0][0], ray[1][0], ray[0][1], ray[1][1]], 0xf8fafc)));
 
-  hud.textContent = `Episode ${payload.episode_id} | frame ${currentFrame + 1}/${payload.frames.length} | t=${frame.time_s.toFixed(2)}s`;
+  const parts = [];
+  if (payload.source) parts.push(`src=${payload.source}`);
+  const traceId = payload.trace_id || payload.episode_id || "";
+  if (traceId) parts.push(`Trace ${traceId}`);
+  if (payload.metadata?.source?.scenario_id) {
+    parts.push(`scenario=${payload.metadata.source.scenario_id}`);
+  }
+  if (payload.metadata?.source?.planner_id) {
+    parts.push(`planner=${payload.metadata.source.planner_id}`);
+  }
+  if (payload.metadata?.source?.seed !== undefined) {
+    parts.push(`seed=${payload.metadata.source.seed}`);
+  }
+  if (payload.metadata?.diagnostic_only) {
+    parts.push("[diagnostic-only]");
+  }
+  parts.push(`frame ${currentFrame + 1}/${payload.frames.length}`);
+  parts.push(`step=${frame.timestep != null ? frame.timestep : currentFrame}`);
+  if (frame.time_s != null) parts.push(`t=${frame.time_s.toFixed(2)}s`);
+
+  if (frame.event) parts.push(`event=${frame.event}`);
+  if (frame.event_id) parts.push(`id=${frame.event_id}`);
+
+  if (frame.planner_action) {
+    const a = frame.planner_action;
+    parts.push(`v=${a.linear_velocity.toFixed(3)} w=${a.angular_velocity.toFixed(3)}`);
+  }
+
+  const annotations = payload.annotations || [];
+  const activeAnnotations = annotations.filter((ann) => {
+    const step = frame.timestep != null ? frame.timestep : currentFrame;
+    return step >= ann.anchor.frame_start && step <= ann.anchor.frame_end;
+  });
+  if (activeAnnotations.length > 0) {
+    parts.push("");
+    activeAnnotations.forEach((ann) => {
+      parts.push(`[${ann.category}] ${ann.summary}`);
+    });
+  }
+
+  hud.textContent = parts.join(" | ");
+}
+
+function annotationFrameRange(scenePayload, annotation) {
+  const startStep = annotation.anchor.frame_start;
+  const endStep = annotation.anchor.frame_end;
+  const frames = scenePayload.frames;
+  let start = frames.findIndex((frame) => frame.timestep === startStep);
+  let end = frames.findIndex((frame) => frame.timestep === endStep);
+  if (start < 0) {
+    start = frames.findIndex((frame) => (frame.timestep ?? 0) >= startStep);
+  }
+  if (end < 0) {
+    end = frames.findIndex((frame) => (frame.timestep ?? 0) > endStep) - 1;
+  }
+  if (end < 0) end = frames.length - 1;
+  if (start < 0 || end < start) return [null, null];
+  return [start, end];
 }
 
 function animate() {
@@ -172,11 +286,12 @@ function disposeObject(object) {
 }
 
 function fitCamera(map) {
+  const origin = map.origin || [0, 0];
   const width = root.clientWidth || window.innerWidth;
   const height = root.clientHeight || window.innerHeight;
   const aspect = width / Math.max(height, 1);
-  const centerX = map.width / 2;
-  const centerY = map.height / 2;
+  const centerX = origin[0] + map.width / 2;
+  const centerY = origin[1] + map.height / 2;
   const margin = 1.16;
   let halfWidth = (map.width * margin) / 2;
   let halfHeight = (map.height * margin) / 2;

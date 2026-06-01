@@ -20,16 +20,60 @@
         position: fixed;
         left: 16px;
         top: 16px;
+        max-width: 80%;
         padding: 10px 12px;
         border-radius: 8px;
         background: rgb(15 23 42 / 88%);
-        font-size: 14px;
+        font-size: 13px;
+        line-height: 1.5;
+        word-break: break-all;
       }
-      #timeline {
+      #hud .diagnostic-badge {
+        display: inline-block;
+        padding: 0 6px;
+        border-radius: 4px;
+        background: #f59e0b;
+        color: #111827;
+        font-weight: 600;
+        font-size: 11px;
+      }
+      .annotation-label {
+        display: inline-block;
+        padding: 0 4px;
+        border-radius: 3px;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      .annotation-label.planner_action {
+        background: #f97316;
+        color: #111827;
+      }
+      .annotation-label.interaction {
+        background: #ec4899;
+        color: #fff;
+      }
+      .annotation-label.safety_margin {
+        background: #14b8a6;
+        color: #111827;
+      }
+      .annotation-label.data_quality {
+        background: #8b5cf6;
+        color: #fff;
+      }
+      #controls {
         position: fixed;
         left: 16px;
         right: 16px;
         bottom: 16px;
+      }
+      #markers {
+        display: none;
+        height: 40px;
+        margin-bottom: 4px;
+        image-rendering: pixelated;
+      }
+      #timeline {
+        width: 100%;
       }
       input[type="range"] {
         width: 100%;
@@ -39,7 +83,10 @@
   <body>
     <div id="viewer"></div>
     <div id="hud">Loading scene...</div>
-    <input id="timeline" type="range" min="0" max="0" value="0" />
+    <div id="controls">
+      <div id="markers"></div>
+      <input id="timeline" type="range" min="0" max="0" value="0" />
+    </div>
     <script type="module" src="./viewer.js"></script>
   </body>
 </html>

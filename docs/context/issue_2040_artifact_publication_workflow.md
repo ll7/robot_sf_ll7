@@ -70,11 +70,24 @@ release or publication-bundle proof described in
    Use this when a report has the row payload expected by a named table contract:
 
    ```bash
+   export CAMPAIGN_ROOT=output/benchmarks/camera_ready/<campaign_id>
+
+   uv run python - <<'PY'
+   import json
+   import os
+   from pathlib import Path
+
+   reports = Path(os.environ["CAMPAIGN_ROOT"]) / "reports"
+   summary = json.loads((reports / "campaign_summary.json").read_text(encoding="utf-8"))
+   rows = summary["planner_rows"]
+   (reports / "planner_rows.json").write_text(json.dumps(rows, indent=2) + "\n", encoding="utf-8")
+   PY
+
    uv run robot_sf_bench export-canonical-table \
      --table-id planner_outcome_summary \
-     --rows output/benchmarks/camera_ready/<campaign_id>/reports/planner_rows.json \
-     --out-dir output/benchmarks/camera_ready/<campaign_id>/reports/canonical_tables \
-     --source output/benchmarks/camera_ready/<campaign_id>/reports/campaign_summary.json
+     --rows "$CAMPAIGN_ROOT/reports/planner_rows.json" \
+     --out-dir "$CAMPAIGN_ROOT/reports/canonical_tables" \
+     --source "$CAMPAIGN_ROOT/reports/campaign_summary.json"
    ```
 
    The exporter writes `csv`, `md`, and `tex` fragments plus a metadata sidecar with source
@@ -98,8 +111,8 @@ release or publication-bundle proof described in
 
    Publication bundles are candidates for GitHub release, DOI, or other durable external storage.
    They should not be copied wholesale into git. Replace placeholder release and DOI values before
-   treating the bundle as paper-facing evidence. From the bundle directory, run
-   `sha256sum --check checksums.sha256` before upload or citation.
+   treating the bundle as paper-facing evidence. From the bundle `payload/` directory, run
+   `sha256sum --check ../checksums.sha256` before upload or citation.
 
 6. Cite the table or figure with its boundary.
 

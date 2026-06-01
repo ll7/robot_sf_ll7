@@ -43,7 +43,7 @@ Export bundles are produced by
 
 There is no standalone publication-bundle schema validator CLI. For release handoff, inspect
 `publication_manifest.json` for `schema_version: benchmark-publication-bundle.v2` and run
-`sha256sum --check checksums.sha256` from the bundle directory before upload.
+`sha256sum --check ../checksums.sha256` from the bundle `payload/` directory before upload.
 
 ## Reusable Figure And Table IDs
 

@@ -85,6 +85,10 @@ entries:
     status: current
     freshness: maintained
     area: carla_external_sim
+  - path: docs/context/issue_2016_webots_gazebo_amv_parity_audit.md
+    status: current
+    freshness: dated
+    area: carla_external_sim
   - path: docs/context/slurm_issue_batch_status_2026-05-21.md
     status: current
     freshness: maintained

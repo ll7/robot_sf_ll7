@@ -1,0 +1,321 @@
+{
+  "claim_boundary": "diagnostic local pilot only; not benchmark-strength or paper-facing evidence",
+  "eligible_perturbed_variant_count": 8,
+  "excluded_perturbed_variant_count": 1,
+  "families": {
+    "single_pedestrian_speed_offset": {
+      "completed_pairs": 27,
+      "eligible_variants": 3,
+      "excluded_variants": 0,
+      "variants": 3
+    },
+    "single_pedestrian_start_delay_offset": {
+      "completed_pairs": 18,
+      "eligible_variants": 2,
+      "excluded_variants": 1,
+      "variants": 3
+    },
+    "single_pedestrian_wait_duration_offset": {
+      "completed_pairs": 27,
+      "eligible_variants": 3,
+      "excluded_variants": 0,
+      "variants": 3
+    }
+  },
+  "schema_version": "issue_1951_family_magnitude_summary.v1",
+  "source_preflight": "output/scenario_perturbations/issue1951_intersection_wait_phase_grid/preflight/preflight.json",
+  "source_summary": "output/scenario_perturbations/issue1951_intersection_wait_phase_grid/pilot/summary.json",
+  "variant_count": 9,
+  "variants": [
+    {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "family": "single_pedestrian_speed_offset",
+      "magnitude": {
+        "parameter": "speed_delta_m_s",
+        "unit": "m/s",
+        "value": -0.25
+      },
+      "mean_deltas_completed_pairs": {
+        "collision_delta": 0.0,
+        "min_distance_delta": 2.1723670658833396,
+        "success_delta": 0.0,
+        "timeout_delta": 0.0
+      },
+      "pairs": 9,
+      "planners": [
+        "goal",
+        "orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "preflight_reasons": [
+        "dynamic_interaction_present"
+      ],
+      "preflight_status": "valid",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "status_counts": {
+        "completed": 9
+      },
+      "variant_id": "francis2023_intersection_wait_speed_h1_m025"
+    },
+    {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "family": "single_pedestrian_speed_offset",
+      "magnitude": {
+        "parameter": "speed_delta_m_s",
+        "unit": "m/s",
+        "value": 0.25
+      },
+      "mean_deltas_completed_pairs": {
+        "collision_delta": 0.0,
+        "min_distance_delta": -2.0029166245630505,
+        "success_delta": 0.0,
+        "timeout_delta": 0.0
+      },
+      "pairs": 9,
+      "planners": [
+        "goal",
+        "orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "preflight_reasons": [
+        "dynamic_interaction_present"
+      ],
+      "preflight_status": "valid",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "status_counts": {
+        "completed": 9
+      },
+      "variant_id": "francis2023_intersection_wait_speed_h1_p025"
+    },
+    {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "family": "single_pedestrian_speed_offset",
+      "magnitude": {
+        "parameter": "speed_delta_m_s",
+        "unit": "m/s",
+        "value": 0.5
+      },
+      "mean_deltas_completed_pairs": {
+        "collision_delta": 0.0,
+        "min_distance_delta": -3.862580815017372,
+        "success_delta": 0.0,
+        "timeout_delta": 0.0
+      },
+      "pairs": 9,
+      "planners": [
+        "goal",
+        "orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "preflight_reasons": [
+        "dynamic_interaction_present"
+      ],
+      "preflight_status": "valid",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "status_counts": {
+        "completed": 9
+      },
+      "variant_id": "francis2023_intersection_wait_speed_h1_p050"
+    },
+    {
+      "benchmark_evidence_status": "excluded_from_success_evidence",
+      "family": "single_pedestrian_start_delay_offset",
+      "magnitude": {
+        "parameter": "dt_s",
+        "unit": "s",
+        "value": -0.5
+      },
+      "pairs": 0,
+      "planners": [],
+      "preflight_reasons": [
+        "preflight_error: single_pedestrian_start_delay_offset would make pedestrian 'h1' start_delay_s negative"
+      ],
+      "preflight_status": "invalid",
+      "seeds": [],
+      "status_counts": {},
+      "variant_id": "francis2023_intersection_wait_start_delay_h1_m050"
+    },
+    {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "family": "single_pedestrian_start_delay_offset",
+      "magnitude": {
+        "parameter": "dt_s",
+        "unit": "s",
+        "value": 0.5
+      },
+      "mean_deltas_completed_pairs": {
+        "collision_delta": 0.0,
+        "min_distance_delta": 4.159357738429309,
+        "success_delta": 0.0,
+        "timeout_delta": 0.0
+      },
+      "pairs": 9,
+      "planners": [
+        "goal",
+        "orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "preflight_reasons": [
+        "dynamic_interaction_present"
+      ],
+      "preflight_status": "valid",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "status_counts": {
+        "completed": 9
+      },
+      "variant_id": "francis2023_intersection_wait_start_delay_h1_p050"
+    },
+    {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "family": "single_pedestrian_start_delay_offset",
+      "magnitude": {
+        "parameter": "dt_s",
+        "unit": "s",
+        "value": 1.0
+      },
+      "mean_deltas_completed_pairs": {
+        "collision_delta": 0.0,
+        "min_distance_delta": 4.159357738429309,
+        "success_delta": 0.0,
+        "timeout_delta": 0.0
+      },
+      "pairs": 9,
+      "planners": [
+        "goal",
+        "orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "preflight_reasons": [
+        "dynamic_interaction_present"
+      ],
+      "preflight_status": "valid",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "status_counts": {
+        "completed": 9
+      },
+      "variant_id": "francis2023_intersection_wait_start_delay_h1_p100"
+    },
+    {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "family": "single_pedestrian_wait_duration_offset",
+      "magnitude": {
+        "parameter": "wait_delta_s",
+        "unit": "s",
+        "value": -0.5
+      },
+      "mean_deltas_completed_pairs": {
+        "collision_delta": 0.0,
+        "min_distance_delta": 0.0,
+        "success_delta": 0.0,
+        "timeout_delta": 0.0
+      },
+      "pairs": 9,
+      "planners": [
+        "goal",
+        "orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "preflight_reasons": [
+        "dynamic_interaction_present"
+      ],
+      "preflight_status": "valid",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "status_counts": {
+        "completed": 9
+      },
+      "variant_id": "francis2023_intersection_wait_wait_h1_m050"
+    },
+    {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "family": "single_pedestrian_wait_duration_offset",
+      "magnitude": {
+        "parameter": "wait_delta_s",
+        "unit": "s",
+        "value": 0.5
+      },
+      "mean_deltas_completed_pairs": {
+        "collision_delta": 0.0,
+        "min_distance_delta": 0.0,
+        "success_delta": 0.0,
+        "timeout_delta": 0.0
+      },
+      "pairs": 9,
+      "planners": [
+        "goal",
+        "orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "preflight_reasons": [
+        "dynamic_interaction_present"
+      ],
+      "preflight_status": "valid",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "status_counts": {
+        "completed": 9
+      },
+      "variant_id": "francis2023_intersection_wait_wait_h1_p050"
+    },
+    {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "family": "single_pedestrian_wait_duration_offset",
+      "magnitude": {
+        "parameter": "wait_delta_s",
+        "unit": "s",
+        "value": 1.0
+      },
+      "mean_deltas_completed_pairs": {
+        "collision_delta": 0.0,
+        "min_distance_delta": 0.0,
+        "success_delta": 0.0,
+        "timeout_delta": 0.0
+      },
+      "pairs": 9,
+      "planners": [
+        "goal",
+        "orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "preflight_reasons": [
+        "dynamic_interaction_present"
+      ],
+      "preflight_status": "valid",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "status_counts": {
+        "completed": 9
+      },
+      "variant_id": "francis2023_intersection_wait_wait_h1_p100"
+    }
+  ]
+}

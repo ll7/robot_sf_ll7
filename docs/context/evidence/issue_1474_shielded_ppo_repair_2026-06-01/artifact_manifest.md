@@ -1,4 +1,4 @@
-# Issue #1474 Shielded PPO Repair Artifact Manifest
+# Issue #1474 Shielded PPO Repair Artifact Manifest 2026-06-01
 
 Date: 2026-06-01
 
@@ -10,8 +10,7 @@ Date: 2026-06-01
 - Training config:
   `configs/training/ppo/ablations/expert_ppo_issue_1474_shielded_repair_collision20_5m.yaml`.
 - Launch packet: `configs/training/shielded_ppo_issue_1396_launch_packet.yaml`.
-- Local synced root:
-  `output/slurm/issue1474-shielded-ppo-repair-job-12674`.
+- Local synced root: ignored worktree-local SLURM cache; not durable evidence.
 - W&B run: `ll7/robot_sf/d8w8uykh`.
 - W&B model artifact:
   `ll7/robot_sf/ppo_expert_issue_1474_shielded_repair_collision20_5m-best-success:v5`.
@@ -19,8 +18,7 @@ Date: 2026-06-01
 ## Best Checkpoint
 
 - Policy id: `ppo_expert_issue_1474_shielded_repair_collision20_5m`.
-- Local synced checkpoint:
-  `output/slurm/issue1474-shielded-ppo-repair-job-12674/benchmarks/expert_policies/ppo_expert_issue_1474_shielded_repair_collision20_5m.zip`.
+- Local synced checkpoint: ignored worktree-local SLURM cache; not durable evidence.
 - Size: `166187385` bytes.
 - SHA256: `7714123d79a4a75ba7e83df61b36cf3a5145191bd00e905e122e0bf87679cc26`.
 - W&B aliases: `step-5000000`, `best-success`, `latest`.
@@ -53,8 +51,8 @@ The selected best-success checkpoint was the final 5M-step checkpoint:
   `ll7/robot_sf/ppo_expert_issue_1474_shielded_repair_collision20_5m-best-success:v5`.
 - `tracked-compact-evidence`: this manifest and
   `docs/context/evidence/issue_1474_shielded_ppo_repair_2026-06-01/learned_policy_eligibility.yaml`.
-- `non-evidence-local-only`: synced raw SLURM logs and local `output/slurm/...` copies.
-- `ignored-cache`: local model cache under `output/model_cache/...` if hydrated by the registry.
+- `non-evidence-local-only`: synced raw SLURM logs and local ignored-cache copies.
+- `ignored-cache`: local model cache if hydrated by the registry.
 
 ## Claim Boundary
 

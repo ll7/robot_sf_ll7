@@ -703,7 +703,7 @@ candidates:
       - stress_slice
 
   shielded_ppo_issue1474_collision20_v1:
-    status: needs_repair
+    status: prototype
     family: guarded_learning_policy
     training_required: false
     promotion_gate: tier_c

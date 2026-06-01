@@ -21,6 +21,14 @@ cases:
   - goal-issue-implementation
   - slurm-campaign-submit
   - artifact-provenance
+- intent: Record a private candidate lesson from an agent workflow
+  primary: agent-workflow-capture
+  secondary: []
+- intent: Promote accumulated private workflow lessons into repository instructions
+  primary: agent-workflow-promotion
+  secondary:
+  - review-and-refactor
+  - update-docs-on-code-change
 - intent: Stage external data
   primary: data-staging-provenance
   secondary:

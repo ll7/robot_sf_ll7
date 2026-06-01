@@ -22,6 +22,8 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Submit issue-791 Auxme training | `auxme-issue791-submit` | `slurm-campaign-submit` |
 | Stage external data | `data-staging-provenance` | `artifact-provenance` |
 | Synthesize evidence across issues | `evidence-synthesis` | `paper-facing-docs` |
+| Capture a private workflow lesson | `agent-workflow-capture` | none |
+| Promote workflow lessons into repo changes | `agent-workflow-promotion` | `review-and-refactor`, `update-docs-on-code-change` |
 
 ## Negative Routing
 
@@ -41,6 +43,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | PR review cleanup | `gh-pr-comment-fixer` -> `implementation-verification` -> `pr-ready-check` |
 | Benchmark evidence audit | `benchmark-row-status` -> `artifact-provenance` -> `evidence-synthesis` |
 | Always-on SLURM experiment | `experiment-context` -> `goal-issue-implementation` -> `slurm-campaign-submit` -> `artifact-provenance` -> `context-note-maintainer` |
+| Agent workflow improvement | `agent-workflow-capture` -> `agent-workflow-promotion` -> `review-and-refactor` -> `update-docs-on-code-change` |
 | SLURM campaign launch | `slurm-campaign-submit` -> `artifact-provenance` |
 | External data staging | `data-staging-provenance` -> `artifact-provenance` -> `context-note-maintainer` |
 
@@ -149,6 +152,8 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `agent-workflow-capture` | atomic | analysis | yes | no | no | none | Capture private candidate lessons from agent execution into `.git/codex-agent-runs/notes/inbox/` when a repeatable workflow, routing, validation, tooling, or instruction improvement is noticed. |
+| `agent-workflow-promotion` | orchestrator | implementation | yes | no | no | `review-and-refactor`, `update-docs-on-code-change`, `context-note-maintainer`, `gh-issue-creator` | Promote accumulated private `.git/codex-agent-runs/notes/inbox/` workflow lessons into small, evidence-backed repository instruction, skill, docs, or tooling changes with validation. |
 | `agentic-eval` | atomic | analysis | yes | no | no | none | Evaluate and improve AI workflow outputs with small goldens, rubrics, and repeatable checks; use when tuning skills, prompts, instructions, or agent behavior. |
 | `auto-improvement` | atomic | analysis | yes | no | no | none | Focused measurement-aware refinement loop for Robot SF prompts, docs, and small code changes; use when a task benefits from trying a few simple improvements. |
 | `autoresearch` | atomic | analysis | yes | no | no | none | Autonomous iterative experimentation loop for measurable Robot SF tasks; use when the user wants an improvement loop with baseline, experiments, and keep/discard decisions. |
@@ -176,6 +181,8 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Alias | Canonical skill |
 | --- | --- |
+| `agent-improvement-capture` | `agent-workflow-capture` |
+| `agent-improvement-promotion` | `agent-workflow-promotion` |
 | `auxme-issue791-reliable-submit` | `auxme-slurm-reliable-submit` |
 | `context-unblocker` | `what-context-needed` |
 | `gh-issue-to-pr` | `gh-issue-autopilot` |

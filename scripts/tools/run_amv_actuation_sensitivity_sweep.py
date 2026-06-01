@@ -619,7 +619,7 @@ def aggregate_campaigns(  # noqa: C901, PLR0912
     csv_path = reports_dir / "effect_size_summary.csv"
     if rows:
         with csv_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+            writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
             writer.writeheader()
             writer.writerows(rows)
     else:

@@ -127,6 +127,7 @@ def test_issue_2011_sweep_labels_unavailable_campaign_roots(tmp_path: Path) -> N
     )
     assert "campaign_status" in csv_text
     assert "accepted_unavailable_only" in csv_text
+    assert "\r\n" not in csv_text
     assert "accepted_unavailable_only" in md_text
 
 

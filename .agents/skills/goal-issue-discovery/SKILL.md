@@ -58,6 +58,7 @@ Do not use it for:
 - `.agents/skills/gh-issue-sequencer/SKILL.md`
 - `.agents/skills/context-map/SKILL.md`
 - `scripts/dev/check_skills.py` (for local syntax/shape sanity)
+- `scripts/dev/check_skills.py --preflight goal-issue-discovery` (for preflight validation before discovery loop)
 
 ## Preflight (required, once)
 
@@ -136,6 +137,42 @@ Split broad ideas before writing.
 - Use a single lane by default.
 
 If API/project writes fail repeatedly, emit a short handoff and stop.
+
+## Delegation Failure Recovery
+
+Each child skill or worker may fail. Handle failures per scenario:
+
+- `gh-issue-creator` failure:
+  - If issue creation fails due to duplicate detection, log the duplicate
+    and skip. Do not retry.
+  - If template render or API write fails, record the error, emit a handoff
+    note, and continue to the next candidate.
+
+- `gh-issue-sequencer` failure:
+  - If Project #5 ordering is unreachable, skip priority normalization and
+    use chronological order. Log the failure.
+
+- `gh-issue-priority-assessor` failure:
+  - If priority assessment fails, leave the issue unprioritized and continue.
+    Do not block the discovery pass.
+
+- `agentic-eval` or `auto-improvement` or `autoresearch` failure:
+  - If the evaluation/experiment tool errors, log the failure and skip the
+    candidate. Do not halt the discovery scan.
+
+- `context-map` failure:
+  - If the context map cannot be generated, fall back to file listing and
+    grep-based scanning. Log the degraded mode.
+
+- General environment failure (auth, disk, network):
+  - Stop the discovery loop and report the blocker with the failing command,
+    exit code, and minimal next action.
+
+Do not retry a child skill on the same candidate if it failed twice with the
+same error. Record the recovery action and continue.
+
+When a delegated worker produces a reusable workflow lesson, include an
+`agent_run_self_review.v1` companion summary.
 
 For benchmark or planner issues, use `review-benchmark-change` semantics before claim-like wording.
 - Do not make paper-facing claims from discovery evidence alone.

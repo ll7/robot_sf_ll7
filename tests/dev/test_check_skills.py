@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -68,3 +69,186 @@ def test_frontmatter_fails_closed_for_non_mapping_yaml(tmp_path: Path) -> None:
 
     with pytest.raises(AssertionError, match="frontmatter must be a YAML mapping"):
         check_skills._frontmatter(skill_path)
+
+
+# -- preflight tests ------------------------------------------------------------
+
+
+def test_check_command_git_is_available() -> None:
+    """git should be available in a git repository checkout."""
+    check_skills = _load_check_skills_module()
+    ok, detail = check_skills._check_command("git", "--version")
+    assert ok, f"git should be available but got: {detail}"
+    assert "git version" in detail
+
+
+def test_check_command_missing_command() -> None:
+    """A nonexistent command should report missing."""
+    check_skills = _load_check_skills_module()
+    ok, detail = check_skills._check_command("this-command-does-not-exist-999", "--version")
+    assert not ok
+    assert "not found on PATH" in detail
+
+
+def test_preflight_requires_no_reqs(tmp_path: Path) -> None:
+    """Preflight should pass when a skill declares no requirements."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  minimal-skill:\n    requires: []\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("minimal-skill")
+    assert rc == 0
+
+
+def test_preflight_unknown_skill(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """Preflight should fail with a clear error for an unknown skill."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  real-skill:\n    requires: []\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("unknown-skill")
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "not found" in captured.out
+
+
+def test_preflight_json_output_unknown_skill(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """Preflight with --json should emit an error JSON object for an unknown skill."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  real-skill:\n    requires: []\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("unknown-skill", json_output=True)
+    assert rc == 1
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["status"] == "error"
+    assert payload["skill"] == "unknown-skill"
+
+
+def test_preflight_git_requires_in_skill(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """Preflight should check declared 'requires' against available tools."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  skill-with-git:\n    requires:\n      - git\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("skill-with-git")
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "ok" in captured.out
+    assert "git" in captured.out
+    assert "PASS" in captured.out
+
+
+def test_preflight_resolves_alias(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """Preflight should resolve an alias to its canonical skill name."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  my-skill:\n    aliases:\n      - my-alias\n    requires:\n      - git\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("my-alias")
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "Preflight check for skill: my-skill" in captured.out
+
+
+def test_preflight_json_output_passing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """Preflight with --json should emit structured JSON on success."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  json-skill:\n    requires:\n      - git\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("json-skill", json_output=True)
+    assert rc == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["status"] == "ok"
+    assert payload["skill"] == "json-skill"
+    assert payload["requires"] == ["git"]
+    assert "checks" in payload
+    assert payload["checks"]["git"]["status"] == "ok"
+    assert payload["summary"]["available"] >= 1
+    assert payload["summary"]["missing"] == 0
+    assert payload["summary"]["unrecognized"] == 0
+
+
+def test_preflight_multiple_requires_passing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """Preflight should check multiple requirements and pass when all are found."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  full-skill:\n    requires:\n      - git\n      - uv\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("full-skill")
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "PASS" in captured.out
+
+
+def test_preflight_unrecognized_requirement(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """Preflight should fail closed on unrecognized requirements."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  exotic-skill:\n    requires:\n      - git\n      - some-exotic-tool\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("exotic-skill")
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "UNRECOGNIZED" in captured.out
+    assert "some-exotic-tool" in captured.out
+    assert "Result: FAIL" in captured.out
+
+
+def test_parse_args_preflight() -> None:
+    """--preflight flag should be parsed correctly."""
+    check_skills = _load_check_skills_module()
+    args = check_skills._parse_args(["--preflight", "my-skill"])
+    assert args.preflight == "my-skill"
+    assert args.json is False
+
+
+def test_parse_args_preflight_with_json() -> None:
+    """--preflight with --json should set both flags."""
+    check_skills = _load_check_skills_module()
+    args = check_skills._parse_args(["--preflight", "my-skill", "--json"])
+    assert args.preflight == "my-skill"
+    assert args.json is True
+
+
+def test_main_dispatches_to_preflight(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """main() should dispatch to _preflight when --preflight is given."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  preflight-skill:\n    requires:\n      - git\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills.main(["--preflight", "preflight-skill"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "Preflight check" in captured.out
+    assert "PASS" in captured.out

@@ -53,6 +53,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1542_manuscript_claim_evidence_map.md
     status: current
     freshness: maintained

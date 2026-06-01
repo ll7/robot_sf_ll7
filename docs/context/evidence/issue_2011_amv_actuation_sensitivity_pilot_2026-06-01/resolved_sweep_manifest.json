@@ -1,0 +1,173 @@
+{
+  "base_config": "configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml",
+  "base_config_sha256": "93c69971b54d5a2b2993c17e69dc63d87bb9d385fdda91ca4a1ac21f921235b7",
+  "claim_boundary": "diagnostic-only",
+  "manifest_path": "configs/benchmarks/issue_2011_amv_actuation_sensitivity_sweep_v0.yaml",
+  "manifest_sha256": "020818c7c2663310f86dbb2769192b9f7f44195781ae02aba12c45c02dd4380e",
+  "name": "issue_2011_amv_actuation_sensitivity_sweep_v0",
+  "paper_facing": false,
+  "pilot": {
+    "bootstrap_samples": 80,
+    "horizon": 80,
+    "output_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot",
+    "planners": [
+      "goal",
+      "social_force"
+    ],
+    "scenario_candidates": [
+      "classic_cross_trap_high",
+      "francis2023_intersection_wait"
+    ],
+    "seed_policy": {
+      "mode": "fixed-list",
+      "seeds": [
+        111
+      ]
+    },
+    "workers": 1
+  },
+  "schema_version": "robot-sf-amv-actuation-sensitivity-results.v1",
+  "variants": [
+    {
+      "caveat": "lower-power e-scooter proxy; not hardware-calibrated AMV evidence",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/longitudinal_proxy_low.yaml",
+      "config_sha256": "4e7f50a54a8294a6a1ee1ed252a44c62f6815c1d08506a0a845596055927a262",
+      "field_group": "longitudinal_proxy",
+      "level": "low",
+      "source_context": "docs/context/issue_2001_amv_actuation_proxy_source_analysis.md",
+      "source_status": "accepted_platform_class_proxy_source",
+      "supported_fields": [
+        "max_linear_accel_m_s2",
+        "max_linear_decel_m_s2"
+      ],
+      "variant_name": "longitudinal_proxy_low"
+    },
+    {
+      "caveat": "full-sample e-scooter proxy mean; not hardware-calibrated AMV evidence",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/longitudinal_proxy_nominal.yaml",
+      "config_sha256": "84dfaeda2ea2589edbd9e6504f946a9fa561cf64b70d5edc31aaf7bdb14d007f",
+      "field_group": "longitudinal_proxy",
+      "level": "nominal",
+      "source_context": "docs/context/issue_2001_amv_actuation_proxy_source_analysis.md",
+      "source_status": "accepted_platform_class_proxy_source",
+      "supported_fields": [
+        "max_linear_accel_m_s2",
+        "max_linear_decel_m_s2"
+      ],
+      "variant_name": "longitudinal_proxy_nominal"
+    },
+    {
+      "caveat": "500 W acceleration proxy plus foot-brake deceleration caveat; not hardware-calibrated AMV evidence",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/longitudinal_proxy_high.yaml",
+      "config_sha256": "0547c86a10861f95648c0bbbdd7919a8eb62e7d1bbace4ac39b466bb93882eda",
+      "field_group": "longitudinal_proxy",
+      "level": "high",
+      "source_context": "docs/context/issue_2001_amv_actuation_proxy_source_analysis.md",
+      "source_status": "accepted_platform_class_proxy_source",
+      "supported_fields": [
+        "max_linear_accel_m_s2",
+        "max_linear_decel_m_s2"
+      ],
+      "variant_name": "longitudinal_proxy_high"
+    },
+    {
+      "caveat": "latency is unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/latency_synthetic_low.yaml",
+      "config_sha256": "6c9df57e44d9c09d87bd311f93a5586ef77d4dc9a4ce978e5c7af254b6d640b3",
+      "field_group": "latency_synthetic",
+      "level": "low",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "latency_synthetic_low"
+    },
+    {
+      "caveat": "latency is unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/latency_synthetic_medium.yaml",
+      "config_sha256": "aa4c08a2a09cfc07b2b224af3b3c7aa4161fde5a0da9edc520e3966621e7c4e7",
+      "field_group": "latency_synthetic",
+      "level": "nominal",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "latency_synthetic_medium"
+    },
+    {
+      "caveat": "latency is unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/latency_synthetic_high.yaml",
+      "config_sha256": "e76ad08925a389d1f667a2c23f80ce62eba94773479bb9aad130d7f1a32171f0",
+      "field_group": "latency_synthetic",
+      "level": "high",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "latency_synthetic_high"
+    },
+    {
+      "caveat": "yaw rate and angular acceleration are unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/yaw_rate_synthetic_low.yaml",
+      "config_sha256": "26fd3b78f45ec3af52b323e80a7e6dfd9be1b7d1f0f5c2ddf2f4f685ea528967",
+      "field_group": "yaw_rate_synthetic",
+      "level": "low",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "yaw_rate_synthetic_low"
+    },
+    {
+      "caveat": "yaw rate and angular acceleration are unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/yaw_rate_synthetic_medium.yaml",
+      "config_sha256": "3fd83ab84184ce123be66da945af2dd7c34471e7d85a37c504132a69b1c1a4a3",
+      "field_group": "yaw_rate_synthetic",
+      "level": "nominal",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "yaw_rate_synthetic_medium"
+    },
+    {
+      "caveat": "yaw rate and angular acceleration are unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/yaw_rate_synthetic_high.yaml",
+      "config_sha256": "6d44e8b96bad3281da2b3ac69c21dfc5ee12e73f38ed74adfda8594e944f8051",
+      "field_group": "yaw_rate_synthetic",
+      "level": "high",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "yaw_rate_synthetic_high"
+    },
+    {
+      "caveat": "update rate is unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/update_rate_synthetic_low.yaml",
+      "config_sha256": "514d8047e12d29975975c4e0ea294bc58648f67e10b995e0261fd874a61c14ca",
+      "field_group": "update_rate_synthetic",
+      "level": "low",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "update_rate_synthetic_low"
+    },
+    {
+      "caveat": "update rate is unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/update_rate_synthetic_medium.yaml",
+      "config_sha256": "6f4592734cb41fbc0709dab516baae93f5aa3dcf13c1f25438399049cdead67f",
+      "field_group": "update_rate_synthetic",
+      "level": "nominal",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "update_rate_synthetic_medium"
+    },
+    {
+      "caveat": "update rate is unsupported by the longitudinal proxy source",
+      "config_path": "<local-output>/issue_2011_amv_actuation_sensitivity_pilot_summary/generated_configs/update_rate_synthetic_high.yaml",
+      "config_sha256": "175463c77ff7890aedffbe0e53abcbf877668644a804a129335147c9132602e1",
+      "field_group": "update_rate_synthetic",
+      "level": "high",
+      "source_context": "",
+      "source_status": "synthetic_stress_factor",
+      "supported_fields": [],
+      "variant_name": "update_rate_synthetic_high"
+    }
+  ]
+}

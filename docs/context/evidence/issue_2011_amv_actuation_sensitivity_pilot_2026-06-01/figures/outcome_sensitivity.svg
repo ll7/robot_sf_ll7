@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="294" role="img">
+<title>Issue #2011 outcome sensitivity by actuation field group</title>
+<rect x="0" y="0" width="100%" height="100%" fill="white"/>
+<text x="24" y="32" font-family="sans-serif" font-size="18" font-weight="700">Outcome sensitivity by field group</text>
+<text x="24" y="81" font-family="sans-serif" font-size="12">latency_synthetic / cross_trap</text>
+<rect x="430" y="66" width="0" height="18" fill="#2f7d8c"/>
+<text x="440" y="80" font-family="sans-serif" font-size="12">0.000</text>
+<text x="24" y="109" font-family="sans-serif" font-size="12">latency_synthetic / intersection_wait</text>
+<rect x="430" y="94" width="0" height="18" fill="#2f7d8c"/>
+<text x="440" y="108" font-family="sans-serif" font-size="12">0.000</text>
+<text x="24" y="137" font-family="sans-serif" font-size="12">longitudinal_proxy / cross_trap</text>
+<rect x="430" y="122" width="0" height="18" fill="#2f7d8c"/>
+<text x="440" y="136" font-family="sans-serif" font-size="12">0.000</text>
+<text x="24" y="165" font-family="sans-serif" font-size="12">longitudinal_proxy / intersection_wait</text>
+<rect x="430" y="150" width="0" height="18" fill="#2f7d8c"/>
+<text x="440" y="164" font-family="sans-serif" font-size="12">0.000</text>
+<text x="24" y="193" font-family="sans-serif" font-size="12">update_rate_synthetic / cross_trap</text>
+<rect x="430" y="178" width="0" height="18" fill="#2f7d8c"/>
+<text x="440" y="192" font-family="sans-serif" font-size="12">0.000</text>
+<text x="24" y="221" font-family="sans-serif" font-size="12">update_rate_synthetic / intersection_wait</text>
+<rect x="430" y="206" width="0" height="18" fill="#2f7d8c"/>
+<text x="440" y="220" font-family="sans-serif" font-size="12">0.000</text>
+<text x="24" y="249" font-family="sans-serif" font-size="12">yaw_rate_synthetic / cross_trap</text>
+<rect x="430" y="234" width="0" height="18" fill="#2f7d8c"/>
+<text x="440" y="248" font-family="sans-serif" font-size="12">0.000</text>
+<text x="24" y="277" font-family="sans-serif" font-size="12">yaw_rate_synthetic / intersection_wait</text>
+<rect x="430" y="262" width="0" height="18" fill="#2f7d8c"/>
+<text x="440" y="276" font-family="sans-serif" font-size="12">0.000</text>
+</svg>

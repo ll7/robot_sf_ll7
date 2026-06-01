@@ -1,0 +1,252 @@
+{
+  "claim_boundary": "Planner output is metadata/provenance guidance only; it is not benchmark evidence and does not publish artifacts.",
+  "generated_at_utc": "2026-06-01T05:29:50+00:00",
+  "rows": [
+    {
+      "action": "Horizon-100 PPO candidate has no durable registry entry or release artifact yet. Missing checkpoint: recover the checkpoint from a durable source or retire this config; do not use it as benchmark evidence.",
+      "artifact": {
+        "exists": false,
+        "sha256": null,
+        "size_bytes": null,
+        "source_path": "output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip"
+      },
+      "blocker_reason": "Horizon-100 PPO candidate has no durable registry entry or release artifact yet.",
+      "claim_boundary": "not benchmark evidence until durable artifact exists",
+      "classification": "missing",
+      "config_path": "configs/baselines/ppo_issue_791_horizon100_12178.yaml",
+      "decision": "recover_before_promotion",
+      "field": "model_path",
+      "local_references": [
+        {
+          "field": "model_path",
+          "value": "output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip"
+        }
+      ],
+      "promotion_plan": {
+        "claim_boundary": "not benchmark evidence until durable artifact exists",
+        "license_access_note": "Maintainer must confirm checkpoint license, access rights, source run, and durable publication target before promotion.",
+        "sha256": null,
+        "size_bytes": null,
+        "source_commit": null,
+        "source_config": "configs/baselines/ppo_issue_791_horizon100_12178.yaml",
+        "source_field": "model_path",
+        "source_path": "output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip",
+        "target_registry_id": "ppo_issue_791_horizon100_12178_local_artifact_candidate",
+        "training_config": null
+      },
+      "surface": "local_experimental",
+      "value": "output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip"
+    },
+    {
+      "action": "Issue-856 comparison checkpoint is recorded only as a local SLURM artifact. Missing experimental checkpoint: recover the checkpoint and prove provenance if it is worth promoting; otherwise retire or rewrite this config.",
+      "artifact": {
+        "exists": false,
+        "sha256": null,
+        "size_bytes": null,
+        "source_path": "output/slurm/issue791-reward-curriculum-job-12223/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_best.zip"
+      },
+      "blocker_reason": "Issue-856 comparison checkpoint is recorded only as a local SLURM artifact.",
+      "claim_boundary": "not benchmark evidence until durable artifact exists",
+      "classification": "retire_candidate",
+      "config_path": "configs/baselines/ppo_issue_856_all_scenarios_12223.yaml",
+      "decision": "recover_or_retire",
+      "field": "model_path",
+      "local_references": [
+        {
+          "field": "model_path",
+          "value": "output/slurm/issue791-reward-curriculum-job-12223/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_best.zip"
+        }
+      ],
+      "promotion_plan": {
+        "claim_boundary": "not benchmark evidence until durable artifact exists",
+        "license_access_note": "Maintainer must confirm checkpoint license, access rights, source run, and durable publication target before promotion.",
+        "sha256": null,
+        "size_bytes": null,
+        "source_commit": null,
+        "source_config": "configs/baselines/ppo_issue_856_all_scenarios_12223.yaml",
+        "source_field": "model_path",
+        "source_path": "output/slurm/issue791-reward-curriculum-job-12223/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_best.zip",
+        "target_registry_id": "ppo_issue_856_all_scenarios_12223_local_artifact_candidate",
+        "training_config": "configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml"
+      },
+      "surface": "local_experimental",
+      "value": "output/slurm/issue791-reward-curriculum-job-12223/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_best.zip"
+    },
+    {
+      "action": "Experimental SAC checkpoint has no durable model registry entry. Missing experimental checkpoint: recover the checkpoint and prove provenance if it is worth promoting; otherwise retire or rewrite this config.",
+      "artifact": {
+        "exists": false,
+        "sha256": null,
+        "size_bytes": null,
+        "source_path": "output/models/sac/sac_gate_socnav_struct_v1.zip"
+      },
+      "blocker_reason": "Experimental SAC checkpoint has no durable model registry entry.",
+      "claim_boundary": "not benchmark evidence until durable artifact exists",
+      "classification": "retire_candidate",
+      "config_path": "configs/baselines/sac_gate_socnav_struct.yaml",
+      "decision": "recover_or_retire",
+      "field": "model_path",
+      "local_references": [
+        {
+          "field": "model_path",
+          "value": "output/models/sac/sac_gate_socnav_struct_v1.zip"
+        }
+      ],
+      "promotion_plan": {
+        "claim_boundary": "not benchmark evidence until durable artifact exists",
+        "license_access_note": "Maintainer must confirm checkpoint license, access rights, source run, and durable publication target before promotion.",
+        "sha256": null,
+        "size_bytes": null,
+        "source_commit": null,
+        "source_config": "configs/baselines/sac_gate_socnav_struct.yaml",
+        "source_field": "model_path",
+        "source_path": "output/models/sac/sac_gate_socnav_struct_v1.zip",
+        "target_registry_id": "sac_gate_socnav_struct_local_artifact_candidate",
+        "training_config": null
+      },
+      "surface": "local_experimental",
+      "value": "output/models/sac/sac_gate_socnav_struct_v1.zip"
+    },
+    {
+      "action": "Experimental ego-frame SAC checkpoint has no durable model registry entry. Missing experimental checkpoint: recover the checkpoint and prove provenance if it is worth promoting; otherwise retire or rewrite this config.",
+      "artifact": {
+        "exists": false,
+        "sha256": null,
+        "size_bytes": null,
+        "source_path": "output/models/sac/sac_gate_socnav_struct_ego_v1.zip"
+      },
+      "blocker_reason": "Experimental ego-frame SAC checkpoint has no durable model registry entry.",
+      "claim_boundary": "not benchmark evidence until durable artifact exists",
+      "classification": "retire_candidate",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego.yaml",
+      "decision": "recover_or_retire",
+      "field": "model_path",
+      "local_references": [
+        {
+          "field": "model_path",
+          "value": "output/models/sac/sac_gate_socnav_struct_ego_v1.zip"
+        }
+      ],
+      "promotion_plan": {
+        "claim_boundary": "not benchmark evidence until durable artifact exists",
+        "license_access_note": "Maintainer must confirm checkpoint license, access rights, source run, and durable publication target before promotion.",
+        "sha256": null,
+        "size_bytes": null,
+        "source_commit": null,
+        "source_config": "configs/baselines/sac_gate_socnav_struct_ego.yaml",
+        "source_field": "model_path",
+        "source_path": "output/models/sac/sac_gate_socnav_struct_ego_v1.zip",
+        "target_registry_id": "sac_gate_socnav_struct_ego_local_artifact_candidate",
+        "training_config": null
+      },
+      "surface": "local_experimental",
+      "value": "output/models/sac/sac_gate_socnav_struct_ego_v1.zip"
+    },
+    {
+      "action": "Experimental multi-scenario SAC checkpoint has no durable model registry entry. Missing experimental checkpoint: recover the checkpoint and prove provenance if it is worth promoting; otherwise retire or rewrite this config.",
+      "artifact": {
+        "exists": false,
+        "sha256": null,
+        "size_bytes": null,
+        "source_path": "output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip"
+      },
+      "blocker_reason": "Experimental multi-scenario SAC checkpoint has no durable model registry entry.",
+      "claim_boundary": "not benchmark evidence until durable artifact exists",
+      "classification": "retire_candidate",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego_multi.yaml",
+      "decision": "recover_or_retire",
+      "field": "model_path",
+      "local_references": [
+        {
+          "field": "model_path",
+          "value": "output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip"
+        }
+      ],
+      "promotion_plan": {
+        "claim_boundary": "not benchmark evidence until durable artifact exists",
+        "license_access_note": "Maintainer must confirm checkpoint license, access rights, source run, and durable publication target before promotion.",
+        "sha256": null,
+        "size_bytes": null,
+        "source_commit": null,
+        "source_config": "configs/baselines/sac_gate_socnav_struct_ego_multi.yaml",
+        "source_field": "model_path",
+        "source_path": "output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip",
+        "target_registry_id": "sac_gate_socnav_struct_ego_multi_local_artifact_candidate",
+        "training_config": null
+      },
+      "surface": "local_experimental",
+      "value": "output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip"
+    },
+    {
+      "action": "Experimental safety-shaped SAC checkpoint has no durable model registry entry. Missing experimental checkpoint: recover the checkpoint and prove provenance if it is worth promoting; otherwise retire or rewrite this config.",
+      "artifact": {
+        "exists": false,
+        "sha256": null,
+        "size_bytes": null,
+        "source_path": "output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip"
+      },
+      "blocker_reason": "Experimental safety-shaped SAC checkpoint has no durable model registry entry.",
+      "claim_boundary": "not benchmark evidence until durable artifact exists",
+      "classification": "retire_candidate",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego_safe.yaml",
+      "decision": "recover_or_retire",
+      "field": "model_path",
+      "local_references": [
+        {
+          "field": "model_path",
+          "value": "output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip"
+        }
+      ],
+      "promotion_plan": {
+        "claim_boundary": "not benchmark evidence until durable artifact exists",
+        "license_access_note": "Maintainer must confirm checkpoint license, access rights, source run, and durable publication target before promotion.",
+        "sha256": null,
+        "size_bytes": null,
+        "source_commit": null,
+        "source_config": "configs/baselines/sac_gate_socnav_struct_ego_safe.yaml",
+        "source_field": "model_path",
+        "source_path": "output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip",
+        "target_registry_id": "sac_gate_socnav_struct_ego_safe_local_artifact_candidate",
+        "training_config": null
+      },
+      "surface": "local_experimental",
+      "value": "output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip"
+    },
+    {
+      "action": "DRL-VO default checkpoint is source-side/local-only until artifact promotion. Missing checkpoint: recover the checkpoint from a durable source or retire this config; do not use it as benchmark evidence.",
+      "artifact": {
+        "exists": false,
+        "sha256": null,
+        "size_bytes": null,
+        "source_path": "output/model_cache/drl_vo_default.pt"
+      },
+      "blocker_reason": "DRL-VO default checkpoint is source-side/local-only until artifact promotion.",
+      "claim_boundary": "not benchmark evidence until durable artifact exists",
+      "classification": "missing",
+      "config_path": "configs/baselines/drl_vo_default.yaml",
+      "decision": "recover_before_promotion",
+      "field": "model_path",
+      "local_references": [
+        {
+          "field": "model_path",
+          "value": "output/model_cache/drl_vo_default.pt"
+        }
+      ],
+      "promotion_plan": {
+        "claim_boundary": "not benchmark evidence until durable artifact exists",
+        "license_access_note": "Maintainer must confirm checkpoint license, access rights, source run, and durable publication target before promotion.",
+        "sha256": null,
+        "size_bytes": null,
+        "source_commit": null,
+        "source_config": "configs/baselines/drl_vo_default.yaml",
+        "source_field": "model_path",
+        "source_path": "output/model_cache/drl_vo_default.pt",
+        "target_registry_id": "drl_vo_default_local_artifact_candidate",
+        "training_config": null
+      },
+      "surface": "local_experimental",
+      "value": "output/model_cache/drl_vo_default.pt"
+    }
+  ],
+  "schema_version": "robot-sf-model-artifact-promotion-plan.v1"
+}

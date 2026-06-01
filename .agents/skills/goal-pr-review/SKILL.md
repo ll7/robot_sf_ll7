@@ -114,6 +114,8 @@ Apply minimum tier by change surface:
 - scope matches contract and tests and CI proof are current for reviewed SHA,
 - unresolved review threads closed via GitHub review-thread resolution,
 - artifacts from `output/` are durably represented or explicitly excluded,
+- evidence-producing PRs complete the `Downstream Propagation` section or give an explicit
+  not-applicable rationale,
 - benchmark evidence no longer depends on fallback/degraded execution.
 
 If one condition fails, withhold label and emit a blocker comment/follow-up.

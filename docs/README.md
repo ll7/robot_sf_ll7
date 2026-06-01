@@ -102,6 +102,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
 * **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for SDD, SocNavBench, and AMV calibration-source assets
 * **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
+* **[Backend Adapter Contract](./context/issue_2013_backend_adapter_contract.md)** - Required adapter fields, fail-closed behavior, and claim boundaries for alternate simulator backend integration
 * **[Context Notes Workflow](./context/README.md)** - Canonical rules for linked Markdown handoff notes, note updates vs new notes, stale-note handling, and discoverability
 * **[Planner Contribution Guide](./contributing_planner.md)** - Minimum path for adding a planner with adapter/protocol metadata, config-first invocation, smoke proof, registry status, and benchmark boundaries
 * **[Planner Zoo](./planner_zoo/index.md)** - User-facing index of runnable, diagnostic-only, learned-policy, monitor-only, and blocked planner rows from the policy-search registries

@@ -203,15 +203,28 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     },
     "ppo": {
         "default_mode": "sensor_fusion_state",
-        "supported_modes": ("sensor_fusion_state",),
+        "supported_modes": ("sensor_fusion_state", "socnav_state"),
         "inputs": ("robot_state", "goal", "lidar_rays", "history"),
-        "notes": "PPO checkpoint inference uses the configured sensor-fusion observation stack.",
+        "notes": (
+            "PPO checkpoint inference uses sensor-fusion by default; BC/materialized "
+            "checkpoints may opt into the SocNav structured observation stack they were "
+            "trained with."
+        ),
     },
     "guarded_ppo": {
         "default_mode": "sensor_fusion_state",
-        "supported_modes": ("sensor_fusion_state",),
-        "inputs": ("robot_state", "goal", "lidar_rays", "history", "safety_guard"),
-        "notes": "Guarded PPO uses sensor-fusion policy inputs plus a local safety guard.",
+        "supported_modes": ("sensor_fusion_state", "socnav_state"),
+        "inputs": (
+            "robot_state",
+            "goal",
+            "lidar_rays",
+            "history",
+            "safety_guard",
+        ),
+        "notes": (
+            "Guarded PPO uses sensor-fusion policy inputs plus a local safety guard by "
+            "default; materialized BC checkpoints may request SocNav structured inputs."
+        ),
     },
     "crowdnav_height": {
         "default_mode": "lidar_human_state",

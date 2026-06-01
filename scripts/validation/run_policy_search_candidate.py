@@ -394,6 +394,16 @@ def _stage_synthetic_actuation_profile(
     return synthetic_actuation_profile
 
 
+def _candidate_observation_override(algo_cfg: Mapping[str, Any], key: str) -> str | None:
+    """Return a non-empty candidate observation override, if configured."""
+
+    raw = algo_cfg.get(key)
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    return value or None
+
+
 def _load_records(path: Path) -> list[dict[str, Any]]:
     """Load policy-search episode records from JSONL.
 
@@ -579,6 +589,8 @@ def _run_stage_eval(  # noqa: PLR0913
         workers=int(workers),
         resume=False,
         benchmark_profile=str(benchmark_profile),
+        observation_mode=_candidate_observation_override(algo_cfg, "observation_mode"),
+        observation_level=_candidate_observation_override(algo_cfg, "observation_level"),
         synthetic_actuation_profile=synthetic_actuation_profile,
     )
     missing_jsonl = not jsonl_path.exists()

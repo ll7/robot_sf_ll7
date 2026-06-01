@@ -633,6 +633,35 @@ skills:
     output_schema: issue_to_pr_summary.v1
     aliases:
     - issue-queue-runner
+  goal-slurm-experiment:
+    description: Keep one skill-owned Robot SF learning or training SLURM job active by selecting the
+      best current experiment candidate, closing implementation gaps through an issue-to-PR workflow,
+      and submitting the validated job from its owning worktree.
+    category: research-iteration
+    kind: orchestrator
+    phase: implementation
+    requires_write: true
+    requires_slurm: true
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: true
+      github_project: true
+      github_pr: true
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - slurm
+    - uv
+    delegates_to:
+    - experiment-context
+    - goal-issue-implementation
+    - slurm-campaign-submit
+    - artifact-provenance
+    - context-note-maintainer
+    output_schema: skill_run_summary.v1
+    aliases: []
   goal-pr-review:
     description: Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates
       proof, resolves review threads, and applies merge-ready; not for merging.

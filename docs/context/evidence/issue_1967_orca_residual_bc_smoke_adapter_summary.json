@@ -1,0 +1,72 @@
+{
+  "schema_version": "robot-sf-evidence-summary.v1",
+  "issue": 1967,
+  "parent_issue": 1475,
+  "generated_at_utc": "2026-06-01T04:37:08Z",
+  "commit_under_test": "worktree-uncommitted-after-2469d1d0f5adf0d9a4afc95c40b483c6f2855c1f",
+  "claim_boundary": "Adapter/observation-contract repair only. This is not evidence that the ORCA-residual BC policy is useful.",
+  "change_summary": [
+    "Guarded PPO/BC candidate smoke now forwards candidate observation_mode=socnav_state to the benchmark runner.",
+    "Policy-search candidate env_overrides now restore the predictive-foresight observation fields used by the BC dataset and checkpoint.",
+    "PPOPlanner validates flat-Box checkpoint compatibility during env binding and flattens runtime Dict observations through the bound observation_space."
+  ],
+  "pre_fix_fail_closed_runs": [
+    {
+      "run_dir": "output/slurm/issue1475-orca-residual-bc-local-1967-20260601T042948Z",
+      "summary_path": "output/slurm/issue1475-orca-residual-bc-local-1967-20260601T042948Z/policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/summary.json",
+      "decision": "revise",
+      "episodes": 0,
+      "availability_reason": "Runtime Dict observation space does not flatten to checkpoint Box: runtime flatdim=831, checkpoint shape=(77095,)."
+    },
+    {
+      "run_dir": "output/slurm/issue1475-orca-residual-bc-local-1967-rerun-20260601T043407Z",
+      "summary_path": "output/slurm/issue1475-orca-residual-bc-local-1967-rerun-20260601T043407Z/policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/summary.json",
+      "decision": "revise",
+      "episodes": 0,
+      "availability_reason": "Runtime Dict observation space does not flatten to checkpoint Box: runtime flatdim=77088, checkpoint shape=(77095,)."
+    }
+  ],
+  "successful_adapter_smoke": {
+    "run_dir": "output/slurm/issue1475-orca-residual-bc-local-1967-rerun2-20260601T043657Z",
+    "materialized_manifest_path": "output/slurm/issue1475-orca-residual-bc-local-1967-rerun2-20260601T043657Z/issue1475_materialized_candidate/materialized_candidate_manifest.json",
+    "summary_path": "output/slurm/issue1475-orca-residual-bc-local-1967-rerun2-20260601T043657Z/policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/summary.json",
+    "jsonl_path": "output/slurm/issue1475-orca-residual-bc-local-1967-rerun2-20260601T043657Z/policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/smoke__orca_residual_guarded_ppo_v0.jsonl",
+    "candidate_runner_decision": "pass",
+    "episodes": 1,
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "termination_reason_counts": {
+      "max_steps": 1
+    },
+    "row_summary": {
+      "scenario_id": "planner_sanity_simple",
+      "seed": 111,
+      "status": "failure",
+      "termination_reason": "max_steps",
+      "steps": 80,
+      "observation_mode": "socnav_state",
+      "observation_level": "tracked_agents_no_noise",
+      "success": false,
+      "collisions": 0,
+      "near_misses": 0
+    },
+    "issue_1475_wrapper_gate": {
+      "status": "revise",
+      "reason": "The strict #1475 wrapper gate requires success_rate=1.0 and collision_rate=0.0 before nominal escalation; this smoke produced a usable row but success_rate=0.0.",
+      "nominal_submitted": false
+    }
+  },
+  "checksums": {
+    "summary_sha256": "b74f88762ad8dd1e79e01171eb98442be44a0d9a14306c85763dcd26734a2606",
+    "jsonl_sha256": "61da7f9d8aceb13bd0482d59fb01c94e6b879d1e4ce45dacbbaeb4dc59deb2be",
+    "materialized_manifest_sha256": "35d3a7a36694cadbdfd836168bc00d4a89015c68ef314b9e1a70d1f99e0eddc2",
+    "policy_checkpoint_sha256": "bc121479723da9c47909d4e2fa0555d7002b6f4d4a0ec143d84b72f1c7c86708"
+  },
+  "validation_commands": [
+    "uv run ruff check robot_sf/benchmark/algorithm_metadata.py scripts/validation/run_policy_search_candidate.py tests/benchmark/test_algorithm_metadata_contract.py tests/validation/test_run_policy_search_candidate.py robot_sf/baselines/ppo.py robot_sf/benchmark/map_runner.py tests/baselines/test_ppo_planner.py tests/test_map_runner_ppo.py",
+    "PYTHONPATH=$PWD uv run pytest tests/baselines/test_ppo_planner.py tests/test_map_runner_ppo.py tests/benchmark/test_algorithm_metadata_contract.py tests/validation/test_run_policy_search_candidate.py tests/tools/test_materialize_orca_residual_candidate.py -q",
+    "uv run python scripts/tools/materialize_orca_residual_candidate.py --policy-model-id issue_1428_orca_residual_bc_policy_smoke --policy-model-path output/slurm/issue1475-orca-residual-bc-local-1967-20260601T042948Z/benchmarks/expert_policies/issue_1428_orca_residual_bc_policy_smoke.zip --candidate orca_residual_guarded_ppo_v0 --output-dir output/slurm/issue1475-orca-residual-bc-local-1967-rerun2-20260601T043657Z/issue1475_materialized_candidate --json",
+    "uv run python scripts/validation/run_policy_search_candidate.py --candidate orca_residual_guarded_ppo_v0 --candidate-registry output/slurm/issue1475-orca-residual-bc-local-1967-rerun2-20260601T043657Z/issue1475_materialized_candidate/candidate_registry.yaml --stage smoke --workers 1 --output-dir output/slurm/issue1475-orca-residual-bc-local-1967-rerun2-20260601T043657Z/policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke"
+  ]
+}

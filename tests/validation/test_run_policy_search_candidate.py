@@ -111,6 +111,26 @@ def test_checked_in_actuation_aware_candidate_uses_synthetic_amv_smoke_stage() -
     assert stage["paper_facing"] is False
 
 
+def test_orca_residual_guarded_candidate_requests_training_observation_contract() -> None:
+    """Materialized ORCA-residual BC smoke should use the SocNav contract it trains with."""
+    repo_root = Path(__file__).parents[2]
+
+    _entry, payload, config, config_path = load_candidate_definition(
+        repo_root / "docs/context/policy_search/candidate_registry.yaml",
+        "orca_residual_guarded_ppo_v0",
+    )
+
+    assert payload["algo"] == "guarded_ppo"
+    assert config["obs_mode"] == "dict"
+    assert config["observation_mode"] == "socnav_state"
+    assert (
+        config_path
+        == (
+            repo_root / "configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml"
+        ).resolve()
+    )
+
+
 def test_risk_surface_candidate_uses_smoke_progress_recovery_speed() -> None:
     """Risk-surface smoke candidate should opt into the 2 m/s local command envelope."""
     repo_root = Path(__file__).resolve().parents[2]
@@ -532,6 +552,39 @@ def test_run_stage_eval_records_missing_jsonl_as_fail_closed(
     assert summary["preflight"]["compatibility_status"] == "incompatible"
     assert summary["benchmark_availability"]["status"] == "not_available"
     assert decide_stage_status("smoke", {}, summary) == "revise"
+
+
+def test_run_stage_eval_passes_candidate_observation_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Candidate-level observation_mode should reach the benchmark runner."""
+
+    def fake_run_map_batch(*args: object, **kwargs: object) -> dict[str, object]:
+        jsonl_path = Path(args[1])
+        jsonl_path.write_text(
+            '{"scenario_id":"planner_sanity_simple","seed":111,"metrics":{"success":1.0}}\n',
+            encoding="utf-8",
+        )
+        assert kwargs["observation_mode"] == "socnav_state"
+        assert kwargs["observation_level"] is None
+        return {"written": 1, "successful_jobs": 1, "failed_jobs": 0}
+
+    monkeypatch.setattr(candidate_runner, "run_map_batch", fake_run_map_batch)
+
+    result = candidate_runner._run_stage_eval(
+        scenarios_or_path=[{"name": "planner_sanity_simple", "map_file": "unused.svg"}],
+        algo="guarded_ppo",
+        algo_cfg={"model_path": "/tmp/model.zip", "observation_mode": "socnav_state"},
+        out_dir=tmp_path,
+        tag="smoke__cand",
+        horizon=1,
+        dt=0.1,
+        workers=1,
+        benchmark_profile="experimental",
+    )
+
+    assert result["summary"]["episodes"] == 1
 
 
 def test_annotate_initial_overlap_exclusions_requires_first_step_evidence() -> None:

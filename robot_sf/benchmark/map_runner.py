@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import time
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import fields
@@ -1921,6 +1922,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             return linear, angular
 
         _policy._planner_close = ppo_planner.close
+        ppo_bind_env = getattr(ppo_planner, "bind_env", None)
+        if callable(ppo_bind_env):
+            _policy._planner_bind_env = ppo_bind_env
         if "status" not in meta:
             meta["status"] = "ok"
         meta.setdefault("algorithm", "ppo")
@@ -2195,9 +2199,17 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 guard_close()
 
         _policy._planner_close = _close_guarded_ppo
+        ppo_bind_env = getattr(ppo_planner, "bind_env", None)
         guard_bind_env = getattr(guard_adapter, "bind_env", None)
-        if callable(guard_bind_env):
-            _policy._planner_bind_env = guard_bind_env
+        bind_hooks = [hook for hook in (ppo_bind_env, guard_bind_env) if callable(hook)]
+        if bind_hooks:
+
+            def _bind_guarded_ppo_env(env: Any) -> None:
+                """Bind PPO runtime observation space and guard map context."""
+                for hook in bind_hooks:
+                    hook(env)
+
+            _policy._planner_bind_env = _bind_guarded_ppo_env
         meta.setdefault("algorithm", "guarded_ppo")
         meta.setdefault("status", "ok")
         meta.setdefault("config", algo_config)
@@ -2852,6 +2864,36 @@ def _apply_active_observation_mode_to_env_config(
     config.grid_config = None
 
 
+_POLICY_ENV_OBSERVATION_OVERRIDE_KEYS = frozenset(
+    {
+        "predictive_foresight_enabled",
+        "predictive_foresight_model_id",
+        "predictive_foresight_checkpoint_path",
+        "predictive_foresight_device",
+        "predictive_foresight_max_agents",
+        "predictive_foresight_horizon_steps",
+        "predictive_foresight_rollout_dt",
+        "predictive_foresight_ego_conditioning",
+        "predictive_foresight_near_distance",
+        "predictive_foresight_front_corridor_length",
+        "predictive_foresight_front_corridor_half_width",
+    }
+)
+
+
+def _apply_policy_env_observation_overrides(
+    config: RobotSimulationConfig,
+    policy_cfg: Mapping[str, Any],
+) -> None:
+    """Apply candidate observation-contract env overrides before env construction."""
+
+    raw_overrides = policy_cfg.get("env_overrides")
+    overrides = raw_overrides if isinstance(raw_overrides, Mapping) else {}
+    for key in _POLICY_ENV_OBSERVATION_OVERRIDE_KEYS:
+        if key in overrides:
+            setattr(config, key, overrides[key])
+
+
 def _validate_sensor_fusion_adapter_config(
     *,
     algo: str,
@@ -3245,6 +3287,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         config,
         active_observation_mode=active_observation_mode,
     )
+    _apply_policy_env_observation_overrides(config, policy_cfg)
     _validate_sensor_fusion_adapter_config(
         algo=algo,
         active_observation_mode=active_observation_mode,

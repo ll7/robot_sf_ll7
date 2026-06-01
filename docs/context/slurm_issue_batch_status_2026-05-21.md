@@ -173,10 +173,14 @@ slurm_issue_status:
   notes_non_evidence: >
     Failed warm-start probe 12673 showed the durable BR06 v3 checkpoint observation space no longer
     matches the current training env. Active retrain job 12674 intentionally starts from the current
-    env with exactly the collision penalty repair delta. Health check at 2026-06-01T07:33+02:00
-    showed RUNNING on a30, W&B run d8w8uykh, CUDA selected, num_envs=10, and 819200/5000000
+    env with exactly the collision penalty repair delta. Health check at 2026-06-01T08:07+02:00
+    showed RUNNING on a30, W&B run d8w8uykh, CUDA selected, num_envs=10, and 1208320/5000000
     timesteps reached. The first 500k evaluation gate emitted success_rate=0.36,
     collision_rate=0.61, snqi=-1.58, path_efficiency=0.782, and eval_episode_return=-0.437;
+    the 1m evaluation gate emitted success_rate=0.66, collision_rate=0.33, snqi=-0.657,
+    path_efficiency=0.817, and eval_episode_return=16.2. Several PPO update blocks after 800k
+    reported early stopping from max KL, so the training dynamics should be reviewed after the full
+    run rather than accepted from interim improvement alone.
     this is an interim training milestone only, not benchmark or guarded-policy evidence.
     Guard-saturated gains must not be reported as raw PPO improvement.
 ```

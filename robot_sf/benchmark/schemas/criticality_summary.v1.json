@@ -1,0 +1,378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/criticality_summary.v1.json",
+  "title": "RobotSF Criticality Summary (v1)",
+  "description": "Compact reviewed summary for #1610 perturbation-family criticality pilots. Requires explicit row status counts for completed, invalid, fallback, degraded, missing, and failed rows. Fallback/degraded/invalid/missing/failed rows are tracked separately from completed-pair effect means.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest",
+    "manifest_id",
+    "planners",
+    "horizon",
+    "dt",
+    "seed_limit",
+    "materialization",
+    "planner_runs",
+    "pair_summary",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "criticality_summary.v1"
+    },
+    "manifest": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repository-relative path to the source perturbation manifest YAML."
+    },
+    "manifest_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$",
+      "description": "Manifest identifier."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional human-readable description for the criticality run."
+    },
+    "planners": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Planner labels used in this criticality pilot."
+    },
+    "horizon": {
+      "type": "integer",
+      "exclusiveMinimum": 0
+    },
+    "dt": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "seed_limit": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "description": "Positive cap on seeds per variant."
+    },
+    "materialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "manifest_id",
+        "included_variants",
+        "excluded_variants",
+        "variant_count",
+        "local_artifact_boundary"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "included_variants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "excluded_variants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "variant_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "local_artifact_boundary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "planner_runs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "algo",
+          "source",
+          "episodes"
+        ],
+        "properties": {
+          "algo": {
+            "type": "string",
+            "minLength": 1
+          },
+          "algo_config_path": {
+            "type": ["string", "null"]
+          },
+          "source": {
+            "enum": [
+              "raw_algo",
+              "policy_search_candidate"
+            ]
+          },
+          "episodes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "pair_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pairs",
+        "row_status_counts",
+        "mean_deltas_completed_pairs"
+      ],
+      "properties": {
+        "pairs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of pair rows."
+        },
+        "row_status_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "completed",
+            "invalid",
+            "fallback",
+            "degraded",
+            "missing",
+            "failed"
+          ],
+          "properties": {
+            "completed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "invalid": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fallback": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "degraded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "missing": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "description": "Per-perturbed-row status counts across all plans, scenarios, and seeds. Non-completed rows are tracked separately and excluded from mean_deltas_completed_pairs."
+        },
+        "mean_deltas_completed_pairs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Mean metric deltas over completed pair rows only. Non-completed rows (invalid, fallback, degraded, missing, failed) are excluded."
+        },
+        "by_planner": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/grouped_pair_summary"
+          }
+        },
+        "by_source_scenario": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/grouped_pair_summary"
+          }
+        },
+        "by_perturbation_family": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/grouped_pair_summary"
+          }
+        }
+      }
+    },
+    "pair_rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pair_row"
+      }
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Explicit evidence/claim boundary for the criticality summary."
+    }
+  },
+  "$defs": {
+    "pair_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planner",
+        "source_scenario_id",
+        "perturbed_variant_id",
+        "perturbed_family",
+        "seed",
+        "pair_status",
+        "noop_status",
+        "perturbed_status"
+      ],
+      "properties": {
+        "planner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_scenario_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "noop_variant_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "perturbed_variant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "perturbed_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "pair_status": {
+          "enum": [
+            "completed",
+            "excluded",
+            "missing_noop"
+          ]
+        },
+        "noop_status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "perturbed_status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "success_delta": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "collision_delta": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "timeout_delta": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min_distance_delta": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "noop": {
+          "type": "object"
+        },
+        "perturbed": {
+          "type": "object"
+        }
+      }
+    },
+    "grouped_pair_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pairs",
+        "row_status_counts",
+        "mean_deltas_completed_pairs"
+      ],
+      "properties": {
+        "pairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "row_status_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "completed",
+            "invalid",
+            "fallback",
+            "degraded",
+            "missing",
+            "failed"
+          ],
+          "properties": {
+            "completed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "invalid": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fallback": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "degraded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "missing": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "mean_deltas_completed_pairs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

@@ -677,7 +677,7 @@ claims."
 
 ### Evidence Links
 
-- Parent perturbation-criticality lane: [issue #1610](https://github.com/ll7/robot_sf_ll7/issues/1610)
+- Parent perturbation-criticality lane: [Issue #1610](https://github.com/ll7/robot_sf_ll7/issues/1610)
 - Synthesis checkpoint:
   [issue_1965_perturbation_criticality_synthesis.md](issue_1965_perturbation_criticality_synthesis.md)
 - Robot route-offset pilot:
@@ -714,7 +714,7 @@ benchmark-strength evidence)
 
 ### Key Results
 
-The current #1610 mechanism map is useful for diagnostic routing, not paper-facing claims:
+The current Issue #1610 mechanism map is useful for diagnostic routing, not paper-facing claims:
 
 | Mechanism / Family | Current Finding | Strength | Limitation |
 | --- | --- | --- | --- |
@@ -726,10 +726,10 @@ The current #1610 mechanism map is useful for diagnostic routing, not paper-faci
 | `pedestrian_density_offset` | Low-sensitivity in the current tiny smoke. | smoke-level evidence | Density-to-count behavior is route/runtime dependent. |
 | `single_pedestrian_trajectory_waypoint_offset` | Tiny smoke completed with small positive clearance delta. | smoke-level evidence | One planner, two seeds; not enough for mechanism conclusions. |
 
-### Claims Strengthened By #1965
+### Claims Strengthened by Issue #1965
 
-- The #1610 lane now has a reusable mechanism vocabulary for deciding whether to stop, consolidate,
-  or run a controlled follow-up slice.
+- The Issue #1610 lane now has a reusable mechanism vocabulary for deciding whether to stop,
+  consolidate, or run a controlled follow-up slice.
 - Start-delay and speed offsets in `francis2023_intersection_wait` are the clearest local
   phase/speed diagnostic signals.
 - Small robot-route offsets are a low-sensitivity diagnostic on the tested slice and should not be
@@ -737,7 +737,7 @@ The current #1610 mechanism map is useful for diagnostic routing, not paper-faci
 - Wait-duration and density pilots should be preserved as low-sensitivity or smoke-only evidence
   rather than treated as failed benchmark rows.
 
-### Claims That Remain Diagnostic-Only Or Blocked
+### Claims That Remain Diagnostic-Only or Blocked
 
 - None of the current perturbation-family findings are benchmark-strength planner performance
   evidence.
@@ -778,8 +778,8 @@ tier upgrade.
 
 ### Verdict
 
-`diagnostic_only` — #1965 strengthens mechanism routing and claim hygiene, but it does not create
-benchmark-strength or paper-facing evidence.
+`diagnostic_only` — Issue #1965 strengthens mechanism routing and claim hygiene, but it does not
+create benchmark-strength or paper-facing evidence.
 
 ---
 

@@ -46,6 +46,7 @@ Select the smallest useful repo-local skill stack when the user request is ambig
 | Open PR | `gh-pr-opener` | `artifact-provenance` |
 | Verify implementation | `implementation-verification` | `pr-ready-check` |
 | Branch cleanup | `clean-up` | `pr-ready-check` |
+| Worktree setup or cleanup | `skill-picker` | `gh-issue-autopilot`, `clean-up`; see `AGENTS.md` |
 | Benchmark-sensitive review | `review-benchmark-change` | `benchmark-row-status` |
 | Camera-ready benchmark audit | `analyze-camera-ready-benchmark` | `artifact-provenance` |
 | Submit training or benchmark job | `slurm-campaign-submit` | `artifact-provenance` |
@@ -68,7 +69,9 @@ Select the smallest useful repo-local skill stack when the user request is ambig
 - Do not treat skill-picker as mandatory pre-step for explicit single-skill requests.
 - Avoid proposing overly broad bundles that overlap the same phase.
 - Use exact repository-specific terminology from AGENTS/skills docs.
-- Match mutating skills to the user's permission and the current worktree safety constraints.
+- Match mutating skills to the user's permission and the current worktree safety constraints. For
+  worktree creation or cleanup, route to the existing issue/cleanup skill and the `AGENTS.md`
+  worktree lifecycle sections instead of inventing a new skill.
 
 ## Output
 

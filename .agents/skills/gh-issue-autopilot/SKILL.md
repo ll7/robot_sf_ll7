@@ -66,7 +66,9 @@ unless the user explicitly chooses a stacked-PR route.
    - set status back to `Tracked`,
    - stop with blocker.
 5. Move the issue to `In progress` (optionally normalize priority).
-6. Create issue branch (`gh issue develop` preferred; fallback to git branch).
+6. Create the issue branch in a linked worktree for non-trivial implementation. Prefer the
+   `AGENTS.md` "Fresh Worktree Bootstrap" location, naming, machine-context symlink, and branch
+   freshness rules; use an in-place branch only for tiny or explicitly requested main-checkout work.
 7. Implement inside accepted scope.
 8. Run validation gate and rerun on failures only when fixable.
 9. Commit with conventional message; if long-running benchmark evidence appears, classify artifacts.
@@ -80,6 +82,8 @@ unless the user explicitly chooses a stacked-PR route.
 
 - One active issue branch by default.
 - Keep branch names stable and issue-linked.
+- Before tearing down a worktree, follow `AGENTS.md` "Worktree Teardown And Preservation" so tracked,
+  untracked, and ignored-but-important local changes are preserved or explicitly dismissed.
 - Do not force-push, rewrite branch history, or merge unrelated issues into this branch.
 - If status/branch drift is detected mid-flow, pause and re-check before continuing.
 

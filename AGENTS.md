@@ -127,6 +127,21 @@ When working in a linked Git worktree, detect bootstrap state before running exp
 - Do not create divergent per-worktree machine context files unless the worktree really needs
   machine-specific behavior that should not be inherited from the main checkout.
 
+## Worktree Teardown And Preservation
+
+Before removing or pruning worktrees, enumerate them with `git worktree list --porcelain` from the
+main checkout. For each candidate, inspect `git -C <path> status --short --branch`; when generated
+outputs may matter, also inspect ignored output paths such as
+`git -C <path> status --ignored --short -uall output`.
+
+- Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
+  by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an
+  explicit handoff.
+- Do not remove a dirty worktree or a worktree with unpushed commits unless the preservation record
+  says exactly what was kept or why nothing needed preservation.
+- Prefer `git worktree remove <path>` for clean worktrees and `git worktree prune` only after
+  verifying stale administrative entries no longer point at useful local state.
+
 ## Knowledge Capture & Context Notes
 
 Treat `docs/context/` as the repository's Markdown knowledge base for issue execution history and

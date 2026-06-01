@@ -269,6 +269,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue #1434 Stress/Uncertainty Coverage Schema v1](./context/issue_1434_stress_uncertainty_coverage_schema.md)** - `stress_uncertainty_coverage.v1` field contract, statistical summary tiers, coverage axes, interpretation boundaries, and fail-closed consumer rules for benchmark reports
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow
+* **[Artifact Catalog v1](./artifact_catalog.md)** - Stable semantic IDs, checksums, generation commands, and claim boundaries for reusable figures and tables
 * **[Multi-AMV Benchmark First Slice](./multi_amv_benchmark.md)** - Minimal multi-robot scenario surface, validation smoke, and inter-robot metric block
 * **[Issue #1128 Multi-AMV Episode Extension](./context/issue_1128_multi_amv_episode_extension.md)** - Additive multi-AMV episode block, canonical `metrics.inter_robot` JSONL/report output, and fail-closed validation notes
 * **[Issue #1168 Multi-AMV Planner Support Classification](./context/issue_1168_multi_amv_planner_support.md)** - Planner-family support inventory, fail-closed multi-AMV preflight gate, and the boundary between smoke control and real multi-robot planner support
@@ -472,7 +473,7 @@ The benchmark layer provides:
 
 #### Figures naming and outputs
 
-See `docs/dev/issues/figures-naming/design.md` for the canonical figure folder naming scheme and migration plan. A small tracker lives at `docs/dev/issues/figures-naming/todo.md` .
+See `docs/dev/issues/figures-naming/design.md` for the canonical figure folder naming scheme and migration plan. Use `docs/artifact_catalog.md` when a generated figure or table needs a durable semantic ID that survives path regeneration. A small tracker lives at `docs/dev/issues/figures-naming/todo.md` .
 
 #### LaTeX Table Embedding (SNQI / Benchmark Tables)
 

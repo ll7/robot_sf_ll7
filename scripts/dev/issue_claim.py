@@ -108,8 +108,15 @@ def _status_from_ls_remote(
             "command": list(result.command),
         }
 
-    line = (result.stdout or "").strip()
-    if not line:
+    target_ref = claim_ref(issue_number)
+    sha = None
+    for line in (result.stdout or "").strip().splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] == target_ref:
+            sha = parts[0]
+            break
+
+    if sha is None:
         return {
             "schema": "issue_claim.v1",
             "action": "status",
@@ -122,7 +129,6 @@ def _status_from_ls_remote(
             "command": list(result.command),
         }
 
-    sha = line.split()[0]
     return {
         "schema": "issue_claim.v1",
         "action": "status",
@@ -193,6 +199,22 @@ def acquire_issue(issue_number: int, *, repo: str, remote: str, source_ref: str)
 
 def release_issue(issue_number: int, *, remote: str) -> dict[str, Any]:
     """Delete the remote claim ref."""
+    status = status_issue(issue_number, remote=remote)
+    if status["ok"] and not status["claimed"]:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": True,
+            "claimed": False,
+            "issue": issue_number,
+            "remote": remote,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "Ref does not exist, nothing to release.",
+            "stderr": "",
+            "error": None,
+        }
+
     result = _run(build_release_command(issue_number, remote=remote))
     ok = result.returncode == 0
     return {

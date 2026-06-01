@@ -6,6 +6,7 @@ import pytest
 
 from scripts.validation.run_scenario_perturbation_trace_response import (
     TraceRun,
+    _select_variant_pair,
     build_trace_pair_summary,
     closest_approach_slice,
     summarize_trace_pairs,
@@ -24,6 +25,20 @@ def _frame(step: int, *, distance: float, clearance: float, goal_distance: float
             "pedestrian_position": [float(step), 0.0],
             "center_distance_m": distance,
             "clearance_m": clearance,
+        },
+    }
+
+
+def _scenario(source: str, family: str, variant: str) -> dict:
+    """Return a compact materialized perturbation scenario payload."""
+    return {
+        "scenario_id": variant,
+        "metadata": {
+            "scenario_perturbation": {
+                "source_scenario_id": source,
+                "family": family,
+                "variant_id": variant,
+            }
         },
     }
 
@@ -111,3 +126,65 @@ def test_summarize_trace_pairs_groups_by_planner_without_recursive_summary() -> 
     )
     assert summary["by_planner"]["goal"]["pairs"] == 1
     assert "by_planner" not in summary["by_planner"]["goal"]
+
+
+def test_select_variant_pair_defaults_to_first_family_match() -> None:
+    """Trace selection should preserve the legacy first-family-match behavior."""
+    scenarios = [
+        _scenario("intersection", "noop", "intersection_noop"),
+        _scenario("intersection", "single_pedestrian_speed_offset", "intersection_speed_m025"),
+        _scenario("intersection", "single_pedestrian_speed_offset", "intersection_speed_p050"),
+    ]
+
+    noop, perturbed = _select_variant_pair(
+        scenarios,
+        source_scenario_id="intersection",
+        perturbed_family="single_pedestrian_speed_offset",
+    )
+
+    assert noop["scenario_id"] == "intersection_noop"
+    assert perturbed["scenario_id"] == "intersection_speed_m025"
+
+
+def test_select_variant_pair_can_target_specific_perturbed_variant() -> None:
+    """An explicit variant id should select that row within the requested source and family."""
+    scenarios = [
+        _scenario("intersection", "noop", "intersection_noop"),
+        _scenario("intersection", "single_pedestrian_speed_offset", "intersection_speed_m025"),
+        _scenario("intersection", "single_pedestrian_speed_offset", "intersection_speed_p050"),
+        _scenario(
+            "intersection", "single_pedestrian_start_delay_offset", "intersection_delay_p050"
+        ),
+        _scenario("corridor", "single_pedestrian_speed_offset", "corridor_speed_p050"),
+    ]
+
+    noop, perturbed = _select_variant_pair(
+        scenarios,
+        source_scenario_id="intersection",
+        perturbed_family="single_pedestrian_speed_offset",
+        perturbed_variant_id="intersection_speed_p050",
+    )
+
+    assert noop["scenario_id"] == "intersection_noop"
+    assert perturbed["scenario_id"] == "intersection_speed_p050"
+
+
+def test_select_variant_pair_reports_missing_specific_variant_context() -> None:
+    """Missing targeted variants should identify the requested source, family, and variant id."""
+    scenarios = [
+        _scenario("intersection", "noop", "intersection_noop"),
+        _scenario("intersection", "single_pedestrian_speed_offset", "intersection_speed_m025"),
+    ]
+
+    with pytest.raises(ValueError) as excinfo:
+        _select_variant_pair(
+            scenarios,
+            source_scenario_id="intersection",
+            perturbed_family="single_pedestrian_speed_offset",
+            perturbed_variant_id="intersection_speed_p050",
+        )
+
+    message = str(excinfo.value)
+    assert "intersection" in message
+    assert "single_pedestrian_speed_offset" in message
+    assert "intersection_speed_p050" in message

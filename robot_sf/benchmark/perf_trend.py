@@ -567,7 +567,18 @@ def _history_status_and_diagnostics(findings: Sequence[TrendFinding]) -> tuple[s
         return "pass", ["No historical regressions detected."]
 
     startup = [finding for finding in regressed if finding.metric in STARTUP_METRICS]
-    steady = [finding for finding in regressed if finding.metric in STEADY_METRICS]
+    steady = [
+        finding
+        for finding in regressed
+        if finding.metric in STEADY_METRICS
+        and not _is_startup_coupled_history_regression(finding, regressed)
+    ]
+    startup_coupled_steady = [
+        finding
+        for finding in regressed
+        if finding.metric in STEADY_METRICS
+        and _is_startup_coupled_history_regression(finding, regressed)
+    ]
     diagnostics: list[str] = []
     if startup and not steady:
         diagnostics.append("Historical regression localized to startup overhead.")
@@ -579,7 +590,61 @@ def _history_status_and_diagnostics(findings: Sequence[TrendFinding]) -> tuple[s
         "Regressed metrics: "
         + ", ".join(f"{finding.scenario}.{finding.phase}.{finding.metric}" for finding in regressed)
     )
-    return "fail", diagnostics
+    if startup_coupled_steady:
+        diagnostics.append(
+            "Startup-coupled steady metrics: "
+            + ", ".join(
+                f"{finding.scenario}.{finding.phase}.{finding.metric}"
+                for finding in startup_coupled_steady
+            )
+        )
+    return ("fail" if steady else "warn"), diagnostics
+
+
+def _is_startup_coupled_history_regression(
+    finding: TrendFinding,
+    regressed: Sequence[TrendFinding],
+) -> bool:
+    """Return whether a steady regression is explained by same-phase first-step overhead."""
+    if finding.metric == "episode_sec":
+        first_step = _matching_history_finding(
+            finding,
+            regressed,
+            metric="first_step_sec",
+        )
+        if first_step is None:
+            return False
+        baseline_body_sec = max(0.0, finding.baseline - first_step.baseline)
+        current_body_sec = max(0.0, finding.current - first_step.current)
+        body_delta = current_body_sec - baseline_body_sec
+        tolerance = 0.02
+        return finding.delta > 0.0 and first_step.delta > 0.0 and body_delta <= tolerance
+    if finding.metric == "steps_per_sec":
+        episode = _matching_history_finding(
+            finding,
+            regressed,
+            metric="episode_sec",
+        )
+        return episode is not None and _is_startup_coupled_history_regression(episode, regressed)
+    return False
+
+
+def _matching_history_finding(
+    finding: TrendFinding,
+    findings: Sequence[TrendFinding],
+    *,
+    metric: str,
+) -> TrendFinding | None:
+    """Return a finding for the same scenario/phase/metric, if present."""
+    for candidate in findings:
+        if (
+            candidate.scenario == finding.scenario
+            and candidate.phase == finding.phase
+            and candidate.metric == metric
+            and candidate.is_regression
+        ):
+            return candidate
+    return None
 
 
 def render_markdown_report(

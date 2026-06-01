@@ -89,6 +89,14 @@ entries:
     status: current
     freshness: maintained
     area: carla_external_sim
+  - path: docs/context/issue_2013_backend_adapter_contract.md
+    status: current
+    freshness: policy
+    area: carla_external_sim
+  - path: docs/context/issue_2014_simulator_backend_matrix.md
+    status: current
+    freshness: dated
+    area: carla_external_sim
   - path: docs/context/issue_2016_webots_gazebo_amv_parity_audit.md
     status: current
     freshness: dated

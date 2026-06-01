@@ -47,6 +47,7 @@ _LOCAL_OUTPUT_ROOT = _REPOSITORY_ROOT / "output"
 _SUCCESS_EVIDENCE_CANDIDATE = "eligible_success_evidence_candidate"
 _EXCLUDED_FROM_SUCCESS_EVIDENCE = "excluded_from_success_evidence"
 _STRESS_ONLY_NOT_SUCCESS_EVIDENCE = "stress_only_not_success_evidence"
+_DEFAULT_SINGLE_PEDESTRIAN_SPEED_M_S = 0.5
 
 
 @dataclass(frozen=True)
@@ -411,6 +412,7 @@ def _normalize_variant(variant: Any) -> Mapping[str, Any]:
         "robot_route_offset",
         "pedestrian_route_offset",
         "single_pedestrian_start_delay_offset",
+        "single_pedestrian_speed_offset",
     }:
         raise ValueError(f"unsupported perturbation family: {family}")
     return variant
@@ -448,6 +450,8 @@ def _validate_perturbation_bounds(
         raise ValueError(f"{family} variants require a parameters mapping")
     if family == "single_pedestrian_start_delay_offset":
         return _validate_start_delay_offset_bounds(variant, manifest=manifest)
+    if family == "single_pedestrian_speed_offset":
+        return _validate_single_pedestrian_speed_offset_bounds(variant, manifest=manifest)
 
     dx = _finite_float(parameters.get("dx_m", 0.0), field_name="parameters.dx_m")
     dy = _finite_float(parameters.get("dy_m", 0.0), field_name="parameters.dy_m")
@@ -478,6 +482,13 @@ def _validate_perturbation_bounds(
             f"{family} magnitude {magnitude:.6f} m exceeds variant max_magnitude_m {bound:.6f} m"
         ], summary
     return [], summary
+
+
+def _optional_positive_float(raw: Any, *, field_name: str) -> float | None:
+    """Return a positive float when present."""
+    if raw is None:
+        return None
+    return _positive_float(raw, field_name=field_name)
 
 
 def _validate_start_delay_offset_bounds(
@@ -523,6 +534,64 @@ def _validate_start_delay_offset_bounds(
     return [], summary
 
 
+def _validate_single_pedestrian_speed_offset_bounds(
+    variant: Mapping[str, Any],
+    *,
+    manifest: Mapping[str, Any],
+) -> tuple[list[str], dict[str, Any]]:
+    """Validate bounded single-pedestrian speed perturbations.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Fail-closed reasons and perturbation summary.
+    """
+    family = str(variant["family"])
+    parameters = variant.get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ValueError(f"{family} variants require a parameters mapping")
+    speed_delta_m_s = _finite_float(
+        parameters.get("speed_delta_m_s"),
+        field_name="parameters.speed_delta_m_s",
+    )
+    variant_max = _positive_float(
+        parameters.get("max_abs_speed_delta_m_s"),
+        field_name="parameters.max_abs_speed_delta_m_s",
+    )
+    manifest_max = _positive_float(
+        manifest["validity"].get("max_single_pedestrian_speed_delta_m_s"),
+        field_name="validity.max_single_pedestrian_speed_delta_m_s",
+    )
+    bound = min(variant_max, manifest_max)
+    manifest_speed_cap = _optional_positive_float(
+        manifest["validity"].get("max_single_pedestrian_speed_m_s"),
+        field_name="validity.max_single_pedestrian_speed_m_s",
+    )
+    variant_speed_cap = _optional_positive_float(
+        parameters.get("max_speed_m_s"),
+        field_name="parameters.max_speed_m_s",
+    )
+    speed_caps = [value for value in (manifest_speed_cap, variant_speed_cap) if value is not None]
+    max_speed_m_s = min(speed_caps) if speed_caps else None
+    abs_speed_delta_m_s = abs(speed_delta_m_s)
+    summary = {
+        "family": family,
+        "speed_delta_m_s": speed_delta_m_s,
+        "abs_speed_delta_m_s": abs_speed_delta_m_s,
+        "max_abs_speed_delta_m_s": bound,
+        "max_speed_m_s": max_speed_m_s,
+        "default_baseline_speed_m_s": _DEFAULT_SINGLE_PEDESTRIAN_SPEED_M_S,
+        "target": {
+            "pedestrian_id": parameters.get("pedestrian_id"),
+            "selector": parameters.get("pedestrian_selector", "all"),
+        },
+    }
+    if abs_speed_delta_m_s > bound:
+        return [
+            f"{family} abs_speed_delta_m_s {abs_speed_delta_m_s:.6f} m/s exceeds "
+            f"variant max_abs_speed_delta_m_s {bound:.6f} m/s"
+        ], summary
+    return [], summary
+
+
 def _certify_variant(
     variant: Mapping[str, Any],
     *,
@@ -548,6 +617,13 @@ def _certify_variant(
         _apply_start_delay_offset(
             perturbed_map.single_pedestrians,
             dt_s=float(perturbation_summary["dt_s"]),
+            parameters=variant.get("parameters", {}),
+        )
+    elif variant["family"] == "single_pedestrian_speed_offset":
+        _apply_single_pedestrian_speed_offset(
+            perturbed_map.single_pedestrians,
+            speed_delta_m_s=float(perturbation_summary["speed_delta_m_s"]),
+            max_speed_m_s=perturbation_summary.get("max_speed_m_s"),
             parameters=variant.get("parameters", {}),
         )
     else:
@@ -619,6 +695,13 @@ def _materialize_variant_scenario(
         scenario["route_overrides_file"] = route_path.relative_to(matrix_path.parent).as_posix()
     elif variant["family"] == "single_pedestrian_start_delay_offset":
         scenario["single_pedestrians"] = _single_pedestrian_overrides_for_start_delay(
+            variant,
+            scenario=scenario,
+            scenario_config=scenario_config,
+            perturbation_summary=result.perturbation_summary,
+        )
+    elif variant["family"] == "single_pedestrian_speed_offset":
+        scenario["single_pedestrians"] = _single_pedestrian_overrides_for_speed(
             variant,
             scenario=scenario,
             scenario_config=scenario_config,
@@ -715,19 +798,24 @@ def _routes_for_family(map_def: Any, family: str) -> list[GlobalRoute]:
     raise ValueError(f"unsupported route-offset family: {family}")
 
 
-def _select_single_pedestrians(pedestrians: list[Any], parameters: Any) -> list[Any]:
+def _select_single_pedestrians(
+    pedestrians: list[Any],
+    parameters: Any,
+    *,
+    family: str = "single_pedestrian_start_delay_offset",
+) -> list[Any]:
     """Return the single-pedestrian definitions targeted by a timing perturbation."""
     if not isinstance(parameters, Mapping):
         raise ValueError("parameters must be a mapping")
     selector = str(parameters.get("pedestrian_selector", "all"))
     if selector != "all":
-        raise ValueError("single_pedestrian_start_delay_offset supports selector='all' only")
+        raise ValueError(f"{family} supports selector='all' only")
     pedestrian_id = parameters.get("pedestrian_id")
     selected = [
         ped for ped in pedestrians if pedestrian_id is None or str(ped.id) == str(pedestrian_id)
     ]
     if not selected:
-        raise ValueError("single_pedestrian_start_delay_offset selected no single pedestrians")
+        raise ValueError(f"{family} selected no single pedestrians")
     return selected
 
 
@@ -747,6 +835,57 @@ def _apply_start_delay_offset(
                 f"pedestrian {ped.id!r} start_delay_s negative"
             )
         ped.start_delay_s = updated
+
+
+def _baseline_single_pedestrian_speed(ped: Any) -> float:
+    """Return the speed used by runtime when a single pedestrian has no explicit override."""
+    return (
+        float(ped.speed_m_s)
+        if getattr(ped, "speed_m_s", None) is not None
+        else _DEFAULT_SINGLE_PEDESTRIAN_SPEED_M_S
+    )
+
+
+def _updated_single_pedestrian_speed(
+    ped: Any,
+    *,
+    speed_delta_m_s: float,
+    max_speed_m_s: Any,
+) -> float:
+    """Return a bounded updated single-pedestrian speed."""
+    updated = _baseline_single_pedestrian_speed(ped) + float(speed_delta_m_s)
+    if updated <= 0.0:
+        raise ValueError(
+            "single_pedestrian_speed_offset would make "
+            f"pedestrian {ped.id!r} speed_m_s non-positive"
+        )
+    if max_speed_m_s is not None and updated > float(max_speed_m_s):
+        raise ValueError(
+            "single_pedestrian_speed_offset would make "
+            f"pedestrian {ped.id!r} speed_m_s exceed max_speed_m_s"
+        )
+    return updated
+
+
+def _apply_single_pedestrian_speed_offset(
+    pedestrians: list[Any],
+    *,
+    speed_delta_m_s: float,
+    max_speed_m_s: Any,
+    parameters: Any,
+) -> None:
+    """Offset selected single-pedestrian speed overrides in place."""
+    selected = _select_single_pedestrians(
+        pedestrians,
+        parameters,
+        family="single_pedestrian_speed_offset",
+    )
+    for ped in selected:
+        ped.speed_m_s = _updated_single_pedestrian_speed(
+            ped,
+            speed_delta_m_s=speed_delta_m_s,
+            max_speed_m_s=max_speed_m_s,
+        )
 
 
 def _single_pedestrian_overrides_for_start_delay(
@@ -786,6 +925,45 @@ def _single_pedestrian_overrides_for_start_delay(
             entry["start_delay_s"] = delays[ped_id]
     for ped_id in sorted(selected_ids - seen_ids):
         overrides.append({"id": ped_id, "start_delay_s": delays[ped_id]})
+    return overrides
+
+
+def _single_pedestrian_overrides_for_speed(
+    variant: Mapping[str, Any],
+    *,
+    scenario: Mapping[str, Any],
+    scenario_config: Path,
+    perturbation_summary: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Return scenario overrides with adjusted single-pedestrian speeds."""
+    config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_config)
+    if not config.map_pool.map_defs:
+        raise ValueError("scenario map pool is empty")
+    _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    selected = _select_single_pedestrians(
+        list(map_def.single_pedestrians),
+        variant.get("parameters", {}),
+        family="single_pedestrian_speed_offset",
+    )
+    selected_ids = {str(ped.id) for ped in selected}
+    speeds = {}
+    for ped in selected:
+        speeds[str(ped.id)] = _updated_single_pedestrian_speed(
+            ped,
+            speed_delta_m_s=float(perturbation_summary["speed_delta_m_s"]),
+            max_speed_m_s=perturbation_summary.get("max_speed_m_s"),
+        )
+
+    raw_overrides = scenario.get("single_pedestrians")
+    overrides = [dict(item) for item in raw_overrides] if isinstance(raw_overrides, list) else []
+    seen_ids: set[str] = set()
+    for entry in overrides:
+        ped_id = str(entry.get("id") or "")
+        seen_ids.add(ped_id)
+        if ped_id in selected_ids:
+            entry["speed_m_s"] = speeds[ped_id]
+    for ped_id in sorted(selected_ids - seen_ids):
+        overrides.append({"id": ped_id, "speed_m_s": speeds[ped_id]})
     return overrides
 
 

@@ -147,6 +147,53 @@ def _write_start_delay_manifest(
     return path
 
 
+def _write_speed_manifest(
+    path: Path,
+    *,
+    scenario_id: str,
+    speed_delta_m_s: float = 0.25,
+    max_abs_speed_delta_m_s: float = 0.5,
+) -> Path:
+    """Write a perturbation manifest that offsets single-pedestrian speed."""
+    payload = {
+        "schema_version": PERTURBATION_MANIFEST_SCHEMA_VERSION,
+        "manifest_id": "test_speed_perturbation_manifest",
+        "scenario_config": "configs/scenarios/classic_interactions_francis2023.yaml",
+        "seed_controls": {
+            "baseline_seeds": [112],
+            "replay_seed_policy": "explicit",
+        },
+        "validity": {
+            "require_scenario_certification": True,
+            "max_route_offset_m": 0.5,
+            "max_single_pedestrian_speed_delta_m_s": 0.5,
+            "max_single_pedestrian_speed_m_s": 2.0,
+            "invalid_variant_evidence_policy": "exclude_from_success_evidence",
+        },
+        "variants": [
+            {
+                "variant_id": f"{scenario_id}_noop",
+                "scenario_id": scenario_id,
+                "family": "noop",
+                "seeds": [112],
+            },
+            {
+                "variant_id": f"{scenario_id}_speed_offset",
+                "scenario_id": scenario_id,
+                "family": "single_pedestrian_speed_offset",
+                "seeds": [112],
+                "parameters": {
+                    "speed_delta_m_s": speed_delta_m_s,
+                    "max_abs_speed_delta_m_s": max_abs_speed_delta_m_s,
+                    "pedestrian_id": "h3",
+                },
+            },
+        ],
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def test_manifest_schema_accepts_noop_and_bounded_route_offset(tmp_path: Path) -> None:
     """The public schema should document the first supported perturbation surface."""
     manifest_path = _write_manifest(tmp_path / "perturbations.yaml")
@@ -214,6 +261,44 @@ def test_manifest_schema_requires_manifest_timing_cap_for_start_delay_offset(
         jsonschema.validate(manifest, schema)
 
 
+def test_manifest_schema_accepts_bounded_single_pedestrian_speed_offset(
+    tmp_path: Path,
+) -> None:
+    """The public schema should expose the single-pedestrian speed family."""
+    manifest_path = _write_speed_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    jsonschema.validate(manifest, schema)
+
+
+def test_manifest_schema_requires_manifest_speed_cap_for_speed_offset(
+    tmp_path: Path,
+) -> None:
+    """Speed manifests should carry both variant-local and policy-level bounds."""
+    manifest_path = _write_speed_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    del manifest["validity"]["max_single_pedestrian_speed_delta_m_s"]
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    with pytest.raises(jsonschema.ValidationError, match="max_single_pedestrian_speed_delta_m_s"):
+        jsonschema.validate(manifest, schema)
+
+
 def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None:
     """Family-specific parameter schemas should catch typo-shaped irrelevant fields."""
     schema = json.loads(
@@ -236,6 +321,15 @@ def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None
     timing_manifest["variants"][1]["parameters"]["dx_m"] = 0.0
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(timing_manifest, schema)
+
+    speed_manifest_path = _write_speed_manifest(
+        tmp_path / "speed_perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    speed_manifest = yaml.safe_load(speed_manifest_path.read_text(encoding="utf-8"))
+    speed_manifest["variants"][1]["parameters"]["dt_s"] = 0.5
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(speed_manifest, schema)
 
 
 def test_preflight_rejects_manifest_that_violates_public_schema(tmp_path: Path) -> None:
@@ -386,6 +480,92 @@ def test_preflight_excludes_negative_start_delay_result(tmp_path: Path) -> None:
     assert excluded.certificate is None
     assert excluded.reasons == [
         "preflight_error: single_pedestrian_start_delay_offset would make pedestrian 'h3' start_delay_s negative"
+    ]
+
+
+def test_preflight_certifies_bounded_single_pedestrian_speed_offset(
+    tmp_path: Path,
+) -> None:
+    """Single-pedestrian speed offsets should certify when the target exists."""
+    manifest_path = _write_speed_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    assert [result.variant_id for result in report.results] == [
+        "francis2023_join_group_noop",
+        "francis2023_join_group_speed_offset",
+    ]
+    assert {result.validity_status for result in report.results} == {"valid"}
+    assert report.results[1].family == "single_pedestrian_speed_offset"
+    assert report.results[1].perturbation_summary["speed_delta_m_s"] == pytest.approx(0.25)
+    assert report.results[1].perturbation_summary["default_baseline_speed_m_s"] == pytest.approx(
+        0.5
+    )
+    assert report.results[1].perturbation_summary["target"]["pedestrian_id"] == "h3"
+
+
+def test_preflight_excludes_speed_offset_without_single_pedestrians(tmp_path: Path) -> None:
+    """A speed perturbation must fail closed when no single pedestrians exist."""
+    manifest_path = _write_speed_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_high",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.family == "single_pedestrian_speed_offset"
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_speed_offset selected no single pedestrians"
+    ]
+
+
+def test_preflight_excludes_unbounded_speed_offset_before_certification(
+    tmp_path: Path,
+) -> None:
+    """Out-of-bounds speed perturbations should fail closed without certification."""
+    manifest_path = _write_speed_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+        speed_delta_m_s=0.75,
+        max_abs_speed_delta_m_s=0.5,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "single_pedestrian_speed_offset abs_speed_delta_m_s 0.750000 m/s exceeds "
+        "variant max_abs_speed_delta_m_s 0.500000 m/s"
+    ]
+
+
+def test_preflight_excludes_non_positive_speed_result(tmp_path: Path) -> None:
+    """Negative speed deltas cannot make the selected speed non-positive."""
+    manifest_path = _write_speed_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+        speed_delta_m_s=-0.5,
+        max_abs_speed_delta_m_s=0.5,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_speed_offset would make pedestrian 'h3' speed_m_s non-positive"
     ]
 
 
@@ -567,6 +747,79 @@ def test_materialize_pilot_matrix_start_delay_selector_all(tmp_path: Path) -> No
     _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
     delays = {ped.id: ped.start_delay_s for ped in offset_map.single_pedestrians}
     assert delays == {"h1": pytest.approx(0.5), "h2": pytest.approx(0.5), "h3": pytest.approx(0.5)}
+
+
+def test_materialize_pilot_matrix_writes_speed_overrides(tmp_path: Path) -> None:
+    """Speed variants should preserve single-ped entries while updating speed."""
+    manifest_path = _write_speed_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    output_dir = tmp_path / "pilot"
+
+    materialized = materialize_perturbation_pilot_matrix(
+        manifest_path,
+        output_dir=output_dir,
+        seed_limit=1,
+    )
+
+    assert materialized.included_variants == (
+        "francis2023_join_group_noop",
+        "francis2023_join_group_speed_offset",
+    )
+    matrix_path = Path(materialized.scenario_matrix_path)
+    generated_scenarios = load_scenarios(matrix_path)
+    offset_scenario = generated_scenarios[1]
+    overrides = {entry["id"]: entry for entry in offset_scenario["single_pedestrians"]}
+    assert overrides["h3"]["role"] == "join"
+    assert overrides["h3"]["role_target_id"] == "h1"
+    assert overrides["h3"]["speed_m_s"] == pytest.approx(0.75)
+
+    offset_config = build_robot_config_from_scenario(
+        offset_scenario,
+        scenario_path=matrix_path,
+    )
+    _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
+    speeds = {ped.id: ped.speed_m_s for ped in offset_map.single_pedestrians}
+    assert speeds["h3"] == pytest.approx(0.75)
+
+
+def test_materialize_pilot_matrix_speed_selector_all(tmp_path: Path) -> None:
+    """The speed family can intentionally shift every single pedestrian speed."""
+    manifest_path = _write_speed_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_leave_group",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    parameters = manifest["variants"][1]["parameters"]
+    del parameters["pedestrian_id"]
+    parameters["pedestrian_selector"] = "all"
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    materialized = materialize_perturbation_pilot_matrix(
+        manifest_path,
+        output_dir=tmp_path / "pilot",
+        seed_limit=1,
+    )
+
+    assert materialized.included_variants == (
+        "francis2023_leave_group_noop",
+        "francis2023_leave_group_speed_offset",
+    )
+    matrix_path = Path(materialized.scenario_matrix_path)
+    generated_scenarios = load_scenarios(matrix_path)
+    offset_scenario = generated_scenarios[1]
+    offset_config = build_robot_config_from_scenario(
+        offset_scenario,
+        scenario_path=matrix_path,
+    )
+    _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
+    speeds = {ped.id: ped.speed_m_s for ped in offset_map.single_pedestrians}
+    assert speeds == {
+        "h1": pytest.approx(0.75),
+        "h2": pytest.approx(0.75),
+        "h3": pytest.approx(0.75),
+    }
 
 
 def test_materialize_pilot_matrix_skips_preflight_excluded_variants(tmp_path: Path) -> None:

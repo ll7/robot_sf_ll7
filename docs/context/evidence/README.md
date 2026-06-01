@@ -116,3 +116,5 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_1951_intersection_wait_phase_grid_2026-06-01/`: compact diagnostic-only paired
   no-op-versus-perturbation summary and family/magnitude rollup for the `francis2023_intersection_wait`
   single-pedestrian phase grid.
+- `issue_1953_intersection_wait_speed_grid_trace_2026-06-01/`: compact diagnostic-only
+  closest-approach trace slices for the strongest #1951 intersection-wait speed-grid response.

@@ -86,6 +86,9 @@ def test_issue_2011_sweep_aggregates_effect_sizes_from_campaign_roots(tmp_path: 
     assert "diagnostic-only" in (
         tmp_path / "aggregated" / "reports" / "effect_size_summary.md"
     ).read_text(encoding="utf-8")
+    assert "angular-acceleration" not in (
+        tmp_path / "aggregated" / "reports" / "effect_size_summary.md"
+    ).read_text(encoding="utf-8")
 
 
 def test_issue_2011_sweep_labels_unavailable_campaign_roots(tmp_path: Path) -> None:

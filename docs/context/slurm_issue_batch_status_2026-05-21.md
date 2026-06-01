@@ -150,22 +150,33 @@ slurm_issue_status:
 ```yaml
 slurm_issue_status:
   issue_number: 1474
-  state: not_submitted
+  state: submitted_running
   source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
-  slurm_job_id: not_submitted
-  branch: issue-1396-shielded-ppo-launch-packet
-  commit: unknown
+  slurm_job_id: 12674
+  branch: issue-1474-shielded-ppo-repair
+  commit: cc3e8552b0fa1ae47ddb3f42cd74443576c6e9c0
   config_path:
+    - configs/training/ppo/ablations/expert_ppo_issue_1474_shielded_repair_collision20_5m.yaml
     - configs/training/shielded_ppo_issue_1396_launch_packet.yaml
-  output_root: missing
-  stdout_stderr_path: missing
+    - SLURM/Auxme/issue_1474_shielded_ppo_repair.sl
+    - scripts/dev/sbatch_shielded_ppo_repair_issue1474.sh
+  output_root: output/slurm/issue1474-shielded-ppo-repair-job-12674/
+  stdout_stderr_path:
+    - output/slurm/12674-issue1474-shielded-ppo-repair.out
+    - output/slurm/12674-issue1474-shielded-ppo-repair.err
   durable_artifact_pointer_status: missing base checkpoint, baseline artifacts, trained checkpoint, compact evaluation artifacts, and checksums
-  next_action: validate the launch packet, record exact training commit/base checkpoint, and submit only the guarded smoke/nominal gate sequence
+  next_action: monitor job 12674 to completion, then run the guarded smoke and nominal gates before any stress/full-matrix escalation
   closure_condition: smoke and nominal gates pass with runtime guard diagnostics and durable artifact pointers, or the campaign is revised/rejected/closed
-  last_update: 2026-05-30
+  last_update: 2026-06-01
   comparison_status: pending smoke and nominal-sanity gates
-  status_basis: issue body and docs/context/policy_search/SLURM/002_shielded_ppo_repair_campaign.md
-  notes_non_evidence: guard-saturated gains must not be reported as raw PPO improvement
+  status_basis: issue comments, local worktree inspection, squeue/sacct, and Slurm stdout/stderr
+  notes_non_evidence: >
+    Failed warm-start probe 12673 showed the durable BR06 v3 checkpoint observation space no longer
+    matches the current training env. Active retrain job 12674 intentionally starts from the current
+    env with exactly the collision penalty repair delta. Health check at 2026-06-01T07:03+02:00
+    showed RUNNING on a30, W&B run d8w8uykh, CUDA selected, num_envs=10, and 450560/5000000
+    timesteps reached; this is live training state only, not benchmark or guarded-policy evidence.
+    Guard-saturated gains must not be reported as raw PPO improvement.
 ```
 
 ### Issue #1475 ORCA-Residual BC Smoke And Nominal Lineage

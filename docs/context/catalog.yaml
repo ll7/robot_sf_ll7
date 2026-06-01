@@ -160,6 +160,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2034_platformization_roadmap.md
+    status: current
+    freshness: maintained
+    area: platformization
   - path: docs/context/evidence/README.md
     status: evidence
     freshness: evidence

@@ -34,6 +34,9 @@ uv sync --all-extras
 source .venv/bin/activate
 ```
 
+CARLA is deliberately excluded from `--all-extras`. Use `uv sync --all-extras --group carla` only
+on machines or worktrees that need the host-side CARLA Python client.
+
 ## GitHub And CI-Parity Tools
 
 These are not Python dependencies, but they make local validation and PR work match the repository
@@ -103,12 +106,16 @@ Record machine-specific availability and limits in local-only `local.machine.md`
 
 * CPU worker caps and memory limits.
 * GPU availability, `nvidia-smi`, and NVIDIA Docker support.
+* CARLA Docker availability, including Docker daemon access, NVIDIA Container Toolkit status, the
+  pinned CARLA image, host ports, and the command that last proved connectivity.
 * SLURM/Auxme access via `sbatch`.
 * Whether long training jobs are allowed locally or must run in tmux/SLURM.
 * Local artifact/cache locations and durable upload expectations.
 
 Use `docs/templates/local.machine.example.md` as the template. Do not commit secrets or
-machine-specific overrides.
+machine-specific overrides. In linked worktrees, prefer symlinking `local.machine.md` from the main
+checkout so Docker/GPU/CARLA status stays current across worktrees; copy it only when the worktree
+truly needs different machine-specific behavior.
 
 ## Optional Python Extras And External Artifacts
 
@@ -119,8 +126,24 @@ Some workflows require Python extras or external assets in addition to host tool
 * RLlib/DreamerV3 paths use `uv sync --extra rllib` and `uv run --extra rllib ...`.
 * Social-Navigation-PyEnvs adapter experiments require the external checkout or a documented
   fail-closed `not_available`/`failed` status.
-* CARLA live replay requires a compatible CARLA installation or Docker image and must report
-  boundary limitations explicitly.
+* CARLA live replay requires both a compatible CARLA server path and the matching host-side Python
+  client. The host-side client is pinned in the `carla` dependency group rather than an optional
+  extra, so `uv sync --all-extras` stays CARLA-free:
+
+  ```bash
+  uv sync --all-extras --group carla
+  scripts/dev/check_carla_runtime.sh
+  scripts/dev/check_carla_runtime.sh --smoke
+  ```
+
+  Use `scripts/dev/check_carla_runtime.sh --pull` or
+  `scripts/dev/check_carla_runtime.sh --smoke --pull` only when the host may download the pinned
+  `carlasim/carla:0.9.16` image. For a minimal CARLA-only environment, `uv sync --group carla` is
+  also valid, but it does not preserve optional extras from a prior all-extras sync. For one-off
+  checks without syncing the group first, `uv run --with carla==0.9.16 ...` remains acceptable, but
+  the group-backed script is the reproducible repository path. A Docker image or passing preflight
+  is setup evidence only. Treat live replay or parity claims as complete only when the exact replay
+  command and boundary limitations are recorded.
 
 Do not silently rely on local `output/` contents for durable dependencies. Promote required
 artifacts to a durable source and track only small manifests or pointers in git.

@@ -87,6 +87,10 @@ Notes:
 - If the worktree path differs, derive the correct source from `$MAIN_REPO_ROOT/local.machine.md`.
 - Reuse the symlinked `local.machine.md` instead of copying it so machine-specific limits stay in
   sync across worktrees.
+- CARLA is intentionally not part of `uv sync --all-extras`. For a CARLA-capable worktree, add the
+  host-side Python client explicitly with `uv sync --all-extras --group carla`, then run
+  `scripts/dev/check_carla_runtime.sh` for preflight or `scripts/dev/check_carla_runtime.sh --smoke`
+  for the bounded Docker connectivity proof.
 - If you are starting work on a feature branch, merge the latest `origin/main` into the current
   branch early so you inherit repository-wide fixes and workflow improvements before your local
   changes diverge. Typical command sequence:

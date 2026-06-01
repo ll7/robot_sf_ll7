@@ -116,6 +116,10 @@ When working in a linked Git worktree, detect bootstrap state before running exp
   checkout virtualenv, prefer `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>` so
   `PYTHONPATH` is pinned to the active worktree while `UV_PROJECT_ENVIRONMENT` points at the shared
   `.venv`. Use a full local `.venv` and final PR readiness for merge proof.
+- Do not add CARLA to the routine `--all-extras` bootstrap. For CARLA-capable worktrees, opt into
+  the host-side Python client with `uv sync --all-extras --group carla`, then prove the local
+  runtime with `scripts/dev/check_carla_runtime.sh` or `scripts/dev/check_carla_runtime.sh --smoke`
+  when it is acceptable to start the simulator container.
 - If the current branch is not `main`, fetch the latest `origin/main` and merge it into the current
   branch early in the work cycle so the branch benefits from repository-wide fixes and workflow
   improvements before local changes diverge. Typical command sequence:

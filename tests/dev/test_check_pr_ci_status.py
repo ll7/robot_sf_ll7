@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.dev.check_pr_ci_status import _format_human, main
+from scripts.dev.check_pr_ci_status import _fetch_ci_status, _format_human, main
 
 
 def test_format_human_success() -> None:
@@ -103,6 +104,31 @@ def test_main_with_explicit_pr_and_failure_exit(
     assert "checks: failure" in captured.out
 
 
+def test_main_with_startup_failure_exit(capsys: pytest.CaptureFixture) -> None:
+    """GitHub startup_failure conclusions should be treated as failed CI."""
+    mock_data = json.dumps(
+        {
+            "number": 43,
+            "title": "workflow issue",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "workflow-issue",
+            "statusCheckRollup": [
+                {"conclusion": "startup_failure", "status": "completed", "name": "ci"},
+            ],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["43"])
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "startup_failure=1" in captured.out
+
+
 def test_main_with_explicit_pr_and_success(
     capsys: pytest.CaptureFixture,
 ) -> None:
@@ -180,6 +206,26 @@ def test_main_gh_error(capsys: pytest.CaptureFixture) -> None:
     assert "ERROR" in captured.out
 
 
+def test_fetch_ci_status_malformed_json() -> None:
+    """Malformed successful gh output should return an error payload."""
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="{oops", stderr="")
+        data = _fetch_ci_status("42")
+
+    assert data["status"] == "error"
+    assert "Failed to parse gh output as JSON" in data["error"]
+
+
+def test_fetch_ci_status_non_object_json() -> None:
+    """Non-object successful gh output should return an error payload."""
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
+        data = _fetch_ci_status("42")
+
+    assert data["status"] == "error"
+    assert data["error"] == "gh output is not a JSON object"
+
+
 def test_main_with_backoff(capsys: pytest.CaptureFixture) -> None:
     """main() should pass --backoff to _fetch_ci_status."""
     mock_data = json.dumps(
@@ -210,6 +256,16 @@ def test_main_gh_not_installed() -> None:
     with patch(
         "scripts.dev.check_pr_ci_status.subprocess.run",
         side_effect=FileNotFoundError("gh not found"),
+    ):
+        rc = main(["42"])
+    assert rc == 1
+
+
+def test_main_gh_timeout() -> None:
+    """main() should exit non-zero when gh times out."""
+    with patch(
+        "scripts.dev.check_pr_ci_status.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(["gh"], timeout=30),
     ):
         rc = main(["42"])
     assert rc == 1

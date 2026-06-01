@@ -90,6 +90,25 @@ def test_check_command_missing_command() -> None:
     assert "not found on PATH" in detail
 
 
+def test_check_command_empty_output_is_safe() -> None:
+    """A command with no version output should not crash preflight."""
+    check_skills = _load_check_skills_module()
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(check_skills.shutil, "which", lambda _cmd: "/usr/bin/tool")
+        monkeypatch.setattr(
+            check_skills.subprocess,
+            "run",
+            lambda *_args, **_kwargs: type(
+                "Result",
+                (),
+                {"stdout": "", "stderr": "", "returncode": 0},
+            )(),
+        )
+        ok, detail = check_skills._check_command("tool", "--version")
+        assert ok
+        assert detail == "unknown version"
+
+
 def test_preflight_requires_no_reqs(tmp_path: Path) -> None:
     """Preflight should pass when a skill declares no requirements."""
     check_skills = _load_check_skills_module()
@@ -220,6 +239,23 @@ def test_preflight_unrecognized_requirement(tmp_path: Path, capsys: pytest.Captu
     assert "UNRECOGNIZED" in captured.out
     assert "some-exotic-tool" in captured.out
     assert "Result: FAIL" in captured.out
+
+
+def test_preflight_json_failure_sets_status(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """JSON preflight should mark the top-level status as fail for unsupported requirements."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  exotic-skill:\n    requires:\n      - some-exotic-tool\n",
+        encoding="utf-8",
+    )
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("exotic-skill", json_output=True)
+    assert rc == 1
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["status"] == "fail"
+    assert payload["summary"]["unrecognized"] == 1
 
 
 def test_parse_args_preflight() -> None:

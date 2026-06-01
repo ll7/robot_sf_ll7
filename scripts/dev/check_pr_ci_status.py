@@ -13,7 +13,13 @@ import sys
 import time
 from typing import Any
 
-FAILURE_CONCLUSIONS = {"failure", "cancelled", "timed_out", "action_required"}
+FAILURE_CONCLUSIONS = {
+    "failure",
+    "cancelled",
+    "timed_out",
+    "action_required",
+    "startup_failure",
+}
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
 
 
@@ -44,6 +50,17 @@ def _resolve_pr_number(pr_number: str | None) -> str:
         )
         sys.exit(1)
     return result.stdout.strip()
+
+
+def _parse_pr_view_json(stdout: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Parse `gh pr view --json` stdout into a dictionary or an error string."""
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        return None, f"Failed to parse gh output as JSON: {exc}"
+    if not isinstance(data, dict):
+        return None, "gh output is not a JSON object"
+    return data, None
 
 
 def _fetch_ci_status(
@@ -78,7 +95,12 @@ def _fetch_ci_status(
             "error": stderr or f"gh returned exit code {result.returncode}",
         }
 
-    data = json.loads(result.stdout)
+    data, parse_error = _parse_pr_view_json(result.stdout)
+    if parse_error or data is None:
+        return {
+            "status": "error",
+            "error": parse_error or "gh output is not a JSON object",
+        }
     rollup = data.get("statusCheckRollup", []) or []
 
     # Classify overall CI state.
@@ -190,6 +212,12 @@ def main(argv: list[str] | None = None) -> int:
         data = _fetch_ci_status(pr, backoff=args.backoff)
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)
+        return 1
+    except subprocess.TimeoutExpired:
+        print(
+            "gh CLI command timed out. Check your network connection or GitHub status.",
+            file=sys.stderr,
+        )
         return 1
 
     if data.get("status") == "error":

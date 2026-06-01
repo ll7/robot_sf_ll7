@@ -335,7 +335,8 @@ def _check_command(cmd: str, arg: str) -> tuple[bool, str]:
             timeout=15,
             check=False,
         )
-        version = (result.stdout or result.stderr or "").splitlines()[0].strip()
+        lines = (result.stdout or result.stderr or "").splitlines()
+        version = lines[0].strip() if lines else "unknown version"
         return True, version
     except FileNotFoundError:
         return False, f"{cmd}: not found on PATH"
@@ -371,15 +372,20 @@ def _run_preflight_check(
     ok, detail = _check_command(cmd, arg)
 
     if ok:
-        if json_output and results is not None:
-            results["checks"][req] = {"status": "ok", "detail": detail, "remedy": None}
+        status = "ok"
+        jq_ok: bool | None = None
         if req == "project5":
             jq_ok, _ = _check_command(_PROJECT5_EXTRA, "--version")
-            if json_output and results is not None:
+            if not jq_ok:
+                status = "warning"
+                detail = f"{cmd} found but {_PROJECT5_EXTRA} not on PATH"
+
+        if json_output and results is not None:
+            results["checks"][req] = {"status": status, "detail": detail, "remedy": None}
+            if jq_ok is not None:
                 results["checks"][req]["jq_available"] = jq_ok
-            elif not jq_ok:
-                return "warning", f"{cmd} found but {_PROJECT5_EXTRA} not on PATH"
-        return "ok", detail
+
+        return status, detail
 
     if json_output and results is not None:
         results["checks"][req] = {"status": "missing", "detail": detail, "remedy": remedy}
@@ -457,6 +463,8 @@ def _preflight(skill_name: str, json_output: bool = False) -> int:
 
     if json_output:
         assert results is not None
+        if missing > 0 or unrecognized > 0:
+            results["status"] = "fail"
         results["summary"] = {
             "available": available,
             "missing": missing,

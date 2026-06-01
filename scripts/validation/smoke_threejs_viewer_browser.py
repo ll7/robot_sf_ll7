@@ -7,7 +7,6 @@ actionable dependency hint. It is a diagnostic smoke gate, not benchmark evidenc
 from __future__ import annotations
 
 import argparse
-import contextlib
 import http.server
 import sys
 import threading
@@ -16,7 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -172,6 +171,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=1,
         help="Minimum non-background pixels required for a rendered canvas.",
     )
+    parser.add_argument(
+        "--background-rgb",
+        type=_parse_rgb,
+        default=DEFAULT_BACKGROUND_RGB,
+        help="Background RGB triplet to ignore when classifying pixels (default: 17,24,39).",
+    )
     return parser.parse_args(argv)
 
 
@@ -195,9 +200,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             height=args.height,
             timeout_ms=args.timeout_ms,
         )
-    except ModuleNotFoundError as exc:
-        if exc.name != "playwright" and "playwright" not in str(exc):
-            raise
+    except ModuleNotFoundError:
         print(
             "Playwright is required for the Three.js browser pixel smoke. "
             "Install it with `uv sync --extra browser`, then run "
@@ -217,25 +220,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Three.js browser smoke failed while driving Chromium: {exc}", file=sys.stderr)
         return EXIT_RENDER_FAILED
 
-    with contextlib.suppress(FileNotFoundError):
+    try:
         result = classify_canvas_screenshot(
             args.screenshot,
+            background_rgb=args.background_rgb,
             min_non_background_pixels=args.min_non_background_pixels,
         )
-        if result.rendered:
-            print(
-                "Three.js browser smoke passed: "
-                f"{result.non_background_pixels} non-background pixels, "
-                f"{result.distinct_colors} distinct colors."
-            )
-            return EXIT_OK
-        print(f"Three.js browser smoke failed: {result.reason}", file=sys.stderr)
+    except FileNotFoundError:
+        print(
+            f"Three.js browser smoke failed: screenshot not written at {args.screenshot}",
+            file=sys.stderr,
+        )
+        return EXIT_RENDER_FAILED
+    except (OSError, UnidentifiedImageError) as exc:
+        print(f"Three.js browser smoke failed: could not read screenshot: {exc}", file=sys.stderr)
         return EXIT_RENDER_FAILED
 
-    print(
-        f"Three.js browser smoke failed: screenshot not written at {args.screenshot}",
-        file=sys.stderr,
-    )
+    if result.rendered:
+        print(
+            "Three.js browser smoke passed: "
+            f"{result.non_background_pixels} non-background pixels, "
+            f"{result.distinct_colors} distinct colors."
+        )
+        return EXIT_OK
+    print(f"Three.js browser smoke failed: {result.reason}", file=sys.stderr)
     return EXIT_RENDER_FAILED
 
 
@@ -243,6 +251,18 @@ def _is_browser_dependency_error(exc: Exception) -> bool:
     """Return true for Playwright errors caused by a missing browser binary."""
     message = str(exc)
     return "Executable doesn't exist" in message or "playwright install chromium" in message
+
+
+def _parse_rgb(value: str) -> tuple[int, int, int]:
+    """Parse an ``R,G,B`` CLI value."""
+    try:
+        red, green, blue = (int(part) for part in value.split(","))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("expected RGB triplet like 17,24,39") from exc
+    rgb = (red, green, blue)
+    if any(channel < 0 or channel > 255 for channel in rgb):
+        raise argparse.ArgumentTypeError("RGB channels must be in [0, 255]")
+    return rgb
 
 
 if __name__ == "__main__":

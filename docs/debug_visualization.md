@@ -122,6 +122,24 @@ result = export_trace_viewer(trace, "output/trace_viewer")
 print(f"Viewer files in {result.output_dir}")
 ```
 
+## Browser Pixel Smoke
+
+For static Three.js viewer exports, run the optional browser pixel smoke when browser automation is
+available:
+
+```bash
+uv sync --extra browser
+uv run python -m playwright install chromium
+uv run python scripts/validation/smoke_threejs_viewer_browser.py \
+  --viewer-dir output/trace_viewer
+```
+
+The smoke serves the static viewer locally, opens it in headless Chromium, captures the canvas, and
+fails if the screenshot is blank or contains only the viewer background. The same command can target
+`output/threejs_viewer` or any other directory that contains `index.html`, `viewer.js`, and
+`scene.json`. Missing Playwright or Chromium support is reported as an actionable validation
+failure, not as a successful skip.
+
 ## Evidence Boundary
 
 Debug timelines and trace viewer exports are diagnostic visualization artifacts. They do not replace

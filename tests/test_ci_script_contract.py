@@ -180,6 +180,83 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "pr_ready_freshness.py" in script_text
 
 
+def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: Path) -> None:
+    """Final PR proof should fail early when analytics extras are missing."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    for script_name in ("pr_ready_check.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'if [[ "$1" == "run" && "$2" == "python" ]]; then',
+                "  echo 'duckdb, pyarrow'",
+                "  exit 1",
+                "fi",
+                "echo 'unexpected uv invocation' >&2",
+                "exit 99",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "test fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script_dir / "pr_ready_check.sh")],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "PR_READY_MODE": "final",
+            "BASE_REF": "origin/main",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "Final PR readiness requires analytics dependencies" in result.stderr
+    assert "uv sync --all-extras" in result.stderr
+    assert "duckdb, pyarrow" in result.stderr
+    assert "ruff_fix_format" not in result.stderr
+
+
 def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
     """Shared-venv validation must import from the active worktree, not the owning checkout."""
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")

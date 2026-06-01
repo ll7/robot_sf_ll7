@@ -106,3 +106,5 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   no-op-versus-start-delay summary for the #1610 single-pedestrian timing phase perturbation pilot.
 - `issue_1943_ped_speed_perturbation_2026-05-31/`: compact diagnostic-only paired
   no-op-versus-speed summary for the #1610 single-pedestrian speed perturbation pilot.
+- `issue_1945_orca_leave_group_speed_trace_2026-06-01/`: compact diagnostic-only ORCA
+  closest-approach trace slices for the `francis2023_leave_group` speed-offset outcome flip.

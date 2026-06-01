@@ -230,6 +230,8 @@ knowledge, not every transient iteration detail.
   [issue_1941_ped_timing_phase.md](issue_1941_ped_timing_phase.md)
 * Issue #1943 Single-Pedestrian Speed Perturbation (2026-05-31):
   [issue_1943_ped_speed_perturbation.md](issue_1943_ped_speed_perturbation.md)
+* Issue #1945 ORCA Leave-Group Speed Trace (2026-06-01):
+  [issue_1945_orca_leave_group_speed_trace.md](issue_1945_orca_leave_group_speed_trace.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:

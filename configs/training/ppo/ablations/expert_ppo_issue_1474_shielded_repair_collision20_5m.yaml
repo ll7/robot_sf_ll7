@@ -1,0 +1,84 @@
+# Issue #1474: shielded PPO repair, collision-penalty-only fine-tune.
+#
+# Scope:
+# - Resume from the BR-06 v3 PPO checkpoint frozen by the shielded-PPO launch packet.
+# - Keep the BR-06 v3 architecture, observation contract, scenario set, and seed strategy.
+# - Change exactly one reward knob for this training run:
+#   env_factory_kwargs.reward_kwargs.weights.collision = -20.0
+# - Runtime guarded evaluation remains a separate stop-gated step after this checkpoint trains.
+policy_id: ppo_expert_issue_1474_shielded_repair_collision20_5m
+scenario_config: ../../../scenarios/classic_interactions_francis2023.yaml
+resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+num_envs: auto
+worker_mode: auto
+seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
+randomize_seeds: true
+total_timesteps: 5000000
+best_checkpoint_metric: success_rate
+feature_extractor: grid_socnav
+feature_extractor_kwargs:
+  grid_channels: [32, 64, 64]
+  grid_kernel_sizes: [5, 3, 3]
+  socnav_hidden_dims: [128, 128]
+  dropout_rate: 0.1
+policy_net_arch: [256, 256]
+env_overrides:
+  observation_mode: socnav_struct
+  use_occupancy_grid: true
+  include_grid_in_observation: true
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 3.0
+    max_angular_speed: 1.0
+    allow_backwards: true
+  grid_config:
+    resolution: 0.2
+    width: 32.0
+    height: 32.0
+    channels: [obstacles, pedestrians, combined]
+    use_ego_frame: true
+    center_on_robot: true
+  peds_have_obstacle_forces: true
+  sim_config:
+    prf_config:
+      is_active: true
+    max_peds_per_group: 3
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      collision: -20.0
+  peds_have_obstacle_forces: true
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 2000
+evaluation:
+  evaluation_episodes: 100
+  hold_out_scenarios: []
+  step_schedule:
+    - until_step: 3000000
+      every_steps: 500000
+    - every_steps: 1000000
+tracking:
+  tensorboard: true
+  wandb:
+    enabled: true
+    project: robot_sf
+    group: issue-1474-shielded-ppo-repair
+    job_type: expert-ppo-collision20-5m
+    tags:
+      - issue-1474
+      - issue-1396
+      - shielded-ppo-repair
+      - br-06
+      - ppo
+      - collision-penalty-only
+      - route-completion-v3
+      - collision20
+      - randomized

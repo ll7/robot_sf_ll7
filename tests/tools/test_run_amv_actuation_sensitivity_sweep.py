@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from scripts.tools import run_amv_actuation_sensitivity_sweep as sweep
@@ -165,6 +166,40 @@ def test_issue_2011_sweep_aggregate_cli_labels_unavailable_campaign_roots(
     )
     assert summary["rows"][0]["campaign_status"] == "accepted_unavailable_only"
     assert summary["rows"][0]["campaign_benchmark_success"] is False
+
+
+def test_issue_2011_sweep_aggregate_requires_campaign_roots(tmp_path: Path) -> None:
+    """Aggregate mode should fail closed when no campaign roots are supplied."""
+    materialized_dir = tmp_path / "materialized"
+    sweep.main(["--manifest", str(MANIFEST_PATH), "--output", str(materialized_dir)])
+    entries = json.loads(
+        (materialized_dir / "resolved_sweep_manifest.json").read_text(encoding="utf-8")
+    )["variants"]
+
+    with pytest.raises(ValueError, match="At least one campaign root"):
+        sweep.aggregate_campaigns(
+            output_dir=tmp_path / "aggregated",
+            entries=entries,
+            campaign_roots=[],
+        )
+
+
+def test_issue_2011_sweep_aggregate_rejects_unmatched_campaign_roots(tmp_path: Path) -> None:
+    """Aggregate mode should not silently accept roots without matching summaries."""
+    materialized_dir = tmp_path / "materialized"
+    sweep.main(["--manifest", str(MANIFEST_PATH), "--output", str(materialized_dir)])
+    entries = json.loads(
+        (materialized_dir / "resolved_sweep_manifest.json").read_text(encoding="utf-8")
+    )["variants"]
+    empty_root = tmp_path / "empty_campaign"
+    empty_root.mkdir()
+
+    with pytest.raises(ValueError, match="No valid campaign summaries"):
+        sweep.aggregate_campaigns(
+            output_dir=tmp_path / "aggregated",
+            entries=entries,
+            campaign_roots=[empty_root],
+        )
 
 
 def _write_campaign_fixture(

@@ -106,6 +106,15 @@ def _repo_relative(path: Path, *, root: Path | None = None) -> str:
         return str(path)
 
 
+def _repo_path(path: Path | str, *, root: Path | None = None) -> Path:
+    """Resolve an absolute or repository-relative path."""
+    parsed = Path(path)
+    if parsed.is_absolute():
+        return parsed
+    root = _repo_root() if root is None else root
+    return root / parsed
+
+
 def _sha256_file(path: Path) -> str:
     """Return a SHA-256 digest for one file."""
     digest = hashlib.sha256()
@@ -354,11 +363,12 @@ def run_preflights(
     raw_argv: Sequence[str],
 ) -> list[dict[str, Any]]:
     """Run camera-ready preflight for every generated variant config."""
+    root = _repo_root()
     pilot = _pilot_overrides(manifest)
     campaign_output_root = Path(str(pilot.get("output_root", output_dir / "campaigns")))
     rows: list[dict[str, Any]] = []
     for entry in entries:
-        config_path = Path(str(entry["config_path"]))
+        config_path = _repo_path(str(entry["config_path"]), root=root)
         cfg = load_campaign_config(config_path)
         prepared = prepare_campaign_preflight(
             cfg,
@@ -394,11 +404,12 @@ def run_pilot(
     raw_argv: Sequence[str],
 ) -> list[dict[str, Any]]:
     """Run the pilot matrix for every generated variant config."""
+    root = _repo_root()
     pilot = _pilot_overrides(manifest)
     campaign_output_root = Path(str(pilot.get("output_root", output_dir / "campaigns")))
     rows: list[dict[str, Any]] = []
     for entry in entries:
-        config_path = Path(str(entry["config_path"]))
+        config_path = _repo_path(str(entry["config_path"]), root=root)
         cfg = load_campaign_config(config_path)
         result = run_campaign(
             cfg,
@@ -478,10 +489,12 @@ def _iter_campaign_episode_records(campaign_root: Path) -> Iterable[dict[str, An
         episodes_path_raw = run_entry.get("episodes_path")
         if not isinstance(episodes_path_raw, str):
             continue
-        episodes_path = _repo_root() / episodes_path_raw
+        raw_path = Path(episodes_path_raw)
+        episodes_path = raw_path if raw_path.is_absolute() else _repo_root() / raw_path
         if not episodes_path.exists():
-            episodes_path = campaign_root / episodes_path_raw
+            episodes_path = campaign_root / raw_path
         if not episodes_path.exists():
+            logger.warning("Skipping missing episode JSONL: {}", episodes_path_raw)
             continue
         for record in read_jsonl(str(episodes_path)):
             if isinstance(record, dict):
@@ -503,18 +516,21 @@ def _format_optional_float(value: float | None) -> str:
     return "nan" if value is None else f"{value:.6f}"
 
 
-def aggregate_campaigns(  # noqa: C901
+def aggregate_campaigns(  # noqa: C901, PLR0912
     *,
     output_dir: Path,
     entries: Sequence[Mapping[str, Any]],
     campaign_roots: Sequence[Path],
 ) -> list[dict[str, Any]]:
     """Aggregate field-group effect sizes from pilot campaign roots."""
+    if not campaign_roots:
+        raise ValueError("At least one campaign root is required for aggregation")
     by_name = {str(entry["variant_name"]): dict(entry) for entry in entries}
     variant_roots: dict[str, tuple[Path, dict[str, Any]]] = {}
     for root in campaign_roots:
         summary_path = root / "reports" / "campaign_summary.json"
         if not summary_path.exists():
+            logger.warning("Skipping campaign root without summary: {}", root)
             continue
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         campaign = summary.get("campaign")
@@ -525,6 +541,8 @@ def aggregate_campaigns(  # noqa: C901
             variant_name = str(profile.get("name", ""))
             if variant_name in by_name:
                 variant_roots[variant_name] = (root, campaign)
+    if not variant_roots:
+        raise ValueError("No valid campaign summaries matched the sweep variants")
 
     buckets: defaultdict[tuple[str, str, str, str], dict[str, Any]] = defaultdict(
         lambda: {"episodes": 0, **{metric: [] for metric in _METRICS}}

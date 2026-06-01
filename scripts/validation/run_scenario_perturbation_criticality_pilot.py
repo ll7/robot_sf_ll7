@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Run a tiny paired planner pilot over materialized scenario perturbations."""
+"""Run a tiny paired planner pilot over materialized scenario perturbations.
+
+Routes the compact evidence summary through
+``robot_sf.scenario_certification.criticality_summary`` v1 helpers
+(``build_criticality_summary_from_pilot``,
+``criticality_summary_to_dict``, ``validate_criticality_summary``)
+instead of maintaining duplicate row-status/completed-pair summary logic
+here. The raw local ``summary.json`` under ``output/`` retains the
+original schema for backward compatibility.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +23,11 @@ import yaml
 
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.scenario_certification import materialize_perturbation_pilot_matrix
+from robot_sf.scenario_certification.criticality_summary import (
+    build_criticality_summary_from_pilot,
+    criticality_summary_to_dict,
+    validate_criticality_summary,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 SCHEMA_VERSION = "scenario_perturbation_criticality_pilot.v1"
@@ -162,196 +176,8 @@ def _scenario_metadata(scenarios: list[dict[str, Any]]) -> dict[str, dict[str, A
     return metadata
 
 
-def _nested_strings(value: Any) -> list[str]:
-    """Return lower-cased string leaves from a nested JSON-like value."""
-    strings: list[str] = []
-    if isinstance(value, str):
-        strings.append(value.strip().lower())
-    elif isinstance(value, dict):
-        for item in value.values():
-            strings.extend(_nested_strings(item))
-    elif isinstance(value, list | tuple):
-        for item in value:
-            strings.extend(_nested_strings(item))
-    return strings
-
-
-def classify_episode_status(row: dict[str, Any] | None) -> str:
-    """Classify whether an episode row can contribute to paired evidence."""
-    if row is None:
-        return "missing"
-    if isinstance(row.get("scenario_exclusion"), dict):
-        return "invalid"
-    metadata_strings = _nested_strings(row.get("algorithm_metadata"))
-    if any("fallback" in item for item in metadata_strings):
-        return "fallback"
-    if any("degraded" in item for item in metadata_strings):
-        return "degraded"
-    reason = str(row.get("termination_reason") or "").strip().lower()
-    if reason == "error":
-        return "failed"
-    return "completed"
-
-
-def _metric(row: dict[str, Any] | None, name: str) -> float | None:
-    """Read a numeric metric from an episode row."""
-    if row is None:
-        return None
-    metrics = row.get("metrics")
-    if not isinstance(metrics, dict):
-        return None
-    value = metrics.get(name)
-    try:
-        return None if value is None else float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _episode_values(row: dict[str, Any] | None) -> dict[str, Any]:
-    """Return compact outcome values for one episode row."""
-    reason = str(row.get("termination_reason") or "") if row is not None else ""
-    return {
-        "success": 1 if reason.lower() == "success" else 0,
-        "collision": 1 if reason.lower() == "collision" else 0,
-        "timeout": 1 if reason.lower() in {"max_steps", "terminated", "truncated"} else 0,
-        "min_distance": _metric(row, "min_distance"),
-        "termination_reason": reason or None,
-    }
-
-
-def _index_records_by_planner_seed(
-    records_by_planner: dict[str, list[dict[str, Any]]],
-) -> dict[tuple[str, str, int], dict[str, Any]]:
-    """Index episode records by planner, materialized scenario id, and seed."""
-    rows_by_key: dict[tuple[str, str, int], dict[str, Any]] = {}
-    for planner, records in records_by_planner.items():
-        for row in records:
-            scenario_id = str(row.get("scenario_id") or row.get("scenario") or "")
-            seed = int(row.get("seed", 0))
-            rows_by_key[(planner, scenario_id, seed)] = row
-    return rows_by_key
-
-
-def _scenarios_by_source(
-    scenario_metadata: dict[str, dict[str, Any]],
-) -> dict[str, dict[str, list[str]]]:
-    """Group materialized scenario ids by source scenario and perturbation family."""
-    grouped: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
-    for scenario_id, metadata in scenario_metadata.items():
-        source = metadata["source_scenario_id"]
-        family = metadata["family"]
-        if source and family:
-            grouped[source][family].append(scenario_id)
-    return grouped
-
-
-def _seeds_for_pair(
-    rows_by_key: dict[tuple[str, str, int], dict[str, Any]],
-    *,
-    planner: str,
-    noop_id: str,
-    variant_id: str,
-) -> list[int]:
-    """Return seeds observed for either side of one no-op/perturbed pair."""
-    return sorted(
-        {
-            seed
-            for key_planner, scenario_id, seed in rows_by_key
-            if key_planner == planner and scenario_id in {noop_id, variant_id}
-        }
-    )
-
-
-def _delta(after: int | float | None, before: int | float | None) -> float | None:
-    """Return numeric delta when both sides are available."""
-    if after is None or before is None:
-        return None
-    return float(after) - float(before)
-
-
-def build_pair_table(
-    records_by_planner: dict[str, list[dict[str, Any]]],
-    scenario_metadata: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Build paired no-op versus route-offset deltas for each planner and seed."""
-    rows_by_key = _index_records_by_planner_seed(records_by_planner)
-    grouped_scenarios = _scenarios_by_source(scenario_metadata)
-
-    pair_rows: list[dict[str, Any]] = []
-    for planner in sorted(records_by_planner):
-        for source_scenario_id, families in sorted(grouped_scenarios.items()):
-            noop_ids = sorted(families.get("noop", []))
-            perturbed_ids = sorted(
-                variant_id
-                for family, variant_ids in families.items()
-                if family != "noop"
-                for variant_id in variant_ids
-            )
-            if not noop_ids:
-                for variant_id in perturbed_ids:
-                    pair_rows.append(
-                        {
-                            "planner": planner,
-                            "source_scenario_id": source_scenario_id,
-                            "noop_variant_id": None,
-                            "perturbed_variant_id": variant_id,
-                            "seed": None,
-                            "pair_status": "missing_noop",
-                        }
-                    )
-                continue
-            noop_id = noop_ids[0]
-            for variant_id in perturbed_ids:
-                for seed in _seeds_for_pair(
-                    rows_by_key,
-                    planner=planner,
-                    noop_id=noop_id,
-                    variant_id=variant_id,
-                ):
-                    noop_row = rows_by_key.get((planner, noop_id, seed))
-                    perturbed_row = rows_by_key.get((planner, variant_id, seed))
-                    noop_status = classify_episode_status(noop_row)
-                    perturbed_status = classify_episode_status(perturbed_row)
-                    pair_status = (
-                        "completed"
-                        if noop_status == "completed" and perturbed_status == "completed"
-                        else "excluded"
-                    )
-                    noop_values = _episode_values(noop_row)
-                    perturbed_values = _episode_values(perturbed_row)
-                    perturbed_metadata = scenario_metadata.get(variant_id, {})
-                    pair_rows.append(
-                        {
-                            "planner": planner,
-                            "source_scenario_id": source_scenario_id,
-                            "noop_variant_id": noop_id,
-                            "perturbed_variant_id": variant_id,
-                            "perturbed_family": str(perturbed_metadata.get("family") or "unknown"),
-                            "seed": seed,
-                            "pair_status": pair_status,
-                            "noop_status": noop_status,
-                            "perturbed_status": perturbed_status,
-                            "success_delta": _delta(
-                                perturbed_values["success"], noop_values["success"]
-                            ),
-                            "collision_delta": _delta(
-                                perturbed_values["collision"], noop_values["collision"]
-                            ),
-                            "timeout_delta": _delta(
-                                perturbed_values["timeout"], noop_values["timeout"]
-                            ),
-                            "min_distance_delta": _delta(
-                                perturbed_values["min_distance"], noop_values["min_distance"]
-                            ),
-                            "noop": noop_values,
-                            "perturbed": perturbed_values,
-                        }
-                    )
-    return pair_rows
-
-
-def _summarize_pair_subset(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate one pair-table subset."""
+def _old_format_summarize(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate one pair-table subset for the legacy raw summary format."""
     status_counts: dict[str, int] = defaultdict(int)
     delta_values: dict[str, list[float]] = defaultdict(list)
     for row in pair_rows:
@@ -378,54 +204,56 @@ def _summarize_pair_subset(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _grouped_pair_summaries(
+def _old_format_grouped_summaries(
     pair_rows: list[dict[str, Any]],
     *,
     field: str,
 ) -> dict[str, dict[str, Any]]:
-    """Aggregate pair rows by one categorical field."""
+    """Aggregate pair rows by one categorical field (legacy raw format)."""
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in pair_rows:
         key = str(row.get(field) or "unknown")
         grouped[key].append(row)
-    return {key: _summarize_pair_subset(rows) for key, rows in sorted(grouped.items())}
+    return {key: _old_format_summarize(rows) for key, rows in sorted(grouped.items())}
 
 
-def summarize_pairs(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate pair-table status counts and mean deltas."""
-    summary = _summarize_pair_subset(pair_rows)
-    summary["by_planner"] = _grouped_pair_summaries(pair_rows, field="planner")
-    summary["by_source_scenario"] = _grouped_pair_summaries(
+def _old_format_pair_summary(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build legacy-format pair summary (status_counts) from v1 pair rows."""
+    summary = _old_format_summarize(pair_rows)
+    summary["by_planner"] = _old_format_grouped_summaries(pair_rows, field="planner")
+    summary["by_source_scenario"] = _old_format_grouped_summaries(
         pair_rows,
         field="source_scenario_id",
     )
-    summary["by_perturbation_family"] = _grouped_pair_summaries(
+    summary["by_perturbation_family"] = _old_format_grouped_summaries(
         pair_rows,
         field="perturbed_family",
     )
     return summary
 
 
-def _write_markdown(summary: dict[str, Any], path: Path) -> None:
-    """Write a compact Markdown summary next to the local pilot artifacts."""
+def _write_markdown_from_v1(v1_payload: dict[str, Any], path: Path) -> None:
+    """Write a compact Markdown summary from the v1 evidence payload."""
+    pair_summary = v1_payload["pair_summary"]
     lines = [
         "# Scenario Perturbation Criticality Pilot",
         "",
         "## Boundary",
         "",
-        "Diagnostic local pilot only. Raw JSONL remains ignored local output; tracked evidence should use the compact summary.",
+        "Diagnostic local pilot only. Raw JSONL remains ignored local output; tracked evidence uses the criticality_summary.v1 schema.",
         "",
         "## Aggregate",
         "",
-        f"- Planners: {', '.join(summary['planners'])}",
-        f"- Materialized variants: {summary['materialization']['variant_count']}",
-        f"- Pair rows: {summary['pair_summary']['pairs']}",
-        f"- Pair statuses: `{json.dumps(summary['pair_summary']['status_counts'], sort_keys=True)}`",
+        f"- Planners: {', '.join(v1_payload['planners'])}",
+        f"- Materialized variants: {v1_payload['materialization']['variant_count']}",
+        f"- Pair rows: {pair_summary['pairs']}",
+        "- Perturbed row status counts: "
+        f"`{json.dumps(pair_summary['row_status_counts'], sort_keys=True)}`",
         "",
         "## Mean Deltas For Completed Pairs",
         "",
     ]
-    deltas = summary["pair_summary"]["mean_deltas_completed_pairs"]
+    deltas = pair_summary["mean_deltas_completed_pairs"]
     if deltas:
         for field, value in deltas.items():
             lines.append(f"- `{field}`: `{value:.4f}`")
@@ -434,40 +262,45 @@ def _write_markdown(summary: dict[str, Any], path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _compact_tracked_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    """Return the small reviewable subset suitable for docs/context/evidence."""
-    materialization = dict(summary["materialization"])
-    materialization.pop("scenario_matrix_path", None)
-    materialization.pop("summary_path", None)
-    materialization["local_artifact_boundary"] = (
-        "materialized scenario matrix, route overrides, and raw episode JSONL remain ignored "
-        "local outputs reproducible from the tracked manifest and command"
+def build_validated_criticality_summary_payload(  # noqa: PLR0913
+    *,
+    records_by_planner: dict[str, list[dict[str, Any]]],
+    scenario_metadata: dict[str, dict[str, Any]],
+    manifest: str,
+    manifest_id: str,
+    planners: list[str],
+    horizon: int,
+    dt: float,
+    seed_limit: int,
+    materialization: dict[str, Any],
+    planner_runs: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Build and validate the compact criticality_summary.v1 evidence payload."""
+    v1_summary = build_criticality_summary_from_pilot(
+        records_by_planner=records_by_planner,
+        scenario_metadata=scenario_metadata,
+        manifest=manifest,
+        manifest_id=manifest_id,
+        planners=planners,
+        horizon=horizon,
+        dt=dt,
+        seed_limit=seed_limit,
+        materialization=materialization,
+        planner_runs=planner_runs,
     )
-    return {
-        "schema_version": summary["schema_version"],
-        "manifest": summary["manifest"],
-        "planners": summary["planners"],
-        "horizon": summary["horizon"],
-        "dt": summary["dt"],
-        "seed_limit": summary["seed_limit"],
-        "materialization": materialization,
-        "planner_runs": {
-            planner: {
-                "algo": run["algo"],
-                "algo_config_path": run["algo_config_path"],
-                "source": run["source"],
-                "episodes": run["episodes"],
-            }
-            for planner, run in summary["planner_runs"].items()
-        },
-        "pair_summary": summary["pair_summary"],
-        "pair_rows": summary["pair_rows"],
-        "claim_boundary": summary["claim_boundary"],
-    }
+    v1_payload = criticality_summary_to_dict(v1_summary)
+    validate_criticality_summary(v1_payload)
+    return v1_payload, v1_summary.pair_rows
 
 
 def main() -> int:
-    """Run the scenario perturbation pilot."""
+    """Run the scenario perturbation pilot.
+
+    Builds the evidence summary through criticality_summary v1 helpers
+    (build_criticality_summary_from_pilot → criticality_summary_to_dict
+    → validate_criticality_summary). The local raw ``summary.json``
+    retains the legacy format for backward compatibility under ``output/``.
+    """
     args = _build_parser().parse_args()
     planners = args.planners or ["goal", "orca"]
     planner_specs = [
@@ -523,7 +356,49 @@ def main() -> int:
             "batch_summary": batch_summary,
         }
 
-    pair_rows = build_pair_table(records_by_planner, metadata)
+    # Build the v1 evidence summary via the criticality_summary helpers
+    v1_materialization = {
+        "schema_version": materialized.schema_version,
+        "manifest_id": materialized.manifest_id,
+        "included_variants": list(materialized.included_variants),
+        "excluded_variants": list(materialized.excluded_variants),
+        "variant_count": len(materialized.included_variants),
+        "local_artifact_boundary": (
+            "materialized scenario matrix, route overrides, and raw episode JSONL "
+            "remain ignored local outputs reproducible from the tracked manifest and command"
+        ),
+    }
+    v1_planner_runs: dict[str, dict[str, Any]] = {}
+    for label, run in planner_runs.items():
+        v1_planner_runs[label] = {
+            "algo": run["algo"],
+            "algo_config_path": run["algo_config_path"],
+            "source": run["source"],
+            "episodes": run["episodes"],
+        }
+    v1_payload, pair_rows = build_validated_criticality_summary_payload(
+        records_by_planner=records_by_planner,
+        scenario_metadata=metadata,
+        manifest=args.manifest.as_posix(),
+        manifest_id=materialized.manifest_id,
+        planners=[s.label for s in planner_specs],
+        horizon=args.horizon,
+        dt=args.dt,
+        seed_limit=args.seed_limit,
+        materialization=v1_materialization,
+        planner_runs=v1_planner_runs,
+    )
+
+    # Legacy raw summary (backward compatible format)
+    old_materialization = {
+        "schema_version": materialized.schema_version,
+        "manifest_id": materialized.manifest_id,
+        "scenario_matrix_path": materialized.scenario_matrix_path,
+        "summary_path": materialized.summary_path,
+        "included_variants": list(materialized.included_variants),
+        "excluded_variants": list(materialized.excluded_variants),
+        "variant_count": len(materialized.included_variants),
+    }
     summary = {
         "schema_version": SCHEMA_VERSION,
         "manifest": args.manifest.as_posix(),
@@ -531,17 +406,9 @@ def main() -> int:
         "horizon": args.horizon,
         "dt": args.dt,
         "seed_limit": args.seed_limit,
-        "materialization": {
-            "schema_version": materialized.schema_version,
-            "manifest_id": materialized.manifest_id,
-            "scenario_matrix_path": materialized.scenario_matrix_path,
-            "summary_path": materialized.summary_path,
-            "included_variants": list(materialized.included_variants),
-            "excluded_variants": list(materialized.excluded_variants),
-            "variant_count": len(materialized.included_variants),
-        },
+        "materialization": old_materialization,
         "planner_runs": planner_runs,
-        "pair_summary": summarize_pairs(pair_rows),
+        "pair_summary": _old_format_pair_summary(pair_rows),
         "pair_rows": pair_rows,
         "claim_boundary": (
             "diagnostic local pilot only; not benchmark-strength or paper-facing evidence"
@@ -549,13 +416,15 @@ def main() -> int:
     }
     summary_path = args.pilot_output_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    _write_markdown(summary, args.pilot_output_dir / "summary.md")
+    _write_markdown_from_v1(v1_payload, args.pilot_output_dir / "summary.md")
+
     if args.evidence_summary is not None:
         args.evidence_summary.parent.mkdir(parents=True, exist_ok=True)
         args.evidence_summary.write_text(
-            json.dumps(_compact_tracked_summary(summary), indent=2, sort_keys=True) + "\n",
+            json.dumps(v1_payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+
     print(
         json.dumps(
             {

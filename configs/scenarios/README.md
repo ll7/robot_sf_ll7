@@ -65,7 +65,8 @@ not scenario certification, benchmark promotion, or benchmark evidence.
 
 ## Scenario Contracts
 
-Versioned scenario-intent contracts live under `contracts/`. `scenario_contract.v1` captures
+Versioned scenario-intent contracts live under `configs/scenarios/contracts/`.
+`scenario_contract.v1` captures
 authored assumptions such as ODD, actors, invariants, observables, termination semantics, and
 provenance before a scenario is executed. It is a governance layer, not a benchmark result and not a
 replacement for `scenario_cert.v1` feasibility checks.

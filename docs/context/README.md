@@ -518,6 +518,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1108 BC Warm-Start PPO Execution](issue_1108_bc_warm_start_execution.md)
   records the imitation observation-contract blocker, unblock patch, one-episode real collection
   preflight, and Slurm job IDs for the #749 BC-preinitialized PPO chain.
+* [Issue #1961 BC Warm-Start Recoverability](issue_1961_bc_warm_start_recoverability.md)
+  classifies the #1108 artifact trail as `rerun_required`: dataset and BC checkpoint are preserved
+  in W&B, but final PPO and comparison evidence are missing.
 * [Issue #1083 Sanity V1 Nominal Matrix](issue_1083_sanity_v1_nominal_matrix.md)
   records the non-paper-facing nominal calibration matrix, smoke config, baseline threshold, and
   local proof run for easier deployment-like scenes.

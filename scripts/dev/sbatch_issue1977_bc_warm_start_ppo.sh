@@ -26,6 +26,8 @@ preserved #1108 W&B artifact and runs PPO fine-tuning from the preserved BC
 checkpoint rather than recollecting trajectories or retraining BC.
 
 Options:
+  --config <path>          PPO fine-tune config (default: issue #1977 full run)
+  --wandb-artifact <name>  W&B artifact to hydrate (default: preserved #1108 artifact)
   --partition <name>       Slurm partition (default: a30)
   --qos <name>             Slurm QoS (default: a30-gpu)
   --time <limit>           Wall time passed to sbatch (default: 1-12:00:00)
@@ -39,17 +41,45 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --config)
+      PPO_CONFIG="$2"
+      shift 2
+      ;;
+    --config=*)
+      PPO_CONFIG="${1#*=}"
+      shift
+      ;;
+    --wandb-artifact)
+      WANDB_ARTIFACT="$2"
+      shift 2
+      ;;
+    --wandb-artifact=*)
+      WANDB_ARTIFACT="${1#*=}"
+      shift
+      ;;
     --partition)
       PARTITION="$2"
       shift 2
+      ;;
+    --partition=*)
+      PARTITION="${1#*=}"
+      shift
       ;;
     --qos)
       QOS="$2"
       shift 2
       ;;
+    --qos=*)
+      QOS="${1#*=}"
+      shift
+      ;;
     --time)
       TIME_LIMIT="$2"
       shift 2
+      ;;
+    --time=*)
+      TIME_LIMIT="${1#*=}"
+      shift
       ;;
     --no-policy-analysis)
       RUN_POLICY_ANALYSIS="0"

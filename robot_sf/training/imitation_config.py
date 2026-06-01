@@ -277,6 +277,13 @@ class PPOFineTuningConfig:
     scenario_id: str | None = None
     env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
+    num_envs: int | str | None = None
+    num_envs_reserve_cores: int = 0
+    worker_mode: str = "auto"
+    device: str = "auto"
+    ppo_hyperparams: dict[str, object] = field(default_factory=dict)
+    checkpoint_freq: int | None = None
+    checkpoint_dir: Path | None = None
 
     @classmethod
     def from_raw(  # noqa: PLR0913
@@ -295,6 +302,13 @@ class PPOFineTuningConfig:
         scenario_id: str | None = None,
         env_overrides: dict[str, object] | None = None,
         env_factory_kwargs: dict[str, object] | None = None,
+        num_envs: int | str | None = None,
+        num_envs_reserve_cores: int = 0,
+        worker_mode: str = "auto",
+        device: str | None = "auto",
+        ppo_hyperparams: dict[str, object] | None = None,
+        checkpoint_freq: int | None = None,
+        checkpoint_dir: Path | None = None,
     ) -> PPOFineTuningConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -316,6 +330,13 @@ class PPOFineTuningConfig:
             scenario_id=str(scenario_id) if scenario_id else None,
             env_overrides=dict(env_overrides or {}),
             env_factory_kwargs=dict(env_factory_kwargs or {}),
+            num_envs=num_envs,
+            num_envs_reserve_cores=int(num_envs_reserve_cores),
+            worker_mode=str(worker_mode),
+            device=str(device or "auto").strip() or "auto",
+            ppo_hyperparams=dict(ppo_hyperparams or {}),
+            checkpoint_freq=int(checkpoint_freq) if checkpoint_freq is not None else None,
+            checkpoint_dir=checkpoint_dir.resolve() if checkpoint_dir else None,
         )
 
 

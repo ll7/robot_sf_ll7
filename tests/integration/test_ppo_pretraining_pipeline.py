@@ -245,6 +245,10 @@ def test_issue_749_warm_start_configs_load():
     assert bc_config.policy_output_id == "issue_749_bc_preinit_v10_policy"
     assert fine_tune_config.pretrained_policy_id == bc_config.policy_output_id
     assert fine_tune_config.total_timesteps == 10_000_000
+    assert fine_tune_config.num_envs == 22
+    assert fine_tune_config.worker_mode == "subproc"
+    assert fine_tune_config.device == "cpu"
+    assert fine_tune_config.checkpoint_freq == 500_000
     assert fine_tune_config.snqi_weights_path is not None
     assert fine_tune_config.snqi_weights_path.name == "snqi_weights_camera_ready_v3.json"
     assert fine_tune_config.snqi_baseline_path is not None
@@ -253,6 +257,7 @@ def test_issue_749_warm_start_configs_load():
     assert fine_tune_config.env_overrides["observation_mode"] == "socnav_struct"
     assert bc_config.env_overrides["predictive_foresight_enabled"] is True
     assert fine_tune_config.env_overrides["include_grid_in_observation"] is True
+    assert fine_tune_config.env_overrides["predictive_foresight_device"] == "cuda"
     assert bc_config.env_factory_kwargs["reward_name"] == "route_completion_v3"
     assert fine_tune_config.env_factory_kwargs["reward_name"] == "route_completion_v3"
 

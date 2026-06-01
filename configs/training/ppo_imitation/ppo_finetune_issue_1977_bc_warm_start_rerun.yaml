@@ -9,6 +9,12 @@ training_config: ../ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yam
 scenario_config: ../../scenarios/sets/ppo_full_maintained_eval_v1.yaml
 total_timesteps: 10000000
 learning_rate: 0.0001
+num_envs: 22
+worker_mode: subproc
+# Keep the MLP PPO policy update on CPU while vectorized env workers use the GPU-backed
+# predictive foresight model. This avoids the low-utilization SB3 MLP-on-GPU path.
+device: cpu
+checkpoint_freq: 500000
 random_seeds: [111, 112, 113]
 scenario_id: classic_bottleneck_low
 snqi_weights: ../../benchmarks/snqi_weights_camera_ready_v3.json
@@ -19,7 +25,7 @@ env_overrides:
   include_grid_in_observation: true
   predictive_foresight_enabled: true
   predictive_foresight_model_id: predictive_proxy_selected_v2_full
-  predictive_foresight_device: cpu
+  predictive_foresight_device: cuda
   predictive_foresight_max_agents: 16
   predictive_foresight_horizon_steps: 8
   predictive_foresight_rollout_dt: 0.2

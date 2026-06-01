@@ -212,6 +212,10 @@ function annotationFrameRange(scenePayload, annotation) {
   const startStep = annotation.anchor.frame_start;
   const endStep = annotation.anchor.frame_end;
   const frames = scenePayload.frames;
+  if (!frames.length) return [null, null];
+  const firstStep = frames[0].timestep ?? 0;
+  const lastStep = frames[frames.length - 1].timestep ?? frames.length - 1;
+  if (endStep < firstStep || startStep > lastStep) return [null, null];
   let start = frames.findIndex((frame) => frame.timestep === startStep);
   let end = frames.findIndex((frame) => frame.timestep === endStep);
   if (start < 0) {

@@ -238,6 +238,8 @@ knowledge, not every transient iteration detail.
   [issue_1949_ped_wait_duration_perturbation.md](issue_1949_ped_wait_duration_perturbation.md)
 * Issue #1951 Intersection-Wait Phase Grid (2026-06-01):
   [issue_1951_intersection_wait_phase_grid.md](issue_1951_intersection_wait_phase_grid.md)
+* Issue #1953 Intersection-Wait Speed-Grid Trace (2026-06-01):
+  [issue_1953_intersection_wait_speed_grid_trace.md](issue_1953_intersection_wait_speed_grid_trace.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:

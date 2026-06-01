@@ -117,9 +117,10 @@ def test_generate_scenario_atlas_records_map_id_file_and_stable_repeated_outputs
     manifest_b = json.loads((out_b / "atlas_manifest.json").read_text(encoding="utf-8"))
     checksums_a = {entry["path"]: entry["sha256"] for entry in manifest_a["outputs"]}
     checksums_b = {entry["path"]: entry["sha256"] for entry in manifest_b["outputs"]}
-    assert checksums_a["thumbnails/fixture_crossing.png"] == checksums_b[
-        "thumbnails/fixture_crossing.png"
-    ]
+    assert (
+        checksums_a["thumbnails/fixture_crossing.png"]
+        == checksums_b["thumbnails/fixture_crossing.png"]
+    )
 
 
 def test_command_quotes_shell_sensitive_paths_and_run_id(tmp_path: Path) -> None:

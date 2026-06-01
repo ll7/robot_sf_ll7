@@ -366,7 +366,9 @@ def _relative_output_path(path: Path, output: Path) -> str:
     try:
         return resolved_path.relative_to(resolved_output).as_posix()
     except ValueError as exc:
-        raise ValueError(f"Generated path '{resolved_path}' is outside output '{resolved_output}'.") from exc
+        raise ValueError(
+            f"Generated path '{resolved_path}' is outside output '{resolved_output}'."
+        ) from exc
 
 
 def _run(args: argparse.Namespace) -> dict[str, str]:

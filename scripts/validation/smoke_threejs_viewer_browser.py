@@ -48,9 +48,13 @@ def classify_canvas_screenshot(
 ) -> CanvasSmokeResult:
     """Classify whether a canvas screenshot contains rendered non-background pixels."""
     image = Image.open(screenshot_path).convert("RGB")
-    pixels = list(image.getdata())
-    distinct_colors = len(set(pixels))
-    non_background_pixels = sum(pixel != background_rgb for pixel in pixels)
+    color_counts = image.getcolors(maxcolors=image.width * image.height)
+    if color_counts is None:  # pragma: no cover - defensive because maxcolors covers all pixels.
+        color_counts = [
+            (count, color) for count, color in image.getcolors(maxcolors=256 * 256 * 256) or []
+        ]
+    distinct_colors = len(color_counts)
+    non_background_pixels = sum(count for count, color in color_counts if color != background_rgb)
 
     if distinct_colors < min_distinct_colors:
         return CanvasSmokeResult(

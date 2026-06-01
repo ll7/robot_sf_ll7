@@ -91,6 +91,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Perturbation family to pair against the no-op variant.",
     )
     parser.add_argument(
+        "--perturbed-variant-id",
+        help=(
+            "Optional exact perturbed variant_id to pair against the no-op. "
+            "When omitted, the first variant matching --perturbed-family is used."
+        ),
+    )
+    parser.add_argument(
         "--planner",
         action="append",
         dest="planners",
@@ -462,6 +469,7 @@ def _select_variant_pair(
     *,
     source_scenario_id: str,
     perturbed_family: str,
+    perturbed_variant_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return the no-op and perturbed scenario entries for one source scenario."""
     noop: dict[str, Any] | None = None
@@ -474,13 +482,23 @@ def _select_variant_pair(
         if str(payload.get("source_scenario_id") or "") != source_scenario_id:
             continue
         family = str(payload.get("family") or "")
+        variant_id = str(payload.get("variant_id") or "")
         if family == "noop" and noop is None:
             noop = scenario
-        elif family == perturbed_family and perturbed is None:
+        elif (
+            family == perturbed_family
+            and perturbed is None
+            and (perturbed_variant_id is None or variant_id == perturbed_variant_id)
+        ):
             perturbed = scenario
     if noop is None:
         raise ValueError(f"No no-op variant found for source scenario {source_scenario_id!r}")
     if perturbed is None:
+        if perturbed_variant_id is not None:
+            raise ValueError(
+                f"No {perturbed_family!r} variant with variant_id {perturbed_variant_id!r} "
+                f"found for source scenario {source_scenario_id!r}"
+            )
         raise ValueError(
             f"No {perturbed_family!r} variant found for source scenario {source_scenario_id!r}"
         )
@@ -509,6 +527,7 @@ def _write_markdown(report: dict[str, Any], path: Path) -> None:
         "",
         f"- Source scenario: `{report['source_scenario_id']}`",
         f"- Perturbed family: `{report['perturbed_family']}`",
+        f"- Perturbed variant: `{report['perturbed_variant_id']}`",
         f"- Planners: {', '.join(f'`{planner}`' for planner in report['planners'])}",
         f"- Pair rows: `{summary['pairs']}`",
         f"- Pair statuses: `{json.dumps(summary['status_counts'], sort_keys=True)}`",
@@ -571,6 +590,22 @@ def main() -> int:
         scenarios,
         source_scenario_id=args.source_scenario_id,
         perturbed_family=args.perturbed_family,
+        perturbed_variant_id=args.perturbed_variant_id,
+    )
+    perturbed_metadata = (
+        perturbed_scenario.get("metadata")
+        if isinstance(perturbed_scenario.get("metadata"), dict)
+        else {}
+    )
+    perturbed_payload = (
+        perturbed_metadata.get("scenario_perturbation")
+        if isinstance(perturbed_metadata, dict)
+        else {}
+    )
+    selected_perturbed_variant_id = (
+        str(perturbed_payload.get("variant_id") or perturbed_scenario.get("scenario_id") or "")
+        if isinstance(perturbed_payload, dict)
+        else str(perturbed_scenario.get("scenario_id") or "")
     )
     seeds = sorted(set(_scenario_seeds(noop_scenario)) & set(_scenario_seeds(perturbed_scenario)))
     pair_rows: list[dict[str, Any]] = []
@@ -607,6 +642,8 @@ def main() -> int:
         "manifest": args.manifest.as_posix(),
         "source_scenario_id": args.source_scenario_id,
         "perturbed_family": args.perturbed_family,
+        "perturbed_variant_id": selected_perturbed_variant_id,
+        "requested_perturbed_variant_id": args.perturbed_variant_id,
         "planners": [spec.label for spec in planner_specs],
         "horizon": args.horizon,
         "dt": args.dt,

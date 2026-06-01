@@ -1,0 +1,148 @@
+# Issue #1951 diagnostic phase-grid manifest for parent issue #1610.
+#
+# This manifest uses the wait-duration perturbation family merged in #1950. It is a compact
+# local-pilot input only; it does not make benchmark-strength or paper-facing claims.
+
+schema_version: scenario_perturbation_manifest.v1
+manifest_id: issue_1610_intersection_wait_phase_grid_v1
+description: >-
+  Compact diagnostic #1610 phase-grid for francis2023_intersection_wait pedestrian h1. It holds
+  the #1941/#1943/#1949 planner, seed, horizon, and dt boundary fixed while varying
+  single-pedestrian start-delay, speed, and wait-duration offsets around the no-op baseline.
+scenario_config: ../classic_interactions_francis2023.yaml
+seed_controls:
+  baseline_seeds: [240, 241, 242]
+  replay_seed_policy: explicit
+  source: docs/context/evidence/issue_1608_seed_sensitivity_2026-05-30/scenario_seed_sensitivity.csv
+validity:
+  require_scenario_certification: true
+  max_route_offset_m: 0.5
+  max_start_delay_offset_s: 1.0
+  max_single_pedestrian_speed_delta_m_s: 0.5
+  max_single_pedestrian_speed_m_s: 2.0
+  max_wait_duration_offset_s: 1.0
+  invalid_variant_evidence_policy: exclude_from_success_evidence
+  notes: >-
+    The phase-grid intentionally uses only existing single-pedestrian perturbation families.
+    Invalid rows must fail closed and stay out of paired success evidence rather than
+    falling back to another perturbation family.
+variants:
+  - variant_id: francis2023_intersection_wait_noop
+    scenario_id: francis2023_intersection_wait
+    family: noop
+    seeds: [240, 241, 242]
+    rationale: Baseline row for the wait-then-cross Francis intersection scenario.
+
+  - variant_id: francis2023_intersection_wait_start_delay_h1_m050
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_start_delay_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Negative timing-phase probe requested by #1951. The source pedestrian has no baseline start
+      delay, so this row is expected to fail closed during preflight instead of being materialized.
+    parameters:
+      dt_s: -0.5
+      max_abs_dt_s: 1.0
+      pedestrian_id: h1
+  - variant_id: francis2023_intersection_wait_start_delay_h1_p050
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_start_delay_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Delays the crossing pedestrian by 0.5 s to compare against the prior #1941 timing-phase
+      pilot on the same planner and seed boundary.
+    parameters:
+      dt_s: 0.5
+      max_abs_dt_s: 1.0
+      pedestrian_id: h1
+  - variant_id: francis2023_intersection_wait_start_delay_h1_p100
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_start_delay_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Delays the crossing pedestrian by 1.0 s to test whether the large positive min-distance
+      response seen at +0.5 s grows or saturates in this local diagnostic slice.
+    parameters:
+      dt_s: 1.0
+      max_abs_dt_s: 1.0
+      pedestrian_id: h1
+
+  - variant_id: francis2023_intersection_wait_speed_h1_m025
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_speed_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Slows the crossing pedestrian by 0.25 m/s, remaining positive under the runtime default
+      single-pedestrian speed baseline.
+    parameters:
+      speed_delta_m_s: -0.25
+      max_abs_speed_delta_m_s: 0.5
+      max_speed_m_s: 2.0
+      pedestrian_id: h1
+  - variant_id: francis2023_intersection_wait_speed_h1_p025
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_speed_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Speeds the crossing pedestrian by 0.25 m/s to compare with the prior #1943/#1947
+      intersection-wait speed response.
+    parameters:
+      speed_delta_m_s: 0.25
+      max_abs_speed_delta_m_s: 0.5
+      max_speed_m_s: 2.0
+      pedestrian_id: h1
+  - variant_id: francis2023_intersection_wait_speed_h1_p050
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_speed_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Speeds the crossing pedestrian by 0.5 m/s, the maximum requested magnitude under the local
+      phase-grid cap.
+    parameters:
+      speed_delta_m_s: 0.5
+      max_abs_speed_delta_m_s: 0.5
+      max_speed_m_s: 2.0
+      pedestrian_id: h1
+
+  - variant_id: francis2023_intersection_wait_wait_h1_m050
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_wait_duration_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Shortens the explicit wait_at duration from 2.0 s to 1.5 s to test whether the prior
+      +0.5 s flat result is symmetric around the source dwell time.
+    parameters:
+      wait_delta_s: -0.5
+      max_abs_wait_delta_s: 1.0
+      pedestrian_id: h1
+  - variant_id: francis2023_intersection_wait_wait_h1_p050
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_wait_duration_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Extends the explicit wait_at duration by 0.5 s, matching the #1949 pilot point within the
+      compact phase grid.
+    parameters:
+      wait_delta_s: 0.5
+      max_abs_wait_delta_s: 1.0
+      pedestrian_id: h1
+  - variant_id: francis2023_intersection_wait_wait_h1_p100
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_wait_duration_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Extends the explicit wait_at duration by 1.0 s to test whether a larger dwell shift remains
+      flat or changes the local closest-approach geometry.
+    parameters:
+      wait_delta_s: 1.0
+      max_abs_wait_delta_s: 1.0
+      pedestrian_id: h1
+pilot_matrix_note:
+  parent_issue: "#1610"
+  next_step: >-
+    Run a compact paired planner pilot over eligible no-op and phase-grid rows using the fixed
+    planners goal, orca, and scenario_adaptive_hybrid_orca_v2_collision_guard with seeds
+    [240, 241, 242], horizon 80, and dt 0.1.
+  evidence_boundary: >-
+    Preflight validity and pilot deltas are diagnostic local evidence only; invalid, fallback,
+    degraded, missing, or failed rows are limitations rather than success evidence.

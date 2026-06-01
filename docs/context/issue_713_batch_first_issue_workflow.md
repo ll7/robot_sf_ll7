@@ -115,6 +115,43 @@ For larger automation, prefer a GitHub App or brokered local queue over several 
 sharing one rate-limit bucket. The broker should cache reads, throttle writes, prioritize project
 mutations, and degrade to local/REST-only mode when GraphQL quota is low.
 
+### Cross-Machine Issue Claims
+
+When two `goal-autopilot` or `goal-issue-implementation` runs may execute on different PCs, use a
+stable remote Git ref as the implementation mutex before creating a worktree or branch:
+
+```bash
+uv run python scripts/dev/issue_claim.py acquire <issue-number>
+```
+
+The helper creates `refs/heads/agent-claims/issue-<issue-number>` through GitHub's create-ref API,
+which fails when the ref already exists. That makes acquisition atomic enough for this workflow: the
+first PC succeeds, and later PCs fail instead of doing the same implementation work. A failed
+acquisition means "skip this issue now", not "retry until it wins". Inspect the current claim with:
+
+```bash
+uv run python scripts/dev/issue_claim.py status <issue-number>
+```
+
+After acquiring a claim, make it visible to humans and other agents by moving the issue to
+`In progress`/`state:running`, assigning the actor when practical, and adding a short comment with:
+
+- claim ref: `agent-claims/issue-<issue-number>`;
+- machine/thread identity;
+- intended implementation branch or worktree;
+- stale-claim cleanup condition.
+
+After a PR is open and duplicate-PR checks can see that the issue is covered, release the transient
+claim:
+
+```bash
+uv run python scripts/dev/issue_claim.py release <issue-number>
+```
+
+Only release another run's claim after checking that there is no open PR, no recent claimant comment,
+and the claim is clearly stale or abandoned. Do not use Project #5 status or labels as the mutex;
+they are useful visibility and routing metadata, but they are not atomic across two PCs.
+
 ## Diagnostic Boundary
 
 - This workflow is about GitHub issue/project hygiene.

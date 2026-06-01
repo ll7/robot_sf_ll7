@@ -65,23 +65,45 @@ unless the user explicitly chooses a stacked-PR route.
    - add `decision-required` (create if missing),
    - set status back to `Tracked`,
    - stop with blocker.
-5. Move the issue to `In progress` (optionally normalize priority).
-6. Create the issue branch in a linked worktree for non-trivial implementation. Prefer the
+5. Acquire the cross-machine issue claim before any implementation branch or worktree setup:
+
+   ```bash
+   uv run python scripts/dev/issue_claim.py acquire <issue-number>
+   ```
+
+   The command atomically creates the remote ref `agent-claims/issue-<issue-number>` through
+   GitHub's create-ref API, which fails when the ref already exists. If it exits non-zero, another
+   PC or agent probably claimed the issue first; run
+   `uv run python scripts/dev/issue_claim.py status <issue-number>`, record the collision, and skip
+   to the next candidate. Do not reimplement the issue unless the remote claim is confirmed stale
+   and deliberately released.
+6. After a successful claim, make the claim visible in GitHub issue/project state: move the issue to
+   `In progress`, add or preserve `state:running` when using state labels, assign the local actor
+   when practical, and add a short issue comment naming the claim ref, machine/thread, intended
+   implementation branch, and stale-claim cleanup condition.
+7. Create the issue branch in a linked worktree for non-trivial implementation. Prefer the
    `AGENTS.md` "Fresh Worktree Bootstrap" location, naming, machine-context symlink, and branch
    freshness rules; use an in-place branch only for tiny or explicitly requested main-checkout work.
-7. Implement inside accepted scope.
-8. Run validation gate and rerun on failures only when fixable.
-9. Commit with conventional message; if long-running benchmark evidence appears, classify artifacts.
-10. Sync with latest `origin/main`, rerun readiness, and check artifact durability.
-11. Re-check open PRs for the same linked issue, head scope, or title before opening a new PR.
-12. Open a ready PR using `gh-pr-opener`; use draft only when explicitly requested or when the
+8. Implement inside accepted scope.
+9. Run validation gate and rerun on failures only when fixable.
+10. Commit with conventional message; if long-running benchmark evidence appears, classify artifacts.
+11. Sync with latest `origin/main`, rerun readiness, and check artifact durability.
+12. Re-check open PRs for the same linked issue, head scope, or title before opening a new PR.
+13. Open a ready PR using `gh-pr-opener`; use draft only when explicitly requested or when the
     PR body names a concrete reason review should be blocked.
-13. For deferred important work, create follow-up issues and link them before final handoff.
+14. After the PR exists and the issue is visibly covered by the PR, release the transient claim with
+    `uv run python scripts/dev/issue_claim.py release <issue-number>`. Do not release the claim
+    earlier unless the run is abandoning the issue and records the handoff.
+15. For deferred important work, create follow-up issues and link them before final handoff.
 
 ## Branch and State Safety
 
 - One active issue branch by default.
 - Keep branch names stable and issue-linked.
+- Treat `agent-claims/issue-<number>` as the cross-machine mutex for implementation selection. A
+  successful claim means this run may proceed; a failed claim means skip the issue, inspect status,
+  and choose another candidate. Project status, labels, assignments, and comments are visibility
+  surfaces, not the atomic claim.
 - Before tearing down a worktree, follow `AGENTS.md` "Worktree Teardown And Preservation" so tracked,
   untracked, and ignored-but-important local changes are preserved or explicitly dismissed.
 - Do not force-push, rewrite branch history, or merge unrelated issues into this branch.

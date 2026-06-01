@@ -148,6 +148,10 @@ entries:
     status: current
     freshness: policy
     area: manual_control_trace
+  - path: docs/context/issue_2038_real_trace_viewer_smoke.md
+    status: current
+    freshness: evidence
+    area: manual_control_trace
   - path: docs/context/evidence/README.md
     status: evidence
     freshness: evidence

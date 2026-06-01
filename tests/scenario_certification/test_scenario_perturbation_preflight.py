@@ -241,6 +241,59 @@ def _write_wait_duration_manifest(
     return path
 
 
+def _write_pedestrian_density_manifest(
+    path: Path,
+    *,
+    scenario_id: str,
+    density_delta: float = 0.02,
+    max_abs_density_delta: float = 0.03,
+    manifest_delta_cap: float = 0.03,
+    max_ped_density: float | None = 0.12,
+) -> Path:
+    """Write a perturbation manifest that offsets route-pedestrian density."""
+    validity = {
+        "require_scenario_certification": True,
+        "max_route_offset_m": 0.5,
+        "max_pedestrian_density_delta": manifest_delta_cap,
+        "invalid_variant_evidence_policy": "exclude_from_success_evidence",
+    }
+    if max_ped_density is not None:
+        validity["max_pedestrian_density"] = max_ped_density
+    parameters = {
+        "density_delta": density_delta,
+        "max_abs_density_delta": max_abs_density_delta,
+    }
+    if max_ped_density is not None:
+        parameters["max_ped_density"] = max_ped_density
+    payload = {
+        "schema_version": PERTURBATION_MANIFEST_SCHEMA_VERSION,
+        "manifest_id": "test_pedestrian_density_perturbation_manifest",
+        "scenario_config": "configs/scenarios/classic_interactions_francis2023.yaml",
+        "seed_controls": {
+            "baseline_seeds": [171],
+            "replay_seed_policy": "explicit",
+        },
+        "validity": validity,
+        "variants": [
+            {
+                "variant_id": f"{scenario_id}_noop",
+                "scenario_id": scenario_id,
+                "family": "noop",
+                "seeds": [171],
+            },
+            {
+                "variant_id": f"{scenario_id}_density_offset",
+                "scenario_id": scenario_id,
+                "family": "pedestrian_density_offset",
+                "seeds": [171],
+                "parameters": parameters,
+            },
+        ],
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def test_manifest_schema_accepts_noop_and_bounded_route_offset(tmp_path: Path) -> None:
     """The public schema should document the first supported perturbation surface."""
     manifest_path = _write_manifest(tmp_path / "perturbations.yaml")
@@ -384,6 +437,44 @@ def test_manifest_schema_requires_manifest_wait_duration_cap_for_wait_duration_o
         jsonschema.validate(manifest, schema)
 
 
+def test_manifest_schema_accepts_bounded_pedestrian_density_offset(
+    tmp_path: Path,
+) -> None:
+    """The public schema should expose the route-pedestrian density family."""
+    manifest_path = _write_pedestrian_density_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_medium",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    jsonschema.validate(manifest, schema)
+
+
+def test_manifest_schema_requires_manifest_density_cap_for_density_offset(
+    tmp_path: Path,
+) -> None:
+    """Density manifests should carry both variant-local and policy-level bounds."""
+    manifest_path = _write_pedestrian_density_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_medium",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    del manifest["validity"]["max_pedestrian_density_delta"]
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    with pytest.raises(jsonschema.ValidationError, match="max_pedestrian_density_delta"):
+        jsonschema.validate(manifest, schema)
+
+
 def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None:
     """Family-specific parameter schemas should catch typo-shaped irrelevant fields."""
     schema = json.loads(
@@ -424,6 +515,15 @@ def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None
     wait_manifest["variants"][1]["parameters"]["speed_delta_m_s"] = 0.25
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(wait_manifest, schema)
+
+    density_manifest_path = _write_pedestrian_density_manifest(
+        tmp_path / "density_perturbations.yaml",
+        scenario_id="classic_group_crossing_medium",
+    )
+    density_manifest = yaml.safe_load(density_manifest_path.read_text(encoding="utf-8"))
+    density_manifest["variants"][1]["parameters"]["dx_m"] = 0.0
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(density_manifest, schema)
 
 
 def test_preflight_rejects_manifest_that_violates_public_schema(tmp_path: Path) -> None:
@@ -778,6 +878,95 @@ def test_preflight_excludes_negative_wait_duration_result(tmp_path: Path) -> Non
     ]
 
 
+def test_preflight_certifies_bounded_pedestrian_density_offset(
+    tmp_path: Path,
+) -> None:
+    """Pedestrian density offsets should certify when route pedestrians can spawn."""
+    manifest_path = _write_pedestrian_density_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_medium",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    assert [result.variant_id for result in report.results] == [
+        "classic_group_crossing_medium_noop",
+        "classic_group_crossing_medium_density_offset",
+    ]
+    assert {result.validity_status for result in report.results} == {"valid"}
+    density_result = report.results[1]
+    assert density_result.family == "pedestrian_density_offset"
+    assert density_result.perturbation_summary["baseline_ped_density"] == pytest.approx(0.08)
+    assert density_result.perturbation_summary["updated_ped_density"] == pytest.approx(0.10)
+    assert density_result.perturbation_summary["pedestrian_route_count"] > 0
+
+
+def test_preflight_excludes_density_offset_without_pedestrian_routes(
+    tmp_path: Path,
+) -> None:
+    """Density offsets must fail closed when the source scenario has no route pedestrians."""
+    manifest_path = _write_pedestrian_density_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.family == "pedestrian_density_offset"
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: pedestrian_density_offset selected no pedestrian routes"
+    ]
+
+
+def test_preflight_excludes_unbounded_density_offset_before_certification(
+    tmp_path: Path,
+) -> None:
+    """Out-of-bounds density perturbations should fail closed without certification."""
+    manifest_path = _write_pedestrian_density_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_medium",
+        density_delta=0.04,
+        max_abs_density_delta=0.03,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "pedestrian_density_offset abs_density_delta 0.040000 exceeds "
+        "variant max_abs_density_delta 0.030000"
+    ]
+
+
+def test_preflight_excludes_negative_density_result(tmp_path: Path) -> None:
+    """Negative density offsets cannot make route-pedestrian density negative."""
+    manifest_path = _write_pedestrian_density_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_medium",
+        density_delta=-0.10,
+        max_abs_density_delta=0.12,
+        manifest_delta_cap=0.12,
+        max_ped_density=None,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: pedestrian_density_offset would make ped_density negative"
+    ]
+
+
 def test_preflight_excludes_unbounded_route_offset_before_certification(tmp_path: Path) -> None:
     """Out-of-bounds perturbations should fail closed without becoming benchmark evidence."""
     manifest_path = _write_manifest(tmp_path / "perturbations.yaml", max_route_offset_m=0.2)
@@ -1070,6 +1259,40 @@ def test_materialize_pilot_matrix_writes_wait_duration_overrides(tmp_path: Path)
         ped.id: [rule.wait_s for rule in ped.wait_at or []] for ped in offset_map.single_pedestrians
     }
     assert waits["h1"] == [pytest.approx(2.5)]
+
+
+def test_materialize_pilot_matrix_writes_pedestrian_density_override(
+    tmp_path: Path,
+) -> None:
+    """Density variants should write an executable scenario-level density override."""
+    manifest_path = _write_pedestrian_density_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_medium",
+    )
+
+    materialized = materialize_perturbation_pilot_matrix(
+        manifest_path,
+        output_dir=tmp_path / "pilot",
+        seed_limit=1,
+    )
+
+    assert materialized.included_variants == (
+        "classic_group_crossing_medium_noop",
+        "classic_group_crossing_medium_density_offset",
+    )
+    matrix_path = Path(materialized.scenario_matrix_path)
+    generated_scenarios = load_scenarios(matrix_path)
+    offset_scenario = generated_scenarios[1]
+    assert offset_scenario["simulation_config"]["ped_density"] == pytest.approx(0.10)
+    metadata = offset_scenario["metadata"]["scenario_perturbation"]
+    assert metadata["family"] == "pedestrian_density_offset"
+    assert metadata["perturbation_summary"]["updated_ped_density"] == pytest.approx(0.10)
+
+    offset_config = build_robot_config_from_scenario(
+        offset_scenario,
+        scenario_path=matrix_path,
+    )
+    assert offset_config.sim_config.peds_per_area_m2 == pytest.approx(0.10)
 
 
 def test_materialize_pilot_matrix_skips_preflight_excluded_variants(tmp_path: Path) -> None:

@@ -361,6 +361,12 @@ def _preflight_variant(
                 reasons=bound_reasons,
                 perturbation_summary=perturbation_summary,
             )
+        perturbation_summary = _resolve_scenario_dependent_perturbation_summary(
+            normalized,
+            perturbation_summary=perturbation_summary,
+            scenario_config=scenario_config,
+            scenarios=scenarios,
+        )
         certificate = _certify_variant(
             normalized,
             scenario_config=scenario_config,
@@ -414,6 +420,7 @@ def _normalize_variant(variant: Any) -> Mapping[str, Any]:
         "single_pedestrian_start_delay_offset",
         "single_pedestrian_speed_offset",
         "single_pedestrian_wait_duration_offset",
+        "pedestrian_density_offset",
     }:
         raise ValueError(f"unsupported perturbation family: {family}")
     return variant
@@ -455,6 +462,8 @@ def _validate_perturbation_bounds(
         return _validate_single_pedestrian_speed_offset_bounds(variant, manifest=manifest)
     if family == "single_pedestrian_wait_duration_offset":
         return _validate_wait_duration_offset_bounds(variant, manifest=manifest)
+    if family == "pedestrian_density_offset":
+        return _validate_pedestrian_density_offset_bounds(variant, manifest=manifest)
 
     dx = _finite_float(parameters.get("dx_m", 0.0), field_name="parameters.dx_m")
     dy = _finite_float(parameters.get("dy_m", 0.0), field_name="parameters.dy_m")
@@ -492,6 +501,113 @@ def _optional_positive_float(raw: Any, *, field_name: str) -> float | None:
     if raw is None:
         return None
     return _positive_float(raw, field_name=field_name)
+
+
+def _validate_pedestrian_density_offset_bounds(
+    variant: Mapping[str, Any],
+    *,
+    manifest: Mapping[str, Any],
+) -> tuple[list[str], dict[str, Any]]:
+    """Validate bounded scenario-level pedestrian-density perturbations.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Fail-closed reasons and perturbation summary.
+    """
+    family = str(variant["family"])
+    parameters = variant.get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ValueError(f"{family} variants require a parameters mapping")
+    density_delta = _finite_float(
+        parameters.get("density_delta"),
+        field_name="parameters.density_delta",
+    )
+    variant_max = _positive_float(
+        parameters.get("max_abs_density_delta"),
+        field_name="parameters.max_abs_density_delta",
+    )
+    manifest_max = _positive_float(
+        manifest["validity"].get("max_pedestrian_density_delta"),
+        field_name="validity.max_pedestrian_density_delta",
+    )
+    bound = min(variant_max, manifest_max)
+    manifest_density_cap = _optional_positive_float(
+        manifest["validity"].get("max_pedestrian_density"),
+        field_name="validity.max_pedestrian_density",
+    )
+    variant_density_cap = _optional_positive_float(
+        parameters.get("max_ped_density"),
+        field_name="parameters.max_ped_density",
+    )
+    density_caps = [
+        value for value in (manifest_density_cap, variant_density_cap) if value is not None
+    ]
+    max_ped_density = min(density_caps) if density_caps else None
+    abs_density_delta = abs(density_delta)
+    summary = {
+        "family": family,
+        "density_delta": density_delta,
+        "abs_density_delta": abs_density_delta,
+        "max_abs_density_delta": bound,
+        "max_ped_density": max_ped_density,
+    }
+    if abs_density_delta > bound:
+        return [
+            f"{family} abs_density_delta {abs_density_delta:.6f} exceeds "
+            f"variant max_abs_density_delta {bound:.6f}"
+        ], summary
+    return [], summary
+
+
+def _resolve_scenario_dependent_perturbation_summary(
+    variant: Mapping[str, Any],
+    *,
+    perturbation_summary: Mapping[str, Any],
+    scenario_config: Path,
+    scenarios: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Enrich perturbation summaries that need scenario-specific facts.
+
+    Returns:
+        dict[str, Any]: Scenario-independent or enriched perturbation summary.
+    """
+    if variant["family"] != "pedestrian_density_offset":
+        return dict(perturbation_summary)
+    return _pedestrian_density_summary_for_scenario(
+        variant,
+        perturbation_summary=perturbation_summary,
+        scenario_config=scenario_config,
+        scenarios=scenarios,
+    )
+
+
+def _pedestrian_density_summary_for_scenario(
+    variant: Mapping[str, Any],
+    *,
+    perturbation_summary: Mapping[str, Any],
+    scenario_config: Path,
+    scenarios: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Return density perturbation facts that depend on the selected source scenario."""
+    scenario = dict(select_scenario(scenarios, str(variant["scenario_id"])))
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_config)
+    if not config.map_pool.map_defs:
+        raise ValueError("scenario map pool is empty")
+    _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    if not map_def.ped_routes:
+        raise ValueError("pedestrian_density_offset selected no pedestrian routes")
+    baseline_ped_density = float(config.sim_config.peds_per_area_m2)
+    density_delta = float(perturbation_summary["density_delta"])
+    updated_ped_density = baseline_ped_density + density_delta
+    if updated_ped_density < 0.0:
+        raise ValueError("pedestrian_density_offset would make ped_density negative")
+    max_ped_density = perturbation_summary.get("max_ped_density")
+    if max_ped_density is not None and updated_ped_density > float(max_ped_density):
+        raise ValueError("pedestrian_density_offset would make ped_density exceed max_ped_density")
+    summary = dict(perturbation_summary)
+    summary["baseline_ped_density"] = baseline_ped_density
+    summary["updated_ped_density"] = updated_ped_density
+    summary["pedestrian_route_count"] = len(map_def.ped_routes)
+    return summary
 
 
 def _validate_start_delay_offset_bounds(
@@ -656,6 +772,15 @@ def _certify_variant(
     scenario = dict(select_scenario(scenarios, str(variant["scenario_id"])))
     if variant["family"] == "noop":
         return certify_scenario(scenario, scenario_path=scenario_config)
+    if variant["family"] == "pedestrian_density_offset":
+        scenario = _scenario_with_pedestrian_density_offset(
+            scenario,
+            perturbation_summary=perturbation_summary,
+        )
+        scenario["metadata"] = _variant_metadata(
+            scenario.get("metadata"), variant, perturbation_summary
+        )
+        return certify_scenario(scenario, scenario_path=scenario_config)
 
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_config)
     if not config.map_pool.map_defs:
@@ -769,7 +894,29 @@ def _materialize_variant_scenario(
             scenario_config=scenario_config,
             perturbation_summary=result.perturbation_summary,
         )
+    elif variant["family"] == "pedestrian_density_offset":
+        scenario = _scenario_with_pedestrian_density_offset(
+            scenario,
+            perturbation_summary=result.perturbation_summary,
+        )
     return scenario
+
+
+def _scenario_with_pedestrian_density_offset(
+    scenario: Mapping[str, Any],
+    *,
+    perturbation_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return a scenario payload with an updated route-pedestrian density."""
+    updated = deepcopy(dict(scenario))
+    simulation_config = (
+        dict(updated.get("simulation_config"))
+        if isinstance(updated.get("simulation_config"), Mapping)
+        else {}
+    )
+    simulation_config["ped_density"] = float(perturbation_summary["updated_ped_density"])
+    updated["simulation_config"] = simulation_config
+    return updated
 
 
 def _resolve_materialized_scenario_paths(

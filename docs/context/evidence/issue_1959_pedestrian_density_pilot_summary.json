@@ -1,0 +1,57 @@
+{
+  "schema_version": "scenario_perturbation_preflight_summary.v1",
+  "issue": "#1959",
+  "parent_issue": "#1610",
+  "manifest": "configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml",
+  "generated_from": {
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/preflight_scenario_perturbations.py configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml --output output/scenario_perturbation_preflight/issue_1610_pedestrian_density_offset_pilot_v1.json --fail-on-excluded",
+    "exit_code": 2,
+    "exit_code_interpretation": "--fail-on-excluded returned non-zero because the Francis fail-closed probe was excluded as intended.",
+    "raw_output_path": "output/scenario_perturbation_preflight/issue_1610_pedestrian_density_offset_pilot_v1.json",
+    "raw_output_tracked": false
+  },
+  "evidence_boundary": "Local validity preflight only; not planner execution, benchmark evidence, or paper-facing evidence.",
+  "variant_results": [
+    {
+      "variant_id": "classic_group_crossing_medium_noop",
+      "scenario_id": "classic_group_crossing_medium",
+      "family": "noop",
+      "seeds": [171, 172, 173],
+      "validity_status": "valid",
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "summary": {
+        "family": "noop",
+        "magnitude_m": 0.0
+      }
+    },
+    {
+      "variant_id": "classic_group_crossing_medium_density_p020",
+      "scenario_id": "classic_group_crossing_medium",
+      "family": "pedestrian_density_offset",
+      "seeds": [171, 172, 173],
+      "validity_status": "valid",
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "summary": {
+        "baseline_ped_density": 0.08,
+        "density_delta": 0.02,
+        "updated_ped_density": 0.1,
+        "max_abs_density_delta": 0.03,
+        "max_ped_density": 0.12,
+        "pedestrian_route_count": 1
+      }
+    },
+    {
+      "variant_id": "francis2023_intersection_wait_density_p020",
+      "scenario_id": "francis2023_intersection_wait",
+      "family": "pedestrian_density_offset",
+      "seeds": [240, 241, 242],
+      "validity_status": "invalid",
+      "benchmark_evidence_status": "excluded_from_success_evidence",
+      "reason": "preflight_error: pedestrian_density_offset selected no pedestrian routes"
+    }
+  ],
+  "status_counts": {
+    "eligible_success_evidence_candidate": 2,
+    "excluded_from_success_evidence": 1
+  }
+}

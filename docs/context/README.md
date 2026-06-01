@@ -297,6 +297,8 @@ knowledge, not every transient iteration detail.
   [issue_2006_guarded_ppo_zero_motion_repair.md](issue_2006_guarded_ppo_zero_motion_repair.md)
 * Issue #2008 Artifact Catalog Contract (2026-06-01):
   [issue_2008_artifact_catalog.md](issue_2008_artifact_catalog.md)
+* Issue #2037 Artifact Compiler Smoke (2026-06-01):
+  [issue_2037_artifact_compiler_smoke.md](issue_2037_artifact_compiler_smoke.md)
 * Issue #2040 Artifact Publication Workflow (2026-06-01):
   [issue_2040_artifact_publication_workflow.md](issue_2040_artifact_publication_workflow.md)
 * Issue #2034 Platformization Roadmap (2026-06-01):

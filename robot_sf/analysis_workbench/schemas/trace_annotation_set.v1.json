@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/trace_annotation_set.v1.json",
+  "title": "Robot SF Trace Annotation Set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "annotation_set_id",
+    "timeline",
+    "provenance",
+    "annotations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "trace_annotation_set.v1"
+    },
+    "annotation_set_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "schema_version", "trace_id"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema_version": {
+          "const": "simulation_trace_export.v1"
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source_issue",
+        "author",
+        "created_at",
+        "evidence_boundary"
+      ],
+      "properties": {
+        "kind": {
+          "enum": ["tracked_fixture"]
+        },
+        "source_issue": {
+          "type": "string",
+          "pattern": "^#[0-9]+$"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "evidence_boundary": {
+          "const": "analysis_workbench_qualitative_only"
+        }
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "annotation_id",
+          "category",
+          "evidence_type",
+          "anchor",
+          "summary"
+        ],
+        "properties": {
+          "annotation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category": {
+            "enum": ["planner_action", "interaction", "safety_margin", "data_quality"]
+          },
+          "evidence_type": {
+            "enum": ["observed", "hypothesis", "commentary"]
+          },
+          "anchor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["frame_start", "frame_end"],
+            "properties": {
+              "frame_start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "frame_end": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "event_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "entities": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["type", "id"],
+                  "properties": {
+                    "type": {
+                      "enum": ["robot", "pedestrian"]
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

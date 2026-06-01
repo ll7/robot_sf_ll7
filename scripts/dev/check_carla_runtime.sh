@@ -45,6 +45,10 @@ while [[ $# -gt 0 ]]; do
         echo "--startup-timeout-s requires a value" >&2
         exit 2
       fi
+      if ! [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
+        echo "--startup-timeout-s must be a positive integer number of seconds" >&2
+        exit 2
+      fi
       startup_timeout_s="$2"
       shift 2
       ;;

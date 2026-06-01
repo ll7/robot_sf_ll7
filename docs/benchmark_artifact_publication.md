@@ -41,6 +41,19 @@ Export bundles are produced by
 - `checksums.sha256`: SHA-256 checksums for payload files.
 - `<bundle_name>.tar.gz`: archive for release upload.
 
+## Reusable Figure And Table IDs
+
+Use `artifact_catalog.v1` when a publication bundle or benchmark report needs
+stable semantic IDs for reusable figures and tables. The catalog records
+`artifact_id`, source files, outputs, SHA-256 checksums, generation command,
+generation commit, and claim boundary while keeping generated paths replaceable.
+
+See `docs/artifact_catalog.md` and validate catalogs with:
+
+```bash
+uv run python scripts/validation/validate_artifact_catalog.py <catalog.yaml>
+```
+
 ## Command Path (Reproducible)
 
 1. Measure current benchmark artifact sizes (optional but recommended):

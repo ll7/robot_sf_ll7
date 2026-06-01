@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/artifact_catalog.v1.json",
+  "title": "Robot SF reusable artifact catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_id", "artifacts"],
+  "properties": {
+    "schema_version": {
+      "const": "artifact_catalog.v1"
+    },
+    "catalog_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "artifact_kind",
+        "source_kind",
+        "source_files",
+        "outputs",
+        "generation_command",
+        "generation_commit",
+        "claim_boundary"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "artifact_kind": {
+          "enum": ["figure", "table"]
+        },
+        "source_kind": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "source_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/file_ref"
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/file_ref"
+          },
+          "propertyNames": {
+            "pattern": "^[a-z0-9_.-]+$"
+          }
+        },
+        "caption_file": {
+          "$ref": "#/$defs/file_ref"
+        },
+        "generation_command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generation_commit": {
+          "type": "string",
+          "minLength": 7
+        },
+        "claim_boundary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "file_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

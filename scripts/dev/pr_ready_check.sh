@@ -19,6 +19,30 @@ worktree_state() {
   fi
 }
 
+check_final_readiness_dependencies() {
+  local missing_output
+  if ! missing_output="$(uv run python - <<'PY' 2>&1
+from __future__ import annotations
+
+import importlib.util
+
+missing = [
+    module_name
+    for module_name in ("duckdb", "pyarrow")
+    if importlib.util.find_spec(module_name) is None
+]
+if missing:
+    print(", ".join(missing))
+    raise SystemExit(1)
+PY
+  )"; then
+    printf 'Final PR readiness requires analytics dependencies: duckdb and pyarrow.\n' >&2
+    printf 'Missing or unavailable modules: %s\n' "$missing_output" >&2
+    printf 'Run `uv sync --all-extras` in this worktree, then rerun final PR readiness.\n' >&2
+    exit 2
+  fi
+}
+
 pr_ready_mode_lower=$(printf '%s' "$PR_READY_MODE" | tr '[:upper:]' '[:lower:]')
 case "$pr_ready_mode_lower" in
   "")
@@ -45,6 +69,10 @@ if [[ "$pr_ready_final" == "1" && "$(worktree_state)" != "clean" ]]; then
   printf 'Commit or remove local changes, or run without PR_READY_MODE=final for interim feedback.\n' >&2
   git status --short --untracked-files=normal >&2
   exit 2
+fi
+
+if [[ "$pr_ready_final" == "1" ]]; then
+  check_final_readiness_dependencies
 fi
 
 "$SCRIPT_DIR/ruff_fix_format.sh"

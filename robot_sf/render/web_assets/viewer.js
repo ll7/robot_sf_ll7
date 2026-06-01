@@ -224,7 +224,7 @@ function annotationFrameRange(scenePayload, annotation) {
   if (end < 0) {
     end = frames.findIndex((frame) => (frame.timestep ?? 0) > endStep) - 1;
   }
-  if (end < 0) end = frames.length - 1;
+  if (end === -2) end = frames.length - 1;
   if (start < 0 || end < start) return [null, null];
   return [start, end];
 }

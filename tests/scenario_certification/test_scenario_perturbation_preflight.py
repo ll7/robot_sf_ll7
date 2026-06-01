@@ -194,6 +194,53 @@ def _write_speed_manifest(
     return path
 
 
+def _write_wait_duration_manifest(
+    path: Path,
+    *,
+    scenario_id: str,
+    wait_delta_s: float = 0.5,
+    max_abs_wait_delta_s: float = 1.0,
+    max_wait_duration_offset_s: float = 1.0,
+) -> Path:
+    """Write a perturbation manifest that offsets single-pedestrian wait durations."""
+    payload = {
+        "schema_version": PERTURBATION_MANIFEST_SCHEMA_VERSION,
+        "manifest_id": "test_wait_duration_perturbation_manifest",
+        "scenario_config": "configs/scenarios/classic_interactions_francis2023.yaml",
+        "seed_controls": {
+            "baseline_seeds": [240],
+            "replay_seed_policy": "explicit",
+        },
+        "validity": {
+            "require_scenario_certification": True,
+            "max_route_offset_m": 0.5,
+            "max_wait_duration_offset_s": max_wait_duration_offset_s,
+            "invalid_variant_evidence_policy": "exclude_from_success_evidence",
+        },
+        "variants": [
+            {
+                "variant_id": f"{scenario_id}_noop",
+                "scenario_id": scenario_id,
+                "family": "noop",
+                "seeds": [240],
+            },
+            {
+                "variant_id": f"{scenario_id}_wait_duration_offset",
+                "scenario_id": scenario_id,
+                "family": "single_pedestrian_wait_duration_offset",
+                "seeds": [240],
+                "parameters": {
+                    "wait_delta_s": wait_delta_s,
+                    "max_abs_wait_delta_s": max_abs_wait_delta_s,
+                    "pedestrian_id": "h1",
+                },
+            },
+        ],
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def test_manifest_schema_accepts_noop_and_bounded_route_offset(tmp_path: Path) -> None:
     """The public schema should document the first supported perturbation surface."""
     manifest_path = _write_manifest(tmp_path / "perturbations.yaml")
@@ -299,6 +346,44 @@ def test_manifest_schema_requires_manifest_speed_cap_for_speed_offset(
         jsonschema.validate(manifest, schema)
 
 
+def test_manifest_schema_accepts_bounded_single_pedestrian_wait_duration_offset(
+    tmp_path: Path,
+) -> None:
+    """The public schema should expose the single-pedestrian wait-duration family."""
+    manifest_path = _write_wait_duration_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    jsonschema.validate(manifest, schema)
+
+
+def test_manifest_schema_requires_manifest_wait_duration_cap_for_wait_duration_offset(
+    tmp_path: Path,
+) -> None:
+    """Wait-duration manifests should carry both variant-local and policy-level bounds."""
+    manifest_path = _write_wait_duration_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    del manifest["validity"]["max_wait_duration_offset_s"]
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    with pytest.raises(jsonschema.ValidationError, match="max_wait_duration_offset_s"):
+        jsonschema.validate(manifest, schema)
+
+
 def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None:
     """Family-specific parameter schemas should catch typo-shaped irrelevant fields."""
     schema = json.loads(
@@ -330,6 +415,15 @@ def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None
     speed_manifest["variants"][1]["parameters"]["dt_s"] = 0.5
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(speed_manifest, schema)
+
+    wait_manifest_path = _write_wait_duration_manifest(
+        tmp_path / "wait_perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+    wait_manifest = yaml.safe_load(wait_manifest_path.read_text(encoding="utf-8"))
+    wait_manifest["variants"][1]["parameters"]["speed_delta_m_s"] = 0.25
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(wait_manifest, schema)
 
 
 def test_preflight_rejects_manifest_that_violates_public_schema(tmp_path: Path) -> None:
@@ -566,6 +660,121 @@ def test_preflight_excludes_non_positive_speed_result(tmp_path: Path) -> None:
     assert excluded.certificate is None
     assert excluded.reasons == [
         "preflight_error: single_pedestrian_speed_offset would make pedestrian 'h3' speed_m_s non-positive"
+    ]
+
+
+def test_preflight_certifies_bounded_single_pedestrian_wait_duration_offset(
+    tmp_path: Path,
+) -> None:
+    """Single-pedestrian wait-duration offsets should certify when target waits exist."""
+    manifest_path = _write_wait_duration_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    assert [result.variant_id for result in report.results] == [
+        "francis2023_intersection_wait_noop",
+        "francis2023_intersection_wait_wait_duration_offset",
+    ]
+    assert {result.validity_status for result in report.results} == {"valid"}
+    assert report.results[1].family == "single_pedestrian_wait_duration_offset"
+    assert report.results[1].perturbation_summary["wait_delta_s"] == pytest.approx(0.5)
+    assert report.results[1].perturbation_summary["target"]["pedestrian_id"] == "h1"
+
+
+def test_preflight_excludes_wait_duration_offset_without_wait_entries(
+    tmp_path: Path,
+) -> None:
+    """A wait-duration perturbation must fail closed when selected pedestrians do not wait."""
+    manifest_path = _write_wait_duration_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["variants"][1]["parameters"]["pedestrian_id"] = "h3"
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.family == "single_pedestrian_wait_duration_offset"
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_wait_duration_offset selected no wait_at entries"
+    ]
+
+
+def test_preflight_excludes_wait_duration_offset_without_single_pedestrians(
+    tmp_path: Path,
+) -> None:
+    """A wait-duration perturbation must fail closed for route-only pedestrian scenarios."""
+    manifest_path = _write_wait_duration_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_high",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["variants"][1]["parameters"]["pedestrian_selector"] = "all"
+    del manifest["variants"][1]["parameters"]["pedestrian_id"]
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.family == "single_pedestrian_wait_duration_offset"
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_wait_duration_offset selected no single pedestrians"
+    ]
+
+
+def test_preflight_excludes_unbounded_wait_duration_offset_before_certification(
+    tmp_path: Path,
+) -> None:
+    """Out-of-bounds wait-duration perturbations should fail closed without certification."""
+    manifest_path = _write_wait_duration_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+        wait_delta_s=1.25,
+        max_abs_wait_delta_s=1.0,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "single_pedestrian_wait_duration_offset abs_wait_delta_s 1.250000 s exceeds "
+        "variant max_abs_wait_delta_s 1.000000 s"
+    ]
+
+
+def test_preflight_excludes_negative_wait_duration_result(tmp_path: Path) -> None:
+    """Negative wait-duration offsets cannot make selected wait rules negative."""
+    manifest_path = _write_wait_duration_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+        wait_delta_s=-2.5,
+        max_abs_wait_delta_s=3.0,
+        max_wait_duration_offset_s=3.0,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_wait_duration_offset would make "
+        "pedestrian 'h1' wait_at[0].wait_s negative"
     ]
 
 
@@ -820,6 +1029,47 @@ def test_materialize_pilot_matrix_speed_selector_all(tmp_path: Path) -> None:
         "h2": pytest.approx(0.75),
         "h3": pytest.approx(0.75),
     }
+
+
+def test_materialize_pilot_matrix_writes_wait_duration_overrides(tmp_path: Path) -> None:
+    """Wait-duration variants should preserve single-ped entries while updating waits."""
+    manifest_path = _write_wait_duration_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+
+    materialized = materialize_perturbation_pilot_matrix(
+        manifest_path,
+        output_dir=tmp_path / "pilot",
+        seed_limit=1,
+    )
+
+    assert materialized.included_variants == (
+        "francis2023_intersection_wait_noop",
+        "francis2023_intersection_wait_wait_duration_offset",
+    )
+    matrix_path = Path(materialized.scenario_matrix_path)
+    generated_scenarios = load_scenarios(matrix_path)
+    offset_scenario = generated_scenarios[1]
+    overrides = {entry["id"]: entry for entry in offset_scenario["single_pedestrians"]}
+    assert overrides["h1"]["note"] == "intersection wait"
+    assert overrides["h1"]["wait_at"] == [
+        {
+            "waypoint_index": 1,
+            "wait_s": pytest.approx(2.5),
+            "note": "yield before crossing",
+        }
+    ]
+
+    offset_config = build_robot_config_from_scenario(
+        offset_scenario,
+        scenario_path=matrix_path,
+    )
+    _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
+    waits = {
+        ped.id: [rule.wait_s for rule in ped.wait_at or []] for ped in offset_map.single_pedestrians
+    }
+    assert waits["h1"] == [pytest.approx(2.5)]
 
 
 def test_materialize_pilot_matrix_skips_preflight_excluded_variants(tmp_path: Path) -> None:

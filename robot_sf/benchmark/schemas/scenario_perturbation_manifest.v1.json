@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/robot-sf/scenario_perturbation_manifest.v1.json",
   "title": "RobotSF Scenario Perturbation Manifest (v1)",
-  "description": "Minimal manifest for no-op baselines plus bounded route, pedestrian timing, and single-pedestrian speed perturbation preflight. Validity preflight is not benchmark execution evidence.",
+  "description": "Minimal manifest for no-op baselines plus bounded route, pedestrian timing, and single-pedestrian speed/wait perturbation preflight. Validity preflight is not benchmark execution evidence.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -72,6 +72,10 @@
           "exclusiveMinimum": 0
         },
         "max_start_delay_offset_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_wait_duration_offset_s": {
           "type": "number",
           "exclusiveMinimum": 0
         },
@@ -154,6 +158,37 @@
               "type": "object",
               "properties": {
                 "family": {
+                  "const": "single_pedestrian_wait_duration_offset"
+                }
+              },
+              "required": [
+                "family"
+              ]
+            }
+          }
+        },
+        "required": [
+          "variants"
+        ]
+      },
+      "then": {
+        "properties": {
+          "validity": {
+            "required": [
+              "max_wait_duration_offset_s"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "variants": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "family": {
                   "const": "single_pedestrian_speed_offset"
                 }
               },
@@ -204,7 +239,8 @@
             "robot_route_offset",
             "pedestrian_route_offset",
             "single_pedestrian_start_delay_offset",
-            "single_pedestrian_speed_offset"
+            "single_pedestrian_speed_offset",
+            "single_pedestrian_wait_duration_offset"
           ]
         },
         "seeds": {
@@ -265,6 +301,13 @@
               "exclusiveMinimum": 0
             },
             "max_speed_m_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "wait_delta_s": {
+              "type": "number"
+            },
+            "max_abs_wait_delta_s": {
               "type": "number",
               "exclusiveMinimum": 0
             }
@@ -401,6 +444,49 @@
                     "type": "number"
                   },
                   "max_abs_dt_s": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "pedestrian_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "pedestrian_selector": {
+                    "const": "all"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "family": {
+                "const": "single_pedestrian_wait_duration_offset"
+              }
+            },
+            "required": [
+              "family"
+            ]
+          },
+          "then": {
+            "required": [
+              "parameters"
+            ],
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "wait_delta_s",
+                  "max_abs_wait_delta_s"
+                ],
+                "properties": {
+                  "wait_delta_s": {
+                    "type": "number"
+                  },
+                  "max_abs_wait_delta_s": {
                     "type": "number",
                     "exclusiveMinimum": 0
                   },

@@ -111,3 +111,5 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_1947_intersection_wait_timing_speed_trace_2026-06-01/`: compact diagnostic-only
   closest-approach trace slices comparing `francis2023_intersection_wait` timing and speed
   perturbation responses.
+- `issue_1949_ped_wait_duration_perturbation_2026-06-01/`: compact diagnostic-only paired
+  no-op-versus-wait-duration summary for the #1610 single-pedestrian wait-at perturbation pilot.

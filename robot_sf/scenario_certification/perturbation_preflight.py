@@ -413,6 +413,7 @@ def _normalize_variant(variant: Any) -> Mapping[str, Any]:
         "pedestrian_route_offset",
         "single_pedestrian_start_delay_offset",
         "single_pedestrian_speed_offset",
+        "single_pedestrian_wait_duration_offset",
     }:
         raise ValueError(f"unsupported perturbation family: {family}")
     return variant
@@ -452,6 +453,8 @@ def _validate_perturbation_bounds(
         return _validate_start_delay_offset_bounds(variant, manifest=manifest)
     if family == "single_pedestrian_speed_offset":
         return _validate_single_pedestrian_speed_offset_bounds(variant, manifest=manifest)
+    if family == "single_pedestrian_wait_duration_offset":
+        return _validate_wait_duration_offset_bounds(variant, manifest=manifest)
 
     dx = _finite_float(parameters.get("dx_m", 0.0), field_name="parameters.dx_m")
     dy = _finite_float(parameters.get("dy_m", 0.0), field_name="parameters.dy_m")
@@ -592,6 +595,52 @@ def _validate_single_pedestrian_speed_offset_bounds(
     return [], summary
 
 
+def _validate_wait_duration_offset_bounds(
+    variant: Mapping[str, Any],
+    *,
+    manifest: Mapping[str, Any],
+) -> tuple[list[str], dict[str, Any]]:
+    """Validate bounded single-pedestrian wait-duration perturbations.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Fail-closed reasons and perturbation summary.
+    """
+    family = str(variant["family"])
+    parameters = variant.get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ValueError(f"{family} variants require a parameters mapping")
+    wait_delta_s = _finite_float(
+        parameters.get("wait_delta_s"),
+        field_name="parameters.wait_delta_s",
+    )
+    variant_max = _positive_float(
+        parameters.get("max_abs_wait_delta_s"),
+        field_name="parameters.max_abs_wait_delta_s",
+    )
+    manifest_max = _positive_float(
+        manifest["validity"].get("max_wait_duration_offset_s"),
+        field_name="validity.max_wait_duration_offset_s",
+    )
+    bound = min(variant_max, manifest_max)
+    abs_wait_delta_s = abs(wait_delta_s)
+    summary = {
+        "family": family,
+        "wait_delta_s": wait_delta_s,
+        "abs_wait_delta_s": abs_wait_delta_s,
+        "max_abs_wait_delta_s": bound,
+        "target": {
+            "pedestrian_id": parameters.get("pedestrian_id"),
+            "selector": parameters.get("pedestrian_selector", "all"),
+        },
+    }
+    if abs_wait_delta_s > bound:
+        return [
+            f"{family} abs_wait_delta_s {abs_wait_delta_s:.6f} s exceeds "
+            f"variant max_abs_wait_delta_s {bound:.6f} s"
+        ], summary
+    return [], summary
+
+
 def _certify_variant(
     variant: Mapping[str, Any],
     *,
@@ -624,6 +673,12 @@ def _certify_variant(
             perturbed_map.single_pedestrians,
             speed_delta_m_s=float(perturbation_summary["speed_delta_m_s"]),
             max_speed_m_s=perturbation_summary.get("max_speed_m_s"),
+            parameters=variant.get("parameters", {}),
+        )
+    elif variant["family"] == "single_pedestrian_wait_duration_offset":
+        _apply_wait_duration_offset(
+            perturbed_map.single_pedestrians,
+            wait_delta_s=float(perturbation_summary["wait_delta_s"]),
             parameters=variant.get("parameters", {}),
         )
     else:
@@ -702,6 +757,13 @@ def _materialize_variant_scenario(
         )
     elif variant["family"] == "single_pedestrian_speed_offset":
         scenario["single_pedestrians"] = _single_pedestrian_overrides_for_speed(
+            variant,
+            scenario=scenario,
+            scenario_config=scenario_config,
+            perturbation_summary=result.perturbation_summary,
+        )
+    elif variant["family"] == "single_pedestrian_wait_duration_offset":
+        scenario["single_pedestrians"] = _single_pedestrian_overrides_for_wait_duration(
             variant,
             scenario=scenario,
             scenario_config=scenario_config,
@@ -888,6 +950,69 @@ def _apply_single_pedestrian_speed_offset(
         )
 
 
+def _updated_wait_rule_payload(
+    ped: Any, rule_index: int, rule: Any, *, wait_delta_s: float
+) -> dict[str, Any]:
+    """Return a YAML-safe wait rule payload after applying a bounded duration offset."""
+    updated = float(rule.wait_s) + float(wait_delta_s)
+    if updated < 0.0:
+        raise ValueError(
+            "single_pedestrian_wait_duration_offset would make "
+            f"pedestrian {ped.id!r} wait_at[{rule_index}].wait_s negative"
+        )
+    payload = {
+        "waypoint_index": int(rule.waypoint_index),
+        "wait_s": updated,
+    }
+    if getattr(rule, "note", None) is not None:
+        payload["note"] = str(rule.note)
+    return payload
+
+
+def _wait_duration_payloads_for_selected_pedestrians(
+    pedestrians: list[Any],
+    *,
+    wait_delta_s: float,
+    parameters: Any,
+) -> dict[str, list[dict[str, Any]]]:
+    """Return updated wait rules for selected pedestrians, failing closed if no waits exist."""
+    selected = _select_single_pedestrians(
+        pedestrians,
+        parameters,
+        family="single_pedestrian_wait_duration_offset",
+    )
+    waits_by_pedestrian: dict[str, list[dict[str, Any]]] = {}
+    for ped in selected:
+        wait_rules = list(getattr(ped, "wait_at", None) or [])
+        if not wait_rules:
+            raise ValueError("single_pedestrian_wait_duration_offset selected no wait_at entries")
+        waits_by_pedestrian[str(ped.id)] = [
+            _updated_wait_rule_payload(ped, idx, rule, wait_delta_s=wait_delta_s)
+            for idx, rule in enumerate(wait_rules)
+        ]
+    return waits_by_pedestrian
+
+
+def _apply_wait_duration_offset(
+    pedestrians: list[Any],
+    *,
+    wait_delta_s: float,
+    parameters: Any,
+) -> None:
+    """Offset selected single-pedestrian wait durations in place."""
+    waits_by_pedestrian = _wait_duration_payloads_for_selected_pedestrians(
+        pedestrians,
+        wait_delta_s=wait_delta_s,
+        parameters=parameters,
+    )
+    for ped in pedestrians:
+        updated_rules = waits_by_pedestrian.get(str(ped.id))
+        if updated_rules is None:
+            continue
+        for rule, payload in zip(ped.wait_at or [], updated_rules, strict=True):
+            rule.wait_s = float(payload["wait_s"])
+
+
 def _single_pedestrian_overrides_for_start_delay(
     variant: Mapping[str, Any],
     *,
@@ -964,6 +1089,38 @@ def _single_pedestrian_overrides_for_speed(
             entry["speed_m_s"] = speeds[ped_id]
     for ped_id in sorted(selected_ids - seen_ids):
         overrides.append({"id": ped_id, "speed_m_s": speeds[ped_id]})
+    return overrides
+
+
+def _single_pedestrian_overrides_for_wait_duration(
+    variant: Mapping[str, Any],
+    *,
+    scenario: Mapping[str, Any],
+    scenario_config: Path,
+    perturbation_summary: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Return scenario overrides with adjusted single-pedestrian wait durations."""
+    config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_config)
+    if not config.map_pool.map_defs:
+        raise ValueError("scenario map pool is empty")
+    _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    waits_by_pedestrian = _wait_duration_payloads_for_selected_pedestrians(
+        list(map_def.single_pedestrians),
+        wait_delta_s=float(perturbation_summary["wait_delta_s"]),
+        parameters=variant.get("parameters", {}),
+    )
+    selected_ids = set(waits_by_pedestrian)
+
+    raw_overrides = scenario.get("single_pedestrians")
+    overrides = [dict(item) for item in raw_overrides] if isinstance(raw_overrides, list) else []
+    seen_ids: set[str] = set()
+    for entry in overrides:
+        ped_id = str(entry.get("id") or "")
+        seen_ids.add(ped_id)
+        if ped_id in selected_ids:
+            entry["wait_at"] = waits_by_pedestrian[ped_id]
+    for ped_id in sorted(selected_ids - seen_ids):
+        overrides.append({"id": ped_id, "wait_at": waits_by_pedestrian[ped_id]})
     return overrides
 
 

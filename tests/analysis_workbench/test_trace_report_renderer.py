@@ -201,3 +201,33 @@ def test_trace_report_renderer_rejects_output_only_annotation_sources(
             annotation_path=ANNOTATION_FIXTURE_PATH,
             output=tmp_path / "report.md",
         )
+
+
+def test_trace_report_renderer_uses_repo_relative_paths_from_subdirectory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fixture validation and display paths should not depend on the current directory."""
+
+    from scripts.tools.render_trace_report import write_trace_report
+
+    nested_cwd = tmp_path / "nested"
+    nested_cwd.mkdir()
+    output = tmp_path / "subdir_report.md"
+    monkeypatch.chdir(nested_cwd)
+
+    write_trace_report(
+        trace_path=ANNOTATED_TRACE_FIXTURE_PATH,
+        annotation_path=ANNOTATION_FIXTURE_PATH,
+        output=output,
+    )
+
+    markdown = output.read_text(encoding="utf-8")
+    assert (
+        "| trace_path | tests/fixtures/analysis_workbench/simulation_trace_export_v1/"
+        "planner_sanity_open_episode_0000.json |"
+    ) in markdown
+    assert (
+        "| annotation_path | tests/fixtures/analysis_workbench/trace_annotation_set_v1/"
+        "issue_1962_planner_sanity_open_annotations.json |"
+    ) in markdown

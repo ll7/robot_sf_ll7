@@ -434,11 +434,8 @@ def _format_value(value: Any) -> str:
 def _validate_tracked_fixture_path(path: Path, *, label: str) -> None:
     """Reject output-only paths before report rendering."""
 
-    if path.is_absolute():
-        candidate = path
-    else:
-        candidate = Path.cwd() / path
-    if any(part in {"output", "results"} for part in candidate.parts):
+    relative_path = _repo_relative_path(path)
+    if any(part in {"output", "results"} for part in relative_path.parts):
         raise ValueError(f"{label} path must be a tracked fixture, not generated output: {path}")
 
 
@@ -474,10 +471,17 @@ def _validate_annotation_matches_trace(
 def _display_path(path: Path) -> str:
     """Return a stable repo-friendly display path when possible."""
 
+    return str(_repo_relative_path(path))
+
+
+def _repo_relative_path(path: Path) -> Path:
+    """Return a path relative to the repository root when possible."""
+
+    repo_root = Path(__file__).resolve().parents[2]
     try:
-        return str(path.resolve().relative_to(Path.cwd().resolve()))
+        return path.resolve().relative_to(repo_root)
     except ValueError:
-        return str(path)
+        return path
 
 
 def _markdown_table(headers: tuple[str, ...], rows: Iterable[tuple[Any, ...]]) -> list[str]:

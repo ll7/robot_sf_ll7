@@ -73,3 +73,9 @@ missing optional contract/certificate/hazard mappings. Thumbnails use the same
 deterministic ID resolution and rendering helper as `robot_sf_bench
 plot-scenarios`, so they are useful visual cues but not route-clearance,
 certification, or planner-performance proof.
+
+Atlas rows link back to source scenario YAML through `source_link`, map inputs
+through `map_ref`, and optional benchmark configs through `benchmark_ref`. Add
+`atlas.benchmark_config` or `atlas.benchmark_configs` to a scenario row when a
+specific benchmark config is the durable evidence surface; otherwise leave the
+field empty rather than implying benchmark eligibility.

@@ -6,6 +6,7 @@ import argparse
 import csv
 import hashlib
 import json
+import shlex
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -36,6 +37,7 @@ ATLAS_COLUMNS = (
     "known_failure_modes",
     "source_link",
     "map_ref",
+    "benchmark_ref",
     "thumbnail",
     "mechanism_card",
     "coverage_gaps",
@@ -113,15 +115,31 @@ def _source_link(scenario_id: str, matrix: Path, scenario: Mapping[str, Any]) ->
 def _map_ref(scenario: Mapping[str, Any], matrix: Path) -> str:
     """Return the scenario map reference when declared."""
     map_id = scenario.get("map_id")
-    if map_id:
-        return f"map_id:{map_id}"
     map_file = scenario.get("map_file")
+    refs: list[str] = []
+    if map_id:
+        refs.append(f"map_id:{map_id}")
     if not map_file:
-        return ""
+        return ";".join(refs)
     path = Path(str(map_file))
     if not path.is_absolute():
         path = matrix.parent / path
-    return _path_ref(path)
+    refs.append(_path_ref(path))
+    return ";".join(refs)
+
+
+def _benchmark_ref(scenario: Mapping[str, Any], matrix: Path) -> str:
+    """Return benchmark config links declared for the atlas row."""
+    atlas_meta = _atlas_meta(scenario)
+    raw = (
+        atlas_meta.get("benchmark_config")
+        or atlas_meta.get("benchmark_configs")
+        or atlas_meta.get("benchmark_ref")
+    )
+    refs = _as_list(raw)
+    if not refs and "configs/benchmarks/" in _path_ref(matrix):
+        refs = [matrix]
+    return ";".join(_path_ref(Path(str(ref))) for ref in refs)
 
 
 def _coverage_gaps(scenario: Mapping[str, Any]) -> list[str]:
@@ -163,6 +181,7 @@ def _scenario_row(
         "known_failure_modes": failure_modes,
         "source_link": _source_link(scenario_id, matrix, scenario),
         "map_ref": _map_ref(scenario, matrix),
+        "benchmark_ref": _benchmark_ref(scenario, matrix),
         "thumbnail": thumbnail_path,
         "mechanism_card": card_path,
         "coverage_gaps": gaps,
@@ -176,6 +195,15 @@ def _join(value: object) -> str:
     if isinstance(value, list | tuple):
         return ";".join(str(item) for item in value)
     return str(value)
+
+
+def _as_list(value: object) -> list[object]:
+    """Return scalar or list-like metadata as a list."""
+    if value is None:
+        return []
+    if isinstance(value, list | tuple):
+        return list(value)
+    return [value]
 
 
 def _write_csv(path: Path, rows: list[Mapping[str, str]]) -> None:
@@ -297,7 +325,7 @@ def _path_ref(path: Path) -> str:
     try:
         return resolved.relative_to(repo_root).as_posix()
     except ValueError:
-        return path.as_posix()
+        return resolved.as_posix()
 
 
 def _git_commit() -> str:
@@ -314,13 +342,33 @@ def _git_commit() -> str:
 
 def _command(args: argparse.Namespace) -> str:
     """Return the command recorded in the manifest."""
-    return (
-        "uv run python scripts/tools/generate_scenario_atlas.py "
-        f"--matrix {args.matrix.as_posix()} "
-        f"--output {args.output.as_posix()} "
-        f"--run-id {args.run_id} "
-        f"--base-seed {args.base_seed}"
-    )
+    parts = [
+        "uv",
+        "run",
+        "python",
+        "scripts/tools/generate_scenario_atlas.py",
+        "--matrix",
+        args.matrix.as_posix(),
+        "--output",
+        args.output.as_posix(),
+        "--run-id",
+        args.run_id,
+        "--base-seed",
+        str(args.base_seed),
+    ]
+    return " ".join(shlex.quote(part) for part in parts)
+
+
+def _relative_output_path(path: Path, output: Path) -> str:
+    """Return an output-relative path with a clear error if it escapes output."""
+    resolved_path = path.resolve()
+    resolved_output = output.resolve()
+    try:
+        return resolved_path.relative_to(resolved_output).as_posix()
+    except ValueError as exc:
+        raise ValueError(
+            f"Generated path '{resolved_path}' is outside output '{resolved_output}'."
+        ) from exc
 
 
 def _run(args: argparse.Namespace) -> dict[str, str]:
@@ -341,14 +389,19 @@ def _run(args: argparse.Namespace) -> dict[str, str]:
         (meta.scenario_id, scenario, Path(meta.png))
         for meta, scenario in zip(thumbs, scenarios, strict=False)
     ]
+    if len(scenario_pairs) != len(scenarios) or len(scenario_pairs) != len(thumbs):
+        raise ValueError(
+            "Thumbnail generation count mismatch: "
+            f"{len(scenarios)} scenarios produced {len(thumbs)} thumbnails."
+        )
     for sid, scenario, thumb_path in scenario_pairs:
         card_path = card_dir / f"{sid}.md"
         row = _scenario_row(
             scenario,
             scenario_id=sid,
             matrix=matrix,
-            thumbnail_path=thumb_path.relative_to(output).as_posix(),
-            card_path=card_path.relative_to(output).as_posix(),
+            thumbnail_path=_relative_output_path(thumb_path, output),
+            card_path=_relative_output_path(card_path, output),
         )
         _write_card(card_path, row, scenario)
         rows.append(row)

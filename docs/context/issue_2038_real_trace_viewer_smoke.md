@@ -12,13 +12,15 @@ checked with the browser pixel smoke. The viewer rendered a nonblank scene from 
 real-environment trace:
 
 - browser smoke: passed
-- screenshot classification: 349898 non-background pixels, 510 distinct colors
+- screenshot classification: 339670 non-background pixels, 590 distinct colors
 - evidence screenshot:
   [issue_2038_real_env_trace_viewer.png](evidence/issue_2038_real_env_trace_viewer.png)
 
 The linked screenshot is a promoted copy of
 `output/validation/issue_2038_real_env_trace_viewer.png` from the generated real-environment trace
 run, copied into `docs/context/evidence/` so the compact visual proof survives worktree cleanup.
+Promoted screenshot checksum:
+`sha256:2f496bc4ea3986e4b2620ff695049300cd199988473c96ff44d2340e88cdee8b`.
 
 This is diagnostic visualization evidence only. It does not make benchmark, planner-quality,
 paper-facing, or performance claims.
@@ -32,9 +34,11 @@ uv run python - <<'PY'
 from pathlib import Path
 
 from robot_sf.gym_env.environment_factory import JsonlRecordingOptions, make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 out = Path("output/issue_2038_real_recording")
 out.mkdir(parents=True, exist_ok=True)
+config = RobotSimulationConfig(map_id="uni_campus_big")
 jsonl_opts = JsonlRecordingOptions(
     enabled=True,
     recording_dir=str(out),
@@ -43,8 +47,15 @@ jsonl_opts = JsonlRecordingOptions(
     algorithm_name="random_policy",
     recording_seed=2038,
 )
-env = make_robot_env(jsonl_recording_options=jsonl_opts, recording_enabled=True, debug=False)
+env = make_robot_env(
+    config=config,
+    seed=2038,
+    jsonl_recording_options=jsonl_opts,
+    recording_enabled=True,
+    debug=False,
+)
 try:
+    env.action_space.seed(2038)
     obs, info = env.reset(seed=2038)
     for _ in range(5):
         action = env.action_space.sample()
@@ -88,7 +99,7 @@ uv run python scripts/validation/smoke_threejs_viewer_browser.py \
 Observed result:
 
 ```text
-Three.js browser smoke passed: 349898 non-background pixels, 510 distinct colors.
+Three.js browser smoke passed: 339670 non-background pixels, 590 distinct colors.
 ```
 
 Promote the compact screenshot used by this note:
@@ -96,6 +107,7 @@ Promote the compact screenshot used by this note:
 ```bash
 cp output/validation/issue_2038_real_env_trace_viewer.png \
   docs/context/evidence/issue_2038_real_env_trace_viewer.png
+sha256sum docs/context/evidence/issue_2038_real_env_trace_viewer.png
 ```
 
 ## Fixture Cross-Check
@@ -125,7 +137,9 @@ the main #2038 real-environment proof.
   positions in `simulation_trace_export.v1`.
 - The generated viewer rendered a visible scene in headless Chromium and wrote a reviewable
   screenshot.
-- The scene still uses trace-viewer auto bounds with no SVG map geometry, obstacles, or zones.
+- The scene still uses trace-viewer auto bounds with no SVG map geometry, obstacles, or zones; this
+  reflects the current viewer/export path used for this smoke, not evidence that the source
+  environment lacks those concepts.
 - The raw JSONL recording, converted trace, viewer directory, and validation screenshot under
   `output/` are disposable local artifacts. The compact screenshot above is the durable review
   evidence.

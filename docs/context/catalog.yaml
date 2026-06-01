@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-05-31
+updated_at: 2026-06-01
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full

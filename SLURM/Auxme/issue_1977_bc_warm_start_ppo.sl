@@ -130,7 +130,7 @@ echo "[issue1977] git_branch=$(git branch --show-current || true)"
 
 uv sync
 
-run_in_allocation uv run python - <<'PY'
+uv run python - <<'PY'
 from __future__ import annotations
 
 import hashlib

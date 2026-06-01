@@ -228,6 +228,48 @@ def test_fine_tuning_config_structure(tmp_path, monkeypatch):
     assert len(config.random_seeds) == 2
 
 
+def test_ppo_finetuning_config_treats_blank_execution_values_as_auto():
+    """Null or blank execution values should use the automatic runtime defaults."""
+    from robot_sf.training.imitation_config import PPOFineTuningConfig
+
+    config = PPOFineTuningConfig.from_raw(
+        run_id="test_ppo_finetune_blank_execution",
+        pretrained_policy_id="test_bc_policy",
+        total_timesteps=1000,
+        random_seeds=(42,),
+        worker_mode=None,
+        device=" ",
+    )
+
+    assert config.worker_mode == "auto"
+    assert config.device == "auto"
+
+
+def test_load_ppo_finetuning_config_treats_blank_execution_values_as_auto(tmp_path):
+    """YAML null or blank execution values should not become literal strings."""
+    from scripts.training.train_ppo_with_pretrained_policy import load_ppo_finetuning_config
+
+    config_path = tmp_path / "ppo_finetune.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "run_id: test_ppo_finetune_blank_yaml",
+                "pretrained_policy_id: test_bc_policy",
+                "total_timesteps: 1000",
+                "random_seeds: [42]",
+                "worker_mode:",
+                "device: ' '",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_ppo_finetuning_config(config_path)
+
+    assert config.worker_mode == "auto"
+    assert config.device == "auto"
+
+
 def test_issue_749_warm_start_configs_load():
     """Issue #749 configs should preserve the BC -> PPO warm-start contract."""
     from scripts.training.pretrain_from_expert import load_bc_config

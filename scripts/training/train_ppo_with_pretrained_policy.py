@@ -343,7 +343,9 @@ def _make_vec_finetuning_env(config: PPOFineTuningConfig) -> DummyVecEnv | Subpr
     return DummyVecEnv(env_fns)
 
 
-def _checkpoint_callback(config: PPOFineTuningConfig, *, num_envs: int) -> CheckpointCallback | None:
+def _checkpoint_callback(
+    config: PPOFineTuningConfig, *, num_envs: int
+) -> CheckpointCallback | None:
     """Build a periodic checkpoint callback using aggregate timestep frequency."""
     if config.checkpoint_freq is None:
         return None
@@ -648,8 +650,8 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
         env_factory_kwargs=dict(raw.get("env_factory_kwargs") or {}),
         num_envs=_parse_num_envs(raw.get("num_envs")),
         num_envs_reserve_cores=int(raw.get("num_envs_reserve_cores", 0)),
-        worker_mode=str(raw.get("worker_mode", "auto")),
-        device=str(raw.get("device", "auto")),
+        worker_mode=str(raw.get("worker_mode") or "auto").strip() or "auto",
+        device=str(raw.get("device") or "auto").strip() or "auto",
         ppo_hyperparams=dict(raw.get("ppo_hyperparams") or {}),
         checkpoint_freq=(
             int(raw["checkpoint_freq"]) if raw.get("checkpoint_freq") is not None else None

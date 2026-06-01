@@ -123,6 +123,7 @@ def test_cli_export_canonical_table_writes_execution_mode_outputs(
     assert (out_dir / "execution_mode.tex").is_file()
     metadata = json.loads((out_dir / "execution_mode.metadata.json").read_text(encoding="utf-8"))
     assert metadata["source_files"][0]["path"] == rows_path.as_posix()
+    assert metadata["command"].startswith("robot_sf_bench export-canonical-table")
     assert "fallback" in (out_dir / "execution_mode.csv").read_text(encoding="utf-8")
 
 

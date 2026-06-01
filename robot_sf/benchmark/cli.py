@@ -10,6 +10,7 @@ import importlib.util
 import json
 import logging
 import os
+import shlex
 import sys
 import traceback
 from collections import Counter
@@ -818,7 +819,7 @@ def _handle_export_canonical_table(args) -> int:
             formats=formats,
             precision=int(args.precision),
             source_paths=[Path(path) for path in args.source],
-            command=" ".join(sys.argv),
+            command=str(getattr(args, "_canonical_command", shlex.join(sys.argv))),
         )
         print(
             json.dumps(
@@ -2787,6 +2788,8 @@ def cli_main(argv: list[str] | None = None) -> int:
     """
     parser = _configure_parser()
     args = parser.parse_args(argv)
+    effective_argv = list(sys.argv if argv is None else ["robot_sf_bench", *argv])
+    args._canonical_command = shlex.join(effective_argv)
     _configure_logging(getattr(args, "quiet", False), getattr(args, "log_level", "INFO"))
     # macOS safe start method for multiprocessing
     if getattr(args, "workers", 1) and int(getattr(args, "workers", 1)) > 1:

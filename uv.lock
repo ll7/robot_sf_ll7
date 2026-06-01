@@ -402,6 +402,17 @@ wheels = [
 ]
 
 [[package]]
+name = "carla"
+version = "0.9.16"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/22/00/986260e4d35444a3a88188deed7fa1b6739b20778d1899fe4b4975121171/carla-0.9.16-cp311-cp311-manylinux_2_31_x86_64.whl", hash = "sha256:9ca1e0793a5f453375a8bc93d85d43cc5629b3342bafe10ab8ebb1ef4fb111dc", size = 34196201, upload-time = "2025-09-14T07:54:42.834Z" },
+    { url = "https://files.pythonhosted.org/packages/96/de/ff523c1d3406de2e30beba69cf58eac354c2ce6fe3e233bfb881621a2764/carla-0.9.16-cp311-cp311-win_amd64.whl", hash = "sha256:9d8bca9ea3a3bccd691536b17f6f278335ce9b6af7883612aa0800929b388ed1", size = 5034970, upload-time = "2025-09-14T07:54:45.36Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/37/c43a7c9d0dc8bd8d0791116998a49c178ab4906a0430150b21372306e520/carla-0.9.16-cp312-cp312-manylinux_2_31_x86_64.whl", hash = "sha256:c323a7b1f8ad3ac81cfac79f5d96c9cac8afa6d0a768fa2fffa46bb336945c4f", size = 34230684, upload-time = "2025-09-14T07:54:50.049Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/6f/47b4778834ed2bbc8e3312e533c82fdd000ce71cff2ade01d0804ec69a96/carla-0.9.16-cp312-cp312-win_amd64.whl", hash = "sha256:f1f22d153b1a43b579d90e816b7016ca19f1483ca64cbc5ebbcd4dbf325e3356", size = 5037190, upload-time = "2025-09-14T07:54:52.916Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -4936,6 +4947,9 @@ viz = [
 ]
 
 [package.dev-dependencies]
+carla = [
+    { name = "carla", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-8-robot-sf-rllib' and extra == 'group-8-robot-sf-imitation') or (sys_platform != 'linux' and extra == 'extra-8-robot-sf-rllib' and extra == 'group-8-robot-sf-imitation')" },
+]
 dev = [
     { name = "pylint" },
     { name = "pytest-xdist" },
@@ -5015,6 +5029,7 @@ requires-dist = [
 provides-extras = ["dev", "gpu", "docs", "rllib", "progress", "analysis", "analytics", "viz", "sacadrl", "orca", "socnav"]
 
 [package.metadata.requires-dev]
+carla = [{ name = "carla", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==0.9.16" }]
 dev = [
     { name = "pylint", specifier = ">=3.3.4" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },

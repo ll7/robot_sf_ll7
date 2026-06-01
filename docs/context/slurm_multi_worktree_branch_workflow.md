@@ -79,6 +79,14 @@ worktree usually needs its own setup:
 uv sync --all-extras --frozen
 ```
 
+CARLA is not included in `--all-extras`. If the worktree will run CARLA client or Docker runtime
+checks, sync the dedicated group after the normal environment is ready:
+
+```bash
+uv sync --all-extras --group carla --frozen
+scripts/dev/check_carla_runtime.sh
+```
+
 Avoid symlinking `.venv` across branches by default. Sharing a virtualenv can hide dependency
 drift and make a job appear to run on one branch while using dependencies last synced for another.
 The UV package cache can still be shared globally, so separate `.venv` directories do not imply a

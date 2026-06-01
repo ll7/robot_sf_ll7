@@ -54,6 +54,10 @@ uv run python examples/quickstart/02_trained_model.py
 uv run python examples/quickstart/03_custom_map.py
 ```
 
+CARLA is not installed by `uv sync --all-extras`. On CARLA-capable Linux x86_64 hosts, opt into
+the pinned host-side client with `uv sync --all-extras --group carla` and check the Docker runtime
+with `scripts/dev/check_carla_runtime.sh`.
+
 These three scripts provide the fastest first-touch path:
 
 1. `01_basic_robot.py` introduces the environment factory and a headless rollout.

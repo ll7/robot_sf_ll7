@@ -121,7 +121,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue #1181/#1191 `ml-intern` Workflow Extraction](./context/issue_1181_ml_intern_experiment_assistant.md)** -
   Safe-use boundary and 2026-05-15 decision to extract `ml-intern` workflow ideas into Robot SF's
   Codex-native proof-first practice instead of running the CLI smoke by default
-* **[Issue #1179 CARLA Docker Runtime](./context/issue_1179_carla_docker_runtime.md)** - Pinned `carlasim/carla:0.9.16` preflight/smoke command, local Docker-daemon blocker, and boundary before live replay semantics
+* **[Issue #1179 CARLA Docker Runtime](./context/issue_1179_carla_docker_runtime.md)** - Pinned `carlasim/carla:0.9.16` preflight/smoke command, current local Docker smoke status, and boundary before live replay semantics
 * **[Issue #1111 CARLA Setup-Only Smoke](./context/issue_1111_carla_setup_smoke.md)** - Ephemeral `carla==0.9.16` setup-only T1 smoke proof and boundary before Issue #1169 live replay
 * **[Issue #1239 Human-Model Transfer Robustness](./context/issue_1239_human_model_transfer.md)** - Explicit human-model variant/source metadata and a conservative transfer-smoke benchmark config
 * **[Issue #1169 CARLA Live T1 Oracle Replay](./context/issue_1169_carla_live_replay.md)** - Docker-backed live replay command, real CARLA `0.9.16` client/server connection, and fail-closed static-geometry boundary

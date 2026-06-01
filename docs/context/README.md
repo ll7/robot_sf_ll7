@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
+* Issue #2001 AMV actuation proxy source analysis:
+  [issue_2001_amv_actuation_proxy_source_analysis.md](issue_2001_amv_actuation_proxy_source_analysis.md)
 * Issue #1414 parser capability metadata:
   [issue_1414_parser_capability_metadata.md](issue_1414_parser_capability_metadata.md)
 * Issue #1413 map catalog schema and sync checker:

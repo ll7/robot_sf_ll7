@@ -83,7 +83,10 @@ def _build_parser() -> argparse.ArgumentParser:
 def _read_campaign_rows(campaign_table: Path) -> list[dict[str, str]]:
     """Load campaign-table rows from CSV."""
     with campaign_table.open(newline="", encoding="utf-8") as handle:
-        return [dict(row) for row in csv.DictReader(handle)]
+        reader = csv.DictReader(handle)
+        return [
+            {field: _cell(row.get(field)) for field in (reader.fieldnames or [])} for row in reader
+        ]
 
 
 def _copy_present_inputs(campaign_root: Path, output: Path) -> dict[str, _FileRef]:
@@ -294,6 +297,11 @@ def _fieldnames(rows: list[Mapping[str, str]]) -> list[str]:
     return list(rows[0])
 
 
+def _cell(value: object) -> str:
+    """Normalize optional CSV cells without rendering Python ``None``."""
+    return "" if value is None else str(value)
+
+
 def _markdown_table(rows: Iterable[Mapping[str, str]], fieldnames: Sequence[str]) -> str:
     """Render rows as a compact GitHub-flavored Markdown table."""
     header = "| " + " | ".join(fieldnames) + " |"
@@ -391,7 +399,7 @@ def _run(args: argparse.Namespace) -> dict[str, str]:
 
     source_refs = _copy_present_inputs(campaign_root, output)
     campaign_table = campaign_root / "reports" / "campaign_table.csv"
-    if not campaign_table.exists():
+    if not campaign_table.is_file():
         raise FileNotFoundError(f"required campaign table is missing: {campaign_table}")
 
     rows = _read_campaign_rows(campaign_table)

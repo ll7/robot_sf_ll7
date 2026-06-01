@@ -51,6 +51,7 @@ def test_compile_benchmark_artifacts_emits_catalog_tables_figures_and_gaps(
     assert table_tex.exists()
     assert "fallback" in table_md.read_text(encoding="utf-8")
     assert "not_available" in table_md.read_text(encoding="utf-8")
+    assert "None" not in table_md.read_text(encoding="utf-8")
 
     assert (output_dir / "figures" / "planner_status_summary.png").exists()
     assert (output_dir / "figures" / "planner_status_summary.pdf").exists()
@@ -99,4 +100,6 @@ def _write_campaign_fixture(campaign_root: Path) -> Path:
         writer.writerow(
             {"planner": "missing_planner", "status": "not_available", "success_rate": ""}
         )
+    with (reports / "campaign_table.csv").open("a", encoding="utf-8") as handle:
+        handle.write("partial_row_planner,native\n")
     return campaign_root

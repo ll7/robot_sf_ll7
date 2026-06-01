@@ -30,6 +30,7 @@ _LATENCY_MODE_TO_STEPS = {
 _UPDATE_MODE_TO_STEPS = {
     "10hz-matched": 1,
     "5hz-hold": 2,
+    "2.5hz-hold": 4,
 }
 _SATURATION_TOL = 1e-9
 

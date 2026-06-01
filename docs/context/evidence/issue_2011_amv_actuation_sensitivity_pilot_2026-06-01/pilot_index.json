@@ -1,0 +1,137 @@
+{
+  "rows": [
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_longitudinal_proxy_low_longitudinal_proxy_low_20260601_232331",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_longitudinal_proxy_low_longitudinal_proxy_low_20260601_232331",
+      "exit_code": 3,
+      "field_group": "longitudinal_proxy",
+      "level": "low",
+      "source_status": "accepted_platform_class_proxy_source",
+      "status": "accepted_unavailable_only",
+      "variant_name": "longitudinal_proxy_low"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_longitudinal_proxy_nominal_longitudinal_proxy_nominal_20260601_232348",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_longitudinal_proxy_nominal_longitudinal_proxy_nominal_20260601_232348",
+      "exit_code": 3,
+      "field_group": "longitudinal_proxy",
+      "level": "nominal",
+      "source_status": "accepted_platform_class_proxy_source",
+      "status": "accepted_unavailable_only",
+      "variant_name": "longitudinal_proxy_nominal"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_longitudinal_proxy_high_longitudinal_proxy_high_20260601_232352",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_longitudinal_proxy_high_longitudinal_proxy_high_20260601_232352",
+      "exit_code": 3,
+      "field_group": "longitudinal_proxy",
+      "level": "high",
+      "source_status": "accepted_platform_class_proxy_source",
+      "status": "accepted_unavailable_only",
+      "variant_name": "longitudinal_proxy_high"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_latency_synthetic_low_latency_synthetic_low_20260601_232355",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_latency_synthetic_low_latency_synthetic_low_20260601_232355",
+      "exit_code": 3,
+      "field_group": "latency_synthetic",
+      "level": "low",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "latency_synthetic_low"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_latency_synthetic_medium_latency_synthetic_medium_20260601_232359",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_latency_synthetic_medium_latency_synthetic_medium_20260601_232359",
+      "exit_code": 3,
+      "field_group": "latency_synthetic",
+      "level": "nominal",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "latency_synthetic_medium"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_latency_synthetic_high_latency_synthetic_high_20260601_232403",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_latency_synthetic_high_latency_synthetic_high_20260601_232403",
+      "exit_code": 3,
+      "field_group": "latency_synthetic",
+      "level": "high",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "latency_synthetic_high"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_yaw_rate_synthetic_low_yaw_rate_synthetic_low_20260601_232406",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_yaw_rate_synthetic_low_yaw_rate_synthetic_low_20260601_232406",
+      "exit_code": 3,
+      "field_group": "yaw_rate_synthetic",
+      "level": "low",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "yaw_rate_synthetic_low"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_yaw_rate_synthetic_medium_yaw_rate_synthetic_medium_20260601_232410",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_yaw_rate_synthetic_medium_yaw_rate_synthetic_medium_20260601_232410",
+      "exit_code": 3,
+      "field_group": "yaw_rate_synthetic",
+      "level": "nominal",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "yaw_rate_synthetic_medium"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_yaw_rate_synthetic_high_yaw_rate_synthetic_high_20260601_232413",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_yaw_rate_synthetic_high_yaw_rate_synthetic_high_20260601_232413",
+      "exit_code": 3,
+      "field_group": "yaw_rate_synthetic",
+      "level": "high",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "yaw_rate_synthetic_high"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_update_rate_synthetic_low_update_rate_synthetic_low_20260601_232417",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_update_rate_synthetic_low_update_rate_synthetic_low_20260601_232417",
+      "exit_code": 3,
+      "field_group": "update_rate_synthetic",
+      "level": "low",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "update_rate_synthetic_low"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_update_rate_synthetic_medium_update_rate_synthetic_medium_20260601_232420",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_update_rate_synthetic_medium_update_rate_synthetic_medium_20260601_232420",
+      "exit_code": 3,
+      "field_group": "update_rate_synthetic",
+      "level": "nominal",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "update_rate_synthetic_medium"
+    },
+    {
+      "benchmark_success": false,
+      "campaign_id": "issue_2011_amv_actuation_sensitivity_sweep_v0_update_rate_synthetic_high_update_rate_synthetic_high_20260601_232424",
+      "campaign_root": "<local-output>/benchmarks/issue_2011_amv_actuation_sensitivity_pilot/issue_2011_amv_actuation_sensitivity_sweep_v0_update_rate_synthetic_high_update_rate_synthetic_high_20260601_232424",
+      "exit_code": 3,
+      "field_group": "update_rate_synthetic",
+      "level": "high",
+      "source_status": "synthetic_stress_factor",
+      "status": "accepted_unavailable_only",
+      "variant_name": "update_rate_synthetic_high"
+    }
+  ],
+  "schema_version": "robot-sf-amv-actuation-sensitivity-results.v1"
+}

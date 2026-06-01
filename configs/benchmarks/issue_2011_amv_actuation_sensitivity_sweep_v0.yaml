@@ -1,0 +1,138 @@
+schema_version: robot-sf-amv-actuation-sensitivity-sweep.v1
+name: issue_2011_amv_actuation_sensitivity_sweep_v0
+base_config: configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml
+claim_boundary: diagnostic-only
+paper_facing: false
+pilot:
+  scenario_candidates:
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+  seed_policy:
+    mode: fixed-list
+    seeds: [111]
+  planners:
+    - goal
+    - social_force
+  horizon: 80
+  workers: 1
+  bootstrap_samples: 80
+  output_root: output/benchmarks/issue_2011_amv_actuation_sensitivity_pilot
+baseline_profile:
+  max_linear_accel_m_s2: 2.819
+  max_linear_decel_m_s2: 3.429
+  max_yaw_rate_rad_s: 1.2
+  max_angular_accel_rad_s2: 4.0
+  latency_mode: one-step-delay
+  update_mode: 5hz-hold
+variants:
+  - name: longitudinal_proxy_low
+    field_group: longitudinal_proxy
+    level: low
+    source_status: accepted_platform_class_proxy_source
+    source_context: docs/context/issue_2001_amv_actuation_proxy_source_analysis.md
+    supported_fields:
+      - max_linear_accel_m_s2
+      - max_linear_decel_m_s2
+    caveat: lower-power e-scooter proxy; not hardware-calibrated AMV evidence
+    profile:
+      max_linear_accel_m_s2: 2.425
+      max_linear_decel_m_s2: 3.210
+  - name: longitudinal_proxy_nominal
+    field_group: longitudinal_proxy
+    level: nominal
+    source_status: accepted_platform_class_proxy_source
+    source_context: docs/context/issue_2001_amv_actuation_proxy_source_analysis.md
+    supported_fields:
+      - max_linear_accel_m_s2
+      - max_linear_decel_m_s2
+    caveat: full-sample e-scooter proxy mean; not hardware-calibrated AMV evidence
+    profile:
+      max_linear_accel_m_s2: 2.819
+      max_linear_decel_m_s2: 3.429
+  - name: longitudinal_proxy_high
+    field_group: longitudinal_proxy
+    level: high
+    source_status: accepted_platform_class_proxy_source
+    source_context: docs/context/issue_2001_amv_actuation_proxy_source_analysis.md
+    supported_fields:
+      - max_linear_accel_m_s2
+      - max_linear_decel_m_s2
+    caveat: 500 W acceleration proxy plus foot-brake deceleration caveat; not hardware-calibrated AMV evidence
+    profile:
+      max_linear_accel_m_s2: 4.625
+      max_linear_decel_m_s2: 3.842
+  - name: latency_synthetic_low
+    field_group: latency_synthetic
+    level: low
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: latency is unsupported by the longitudinal proxy source
+    profile:
+      latency_mode: zero-step-delay
+  - name: latency_synthetic_medium
+    field_group: latency_synthetic
+    level: nominal
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: latency is unsupported by the longitudinal proxy source
+    profile:
+      latency_mode: one-step-delay
+  - name: latency_synthetic_high
+    field_group: latency_synthetic
+    level: high
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: latency is unsupported by the longitudinal proxy source
+    profile:
+      latency_mode: two-step-delay
+  - name: yaw_rate_synthetic_low
+    field_group: yaw_rate_synthetic
+    level: low
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: yaw rate and angular acceleration are unsupported by the longitudinal proxy source
+    profile:
+      max_yaw_rate_rad_s: 0.8
+      max_angular_accel_rad_s2: 2.0
+  - name: yaw_rate_synthetic_medium
+    field_group: yaw_rate_synthetic
+    level: nominal
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: yaw rate and angular acceleration are unsupported by the longitudinal proxy source
+    profile:
+      max_yaw_rate_rad_s: 1.2
+      max_angular_accel_rad_s2: 4.0
+  - name: yaw_rate_synthetic_high
+    field_group: yaw_rate_synthetic
+    level: high
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: yaw rate and angular acceleration are unsupported by the longitudinal proxy source
+    profile:
+      max_yaw_rate_rad_s: 1.6
+      max_angular_accel_rad_s2: 6.0
+  - name: update_rate_synthetic_low
+    field_group: update_rate_synthetic
+    level: low
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: update rate is unsupported by the longitudinal proxy source
+    profile:
+      update_mode: 2.5hz-hold
+  - name: update_rate_synthetic_medium
+    field_group: update_rate_synthetic
+    level: nominal
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: update rate is unsupported by the longitudinal proxy source
+    profile:
+      update_mode: 5hz-hold
+  - name: update_rate_synthetic_high
+    field_group: update_rate_synthetic
+    level: high
+    source_status: synthetic_stress_factor
+    supported_fields: []
+    caveat: update rate is unsupported by the longitudinal proxy source
+    profile:
+      update_mode: 10hz-matched

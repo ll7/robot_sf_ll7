@@ -39,3 +39,37 @@ _ = save_montage(metas, out_png="docs/figures/scenarios/montage.png", cols=3, ou
 - Deterministic thumbnails: seed = base_seed + hash(scenario_id).
 - Repeats in the matrix are ignored for thumbnails.
 - Headless-safe via MPLBACKEND=Agg (set in seed_utils).
+
+## Scenario Atlas
+
+Use `scripts/tools/generate_scenario_atlas.py` when you need a compact
+discoverability pack that combines scenario rows, thumbnails, mechanism cards,
+coverage gaps, and a checksum manifest:
+
+```bash
+uv run python scripts/tools/generate_scenario_atlas.py \
+  --matrix configs/scenarios/sets/verified_simple_subset_v1.yaml \
+  --output output/scenario_atlas/verified_simple_subset_v1 \
+  --run-id verified_simple_subset_v1 \
+  --base-seed 0
+```
+
+Expected output tree:
+
+```text
+scenario_atlas.md
+scenario_atlas.csv
+coverage_gaps.json
+atlas_manifest.json
+thumbnails/
+  <scenario_id>.png
+mechanism_cards/
+  <scenario_id>.md
+```
+
+The atlas is a discovery and inspection artifact, not benchmark evidence.
+Rows distinguish authored intent, certification status, executed evidence, and
+missing optional contract/certificate/hazard mappings. Thumbnails use the same
+deterministic ID resolution and rendering helper as `robot_sf_bench
+plot-scenarios`, so they are useful visual cues but not route-clearance,
+certification, or planner-performance proof.

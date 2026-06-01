@@ -13,7 +13,12 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.map_runner import run_map_batch
-from robot_sf.scenario_certification import materialize_perturbation_pilot_matrix
+from robot_sf.scenario_certification import (
+    build_criticality_summary_from_pilot,
+    criticality_summary_to_dict,
+    materialize_perturbation_pilot_matrix,
+    validate_criticality_summary,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 SCHEMA_VERSION = "scenario_perturbation_criticality_pilot.v1"
@@ -434,36 +439,49 @@ def _write_markdown(summary: dict[str, Any], path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _compact_tracked_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    """Return the small reviewable subset suitable for docs/context/evidence."""
-    materialization = dict(summary["materialization"])
-    materialization.pop("scenario_matrix_path", None)
-    materialization.pop("summary_path", None)
-    materialization["local_artifact_boundary"] = (
-        "materialized scenario matrix, route overrides, and raw episode JSONL remain ignored "
-        "local outputs reproducible from the tracked manifest and command"
-    )
-    return {
-        "schema_version": summary["schema_version"],
-        "manifest": summary["manifest"],
-        "planners": summary["planners"],
-        "horizon": summary["horizon"],
-        "dt": summary["dt"],
-        "seed_limit": summary["seed_limit"],
-        "materialization": materialization,
-        "planner_runs": {
-            planner: {
-                "algo": run["algo"],
-                "algo_config_path": run["algo_config_path"],
-                "source": run["source"],
-                "episodes": run["episodes"],
-            }
-            for planner, run in summary["planner_runs"].items()
+def _build_evidence_summary_payload(
+    records_by_planner: dict[str, list[dict[str, Any]]],
+    scenario_metadata: dict[str, dict[str, Any]],
+    manifest_path: str,
+    materialized: Any,
+    planner_specs: list[PlannerRunSpec],
+    planner_runs: dict[str, dict[str, Any]],
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    """Build a validated criticality_summary.v1 payload suitable for docs/context/evidence."""
+    clean_planner_runs: dict[str, dict[str, Any]] = {}
+    for label, run in planner_runs.items():
+        clean_planner_runs[label] = {
+            "algo": run["algo"],
+            "algo_config_path": run["algo_config_path"],
+            "source": run["source"],
+            "episodes": run["episodes"],
+        }
+    summary = build_criticality_summary_from_pilot(
+        records_by_planner=records_by_planner,
+        scenario_metadata=scenario_metadata,
+        manifest=manifest_path,
+        manifest_id=materialized.manifest_id,
+        planners=[spec.label for spec in planner_specs],
+        horizon=args.horizon,
+        dt=args.dt,
+        seed_limit=args.seed_limit,
+        materialization={
+            "schema_version": materialized.schema_version,
+            "manifest_id": materialized.manifest_id,
+            "included_variants": list(materialized.included_variants),
+            "excluded_variants": list(materialized.excluded_variants),
+            "variant_count": len(materialized.included_variants),
+            "local_artifact_boundary": (
+                "materialized scenario matrix, route overrides, and raw episode JSONL remain "
+                "ignored local outputs reproducible from the tracked manifest and command"
+            ),
         },
-        "pair_summary": summary["pair_summary"],
-        "pair_rows": summary["pair_rows"],
-        "claim_boundary": summary["claim_boundary"],
-    }
+        planner_runs=clean_planner_runs,
+    )
+    payload = criticality_summary_to_dict(summary)
+    validate_criticality_summary(payload)
+    return payload
 
 
 def main() -> int:
@@ -552,8 +570,17 @@ def main() -> int:
     _write_markdown(summary, args.pilot_output_dir / "summary.md")
     if args.evidence_summary is not None:
         args.evidence_summary.parent.mkdir(parents=True, exist_ok=True)
+        evidence = _build_evidence_summary_payload(
+            records_by_planner=records_by_planner,
+            scenario_metadata=metadata,
+            manifest_path=args.manifest.as_posix(),
+            materialized=materialized,
+            planner_specs=planner_specs,
+            planner_runs=planner_runs,
+            args=args,
+        )
         args.evidence_summary.write_text(
-            json.dumps(_compact_tracked_summary(summary), indent=2, sort_keys=True) + "\n",
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
     print(

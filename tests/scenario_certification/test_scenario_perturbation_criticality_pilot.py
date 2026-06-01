@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from scripts.validation.run_scenario_perturbation_criticality_pilot import (
+    PlannerRunSpec,
+    _build_evidence_summary_payload,
     build_pair_table,
     classify_episode_status,
     resolve_planner_run_spec,
@@ -48,6 +52,41 @@ def test_resolve_planner_run_spec_keeps_unknown_planner_as_raw_algo(tmp_path) ->
     assert spec.algo == "goal"
     assert spec.algo_config_path is None
     assert spec.source == "raw_algo"
+
+
+def _build_script_evidence_summary(
+    records: dict[str, list[dict]],
+    metadata: dict[str, dict],
+    *,
+    planner: str,
+    episodes: int,
+) -> dict:
+    """Build the script-level evidence payload without running planners."""
+    return _build_evidence_summary_payload(
+        records_by_planner=records,
+        scenario_metadata=metadata,
+        manifest_path="dummy.yaml",
+        materialized=SimpleNamespace(
+            schema_version="scenario_perturbation_pilot_matrix.v1",
+            manifest_id="demo",
+            included_variants=["demo_noop", "demo_offset"],
+            excluded_variants=[],
+        ),
+        planner_specs=[
+            PlannerRunSpec(label=planner, algo=planner, source="raw_algo"),
+        ],
+        planner_runs={
+            planner: {
+                "algo": planner,
+                "algo_config_path": None,
+                "source": "raw_algo",
+                "jsonl_path": "output/local.episodes.jsonl",
+                "episodes": episodes,
+                "batch_summary": {"local_only": True},
+            },
+        },
+        args=SimpleNamespace(horizon=80, dt=0.1, seed_limit=1),
+    )
 
 
 def test_classify_episode_status_separates_fallback_and_invalid_rows() -> None:
@@ -119,6 +158,25 @@ def test_build_pair_table_computes_completed_pair_deltas() -> None:
         "completed": 1
     }
 
+    # The script-level --evidence-summary path emits criticality_summary.v1.
+    payload = _build_script_evidence_summary(records, metadata, planner="goal", episodes=2)
+    assert payload["schema_version"] == "criticality_summary.v1"
+    rc = payload["pair_summary"]["row_status_counts"]
+    assert rc["completed"] == 1
+    assert rc["invalid"] == 0
+    assert rc["fallback"] == 0
+    assert rc["degraded"] == 0
+    assert rc["missing"] == 0
+    assert rc["failed"] == 0
+    assert set(rc) == {"completed", "invalid", "fallback", "degraded", "missing", "failed"}
+    assert "jsonl_path" not in payload["planner_runs"]["goal"]
+    assert "batch_summary" not in payload["planner_runs"]["goal"]
+    assert "scenario_matrix_path" not in payload["materialization"]
+    assert "summary_path" not in payload["materialization"]
+    assert payload["pair_summary"]["mean_deltas_completed_pairs"]["success_delta"] == pytest.approx(
+        -1.0
+    )
+
 
 def test_build_pair_table_excludes_fallback_rows_from_completed_deltas() -> None:
     """Fallback perturbed rows should be visible but excluded from completed-pair means."""
@@ -153,3 +211,15 @@ def test_build_pair_table_excludes_fallback_rows_from_completed_deltas() -> None
     assert pairs[0]["perturbed_status"] == "fallback"
     assert summary["status_counts"] == {"excluded": 1}
     assert summary["mean_deltas_completed_pairs"] == {}
+
+    # The script-level --evidence-summary path records fallback separately.
+    payload = _build_script_evidence_summary(records, metadata, planner="orca", episodes=2)
+    assert payload["schema_version"] == "criticality_summary.v1"
+    rc = payload["pair_summary"]["row_status_counts"]
+    assert rc["completed"] == 0
+    assert rc["fallback"] == 1
+    assert rc["invalid"] == 0
+    assert rc["degraded"] == 0
+    assert rc["missing"] == 0
+    assert rc["failed"] == 0
+    assert payload["pair_summary"]["mean_deltas_completed_pairs"] == {}

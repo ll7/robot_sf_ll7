@@ -133,7 +133,7 @@ def test_orca_residual_guarded_candidate_requests_training_observation_contract(
 
 def test_shielded_ppo_issue1474_candidate_requests_training_observation_contract() -> None:
     """Issue #1474 shielded-PPO repair should use the SocNav contract it trained with."""
-    repo_root = Path(__file__).parents[2]
+    repo_root = Path(__file__).resolve().parents[2]
 
     _entry, payload, config, config_path = load_candidate_definition(
         repo_root / "docs/context/policy_search/candidate_registry.yaml",

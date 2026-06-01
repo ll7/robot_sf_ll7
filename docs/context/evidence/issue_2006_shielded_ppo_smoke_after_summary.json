@@ -1,0 +1,53 @@
+{
+  "schema_version": "artifact_provenance_summary.v1",
+  "issue": 2006,
+  "candidate": "shielded_ppo_issue1474_collision20_v1",
+  "stage": "smoke",
+  "classification": "tracked-compact-evidence",
+  "generated_at_date": "2026-06-01",
+  "git_commit_before_fix": "3cc4a21e6e151e9830e89d07dff95bdbc5337536",
+  "git_commit_under_test": "647e7726ae2d2951736037ba39a069c6effb1c23",
+  "command": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_policy_search_candidate.py --candidate shielded_ppo_issue1474_collision20_v1 --stage smoke --workers 1 --output-dir <ignored-worktree-artifact-dir>",
+  "local_artifacts": {
+    "summary_json": "ignored worktree-local summary, metrics copied below",
+    "jsonl": "ignored worktree-local JSONL, diagnostics copied below"
+  },
+  "config_change_under_test": {
+    "path": "configs/policy_search/candidates/shielded_ppo_issue1474_collision20_v1.yaml",
+    "field": "params.observation_mode",
+    "value": "socnav_state"
+  },
+  "before_repair": {
+    "source": "docs/context/policy_search/reports/2026-06-01_shielded_ppo_issue1474_collision20_v1_smoke.md before issue-2006 repair",
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "mean_avg_speed": 0.0,
+    "failure_mode": "overconservative_stop",
+    "shield_decision_count": 80,
+    "shield_intervention_count": 0,
+    "shield_override_count": 0,
+    "guard_decision_counts": {
+      "goal_reached": 80
+    }
+  },
+  "after_repair": {
+    "episodes": 1,
+    "success_rate": 1.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "mean_avg_speed": 1.9996905469041861,
+    "termination_reason_counts": {
+      "success": 1
+    },
+    "failure_mode_counts": {},
+    "shield_decision_count": 71,
+    "shield_intervention_count": 0,
+    "shield_override_count": 0,
+    "guard_decision_counts": {
+      "ppo_clear": 71
+    },
+    "observation_mode": "socnav_state",
+    "observation_level": "tracked_agents_no_noise"
+  },
+  "claim_boundary": "Single-episode local smoke evidence that the issue-2006 zero-motion launch-packet blocker is repaired; not nominal, stress, full-matrix, or benchmark-strength evidence."
+}

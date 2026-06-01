@@ -94,9 +94,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _repo_root() -> Path:
     """Return the repository root."""
-    return Path(
-        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
-    )
+    return Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
 
 
 def _repo_relative(path: Path, *, root: Path | None = None) -> str:
@@ -202,9 +200,13 @@ def _materialize_variant_config(  # noqa: C901
     update_mode = str(baseline.get("update_mode", "")).strip()
     latency_mode = str(baseline.get("latency_mode", "")).strip()
     if update_mode not in known_update_modes():
-        raise ValueError(f"Unsupported update_mode for sweep variant '{variant['name']}': {update_mode}")
+        raise ValueError(
+            f"Unsupported update_mode for sweep variant '{variant['name']}': {update_mode}"
+        )
     if latency_mode not in known_latency_modes():
-        raise ValueError(f"Unsupported latency_mode for sweep variant '{variant['name']}': {latency_mode}")
+        raise ValueError(
+            f"Unsupported latency_mode for sweep variant '{variant['name']}': {latency_mode}"
+        )
 
     payload["name"] = f"{manifest['name']}_{variant['name']}"
     payload["paper_facing"] = False
@@ -266,11 +268,15 @@ def _materialize_variant_config(  # noqa: C901
     if isinstance(planner_keys, list):
         selected = {str(key) for key in planner_keys}
         payload["planners"] = [
-            planner for planner in payload.get("planners", []) if str(planner.get("key")) in selected
+            planner
+            for planner in payload.get("planners", [])
+            if str(planner.get("key")) in selected
         ]
         missing = selected - {str(planner.get("key")) for planner in payload["planners"]}
         if missing:
-            raise ValueError(f"Pilot planner override references missing planners: {sorted(missing)}")
+            raise ValueError(
+                f"Pilot planner override references missing planners: {sorted(missing)}"
+            )
     payload["issue_2011_sweep_variant"] = {
         "name": str(variant["name"]),
         "field_group": str(variant["field_group"]),
@@ -335,7 +341,9 @@ def materialize_configs(
 
 def _invoked_command(config_path: Path, raw_argv: Sequence[str]) -> str:
     """Build an invoked command string for campaign metadata."""
-    return shlex.join([sys.executable, "scripts/tools/run_amv_actuation_sensitivity_sweep.py", *raw_argv])
+    return shlex.join(
+        [sys.executable, "scripts/tools/run_amv_actuation_sensitivity_sweep.py", *raw_argv]
+    )
 
 
 def run_preflights(
@@ -360,7 +368,10 @@ def run_preflights(
         )
         rows.append(
             {
-                **{key: entry[key] for key in ("variant_name", "field_group", "level", "source_status")},
+                **{
+                    key: entry[key]
+                    for key in ("variant_name", "field_group", "level", "source_status")
+                },
                 "campaign_id": str(prepared["campaign_id"]),
                 "campaign_root": _repo_relative(Path(prepared["campaign_root"])),
                 "validate_config_path": _repo_relative(Path(prepared["validate_config_path"])),
@@ -369,7 +380,9 @@ def run_preflights(
                 "matrix_summary_csv": _repo_relative(Path(prepared["matrix_summary_csv_path"])),
             }
         )
-    _write_json(output_dir / "preflight_index.json", {"schema_version": _SCHEMA_VERSION, "rows": rows})
+    _write_json(
+        output_dir / "preflight_index.json", {"schema_version": _SCHEMA_VERSION, "rows": rows}
+    )
     return rows
 
 
@@ -396,7 +409,10 @@ def run_pilot(
         )
         rows.append(
             {
-                **{key: entry[key] for key in ("variant_name", "field_group", "level", "source_status")},
+                **{
+                    key: entry[key]
+                    for key in ("variant_name", "field_group", "level", "source_status")
+                },
                 "campaign_id": str(result.get("campaign_id", "")),
                 "campaign_root": _repo_relative(Path(str(result.get("campaign_root", "")))),
                 "status": str(result.get("status", "")),
@@ -405,7 +421,11 @@ def run_pilot(
             }
         )
     _write_json(output_dir / "pilot_index.json", {"schema_version": _SCHEMA_VERSION, "rows": rows})
-    aggregate_campaigns(output_dir=output_dir, entries=entries, campaign_roots=[Path(row["campaign_root"]) for row in rows])
+    aggregate_campaigns(
+        output_dir=output_dir,
+        entries=entries,
+        campaign_roots=[Path(row["campaign_root"]) for row in rows],
+    )
     return rows
 
 
@@ -542,9 +562,13 @@ def aggregate_campaigns(  # noqa: C901
         }
 
     rows: list[dict[str, Any]] = []
-    for (field_group, variant_name, planner_key, scenario_family), bucket in sorted(buckets.items()):
+    for (field_group, variant_name, planner_key, scenario_family), bucket in sorted(
+        buckets.items()
+    ):
         entry = by_name[variant_name]
-        baseline = nominal_by_group_planner_family.get((field_group, planner_key, scenario_family), {})
+        baseline = nominal_by_group_planner_family.get(
+            (field_group, planner_key, scenario_family), {}
+        )
         row: dict[str, Any] = {
             "field_group": field_group,
             "variant_name": variant_name,
@@ -581,7 +605,10 @@ def aggregate_campaigns(  # noqa: C901
             writer.writeheader()
             writer.writerows(rows)
     else:
-        csv_path.write_text("field_group,variant_name,level,planner_key,scenario_family,episodes\n", encoding="utf-8")
+        csv_path.write_text(
+            "field_group,variant_name,level,planner_key,scenario_family,episodes\n",
+            encoding="utf-8",
+        )
     _write_effect_markdown(reports_dir / "effect_size_summary.md", rows)
     _write_sensitivity_svg(output_dir / "figures" / "outcome_sensitivity.svg", rows)
     _write_json(
@@ -664,9 +691,7 @@ def _write_sensitivity_svg(path: Path, rows: Sequence[Mapping[str, Any]]) -> Non
 def _write_checksums(output_dir: Path) -> None:
     """Write checksums for compact output artifacts."""
     targets = [
-        path
-        for path in output_dir.rglob("*")
-        if path.is_file() and path.name != "checksums.sha256"
+        path for path in output_dir.rglob("*") if path.is_file() and path.name != "checksums.sha256"
     ]
     lines = []
     for path in sorted(targets):
@@ -685,14 +710,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     manifest, entries = materialize_configs(manifest_path=args.manifest, output_dir=args.output)
     source_manifest = _load_yaml(args.manifest)
     if args.mode == "preflight":
-        run_preflights(entries=entries, output_dir=args.output, manifest=source_manifest, raw_argv=raw_argv)
+        run_preflights(
+            entries=entries, output_dir=args.output, manifest=source_manifest, raw_argv=raw_argv
+        )
     elif args.mode == "pilot":
-        run_pilot(entries=entries, output_dir=args.output, manifest=source_manifest, raw_argv=raw_argv)
+        run_pilot(
+            entries=entries, output_dir=args.output, manifest=source_manifest, raw_argv=raw_argv
+        )
     elif args.mode == "aggregate":
-        aggregate_campaigns(output_dir=args.output, entries=entries, campaign_roots=args.campaign_root)
+        aggregate_campaigns(
+            output_dir=args.output, entries=entries, campaign_roots=args.campaign_root
+        )
     else:
         _write_checksums(args.output)
-    _write_json(args.output / "run_summary.json", {"schema_version": _SCHEMA_VERSION, "mode": args.mode, "manifest": manifest})
+    _write_json(
+        args.output / "run_summary.json",
+        {"schema_version": _SCHEMA_VERSION, "mode": args.mode, "manifest": manifest},
+    )
     return 0
 
 

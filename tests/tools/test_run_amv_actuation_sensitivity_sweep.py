@@ -21,9 +21,7 @@ def test_issue_2011_sweep_manifest_materializes_diagnostic_configs(tmp_path: Pat
     resolved = json.loads((tmp_path / "resolved_sweep_manifest.json").read_text(encoding="utf-8"))
     assert resolved["claim_boundary"] == "diagnostic-only"
     assert len(resolved["variants"]) == 12
-    assert {
-        (entry["field_group"], entry["level"]) for entry in resolved["variants"]
-    } >= {
+    assert {(entry["field_group"], entry["level"]) for entry in resolved["variants"]} >= {
         ("longitudinal_proxy", "low"),
         ("longitudinal_proxy", "nominal"),
         ("longitudinal_proxy", "high"),
@@ -98,9 +96,9 @@ def test_issue_2011_sweep_labels_unavailable_campaign_roots(tmp_path: Path) -> N
     )["variants"]
 
     roots = [
-            _write_campaign_fixture(
-                tmp_path,
-                "latency_synthetic_medium",
+        _write_campaign_fixture(
+            tmp_path,
+            "latency_synthetic_medium",
             0.0,
             1.0,
             status="accepted_unavailable_only",

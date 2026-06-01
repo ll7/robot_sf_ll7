@@ -284,6 +284,8 @@ knowledge, not every transient iteration detail.
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Issue #1638 local model path preflight:
   [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
+* Issue #1960 local artifact retirement status:
+  [issue_1960_local_artifact_retirement.md](issue_1960_local_artifact_retirement.md)
 * Issue #1845 report grouping contracts:
   [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:

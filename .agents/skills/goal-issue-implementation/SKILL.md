@@ -290,14 +290,31 @@ Route remaining issues by their blocker:
 1. Select one issue (`gh-issue-sequencer` output or explicit user target).
 2. Re-check issue body/comments and open PRs for source-PR dependencies, active coverage, and
    duplicate branch/PR risk before branching.
-3. Create/checkout the isolated implementation branch. For non-trivial local changes, prefer a
+3. Acquire the cross-machine issue claim before branching:
+
+   ```bash
+   uv run python scripts/dev/issue_claim.py acquire <issue-number>
+   ```
+
+   The helper creates `agent-claims/issue-<issue-number>` through GitHub's create-ref API, which
+   fails when the ref already exists. If the command fails, treat the issue as already claimed by
+   another PC or agent, run `uv run python scripts/dev/issue_claim.py status <issue-number>` for the
+   handoff, and skip to the next candidate unless the claim is explicitly confirmed stale and
+   released.
+4. Make the successful claim visible in the issue/project surfaces: move the issue to `In progress`
+   or `state:running`, assign the actor when practical, and add a concise issue comment with the
+   claim ref, machine/thread, planned branch, and stale-claim cleanup condition.
+5. Create/checkout the isolated implementation branch. For non-trivial local changes, prefer a
    linked worktree and follow `AGENTS.md` "Fresh Worktree Bootstrap" for location, naming,
    machine-context symlink, environment setup, and early `origin/main` freshness.
-4. Implement only in-scope behavior and required tests/docs.
-5. Validate using the narrowest meaningful level first, then expand.
-6. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
-7. Prepare proof and branch handoff via `gh-pr-opener`.
-8. Open PR, then report and move to next queue item.
+6. Implement only in-scope behavior and required tests/docs.
+7. Validate using the narrowest meaningful level first, then expand.
+8. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
+9. Prepare proof and branch handoff via `gh-pr-opener`.
+10. Open PR, release the transient claim with
+    `uv run python scripts/dev/issue_claim.py release <issue-number>` once the PR visibly covers the
+    issue, then report and move to next queue item. If the run abandons the issue before PR opening,
+    release the claim only after recording the blocker or handoff.
 
 Never run unrelated refactors or paper-facing claims in this loop.
 
@@ -386,6 +403,13 @@ When a delegated worker produces a reusable workflow lesson, include an
 ## Race-Condition / Multi-Agent Safety
 
 - Operate one implementation branch at a time by default.
+- Use `scripts/dev/issue_claim.py acquire <issue-number>` as the first write after candidate
+  selection and duplicate-PR checks. The remote `agent-claims/issue-<number>` ref is the atomic
+  cross-machine claim; labels, assignments, Project #5 status, and comments are secondary visibility
+  signals.
+- If acquiring the claim fails, do not branch or implement. Record the existing claim status and
+  select another issue. Release only stale or abandoned claims after checking for an open PR or a
+  recent issue comment from the claimant.
 - Before cleaning stale worktrees at loop end or after a PR handoff, follow `AGENTS.md` "Worktree
   Teardown And Preservation" and record how relevant tracked, untracked, and ignored local changes
   were preserved.

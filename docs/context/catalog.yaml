@@ -81,6 +81,10 @@ entries:
     status: current
     freshness: policy
     area: learned_policy
+  - path: docs/context/issue_1966_scenario_belief_interface.md
+    status: current
+    freshness: dated
+    area: learned_policy
   - path: docs/context/open_issues_training_split_audit_2026-05-30.md
     status: current
     freshness: dated

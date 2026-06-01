@@ -70,11 +70,15 @@ Do not retry preflight on the same PR without a state change.
    ```
 2. For each PR:
    - Run preflight checks.
-   - If all pass, merge using squash merge:
+   - If all pass, record the PR head SHA and merge using squash merge:
      ```bash
-     gh pr merge <number> --squash --delete-branch
+     HEAD_SHA=$(gh pr view <number> --json headRefOid --jq .headRefOid)
+     gh pr merge <number> --squash --delete-branch --match-head-commit "$HEAD_SHA"
      ```
-   - If merge fails, record the error and continue to the next PR.
+     If `HEAD_SHA` is empty or the `gh pr view` command fails, stop and report
+     the lookup failure before attempting the merge.
+   - If merge fails, run diagnostics and handle the failure (see Merge
+     Command Failure below) before continuing to the next PR.
 3. Report merged PRs, skipped PRs with reasons, and any failures.
 
 Do not merge multiple PRs in parallel. Process sequentially.
@@ -100,10 +104,27 @@ Do not merge multiple PRs in parallel. Process sequentially.
   - Report the specific protection rule that blocked the merge.
   - Do not attempt to bypass branch protection.
 
+- Merge command failure:
+  - Run diagnostics to distinguish remote-side success from true failure:
+    ```bash
+    gh pr view <number> --json state,mergedAt,mergeCommit,headRefOid,headRefName
+    ```
+  - If `state == "MERGED"` and `mergedAt` is set, the remote merge succeeded
+    but local cleanup (branch deletion, cache update) may have failed. Report
+    the merged commit SHA and note the cleanup failure separately. Do not
+    retry; the PR is already merged.
+  - If `state` is not `"MERGED"`, the merge genuinely failed. Record the
+    `headRefOid`, exit code, and stderr. Do not retry without an external
+    state change.
+  - Never retry a PR whose remote state is already `"MERGED"`.
+
 ## Anti-Loop Rules
 
 - Do not retry merging the same PR if preflight or merge command failed without
   an external state change (new CI run completed, conflicts resolved, label added).
+- Never retry a PR whose remote state is already `"MERGED"`, even if the local
+  `gh pr merge` command exited nonzero. Check with
+  `gh pr view <number> --json state` before any retry attempt.
 - After two sequential PRs fail the same preflight check, stop and report the
   pattern instead of continuing.
 

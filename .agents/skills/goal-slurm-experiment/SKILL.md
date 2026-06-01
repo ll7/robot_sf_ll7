@@ -125,7 +125,20 @@ Do not use it for:
    - Capture job id, branch, commit, config path, SLURM script, output root, and stdout/stderr path.
    - Immediately check `squeue`, `sacct`, and early stderr when the job starts.
 
-8. Record the handoff.
+8. Monitor with long, low-churn intervals.
+   - Estimate remaining wall time from observed timesteps/throughput, configured horizon, and eval
+     overhead.
+   - For healthy multi-hour training jobs, prefer a small number of long sleeps over frequent polls:
+     usually two to four checks until the expected finish window, with shorter checks only near
+     completion, suspected early failure, or a scheduler state change.
+   - Do not open a PR or commit for every scheduled eval gate. Preserve interim eval metrics in an
+     issue comment or local note only when they change the operational decision, expose a new
+     failure mode, or the user explicitly wants live reporting.
+   - Make the durable context-note update and PR after the job finishes, fails, or reaches a
+     campaign decision point that changes what should run next.
+   - Keep interim metrics labeled as live training state, not benchmark or guarded-policy evidence.
+
+9. Record the handoff.
    - Comment on the issue or update the relevant context note with the job id, branch, commit,
      config, logs, output root, durable artifact status, validation status, and next action.
    - Keep local `output/` paths labeled as non-durable until `artifact-provenance` classifies or
@@ -150,6 +163,8 @@ fresh rerun is the stated next action.
   calling out the risk.
 - Do not let a `slurm` or `resource:slurm` label override issue comments, context notes, or the
   submission suitability gate.
+- Do not create PR churn for routine in-progress eval gates; wait for completion/failure or a real
+  decision-changing signal before opening durable follow-up PRs.
 - Do not treat queued, running, fallback, degraded, or local-only `output/` artifacts as completed
   evidence.
 - Do not spend a training allocation on a bug that can be fixed from logs, config inspection, a

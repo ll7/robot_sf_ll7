@@ -114,6 +114,10 @@ entries:
     status: current
     freshness: maintained
     area: root_layout
+  - path: docs/context/issue_2035_path_reference_audit.md
+    status: current
+    freshness: dated
+    area: root_layout
   - path: docs/context/issue_1573_root_layout_inventory.md
     status: historical
     freshness: dated

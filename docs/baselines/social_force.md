@@ -50,7 +50,7 @@ robot_sf_bench run \
     --matrix configs/scenarios/sanity_v1.yaml \
     --algo baseline_sf \
     --config configs/baselines/social_force_default.yaml \
-    --out output/benchmarks/social_force_custom.jsonl
+    --out output/benchmarks/social_force_default.jsonl
 ```
 
 ## Configuration

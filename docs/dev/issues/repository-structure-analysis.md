@@ -445,7 +445,7 @@ Tests split across multiple locations:
 
 **Option A: Keep As-Is (Recommended)**
 Current structure works:
-```
+```text
 tests/              # Unit and integration tests
 tests/pygame/        # GUI-dependent tests
 fast-pysf/tests/    # External dependency tests

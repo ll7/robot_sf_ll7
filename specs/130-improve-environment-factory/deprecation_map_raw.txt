@@ -158,12 +158,12 @@
 ./tests/test_environment_factory_signatures.py:35:    params = _param_names(make_image_robot_env)
 ./tests/test_environment_factory_signatures.py:40:def test_make_pedestrian_env_signature_explicit():  # noqa: D401
 ./tests/test_environment_factory_signatures.py:41:    params = _param_names(make_pedestrian_env)
-./tests/tests/pygame_headless.py:9:from robot_sf.gym_env.environment_factory import make_robot_env
-./tests/tests/pygame_headless.py:33:        env = make_robot_env(debug=True)
-./tests/tests/pygame_headless.py:60:            env = make_robot_env(debug=True)
-./tests/tests/pygame_headless.py:107:            env = make_robot_env(debug=True)
-./tests/tests/pygame_headless.py:149:        env_normal = make_robot_env(debug=True)
-./tests/tests/pygame_headless.py:158:        env_headless = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:9:from robot_sf.gym_env.environment_factory import make_robot_env
+./tests/test_pygame_headless.py:33:        env = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:60:            env = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:107:            env = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:149:        env_normal = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:158:        env_headless = make_robot_env(debug=True)
 ./docs/README.md:208:    make_robot_env,
 ./docs/README.md:209:    make_image_robot_env,
 ./docs/README.md:210:    make_pedestrian_env

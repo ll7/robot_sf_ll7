@@ -45,6 +45,9 @@ from robot_sf.benchmark.canonical_table_export import load_rows_json as _load_ca
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
+from robot_sf.benchmark.failure_mechanism_classifier import (
+    classify_failure_mechanisms_from_jsonl,
+)
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
 from robot_sf.benchmark.grouping import DEFAULT_REPORT_FALLBACK_GROUP_BY, DEFAULT_REPORT_GROUP_BY
 from robot_sf.benchmark.observation_levels import OBSERVATION_LEVEL_KEYS
@@ -578,6 +581,32 @@ def _handle_stress_coverage_report(args) -> int:
         return 0
     except Exception:
         logging.exception("Stress/uncertainty coverage report failed")
+        return 2
+
+
+def _handle_classify_failure_mechanisms(args) -> int:
+    """Classify paired fixed/long-horizon failure mechanisms.
+
+    Returns:
+        Exit code (0 success, 2 failure).
+    """
+    try:
+        payload = classify_failure_mechanisms_from_jsonl(
+            args.episodes_jsonl,
+            scenario_certificates=args.scenario_certificates,
+            output_json=args.out_json,
+            output_csv=args.out_csv,
+            fixed_horizon=args.fixed_horizon,
+            long_horizon=args.long_horizon,
+        )
+        logging.info(
+            "Failure mechanism classification wrote %d rows to %s",
+            len(payload["rows"]),
+            args.out_json,
+        )
+        return 0
+    except Exception:
+        logging.exception("Failure mechanism classification failed")
         return 2
 
 
@@ -1790,6 +1819,32 @@ def _add_stress_coverage_report_subparser(
     p.set_defaults(cmd="stress-coverage-report")
 
 
+def _add_classify_failure_mechanisms_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the classify-failure-mechanisms subcommand parser."""
+    p = subparsers.add_parser(
+        "classify-failure-mechanisms",
+        help="Classify paired fixed/long-horizon failure mechanisms from episode JSONL.",
+    )
+    p.add_argument(
+        "--episodes-jsonl",
+        required=True,
+        nargs="+",
+        help="Input paired episode JSONL path(s).",
+    )
+    p.add_argument(
+        "--scenario-certificates",
+        default=None,
+        help="Optional scenario_cert.v1 JSON or JSONL used to block planner attribution.",
+    )
+    p.add_argument("--out-json", required=True, help="Output classifier JSON path.")
+    p.add_argument("--out-csv", required=True, help="Output classifier CSV path.")
+    p.add_argument("--fixed-horizon", type=int, default=100)
+    p.add_argument("--long-horizon", type=int, default=500)
+    p.set_defaults(cmd="classify-failure-mechanisms")
+
+
 def _add_claim_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2364,6 +2419,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_summary_subparser(subparsers)
     _add_aggregate_subparser(subparsers)
     _add_stress_coverage_report_subparser(subparsers)
+    _add_classify_failure_mechanisms_subparser(subparsers)
     _add_claim_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
@@ -2819,6 +2875,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,
         "stress-coverage-report": _handle_stress_coverage_report,
+        "classify-failure-mechanisms": _handle_classify_failure_mechanisms,
         "claim": _handle_claim,
         "export-parquet": _handle_export_parquet,
         "seed-variance": _handle_seed_variance,

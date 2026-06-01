@@ -102,10 +102,10 @@ Before each phase, run a delegation checkpoint:
   `critical-path-blocker`, `route-unavailable`, `sensitive-context`, `pure-synthesis`, or
   `local-publication-step`.
 
-Publication and final judgment remain local: delegates must not push, open or merge PRs, change
-labels/project state, resolve review threads, or make final benchmark/paper/safety claims unless
-the user explicitly grants that permission. Their output is route evidence that must be reviewed and
-validated before phase completion.
+Publication and final judgment remain local: delegates must not push, open, or merge PRs; change
+labels or project state; resolve review threads; or make final benchmark, paper, or safety claims
+unless the user explicitly grants that permission. Their output is route evidence that must be
+reviewed and validated before phase completion.
 
 Transitions:
 - After `implement`, proceed to `review`.

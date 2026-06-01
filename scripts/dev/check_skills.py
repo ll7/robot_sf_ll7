@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 # ruff: noqa: C901, PLR0912
-"""Validate repo-local skill metadata, registry links, and generated index drift."""
+"""Validate repo-local skill metadata, registry links, and generated index drift.
+
+Subcommands:
+  (no subcommand)  Run full registry validation (existing behavior).
+  --preflight SKILL  Check runtime requirements declared by SKILL are available.
+"""
 
 from __future__ import annotations
 
+import argparse
+import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -292,8 +301,230 @@ def _validate_duplicate_routing(text_by_path: dict[Path, str]) -> list[str]:
     return errors
 
 
-def main() -> int:
-    """Return non-zero when skill metadata, registry links, or docs are stale."""
+# -- preflight helpers ----------------------------------------------------------
+
+_REQUIREMENT_CHECKS: dict[str, tuple[str, str, str]] = {
+    "git": ("git", "--version", "Install Git and ensure `git` is on PATH."),
+    "uv": ("uv", "--version", "Install uv and ensure `uv` is on PATH."),
+    "gh": ("gh", "--version", "Install GitHub CLI, then run `gh auth login`."),
+    "slurm": (
+        "sbatch",
+        "--version",
+        "Run on a SLURM login node or use a non-SLURM skill for this task.",
+    ),
+    "project5": (
+        "gh",
+        "--version",
+        "Install/authenticate GitHub CLI; Project #5 writes also need project permissions.",
+    ),
+}
+
+_PROJECT5_EXTRA = "jq"
+
+
+def _check_command(cmd: str, arg: str) -> tuple[bool, str]:
+    """Return (available, version_or_error) for a command."""
+    resolved = shutil.which(cmd)
+    if resolved is None:
+        return False, f"{cmd}: not found on PATH"
+    try:
+        result = subprocess.run(
+            [resolved, arg],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        lines = (result.stdout or result.stderr or "").splitlines()
+        version = lines[0].strip() if lines else "unknown version"
+        return True, version
+    except FileNotFoundError:
+        return False, f"{cmd}: not found on PATH"
+    except subprocess.TimeoutExpired:
+        return False, f"{cmd}: timed out after 15s"
+
+
+def _run_preflight_check(
+    req: str,
+    results: dict[str, Any] | None,
+    json_output: bool,
+) -> tuple[str, str]:
+    """Run a single requirement check and return (status, detail).
+
+    Returns one of (ok, version_string), (missing, error_string),
+    or (unrecognized, message).
+    """
+    check = _REQUIREMENT_CHECKS.get(req)
+    if check is None:
+        detail = (
+            "no check registered for this requirement; add it to "
+            "scripts/dev/check_skills.py or remove the unsupported `requires` value"
+        )
+        if json_output and results is not None:
+            results["checks"][req] = {
+                "status": "unrecognized",
+                "detail": detail,
+                "remedy": detail,
+            }
+        return "unrecognized", detail
+
+    cmd, arg, remedy = check
+    ok, detail = _check_command(cmd, arg)
+
+    if ok:
+        status = "ok"
+        jq_ok: bool | None = None
+        if req == "project5":
+            jq_ok, _ = _check_command(_PROJECT5_EXTRA, "--version")
+            if not jq_ok:
+                status = "warning"
+                detail = f"{cmd} found but {_PROJECT5_EXTRA} not on PATH"
+
+        if json_output and results is not None:
+            results["checks"][req] = {"status": status, "detail": detail, "remedy": None}
+            if jq_ok is not None:
+                results["checks"][req]["jq_available"] = jq_ok
+
+        return status, detail
+
+    if json_output and results is not None:
+        results["checks"][req] = {"status": "missing", "detail": detail, "remedy": remedy}
+    return "missing", f"{detail}; remedy: {remedy}"
+
+
+def _preflight(skill_name: str, json_output: bool = False) -> int:
+    """Check runtime requirements declared by SKILL_NAME are available on PATH."""
+    registry = _read_yaml(REGISTRY)
+    skills: dict[str, Any] = registry.get("skills", {})
+
+    # Resolve via alias lookup
+    canonical = skill_name
+    if canonical not in skills:
+        for name, meta in skills.items():
+            if skill_name in meta.get("aliases", []):
+                canonical = name
+                break
+        else:
+            msg = f"Skill {skill_name!r} not found in skills.yaml (and no alias matches)"
+            if json_output:
+                print(json.dumps({"status": "error", "skill": skill_name, "error": msg}))
+            else:
+                print(f"ERROR: {msg}")
+            return 1
+
+    meta = skills[canonical]
+    requires: list[str] = meta.get("requires", [])
+
+    results: dict[str, Any] | None = (
+        {"status": "ok", "skill": canonical, "requires": requires, "checks": {}}
+        if json_output
+        else None
+    )
+
+    if not requires:
+        if json_output:
+            assert results is not None
+            results["summary"] = {"available": 0, "missing": 0, "unrecognized": 0}
+            print(json.dumps(results))
+        else:
+            _print_preflight_header(canonical, requires)
+            print("  (no requirements declared)")
+            print()
+            print("Result: PASS (no requirements to check)")
+        return 0
+
+    if not json_output:
+        _print_preflight_header(canonical, requires)
+
+    available = 0
+    missing = 0
+    unrecognized = 0
+
+    for req in requires:
+        status, detail = _run_preflight_check(req, results, json_output)
+
+        if status == "ok":
+            available += 1
+            if not json_output:
+                print(f"  ok            {req:12}  {detail}")
+        elif status == "warning":
+            # project5 edge case: found gh but missing jq
+            available += 1
+            if not json_output:
+                print(f"  warning       {req:12}  {detail}")
+        elif status == "missing":
+            missing += 1
+            if not json_output:
+                print(f"  missing       {req:12}  {detail}")
+        else:
+            unrecognized += 1
+            if not json_output:
+                print(f"  UNRECOGNIZED  {req:12}  {detail}")
+
+    if json_output:
+        assert results is not None
+        if missing > 0 or unrecognized > 0:
+            results["status"] = "fail"
+        results["summary"] = {
+            "available": available,
+            "missing": missing,
+            "unrecognized": unrecognized,
+        }
+        print(json.dumps(results))
+    else:
+        print()
+        _print_preflight_summary(available, missing, unrecognized)
+
+    return 1 if missing > 0 or unrecognized > 0 else 0
+
+
+def _print_preflight_header(skill: str, requires: list[str]) -> None:
+    """Print a human-readable preflight header."""
+    print(f"Preflight check for skill: {skill}")
+    print(f"Declared requirements: {', '.join(requires)}")
+    print()
+
+
+def _print_preflight_summary(available: int, missing: int, unrecognized: int) -> None:
+    """Print a human-readable summary."""
+    parts = [f"  available: {available}"]
+    if missing:
+        parts.append(f"missing: {missing}")
+    if unrecognized:
+        parts.append(f"unrecognized: {unrecognized}")
+    if missing or unrecognized:
+        print("Result: FAIL (" + ", ".join(parts) + ")")
+    else:
+        print("Result: PASS (" + ", ".join(parts) + ")")
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--preflight",
+        metavar="SKILL",
+        help="run preflight requirement check for a named skill",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="emit machine-readable JSON output",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Return non-zero when skill metadata, registry links, or docs are stale.
+
+    Can also run ``--preflight SKILL`` to check runtime requirements.
+    """
+    args = _parse_args(argv)
+
+    if args.preflight:
+        return _preflight(args.preflight, json_output=args.json)
+
     registry = _read_yaml(REGISTRY)
     schema = _read_yaml(SKILLS_SCHEMA)
     readme_text = README.read_text(encoding="utf-8")

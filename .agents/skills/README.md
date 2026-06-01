@@ -8,10 +8,12 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | User intent | Primary skill | Secondary skill |
 | --- | --- | --- |
 | Not sure which skill applies | `skill-picker` | none |
+| Run continuous implement-review-merge-discover autopilot | `goal-autopilot` | `goal-issue-implementation`, `goal-pr-review`, `gh-pr-merger`, `goal-issue-discovery` |
 | Take the next eligible issue to PR | `goal-issue-implementation` | `gh-issue-autopilot` |
 | Execute one selected issue to ready PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |
 | Clarify or repair issue contracts | `issue-contract-maintainer` | legacy aliases only when explicitly named |
 | Fix PR review comments | `gh-pr-comment-fixer` | `pr-ready-check` |
+| Merge a PR carrying the merge-ready label | `gh-pr-merger` | `goal-pr-review` |
 | Open a ready PR | `gh-pr-opener` | `artifact-provenance` |
 | Verify branch claims | `implementation-verification` | `pr-ready-check` |
 | Run the standard readiness gate | `pr-ready-check` | none |
@@ -38,7 +40,9 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Stack | Skills |
 | --- | --- |
+| Continuous goal autopilot | `goal-autopilot` -> `goal-issue-implementation` -> `goal-pr-review` -> `gh-pr-merger` -> `goal-issue-discovery` |
 | Issue queue to PR | `gh-issue-sequencer` -> `gh-issue-autopilot` -> `implementation-verification` -> `pr-ready-check` -> `gh-pr-opener` |
+| Guarded PR merge | `goal-pr-review` -> `gh-pr-merger` |
 | Issue contract repair | `issue-contract-maintainer` -> `gh-issue-sequencer` |
 | PR review cleanup | `gh-pr-comment-fixer` -> `implementation-verification` -> `pr-ready-check` |
 | Benchmark evidence audit | `benchmark-row-status` -> `artifact-provenance` -> `evidence-synthesis` |
@@ -59,9 +63,11 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 ## GitHub And Project Policy
 
 - `goal-issue-implementation` owns the multi-issue loop and stop condition.
+- `goal-autopilot` owns the continuous implement, review, merge, and discover loop.
 - `gh-issue-sequencer` owns Project #5 queue ordering, with current maintainer direction and fresh
   evidence allowed to override score order.
 - `gh-issue-autopilot` owns one selected issue -> branch -> validation -> ready PR.
+- `gh-pr-merger` owns guarded merge after `goal-pr-review` has established merge-ready proof.
 - `gh-issue-creator` owns new issue creation.
 - `issue-contract-maintainer` owns ambiguity, template, and decision repair.
 - Use Project #5 `Priority Score` as an advisory queue-ordering signal; use
@@ -124,6 +130,12 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `svg-inspection` | atomic | analysis | no | no | no | none | Inspect and debug SVG maps for parser-facing issues using reusable Robot SF helpers. |
 
+### General
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `goal-autopilot` | orchestrator | implementation | yes | no | no | `goal-issue-implementation`, `gh-pr-merger`, `goal-pr-review`, `goal-issue-discovery` | Continuous goal autopilot; orchestrates implement, review, merge, and discover cycles with preflight validation and delegation failure recovery. |
+
 ### Issue Lifecycle
 
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
@@ -145,6 +157,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `gh-pr-comment-fixer` | atomic | context | yes | no | no | none | Fix GitHub PR review comments with branch-safe edits, validation, and explicit thread resolution. |
+| `gh-pr-merger` | atomic | verification | yes | no | no | none | Guarded PR merger; merges merge-ready PRs after verifying label, CI status, branch protection, and preflight checks. |
 | `gh-pr-opener` | atomic | context | yes | no | no | none | Open a conservative Robot SF PR with scope verification, freshness checks, and artifact discipline. |
 | `goal-pr-review` | orchestrator | verification | yes | no | no | `implementation-verification`, `pr-ready-check`, `gh-pr-comment-fixer`, `review-benchmark-change`, `gh-issue-creator`, `context-note-maintainer` | Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof, resolves review threads, and applies merge-ready; not for merging. |
 
@@ -185,13 +198,17 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `agent-improvement-promotion` | `agent-workflow-promotion` |
 | `auxme-issue791-reliable-submit` | `auxme-slurm-reliable-submit` |
 | `context-unblocker` | `what-context-needed` |
+| `continuous-autopilot` | `goal-autopilot` |
 | `gh-issue-to-pr` | `gh-issue-autopilot` |
+| `guarded-pr-merge` | `gh-pr-merger` |
+| `implement-review-merge-discover` | `goal-autopilot` |
 | `issue-clarification` | `issue-contract-maintainer` |
 | `issue-contract-audit` | `issue-contract-maintainer` |
 | `issue-discovery` | `goal-issue-discovery` |
 | `issue-queue-runner` | `goal-issue-implementation` |
 | `issue-to-pr` | `gh-issue-autopilot` |
 | `parent-to-child-issue` | `issue-splitter` |
+| `pr-merger` | `gh-pr-merger` |
 | `pr-review-runner` | `goal-pr-review` |
 | `proof-policy` | `quality-playbook` |
 | `quality-strategy` | `quality-playbook` |

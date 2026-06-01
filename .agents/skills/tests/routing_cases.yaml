@@ -70,3 +70,19 @@ cases:
   secondary:
   - slurm-campaign-submit
   - artifact-provenance
+- intent: Run continuous implement-review-merge-discover autopilot
+  primary: goal-autopilot
+  secondary:
+  - goal-issue-implementation
+  - gh-pr-merger
+  - goal-pr-review
+- intent: Merge a merge-ready PR
+  primary: gh-pr-merger
+  secondary: []
+- intent: Do full autopilot cycle
+  primary: goal-autopilot
+  secondary:
+  - goal-issue-implementation
+  - gh-pr-merger
+  - goal-pr-review
+  - goal-issue-discovery

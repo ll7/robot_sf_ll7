@@ -40,6 +40,14 @@ expected_stacks:
   - benchmark-row-status
   - artifact-provenance
   - evidence-synthesis
+  goal_autopilot:
+  - goal-autopilot
+  - goal-issue-implementation
+  - gh-pr-merger
+  - goal-pr-review
+  - goal-issue-discovery
+  merge_ready_pr:
+  - gh-pr-merger
   negative_cleanup:
   - clean-up
   - pr-ready-check

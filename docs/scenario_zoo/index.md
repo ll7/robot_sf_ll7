@@ -34,6 +34,15 @@ The authoring validator checks required draft fields, map references, and seed m
 the maintained scenario loader and map/config builder. A passing draft is reviewable and loadable,
 but it is not certified and is not benchmark evidence.
 
+## Atlas Generation
+
+For a generated scenario overview with thumbnails, mechanism cards, coverage
+gaps, and a checksum manifest, use the scenario atlas workflow documented in
+[Scenario Thumbnails and Montage](../scenario_thumbnails.md#scenario-atlas).
+The atlas complements this hand-maintained zoo index. It should be read as a
+discoverability artifact unless the row separately links certification and
+executed benchmark evidence.
+
 ## Families
 
 | Family | Scenario ids / examples | Maps and configs | Agents / actors | Difficulty | Known failure modes | Recommended seed / source | Example command or links |

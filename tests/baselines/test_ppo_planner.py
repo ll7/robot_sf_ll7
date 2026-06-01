@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import yaml
+from gymnasium import spaces
 
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.baselines.social_force import Observation
@@ -83,6 +84,81 @@ def test_build_model_obs_dict_reshapes_to_model_space():
     converted = planner._build_model_obs_dict({"occupancy_grid": [0, 1, 2, 3]})
     assert converted["occupancy_grid"].shape == (2, 2)
     assert converted["occupancy_grid"].dtype == np.float32
+
+
+def test_step_dict_mode_flattens_runtime_dict_for_box_checkpoint() -> None:
+    """BC checkpoints trained with FlattenObservation should receive flat Box inputs."""
+    planner = PPOPlanner(_planner_config(obs_mode="dict", action_space="unicycle"))
+    captured: dict[str, np.ndarray | bool] = {}
+
+    class _Model:
+        """Flat-Box model stub that records prediction observations."""
+
+        observation_space = spaces.Box(low=-10.0, high=10.0, shape=(3,), dtype=np.float32)
+
+        def predict(self, obs, deterministic: bool = True):
+            """Record the flattened observation and return a unicycle action."""
+            captured["obs"] = np.asarray(obs)
+            captured["deterministic"] = deterministic
+            return np.array([0.4, -0.1], dtype=np.float32), None
+
+    planner._model = _Model()
+    planner._status = "ok"
+    planner.bind_env(
+        SimpleNamespace(
+            observation_space=spaces.Dict(
+                {
+                    "robot_position": spaces.Box(
+                        low=-10.0,
+                        high=10.0,
+                        shape=(2,),
+                        dtype=np.float32,
+                    ),
+                    "sim_timestep": spaces.Box(
+                        low=0.0,
+                        high=1.0,
+                        shape=(1,),
+                        dtype=np.float32,
+                    ),
+                }
+            )
+        )
+    )
+
+    action = planner.step(
+        {
+            "robot_position": np.array([1.0, 2.0], dtype=np.float32),
+            "sim_timestep": np.array([0.2], dtype=np.float32),
+        }
+    )
+
+    assert action == {"v": pytest.approx(0.4), "omega": pytest.approx(-0.1)}
+    assert np.asarray(captured["obs"]).shape == (3,)
+    assert np.asarray(captured["obs"]).dtype == np.float32
+
+
+def test_bind_env_rejects_flat_box_checkpoint_shape_mismatch() -> None:
+    """Runtime binding should fail before benchmark execution on adapter mismatch."""
+    planner = PPOPlanner(_planner_config(obs_mode="dict"))
+    planner._model = SimpleNamespace(
+        observation_space=spaces.Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32),
+    )
+
+    with pytest.raises(ValueError, match="does not flatten to the checkpoint Box shape"):
+        planner.bind_env(
+            SimpleNamespace(
+                observation_space=spaces.Dict(
+                    {
+                        "robot_position": spaces.Box(
+                            low=-1.0,
+                            high=1.0,
+                            shape=(2,),
+                            dtype=np.float32,
+                        )
+                    }
+                )
+            )
+        )
 
 
 def test_build_model_obs_dict_raises_on_missing_key():

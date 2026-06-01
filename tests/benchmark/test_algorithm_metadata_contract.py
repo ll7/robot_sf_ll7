@@ -31,6 +31,7 @@ def test_observation_spec_declares_supported_modes_and_rejects_invalid_override(
     meta = enrich_algorithm_metadata(algo="goal", observation_mode="socnav_state")
     assert meta["observation_spec"]["active_mode"] == "socnav_state"
     assert meta["observation_spec"]["override_applied"] is True
+    assert resolve_observation_mode("guarded_ppo", "socnav_state") == "socnav_state"
 
     with pytest.raises(ValueError) as excinfo:
         resolve_observation_mode("orca", "goal_state")

@@ -3,6 +3,7 @@ algo: guarded_ppo
 base_config_path: configs/algos/guarded_ppo_relaxed_v2.yaml
 params:
   model_id: ppo_expert_issue_1474_shielded_repair_collision20_5m
+  observation_mode: socnav_state
   guard_rollout_steps: 5
   guard_hard_ped_clearance: 0.44
   guard_first_step_ped_clearance: 0.56

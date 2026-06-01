@@ -41,15 +41,15 @@ planner.close()
 ```bash
 # Run benchmark with Social Force baseline
 robot_sf_bench run \
-    --matrix scenarios/tests/fixtures/scenarios.yaml \
+    --matrix configs/scenarios/sanity_v1.yaml \
     --algo baseline_sf \
     --out output/benchmarks/social_force_results.jsonl
 
 # Use custom configuration
 robot_sf_bench run \
-    --matrix scenarios/tests/fixtures/scenarios.yaml \
+    --matrix configs/scenarios/sanity_v1.yaml \
     --algo baseline_sf \
-    --config configs/baselines/social_force_custom.yaml \
+    --config configs/baselines/social_force_default.yaml \
     --out output/benchmarks/social_force_custom.jsonl
 ```
 

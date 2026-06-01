@@ -143,7 +143,7 @@ Tasks are organized by **user story** to enable independent, parallel implementa
 - [x] T019 Validate backward-compat: pygame visualization still works
   - **Acceptance**: Existing test suite passes; `tests/pygame` tests unaffected
   - **File**: `tests/test_osm_backward_compat.py`
-  - **Test**: `tests/test_osm_backward_compat.py::tests/pygame_visualization_unchanged`
+  - **Test**: `tests/test_osm_backward_compat.py::TestOSMBackwardCompat::test_pygame_visualization_unchanged`
   - **Spec Link**: SC-009 (Backward compatibility)
 
 - [x] T020 Validate backward-compat: sensor suite still works

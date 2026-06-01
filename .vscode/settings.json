@@ -31,8 +31,7 @@
         }
     },
     "python.testing.pytestArgs": [
-        "tests",
-        "tests/pygame",
+        "tests"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
@@ -51,5 +50,5 @@
     "[markdown]": {
         "editor.formatOnSave": true,
         "editor.formatOnPaste": true
-    },
+    }
 }

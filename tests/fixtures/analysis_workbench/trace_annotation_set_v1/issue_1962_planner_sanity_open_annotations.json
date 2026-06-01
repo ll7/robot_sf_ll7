@@ -1,0 +1,74 @@
+{
+  "schema_version": "trace_annotation_set.v1",
+  "annotation_set_id": "issue_1962_planner_sanity_open_annotations",
+  "timeline": {
+    "path": "../simulation_trace_export_v1/planner_sanity_open_episode_0000.json",
+    "schema_version": "simulation_trace_export.v1",
+    "trace_id": "planner_sanity_open-ep0-seed7-source-aae87cf6"
+  },
+  "provenance": {
+    "kind": "tracked_fixture",
+    "source_issue": "#1962",
+    "author": "codex",
+    "created_at": "2026-06-01",
+    "evidence_boundary": "analysis_workbench_qualitative_only"
+  },
+  "annotations": [
+    {
+      "annotation_id": "issue_1962_step_1_to_2_goal_action_observed",
+      "category": "planner_action",
+      "evidence_type": "observed",
+      "anchor": {
+        "frame_start": 1,
+        "frame_end": 2,
+        "event_ids": [
+          "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0000",
+          "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0001"
+        ],
+        "entities": [
+          {
+            "type": "robot",
+            "id": "robot"
+          }
+        ]
+      },
+      "summary": "The robot stays nearly stationary on the first frame and then selects a small forward command.",
+      "details": "This is a qualitative fixture annotation for report and viewer plumbing only."
+    },
+    {
+      "annotation_id": "issue_1962_step_3_heading_hypothesis",
+      "category": "interaction",
+      "evidence_type": "hypothesis",
+      "anchor": {
+        "frame_start": 3,
+        "frame_end": 3,
+        "event_ids": [
+          "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0002"
+        ],
+        "entities": [
+          {
+            "type": "robot",
+            "id": "robot"
+          }
+        ]
+      },
+      "summary": "The final small angular command can be discussed as a candidate heading correction, not as benchmark evidence."
+    },
+    {
+      "annotation_id": "issue_1962_fixture_scope_commentary",
+      "category": "data_quality",
+      "evidence_type": "commentary",
+      "anchor": {
+        "frame_start": 1,
+        "frame_end": 3,
+        "entities": [
+          {
+            "type": "robot",
+            "id": "robot"
+          }
+        ]
+      },
+      "summary": "The fixture is intentionally tiny and renderer-neutral, so it is suitable for contract tests but not for performance conclusions."
+    }
+  ]
+}

@@ -19,6 +19,11 @@ consumers. It does not add a frontend, renderer, benchmark metric, or paper-faci
 - Loader: `robot_sf/analysis_workbench/simulation_trace_export.py`
 - Fixture: `tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json`
 - Test: `tests/analysis_workbench/test_simulation_trace_export.py`
+- Annotation schema: `robot_sf/analysis_workbench/schemas/trace_annotation_set.v1.json`
+- Annotation loader: `robot_sf/analysis_workbench/trace_annotation.py`
+- Annotation fixture:
+  `tests/fixtures/analysis_workbench/trace_annotation_set_v1/issue_1962_planner_sanity_open_annotations.json`
+- Annotation test: `tests/analysis_workbench/test_trace_annotation.py`
 
 The trace contains source metadata, a strict `analysis_workbench_only` evidence boundary, frame
 units, robot state, pedestrian state, and a small planner action/event block. The typed loader also
@@ -32,10 +37,15 @@ benchmark evidence, not a success claim, and not a replacement for schema-checke
 records or durable campaign summaries. If a payload changes `evidence_boundary` to
 `benchmark_evidence`, validation fails closed.
 
+`trace_annotation_set.v1` follows the same boundary. It records qualitative frame-range annotations
+against a tracked trace fixture and rejects missing timeline fixtures, generated `output/` timeline
+references, unknown event IDs, unsupported categories, and benchmark-evidence provenance.
+
 ## Validation
 
 ```bash
 uv run pytest -q tests/analysis_workbench/test_simulation_trace_export.py
+uv run pytest -q tests/analysis_workbench/test_trace_annotation.py
 ```
 
-Expected result: `3 passed`.
+Expected result: both targeted suites pass.

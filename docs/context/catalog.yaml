@@ -160,6 +160,14 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2037_artifact_compiler_smoke.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2037_artifact_compiler_smoke_2026-06-01/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
   - path: docs/context/evidence/README.md
     status: evidence
     freshness: evidence

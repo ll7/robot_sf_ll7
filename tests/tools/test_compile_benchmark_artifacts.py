@@ -49,6 +49,12 @@ def test_compile_benchmark_artifacts_emits_catalog_tables_figures_and_gaps(
     assert table_csv.exists()
     assert table_md.exists()
     assert table_tex.exists()
+    assert b"\r" not in table_csv.read_bytes()
+    assert b"\r" not in (output_dir / "sources" / "reports" / "campaign_table.csv").read_bytes()
+    assert "'-0.25" not in table_csv.read_text(encoding="utf-8")
+    assert "'-0.25" not in table_md.read_text(encoding="utf-8")
+    assert "'-0.25" not in table_tex.read_text(encoding="utf-8")
+    assert "-0.25" in table_md.read_text(encoding="utf-8")
     assert "fallback" in table_md.read_text(encoding="utf-8")
     assert "not_available" in table_md.read_text(encoding="utf-8")
     assert "None" not in table_md.read_text(encoding="utf-8")
@@ -91,14 +97,28 @@ def _write_campaign_fixture(campaign_root: Path) -> Path:
         encoding="utf-8",
     )
     with (reports / "campaign_table.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["planner", "status", "success_rate"])
+        writer = csv.DictWriter(
+            handle, fieldnames=["planner", "status", "success_rate", "snqi_mean"]
+        )
         writer.writeheader()
-        writer.writerow({"planner": "baseline", "status": "native", "success_rate": "0.80"})
         writer.writerow(
-            {"planner": "fallback_planner", "status": "fallback", "success_rate": "0.20"}
+            {"planner": "baseline", "status": "native", "success_rate": "0.80", "snqi_mean": "0.10"}
         )
         writer.writerow(
-            {"planner": "missing_planner", "status": "not_available", "success_rate": ""}
+            {
+                "planner": "fallback_planner",
+                "status": "fallback",
+                "success_rate": "0.20",
+                "snqi_mean": "'-0.25",
+            }
+        )
+        writer.writerow(
+            {
+                "planner": "missing_planner",
+                "status": "not_available",
+                "success_rate": "",
+                "snqi_mean": "",
+            }
         )
     with (reports / "campaign_table.csv").open("a", encoding="utf-8") as handle:
         handle.write("partial_row_planner,native\n")

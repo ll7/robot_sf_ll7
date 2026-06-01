@@ -101,9 +101,18 @@ def _copy_present_inputs(campaign_root: Path, output: Path) -> dict[str, _FileRe
         if not source.exists():
             continue
         destination = source_reports / name
-        shutil.copy2(source, destination)
+        _copy_report_input(source, destination)
         source_refs[name] = _file_ref(output, destination)
     return source_refs
+
+
+def _copy_report_input(source: Path, destination: Path) -> None:
+    """Copy report input while normalizing CSV line endings for tracked artifacts."""
+    if source.suffix == ".csv":
+        destination.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        shutil.copystat(source, destination)
+        return
+    shutil.copy2(source, destination)
 
 
 def _missing_inputs(campaign_root: Path) -> list[dict[str, str]]:
@@ -128,7 +137,7 @@ def _write_campaign_tables(rows: list[Mapping[str, str]], output: Path) -> dict[
 
     csv_path = tables_dir / "campaign_table.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -299,7 +308,12 @@ def _fieldnames(rows: list[Mapping[str, str]]) -> list[str]:
 
 def _cell(value: object) -> str:
     """Normalize optional CSV cells without rendering Python ``None``."""
-    return "" if value is None else str(value)
+    if value is None:
+        return ""
+    text = str(value)
+    if len(text) > 1 and text[0] == "'" and (text[1].isdigit() or text[1] in {"-", "+"}):
+        return text[1:]
+    return text
 
 
 def _markdown_table(rows: Iterable[Mapping[str, str]], fieldnames: Sequence[str]) -> str:

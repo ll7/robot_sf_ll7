@@ -1,0 +1,75 @@
+# Issue #1949 follow-up perturbation manifest for parent issue #1610.
+#
+# This manifest adds exactly one wait-duration perturbation family for explicit
+# single-pedestrian wait_at entries. It is a validity-preflight and local-pilot input only; it
+# does not make benchmark-strength or paper-facing claims.
+
+schema_version: scenario_perturbation_manifest.v1
+manifest_id: issue_1610_ped_wait_duration_pilot_v1
+description: >-
+  Bounded #1610 follow-up manifest that holds the #1941/#1943 planner/seed/horizon pilot boundary
+  fixed while adding single-pedestrian wait-duration offsets as the only new perturbation family.
+scenario_config: ../classic_interactions_francis2023.yaml
+seed_controls:
+  baseline_seeds: [112, 113, 115, 116, 240, 241, 242]
+  replay_seed_policy: explicit
+  source: docs/context/evidence/issue_1608_seed_sensitivity_2026-05-30/scenario_seed_sensitivity.csv
+validity:
+  require_scenario_certification: true
+  max_route_offset_m: 0.5
+  max_wait_duration_offset_s: 1.0
+  invalid_variant_evidence_policy: exclude_from_success_evidence
+  notes: >-
+    The v1 wait-duration preflight supports no-op baselines plus bounded wait_s offsets for
+    explicit single_pedestrians with wait_at entries. Route-only pedestrians and single
+    pedestrians without wait_at fail closed rather than falling back to start-delay or speed
+    semantics.
+variants:
+  - variant_id: francis2023_intersection_wait_noop
+    scenario_id: francis2023_intersection_wait
+    family: noop
+    seeds: [240, 241, 242]
+    rationale: Baseline row for a single-pedestrian wait-then-cross Francis scenario.
+  - variant_id: francis2023_intersection_wait_wait_h1_p050
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_wait_duration_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Extends the crossing pedestrian wait_at duration to probe whether dwell timing is distinct
+      from the start-delay and speed perturbations exercised in #1941 and #1943.
+    parameters:
+      wait_delta_s: 0.5
+      max_abs_wait_delta_s: 1.0
+      pedestrian_id: h1
+
+  - variant_id: francis2023_join_group_wait_h3_p050
+    scenario_id: francis2023_join_group
+    family: single_pedestrian_wait_duration_offset
+    seeds: [112, 113, 115, 116]
+    rationale: >-
+      Fail-closed probe proving that explicit single_pedestrians without wait_at entries are not
+      silently treated as wait-duration targets.
+    parameters:
+      wait_delta_s: 0.5
+      max_abs_wait_delta_s: 1.0
+      pedestrian_id: h3
+
+  - variant_id: classic_head_on_corridor_low_wait_all_p050
+    scenario_id: classic_head_on_corridor_low
+    family: single_pedestrian_wait_duration_offset
+    seeds: [111, 112, 116, 117]
+    rationale: >-
+      Fail-closed probe proving that route-only classic pedestrians are not silently treated as
+      explicit single-pedestrian wait targets.
+    parameters:
+      wait_delta_s: 0.5
+      max_abs_wait_delta_s: 1.0
+      pedestrian_selector: all
+pilot_matrix_note:
+  parent_issue: "#1610"
+  next_step: >-
+    Run a tiny paired planner pilot over eligible no-op and single-pedestrian wait-duration rows
+    using the same planner/config/seed controls except for variant_id.
+  evidence_boundary: >-
+    Preflight validity is necessary but not sufficient benchmark evidence; invalid, fallback,
+    degraded, missing, or stress-only rows are limitations rather than success evidence.

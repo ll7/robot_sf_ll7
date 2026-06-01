@@ -34,6 +34,13 @@ from robot_sf.benchmark.benchmark_claim import (
     build_benchmark_claim,
     write_benchmark_claim,
 )
+from robot_sf.benchmark.canonical_table_export import (
+    TABLE_SPECS as _canonical_table_specs,
+)
+from robot_sf.benchmark.canonical_table_export import (
+    export_canonical_table as _export_canonical_table,
+)
+from robot_sf.benchmark.canonical_table_export import load_rows_json as _load_canonical_rows_json
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
@@ -790,6 +797,42 @@ def _handle_table(args) -> int:
             logging.info("Table output written to %s", out_path)
         except Exception:
             logging.debug("Logging 'Table output' failed", exc_info=True)
+        return 0
+    except Exception:  # pragma: no cover - error path
+        return 2
+
+
+def _handle_export_canonical_table(args) -> int:
+    """Export named canonical benchmark tables from JSON row fixtures.
+
+    Returns:
+        Process exit code; zero indicates all requested outputs were written.
+    """
+    try:
+        rows = _load_canonical_rows_json(args.rows)
+        formats = [fmt.strip() for fmt in str(args.formats).split(",") if fmt.strip()]
+        result = _export_canonical_table(
+            rows,
+            table_id=str(args.table_id),
+            output_dir=args.out_dir,
+            formats=formats,
+            precision=int(args.precision),
+            source_paths=[Path(path) for path in args.source],
+            command=" ".join(sys.argv),
+        )
+        print(
+            json.dumps(
+                {
+                    "table_id": result.table_id,
+                    "row_count": result.row_count,
+                    "outputs": {
+                        fmt: path.as_posix() for fmt, path in sorted(result.output_paths.items())
+                    },
+                    "metadata": result.metadata_path.as_posix(),
+                },
+                indent=2,
+            )
+        )
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -2049,6 +2092,42 @@ def _add_table_subparser(
     p.set_defaults(cmd="table")
 
 
+def _add_export_canonical_table_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the canonical table export subcommand parser."""
+    p = subparsers.add_parser(
+        "export-canonical-table",
+        help="Export a named canonical benchmark table as csv/md/tex with metadata",
+    )
+    p.add_argument(
+        "--table-id",
+        required=True,
+        choices=sorted(_canonical_table_specs),
+        help="Canonical table contract to export",
+    )
+    p.add_argument("--rows", required=True, help="JSON list of row mappings")
+    p.add_argument("--out-dir", required=True, help="Directory for table outputs and metadata")
+    p.add_argument(
+        "--formats",
+        default="csv,md,tex",
+        help="Comma-separated output formats. Supported: csv, md, tex",
+    )
+    p.add_argument(
+        "--precision",
+        type=int,
+        default=4,
+        help="Decimal places for floating point cells",
+    )
+    p.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        help="Source file to checksum in the metadata sidecar; may be repeated",
+    )
+    p.set_defaults(cmd="export-canonical-table")
+
+
 def _add_debug_seeds_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2290,6 +2369,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_snqi_ablate_subparser(subparsers)
     _add_rank_subparser(subparsers)
     _add_table_subparser(subparsers)
+    _add_export_canonical_table_subparser(subparsers)
     _add_debug_seeds_subparser(subparsers)
     _add_plot_pareto_subparser(subparsers)
     _add_plot_distributions_subparser(subparsers)
@@ -2742,6 +2822,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "snqi-ablate": _handle_snqi_ablate,
         "rank": _handle_rank,
         "table": _handle_table,
+        "export-canonical-table": _handle_export_canonical_table,
         "debug-seeds": _handle_debug_seeds,
         "plot-pareto": _handle_plot_pareto,
         "plot-distributions": _handle_plot_distributions,

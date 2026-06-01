@@ -1,0 +1,59 @@
+# Issue #1977 clean BC warm-start PPO rerun.
+#
+# This consumes the durable #1108/#749 W&B preservation artifact rather than
+# recollecting the dataset or retraining the BC checkpoint before PPO fine-tuning.
+run_id: issue_1977_ppo_finetune_v10_warm_start_rerun
+pretrained_policy_id: issue_749_bc_preinit_v10_policy
+dataset_id: issue_749_b60iopxt_v10_eval_trajectories
+training_config: ../ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+scenario_config: ../../scenarios/sets/ppo_full_maintained_eval_v1.yaml
+total_timesteps: 10000000
+learning_rate: 0.0001
+random_seeds: [111, 112, 113]
+scenario_id: classic_bottleneck_low
+snqi_weights: ../../benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: ../../benchmarks/snqi_baseline_camera_ready_v3.json
+env_overrides:
+  observation_mode: socnav_struct
+  use_occupancy_grid: true
+  include_grid_in_observation: true
+  predictive_foresight_enabled: true
+  predictive_foresight_model_id: predictive_proxy_selected_v2_full
+  predictive_foresight_device: cpu
+  predictive_foresight_max_agents: 16
+  predictive_foresight_horizon_steps: 8
+  predictive_foresight_rollout_dt: 0.2
+  predictive_foresight_near_distance: 0.7
+  predictive_foresight_front_corridor_length: 3.0
+  predictive_foresight_front_corridor_half_width: 1.0
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 3.0
+    max_angular_speed: 1.0
+    allow_backwards: true
+  grid_config:
+    resolution: 0.2
+    width: 32.0
+    height: 32.0
+    channels: [obstacles, pedestrians, combined]
+    use_ego_frame: true
+    center_on_robot: true
+  peds_have_obstacle_forces: true
+  sim_config:
+    prf_config:
+      is_active: true
+    max_peds_per_group: 3
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      progress: 1.1
+      living: -0.015
+      collision: -15.0
+      near_miss: -3.0
+      ttc_risk: -2.8
+      comfort: -0.5
+      smoothness: -0.18
+      timeout: -6.5
+      stagnation: -2.0
+      terminal_bonus: 20.0

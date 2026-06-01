@@ -56,6 +56,7 @@ Do not use it for:
 - `.agents/skills/implementation-verification/SKILL.md`
 - `.agents/skills/gh-pr-comment-fixer/SKILL.md`
 - `.agents/skills/review-benchmark-change/SKILL.md`
+- `scripts/dev/check_skills.py --preflight goal-pr-review` (for preflight validation before review loop)
 
 ## Preflight
 
@@ -132,6 +133,46 @@ Confidence meanings:
 - After two repeats, move to `blocked_external` or `awaiting_reviewer` with failure signature and next
   action.
 - Do not repeat benchmark campaigns for docs-only or metadata-only PR changes.
+
+## Delegation Failure Recovery
+
+Each child skill or worker may fail. Handle failures per scenario:
+
+- `implementation-verification` failure:
+  - If claims are not proven, record specific evidence gaps and leave the PR
+    in `under_review`. Do not apply `merge-ready`.
+  - If the PR scope does not match the linked issue contract, create a follow-up
+    issue and adjust the PR body.
+
+- `pr-ready-check` failure:
+  - If lint/format fails, fix and retry once.
+  - If tests fail, classify as environmental flake (retry once) or real regression
+    (move to `blocked_external` with failure signature).
+
+- `gh-pr-comment-fixer` failure:
+  - If push fails after fix, record the error and leave the thread unresolved.
+    Move PR to `blocked_external`.
+  - If the fix branch has diverged from the remote, skip and report.
+
+- `review-benchmark-change` failure:
+  - If benchmark artifacts are missing, record the gap and leave the PR in
+    `awaiting_reviewer`. Do not block other PRs.
+  - If the benchmark change introduces a regression, report with evidence and
+    move the PR to `deferred_scope`.
+
+- `gh-issue-creator` failure:
+  - Log the failure and continue. Do not let a follow-up creation failure block
+    the PR review.
+
+- `context-note-maintainer` failure:
+  - Log the failure and continue. Do not block the PR for a note write failure.
+
+- General environment failure (auth, disk, network):
+  - Stop the review loop and report the blocker with the failing command,
+    exit code, and minimal next action.
+
+Do not retry a child skill on the same PR if it failed twice with the same
+error. Record the recovery action and continue.
 
 ## Artifact and Race Rules
 

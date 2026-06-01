@@ -32,6 +32,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from gymnasium import spaces as gym_spaces
+from gymnasium.spaces.utils import flatdim, flatten
 from loguru import logger
 
 try:  # Lazy import; not required for type-check only
@@ -114,6 +116,7 @@ class PPOPlanner:
         self._status = "ok"
         self._fallback_reason: str | None = None
         self._predictive_foresight: PredictiveForesightEncoder | None = None
+        self._runtime_observation_space: gym_spaces.Space | None = None
         self._load_model()
         self._init_predictive_foresight()
 
@@ -215,6 +218,14 @@ class PPOPlanner:
         """
         if seed is not None:
             self._seed = seed
+
+    def bind_env(self, env: Any) -> None:
+        """Bind runtime observation space for dict-to-Box checkpoint adapters."""
+
+        obs_space = getattr(env, "observation_space", None)
+        if isinstance(obs_space, gym_spaces.Space):
+            self._runtime_observation_space = obs_space
+            self._validate_runtime_observation_space()
 
     def close(self) -> None:
         """Release the loaded PPO model."""
@@ -328,11 +339,11 @@ class PPOPlanner:
             logger.debug("PPO model prediction failed: %s", exc, exc_info=True)
             return None
 
-    def _build_model_obs_dict(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
-        """Build model-ready dict observation and align dtypes/shapes to model space.
+    def _build_model_obs_dict(self, obs: dict[str, Any]) -> dict[str, np.ndarray] | np.ndarray:
+        """Build model-ready observation payload and align it to the model space.
 
         Returns:
-            Dict payload shaped and typed to match the loaded model's observation space.
+            Payload shaped and typed to match the loaded model's observation space.
         """
         if self._model is None:
             return {str(k): np.asarray(v) for k, v in obs.items()}
@@ -340,7 +351,19 @@ class PPOPlanner:
         space = getattr(self._model, "observation_space", None)
         spaces = getattr(space, "spaces", None)
         if not isinstance(spaces, dict):
+            if isinstance(space, gym_spaces.Box):
+                return self._build_model_obs_flat_box(obs, space)
             return {str(k): np.asarray(v) for k, v in obs.items()}
+
+        source_obs = self._source_obs_with_predictive_backfill(obs, spaces)
+        return self._align_model_obs_dict(source_obs, spaces)
+
+    def _source_obs_with_predictive_backfill(
+        self,
+        obs: dict[str, Any],
+        spaces: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return dict observations plus any missing predictive feature payload."""
 
         source_obs = dict(obs)
         if self._predictive_foresight is not None:
@@ -352,6 +375,18 @@ class PPOPlanner:
                 source_obs.update(
                     {key: value for key, value in payload.items() if key in missing_predictive}
                 )
+        return source_obs
+
+    def _align_model_obs_dict(
+        self,
+        source_obs: dict[str, Any],
+        spaces: dict[str, Any],
+    ) -> dict[str, np.ndarray]:
+        """Align source observation fields to a model-declared Dict space.
+
+        Returns:
+            Dict payload shaped and typed to match the model-declared subspaces.
+        """
 
         converted: dict[str, np.ndarray] = {}
         missing: list[str] = []
@@ -375,6 +410,73 @@ class PPOPlanner:
             missing_preview = ", ".join(missing[:6])
             raise ValueError(f"Missing required dict observation keys: {missing_preview}")
         return converted
+
+    def _validate_runtime_observation_space(self) -> None:
+        """Fail closed when a flat checkpoint cannot match runtime observations."""
+
+        if self._model is None:
+            return
+        model_space = getattr(self._model, "observation_space", None)
+        if not isinstance(model_space, gym_spaces.Box) or not self._uses_dict_observation():
+            return
+
+        runtime_space = self._runtime_observation_space
+        model_size = int(np.prod(model_space.shape))
+        if isinstance(runtime_space, gym_spaces.Dict):
+            runtime_size = int(flatdim(runtime_space))
+            if runtime_size != model_size:
+                raise ValueError(
+                    "Runtime Dict observation space does not flatten to the checkpoint "
+                    f"Box shape: runtime flatdim={runtime_size}, "
+                    f"checkpoint shape={tuple(model_space.shape)}."
+                )
+            return
+        if isinstance(runtime_space, gym_spaces.Box):
+            runtime_size = int(np.prod(runtime_space.shape))
+            if runtime_size != model_size:
+                raise ValueError(
+                    "Runtime Box observation space does not match checkpoint Box shape: "
+                    f"runtime shape={tuple(runtime_space.shape)}, "
+                    f"checkpoint shape={tuple(model_space.shape)}."
+                )
+            return
+        raise ValueError(
+            "PPO checkpoint expects a flat Box observation but runtime observation_space "
+            f"is {type(runtime_space).__name__}; cannot prove adapter compatibility."
+        )
+
+    def _build_model_obs_flat_box(
+        self,
+        obs: dict[str, Any],
+        model_space: gym_spaces.Box,
+    ) -> np.ndarray:
+        """Flatten a runtime Dict observation for a flat-Box SB3 checkpoint.
+
+        Returns:
+            Model-ready flat observation matching the checkpoint shape.
+        """
+
+        runtime_space = self._runtime_observation_space
+        if isinstance(runtime_space, gym_spaces.Dict):
+            try:
+                flat_obs = np.asarray(flatten(runtime_space, obs), dtype=model_space.dtype)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(
+                    "Failed to flatten runtime Dict observation for PPO checkpoint."
+                ) from exc
+        else:
+            flat_obs = np.asarray(obs, dtype=model_space.dtype)
+
+        target_shape = tuple(model_space.shape)
+        if tuple(flat_obs.shape) != target_shape:
+            target_size = int(np.prod(target_shape))
+            if int(flat_obs.size) != target_size:
+                raise ValueError(
+                    "Flattened PPO observation size mismatch: "
+                    f"got shape {tuple(flat_obs.shape)}, expected {target_shape}."
+                )
+            flat_obs = flat_obs.reshape(target_shape)
+        return flat_obs
 
     def _predictive_feature_payload(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:
         """Map nested predictive foresight outputs to flat PPO observation keys.

@@ -45,6 +45,53 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
+  agent-workflow-capture:
+    description: Capture private candidate lessons from agent execution into `.git/codex-agent-runs/notes/inbox/`
+      when a repeatable workflow, routing, validation, tooling, or instruction improvement is noticed.
+    category: research-iteration
+    kind: atomic
+    phase: analysis
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases:
+    - agent-improvement-capture
+  agent-workflow-promotion:
+    description: Promote accumulated private `.git/codex-agent-runs/notes/inbox/` workflow lessons into
+      small, evidence-backed repository instruction, skill, docs, or tooling changes with validation.
+    category: research-iteration
+    kind: orchestrator
+    phase: implementation
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: true
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - review-and-refactor
+    - update-docs-on-code-change
+    - context-note-maintainer
+    - gh-issue-creator
+    output_schema: skill_run_summary.v1
+    aliases:
+    - agent-improvement-promotion
   analyze-camera-ready-benchmark:
     description: Analyze a camera-ready benchmark campaign for consistency, runtime hotspots, fallback/degraded
       planners, and reproducibility metadata.
@@ -551,6 +598,29 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
+  gh-pr-merger:
+    description: Guarded PR merger; merges merge-ready PRs after verifying label, CI status, branch
+      protection, and preflight checks.
+    category: github-pr
+    kind: atomic
+    phase: verification
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: true
+      filesystem: false
+    requires:
+    - gh
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases:
+    - pr-merger
+    - guarded-pr-merge
   gh-pr-opener:
     description: Open a conservative Robot SF PR with scope verification, freshness checks, and artifact
       discipline.
@@ -572,6 +642,35 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
+  goal-autopilot:
+    description: Continuous goal autopilot; orchestrates implement, review, merge, and discover cycles
+      with preflight validation and delegation failure recovery.
+    category: general
+    kind: orchestrator
+    phase: implementation
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: true
+      github_project: true
+      github_pr: true
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - project5
+    - uv
+    delegates_to:
+    - goal-issue-implementation
+    - gh-pr-merger
+    - goal-pr-review
+    - goal-issue-discovery
+    output_schema: skill_run_summary.v1
+    aliases:
+    - continuous-autopilot
+    - implement-review-merge-discover
   goal-issue-discovery:
     description: Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities
       and creates evidence-graded GitHub issues; not for implementation.
@@ -633,6 +732,35 @@ skills:
     output_schema: issue_to_pr_summary.v1
     aliases:
     - issue-queue-runner
+  goal-slurm-experiment:
+    description: Keep one skill-owned Robot SF learning or training SLURM job active by selecting the
+      best current experiment candidate, closing implementation gaps through an issue-to-PR workflow,
+      and submitting the validated job from its owning worktree.
+    category: research-iteration
+    kind: orchestrator
+    phase: implementation
+    requires_write: true
+    requires_slurm: true
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: true
+      github_project: true
+      github_pr: true
+      filesystem: true
+    requires:
+    - gh
+    - git
+    - slurm
+    - uv
+    delegates_to:
+    - experiment-context
+    - goal-issue-implementation
+    - slurm-campaign-submit
+    - artifact-provenance
+    - context-note-maintainer
+    output_schema: skill_run_summary.v1
+    aliases: []
   goal-pr-review:
     description: Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates
       proof, resolves review threads, and applies merge-ready; not for merging.

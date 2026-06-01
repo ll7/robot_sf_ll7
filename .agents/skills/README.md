@@ -8,19 +8,25 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | User intent | Primary skill | Secondary skill |
 | --- | --- | --- |
 | Not sure which skill applies | `skill-picker` | none |
+| Run continuous implement-review-merge-discover autopilot | `goal-autopilot` | `goal-issue-implementation`, `goal-pr-review`, `gh-pr-merger`, `goal-issue-discovery` |
 | Take the next eligible issue to PR | `goal-issue-implementation` | `gh-issue-autopilot` |
 | Execute one selected issue to ready PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |
 | Clarify or repair issue contracts | `issue-contract-maintainer` | legacy aliases only when explicitly named |
 | Fix PR review comments | `gh-pr-comment-fixer` | `pr-ready-check` |
+| Merge a PR carrying the merge-ready label | `gh-pr-merger` | `goal-pr-review` |
 | Open a ready PR | `gh-pr-opener` | `artifact-provenance` |
 | Verify branch claims | `implementation-verification` | `pr-ready-check` |
 | Run the standard readiness gate | `pr-ready-check` | none |
+| Set up or clean up worktrees | `skill-picker` | `gh-issue-autopilot`, `clean-up`; see `AGENTS.md` |
 | Review benchmark output | `analyze-camera-ready-benchmark` | `benchmark-row-status`, `artifact-provenance` |
 | Classify benchmark rows | `benchmark-row-status` | `review-benchmark-change` |
+| Keep one training SLURM job active | `goal-slurm-experiment` | `goal-issue-implementation`, `slurm-campaign-submit` |
 | Submit a generic SLURM campaign | `slurm-campaign-submit` | `artifact-provenance` |
 | Submit issue-791 Auxme training | `auxme-issue791-submit` | `slurm-campaign-submit` |
 | Stage external data | `data-staging-provenance` | `artifact-provenance` |
 | Synthesize evidence across issues | `evidence-synthesis` | `paper-facing-docs` |
+| Capture a private workflow lesson | `agent-workflow-capture` | none |
+| Promote workflow lessons into repo changes | `agent-workflow-promotion` | `review-and-refactor`, `update-docs-on-code-change` |
 
 ## Negative Routing
 
@@ -35,10 +41,14 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Stack | Skills |
 | --- | --- |
+| Continuous goal autopilot | `goal-autopilot` -> `goal-issue-implementation` -> `goal-pr-review` -> `gh-pr-merger` -> `goal-issue-discovery` |
 | Issue queue to PR | `gh-issue-sequencer` -> `gh-issue-autopilot` -> `implementation-verification` -> `pr-ready-check` -> `gh-pr-opener` |
+| Guarded PR merge | `goal-pr-review` -> `gh-pr-merger` |
 | Issue contract repair | `issue-contract-maintainer` -> `gh-issue-sequencer` |
 | PR review cleanup | `gh-pr-comment-fixer` -> `implementation-verification` -> `pr-ready-check` |
 | Benchmark evidence audit | `benchmark-row-status` -> `artifact-provenance` -> `evidence-synthesis` |
+| Always-on SLURM experiment | `experiment-context` -> `goal-issue-implementation` -> `slurm-campaign-submit` -> `artifact-provenance` -> `context-note-maintainer` |
+| Agent workflow improvement | `agent-workflow-capture` -> `agent-workflow-promotion` -> `review-and-refactor` -> `update-docs-on-code-change` |
 | SLURM campaign launch | `slurm-campaign-submit` -> `artifact-provenance` |
 | External data staging | `data-staging-provenance` -> `artifact-provenance` -> `context-note-maintainer` |
 
@@ -54,9 +64,11 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 ## GitHub And Project Policy
 
 - `goal-issue-implementation` owns the multi-issue loop and stop condition.
+- `goal-autopilot` owns the continuous implement, review, merge, and discover loop.
 - `gh-issue-sequencer` owns Project #5 queue ordering, with current maintainer direction and fresh
   evidence allowed to override score order.
 - `gh-issue-autopilot` owns one selected issue -> branch -> validation -> ready PR.
+- `gh-pr-merger` owns guarded merge after `goal-pr-review` has established merge-ready proof.
 - `gh-issue-creator` owns new issue creation.
 - `issue-contract-maintainer` owns ambiguity, template, and decision repair.
 - Use Project #5 `Priority Score` as an advisory queue-ordering signal; use
@@ -119,6 +131,12 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `svg-inspection` | atomic | analysis | no | no | no | none | Inspect and debug SVG maps for parser-facing issues using reusable Robot SF helpers. |
 
+### General
+
+| Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `goal-autopilot` | orchestrator | implementation | yes | no | no | `goal-issue-implementation`, `gh-pr-merger`, `goal-pr-review`, `goal-issue-discovery` | Continuous goal autopilot; orchestrates implement, review, merge, and discover cycles with preflight validation and delegation failure recovery. |
+
 ### Issue Lifecycle
 
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
@@ -140,6 +158,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `gh-pr-comment-fixer` | atomic | context | yes | no | no | none | Fix GitHub PR review comments with branch-safe edits, validation, and explicit thread resolution. |
+| `gh-pr-merger` | atomic | verification | yes | no | no | none | Guarded PR merger; merges merge-ready PRs after verifying label, CI status, branch protection, and preflight checks. |
 | `gh-pr-opener` | atomic | context | yes | no | no | none | Open a conservative Robot SF PR with scope verification, freshness checks, and artifact discipline. |
 | `goal-pr-review` | orchestrator | verification | yes | no | no | `implementation-verification`, `pr-ready-check`, `gh-pr-comment-fixer`, `review-benchmark-change`, `gh-issue-creator`, `context-note-maintainer` | Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof, resolves review threads, and applies merge-ready; not for merging. |
 
@@ -147,9 +166,12 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `agent-workflow-capture` | atomic | analysis | yes | no | no | none | Capture private candidate lessons from agent execution into `.git/codex-agent-runs/notes/inbox/` when a repeatable workflow, routing, validation, tooling, or instruction improvement is noticed. |
+| `agent-workflow-promotion` | orchestrator | implementation | yes | no | no | `review-and-refactor`, `update-docs-on-code-change`, `context-note-maintainer`, `gh-issue-creator` | Promote accumulated private `.git/codex-agent-runs/notes/inbox/` workflow lessons into small, evidence-backed repository instruction, skill, docs, or tooling changes with validation. |
 | `agentic-eval` | atomic | analysis | yes | no | no | none | Evaluate and improve AI workflow outputs with small goldens, rubrics, and repeatable checks; use when tuning skills, prompts, instructions, or agent behavior. |
 | `auto-improvement` | atomic | analysis | yes | no | no | none | Focused measurement-aware refinement loop for Robot SF prompts, docs, and small code changes; use when a task benefits from trying a few simple improvements. |
 | `autoresearch` | atomic | analysis | yes | no | no | none | Autonomous iterative experimentation loop for measurable Robot SF tasks; use when the user wants an improvement loop with baseline, experiments, and keep/discard decisions. |
+| `goal-slurm-experiment` | orchestrator | implementation | yes | yes | no | `experiment-context`, `goal-issue-implementation`, `slurm-campaign-submit`, `artifact-provenance`, `context-note-maintainer` | Keep one skill-owned Robot SF learning or training SLURM job active by selecting the best current experiment candidate, closing implementation gaps through an issue-to-PR workflow, and submitting the validated job from its owning worktree. |
 
 ### SLURM And Campaign Submission
 
@@ -173,15 +195,21 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Alias | Canonical skill |
 | --- | --- |
+| `agent-improvement-capture` | `agent-workflow-capture` |
+| `agent-improvement-promotion` | `agent-workflow-promotion` |
 | `auxme-issue791-reliable-submit` | `auxme-slurm-reliable-submit` |
 | `context-unblocker` | `what-context-needed` |
+| `continuous-autopilot` | `goal-autopilot` |
 | `gh-issue-to-pr` | `gh-issue-autopilot` |
+| `guarded-pr-merge` | `gh-pr-merger` |
+| `implement-review-merge-discover` | `goal-autopilot` |
 | `issue-clarification` | `issue-contract-maintainer` |
 | `issue-contract-audit` | `issue-contract-maintainer` |
 | `issue-discovery` | `goal-issue-discovery` |
 | `issue-queue-runner` | `goal-issue-implementation` |
 | `issue-to-pr` | `gh-issue-autopilot` |
 | `parent-to-child-issue` | `issue-splitter` |
+| `pr-merger` | `gh-pr-merger` |
 | `pr-review-runner` | `goal-pr-review` |
 | `proof-policy` | `quality-playbook` |
 | `quality-strategy` | `quality-playbook` |

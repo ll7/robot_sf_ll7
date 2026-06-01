@@ -116,12 +116,31 @@ When working in a linked Git worktree, detect bootstrap state before running exp
   checkout virtualenv, prefer `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>` so
   `PYTHONPATH` is pinned to the active worktree while `UV_PROJECT_ENVIRONMENT` points at the shared
   `.venv`. Use a full local `.venv` and final PR readiness for merge proof.
+- Do not add CARLA to the routine `--all-extras` bootstrap. For CARLA-capable worktrees, opt into
+  the host-side Python client with `uv sync --all-extras --group carla`, then prove the local
+  runtime with `scripts/dev/check_carla_runtime.sh` or `scripts/dev/check_carla_runtime.sh --smoke`
+  when it is acceptable to start the simulator container.
 - If the current branch is not `main`, fetch the latest `origin/main` and merge it into the current
   branch early in the work cycle so the branch benefits from repository-wide fixes and workflow
   improvements before local changes diverge. Typical command sequence:
   `git fetch origin main && git merge origin/main`.
 - Do not create divergent per-worktree machine context files unless the worktree really needs
   machine-specific behavior that should not be inherited from the main checkout.
+
+## Worktree Teardown And Preservation
+
+Before removing or pruning worktrees, enumerate them with `git worktree list --porcelain` from the
+main checkout. For each candidate, inspect `git -C <path> status --short --branch`; when generated
+outputs may matter, also inspect ignored output paths such as
+`[ -d "<path>/output" ] && git -C <path> status --ignored --short -uall output`.
+
+- Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
+  by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an
+  explicit handoff.
+- Do not remove a dirty worktree or a worktree with unpushed commits unless the preservation record
+  says exactly what was kept or why nothing needed preservation.
+- Prefer `git worktree remove <path>` for clean worktrees and `git worktree prune` only after
+  verifying stale administrative entries no longer point at useful local state.
 
 ## Knowledge Capture & Context Notes
 
@@ -256,9 +275,9 @@ resolving lint or test failures locally before requesting review.
   Merge the latest `origin/main` into the current branch at the start of active work, and repeat
   that sync before PR creation so validation covers the newest shared baseline.
 - Before creating a PR, inspect newly created `output/*` files, including ignored paths via
-  `git status --ignored --short -uall output`. Decide whether each output is disposable, should remain
-  ignored, should be represented by a tracked manifest or registry entry, or must be uploaded to a
-  durable artifact store before the branch is handed off.
+  `[ -d output ] && git status --ignored --short -uall output`. Decide whether each output is
+  disposable, should remain ignored, should be represented by a tracked manifest or registry entry,
+  or must be uploaded to a durable artifact store before the branch is handed off.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

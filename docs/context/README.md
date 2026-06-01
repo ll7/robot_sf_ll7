@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
+* Issue #2001 AMV Actuation Proxy Source Analysis (2026-06-01):
+  [issue_2001_amv_actuation_proxy_source_analysis.md](issue_2001_amv_actuation_proxy_source_analysis.md)
 * Issue #1414 parser capability metadata:
   [issue_1414_parser_capability_metadata.md](issue_1414_parser_capability_metadata.md)
 * Issue #1413 map catalog schema and sync checker:
@@ -214,6 +216,8 @@ knowledge, not every transient iteration detail.
   [issue_1878_head_on_route_replay_determinism.md](issue_1878_head_on_route_replay_determinism.md)
 * Issue #1503 Adversarial Stress-Coverage Synthesis (2026-05-31):
   [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md)
+* Issue #1963 Adversarial Parent Closeout (2026-06-01):
+  [issue_1963_adversarial_parent_closeout.md](issue_1963_adversarial_parent_closeout.md)
 * Issue #1861 Adversarial Replay Determinism Gate (2026-05-31):
   [issue_1861_adversarial_replay_determinism_gate.md](issue_1861_adversarial_replay_determinism_gate.md)
 * Issue #1904 Scenario Perturbation Criticality Pilot (2026-05-31):
@@ -240,6 +244,8 @@ knowledge, not every transient iteration detail.
   [issue_1951_intersection_wait_phase_grid.md](issue_1951_intersection_wait_phase_grid.md)
 * Issue #1953 Intersection-Wait Speed-Grid Trace (2026-06-01):
   [issue_1953_intersection_wait_speed_grid_trace.md](issue_1953_intersection_wait_speed_grid_trace.md)
+* Issue #1965 Perturbation Criticality Synthesis (2026-06-01):
+  [issue_1965_perturbation_criticality_synthesis.md](issue_1965_perturbation_criticality_synthesis.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:
@@ -284,6 +290,8 @@ knowledge, not every transient iteration detail.
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Issue #1638 local model path preflight:
   [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
+* Issue #1960 local artifact retirement status:
+  [issue_1960_local_artifact_retirement.md](issue_1960_local_artifact_retirement.md)
 * Issue #1845 report grouping contracts:
   [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:
@@ -518,6 +526,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1108 BC Warm-Start PPO Execution](issue_1108_bc_warm_start_execution.md)
   records the imitation observation-contract blocker, unblock patch, one-episode real collection
   preflight, and Slurm job IDs for the #749 BC-preinitialized PPO chain.
+* [Issue #1961 BC Warm-Start Recoverability](issue_1961_bc_warm_start_recoverability.md)
+  classifies the #1108 artifact trail as `rerun_required`: dataset and BC checkpoint are preserved
+  in W&B, but final PPO and comparison evidence are missing.
 * [Issue #1083 Sanity V1 Nominal Matrix](issue_1083_sanity_v1_nominal_matrix.md)
   records the non-paper-facing nominal calibration matrix, smoke config, baseline threshold, and
   local proof run for easier deployment-like scenes.

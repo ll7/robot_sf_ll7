@@ -33,10 +33,13 @@ This clears the Issue #1111 setup-only Python API and T0 payload-selection proof
 the Issue #1169 live replay requirement because no CARLA server was started, no actors were spawned,
 no world was replayed, and no Robot-SF/CARLA metric parity was attempted.
 
-The Docker-backed live runtime path from Issue #1179 still fails closed on this machine with
-`missing_capability: docker-daemon`; Issue #1169 remains blocked until a Docker/NVIDIA-capable host
-can run `robot-sf-carla-docker-runtime smoke --pull --json` or another CARLA server path can be
-connected.
+At the time of the May 18, 2026 setup-only smoke, the Docker-backed live runtime path from
+Issue #1179 still failed closed on this machine with `missing_capability: docker-daemon`; Issue #1169
+therefore remained blocked until a Docker/NVIDIA-capable host could run the Docker smoke or another
+CARLA server path could be connected. That host-level blocker was superseded on May 31, 2026 for
+`auxme-imech036`: see
+[`issue_1179_carla_docker_runtime.md`](issue_1179_carla_docker_runtime.md) for the current local
+CARLA Docker smoke command. This does not change the setup-only boundary of Issue #1111.
 
 ## Validation
 

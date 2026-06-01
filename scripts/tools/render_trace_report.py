@@ -20,6 +20,12 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceFrame,
     load_simulation_trace_export,
 )
+from robot_sf.analysis_workbench.trace_annotation import (
+    TraceAnnotation,
+    TraceAnnotationSet,
+    TraceAnnotationSetValidationError,
+    load_trace_annotation_set,
+)
 
 ANNOTATION_KEYS = {
     "annotation",
@@ -37,7 +43,13 @@ ANNOTATION_KEYS = {
 }
 
 
-def render_trace_report(trace: SimulationTraceExport) -> str:
+def render_trace_report(
+    trace: SimulationTraceExport,
+    *,
+    trace_path: Path | None = None,
+    annotation_set: TraceAnnotationSet | None = None,
+    annotation_path: Path | None = None,
+) -> str:
     """Render a loaded trace export as Markdown.
 
     Returns:
@@ -56,23 +68,48 @@ def render_trace_report(trace: SimulationTraceExport) -> str:
     ]
     lines.extend(_trace_metadata(trace))
     lines.extend(_summary(trace))
+    if trace_path is not None or annotation_set is not None:
+        lines.extend(_source_fixture_summary(trace_path, annotation_set, annotation_path))
     lines.extend(_event_summary(trace.frames))
     lines.extend(_planner_key_summary(trace.frames))
     lines.extend(_annotation_summary(trace.frames))
+    if annotation_set is not None:
+        lines.extend(_annotation_set_summary(annotation_set))
     lines.extend(_frame_table(trace.frames))
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_trace_report(*, trace_path: Path, output: Path) -> Path:
+def write_trace_report(
+    *,
+    trace_path: Path,
+    output: Path,
+    annotation_path: Path | None = None,
+) -> Path:
     """Load a trace export and write a Markdown report.
 
     Raises:
         SimulationTraceExportValidationError: if ``trace_path`` is not a valid trace export.
+        TraceAnnotationSetValidationError: if ``annotation_path`` is invalid or mismatched.
         OSError: if input or output files cannot be read or written.
     """
 
+    _validate_tracked_fixture_path(trace_path, label="trace")
     trace = load_simulation_trace_export(trace_path)
-    markdown = render_trace_report(trace)
+    annotation_set = None
+    if annotation_path is not None:
+        _validate_tracked_fixture_path(annotation_path, label="annotation")
+        annotation_set = load_trace_annotation_set(annotation_path)
+        _validate_annotation_matches_trace(
+            trace=trace,
+            trace_path=trace_path,
+            annotation_set=annotation_set,
+        )
+    markdown = render_trace_report(
+        trace,
+        trace_path=trace_path,
+        annotation_set=annotation_set,
+        annotation_path=annotation_path,
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(markdown, encoding="utf-8")
     return output
@@ -130,6 +167,35 @@ def _summary(trace: SimulationTraceExport) -> list[str]:
     ]
 
 
+def _source_fixture_summary(
+    trace_path: Path | None,
+    annotation_set: TraceAnnotationSet | None,
+    annotation_path: Path | None,
+) -> list[str]:
+    """Render source fixture paths and annotation metadata."""
+
+    rows: list[tuple[str, Any]] = []
+    if trace_path is not None:
+        rows.append(("trace_path", _display_path(trace_path)))
+    if annotation_path is not None:
+        rows.append(("annotation_path", _display_path(annotation_path)))
+    if annotation_set is not None:
+        rows.extend(
+            [
+                ("annotation_set_id", annotation_set.annotation_set_id),
+                ("annotation_source_issue", annotation_set.provenance.source_issue),
+                ("annotation_evidence_boundary", annotation_set.provenance.evidence_boundary),
+                ("annotation_count", len(annotation_set.annotations)),
+            ]
+        )
+    return [
+        "## Source Fixtures",
+        "",
+        *_markdown_table(("field", "value"), rows),
+        "",
+    ]
+
+
 def _event_summary(frames: Iterable[SimulationTraceFrame]) -> list[str]:
     """Render event and selected-action counts."""
 
@@ -179,6 +245,55 @@ def _annotation_summary(frames: Iterable[SimulationTraceFrame]) -> list[str]:
         *_markdown_table(("step", "annotation", "value"), rows),
         "",
     ]
+
+
+def _annotation_set_summary(annotation_set: TraceAnnotationSet) -> list[str]:
+    """Render external qualitative annotation anchors and evidence boundaries."""
+
+    rows = [_annotation_row(annotation) for annotation in annotation_set.annotations]
+    return [
+        "## Annotation Review",
+        "",
+        (
+            "Annotation review rows preserve their evidence type. `observed` rows cite trace "
+            "contents, `hypothesis` rows are candidate interpretations, and `commentary` rows "
+            "are reviewer notes. These qualitative rows are diagnostic-only and not benchmark "
+            "evidence."
+        ),
+        "",
+        *_markdown_table(
+            (
+                "annotation_id",
+                "evidence_type",
+                "category",
+                "frame_range",
+                "event_ids",
+                "entities",
+                "summary",
+                "details",
+            ),
+            rows,
+        ),
+        "",
+    ]
+
+
+def _annotation_row(annotation: TraceAnnotation) -> tuple[str, str, str, str, str, str, str, str]:
+    """Format one external annotation as a Markdown-table row."""
+
+    anchor = annotation.anchor
+    return (
+        annotation.annotation_id,
+        annotation.evidence_type,
+        annotation.category,
+        f"{anchor.frame_start}-{anchor.frame_end}",
+        ", ".join(anchor.event_ids) if anchor.event_ids else "none",
+        ", ".join(f"{entity.type}:{entity.id}" for entity in anchor.entities)
+        if anchor.entities
+        else "none",
+        annotation.summary,
+        annotation.details or "",
+    )
 
 
 def _frame_table(frames: Iterable[SimulationTraceFrame]) -> list[str]:
@@ -316,6 +431,59 @@ def _format_value(value: Any) -> str:
     return json.dumps(value, sort_keys=True)
 
 
+def _validate_tracked_fixture_path(path: Path, *, label: str) -> None:
+    """Reject output-only paths before report rendering."""
+
+    relative_path = _repo_relative_path(path)
+    if any(part in {"output", "results"} for part in relative_path.parts):
+        raise ValueError(f"{label} path must be a tracked fixture, not generated output: {path}")
+
+
+def _validate_annotation_matches_trace(
+    *,
+    trace: SimulationTraceExport,
+    trace_path: Path,
+    annotation_set: TraceAnnotationSet,
+) -> None:
+    """Fail closed when the external annotation set points at another trace."""
+
+    if annotation_set.timeline.trace_id != trace.trace_id:
+        raise TraceAnnotationSetValidationError(
+            [
+                "/timeline/trace_id: "
+                f"expected supplied trace_id {trace.trace_id!r}, "
+                f"got {annotation_set.timeline.trace_id!r}"
+            ],
+            source=annotation_set.annotation_set_id,
+        )
+    expected_name = Path(annotation_set.timeline.path).name
+    if expected_name != trace_path.name:
+        raise TraceAnnotationSetValidationError(
+            [
+                "/timeline/path: "
+                f"annotation references {annotation_set.timeline.path!r}, "
+                f"but supplied trace path is {str(trace_path)!r}"
+            ],
+            source=annotation_set.annotation_set_id,
+        )
+
+
+def _display_path(path: Path) -> str:
+    """Return a stable repo-friendly display path when possible."""
+
+    return str(_repo_relative_path(path))
+
+
+def _repo_relative_path(path: Path) -> Path:
+    """Return a path relative to the repository root when possible."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        return path.resolve().relative_to(repo_root)
+    except ValueError:
+        return path
+
+
 def _markdown_table(headers: tuple[str, ...], rows: Iterable[tuple[Any, ...]]) -> list[str]:
     """Render a simple GitHub-flavored Markdown table."""
 
@@ -344,6 +512,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--trace", type=Path, required=True, help="simulation_trace_export.v1 JSON."
     )
     parser.add_argument(
+        "--annotations",
+        type=Path,
+        help="Optional trace_annotation_set.v1 JSON to cite in the report.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("report.md"),
@@ -359,8 +532,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        output = write_trace_report(trace_path=args.trace, output=args.output)
-    except (OSError, ValueError, SimulationTraceExportValidationError) as exc:
+        output = write_trace_report(
+            trace_path=args.trace,
+            annotation_path=args.annotations,
+            output=args.output,
+        )
+    except (
+        OSError,
+        ValueError,
+        SimulationTraceExportValidationError,
+        TraceAnnotationSetValidationError,
+    ) as exc:
         print(f"{exc}", file=sys.stderr)
         return 1
 

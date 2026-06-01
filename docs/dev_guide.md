@@ -87,6 +87,10 @@ Notes:
 - If the worktree path differs, derive the correct source from `$MAIN_REPO_ROOT/local.machine.md`.
 - Reuse the symlinked `local.machine.md` instead of copying it so machine-specific limits stay in
   sync across worktrees.
+- CARLA is intentionally not part of `uv sync --all-extras`. For a CARLA-capable worktree, add the
+  host-side Python client explicitly with `uv sync --all-extras --group carla`, then run
+  `scripts/dev/check_carla_runtime.sh` for preflight or `scripts/dev/check_carla_runtime.sh --smoke`
+  for the bounded Docker connectivity proof.
 - If you are starting work on a feature branch, merge the latest `origin/main` into the current
   branch early so you inherit repository-wide fixes and workflow improvements before your local
   changes diverge. Typical command sequence:
@@ -95,6 +99,19 @@ Notes:
 git fetch origin main
 git merge origin/main
 ```
+
+### Worktree teardown and preservation
+
+Before deleting old worktrees, run `git worktree list --porcelain` from the main checkout and inspect
+each candidate with `git -C <path> status --short --branch`. If the worktree may contain generated
+evidence or local experiment outputs, also inspect relevant ignored paths, for example
+`[ -d "<path>/output" ] && git -C <path> status --ignored --short -uall output`.
+
+Only remove a worktree after preserving relevant tracked, untracked, and ignored-but-important
+changes through a commit, stash, patch, durable artifact promotion, or explicit handoff note. Do not
+delete dirty or unpushed worktrees unless the cleanup record states what was preserved or why nothing
+needed preservation. Use `git worktree remove <path>` for clean worktrees; reserve
+`git worktree prune` for stale administrative entries after local state is checked.
 
 ### Targeted shared-venv worktree validation
 

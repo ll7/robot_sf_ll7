@@ -62,6 +62,7 @@ Do not use it for:
 - `.agents/skills/gh-pr-opener/SKILL.md`
 - `.agents/skills/context-note-maintainer/SKILL.md`
 - `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
+- `scripts/dev/check_skills.py --preflight goal-issue-implementation` (for preflight validation before implementation loop)
 
 ## Preflight
 
@@ -289,7 +290,9 @@ Route remaining issues by their blocker:
 1. Select one issue (`gh-issue-sequencer` output or explicit user target).
 2. Re-check issue body/comments and open PRs for source-PR dependencies, active coverage, and
    duplicate branch/PR risk before branching.
-3. Create/checkout isolated implementation branch.
+3. Create/checkout the isolated implementation branch. For non-trivial local changes, prefer a
+   linked worktree and follow `AGENTS.md` "Fresh Worktree Bootstrap" for location, naming,
+   machine-context symlink, environment setup, and early `origin/main` freshness.
 4. Implement only in-scope behavior and required tests/docs.
 5. Validate using the narrowest meaningful level first, then expand.
 6. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
@@ -335,9 +338,57 @@ Never close an issue with `Low` proof without explicitly marking follow-up work.
   - last error,
   - next minimal action.
 
+## Delegation Failure Recovery
+
+Each child skill or worker may fail. Handle failures per scenario:
+
+- `gh-issue-sequencer` failure:
+  - If the queue is empty or unreachable, skip queue ordering and fall back to
+    explicit user target or open-issues sweep.
+  - If Project #5 API writes fail, log the error and continue without priority
+    normalization.
+
+- `gh-issue-autopilot` failure:
+  - If the issue is ambiguous mid-flow, route to `issue-contract-maintainer`,
+    mark the issue `skipped`, and continue to the next candidate.
+  - If branch creation fails, record the error and skip the issue.
+  - If validation fails twice without meaningful change, mark the issue
+    `blocked` and record the failing command and last error.
+
+- `implementation-verification` failure:
+  - If evidence is insufficient, record the gaps and move the PR to
+    `blocked` instead of `pr_opened`. Do not open a PR with failing claims.
+
+- `pr-ready-check` failure:
+  - If the gate fails on fixable issues (lint, format), fix and retry once.
+  - If the gate fails on test or coverage, record the failure and move to
+    `blocked` instead of `pr_opened`.
+
+- `gh-pr-opener` failure:
+  - If the PR already exists for the branch, update the existing PR body
+    instead of creating a duplicate.
+  - If push fails, record the error and mark the issue blocked.
+
+- `gh-issue-creator` or `issue-splitter` failure:
+  - Log the failure, skip the issue, and continue to the next candidate.
+  - Do not let a child-creation failure block the implementation queue.
+
+- General environment failure (auth, disk, network):
+  - Stop the implementation loop and report the blocker with the failing command,
+    exit code, and minimal next action.
+
+Do not retry a child skill on the same issue if it failed with the same error
+twice. Record the recovery action and continue.
+
+When a delegated worker produces a reusable workflow lesson, include an
+`agent_run_self_review.v1` companion summary.
+
 ## Race-Condition / Multi-Agent Safety
 
 - Operate one implementation branch at a time by default.
+- Before cleaning stale worktrees at loop end or after a PR handoff, follow `AGENTS.md` "Worktree
+  Teardown And Preservation" and record how relevant tracked, untracked, and ignored local changes
+  were preserved.
 - Before pushing, verify branch state is expected and avoid rewriting branch history.
 - If remote branch changed unexpectedly:
   - stop,

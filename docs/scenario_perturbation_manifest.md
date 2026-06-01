@@ -120,6 +120,85 @@ The pilot writes raw episode JSONL under `output/` and, when requested, a compac
 under `docs/context/evidence/`. Fallback, degraded, invalid, missing, and failed rows are reported
 separately and excluded from completed-pair mean deltas.
 
+## Perturbation Family Registry
+
+The reusable family registry at
+[`robot_sf/scenario_certification/perturbation_family_registry.py`](../robot_sf/scenario_certification/perturbation_family_registry.py)
+defines each family's semantic boundary, target surface, validity constraints, fail-closed rules,
+and required/optional parameter keys. Downstream writers (preflight, criticality_summary.v1)
+should use the registry instead of hardcoding family knowledge.
+
+```python
+from robot_sf.scenario_certification import (
+    perturbation_families,
+    perturbation_family,
+    supported_perturbation_families,
+    validate_perturbation_family_parameters,
+)
+
+family = perturbation_family("robot_route_offset")
+assert family.target_surface == "robot_route_waypoints"
+reasons, family = validate_perturbation_family_parameters(
+    "robot_route_offset",
+    {"dx_m": 0.25, "dy_m": 0.0, "max_magnitude_m": 0.5},
+)
+```
+
+## Criticality Summary v1
+
+The criticality summary schema at
+[`robot_sf/benchmark/schemas/criticality_summary.v1.json`](../robot_sf/benchmark/schemas/criticality_summary.v1.json)
+and writer at
+[`robot_sf/scenario_certification/criticality_summary.py`](../robot_sf/scenario_certification/criticality_summary.py)
+provide a validated surface for #1610 perturbation-family summary payloads.
+Every summary must record explicit row status counts for `completed`, `invalid`, `fallback`,
+`degraded`, `missing`, and `failed` rows. Non-completed rows are tracked separately and never
+contribute to completed-pair effect means.
+
+Build a summary from pilot records:
+
+```python
+from robot_sf.scenario_certification import (
+    build_criticality_summary_from_pilot,
+    criticality_summary_to_dict,
+    validate_criticality_summary,
+)
+
+summary = build_criticality_summary_from_pilot(
+    records_by_planner=...,
+    scenario_metadata=...,
+    manifest="configs/scenarios/perturbations/example.yaml",
+    manifest_id="example_v1",
+    planners=["goal", "orca"],
+    horizon=80,
+    dt=0.1,
+    seed_limit=5,
+    materialization=...,
+    planner_runs=...,
+)
+payload = criticality_summary_to_dict(summary)
+validate_criticality_summary(payload)
+```
+
+Or wrap an existing compact #1610 evidence payload (without raw output paths):
+
+```python
+import json
+from pathlib import Path
+
+from robot_sf.scenario_certification import (
+    build_criticality_summary_from_compact_evidence,
+    criticality_summary_to_dict,
+    validate_criticality_summary,
+)
+
+path = Path("docs/context/evidence/example/summary.json")
+evidence = json.loads(path.read_text())
+summary = build_criticality_summary_from_compact_evidence(evidence)
+payload = criticality_summary_to_dict(summary)
+validate_criticality_summary(payload)
+```
+
 ## Boundary
 
 This is not planner execution and not paper-facing evidence. It only proves that the selected

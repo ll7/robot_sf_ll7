@@ -486,6 +486,11 @@ docs = [
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",
 ]
+carla = [
+    # Host-side Python client for the pinned CARLA Docker/runtime path. Keep this as an explicit
+    # dependency group so routine `uv sync --all-extras` installs remain CARLA-free.
+    "carla==0.9.16 ; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 imitation = [
     "imitation>=1.0.0",
 ]

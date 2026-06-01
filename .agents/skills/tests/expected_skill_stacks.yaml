@@ -12,6 +12,17 @@ expected_stacks:
   slurm_campaign:
   - slurm-campaign-submit
   - artifact-provenance
+  goal_slurm_experiment:
+  - experiment-context
+  - goal-issue-implementation
+  - slurm-campaign-submit
+  - artifact-provenance
+  - context-note-maintainer
+  agent_workflow_improvement:
+  - agent-workflow-capture
+  - agent-workflow-promotion
+  - review-and-refactor
+  - update-docs-on-code-change
   adversarial_search_campaign:
   - adversarial-search-campaign
   - benchmark-row-status
@@ -29,6 +40,14 @@ expected_stacks:
   - benchmark-row-status
   - artifact-provenance
   - evidence-synthesis
+  goal_autopilot:
+  - goal-autopilot
+  - goal-issue-implementation
+  - gh-pr-merger
+  - goal-pr-review
+  - goal-issue-discovery
+  merge_ready_pr:
+  - gh-pr-merger
   negative_cleanup:
   - clean-up
   - pr-ready-check

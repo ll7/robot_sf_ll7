@@ -15,6 +15,20 @@ cases:
   primary: slurm-campaign-submit
   secondary:
   - artifact-provenance
+- intent: Keep one skill-owned training job running through SLURM
+  primary: goal-slurm-experiment
+  secondary:
+  - goal-issue-implementation
+  - slurm-campaign-submit
+  - artifact-provenance
+- intent: Record a private candidate lesson from an agent workflow
+  primary: agent-workflow-capture
+  secondary: []
+- intent: Promote accumulated private workflow lessons into repository instructions
+  primary: agent-workflow-promotion
+  secondary:
+  - review-and-refactor
+  - update-docs-on-code-change
 - intent: Stage external data
   primary: data-staging-provenance
   secondary:
@@ -25,6 +39,11 @@ cases:
   - pr-ready-check
   negative:
   - autoresearch
+- intent: Set up or clean up worktrees
+  primary: skill-picker
+  secondary:
+  - gh-issue-autopilot
+  - clean-up
 - intent: Edit non-claim docs
   primary: update-docs-on-code-change
   secondary: []
@@ -56,3 +75,19 @@ cases:
   secondary:
   - slurm-campaign-submit
   - artifact-provenance
+- intent: Run continuous implement-review-merge-discover autopilot
+  primary: goal-autopilot
+  secondary:
+  - goal-issue-implementation
+  - gh-pr-merger
+  - goal-pr-review
+- intent: Merge a merge-ready PR
+  primary: gh-pr-merger
+  secondary: []
+- intent: Do full autopilot cycle
+  primary: goal-autopilot
+  secondary:
+  - goal-issue-implementation
+  - gh-pr-merger
+  - goal-pr-review
+  - goal-issue-discovery

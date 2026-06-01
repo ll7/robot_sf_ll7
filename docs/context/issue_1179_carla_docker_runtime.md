@@ -26,8 +26,18 @@ support as successful simulator evidence.
 Recommended command sequence on a CARLA-capable host:
 
 ```bash
-uv run robot-sf-carla-docker-runtime preflight --json
-uv run robot-sf-carla-docker-runtime smoke --pull --json
+uv sync --all-extras --group carla
+scripts/dev/check_carla_runtime.sh
+scripts/dev/check_carla_runtime.sh --smoke
+```
+
+The `carla` dependency group pins the host-side Python client to `carla==0.9.16` without making
+routine `uv sync --all-extras` installs pull CARLA. If the group has not been synced yet, a one-off
+ephemeral command is still valid for local diagnostics:
+
+```bash
+uv run --with carla==0.9.16 robot-sf-carla-docker-runtime preflight --json
+uv run --with carla==0.9.16 robot-sf-carla-docker-runtime smoke --json
 ```
 
 The `smoke --pull` path reuses `carlasim/carla:0.9.16` when present, otherwise it checks Docker
@@ -101,7 +111,7 @@ rtk uv pip install --dry-run 'carla==0.9.16'
 Result: uv resolved the package for this Python 3.12.3 environment and reported it would install
 `carla==0.9.16`. The package was not installed into the normal repo environment.
 
-Local runtime preflight:
+Historical local runtime preflight from 2026-05-18:
 
 ```bash
 rtk uv run robot-sf-carla-docker-runtime preflight --skip-api-check --json
@@ -111,9 +121,25 @@ Observed on `Linux x86_64` with an NVIDIA GeForce RTX 3080: status `not-availabl
 `missing_capability: docker-daemon`, because Docker Engine 29.4.2 client reports `Server: null` and
 fails with permission denied while connecting to `unix:///var/run/docker.sock`.
 
-This local result is a precise runtime blocker, not live CARLA proof. A Docker/NVIDIA-capable host
-still needs to run `robot-sf-carla-docker-runtime smoke --pull --json` to record image digest,
-client/server versions, active map, Docker command, status, and log tail.
+Current local host status from 2026-05-31 on `auxme-imech036`:
+
+```bash
+uv run robot-sf-carla-docker-runtime preflight --skip-api-check --json
+scripts/dev/check_carla_runtime.sh --smoke
+```
+
+Result: Docker Engine 29.4.2 was reachable without sudo, NVIDIA Container Toolkit was available,
+ports `2000-2002` were free, and the local `carlasim/carla:0.9.16` image
+(`sha256:aaf1df22702780ece072069e23d03c4879b002ae028c79744b09c4c7ddbae953`) was present. The
+plain repo environment still reported `missing_capability: carla-python-api`, but the
+`carla==0.9.16` client path connected to the pinned Docker server, reported client/server version
+`0.9.16` and map `Carla/Maps/Town10HD_Opt`, then stopped the test container cleanly. The
+group-backed `scripts/dev/check_carla_runtime.sh --smoke` path is the reproducible follow-up to
+that ephemeral proof.
+
+This local result is CARLA Docker connectivity proof, not Robot-SF live replay or metric-parity
+proof. Replay and parity claims still need the exact replay command, payload provenance, boundary
+mode, and output summary recorded separately.
 
 Generated `output/coverage/` files from validation remain ignored and disposable. No generated
 CARLA Docker image, benchmark bundle, model checkpoint, or durable runtime artifact was produced on

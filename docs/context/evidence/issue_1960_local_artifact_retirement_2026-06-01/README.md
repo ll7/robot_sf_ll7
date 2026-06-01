@@ -8,4 +8,3 @@ as rerun for issue #1960 on 2026-06-01.
 
 Boundary: this evidence is metadata/provenance guidance only. It does not publish checkpoints,
 promote model registry entries, or establish benchmark results.
-

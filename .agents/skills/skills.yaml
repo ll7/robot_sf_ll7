@@ -45,6 +45,53 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
+  agent-workflow-capture:
+    description: Capture private candidate lessons from agent execution into `.git/codex-agent-runs/notes/inbox/`
+      when a repeatable workflow, routing, validation, tooling, or instruction improvement is noticed.
+    category: research-iteration
+    kind: atomic
+    phase: analysis
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases:
+    - agent-improvement-capture
+  agent-workflow-promotion:
+    description: Promote accumulated private `.git/codex-agent-runs/notes/inbox/` workflow lessons into
+      small, evidence-backed repository instruction, skill, docs, or tooling changes with validation.
+    category: research-iteration
+    kind: orchestrator
+    phase: implementation
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: true
+      github_issue: true
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - git
+    - uv
+    delegates_to:
+    - review-and-refactor
+    - update-docs-on-code-change
+    - context-note-maintainer
+    - gh-issue-creator
+    output_schema: skill_run_summary.v1
+    aliases:
+    - agent-improvement-promotion
   analyze-camera-ready-benchmark:
     description: Analyze a camera-ready benchmark campaign for consistency, runtime hotspots, fallback/degraded
       planners, and reproducibility metadata.

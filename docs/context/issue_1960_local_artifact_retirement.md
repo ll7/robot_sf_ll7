@@ -1,7 +1,7 @@
 # Issue #1960 Local Artifact Retirement
 
-Issue: [#1960](https://github.com/ll7/robot_sf_ll7/issues/1960)  
-Parent: [#1764](https://github.com/ll7/robot_sf_ll7/issues/1764)  
+Issue: [#1960](https://github.com/ll7/robot_sf_ll7/issues/1960)
+Parent: [#1764](https://github.com/ll7/robot_sf_ll7/issues/1764)
 Evidence: [summary.json](evidence/issue_1960_local_artifact_retirement_2026-06-01/summary.json)
 
 ## Scope
@@ -39,4 +39,3 @@ uv run python scripts/validation/check_local_model_artifacts.py --json
 Expected state on 2026-06-01: the scanner reports seven rows and the local-artifact preflight
 reports the same seven rows as `blocked`. A nonzero strict audit with
 `--fail-on-blocked` remains expected until #1764 resolves these local-only references.
-

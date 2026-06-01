@@ -105,6 +105,10 @@ entries:
     status: current
     freshness: dated
     area: carla_external_sim
+  - path: docs/context/issue_2015_mujoco_amv_micro_backend.md
+    status: current
+    freshness: dated
+    area: carla_external_sim
   - path: docs/context/slurm_issue_batch_status_2026-05-21.md
     status: current
     freshness: maintained

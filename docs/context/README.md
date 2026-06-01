@@ -926,6 +926,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1169 CARLA Live T1 Oracle Replay](issue_1169_carla_live_replay.md)
   adds the Docker-backed live replay command, records a real CARLA `0.9.16` connection on
   `Town10HD_Opt`, and fails closed on static-geometry replay for the inherited #1111 payload.
+- [Issue #2015 MuJoCo AMV Micro-Backend Diagnostic](issue_2015_mujoco_amv_micro_backend.md)
+  records the optional diagnostic-only MuJoCo micro-backend probe for AMV command-trace actuation
+  response, with no routine dependency or calibrated/benchmark claim.
 
 ## DreamerV3 Notes
 

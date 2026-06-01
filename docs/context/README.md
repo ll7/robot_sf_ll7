@@ -330,6 +330,8 @@ knowledge, not every transient iteration detail.
   [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
 * Issue #1689 Simulation Trace Export Schema (2026-05-30):
   [issue_1689_simulation_trace_export_schema.md](issue_1689_simulation_trace_export_schema.md)
+* Issue #2038 Real Trace Viewer Smoke (2026-06-01):
+  [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
   [issue_1676_proxemic_profile_comfort_slice.md](issue_1676_proxemic_profile_comfort_slice.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):

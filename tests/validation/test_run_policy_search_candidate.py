@@ -133,7 +133,7 @@ def test_orca_residual_guarded_candidate_requests_training_observation_contract(
 
 def test_issue1474_shielded_ppo_candidate_requests_guard_observation_contract() -> None:
     """Issue #2006 candidate should expose goal fields consumed by the runtime guard."""
-    repo_root = Path(__file__).parents[2]
+    repo_root = Path(__file__).resolve().parents[2]
 
     _entry, payload, config, config_path = load_candidate_definition(
         repo_root / "docs/context/policy_search/candidate_registry.yaml",

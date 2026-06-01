@@ -3,6 +3,17 @@ algo: guarded_ppo
 base_config_path: configs/algos/guarded_ppo_relaxed_v2.yaml
 params:
   prior_residual_mode: true
+  observation_mode: socnav_state
+  env_overrides:
+    predictive_foresight_enabled: true
+    predictive_foresight_model_id: predictive_proxy_selected_v2_full
+    predictive_foresight_device: cpu
+    predictive_foresight_max_agents: 16
+    predictive_foresight_horizon_steps: 8
+    predictive_foresight_rollout_dt: 0.2
+    predictive_foresight_near_distance: 0.7
+    predictive_foresight_front_corridor_length: 3.0
+    predictive_foresight_front_corridor_half_width: 1.0
   prior_residual_max_linear_delta: 0.25
   prior_residual_max_angular_delta: 0.35
   prior_policy: orca

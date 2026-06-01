@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark import map_runner
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 
 class _DummyPPOPlanner:
@@ -18,6 +19,7 @@ class _DummyPPOPlanner:
         self.seed = seed
         self.closed = False
         self.last_obs = None
+        self.bound_envs = []
 
     def step(self, _obs):
         """Return the configured action and retain the received observation."""
@@ -27,6 +29,10 @@ class _DummyPPOPlanner:
     def close(self):
         """Mark the dummy planner as closed."""
         self.closed = True
+
+    def bind_env(self, env):
+        """Record runtime env binding."""
+        self.bound_envs.append(env)
 
     def get_metadata(self):
         """Return map-runner metadata for the dummy planner.
@@ -279,6 +285,54 @@ def test_build_policy_guarded_ppo_arbitrates_and_tracks_guard_stats(monkeypatch)
     assert guard.bound_envs == [env]
     assert guard.reset_seeds == [5]
     assert guard.closed
+
+
+def test_build_policy_guarded_ppo_binds_ppo_and_guard_env(monkeypatch):
+    """Guarded PPO should bind both PPO obs adapter and guard map context."""
+    _DummyGuardedPPOAdapter.instances = []
+    ppo_instances: list[_DummyPPOPlanner] = []
+
+    def _make_ppo(*args, **kwargs):
+        planner = _DummyPPOPlanner(*args, **kwargs)
+        ppo_instances.append(planner)
+        return planner
+
+    monkeypatch.setattr(map_runner, "PPOPlanner", _make_ppo)
+    monkeypatch.setattr(map_runner, "GuardedPPOAdapter", _DummyGuardedPPOAdapter)
+    monkeypatch.setattr(map_runner, "build_guarded_ppo_fallback", lambda cfg: object())
+
+    policy, _ = map_runner._build_policy(
+        "guarded_ppo",
+        {"obs_mode": "dict", "test_action": {"v": 0.7, "omega": 0.3}},
+    )
+
+    env = object()
+    policy._planner_bind_env(env)
+
+    assert ppo_instances[-1].bound_envs == [env]
+    assert _DummyGuardedPPOAdapter.instances[-1].bound_envs == [env]
+
+
+def test_policy_env_observation_overrides_apply_predictive_contract() -> None:
+    """Policy-search candidate env_overrides should restore BC observation features."""
+    config = RobotSimulationConfig()
+
+    map_runner._apply_policy_env_observation_overrides(
+        config,
+        {
+            "env_overrides": {
+                "predictive_foresight_enabled": True,
+                "predictive_foresight_device": "cpu",
+                "predictive_foresight_max_agents": 16,
+                "predictive_foresight_horizon_steps": 8,
+            }
+        },
+    )
+
+    assert config.predictive_foresight_enabled is True
+    assert config.predictive_foresight_device == "cpu"
+    assert config.predictive_foresight_max_agents == 16
+    assert config.predictive_foresight_horizon_steps == 8
 
 
 def test_obs_to_ppo_format_uses_ped_count_and_sim_timestep():

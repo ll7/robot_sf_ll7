@@ -10,13 +10,24 @@ The schema lives at
 [`robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json`](../robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json).
 The first tracked example is
 [`configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml`](../configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml).
+The current #1610 single-pedestrian trajectory example is
+[`configs/scenarios/perturbations/issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1.yaml`](../configs/scenarios/perturbations/issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1.yaml).
 
 ## Contract
 
-The v1 manifest intentionally supports only:
+The v1 manifest intentionally supports:
 
 - `noop`: the unperturbed baseline row for paired comparisons;
-- `robot_route_offset`: a bounded `(dx_m, dy_m)` shift applied to selected robot route waypoints.
+- `robot_route_offset`: a bounded `(dx_m, dy_m)` shift applied to selected robot route waypoints;
+- `pedestrian_route_offset`: the same bounded shift applied to selected pedestrian route waypoints;
+- `single_pedestrian_start_delay_offset`: a bounded start-delay phase shift for explicit
+  `single_pedestrians`;
+- `single_pedestrian_speed_offset`: a bounded per-pedestrian speed change for explicit
+  `single_pedestrians`;
+- `single_pedestrian_wait_duration_offset`: a bounded `wait_at` duration change for explicit
+  trajectory pedestrians with wait rules;
+- `single_pedestrian_trajectory_waypoint_offset`: a bounded `(dx_m, dy_m)` shift applied to all
+  coordinate trajectory waypoints for one explicit `single_pedestrians` entry.
 
 Every manifest must include:
 
@@ -25,6 +36,19 @@ Every manifest must include:
 - `validity.max_route_offset_m`: manifest-level offset bound;
 - `validity.invalid_variant_evidence_policy: exclude_from_success_evidence`;
 - one or more `variants`, each with `variant_id`, `scenario_id`, `family`, and `seeds`.
+
+Family-specific validity caps are required when a manifest uses the matching family:
+
+- `validity.max_start_delay_offset_s` for `single_pedestrian_start_delay_offset`;
+- `validity.max_wait_duration_offset_s` for `single_pedestrian_wait_duration_offset`;
+- `validity.max_single_pedestrian_speed_delta_m_s` for `single_pedestrian_speed_offset`;
+- `validity.max_single_pedestrian_trajectory_waypoint_offset_m` for
+  `single_pedestrian_trajectory_waypoint_offset`.
+
+`single_pedestrian_trajectory_waypoint_offset` is intentionally narrow: it requires
+`parameters.pedestrian_id`, `parameters.waypoint_selector: all`, and an existing non-empty
+coordinate `trajectory`. Route pedestrians, role-only pedestrians, goal-only pedestrians, POI-only
+trajectory materialization, and individual waypoint indexes fail closed until separately scoped.
 
 ## Preflight
 

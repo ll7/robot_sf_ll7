@@ -1,0 +1,51 @@
+schema_version: scenario_perturbation_manifest.v1
+manifest_id: issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1
+description: >-
+  Compact diagnostic #1610 pilot for bounded explicit single-pedestrian trajectory waypoint
+  offsets. The eligible row shifts francis2023_intersection_wait pedestrian h1's coordinate
+  trajectory by 0.25 m on x. The join-group row is an intentional fail-closed probe because h3 is
+  role-based and has no coordinate trajectory.
+scenario_config: ../classic_interactions_francis2023.yaml
+seed_controls:
+  baseline_seeds: [240, 241, 242]
+  replay_seed_policy: explicit
+validity:
+  require_scenario_certification: true
+  max_route_offset_m: 0.5
+  max_single_pedestrian_trajectory_waypoint_offset_m: 0.5
+  invalid_variant_evidence_policy: exclude_from_success_evidence
+variants:
+  - variant_id: francis2023_intersection_wait_noop
+    scenario_id: francis2023_intersection_wait
+    family: noop
+    seeds: [240, 241, 242]
+  - variant_id: francis2023_intersection_wait_traj_h1_x025
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_trajectory_waypoint_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Shift the explicit h1 crossing trajectory laterally by a small bounded amount while keeping
+      wait_at indices and replay seeds fixed.
+    parameters:
+      dx_m: 0.25
+      dy_m: 0.0
+      max_magnitude_m: 0.5
+      pedestrian_id: h1
+      waypoint_selector: all
+  - variant_id: francis2023_join_group_traj_h3_x025
+    scenario_id: francis2023_join_group
+    family: single_pedestrian_trajectory_waypoint_offset
+    seeds: [255, 256, 257]
+    rationale: >-
+      Fail-closed probe proving role-only single pedestrians are not silently coerced into
+      trajectory perturbations.
+    parameters:
+      dx_m: 0.25
+      dy_m: 0.0
+      max_magnitude_m: 0.5
+      pedestrian_id: h3
+      waypoint_selector: all
+pilot_matrix_note:
+  parent_issue: "#1610"
+  next_step: "Run a tiny local paired planner pilot before treating this as diagnostic evidence."
+  evidence_boundary: "local preflight/materialization input only; not benchmark evidence"

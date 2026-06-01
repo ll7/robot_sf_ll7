@@ -1,0 +1,146 @@
+{
+  "claim_boundary": "diagnostic local pilot only; not benchmark-strength or paper-facing evidence",
+  "dt": 0.1,
+  "horizon": 40,
+  "manifest": "configs/scenarios/perturbations/issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1.yaml",
+  "materialization": {
+    "excluded_variants": [
+      "francis2023_join_group_traj_h3_x025"
+    ],
+    "included_variants": [
+      "francis2023_intersection_wait_noop",
+      "francis2023_intersection_wait_traj_h1_x025"
+    ],
+    "local_artifact_boundary": "materialized scenario matrix, route overrides, and raw episode JSONL remain ignored local outputs reproducible from the tracked manifest and command",
+    "manifest_id": "issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1",
+    "schema_version": "scenario_perturbation_pilot_matrix.v1",
+    "variant_count": 2
+  },
+  "pair_rows": [
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.033832585236350354,
+      "noop": {
+        "collision": 0,
+        "min_distance": 11.399756917343742,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 11.433589502580093,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_trajectory_waypoint_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_traj_h1_x025",
+      "planner": "goal",
+      "seed": 240,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.03432788489824112,
+      "noop": {
+        "collision": 0,
+        "min_distance": 11.55981333382666,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 11.594141218724902,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_trajectory_waypoint_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_traj_h1_x025",
+      "planner": "goal",
+      "seed": 241,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    }
+  ],
+  "pair_summary": {
+    "by_perturbation_family": {
+      "single_pedestrian_trajectory_waypoint_offset": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.03408023506729574,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 2,
+        "status_counts": {
+          "completed": 2
+        }
+      }
+    },
+    "by_planner": {
+      "goal": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.03408023506729574,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 2,
+        "status_counts": {
+          "completed": 2
+        }
+      }
+    },
+    "by_source_scenario": {
+      "francis2023_intersection_wait": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.03408023506729574,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 2,
+        "status_counts": {
+          "completed": 2
+        }
+      }
+    },
+    "mean_deltas_completed_pairs": {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.03408023506729574,
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    "pairs": 2,
+    "status_counts": {
+      "completed": 2
+    }
+  },
+  "planner_runs": {
+    "goal": {
+      "algo": "goal",
+      "algo_config_path": null,
+      "episodes": 4,
+      "source": "raw_algo"
+    }
+  },
+  "planners": [
+    "goal"
+  ],
+  "schema_version": "scenario_perturbation_criticality_pilot.v1",
+  "seed_limit": 2
+}

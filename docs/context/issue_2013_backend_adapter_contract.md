@@ -91,6 +91,8 @@ test -f docs/context/issue_691_benchmark_fallback_policy.md
 test -f docs/context/issue_1689_simulation_trace_export_schema.md
 test -f docs/context/issue_1169_carla_live_replay.md
 test -f docs/debug_visualization.md
+grep -q 'issue_2013_backend_adapter_contract.md' docs/README.md
+grep -q 'issue_2013_backend_adapter_contract.md' docs/context/INDEX.md
 ```
 
 ## References

@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "failure_mechanism_classification.schema.v1.json",
+  "title": "Failure Mechanism Classification v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "classification_source",
+    "generated_at_utc",
+    "inputs",
+    "rows",
+    "coverage_axes",
+    "missing_fields",
+    "caveats"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "failure_mechanism_classification.v1"
+    },
+    "classification_source": {
+      "type": "string"
+    },
+    "generated_at_utc": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "object"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "episode_id",
+          "scenario_id",
+          "planner_id",
+          "seed",
+          "fixed_episode_id",
+          "long_episode_id",
+          "classification_source",
+          "label",
+          "confidence",
+          "evidence_inputs",
+          "required_inputs_present",
+          "unavailable_reason",
+          "caveats"
+        ],
+        "properties": {
+          "episode_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scenario_id": {
+            "type": "string"
+          },
+          "planner_id": {
+            "type": "string"
+          },
+          "seed": {
+            "type": "string"
+          },
+          "fixed_episode_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "long_episode_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "classification_source": {
+            "type": "string"
+          },
+          "label": {
+            "enum": [
+              "time_budget_clean_relief",
+              "exposure_enabled_completion",
+              "safety_regressed_long_horizon",
+              "persistent_low_progress_timeout",
+              "scenario_contract_blocker",
+              "unsupported_wait_then_go_hypothesis",
+              "collision",
+              "near_miss",
+              "timeout_without_progress",
+              "unavailable"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "evidence_inputs": {
+            "type": "object"
+          },
+          "required_inputs_present": {
+            "type": "boolean"
+          },
+          "unavailable_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "caveats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "coverage_axes": {
+      "type": "object",
+      "required": [
+        "failure_modes"
+      ],
+      "properties": {
+        "failure_modes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "observed_episodes",
+              "observed_fraction",
+              "scenario_ids",
+              "classification_source"
+            ],
+            "properties": {
+              "observed_episodes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "observed_fraction": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "scenario_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "classification_source": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "missing_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "caveats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

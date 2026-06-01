@@ -144,6 +144,8 @@ knowledge, not every transient iteration detail.
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #2001 AMV Actuation Proxy Source Analysis (2026-06-01):
   [issue_2001_amv_actuation_proxy_source_analysis.md](issue_2001_amv_actuation_proxy_source_analysis.md)
+* Issue #2014 Simulator Backend Decision Matrix (2026-06-01):
+  [issue_2014_simulator_backend_matrix.md](issue_2014_simulator_backend_matrix.md)
 * Issue #2016 Webots/Gazebo AMV Prototype Parity Audit (2026-06-01):
   [issue_2016_webots_gazebo_amv_parity_audit.md](issue_2016_webots_gazebo_amv_parity_audit.md)
 * Issue #1414 parser capability metadata:

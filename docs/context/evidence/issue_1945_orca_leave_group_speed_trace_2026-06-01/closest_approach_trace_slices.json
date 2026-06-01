@@ -1,0 +1,927 @@
+{
+  "claim_boundary": "diagnostic local trace inspection only; not benchmark-strength or paper-facing evidence",
+  "dt": 0.1,
+  "horizon": 80,
+  "manifest": "configs/scenarios/perturbations/issue_1610_ped_speed_pilot_v1.yaml",
+  "materialization": {
+    "excluded_variants": [
+      "classic_head_on_corridor_low_speed_all_p025"
+    ],
+    "included_variants": [
+      "francis2023_join_group_noop",
+      "francis2023_join_group_speed_h3_p025",
+      "francis2023_intersection_wait_noop",
+      "francis2023_intersection_wait_speed_h1_p025",
+      "francis2023_leave_group_noop",
+      "francis2023_leave_group_speed_all_p025",
+      "classic_head_on_corridor_low_noop"
+    ],
+    "local_artifact_boundary": "materialized scenario matrix and route overrides remain ignored local outputs reproducible from the tracked manifest and command",
+    "manifest_id": "issue_1610_ped_speed_pilot_v1",
+    "schema_version": "scenario_perturbation_pilot_matrix.v1",
+    "variant_count": 7
+  },
+  "pair_summary": {
+    "by_planner": {
+      "orca": {
+        "mean_closest_approach_deltas_completed_pairs": {
+          "center_distance_m": 0.034504,
+          "clearance_m": 0.034504,
+          "goal_distance_m": -0.930346,
+          "progress_m": 0.930346,
+          "time_s": -0.433333
+        },
+        "pairs": 3,
+        "status_counts": {
+          "completed": 3
+        }
+      }
+    },
+    "mean_closest_approach_deltas_completed_pairs": {
+      "center_distance_m": 0.034504,
+      "clearance_m": 0.034504,
+      "goal_distance_m": -0.930346,
+      "progress_m": 0.930346,
+      "time_s": -0.433333
+    },
+    "pairs": 3,
+    "status_counts": {
+      "completed": 3
+    }
+  },
+  "perturbed_family": "single_pedestrian_speed_offset",
+  "planner_runs": {
+    "orca": {
+      "algo": "orca",
+      "algo_config_path": null,
+      "output_stem": "orca",
+      "source": "raw_algo"
+    }
+  },
+  "planners": [
+    "orca"
+  ],
+  "schema_version": "scenario_perturbation_trace_response.v1",
+  "seed_limit": 4,
+  "slice_window": 3,
+  "source_scenario_id": "francis2023_leave_group",
+  "trace_pairs": [
+    {
+      "closest_approach_delta": {
+        "center_distance_m": 0.013248,
+        "clearance_m": 0.013248,
+        "goal_distance_m": -1.305127,
+        "progress_m": 1.305128,
+        "time_s": -0.6
+      },
+      "noop_closest_approach": {
+        "closest": {
+          "closest_pedestrian": {
+            "center_distance_m": 1.398979,
+            "clearance_m": -0.001021,
+            "pedestrian_index": 2,
+            "pedestrian_position": [
+              12.0,
+              10.5
+            ]
+          },
+          "goal_distance_m": 5.102825,
+          "progress_m": -2.731496,
+          "robot_position": [
+            12.023047,
+            9.101211
+          ],
+          "step": 37,
+          "time_s": 3.8
+        },
+        "frames": [
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.512821,
+              "clearance_m": 0.112821,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.513382,
+            "progress_m": -2.142053,
+            "robot_position": [
+              11.423047,
+              9.101517
+            ],
+            "step": 34,
+            "time_s": 3.5
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.448432,
+              "clearance_m": 0.048432,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.709555,
+            "progress_m": -2.338225,
+            "robot_position": [
+              11.623047,
+              9.101479
+            ],
+            "step": 35,
+            "time_s": 3.6
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.409762,
+              "clearance_m": 0.009762,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.906046,
+            "progress_m": -2.534717,
+            "robot_position": [
+              11.823047,
+              9.101388
+            ],
+            "step": 36,
+            "time_s": 3.7
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.398979,
+              "clearance_m": -0.001021,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.102825,
+            "progress_m": -2.731496,
+            "robot_position": [
+              12.023047,
+              9.101211
+            ],
+            "step": 37,
+            "time_s": 3.8
+          }
+        ],
+        "status": "ok"
+      },
+      "noop_termination_reason": "collision",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed_closest_approach": {
+        "closest": {
+          "closest_pedestrian": {
+            "center_distance_m": 1.412227,
+            "clearance_m": 0.012227,
+            "pedestrian_index": 0,
+            "pedestrian_position": [
+              10.769671,
+              10.453302
+            ]
+          },
+          "goal_distance_m": 3.797698,
+          "progress_m": -1.426368,
+          "robot_position": [
+            10.675458,
+            9.044221
+          ],
+          "step": 31,
+          "time_s": 3.2
+        },
+        "frames": [
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.599114,
+              "clearance_m": 0.199114,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.875935,
+                10.449616
+              ]
+            },
+            "goal_distance_m": 3.214786,
+            "progress_m": -0.843457,
+            "robot_position": [
+              10.075831,
+              9.065059
+            ],
+            "step": 28,
+            "time_s": 2.9
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.482353,
+              "clearance_m": 0.082353,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.836944,
+                10.43161
+              ]
+            },
+            "goal_distance_m": 3.408071,
+            "progress_m": -1.036742,
+            "robot_position": [
+              10.275756,
+              9.05959
+            ],
+            "step": 29,
+            "time_s": 3.0
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.417927,
+              "clearance_m": 0.017927,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.803023,
+                10.432184
+              ]
+            },
+            "goal_distance_m": 3.60245,
+            "progress_m": -1.231121,
+            "robot_position": [
+              10.475633,
+              9.052571
+            ],
+            "step": 30,
+            "time_s": 3.1
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.412227,
+              "clearance_m": 0.012227,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.769671,
+                10.453302
+              ]
+            },
+            "goal_distance_m": 3.797698,
+            "progress_m": -1.426368,
+            "robot_position": [
+              10.675458,
+              9.044221
+            ],
+            "step": 31,
+            "time_s": 3.2
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.463789,
+              "clearance_m": 0.063789,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.730989,
+                10.492079
+              ]
+            },
+            "goal_distance_m": 3.993507,
+            "progress_m": -1.622177,
+            "robot_position": [
+              10.875265,
+              9.035417
+            ],
+            "step": 32,
+            "time_s": 3.3
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.563907,
+              "clearance_m": 0.163907,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.682352,
+                10.541129
+              ]
+            },
+            "goal_distance_m": 4.189572,
+            "progress_m": -1.818243,
+            "robot_position": [
+              11.075101,
+              9.027342
+            ],
+            "step": 33,
+            "time_s": 3.4
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.647583,
+              "clearance_m": 0.247583,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.38576,
+            "progress_m": -2.014431,
+            "robot_position": [
+              11.274985,
+              9.020513
+            ],
+            "step": 34,
+            "time_s": 3.5
+          }
+        ],
+        "status": "ok"
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_termination_reason": "success",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "orca",
+      "seed": 258,
+      "source_scenario_id": "francis2023_leave_group"
+    },
+    {
+      "closest_approach_delta": {
+        "center_distance_m": -0.010947,
+        "clearance_m": -0.010947,
+        "goal_distance_m": -1.977949,
+        "progress_m": 1.977949,
+        "time_s": -0.9
+      },
+      "noop_closest_approach": {
+        "closest": {
+          "closest_pedestrian": {
+            "center_distance_m": 1.397376,
+            "clearance_m": -0.002624,
+            "pedestrian_index": 2,
+            "pedestrian_position": [
+              12.0,
+              10.5
+            ]
+          },
+          "goal_distance_m": 4.924814,
+          "progress_m": -2.272261,
+          "robot_position": [
+            11.843977,
+            9.111362
+          ],
+          "step": 41,
+          "time_s": 4.2
+        },
+        "frames": [
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.536499,
+              "clearance_m": 0.136499,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.32811,
+            "progress_m": -1.675557,
+            "robot_position": [
+              11.246051,
+              9.161198
+            ],
+            "step": 38,
+            "time_s": 3.9
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.464369,
+              "clearance_m": 0.064369,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.526899,
+            "progress_m": -1.874347,
+            "robot_position": [
+              11.445371,
+              9.144727
+            ],
+            "step": 39,
+            "time_s": 4.0
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.417134,
+              "clearance_m": 0.017134,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.725803,
+            "progress_m": -2.073251,
+            "robot_position": [
+              11.644682,
+              9.128134
+            ],
+            "step": 40,
+            "time_s": 4.1
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.397376,
+              "clearance_m": -0.002624,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.924814,
+            "progress_m": -2.272261,
+            "robot_position": [
+              11.843977,
+              9.111362
+            ],
+            "step": 41,
+            "time_s": 4.2
+          }
+        ],
+        "status": "ok"
+      },
+      "noop_termination_reason": "collision",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed_closest_approach": {
+        "closest": {
+          "closest_pedestrian": {
+            "center_distance_m": 1.386429,
+            "clearance_m": -0.013571,
+            "pedestrian_index": 0,
+            "pedestrian_position": [
+              10.68349,
+              10.219188
+            ]
+          },
+          "goal_distance_m": 2.946865,
+          "progress_m": -0.294312,
+          "robot_position": [
+            9.817506,
+            9.136479
+          ],
+          "step": 32,
+          "time_s": 3.3
+        },
+        "frames": [
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.868656,
+              "clearance_m": 0.468656,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.776724,
+                10.326986
+              ]
+            },
+            "goal_distance_m": 2.348678,
+            "progress_m": 0.303874,
+            "robot_position": [
+              9.233442,
+              9.273345
+            ],
+            "step": 29,
+            "time_s": 3.0
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.673555,
+              "clearance_m": 0.273555,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.734231,
+                10.279923
+              ]
+            },
+            "goal_distance_m": 2.547612,
+            "progress_m": 0.10494,
+            "robot_position": [
+              9.429175,
+              9.232252
+            ],
+            "step": 30,
+            "time_s": 3.1
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.509032,
+              "clearance_m": 0.109032,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.702482,
+                10.24228
+              ]
+            },
+            "goal_distance_m": 2.747061,
+            "progress_m": -0.094509,
+            "robot_position": [
+              9.623952,
+              9.186843
+            ],
+            "step": 31,
+            "time_s": 3.2
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.386429,
+              "clearance_m": -0.013571,
+              "pedestrian_index": 0,
+              "pedestrian_position": [
+                10.68349,
+                10.219188
+              ]
+            },
+            "goal_distance_m": 2.946865,
+            "progress_m": -0.294312,
+            "robot_position": [
+              9.817506,
+              9.136479
+            ],
+            "step": 32,
+            "time_s": 3.3
+          }
+        ],
+        "status": "ok"
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_termination_reason": "collision",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "orca",
+      "seed": 259,
+      "source_scenario_id": "francis2023_leave_group"
+    },
+    {
+      "closest_approach_delta": {
+        "center_distance_m": 0.101211,
+        "clearance_m": 0.101211,
+        "goal_distance_m": 0.492039,
+        "progress_m": -0.492039,
+        "time_s": 0.2
+      },
+      "noop_closest_approach": {
+        "closest": {
+          "closest_pedestrian": {
+            "center_distance_m": 1.423583,
+            "clearance_m": 0.023583,
+            "pedestrian_index": 2,
+            "pedestrian_position": [
+              12.0,
+              10.5
+            ]
+          },
+          "goal_distance_m": 4.851598,
+          "progress_m": -2.641206,
+          "robot_position": [
+            11.766573,
+            9.095685
+          ],
+          "step": 37,
+          "time_s": 3.8
+        },
+        "frames": [
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.569277,
+              "clearance_m": 0.169277,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.253152,
+            "progress_m": -2.04276,
+            "robot_position": [
+              11.170905,
+              9.167622
+            ],
+            "step": 34,
+            "time_s": 3.5
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.49657,
+              "clearance_m": 0.09657,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.45265,
+            "progress_m": -2.242258,
+            "robot_position": [
+              11.369358,
+              9.142793
+            ],
+            "step": 35,
+            "time_s": 3.6
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.447275,
+              "clearance_m": 0.047275,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.652138,
+            "progress_m": -2.441747,
+            "robot_position": [
+              11.567905,
+              9.118733
+            ],
+            "step": 36,
+            "time_s": 3.7
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.423583,
+              "clearance_m": 0.023583,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.851598,
+            "progress_m": -2.641206,
+            "robot_position": [
+              11.766573,
+              9.095685
+            ],
+            "step": 37,
+            "time_s": 3.8
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.426284,
+              "clearance_m": 0.026284,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.050991,
+            "progress_m": -2.840599,
+            "robot_position": [
+              11.965409,
+              9.074136
+            ],
+            "step": 38,
+            "time_s": 3.9
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.454697,
+              "clearance_m": 0.054697,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.250269,
+            "progress_m": -3.039877,
+            "robot_position": [
+              12.164455,
+              9.054629
+            ],
+            "step": 39,
+            "time_s": 4.0
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.507149,
+              "clearance_m": 0.107149,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.449404,
+            "progress_m": -3.239013,
+            "robot_position": [
+              12.363711,
+              9.037396
+            ],
+            "step": 40,
+            "time_s": 4.1
+          }
+        ],
+        "status": "ok"
+      },
+      "noop_termination_reason": "success",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed_closest_approach": {
+        "closest": {
+          "closest_pedestrian": {
+            "center_distance_m": 1.524794,
+            "clearance_m": 0.124794,
+            "pedestrian_index": 2,
+            "pedestrian_position": [
+              12.0,
+              10.5
+            ]
+          },
+          "goal_distance_m": 5.343637,
+          "progress_m": -3.133245,
+          "robot_position": [
+            11.945564,
+            12.023822
+          ],
+          "step": 39,
+          "time_s": 4.0
+        },
+        "frames": [
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.594445,
+              "clearance_m": 0.194445,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.768944,
+            "progress_m": -2.558553,
+            "robot_position": [
+              11.349487,
+              11.955709
+            ],
+            "step": 36,
+            "time_s": 3.7
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.548849,
+              "clearance_m": 0.148849,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 4.960709,
+            "progress_m": -2.750318,
+            "robot_position": [
+              11.547833,
+              11.981377
+            ],
+            "step": 37,
+            "time_s": 3.8
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.525266,
+              "clearance_m": 0.125266,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.152273,
+            "progress_m": -2.941882,
+            "robot_position": [
+              11.746542,
+              12.00406
+            ],
+            "step": 38,
+            "time_s": 3.9
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.524794,
+              "clearance_m": 0.124794,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.343637,
+            "progress_m": -3.133245,
+            "robot_position": [
+              11.945564,
+              12.023822
+            ],
+            "step": 39,
+            "time_s": 4.0
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.547506,
+              "clearance_m": 0.147506,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.534797,
+            "progress_m": -3.324405,
+            "robot_position": [
+              12.144849,
+              12.040712
+            ],
+            "step": 40,
+            "time_s": 4.1
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.592434,
+              "clearance_m": 0.192434,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.725745,
+            "progress_m": -3.515353,
+            "robot_position": [
+              12.344355,
+              12.054756
+            ],
+            "step": 41,
+            "time_s": 4.2
+          },
+          {
+            "closest_pedestrian": {
+              "center_distance_m": 1.657768,
+              "clearance_m": 0.257768,
+              "pedestrian_index": 2,
+              "pedestrian_position": [
+                12.0,
+                10.5
+              ]
+            },
+            "goal_distance_m": 5.916466,
+            "progress_m": -3.706074,
+            "robot_position": [
+              12.544042,
+              12.065954
+            ],
+            "step": 42,
+            "time_s": 4.3
+          }
+        ],
+        "status": "ok"
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_termination_reason": "success",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "orca",
+      "seed": 260,
+      "source_scenario_id": "francis2023_leave_group"
+    }
+  ],
+  "variant_metadata": {
+    "francis2023_leave_group_noop": {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "evidence_boundary": "local_pilot_input_not_benchmark_evidence",
+      "family": "noop",
+      "perturbation_summary": {
+        "family": "noop",
+        "magnitude_m": 0.0
+      },
+      "source_scenario_id": "francis2023_leave_group",
+      "variant_id": "francis2023_leave_group_noop"
+    },
+    "francis2023_leave_group_speed_all_p025": {
+      "benchmark_evidence_status": "eligible_success_evidence_candidate",
+      "evidence_boundary": "local_pilot_input_not_benchmark_evidence",
+      "family": "single_pedestrian_speed_offset",
+      "perturbation_summary": {
+        "abs_speed_delta_m_s": 0.25,
+        "default_baseline_speed_m_s": 0.5,
+        "family": "single_pedestrian_speed_offset",
+        "max_abs_speed_delta_m_s": 0.5,
+        "max_speed_m_s": 2.0,
+        "speed_delta_m_s": 0.25,
+        "target": {
+          "pedestrian_id": null,
+          "selector": "all"
+        }
+      },
+      "source_scenario_id": "francis2023_leave_group",
+      "variant_id": "francis2023_leave_group_speed_all_p025"
+    }
+  }
+}

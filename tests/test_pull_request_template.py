@@ -25,6 +25,7 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
         "## Validation / Proof",
         "## Risks / Rollout",
         "## Docs / Provenance",
+        "## Downstream Propagation",
         "## Follow-Up Issues",
         "## Reviewer Notes",
     ):
@@ -34,3 +35,10 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
     assert "Evidence that the change works here:" in text
     assert "Deferred work:" in text
     assert "Issues opened for follow-up:" in text
+    assert "Parent issue updated (yes/no/NA):" in text
+    assert "Claim map / benchmark report updated (yes/no/NA):" in text
+    assert "Leaderboard / artifact catalog updated (yes/no/NA):" in text
+    assert "Registry or config index updated (yes/no/NA):" in text
+    assert "Context index / memory note updated (yes/no/NA):" in text
+    assert "Follow-up issue opened for deferred propagation (yes/no/NA):" in text
+    assert "Not applicable because:" in text

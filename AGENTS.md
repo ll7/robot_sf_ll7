@@ -278,6 +278,12 @@ resolving lint or test failures locally before requesting review.
   `[ -d output ] && git status --ignored --short -uall output`. Decide whether each output is
   disposable, should remain ignored, should be represented by a tracked manifest or registry entry,
   or must be uploaded to a durable artifact store before the branch is handed off.
+- Fill the PR template's `Downstream Propagation` section for evidence-producing PRs. Check whether
+  the parent issue, claim map or benchmark report, leaderboard or artifact catalog, registry or
+  config index, context index or memory note, and deferred follow-up issue need updates. For
+  low-risk or not-applicable changes, state the reason explicitly instead of deleting the section.
+  PR #2044 is a recent small example: it promoted a compact trace-viewer screenshot and updated the
+  context index/catalog so the evidence remained discoverable after worktree cleanup.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

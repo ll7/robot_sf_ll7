@@ -39,10 +39,11 @@ What changed, in one or two sentences.
 ## Downstream Propagation
 - Parent issue updated (yes/no/NA):
 - Claim map / benchmark report updated (yes/no/NA):
+- Leaderboard / artifact catalog updated (yes/no/NA):
 - Registry or config index updated (yes/no/NA):
 - Context index / memory note updated (yes/no/NA):
 - Follow-up issue opened for deferred propagation (yes/no/NA):
-- Not-applicable rationale:
+- Not applicable because:
 
 For benchmark, registry, claim-map, or paper-facing changes, explicitly say when downstream
 propagation is deferred and name the issue or note that will carry it.

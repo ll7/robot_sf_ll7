@@ -1,4 +1,4 @@
-# Issue #2013 Backend Adapter Contract
+# Issue #2013 Backend Adapter Contract (2026-06-01)
 
 Date: 2026-06-01
 

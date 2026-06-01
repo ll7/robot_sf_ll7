@@ -23,7 +23,7 @@ _CRITICALITY_SUMMARY_SCHEMA_PATH = (
 )
 
 
-def _sum(values: list[float]) -> float:
+def _mean(values: list[float]) -> float:
     """Return the arithmetic mean of a non-empty list."""
     return sum(values) / len(values)
 
@@ -174,7 +174,7 @@ def _aggregate_subset(pair_rows: list[dict[str, Any]]) -> dict[str, Any]:
         "pairs": len(pair_rows),
         "row_status_counts": combined_status_counts,
         "mean_deltas_completed_pairs": {
-            field_name: _sum(values)
+            field_name: _mean(values)
             for field_name, values in sorted(delta_values.items())
             if values
         },
@@ -258,13 +258,14 @@ def build_criticality_summary_from_pilot(  # noqa: PLR0913
             )
             if not noop_ids:
                 for variant_id in perturbed_ids:
+                    perturbed_meta = scenario_metadata.get(variant_id, {})
                     pair_rows.append(
                         {
                             "planner": planner_name,
                             "source_scenario_id": source_scenario_id,
                             "noop_variant_id": None,
                             "perturbed_variant_id": variant_id,
-                            "perturbed_family": "unknown",
+                            "perturbed_family": str(perturbed_meta.get("family") or "unknown"),
                             "seed": None,
                             "pair_status": "missing_noop",
                             "noop_status": "missing",
@@ -479,7 +480,7 @@ def build_pair_summary_with_statuses(
         "pairs": len(pair_rows),
         "row_status_counts": combined,
         "mean_deltas_completed_pairs": {
-            field_name: _sum(values)
+            field_name: _mean(values)
             for field_name, values in sorted(delta_values.items())
             if values
         },

@@ -247,7 +247,11 @@
           "minLength": 1
         },
         "noop_variant_id": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
         },
         "perturbed_variant_id": {
           "type": "string",
@@ -258,7 +262,10 @@
           "minLength": 1
         },
         "seed": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0
         },
         "pair_status": {
@@ -277,16 +284,28 @@
           "minLength": 1
         },
         "success_delta": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "collision_delta": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "timeout_delta": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "min_distance_delta": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "noop": {
           "type": "object"
@@ -311,6 +330,7 @@
         },
         "row_status_counts": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "completed",
             "invalid",

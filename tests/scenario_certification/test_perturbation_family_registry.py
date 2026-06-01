@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from robot_sf.scenario_certification import (
@@ -68,7 +70,7 @@ def test_perturbation_family_unknown_raises() -> None:
 def test_perturbation_family_is_immutable() -> None:
     """PerturbationFamily must be frozen for registry safety."""
     family = perturbation_family("robot_route_offset")
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         family.name = "altered"  # type: ignore[misc]
 
 

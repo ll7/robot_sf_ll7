@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -260,7 +261,7 @@ def test_build_criticality_summary_records_missing_noop() -> None:
             "source_scenario_id": "demo",
             "noop_variant_id": None,
             "perturbed_variant_id": "demo_offset",
-            "perturbed_family": "unknown",
+            "perturbed_family": "robot_route_offset",
             "seed": None,
             "pair_status": "missing_noop",
             "noop_status": "missing",
@@ -331,7 +332,7 @@ def test_criticality_summary_is_immutable() -> None:
             "mean_deltas_completed_pairs": {},
         },
     )
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         summary.horizon = 100  # type: ignore[misc]
 
 
@@ -500,9 +501,7 @@ def test_build_from_compact_evidence_does_not_require_raw_output_paths(
     payload = criticality_summary_to_dict(summary)
     local_artifact_boundary = payload["materialization"].get("local_artifact_boundary")
     assert local_artifact_boundary is not None
-    assert "output/" not in str(payload.get("scenario_matrix_path", ""))
-    if "scenario_matrix_path" in payload.get("materialization", {}):
-        del payload["materialization"]["scenario_matrix_path"]
+    assert "output/" not in str(payload.get("materialization", {}).get("scenario_matrix_path", ""))
 
 
 def test_build_from_compact_evidence_sets_claim_boundary() -> None:

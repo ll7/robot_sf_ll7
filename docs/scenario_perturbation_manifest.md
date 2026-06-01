@@ -183,10 +183,16 @@ validate_criticality_summary(payload)
 Or wrap an existing compact #1610 evidence payload (without raw output paths):
 
 ```python
+import json
+from pathlib import Path
+
 from robot_sf.scenario_certification import (
     build_criticality_summary_from_compact_evidence,
+    criticality_summary_to_dict,
+    validate_criticality_summary,
 )
 
+path = Path("docs/context/evidence/example/summary.json")
 evidence = json.loads(path.read_text())
 summary = build_criticality_summary_from_compact_evidence(evidence)
 payload = criticality_summary_to_dict(summary)

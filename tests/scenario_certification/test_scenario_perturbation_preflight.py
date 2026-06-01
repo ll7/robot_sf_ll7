@@ -241,6 +241,57 @@ def _write_wait_duration_manifest(
     return path
 
 
+def _write_trajectory_waypoint_manifest(
+    path: Path,
+    *,
+    scenario_id: str,
+    pedestrian_id: str = "h1",
+    dx_m: float = 0.25,
+    dy_m: float = 0.0,
+    max_magnitude_m: float = 0.5,
+    manifest_cap_m: float = 0.5,
+) -> Path:
+    """Write a perturbation manifest that offsets single-pedestrian trajectories."""
+    payload = {
+        "schema_version": PERTURBATION_MANIFEST_SCHEMA_VERSION,
+        "manifest_id": "test_trajectory_waypoint_perturbation_manifest",
+        "scenario_config": "configs/scenarios/classic_interactions_francis2023.yaml",
+        "seed_controls": {
+            "baseline_seeds": [240],
+            "replay_seed_policy": "explicit",
+        },
+        "validity": {
+            "require_scenario_certification": True,
+            "max_route_offset_m": 0.5,
+            "max_single_pedestrian_trajectory_waypoint_offset_m": manifest_cap_m,
+            "invalid_variant_evidence_policy": "exclude_from_success_evidence",
+        },
+        "variants": [
+            {
+                "variant_id": f"{scenario_id}_noop",
+                "scenario_id": scenario_id,
+                "family": "noop",
+                "seeds": [240],
+            },
+            {
+                "variant_id": f"{scenario_id}_trajectory_waypoint_offset",
+                "scenario_id": scenario_id,
+                "family": "single_pedestrian_trajectory_waypoint_offset",
+                "seeds": [240],
+                "parameters": {
+                    "dx_m": dx_m,
+                    "dy_m": dy_m,
+                    "max_magnitude_m": max_magnitude_m,
+                    "pedestrian_id": pedestrian_id,
+                    "waypoint_selector": "all",
+                },
+            },
+        ],
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def test_manifest_schema_accepts_noop_and_bounded_route_offset(tmp_path: Path) -> None:
     """The public schema should document the first supported perturbation surface."""
     manifest_path = _write_manifest(tmp_path / "perturbations.yaml")
@@ -384,6 +435,47 @@ def test_manifest_schema_requires_manifest_wait_duration_cap_for_wait_duration_o
         jsonschema.validate(manifest, schema)
 
 
+def test_manifest_schema_accepts_bounded_single_pedestrian_trajectory_waypoint_offset(
+    tmp_path: Path,
+) -> None:
+    """The public schema should expose the single-pedestrian trajectory family."""
+    manifest_path = _write_trajectory_waypoint_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    jsonschema.validate(manifest, schema)
+
+
+def test_manifest_schema_requires_manifest_trajectory_waypoint_cap(
+    tmp_path: Path,
+) -> None:
+    """Trajectory waypoint manifests should carry variant-local and policy-level bounds."""
+    manifest_path = _write_trajectory_waypoint_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    del manifest["validity"]["max_single_pedestrian_trajectory_waypoint_offset_m"]
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    with pytest.raises(
+        jsonschema.ValidationError,
+        match="max_single_pedestrian_trajectory_waypoint_offset_m",
+    ):
+        jsonschema.validate(manifest, schema)
+
+
 def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None:
     """Family-specific parameter schemas should catch typo-shaped irrelevant fields."""
     schema = json.loads(
@@ -424,6 +516,15 @@ def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None
     wait_manifest["variants"][1]["parameters"]["speed_delta_m_s"] = 0.25
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(wait_manifest, schema)
+
+    trajectory_manifest_path = _write_trajectory_waypoint_manifest(
+        tmp_path / "trajectory_perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+    trajectory_manifest = yaml.safe_load(trajectory_manifest_path.read_text(encoding="utf-8"))
+    trajectory_manifest["variants"][1]["parameters"]["wait_delta_s"] = 0.25
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(trajectory_manifest, schema)
 
 
 def test_preflight_rejects_manifest_that_violates_public_schema(tmp_path: Path) -> None:
@@ -778,6 +879,97 @@ def test_preflight_excludes_negative_wait_duration_result(tmp_path: Path) -> Non
     ]
 
 
+def test_preflight_certifies_bounded_single_pedestrian_trajectory_waypoint_offset(
+    tmp_path: Path,
+) -> None:
+    """Single-pedestrian trajectory waypoint offsets should certify when target exists."""
+    manifest_path = _write_trajectory_waypoint_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    assert [result.variant_id for result in report.results] == [
+        "francis2023_intersection_wait_noop",
+        "francis2023_intersection_wait_trajectory_waypoint_offset",
+    ]
+    assert {result.validity_status for result in report.results} == {"valid"}
+    assert report.results[1].family == "single_pedestrian_trajectory_waypoint_offset"
+    assert report.results[1].perturbation_summary["dx_m"] == pytest.approx(0.25)
+    assert report.results[1].perturbation_summary["target"]["pedestrian_id"] == "h1"
+
+
+def test_preflight_excludes_trajectory_waypoint_offset_without_trajectory(
+    tmp_path: Path,
+) -> None:
+    """A trajectory perturbation must fail closed for role-only single pedestrians."""
+    manifest_path = _write_trajectory_waypoint_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+        pedestrian_id="h3",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.family == "single_pedestrian_trajectory_waypoint_offset"
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_trajectory_waypoint_offset selected pedestrian "
+        "'h3' has no trajectory"
+    ]
+
+
+def test_preflight_excludes_unbounded_trajectory_waypoint_offset_before_certification(
+    tmp_path: Path,
+) -> None:
+    """Out-of-bounds trajectory magnitudes should fail closed without certification."""
+    manifest_path = _write_trajectory_waypoint_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+        dx_m=0.75,
+        max_magnitude_m=0.5,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "single_pedestrian_trajectory_waypoint_offset magnitude 0.750000 m exceeds "
+        "variant max_magnitude_m 0.500000 m"
+    ]
+
+
+def test_preflight_excludes_trajectory_waypoint_offset_outside_map_bounds(
+    tmp_path: Path,
+) -> None:
+    """Trajectory waypoint offsets must fail closed when updated points leave the map."""
+    manifest_path = _write_trajectory_waypoint_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+        dx_m=1000.0,
+        max_magnitude_m=2000.0,
+        manifest_cap_m=2000.0,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_trajectory_waypoint_offset would move "
+        "pedestrian 'h1' trajectory waypoint 0 outside map bounds"
+    ]
+
+
 def test_preflight_excludes_unbounded_route_offset_before_certification(tmp_path: Path) -> None:
     """Out-of-bounds perturbations should fail closed without becoming benchmark evidence."""
     manifest_path = _write_manifest(tmp_path / "perturbations.yaml", max_route_offset_m=0.2)
@@ -1070,6 +1262,50 @@ def test_materialize_pilot_matrix_writes_wait_duration_overrides(tmp_path: Path)
         ped.id: [rule.wait_s for rule in ped.wait_at or []] for ped in offset_map.single_pedestrians
     }
     assert waits["h1"] == [pytest.approx(2.5)]
+
+
+def test_materialize_pilot_matrix_writes_trajectory_waypoint_overrides(tmp_path: Path) -> None:
+    """Trajectory variants should preserve single-ped entries while updating trajectory points."""
+    manifest_path = _write_trajectory_waypoint_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_intersection_wait",
+    )
+
+    materialized = materialize_perturbation_pilot_matrix(
+        manifest_path,
+        output_dir=tmp_path / "pilot",
+        seed_limit=1,
+    )
+
+    assert materialized.included_variants == (
+        "francis2023_intersection_wait_noop",
+        "francis2023_intersection_wait_trajectory_waypoint_offset",
+    )
+    matrix_path = Path(materialized.scenario_matrix_path)
+    generated_scenarios = load_scenarios(matrix_path)
+    offset_scenario = generated_scenarios[1]
+    overrides = {entry["id"]: entry for entry in offset_scenario["single_pedestrians"]}
+    assert overrides["h1"]["note"] == "intersection wait"
+    assert overrides["h1"]["goal"] is None
+    assert "goal_poi" not in overrides["h1"]
+    assert "trajectory_poi" not in overrides["h1"]
+    assert overrides["h1"]["trajectory"] == [
+        [pytest.approx(14.25), pytest.approx(17.5)],
+        [pytest.approx(14.25), pytest.approx(15.0)],
+        [pytest.approx(14.25), pytest.approx(4.0)],
+    ]
+
+    offset_config = build_robot_config_from_scenario(
+        offset_scenario,
+        scenario_path=matrix_path,
+    )
+    _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
+    trajectories = {ped.id: ped.trajectory for ped in offset_map.single_pedestrians}
+    assert trajectories["h1"] == [
+        (pytest.approx(14.25), pytest.approx(17.5)),
+        (pytest.approx(14.25), pytest.approx(15.0)),
+        (pytest.approx(14.25), pytest.approx(4.0)),
+    ]
 
 
 def test_materialize_pilot_matrix_skips_preflight_excluded_variants(tmp_path: Path) -> None:

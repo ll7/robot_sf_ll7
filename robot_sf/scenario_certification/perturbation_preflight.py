@@ -414,6 +414,7 @@ def _normalize_variant(variant: Any) -> Mapping[str, Any]:
         "single_pedestrian_start_delay_offset",
         "single_pedestrian_speed_offset",
         "single_pedestrian_wait_duration_offset",
+        "single_pedestrian_trajectory_waypoint_offset",
     }:
         raise ValueError(f"unsupported perturbation family: {family}")
     return variant
@@ -455,6 +456,8 @@ def _validate_perturbation_bounds(
         return _validate_single_pedestrian_speed_offset_bounds(variant, manifest=manifest)
     if family == "single_pedestrian_wait_duration_offset":
         return _validate_wait_duration_offset_bounds(variant, manifest=manifest)
+    if family == "single_pedestrian_trajectory_waypoint_offset":
+        return _validate_trajectory_waypoint_offset_bounds(variant, manifest=manifest)
 
     dx = _finite_float(parameters.get("dx_m", 0.0), field_name="parameters.dx_m")
     dy = _finite_float(parameters.get("dy_m", 0.0), field_name="parameters.dy_m")
@@ -477,6 +480,50 @@ def _validate_perturbation_bounds(
         "target": {
             "spawn_id": parameters.get("spawn_id"),
             "goal_id": parameters.get("goal_id"),
+            "waypoint_selector": parameters.get("waypoint_selector", "all"),
+        },
+    }
+    if magnitude > bound:
+        return [
+            f"{family} magnitude {magnitude:.6f} m exceeds variant max_magnitude_m {bound:.6f} m"
+        ], summary
+    return [], summary
+
+
+def _validate_trajectory_waypoint_offset_bounds(
+    variant: Mapping[str, Any],
+    *,
+    manifest: Mapping[str, Any],
+) -> tuple[list[str], dict[str, Any]]:
+    """Validate bounded single-pedestrian trajectory waypoint perturbations.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Fail-closed reasons and perturbation summary.
+    """
+    family = str(variant["family"])
+    parameters = variant.get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ValueError(f"{family} variants require a parameters mapping")
+    dx = _finite_float(parameters.get("dx_m"), field_name="parameters.dx_m")
+    dy = _finite_float(parameters.get("dy_m"), field_name="parameters.dy_m")
+    magnitude = math.hypot(dx, dy)
+    variant_max = _positive_float(
+        parameters.get("max_magnitude_m"),
+        field_name="parameters.max_magnitude_m",
+    )
+    manifest_max = _positive_float(
+        manifest["validity"].get("max_single_pedestrian_trajectory_waypoint_offset_m"),
+        field_name="validity.max_single_pedestrian_trajectory_waypoint_offset_m",
+    )
+    bound = min(variant_max, manifest_max)
+    summary = {
+        "family": family,
+        "dx_m": dx,
+        "dy_m": dy,
+        "magnitude_m": magnitude,
+        "max_magnitude_m": bound,
+        "target": {
+            "pedestrian_id": parameters.get("pedestrian_id"),
             "waypoint_selector": parameters.get("waypoint_selector", "all"),
         },
     }
@@ -681,6 +728,13 @@ def _certify_variant(
             wait_delta_s=float(perturbation_summary["wait_delta_s"]),
             parameters=variant.get("parameters", {}),
         )
+    elif variant["family"] == "single_pedestrian_trajectory_waypoint_offset":
+        _apply_trajectory_waypoint_offset(
+            perturbed_map,
+            dx=float(perturbation_summary["dx_m"]),
+            dy=float(perturbation_summary["dy_m"]),
+            parameters=variant.get("parameters", {}),
+        )
     else:
         _apply_route_offset(
             _routes_for_family(perturbed_map, str(variant["family"])),
@@ -764,6 +818,13 @@ def _materialize_variant_scenario(
         )
     elif variant["family"] == "single_pedestrian_wait_duration_offset":
         scenario["single_pedestrians"] = _single_pedestrian_overrides_for_wait_duration(
+            variant,
+            scenario=scenario,
+            scenario_config=scenario_config,
+            perturbation_summary=result.perturbation_summary,
+        )
+    elif variant["family"] == "single_pedestrian_trajectory_waypoint_offset":
+        scenario["single_pedestrians"] = _single_pedestrian_overrides_for_trajectory_waypoint(
             variant,
             scenario=scenario,
             scenario_config=scenario_config,
@@ -1013,6 +1074,94 @@ def _apply_wait_duration_offset(
             rule.wait_s = float(payload["wait_s"])
 
 
+def _select_trajectory_waypoint_pedestrians(pedestrians: list[Any], parameters: Any) -> list[Any]:
+    """Return the explicit trajectory pedestrian targeted by a waypoint-offset perturbation."""
+    family = "single_pedestrian_trajectory_waypoint_offset"
+    if not isinstance(parameters, Mapping):
+        raise ValueError("parameters must be a mapping")
+    selector = str(parameters.get("waypoint_selector", "all"))
+    if selector != "all":
+        raise ValueError(f"{family} supports waypoint_selector='all' only")
+    pedestrian_id = parameters.get("pedestrian_id")
+    if not isinstance(pedestrian_id, str) or not pedestrian_id.strip():
+        raise ValueError(f"{family} requires parameters.pedestrian_id")
+    selected = [ped for ped in pedestrians if str(ped.id) == pedestrian_id]
+    if not selected:
+        raise ValueError(f"{family} selected no single pedestrians")
+    for ped in selected:
+        if not getattr(ped, "trajectory", None):
+            raise ValueError(f"{family} selected pedestrian {ped.id!r} has no trajectory")
+    return selected
+
+
+def _offset_trajectory_points(
+    ped: Any,
+    *,
+    dx: float,
+    dy: float,
+    map_width: float,
+    map_height: float,
+) -> list[tuple[float, float]]:
+    """Return trajectory points after a bounded offset, failing closed outside map bounds."""
+    updated: list[tuple[float, float]] = []
+    for idx, (x, y) in enumerate(ped.trajectory or []):
+        point = (float(x) + float(dx), float(y) + float(dy))
+        if not (0.0 <= point[0] <= map_width and 0.0 <= point[1] <= map_height):
+            raise ValueError(
+                "single_pedestrian_trajectory_waypoint_offset would move "
+                f"pedestrian {ped.id!r} trajectory waypoint {idx} outside map bounds"
+            )
+        updated.append(point)
+    return updated
+
+
+def _trajectory_payloads_for_selected_pedestrians(
+    pedestrians: list[Any],
+    *,
+    dx: float,
+    dy: float,
+    parameters: Any,
+    map_width: float,
+    map_height: float,
+) -> dict[str, list[tuple[float, float]]]:
+    """Return updated trajectory payloads for selected pedestrians."""
+    selected = _select_trajectory_waypoint_pedestrians(pedestrians, parameters)
+    return {
+        str(ped.id): _offset_trajectory_points(
+            ped,
+            dx=dx,
+            dy=dy,
+            map_width=map_width,
+            map_height=map_height,
+        )
+        for ped in selected
+    }
+
+
+def _apply_trajectory_waypoint_offset(
+    map_def: Any,
+    *,
+    dx: float,
+    dy: float,
+    parameters: Any,
+) -> None:
+    """Offset selected single-pedestrian trajectory waypoints in place."""
+    trajectories = _trajectory_payloads_for_selected_pedestrians(
+        list(map_def.single_pedestrians),
+        dx=dx,
+        dy=dy,
+        parameters=parameters,
+        map_width=float(map_def.width),
+        map_height=float(map_def.height),
+    )
+    for ped in map_def.single_pedestrians:
+        updated = trajectories.get(str(ped.id))
+        if updated is None:
+            continue
+        ped.goal = None
+        ped.trajectory = updated
+
+
 def _single_pedestrian_overrides_for_start_delay(
     variant: Mapping[str, Any],
     *,
@@ -1121,6 +1270,50 @@ def _single_pedestrian_overrides_for_wait_duration(
             entry["wait_at"] = waits_by_pedestrian[ped_id]
     for ped_id in sorted(selected_ids - seen_ids):
         overrides.append({"id": ped_id, "wait_at": waits_by_pedestrian[ped_id]})
+    return overrides
+
+
+def _single_pedestrian_overrides_for_trajectory_waypoint(
+    variant: Mapping[str, Any],
+    *,
+    scenario: Mapping[str, Any],
+    scenario_config: Path,
+    perturbation_summary: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Return scenario overrides with adjusted single-pedestrian trajectory points."""
+    config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_config)
+    if not config.map_pool.map_defs:
+        raise ValueError("scenario map pool is empty")
+    _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    trajectories = _trajectory_payloads_for_selected_pedestrians(
+        list(map_def.single_pedestrians),
+        dx=float(perturbation_summary["dx_m"]),
+        dy=float(perturbation_summary["dy_m"]),
+        parameters=variant.get("parameters", {}),
+        map_width=float(map_def.width),
+        map_height=float(map_def.height),
+    )
+    selected_ids = set(trajectories)
+
+    raw_overrides = scenario.get("single_pedestrians")
+    overrides = [dict(item) for item in raw_overrides] if isinstance(raw_overrides, list) else []
+    seen_ids: set[str] = set()
+    for entry in overrides:
+        ped_id = str(entry.get("id") or "")
+        seen_ids.add(ped_id)
+        if ped_id in selected_ids:
+            entry["trajectory"] = [[float(x), float(y)] for x, y in trajectories[ped_id]]
+            entry["goal"] = None
+            entry.pop("goal_poi", None)
+            entry.pop("trajectory_poi", None)
+    for ped_id in sorted(selected_ids - seen_ids):
+        overrides.append(
+            {
+                "id": ped_id,
+                "goal": None,
+                "trajectory": [[float(x), float(y)] for x, y in trajectories[ped_id]],
+            }
+        )
     return overrides
 
 

@@ -186,6 +186,10 @@ Treat it as a reviewer-lens pass, not another full test suite:
   random-state isolation, static Gymnasium spaces, and per-step output size.
 - skill or agent workflow changes: read changed text as executable instructions and preserve
   selected issue sets, scope boundaries, and evidence destinations.
+- reusable agent workflow lessons: use `agent-workflow-capture` to write private candidates under
+  `.git/codex-agent-runs/notes/inbox/`; use `agent-workflow-promotion` only when evidence supports
+  a small durable repo change. Do not promote private logs, local paths, or weak observations, and
+  do not relax benchmark or paper-facing proof rules.
 
 ### 7. Open the PR
 

@@ -1,6 +1,6 @@
 # Issue #1963 Adversarial Parent Closeout
 
-Issue: [#1963](https://github.com/ll7/robot_sf_ll7/issues/1963)  
+Issue: [#1963](https://github.com/ll7/robot_sf_ll7/issues/1963)
 Parent: [#1488](https://github.com/ll7/robot_sf_ll7/issues/1488)
 
 ## Closeout Decision

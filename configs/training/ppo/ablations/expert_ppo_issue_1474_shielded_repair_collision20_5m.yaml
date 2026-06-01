@@ -1,14 +1,13 @@
 # Issue #1474: shielded PPO repair, collision-penalty-only fine-tune.
 #
 # Scope:
-# - Resume from the BR-06 v3 PPO checkpoint frozen by the shielded-PPO launch packet.
+# - Retrain with the BR-06 v3 PPO config shape frozen by the shielded-PPO launch packet.
 # - Keep the BR-06 v3 architecture, observation contract, scenario set, and seed strategy.
 # - Change exactly one reward knob for this training run:
 #   env_factory_kwargs.reward_kwargs.weights.collision = -20.0
 # - Runtime guarded evaluation remains a separate stop-gated step after this checkpoint trains.
 policy_id: ppo_expert_issue_1474_shielded_repair_collision20_5m
 scenario_config: ../../../scenarios/classic_interactions_francis2023.yaml
-resume_model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 num_envs: auto
 worker_mode: auto
 seeds:

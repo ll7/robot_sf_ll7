@@ -103,8 +103,8 @@ config = load_expert_training_config(sys.argv[1])
 weights = config.env_factory_kwargs.get("reward_kwargs", {}).get("weights", {})
 if weights.get("collision") != -20.0:
     raise SystemExit("expected env_factory_kwargs.reward_kwargs.weights.collision == -20.0")
-if config.resume_model_id != "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200":
-    raise SystemExit(f"unexpected resume_model_id: {config.resume_model_id!r}")
+if config.resume_model_id:
+    raise SystemExit(f"expected retrain config without resume_model_id, got {config.resume_model_id!r}")
 PY
 
 mkdir -p output/slurm

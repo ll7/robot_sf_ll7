@@ -406,7 +406,12 @@ def _normalize_variant(variant: Any) -> Mapping[str, Any]:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"variant.{field_name} must be a non-empty string")
     family = str(variant["family"])
-    if family not in {"noop", "robot_route_offset", "pedestrian_route_offset"}:
+    if family not in {
+        "noop",
+        "robot_route_offset",
+        "pedestrian_route_offset",
+        "single_pedestrian_start_delay_offset",
+    }:
         raise ValueError(f"unsupported perturbation family: {family}")
     return variant
 
@@ -441,6 +446,9 @@ def _validate_perturbation_bounds(
     parameters = variant.get("parameters")
     if not isinstance(parameters, Mapping):
         raise ValueError(f"{family} variants require a parameters mapping")
+    if family == "single_pedestrian_start_delay_offset":
+        return _validate_start_delay_offset_bounds(variant, manifest=manifest)
+
     dx = _finite_float(parameters.get("dx_m", 0.0), field_name="parameters.dx_m")
     dy = _finite_float(parameters.get("dy_m", 0.0), field_name="parameters.dy_m")
     magnitude = math.hypot(dx, dy)
@@ -472,6 +480,49 @@ def _validate_perturbation_bounds(
     return [], summary
 
 
+def _validate_start_delay_offset_bounds(
+    variant: Mapping[str, Any],
+    *,
+    manifest: Mapping[str, Any],
+) -> tuple[list[str], dict[str, Any]]:
+    """Validate bounded pedestrian start-delay perturbations.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Fail-closed reasons and perturbation summary.
+    """
+    family = str(variant["family"])
+    parameters = variant.get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ValueError(f"{family} variants require a parameters mapping")
+    dt_s = _finite_float(parameters.get("dt_s"), field_name="parameters.dt_s")
+    variant_max = _positive_float(
+        parameters.get("max_abs_dt_s"),
+        field_name="parameters.max_abs_dt_s",
+    )
+    manifest_max_raw = manifest["validity"].get("max_start_delay_offset_s")
+    manifest_max = _positive_float(
+        manifest_max_raw,
+        field_name="validity.max_start_delay_offset_s",
+    )
+    bound = min(variant_max, manifest_max)
+    abs_dt_s = abs(dt_s)
+    summary = {
+        "family": family,
+        "dt_s": dt_s,
+        "abs_dt_s": abs_dt_s,
+        "max_abs_dt_s": bound,
+        "target": {
+            "pedestrian_id": parameters.get("pedestrian_id"),
+            "selector": parameters.get("pedestrian_selector", "all"),
+        },
+    }
+    if abs_dt_s > bound:
+        return [
+            f"{family} abs_dt_s {abs_dt_s:.6f} s exceeds variant max_abs_dt_s {bound:.6f} s"
+        ], summary
+    return [], summary
+
+
 def _certify_variant(
     variant: Mapping[str, Any],
     *,
@@ -493,13 +544,20 @@ def _certify_variant(
         raise ValueError("scenario map pool is empty")
     _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
     perturbed_map = deepcopy(map_def)
-    _apply_route_offset(
-        _routes_for_family(perturbed_map, str(variant["family"])),
-        dx=float(perturbation_summary["dx_m"]),
-        dy=float(perturbation_summary["dy_m"]),
-        parameters=variant.get("parameters", {}),
-        family=str(variant["family"]),
-    )
+    if variant["family"] == "single_pedestrian_start_delay_offset":
+        _apply_start_delay_offset(
+            perturbed_map.single_pedestrians,
+            dt_s=float(perturbation_summary["dt_s"]),
+            parameters=variant.get("parameters", {}),
+        )
+    else:
+        _apply_route_offset(
+            _routes_for_family(perturbed_map, str(variant["family"])),
+            dx=float(perturbation_summary["dx_m"]),
+            dy=float(perturbation_summary["dy_m"]),
+            parameters=variant.get("parameters", {}),
+            family=str(variant["family"]),
+        )
     perturbed_map.__post_init__()
     scenario["metadata"] = _variant_metadata(
         scenario.get("metadata"), variant, perturbation_summary
@@ -559,6 +617,13 @@ def _materialize_variant_scenario(
             route_path=route_path,
         )
         scenario["route_overrides_file"] = route_path.relative_to(matrix_path.parent).as_posix()
+    elif variant["family"] == "single_pedestrian_start_delay_offset":
+        scenario["single_pedestrians"] = _single_pedestrian_overrides_for_start_delay(
+            variant,
+            scenario=scenario,
+            scenario_config=scenario_config,
+            perturbation_summary=result.perturbation_summary,
+        )
     return scenario
 
 
@@ -648,6 +713,80 @@ def _routes_for_family(map_def: Any, family: str) -> list[GlobalRoute]:
     if family == "pedestrian_route_offset":
         return map_def.ped_routes
     raise ValueError(f"unsupported route-offset family: {family}")
+
+
+def _select_single_pedestrians(pedestrians: list[Any], parameters: Any) -> list[Any]:
+    """Return the single-pedestrian definitions targeted by a timing perturbation."""
+    if not isinstance(parameters, Mapping):
+        raise ValueError("parameters must be a mapping")
+    selector = str(parameters.get("pedestrian_selector", "all"))
+    if selector != "all":
+        raise ValueError("single_pedestrian_start_delay_offset supports selector='all' only")
+    pedestrian_id = parameters.get("pedestrian_id")
+    selected = [
+        ped for ped in pedestrians if pedestrian_id is None or str(ped.id) == str(pedestrian_id)
+    ]
+    if not selected:
+        raise ValueError("single_pedestrian_start_delay_offset selected no single pedestrians")
+    return selected
+
+
+def _apply_start_delay_offset(
+    pedestrians: list[Any],
+    *,
+    dt_s: float,
+    parameters: Any,
+) -> None:
+    """Offset selected single-pedestrian start delays in place."""
+    selected = _select_single_pedestrians(pedestrians, parameters)
+    for ped in selected:
+        updated = float(ped.start_delay_s) + float(dt_s)
+        if updated < 0.0:
+            raise ValueError(
+                "single_pedestrian_start_delay_offset would make "
+                f"pedestrian {ped.id!r} start_delay_s negative"
+            )
+        ped.start_delay_s = updated
+
+
+def _single_pedestrian_overrides_for_start_delay(
+    variant: Mapping[str, Any],
+    *,
+    scenario: Mapping[str, Any],
+    scenario_config: Path,
+    perturbation_summary: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Return scenario overrides with adjusted single-pedestrian start delays."""
+    config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_config)
+    if not config.map_pool.map_defs:
+        raise ValueError("scenario map pool is empty")
+    _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    selected = _select_single_pedestrians(
+        list(map_def.single_pedestrians),
+        variant.get("parameters", {}),
+    )
+    selected_ids = {str(ped.id) for ped in selected}
+    delays = {}
+    for ped in selected:
+        updated = float(ped.start_delay_s) + float(perturbation_summary["dt_s"])
+        if updated < 0.0:
+            raise ValueError(
+                "single_pedestrian_start_delay_offset would make "
+                f"pedestrian {ped.id!r} start_delay_s negative"
+            )
+        delays[str(ped.id)] = updated
+
+    raw_overrides = scenario.get("single_pedestrians")
+    overrides = [dict(item) for item in raw_overrides] if isinstance(raw_overrides, list) else []
+    seen_ids: set[str] = set()
+    for entry in overrides:
+        ped_id = str(entry.get("id") or "")
+        seen_ids.add(ped_id)
+        if ped_id in selected_ids:
+            entry["start_delay_s"] = delays[ped_id]
+    for ped_id in sorted(selected_ids - seen_ids):
+        overrides.append({"id": ped_id, "start_delay_s": delays[ped_id]})
+    return overrides
 
 
 def _route_to_payload(route: GlobalRoute) -> dict[str, Any]:

@@ -1,0 +1,84 @@
+# Issue #1941 follow-up perturbation manifest for parent issue #1610.
+#
+# This manifest adds exactly one timing perturbation family for single-pedestrian Francis
+# scenarios. It is a validity-preflight and local-pilot input only; it does not make
+# benchmark-strength or paper-facing claims.
+
+schema_version: scenario_perturbation_manifest.v1
+manifest_id: issue_1610_ped_timing_phase_pilot_v1
+description: >-
+  Bounded #1610 follow-up manifest that holds the #1937 planner/seed/horizon pilot boundary
+  fixed while adding single-pedestrian start-delay offsets as the only new perturbation family.
+scenario_config: ../classic_interactions_francis2023.yaml
+seed_controls:
+  baseline_seeds: [112, 113, 115, 116, 240, 241, 242]
+  replay_seed_policy: explicit
+  source: docs/context/evidence/issue_1608_seed_sensitivity_2026-05-30/scenario_seed_sensitivity.csv
+validity:
+  require_scenario_certification: true
+  max_route_offset_m: 0.5
+  max_start_delay_offset_s: 1.0
+  invalid_variant_evidence_policy: exclude_from_success_evidence
+  notes: >-
+    The v1 timing preflight supports no-op baselines plus bounded start-delay offsets for
+    scenarios that expose single_pedestrians. Route-only pedestrian scenarios must fail closed
+    until a separate trajectory timing perturbation family is defined.
+variants:
+  - variant_id: francis2023_join_group_noop
+    scenario_id: francis2023_join_group
+    family: noop
+    seeds: [112, 113, 115, 116]
+    rationale: Baseline row for a Francis social-interaction scenario flagged by issue #1608.
+  - variant_id: francis2023_join_group_start_delay_h3_p050
+    scenario_id: francis2023_join_group
+    family: single_pedestrian_start_delay_offset
+    seeds: [112, 113, 115, 116]
+    rationale: >-
+      Delays the joining pedestrian to test whether local planners are sensitive to the phase of
+      the join-group interaction without changing the map or robot route.
+    parameters:
+      dt_s: 0.5
+      max_abs_dt_s: 1.0
+      pedestrian_id: h3
+
+  - variant_id: francis2023_intersection_wait_noop
+    scenario_id: francis2023_intersection_wait
+    family: noop
+    seeds: [240, 241, 242]
+    rationale: Baseline row for a single-pedestrian wait-then-cross Francis scenario.
+  - variant_id: francis2023_intersection_wait_start_delay_h1_p050
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_start_delay_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Delays the crossing pedestrian start to probe phase sensitivity in an explicit intersection
+      wait scenario while leaving wait_at semantics unchanged.
+    parameters:
+      dt_s: 0.5
+      max_abs_dt_s: 1.0
+      pedestrian_id: h1
+
+  - variant_id: classic_head_on_corridor_low_noop
+    scenario_id: classic_head_on_corridor_low
+    family: noop
+    seeds: [111, 112, 116, 117]
+    rationale: Baseline row for the corridor route-based scenario used in #1939 trace analysis.
+  - variant_id: classic_head_on_corridor_low_start_delay_all_p050
+    scenario_id: classic_head_on_corridor_low
+    family: single_pedestrian_start_delay_offset
+    seeds: [111, 112, 116, 117]
+    rationale: >-
+      Fail-closed probe proving that route-only classic pedestrians are not silently treated as
+      single-pedestrian timing targets.
+    parameters:
+      dt_s: 0.5
+      max_abs_dt_s: 1.0
+      pedestrian_selector: all
+pilot_matrix_note:
+  parent_issue: "#1610"
+  next_step: >-
+    Run a tiny paired planner pilot over eligible no-op and single-pedestrian start-delay rows
+    using the same planner/config/seed controls except for variant_id.
+  evidence_boundary: >-
+    Preflight validity is necessary but not sufficient benchmark evidence; invalid, fallback,
+    degraded, missing, or stress-only rows are limitations rather than success evidence.

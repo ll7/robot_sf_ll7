@@ -101,6 +101,52 @@ def _write_pedestrian_route_manifest(path: Path, *, scenario_id: str) -> Path:
     return path
 
 
+def _write_start_delay_manifest(
+    path: Path,
+    *,
+    scenario_id: str,
+    dt_s: float = 0.5,
+    max_abs_dt_s: float = 1.0,
+) -> Path:
+    """Write a perturbation manifest that offsets single-pedestrian start delay."""
+    payload = {
+        "schema_version": PERTURBATION_MANIFEST_SCHEMA_VERSION,
+        "manifest_id": "test_start_delay_perturbation_manifest",
+        "scenario_config": "configs/scenarios/classic_interactions_francis2023.yaml",
+        "seed_controls": {
+            "baseline_seeds": [112],
+            "replay_seed_policy": "explicit",
+        },
+        "validity": {
+            "require_scenario_certification": True,
+            "max_route_offset_m": 0.5,
+            "max_start_delay_offset_s": 1.0,
+            "invalid_variant_evidence_policy": "exclude_from_success_evidence",
+        },
+        "variants": [
+            {
+                "variant_id": f"{scenario_id}_noop",
+                "scenario_id": scenario_id,
+                "family": "noop",
+                "seeds": [112],
+            },
+            {
+                "variant_id": f"{scenario_id}_start_delay_offset",
+                "scenario_id": scenario_id,
+                "family": "single_pedestrian_start_delay_offset",
+                "seeds": [112],
+                "parameters": {
+                    "dt_s": dt_s,
+                    "max_abs_dt_s": max_abs_dt_s,
+                    "pedestrian_id": "h3",
+                },
+            },
+        ],
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def test_manifest_schema_accepts_noop_and_bounded_route_offset(tmp_path: Path) -> None:
     """The public schema should document the first supported perturbation surface."""
     manifest_path = _write_manifest(tmp_path / "perturbations.yaml")
@@ -128,6 +174,68 @@ def test_manifest_schema_accepts_bounded_pedestrian_route_offset(tmp_path: Path)
     )
 
     jsonschema.validate(manifest, schema)
+
+
+def test_manifest_schema_accepts_bounded_single_pedestrian_start_delay_offset(
+    tmp_path: Path,
+) -> None:
+    """The public schema should expose the start-delay timing family."""
+    manifest_path = _write_start_delay_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    jsonschema.validate(manifest, schema)
+
+
+def test_manifest_schema_requires_manifest_timing_cap_for_start_delay_offset(
+    tmp_path: Path,
+) -> None:
+    """Timing manifests should carry both variant-local and policy-level bounds."""
+    manifest_path = _write_start_delay_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    del manifest["validity"]["max_start_delay_offset_s"]
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    with pytest.raises(jsonschema.ValidationError, match="max_start_delay_offset_s"):
+        jsonschema.validate(manifest, schema)
+
+
+def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None:
+    """Family-specific parameter schemas should catch typo-shaped irrelevant fields."""
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    route_manifest_path = _write_manifest(tmp_path / "route_perturbations.yaml")
+    route_manifest = yaml.safe_load(route_manifest_path.read_text(encoding="utf-8"))
+    route_manifest["variants"][1]["parameters"]["dt_s"] = 0.5
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(route_manifest, schema)
+
+    timing_manifest_path = _write_start_delay_manifest(
+        tmp_path / "timing_perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    timing_manifest = yaml.safe_load(timing_manifest_path.read_text(encoding="utf-8"))
+    timing_manifest["variants"][1]["parameters"]["dx_m"] = 0.0
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(timing_manifest, schema)
 
 
 def test_preflight_rejects_manifest_that_violates_public_schema(tmp_path: Path) -> None:
@@ -194,6 +302,90 @@ def test_preflight_excludes_pedestrian_route_offset_without_ped_routes(tmp_path:
     assert excluded.certificate is None
     assert excluded.reasons == [
         "preflight_error: pedestrian_route_offset selected no pedestrian routes"
+    ]
+
+
+def test_preflight_certifies_bounded_single_pedestrian_start_delay_offset(
+    tmp_path: Path,
+) -> None:
+    """Single-pedestrian start-delay offsets should certify when the target exists."""
+    manifest_path = _write_start_delay_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    assert [result.variant_id for result in report.results] == [
+        "francis2023_join_group_noop",
+        "francis2023_join_group_start_delay_offset",
+    ]
+    assert {result.validity_status for result in report.results} == {"valid"}
+    assert report.results[1].family == "single_pedestrian_start_delay_offset"
+    assert report.results[1].perturbation_summary["dt_s"] == pytest.approx(0.5)
+    assert report.results[1].perturbation_summary["target"]["pedestrian_id"] == "h3"
+
+
+def test_preflight_excludes_start_delay_offset_without_single_pedestrians(
+    tmp_path: Path,
+) -> None:
+    """A timing perturbation must fail closed when no single pedestrians exist."""
+    manifest_path = _write_start_delay_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="classic_group_crossing_high",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.family == "single_pedestrian_start_delay_offset"
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_start_delay_offset selected no single pedestrians"
+    ]
+
+
+def test_preflight_excludes_unbounded_start_delay_offset_before_certification(
+    tmp_path: Path,
+) -> None:
+    """Out-of-bounds timing perturbations should fail closed without certification."""
+    manifest_path = _write_start_delay_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+        dt_s=1.25,
+        max_abs_dt_s=1.0,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "single_pedestrian_start_delay_offset abs_dt_s 1.250000 s exceeds variant max_abs_dt_s 1.000000 s"
+    ]
+
+
+def test_preflight_excludes_negative_start_delay_result(tmp_path: Path) -> None:
+    """Negative timing offsets cannot make the selected start delay negative."""
+    manifest_path = _write_start_delay_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+        dt_s=-0.5,
+        max_abs_dt_s=1.0,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: single_pedestrian_start_delay_offset would make pedestrian 'h3' start_delay_s negative"
     ]
 
 
@@ -306,6 +498,75 @@ def test_materialize_pilot_matrix_writes_pedestrian_route_overrides(tmp_path: Pa
     offset_point = offset_map.ped_routes[0].waypoints[0]
     assert offset_point[0] == pytest.approx(original_point[0])
     assert offset_point[1] == pytest.approx(original_point[1] + 0.25)
+
+
+def test_materialize_pilot_matrix_writes_start_delay_overrides(tmp_path: Path) -> None:
+    """Start-delay variants should preserve single-ped entries while updating delay."""
+    manifest_path = _write_start_delay_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_join_group",
+    )
+    output_dir = tmp_path / "pilot"
+
+    materialized = materialize_perturbation_pilot_matrix(
+        manifest_path,
+        output_dir=output_dir,
+        seed_limit=1,
+    )
+
+    assert materialized.included_variants == (
+        "francis2023_join_group_noop",
+        "francis2023_join_group_start_delay_offset",
+    )
+    matrix_path = Path(materialized.scenario_matrix_path)
+    generated_scenarios = load_scenarios(matrix_path)
+    offset_scenario = generated_scenarios[1]
+    overrides = {entry["id"]: entry for entry in offset_scenario["single_pedestrians"]}
+    assert overrides["h3"]["role"] == "join"
+    assert overrides["h3"]["role_target_id"] == "h1"
+    assert overrides["h3"]["start_delay_s"] == pytest.approx(0.5)
+
+    offset_config = build_robot_config_from_scenario(
+        offset_scenario,
+        scenario_path=matrix_path,
+    )
+    _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
+    delays = {ped.id: ped.start_delay_s for ped in offset_map.single_pedestrians}
+    assert delays["h3"] == pytest.approx(0.5)
+
+
+def test_materialize_pilot_matrix_start_delay_selector_all(tmp_path: Path) -> None:
+    """The timing family can intentionally phase-shift every single pedestrian."""
+    manifest_path = _write_start_delay_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_id="francis2023_leave_group",
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    parameters = manifest["variants"][1]["parameters"]
+    del parameters["pedestrian_id"]
+    parameters["pedestrian_selector"] = "all"
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    materialized = materialize_perturbation_pilot_matrix(
+        manifest_path,
+        output_dir=tmp_path / "pilot",
+        seed_limit=1,
+    )
+
+    assert materialized.included_variants == (
+        "francis2023_leave_group_noop",
+        "francis2023_leave_group_start_delay_offset",
+    )
+    matrix_path = Path(materialized.scenario_matrix_path)
+    generated_scenarios = load_scenarios(matrix_path)
+    offset_scenario = generated_scenarios[1]
+    offset_config = build_robot_config_from_scenario(
+        offset_scenario,
+        scenario_path=matrix_path,
+    )
+    _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
+    delays = {ped.id: ped.start_delay_s for ped in offset_map.single_pedestrians}
+    assert delays == {"h1": pytest.approx(0.5), "h2": pytest.approx(0.5), "h3": pytest.approx(0.5)}
 
 
 def test_materialize_pilot_matrix_skips_preflight_excluded_variants(tmp_path: Path) -> None:

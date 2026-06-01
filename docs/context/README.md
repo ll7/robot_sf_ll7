@@ -226,6 +226,8 @@ knowledge, not every transient iteration detail.
   [issue_1937_ped_route_offset.md](issue_1937_ped_route_offset.md)
 * Issue #1939 Corridor Trace Response (2026-05-31):
   [issue_1939_corridor_trace_response.md](issue_1939_corridor_trace_response.md)
+* Issue #1941 Pedestrian Timing Phase Perturbation (2026-05-31):
+  [issue_1941_ped_timing_phase.md](issue_1941_ped_timing_phase.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:

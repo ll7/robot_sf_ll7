@@ -15,6 +15,12 @@ cases:
   primary: slurm-campaign-submit
   secondary:
   - artifact-provenance
+- intent: Keep one skill-owned training job running through SLURM
+  primary: goal-slurm-experiment
+  secondary:
+  - goal-issue-implementation
+  - slurm-campaign-submit
+  - artifact-provenance
 - intent: Stage external data
   primary: data-staging-provenance
   secondary:

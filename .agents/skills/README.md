@@ -17,6 +17,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Run the standard readiness gate | `pr-ready-check` | none |
 | Review benchmark output | `analyze-camera-ready-benchmark` | `benchmark-row-status`, `artifact-provenance` |
 | Classify benchmark rows | `benchmark-row-status` | `review-benchmark-change` |
+| Keep one training SLURM job active | `goal-slurm-experiment` | `goal-issue-implementation`, `slurm-campaign-submit` |
 | Submit a generic SLURM campaign | `slurm-campaign-submit` | `artifact-provenance` |
 | Submit issue-791 Auxme training | `auxme-issue791-submit` | `slurm-campaign-submit` |
 | Stage external data | `data-staging-provenance` | `artifact-provenance` |
@@ -39,6 +40,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Issue contract repair | `issue-contract-maintainer` -> `gh-issue-sequencer` |
 | PR review cleanup | `gh-pr-comment-fixer` -> `implementation-verification` -> `pr-ready-check` |
 | Benchmark evidence audit | `benchmark-row-status` -> `artifact-provenance` -> `evidence-synthesis` |
+| Always-on SLURM experiment | `experiment-context` -> `goal-issue-implementation` -> `slurm-campaign-submit` -> `artifact-provenance` -> `context-note-maintainer` |
 | SLURM campaign launch | `slurm-campaign-submit` -> `artifact-provenance` |
 | External data staging | `data-staging-provenance` -> `artifact-provenance` -> `context-note-maintainer` |
 
@@ -150,6 +152,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `agentic-eval` | atomic | analysis | yes | no | no | none | Evaluate and improve AI workflow outputs with small goldens, rubrics, and repeatable checks; use when tuning skills, prompts, instructions, or agent behavior. |
 | `auto-improvement` | atomic | analysis | yes | no | no | none | Focused measurement-aware refinement loop for Robot SF prompts, docs, and small code changes; use when a task benefits from trying a few simple improvements. |
 | `autoresearch` | atomic | analysis | yes | no | no | none | Autonomous iterative experimentation loop for measurable Robot SF tasks; use when the user wants an improvement loop with baseline, experiments, and keep/discard decisions. |
+| `goal-slurm-experiment` | orchestrator | implementation | yes | yes | no | `experiment-context`, `goal-issue-implementation`, `slurm-campaign-submit`, `artifact-provenance`, `context-note-maintainer` | Keep one skill-owned Robot SF learning or training SLURM job active by selecting the best current experiment candidate, closing implementation gaps through an issue-to-PR workflow, and submitting the validated job from its owning worktree. |
 
 ### SLURM And Campaign Submission
 

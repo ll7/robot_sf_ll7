@@ -12,6 +12,12 @@ expected_stacks:
   slurm_campaign:
   - slurm-campaign-submit
   - artifact-provenance
+  goal_slurm_experiment:
+  - experiment-context
+  - goal-issue-implementation
+  - slurm-campaign-submit
+  - artifact-provenance
+  - context-note-maintainer
   adversarial_search_campaign:
   - adversarial-search-campaign
   - benchmark-row-status

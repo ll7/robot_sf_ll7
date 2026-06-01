@@ -54,6 +54,45 @@ See `docs/artifact_catalog.md` and validate catalogs with:
 uv run python scripts/validation/validate_artifact_catalog.py <catalog.yaml>
 ```
 
+## Benchmark Artifact Compiler
+
+Use `scripts/tools/compile_benchmark_artifacts.py` to turn an existing benchmark
+campaign report directory into a compact, cataloged artifact pack for paper
+tables, figures, captions, and export review:
+
+```bash
+uv run python scripts/tools/compile_benchmark_artifacts.py \
+  --campaign-root output/benchmarks/camera_ready/<campaign_id> \
+  --output output/report_artifacts/<campaign_id> \
+  --catalog-id <campaign_id>_artifacts
+```
+
+Expected output tree:
+
+```text
+artifact_catalog.yaml
+captions.md
+checksums.sha256
+figures/
+  planner_status_summary.pdf
+  planner_status_summary.png
+not_available_inputs.json
+sources/
+  reports/
+    <copied source report inputs>
+tables/
+  campaign_table.csv
+  campaign_table.md
+  campaign_table.tex
+  not_available_inputs.md
+```
+
+The compiler preserves fallback, degraded, failed, and `not_available` rows in
+the generated campaign table. Missing optional report inputs are recorded in
+`not_available_inputs.json` rather than silently omitted. The resulting
+`artifact_catalog.yaml` should validate with the catalog command above before an
+artifact pack is cited or exported.
+
 ## Command Path (Reproducible)
 
 1. Measure current benchmark artifact sizes (optional but recommended):

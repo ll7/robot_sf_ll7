@@ -150,7 +150,7 @@ slurm_issue_status:
 ```yaml
 slurm_issue_status:
   issue_number: 1474
-  state: submitted_running
+  state: completed_with_durable_evidence
   source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: 12674
   branch: issue-1474-shielded-ppo-repair
@@ -164,17 +164,18 @@ slurm_issue_status:
   stdout_stderr_path:
     - output/slurm/12674-issue1474-shielded-ppo-repair.out
     - output/slurm/12674-issue1474-shielded-ppo-repair.err
-  durable_artifact_pointer_status: missing base checkpoint, baseline artifacts, trained checkpoint, compact evaluation artifacts, and checksums
-  next_action: monitor job 12674 to completion, then run the guarded smoke and nominal gates before any stress/full-matrix escalation
-  closure_condition: smoke and nominal gates pass with runtime guard diagnostics and durable artifact pointers, or the campaign is revised/rejected/closed
+  durable_artifact_pointer_status: durable trained checkpoint plus compact evidence; baseline and downstream benchmark artifacts still not promoted
+  next_action: repair the guarded-PPO zero-motion smoke failure before nominal-sanity or stress escalation
+  closure_condition: guarded smoke and nominal gates pass with runtime guard diagnostics, or the campaign is revised/rejected/closed as an unsuccessful repair candidate
   last_update: 2026-06-01
-  comparison_status: pending smoke and nominal-sanity gates
-  status_basis: issue comments, local worktree inspection, squeue/sacct, and Slurm stdout/stderr
+  comparison_status: guarded smoke failed launch-packet success gate; nominal-sanity blocked
+  status_basis: issue comments, local worktree inspection, squeue/sacct, Slurm stdout/stderr, W&B artifact metadata, and guarded smoke report
   notes_non_evidence: >
     Failed warm-start probe 12673 showed the durable BR06 v3 checkpoint observation space no longer
     matches the current training env. Active retrain job 12674 intentionally starts from the current
-    env with exactly the collision penalty repair delta. Health check at 2026-06-01T08:35+02:00
-    showed RUNNING on a30, W&B run d8w8uykh, CUDA selected, num_envs=10, and 1536000/5000000
+    env with exactly the collision penalty repair delta. Interim health checks at
+    2026-06-01T07:33+02:00 and 2026-06-01T08:35+02:00 showed RUNNING on a30, W&B run
+    d8w8uykh, CUDA selected, num_envs=10, and progress from 819200 to 1536000/5000000
     timesteps reached. The first 500k evaluation gate emitted success_rate=0.36,
     collision_rate=0.61, snqi=-1.58, path_efficiency=0.782, and eval_episode_return=-0.437;
     the 1m evaluation gate emitted success_rate=0.66, collision_rate=0.33, snqi=-0.657,
@@ -184,8 +185,15 @@ slurm_issue_status:
     by 1.5m. Several PPO update blocks after 800k
     reported early stopping from max KL, so the training dynamics should be reviewed after the full
     run rather than accepted from interim improvement alone.
-    this is an interim training milestone only, not benchmark or guarded-policy evidence.
-    Guard-saturated gains must not be reported as raw PPO improvement.
+    Job 12674 later completed successfully and selected the 5m checkpoint with success_rate=0.83,
+    collision_rate=0.16, snqi=-0.1023, path_efficiency=0.8145, and eval_episode_return=27.93.
+    The W&B artifact
+    ll7/robot_sf/ppo_expert_issue_1474_shielded_repair_collision20_5m-best-success:v5 is durable
+    training evidence, but not benchmark or guarded-policy evidence. Guarded smoke job 12685_0
+    completed with collision_rate=0.0 and near_miss_rate=0.0 but failed the launch-packet smoke
+    gate because success_rate=0.0; diagnostics show zero-motion overconservative_stop behavior
+    with decision_counts.goal_reached=80. Guard-saturated gains must not be reported as raw PPO
+    improvement.
 ```
 
 ### Issue #1475 ORCA-Residual BC Smoke And Nominal Lineage

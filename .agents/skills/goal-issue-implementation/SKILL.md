@@ -290,7 +290,9 @@ Route remaining issues by their blocker:
 1. Select one issue (`gh-issue-sequencer` output or explicit user target).
 2. Re-check issue body/comments and open PRs for source-PR dependencies, active coverage, and
    duplicate branch/PR risk before branching.
-3. Create/checkout isolated implementation branch.
+3. Create/checkout the isolated implementation branch. For non-trivial local changes, prefer a
+   linked worktree and follow `AGENTS.md` "Fresh Worktree Bootstrap" for location, naming,
+   machine-context symlink, environment setup, and early `origin/main` freshness.
 4. Implement only in-scope behavior and required tests/docs.
 5. Validate using the narrowest meaningful level first, then expand.
 6. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
@@ -384,6 +386,9 @@ When a delegated worker produces a reusable workflow lesson, include an
 ## Race-Condition / Multi-Agent Safety
 
 - Operate one implementation branch at a time by default.
+- Before cleaning stale worktrees at loop end or after a PR handoff, follow `AGENTS.md` "Worktree
+  Teardown And Preservation" and record how relevant tracked, untracked, and ignored local changes
+  were preserved.
 - Before pushing, verify branch state is expected and avoid rewriting branch history.
 - If remote branch changed unexpectedly:
   - stop,

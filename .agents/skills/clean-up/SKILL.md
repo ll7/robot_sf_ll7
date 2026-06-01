@@ -39,18 +39,26 @@ parallel tests, and diff-based quality gates.
    - `BASE_REF=origin/main scripts/dev/check_docstring_todos_diff.sh`
 6. Report:
    - Summarize passed/failed commands and any residual risk blocks (flaky or deferred tests).
+7. Optional worktree hygiene:
+   - If asked to tidy stale worktrees, follow `AGENTS.md` "Worktree Teardown And Preservation"
+     before removing or pruning anything.
+   - Inspect `output/` and other ignored local artifacts before cleanup; classify them as
+     disposable, ignored-cache, tracked-manifest, durable-required, or handoff-needed.
 
 ## Guardrails
 
 - Fix failures with intent; do not silence value-heavy tests without explicit direction.
 - If touched tests were added, verify those new tests locally.
 - For rendering or benchmark-affecting work, keep GUI/benchmarks in follow-up if required and noted.
+- Do not remove dirty or unpushed worktrees as part of cleanup unless preservation is explicitly
+  recorded.
 
 ## Output
 
 - Commands executed and pass/fail status.
 - List of remaining failures and the decision (fix, defer, investigate).
 - Remaining follow-up tasks before merge-ready handoff.
+- Any worktree or artifact cleanup inspected, preserved, skipped, or deferred.
 ## When to use
 
 Use this skill for the scope named in its frontmatter description and registry metadata.

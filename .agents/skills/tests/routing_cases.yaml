@@ -39,6 +39,11 @@ cases:
   - pr-ready-check
   negative:
   - autoresearch
+- intent: Set up or clean up worktrees
+  primary: skill-picker
+  secondary:
+  - gh-issue-autopilot
+  - clean-up
 - intent: Edit non-claim docs
   primary: update-docs-on-code-change
   secondary: []

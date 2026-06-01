@@ -127,6 +127,21 @@ When working in a linked Git worktree, detect bootstrap state before running exp
 - Do not create divergent per-worktree machine context files unless the worktree really needs
   machine-specific behavior that should not be inherited from the main checkout.
 
+## Worktree Teardown And Preservation
+
+Before removing or pruning worktrees, enumerate them with `git worktree list --porcelain` from the
+main checkout. For each candidate, inspect `git -C <path> status --short --branch`; when generated
+outputs may matter, also inspect ignored output paths such as
+`[ -d "<path>/output" ] && git -C <path> status --ignored --short -uall output`.
+
+- Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
+  by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an
+  explicit handoff.
+- Do not remove a dirty worktree or a worktree with unpushed commits unless the preservation record
+  says exactly what was kept or why nothing needed preservation.
+- Prefer `git worktree remove <path>` for clean worktrees and `git worktree prune` only after
+  verifying stale administrative entries no longer point at useful local state.
+
 ## Knowledge Capture & Context Notes
 
 Treat `docs/context/` as the repository's Markdown knowledge base for issue execution history and
@@ -260,9 +275,9 @@ resolving lint or test failures locally before requesting review.
   Merge the latest `origin/main` into the current branch at the start of active work, and repeat
   that sync before PR creation so validation covers the newest shared baseline.
 - Before creating a PR, inspect newly created `output/*` files, including ignored paths via
-  `git status --ignored --short -uall output`. Decide whether each output is disposable, should remain
-  ignored, should be represented by a tracked manifest or registry entry, or must be uploaded to a
-  durable artifact store before the branch is handed off.
+  `[ -d output ] && git status --ignored --short -uall output`. Decide whether each output is
+  disposable, should remain ignored, should be represented by a tracked manifest or registry entry,
+  or must be uploaded to a durable artifact store before the branch is handed off.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

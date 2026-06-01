@@ -100,6 +100,19 @@ git fetch origin main
 git merge origin/main
 ```
 
+### Worktree teardown and preservation
+
+Before deleting old worktrees, run `git worktree list --porcelain` from the main checkout and inspect
+each candidate with `git -C <path> status --short --branch`. If the worktree may contain generated
+evidence or local experiment outputs, also inspect relevant ignored paths, for example
+`[ -d "<path>/output" ] && git -C <path> status --ignored --short -uall output`.
+
+Only remove a worktree after preserving relevant tracked, untracked, and ignored-but-important
+changes through a commit, stash, patch, durable artifact promotion, or explicit handoff note. Do not
+delete dirty or unpushed worktrees unless the cleanup record states what was preserved or why nothing
+needed preservation. Use `git worktree remove <path>` for clean worktrees; reserve
+`git worktree prune` for stale administrative entries after local state is checked.
+
 ### Targeted shared-venv worktree validation
 
 For quick, targeted checks in a sibling worktree, you can reuse the main checkout virtualenv while

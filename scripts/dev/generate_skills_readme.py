@@ -71,6 +71,7 @@ def render_readme(registry: dict[str, Any]) -> str:
         "| Open a ready PR | `gh-pr-opener` | `artifact-provenance` |",
         "| Verify branch claims | `implementation-verification` | `pr-ready-check` |",
         "| Run the standard readiness gate | `pr-ready-check` | none |",
+        "| Set up or clean up worktrees | `skill-picker` | `gh-issue-autopilot`, `clean-up`; see `AGENTS.md` |",
         "| Review benchmark output | `analyze-camera-ready-benchmark` | `benchmark-row-status`, `artifact-provenance` |",
         "| Classify benchmark rows | `benchmark-row-status` | `review-benchmark-change` |",
         "| Keep one training SLURM job active | `goal-slurm-experiment` | `goal-issue-implementation`, `slurm-campaign-submit` |",

@@ -84,7 +84,7 @@ cd "$REPO_ROOT"
 
 SLURM_SCRIPT="SLURM/Auxme/issue_1474_shielded_ppo_repair.sl"
 
-for path in "$TRAIN_CONFIG" "$LAUNCH_PACKET" "$SLURM_SCRIPT"; do
+for path in "$TRAIN_CONFIG" "$LAUNCH_PACKET" "$SLURM_SCRIPT" "$SBATCH_MAX_TIME_SCRIPT"; do
   [[ -f "$path" ]] || {
     echo "Required path not found: $path" >&2
     exit 2

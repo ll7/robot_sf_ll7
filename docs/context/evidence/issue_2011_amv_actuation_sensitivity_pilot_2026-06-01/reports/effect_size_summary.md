@@ -1,6 +1,6 @@
 # Issue #2011 AMV Actuation Sensitivity Summary
 
-diagnostic-only pilot summary. Longitudinal rows use platform-class proxy values; yaw, latency, angular-acceleration, and update-rate rows remain synthetic stress factors.
+diagnostic-only pilot summary. Longitudinal rows use platform-class proxy values; yaw, latency, and update-rate rows remain synthetic stress factors.
 
 | Field group | Level | Campaign status | Benchmark success | Planner | Scenario family | Episodes | Success delta | Collision delta | Near-miss delta |
 | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |

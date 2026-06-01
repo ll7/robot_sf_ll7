@@ -4,36 +4,53 @@
 
 `scenario_perturbation_manifest.v1` is a small preflight surface for issue #1858 and parent
 criticality issue #1610. It records the scenario, seeds, perturbation family, magnitude bounds, and
-validity policy before any perturbed row is allowed into a planner pilot.
+validity policy before any perturbed row is allowed into a planner pilot. Tracked manifests are
+local pilot inputs unless a later command records planner execution evidence.
 
 The schema lives at
 [`robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json`](../robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json).
-The first tracked example is
-[`configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml`](../configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml).
-The current #1610 single-pedestrian trajectory example is
-[`configs/scenarios/perturbations/issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1.yaml`](../configs/scenarios/perturbations/issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1.yaml).
+Tracked examples include
+[`configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml`](../configs/scenarios/perturbations/issue_1858_seed_sensitive_pilot_v1.yaml),
+the single-pedestrian trajectory input
+[`configs/scenarios/perturbations/issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1.yaml`](../configs/scenarios/perturbations/issue_1610_single_ped_trajectory_waypoint_offset_pilot_v1.yaml),
+and the exploratory density input
+[`configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml`](../configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml).
 
 ## Contract
 
-The v1 manifest intentionally supports:
+The executable v1 schema/preflight path currently supports:
 
 - `noop`: the unperturbed baseline row for paired comparisons;
 - `robot_route_offset`: a bounded `(dx_m, dy_m)` shift applied to selected robot route waypoints;
-- `pedestrian_route_offset`: the same bounded shift applied to selected pedestrian route waypoints;
-- `single_pedestrian_start_delay_offset`: a bounded start-delay phase shift for explicit
+- `pedestrian_route_offset`: the same bounded waypoint shift applied to selected pedestrian routes;
+- `single_pedestrian_start_delay_offset`: a bounded start-delay offset for explicit
   `single_pedestrians`;
-- `single_pedestrian_speed_offset`: a bounded per-pedestrian speed change for explicit
-  `single_pedestrians`;
-- `single_pedestrian_wait_duration_offset`: a bounded `wait_at` duration change for explicit
-  trajectory pedestrians with wait rules;
+- `single_pedestrian_speed_offset`: a bounded speed offset for explicit `single_pedestrians`;
+- `single_pedestrian_wait_duration_offset`: a bounded `wait_at.wait_s` offset for explicit
+  single-pedestrian wait entries;
 - `single_pedestrian_trajectory_waypoint_offset`: a bounded `(dx_m, dy_m)` shift applied to all
-  coordinate trajectory waypoints for one explicit `single_pedestrians` entry.
+  coordinate trajectory waypoints for one explicit `single_pedestrians` entry;
+- `pedestrian_density_offset`: a bounded `simulation_config.ped_density` offset for scenarios
+  with pedestrian routes.
+
+`single_pedestrian_trajectory_waypoint_offset` is intentionally narrow: it requires
+`parameters.pedestrian_id`, `parameters.waypoint_selector: all`, and an existing non-empty
+coordinate `trajectory`. Route pedestrians, role-only pedestrians, goal-only pedestrians, POI-only
+trajectory materialization, and individual waypoint indexes fail closed until separately scoped.
+
+Issue #1959 adds a tracked exploratory pilot input for `pedestrian_density_offset`:
+[`configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml`](../configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml).
+That manifest records a bounded `simulation_config.ped_density` delta for
+`classic_group_crossing_medium` and a fail-closed Francis wait probe that should be excluded
+because it has no pedestrian routes. Treat the manifest and preflight result as local pilot input,
+not planner execution or benchmark evidence.
 
 Every manifest must include:
 
 - `scenario_config`: the source scenario manifest;
 - `seed_controls.baseline_seeds`: explicit replay seeds;
-- `validity.max_route_offset_m`: manifest-level offset bound;
+- `validity.max_route_offset_m`: manifest-level route-offset bound used by the executable v1
+  preflight path;
 - `validity.invalid_variant_evidence_policy: exclude_from_success_evidence`;
 - one or more `variants`, each with `variant_id`, `scenario_id`, `family`, and `seeds`.
 
@@ -44,11 +61,10 @@ Family-specific validity caps are required when a manifest uses the matching fam
 - `validity.max_single_pedestrian_speed_delta_m_s` for `single_pedestrian_speed_offset`;
 - `validity.max_single_pedestrian_trajectory_waypoint_offset_m` for
   `single_pedestrian_trajectory_waypoint_offset`.
+- `validity.max_pedestrian_density_delta` for `pedestrian_density_offset`.
 
-`single_pedestrian_trajectory_waypoint_offset` is intentionally narrow: it requires
-`parameters.pedestrian_id`, `parameters.waypoint_selector: all`, and an existing non-empty
-coordinate `trajectory`. Route pedestrians, role-only pedestrians, goal-only pedestrians, POI-only
-trajectory materialization, and individual waypoint indexes fail closed until separately scoped.
+Density inputs also record optional `validity.max_pedestrian_density` plus per-variant
+`density_delta`, `max_abs_density_delta`, and optional `max_ped_density` parameters.
 
 ## Preflight
 

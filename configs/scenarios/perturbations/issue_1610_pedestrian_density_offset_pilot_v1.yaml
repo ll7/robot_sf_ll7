@@ -1,0 +1,70 @@
+# Issue #1959 exploratory density perturbation manifest for parent issue #1610.
+#
+# This manifest records a local pilot input for the pedestrian_density_offset family. It is not
+# benchmark-strength or paper-facing evidence.
+
+schema_version: scenario_perturbation_manifest.v1
+manifest_id: issue_1610_pedestrian_density_offset_pilot_v1
+description: >-
+  Exploratory #1610/#1959 local pilot input for bounded pedestrian-density offsets. The first
+  eligible candidate keeps the classic group-crossing map and seeds fixed while increasing
+  simulation_config.ped_density within the current high-density ceiling; the Francis wait scenario
+  is included only as a fail-closed probe for scenarios without pedestrian routes.
+scenario_config: ../classic_interactions_francis2023.yaml
+seed_controls:
+  baseline_seeds: [171, 172, 173, 240, 241, 242]
+  replay_seed_policy: explicit
+  source: >-
+    configs/scenarios/archetypes/classic_group_crossing.yaml and
+    configs/scenarios/single/francis2023_intersection_wait.yaml
+validity:
+  require_scenario_certification: true
+  max_route_offset_m: 0.5
+  max_pedestrian_density_delta: 0.03
+  max_pedestrian_density: 0.12
+  invalid_variant_evidence_policy: exclude_from_success_evidence
+  notes: >-
+    The density preflight supports no-op baselines plus bounded simulation_config.ped_density
+    offsets only for scenarios with route-spawn pedestrian routes. Scenarios without pedestrian
+    routes must fail closed and stay out of success evidence.
+variants:
+  - variant_id: classic_group_crossing_medium_noop
+    scenario_id: classic_group_crossing_medium
+    family: noop
+    seeds: [171, 172, 173]
+    rationale: >-
+      Baseline row for the verified medium-density classic group-crossing scenario
+      (ped_density=0.08).
+  - variant_id: classic_group_crossing_medium_density_p020
+    scenario_id: classic_group_crossing_medium
+    family: pedestrian_density_offset
+    seeds: [171, 172, 173]
+    rationale: >-
+      Raises the medium group-crossing density from 0.08 to 0.10 to probe whether local planners
+      respond to route-spawn crowd density without changing map, route, or seed controls.
+    parameters:
+      density_delta: 0.02
+      max_abs_density_delta: 0.03
+      max_ped_density: 0.12
+
+  - variant_id: francis2023_intersection_wait_density_p020
+    scenario_id: francis2023_intersection_wait
+    family: pedestrian_density_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Fail-closed probe: this Francis scenario uses an explicit single pedestrian and has no
+      pedestrian routes, so it should be excluded rather than silently converted into a density
+      perturbation success row.
+    parameters:
+      density_delta: 0.02
+      max_abs_density_delta: 0.03
+      max_ped_density: 0.12
+pilot_matrix_note:
+  parent_issue: "#1610"
+  next_step: >-
+    Run a tiny paired planner pilot over the eligible no-op and density rows using the same
+    planner/config/seed controls except for variant_id.
+  evidence_boundary: >-
+    This tracked YAML is a local exploratory pilot input only. It is not planner execution,
+    benchmark evidence, or paper-facing evidence; invalid, unsupported, missing, fallback, or
+    degraded rows remain limitations rather than success evidence.

@@ -1,0 +1,146 @@
+{
+  "claim_boundary": "diagnostic local pilot only; not benchmark-strength or paper-facing evidence",
+  "dt": 0.1,
+  "horizon": 40,
+  "manifest": "configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml",
+  "materialization": {
+    "excluded_variants": [
+      "francis2023_intersection_wait_density_p020"
+    ],
+    "included_variants": [
+      "classic_group_crossing_medium_noop",
+      "classic_group_crossing_medium_density_p020"
+    ],
+    "local_artifact_boundary": "materialized scenario matrix, route overrides, and raw episode JSONL remain ignored local outputs reproducible from the tracked manifest and command",
+    "manifest_id": "issue_1610_pedestrian_density_offset_pilot_v1",
+    "schema_version": "scenario_perturbation_pilot_matrix.v1",
+    "variant_count": 2
+  },
+  "pair_rows": [
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 5.888901685943133,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_medium_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 5.888901685943133,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_density_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_medium_density_p020",
+      "planner": "goal",
+      "seed": 171,
+      "source_scenario_id": "classic_group_crossing_medium",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 3.5610923405200428,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "classic_group_crossing_medium_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 3.5610923405200428,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "pedestrian_density_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "classic_group_crossing_medium_density_p020",
+      "planner": "goal",
+      "seed": 172,
+      "source_scenario_id": "classic_group_crossing_medium",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    }
+  ],
+  "pair_summary": {
+    "by_perturbation_family": {
+      "pedestrian_density_offset": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.0,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 2,
+        "status_counts": {
+          "completed": 2
+        }
+      }
+    },
+    "by_planner": {
+      "goal": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.0,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 2,
+        "status_counts": {
+          "completed": 2
+        }
+      }
+    },
+    "by_source_scenario": {
+      "classic_group_crossing_medium": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": 0.0,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 2,
+        "status_counts": {
+          "completed": 2
+        }
+      }
+    },
+    "mean_deltas_completed_pairs": {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    "pairs": 2,
+    "status_counts": {
+      "completed": 2
+    }
+  },
+  "planner_runs": {
+    "goal": {
+      "algo": "goal",
+      "algo_config_path": null,
+      "episodes": 4,
+      "source": "raw_algo"
+    }
+  },
+  "planners": [
+    "goal"
+  ],
+  "schema_version": "scenario_perturbation_criticality_pilot.v1",
+  "seed_limit": 2
+}

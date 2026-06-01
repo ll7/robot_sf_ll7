@@ -104,3 +104,5 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   #1610/#1937 pilot.
 - `issue_1941_ped_timing_phase_2026-05-31/`: compact diagnostic-only paired
   no-op-versus-start-delay summary for the #1610 single-pedestrian timing phase perturbation pilot.
+- `issue_1943_ped_speed_perturbation_2026-05-31/`: compact diagnostic-only paired
+  no-op-versus-speed summary for the #1610 single-pedestrian speed perturbation pilot.

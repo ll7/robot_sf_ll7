@@ -1,0 +1,1025 @@
+{
+  "claim_boundary": "diagnostic local pilot only; not benchmark-strength or paper-facing evidence",
+  "dt": 0.1,
+  "horizon": 80,
+  "manifest": "configs/scenarios/perturbations/issue_1610_ped_speed_pilot_v1.yaml",
+  "materialization": {
+    "excluded_variants": [
+      "classic_head_on_corridor_low_speed_all_p025"
+    ],
+    "included_variants": [
+      "francis2023_join_group_noop",
+      "francis2023_join_group_speed_h3_p025",
+      "francis2023_intersection_wait_noop",
+      "francis2023_intersection_wait_speed_h1_p025",
+      "francis2023_leave_group_noop",
+      "francis2023_leave_group_speed_all_p025",
+      "classic_head_on_corridor_low_noop"
+    ],
+    "local_artifact_boundary": "materialized scenario matrix, route overrides, and raw episode JSONL remain ignored local outputs reproducible from the tracked manifest and command",
+    "manifest_id": "issue_1610_ped_speed_pilot_v1",
+    "schema_version": "scenario_perturbation_pilot_matrix.v1",
+    "variant_count": 7
+  },
+  "pair_rows": [
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -2.3114866049253884,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.396640728620171,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 5.085154123694783,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "goal",
+      "seed": 240,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -2.290897456841522,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.50130537424527,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 5.210407917403748,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "goal",
+      "seed": 241,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -2.2936836547177526,
+      "noop": {
+        "collision": 0,
+        "min_distance": 7.119166442080297,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 4.825482787362544,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "goal",
+      "seed": 242,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.489627078493282,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.489627078493282,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "goal",
+      "seed": 112,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.006339899161680318,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.860499164278315,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.866839063439995,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "goal",
+      "seed": 113,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5542955250491202,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.5542955250491202,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "goal",
+      "seed": 115,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 2.1354041290479486,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 2.1354041290479486,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "goal",
+      "seed": 116,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.002027434418448326,
+      "noop": {
+        "collision": 1,
+        "min_distance": 1.3890071223697769,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 1.3869796879513285,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "goal",
+      "seed": 258,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.016635608023517268,
+      "noop": {
+        "collision": 1,
+        "min_distance": 1.3717746434984393,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 1.3884102515219565,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "goal",
+      "seed": 259,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.08293764987391494,
+      "noop": {
+        "collision": 1,
+        "min_distance": 1.399946555342972,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 1.317008905469057,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "goal",
+      "seed": 260,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -1.8154889770045628,
+      "noop": {
+        "collision": 0,
+        "min_distance": 8.409910230972628,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 6.594421253968065,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "orca",
+      "seed": 240,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -1.8349887094198376,
+      "noop": {
+        "collision": 0,
+        "min_distance": 8.373728612568657,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 6.538739903148819,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "orca",
+      "seed": 241,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -1.810025913954152,
+      "noop": {
+        "collision": 0,
+        "min_distance": 8.16723292620106,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 6.357207012246907,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "orca",
+      "seed": 242,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.0033332886246757454,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4492909863429455,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4459576977182698,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "orca",
+      "seed": 112,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.0014981811475689444,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.439309677641443,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.437811496493874,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "orca",
+      "seed": 113,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -9.538736683412097e-05,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4397620085044152,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.439666621137581,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "orca",
+      "seed": 115,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.02747195671415792,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4741467753802409,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.446674818666083,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "orca",
+      "seed": 116,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": -1.0,
+      "min_distance_delta": 0.01324802303149486,
+      "noop": {
+        "collision": 1,
+        "min_distance": 1.3989791295768006,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4122271526082955,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "orca",
+      "seed": 258,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 1.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -0.010946433094039865,
+      "noop": {
+        "collision": 1,
+        "min_distance": 1.397375601640609,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 1,
+        "min_distance": 1.386429168546569,
+        "success": 0,
+        "termination_reason": "collision",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "orca",
+      "seed": 259,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.10121123120699349,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4235830142893957,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.5247942454963892,
+        "success": 1,
+        "termination_reason": "success",
+        "timeout": 0
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "orca",
+      "seed": 260,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -1.881998172916271,
+      "noop": {
+        "collision": 0,
+        "min_distance": 8.219161902426459,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 6.337163729510188,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 240,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -1.9031966889107856,
+      "noop": {
+        "collision": 0,
+        "min_distance": 8.180964865278593,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 6.2777681763678075,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 241,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": -1.8844834423771823,
+      "noop": {
+        "collision": 0,
+        "min_distance": 8.220298941258834,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_intersection_wait_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 6.335815498881652,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_intersection_wait_speed_h1_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 242,
+      "source_scenario_id": "francis2023_intersection_wait",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4482470133949672,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4482470133949672,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 112,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4487350475219367,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4487350475219367,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 113,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4494315390472794,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4494315390472794,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 115,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.0,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4477641505470757,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_join_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.4477641505470757,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_join_group_speed_h3_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 116,
+      "source_scenario_id": "francis2023_join_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.08267971781593797,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.5126069816360954,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.5952866994520334,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 258,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.14604244448258252,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4476440318966894,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.593686476379272,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 259,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    },
+    {
+      "collision_delta": 0.0,
+      "min_distance_delta": 0.1379792775921853,
+      "noop": {
+        "collision": 0,
+        "min_distance": 1.4471693418500375,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "noop_status": "completed",
+      "noop_variant_id": "francis2023_leave_group_noop",
+      "pair_status": "completed",
+      "perturbed": {
+        "collision": 0,
+        "min_distance": 1.5851486194422229,
+        "success": 0,
+        "termination_reason": "max_steps",
+        "timeout": 1
+      },
+      "perturbed_family": "single_pedestrian_speed_offset",
+      "perturbed_status": "completed",
+      "perturbed_variant_id": "francis2023_leave_group_speed_all_p025",
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "seed": 260,
+      "source_scenario_id": "francis2023_leave_group",
+      "success_delta": 0.0,
+      "timeout_delta": 0.0
+    }
+  ],
+  "pair_summary": {
+    "by_perturbation_family": {
+      "single_pedestrian_speed_offset": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": -0.03333333333333333,
+          "min_distance_delta": -0.5883474583664233,
+          "success_delta": 0.03333333333333333,
+          "timeout_delta": 0.0
+        },
+        "pairs": 30,
+        "status_counts": {
+          "completed": 30
+        }
+      }
+    },
+    "by_planner": {
+      "goal": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": -0.6958057293591828,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 10,
+        "status_counts": {
+          "completed": 10
+        }
+      },
+      "orca": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": -0.1,
+          "min_distance_delta": -0.538938959308734,
+          "success_delta": 0.1,
+          "timeout_delta": 0.0
+        },
+        "pairs": 10,
+        "status_counts": {
+          "completed": 10
+        }
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": -0.5302976864313533,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 10,
+        "status_counts": {
+          "completed": 10
+        }
+      }
+    },
+    "by_source_scenario": {
+      "francis2023_intersection_wait": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": -2.0029166245630505,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 9,
+        "status_counts": {
+          "completed": 9
+        }
+      },
+      "francis2023_join_group": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": 0.0,
+          "min_distance_delta": -0.0021715762242963677,
+          "success_delta": 0.0,
+          "timeout_delta": 0.0
+        },
+        "pairs": 12,
+        "status_counts": {
+          "completed": 12
+        }
+      },
+      "francis2023_leave_group": {
+        "mean_deltas_completed_pairs": {
+          "collision_delta": -0.1111111111111111,
+          "min_distance_delta": 0.04465386497403426,
+          "success_delta": 0.1111111111111111,
+          "timeout_delta": 0.0
+        },
+        "pairs": 9,
+        "status_counts": {
+          "completed": 9
+        }
+      }
+    },
+    "mean_deltas_completed_pairs": {
+      "collision_delta": -0.03333333333333333,
+      "min_distance_delta": -0.5883474583664233,
+      "success_delta": 0.03333333333333333,
+      "timeout_delta": 0.0
+    },
+    "pairs": 30,
+    "status_counts": {
+      "completed": 30
+    }
+  },
+  "planner_runs": {
+    "goal": {
+      "algo": "goal",
+      "algo_config_path": null,
+      "episodes": 24,
+      "source": "raw_algo"
+    },
+    "orca": {
+      "algo": "orca",
+      "algo_config_path": null,
+      "episodes": 24,
+      "source": "raw_algo"
+    },
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": {
+      "algo": "hybrid_rule_local_planner",
+      "algo_config_path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml",
+      "episodes": 24,
+      "source": "policy_search_candidate"
+    }
+  },
+  "planners": [
+    "goal",
+    "orca",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard"
+  ],
+  "schema_version": "scenario_perturbation_criticality_pilot.v1",
+  "seed_limit": 4
+}

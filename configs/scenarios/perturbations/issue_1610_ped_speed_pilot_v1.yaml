@@ -1,0 +1,106 @@
+# Issue #1943 follow-up perturbation manifest for parent issue #1610.
+#
+# This manifest adds exactly one speed perturbation family for single-pedestrian scenarios. It is
+# a validity-preflight and local-pilot input only; it does not make benchmark-strength or
+# paper-facing claims.
+
+schema_version: scenario_perturbation_manifest.v1
+manifest_id: issue_1610_ped_speed_pilot_v1
+description: >-
+  Bounded #1610 follow-up manifest that holds the #1941 planner/seed/horizon pilot boundary fixed
+  while adding single-pedestrian speed offsets as the only new perturbation family.
+scenario_config: ../classic_interactions_francis2023.yaml
+seed_controls:
+  baseline_seeds: [112, 113, 115, 116, 240, 241, 242, 258, 259, 260]
+  replay_seed_policy: explicit
+  source: docs/context/evidence/issue_1608_seed_sensitivity_2026-05-30/scenario_seed_sensitivity.csv
+validity:
+  require_scenario_certification: true
+  max_route_offset_m: 0.5
+  max_single_pedestrian_speed_delta_m_s: 0.5
+  max_single_pedestrian_speed_m_s: 2.0
+  invalid_variant_evidence_policy: exclude_from_success_evidence
+  notes: >-
+    The v1 speed preflight supports no-op baselines plus bounded speed offsets for scenarios that
+    expose single_pedestrians. Route-only pedestrian scenarios must fail closed because GlobalRoute
+    has no per-route speed field.
+variants:
+  - variant_id: francis2023_join_group_noop
+    scenario_id: francis2023_join_group
+    family: noop
+    seeds: [112, 113, 115, 116]
+    rationale: Baseline row for a Francis social-interaction scenario flagged by issue #1608.
+  - variant_id: francis2023_join_group_speed_h3_p025
+    scenario_id: francis2023_join_group
+    family: single_pedestrian_speed_offset
+    seeds: [112, 113, 115, 116]
+    rationale: >-
+      Speeds up the joining pedestrian to test whether local planners are sensitive to approach
+      velocity in the join-group interaction without changing the map or robot route.
+    parameters:
+      speed_delta_m_s: 0.25
+      max_abs_speed_delta_m_s: 0.5
+      max_speed_m_s: 2.0
+      pedestrian_id: h3
+
+  - variant_id: francis2023_intersection_wait_noop
+    scenario_id: francis2023_intersection_wait
+    family: noop
+    seeds: [240, 241, 242]
+    rationale: Baseline row for a single-pedestrian wait-then-cross Francis scenario.
+  - variant_id: francis2023_intersection_wait_speed_h1_p025
+    scenario_id: francis2023_intersection_wait
+    family: single_pedestrian_speed_offset
+    seeds: [240, 241, 242]
+    rationale: >-
+      Speeds up the crossing pedestrian to probe velocity sensitivity in the same scenario where
+      #1941 found a large timing-phase min-distance response.
+    parameters:
+      speed_delta_m_s: 0.25
+      max_abs_speed_delta_m_s: 0.5
+      max_speed_m_s: 2.0
+      pedestrian_id: h1
+
+  - variant_id: francis2023_leave_group_noop
+    scenario_id: francis2023_leave_group
+    family: noop
+    seeds: [258, 259, 260]
+    rationale: Baseline row for a multi-single-pedestrian group-leaving scenario.
+  - variant_id: francis2023_leave_group_speed_all_p025
+    scenario_id: francis2023_leave_group
+    family: single_pedestrian_speed_offset
+    seeds: [258, 259, 260]
+    rationale: >-
+      Speeds up all single pedestrians to exercise selector-all materialization on a
+      multi-single-pedestrian Francis scenario.
+    parameters:
+      speed_delta_m_s: 0.25
+      max_abs_speed_delta_m_s: 0.5
+      max_speed_m_s: 2.0
+      pedestrian_selector: all
+
+  - variant_id: classic_head_on_corridor_low_noop
+    scenario_id: classic_head_on_corridor_low
+    family: noop
+    seeds: [111, 112, 116, 117]
+    rationale: Baseline row for the corridor route-based scenario used in #1939 trace analysis.
+  - variant_id: classic_head_on_corridor_low_speed_all_p025
+    scenario_id: classic_head_on_corridor_low
+    family: single_pedestrian_speed_offset
+    seeds: [111, 112, 116, 117]
+    rationale: >-
+      Fail-closed probe proving that route-only classic pedestrians are not silently treated as
+      single-pedestrian speed targets.
+    parameters:
+      speed_delta_m_s: 0.25
+      max_abs_speed_delta_m_s: 0.5
+      max_speed_m_s: 2.0
+      pedestrian_selector: all
+pilot_matrix_note:
+  parent_issue: "#1610"
+  next_step: >-
+    Run a tiny paired planner pilot over eligible no-op and single-pedestrian speed rows using the
+    same planner/config/seed controls except for variant_id.
+  evidence_boundary: >-
+    Preflight validity is necessary but not sufficient benchmark evidence; invalid, fallback,
+    degraded, missing, or stress-only rows are limitations rather than success evidence.

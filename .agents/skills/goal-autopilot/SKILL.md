@@ -92,6 +92,21 @@ Each cycle iteration follows a fixed phase order:
 3. `merge` — delegate to `gh-pr-merger` for all `merge-ready` PRs.
 4. `discover` — delegate to `goal-issue-discovery` for bounded discovery.
 
+Before each phase, run a delegation checkpoint:
+
+- Choose the routed helper role for the phase when `ai-delegation-routing` is active:
+  queue scout, PR blocker reviewer, bounded editor, validation verifier, or discovery scout.
+- Start at least one eligible routed worker or Spark sidecar for any phase likely to exceed about
+  10 minutes, unless the next action is a local-only publication step or all routes are unavailable.
+- If no helper is used, record `delegation_skipped: <reason>` with one of: `tiny`,
+  `critical-path-blocker`, `route-unavailable`, `sensitive-context`, `pure-synthesis`, or
+  `local-publication-step`.
+
+Publication and final judgment remain local: delegates must not push, open, or merge PRs; change
+labels or project state; resolve review threads; or make final benchmark, paper, or safety claims
+unless the user explicitly grants that permission. Their output is route evidence that must be
+reviewed and validated before phase completion.
+
 Transitions:
 - After `implement`, proceed to `review`.
 - After `review`, proceed to `merge`.

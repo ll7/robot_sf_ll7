@@ -27,19 +27,23 @@ Rules:
 - Keep generated large artifacts out of source control unless intentionally tiny
   and review-critical.
 
-## Bundle Format (v1)
+## Bundle Format (v2)
 
 Export bundles are produced by
 `scripts/tools/benchmark_publication_bundle.py export` and contain:
 
 - `payload/`: run files selected for publication.
 - `publication_manifest.json`:
-  - `schema_version: benchmark-publication-bundle.v1`
+  - `schema_version: benchmark-publication-bundle.v2`
   - provenance (run id, optional run meta/manifests)
   - publication channel metadata (repo URL, release tag, DOI string)
   - per-file metadata (`path`, `size_bytes`, `sha256`, `kind`)
 - `checksums.sha256`: SHA-256 checksums for payload files.
 - `<bundle_name>.tar.gz`: archive for release upload.
+
+There is no standalone publication-bundle schema validator CLI. For release handoff, inspect
+`publication_manifest.json` for `schema_version: benchmark-publication-bundle.v2` and run
+`sha256sum --check checksums.sha256` from the bundle directory before upload.
 
 ## Reusable Figure And Table IDs
 
@@ -57,13 +61,13 @@ uv run python scripts/validation/validate_artifact_catalog.py <catalog.yaml>
 ## Benchmark Artifact Compiler
 
 Use `scripts/tools/compile_benchmark_artifacts.py` to turn an existing benchmark
-campaign report directory into a compact, cataloged artifact pack for paper
-tables, figures, captions, and export review:
+campaign report directory into a compact, cataloged artifact pack for dissertation
+draft tables, figures, captions, and export review:
 
 ```bash
 uv run python scripts/tools/compile_benchmark_artifacts.py \
   --campaign-root output/benchmarks/camera_ready/<campaign_id> \
-  --output output/report_artifacts/<campaign_id> \
+  --output output/benchmarks/publication_candidates/<campaign_id> \
   --catalog-id <campaign_id>_artifacts
 ```
 
@@ -93,6 +97,22 @@ the generated campaign table. Missing optional report inputs are recorded in
 `artifact_catalog.yaml` should validate with the catalog command above before an
 artifact pack is cited or exported.
 
+Compiler output under `output/` is a local publication-candidate stage, not the
+durable citation target. Treat its catalog rows as draft-ready only until the
+source campaign and selected artifacts are promoted through a release asset, DOI,
+tracked compact evidence copy, or another durable store with checksums. The
+compiler's claim boundary is diagnostic-only unless that downstream durable proof
+exists and the source benchmark campaign itself satisfies the relevant
+camera-ready or paper-facing contract.
+
+Compiler evidence map:
+
+| Artifact id | Files | Caption/checksum surface | Boundary |
+| --- | --- | --- | --- |
+| `fig_planner_status_summary` | `figures/planner_status_summary.{png,pdf}` | `captions.md`, `checksums.sha256`, and `artifact_catalog.yaml` | Diagnostic status distribution; not metric or planner-quality evidence by itself. |
+| `tab_campaign_table` | `tables/campaign_table.{csv,md,tex}` | `captions.md`, `checksums.sha256`, and `artifact_catalog.yaml` | Formatted campaign rows; preserves fallback, degraded, failed, and `not_available` caveats. |
+| `tab_not_available_inputs` | `tables/not_available_inputs.md`, `not_available_inputs.json` | `captions.md`, `checksums.sha256`, and `artifact_catalog.yaml` | Missing optional compiler inputs; documents limitations instead of filling gaps. |
+
 ## Command Path (Reproducible)
 
 1. Measure current benchmark artifact sizes (optional but recommended):
@@ -114,7 +134,8 @@ uv run python scripts/tools/benchmark_publication_bundle.py export \
   --doi 10.5281/zenodo.<record-id>
 ```
 
-This is the canonical command path required for publication exports.
+This is the canonical command path required for publication exports. Replace the release tag and DOI
+placeholders before citing the bundle as paper-facing evidence.
 
 ## DOI-Capable Release Flow
 

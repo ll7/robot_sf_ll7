@@ -156,6 +156,10 @@ entries:
     status: current
     freshness: evidence
     area: manual_control_trace
+  - path: docs/context/issue_2040_artifact_publication_workflow.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/evidence/README.md
     status: evidence
     freshness: evidence

@@ -297,6 +297,8 @@ knowledge, not every transient iteration detail.
   [issue_2006_guarded_ppo_zero_motion_repair.md](issue_2006_guarded_ppo_zero_motion_repair.md)
 * Issue #2008 Artifact Catalog Contract (2026-06-01):
   [issue_2008_artifact_catalog.md](issue_2008_artifact_catalog.md)
+* Issue #2040 Artifact Publication Workflow (2026-06-01):
+  [issue_2040_artifact_publication_workflow.md](issue_2040_artifact_publication_workflow.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
 * Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):

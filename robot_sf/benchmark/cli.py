@@ -834,7 +834,8 @@ def _handle_export_canonical_table(args) -> int:
             )
         )
         return 0
-    except Exception:  # pragma: no cover - error path
+    except Exception as exc:  # pragma: no cover - error path
+        logging.exception("Canonical table export failed: %s", exc)
         return 2
 
 

@@ -124,3 +124,25 @@ def test_cli_export_canonical_table_writes_execution_mode_outputs(
     metadata = json.loads((out_dir / "execution_mode.metadata.json").read_text(encoding="utf-8"))
     assert metadata["source_files"][0]["path"] == rows_path.as_posix()
     assert "fallback" in (out_dir / "execution_mode.csv").read_text(encoding="utf-8")
+
+
+def test_latex_escape_is_single_pass_for_backslash_macro_output(tmp_path: Path) -> None:
+    """Backslash escaping should not re-escape braces introduced by replacement macros."""
+    result = export_canonical_table(
+        [
+            {
+                "artifact_id": r"path\with_{chars}",
+                "source_files": [],
+                "checksums": {},
+                "command": r"python tool.py --name a_b",
+                "generated_outputs": [],
+            }
+        ],
+        table_id="artifact_source",
+        output_dir=tmp_path,
+        formats=["tex"],
+    )
+
+    tex_text = result.output_paths["tex"].read_text(encoding="utf-8")
+    assert r"path\textbackslash{}with\_\{chars\}" in tex_text
+    assert r"\textbackslash\{\}" not in tex_text

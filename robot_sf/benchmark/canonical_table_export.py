@@ -271,9 +271,7 @@ def _latex_escape(text: str) -> str:
         "~": r"\textasciitilde{}",
         "^": r"\textasciicircum{}",
     }
-    for source, replacement in replacements.items():
-        text = text.replace(source, replacement)
-    return text
+    return "".join(replacements.get(character, character) for character in text)
 
 
 def _build_metadata(

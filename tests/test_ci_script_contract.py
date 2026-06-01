@@ -200,7 +200,7 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
             [
                 "#!/usr/bin/env bash",
                 'if [[ "$1" == "run" && "$2" == "python" ]]; then',
-                "  echo 'duckdb, pyarrow' >&2",
+                "  echo 'duckdb, pyarrow'",
                 "  exit 1",
                 "fi",
                 "echo 'unexpected uv invocation' >&2",

@@ -21,7 +21,7 @@ worktree_state() {
 
 check_final_readiness_dependencies() {
   local missing_output
-  if ! missing_output="$(uv run python - <<'PY' 2>&1
+  if ! missing_output="$(uv run python - <<'PY'
 from __future__ import annotations
 
 import importlib.util

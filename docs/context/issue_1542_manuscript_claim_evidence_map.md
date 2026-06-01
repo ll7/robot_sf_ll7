@@ -667,6 +667,122 @@ evidence remains S10-derived and does not satisfy paper-facing seed-budget stabi
 
 ---
 
+## Claim Area 7: Perturbation Mechanism Diagnostics
+
+### Candidate Claim
+
+"Scenario perturbation pilots can identify which local scenario mechanisms are useful diagnostic
+probes, while keeping those findings separate from benchmark-strength or paper-facing planner
+claims."
+
+### Evidence Links
+
+- Parent perturbation-criticality lane: [issue #1610](https://github.com/ll7/robot_sf_ll7/issues/1610)
+- Synthesis checkpoint:
+  [issue_1965_perturbation_criticality_synthesis.md](issue_1965_perturbation_criticality_synthesis.md)
+- Robot route-offset pilot:
+  [issue_1904_scenario_perturbation_criticality_pilot.md](issue_1904_scenario_perturbation_criticality_pilot.md)
+- Pedestrian route-offset pilot:
+  [issue_1937_ped_route_offset.md](issue_1937_ped_route_offset.md)
+- Corridor route trace response:
+  [issue_1939_corridor_trace_response.md](issue_1939_corridor_trace_response.md)
+- Single-pedestrian timing pilot:
+  [issue_1941_ped_timing_phase.md](issue_1941_ped_timing_phase.md)
+- Single-pedestrian speed pilot:
+  [issue_1943_ped_speed_perturbation.md](issue_1943_ped_speed_perturbation.md)
+- Leave-group speed trace:
+  [issue_1945_orca_leave_group_speed_trace.md](issue_1945_orca_leave_group_speed_trace.md)
+- Intersection timing/speed trace:
+  [issue_1947_intersection_wait_timing_speed_trace.md](issue_1947_intersection_wait_timing_speed_trace.md)
+- Wait-duration pilot:
+  [issue_1949_ped_wait_duration_perturbation.md](issue_1949_ped_wait_duration_perturbation.md)
+- Compact evidence index:
+  [evidence/README.md](evidence/README.md)
+
+### Evidence Tier
+
+`diagnostic_local` (paired local pilots, compact tracked summaries, and trace inspections; not
+benchmark-strength evidence)
+
+### Metrics Used
+
+- Paired no-op versus perturbed rows by planner, scenario, seed, and perturbation family
+- Row status counts: completed, invalid, fallback, degraded, missing, failed
+- Terminal deltas: success, collision, timeout
+- Clearance deltas: mean minimum-distance changes on completed pairs only
+- Trace-level mechanism notes for selected seed-local or corridor responses
+
+### Key Results
+
+The current #1610 mechanism map is useful for diagnostic routing, not paper-facing claims:
+
+| Mechanism / Family | Current Finding | Strength | Limitation |
+| --- | --- | --- | --- |
+| `robot_route_offset` | Low-criticality on the tested slice: terminal deltas stayed neutral and min-distance deltas were near zero. | observed diagnostic evidence | Limited scenarios and no terminal outcome signal. |
+| `pedestrian_route_offset` | Corridor-sensitive clearance response; terminal metrics stayed neutral. | observed diagnostic evidence | Route-only support and trace-local mechanism, not broad criticality. |
+| `single_pedestrian_start_delay_offset` | Strongest positive `francis2023_intersection_wait` clearance signal. | observed diagnostic evidence | Explicit single-pedestrian timing only; terminal metrics neutral. |
+| `single_pedestrian_speed_offset` | Strong signed `francis2023_intersection_wait` clearance signal and one seed-local ORCA collision-to-success flip. | observed plus trace-inspected local evidence | Seed-local outcome flip is not replicated; route-pedestrian speed remains unsupported. |
+| `single_pedestrian_wait_duration_offset` | Low-sensitivity on current tested magnitudes. | observed negative diagnostic evidence | One wait-bearing scenario only. |
+| `pedestrian_density_offset` | Low-sensitivity in the current tiny smoke. | smoke-level evidence | Density-to-count behavior is route/runtime dependent. |
+| `single_pedestrian_trajectory_waypoint_offset` | Tiny smoke completed with small positive clearance delta. | smoke-level evidence | One planner, two seeds; not enough for mechanism conclusions. |
+
+### Claims Strengthened By #1965
+
+- The #1610 lane now has a reusable mechanism vocabulary for deciding whether to stop, consolidate,
+  or run a controlled follow-up slice.
+- Start-delay and speed offsets in `francis2023_intersection_wait` are the clearest local
+  phase/speed diagnostic signals.
+- Small robot-route offsets are a low-sensitivity diagnostic on the tested slice and should not be
+  rerun casually.
+- Wait-duration and density pilots should be preserved as low-sensitivity or smoke-only evidence
+  rather than treated as failed benchmark rows.
+
+### Claims That Remain Diagnostic-Only Or Blocked
+
+- None of the current perturbation-family findings are benchmark-strength planner performance
+  evidence.
+- None of the findings are paper-facing robustness claims.
+- Route-offset and timing/speed findings are mechanism hypotheses unless trace-backed for the exact
+  planner/scenario/seed slice being cited.
+- A broader S20/S30 or paper-facing perturbation claim remains premature until a schema-backed
+  summary contract and selected controlled follow-up exist.
+
+### Known Caveats
+
+1. **Local diagnostic scope**: Evidence comes from small local pilots and trace inspections, not a
+   pre-registered benchmark campaign.
+2. **Completed-row boundary**: Invalid, fallback, degraded, missing, and failed rows remain
+   limitations and must be excluded from completed-pair effect means.
+3. **Terminal neutrality**: Several families show clearance shifts without success/collision/timeout
+   deltas, so mechanism usefulness should not be translated into planner performance language.
+4. **Seed-local effects**: The ORCA speed flip in `francis2023_leave_group` is useful for trace
+   diagnosis but not replicated as a robustness result.
+5. **Smoke-only families**: Trajectory waypoint and density pilots prove a narrow wiring path, not a
+   stable mechanism effect.
+
+### Blocker / Next Action
+
+**Blocker:** This claim area is intentionally diagnostic-only. Paper-facing or benchmark-strength
+language requires a controlled follow-up with schema-backed row accounting and an explicit evidence
+tier upgrade.
+
+**Next actions:**
+
+1. Merge or otherwise land the reusable perturbation-family registry and `criticality_summary.v1`
+   writer from issue #1980 before adding more one-off family summaries.
+2. Prefer a controlled `francis2023_intersection_wait` speed/start-delay follow-up only if the next
+   question changes exactly one axis: family, magnitude grid, planner set, scenario set, or seed
+   budget.
+3. Keep route-offset, wait-duration, density, and trajectory-waypoint findings in diagnostic
+   routing language unless stronger paired evidence is produced.
+
+### Verdict
+
+`diagnostic_only` — #1965 strengthens mechanism routing and claim hygiene, but it does not create
+benchmark-strength or paper-facing evidence.
+
+---
+
 ## Cross-Claim Summary
 
 | Claim Area | Verdict | Readiness Blocker | Evidence Tier |
@@ -677,6 +793,7 @@ evidence remains S10-derived and does not satisfy paper-facing seed-budget stabi
 | Predictive Planner v2 | `negative` | Obstacle-feature variant worsened success despite forecast improvement | `stress` |
 | Hard-Guarded Hybrid Learning | `not_ready` | Component campaigns incomplete | `launch_packet` |
 | Scenario Seed Sensitivity And Seed-Budget Stability | `insufficient` | S20/S30 paper-facing evidence gate remains blocked (#1554) | `diagnostic_s10` |
+| Perturbation Mechanism Diagnostics | `diagnostic_only` | Needs schema-backed controlled follow-up before evidence-tier upgrade | `diagnostic_local` |
 
 ## Conservative Manuscript Readiness Assessment
 

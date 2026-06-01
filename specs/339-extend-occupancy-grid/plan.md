@@ -20,7 +20,7 @@ Extend the occupancy grid module in `robot_sf/nav/occupancy.py` to support confi
 **Storage**: File-based (configs in YAML, maps in SVG, grids computed in-memory, no persistence required)  
 **Testing**: 
 - Unit/integration: `pytest` (tests/ suite)
-- Visual/GUI: `pytest` headless mode with `DISPLAY=`, `MPLBACKEND=Agg`, `SDL_VIDEODRIVER=dummy` (test_pygame/)
+- Visual/GUI: `pytest` headless mode with `DISPLAY=`, `MPLBACKEND=Agg`, `SDL_VIDEODRIVER=dummy` (tests/pygame/)
 - Coverage: `coverage.py` (automatic collection)
 
 **Target Platform**: Linux/macOS headless + interactive pygame desktop  
@@ -101,7 +101,7 @@ tests/
 ├── test_occupancy_edge_cases.py # ADD: Empty grids, boundary conditions, extreme resolutions
 └── test_occupancy_gymnasium.py  # ADD: Observation space integration tests
 
-test_pygame/
+tests/pygame/
 └── test_occupancy_visualization.py  # ADD: Visual tests for grid overlay, channel toggling
 
 examples/

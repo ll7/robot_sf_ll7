@@ -517,7 +517,7 @@ class MapDefinition:
 **Minimum Coverage Target**: 85% for new modules (osm_map_builder, osm_zones_yaml, osm_background_renderer)
 
 **Fixtures**:
-- Small PBF (single city block, <1MB) checked into `test_scenarios/osm_fixtures/`
+- Small PBF (single city block, <1MB) checked into `tests/fixtures/scenarios/osm_fixtures/`
 - Expected outputs (PNG, YAML) for regression testing
 - Backward-compat baseline (existing environment creation + step loop)
 

@@ -253,7 +253,7 @@ tests/
 
 ### To Begin Phase 1 Implementation
 1. Create **tasks.md** (atomic, testable tasks) — Via `/speckit.tasks` command or manually break plan into JIRA-style tasks
-2. Create **small PBF fixture** (test_scenarios/osm_fixtures/sample_block.pbf)
+2. Create **small PBF fixture** (tests/fixtures/scenarios/osm_fixtures/sample_block.pbf)
 3. Begin **osm_map_builder.py** (core importer)
 
 ---

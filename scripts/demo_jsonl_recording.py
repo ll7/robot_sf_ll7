@@ -99,7 +99,7 @@ def demo_interactive_playback():
     logger.info("=== Interactive Playback Demo ===")
 
     # For this demo, we'll use the test pickle file if available
-    test_pickle = Path("test_pygame/recordings/2024-06-04_08-39-59.pkl")
+    test_pickle = Path("tests/pygame/recordings/2024-06-04_08-39-59.pkl")
 
     if test_pickle.exists():
         logger.info(f"Demo: Loading legacy pickle file: {test_pickle}")

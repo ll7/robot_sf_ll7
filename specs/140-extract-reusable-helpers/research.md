@@ -29,7 +29,7 @@
 ### Validation & Regression Coverage
 - **Decision**: Require the following to pass before/after extraction:
   - `uv run pytest tests`
-  - `uv run pytest test_pygame` (headless rendering smoke)
+  - `uv run pytest tests/pygame` (headless rendering smoke)
   - `scripts/validation/test_basic_environment.sh`
   - `scripts/validation/test_complete_simulation.sh`
 - **Rationale**: These cover core env behavior, rendering, and end-to-end simulation.

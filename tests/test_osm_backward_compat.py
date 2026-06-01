@@ -104,7 +104,7 @@ class TestOSMBackwardCompat:
     @pytest.fixture
     def pbf_file(self) -> str:
         """Path to sample PBF file."""
-        return "test_scenarios/osm_fixtures/sample_block.pbf"
+        return "tests/fixtures/scenarios/osm_fixtures/sample_block.pbf"
 
     @pytest.fixture
     def osm_map_definition(self, pbf_file: str) -> MapDefinition:
@@ -409,12 +409,12 @@ class TestOSMBackwardCompat:
         assert len(path) >= 2
 
     @pytest.mark.skipif(
-        not Path("test_scenarios/osm_fixtures/sample_block.pbf").exists(),
+        not Path("tests/fixtures/scenarios/osm_fixtures/sample_block.pbf").exists(),
         reason="Sample PBF file not available",
     )
     def test_osm_to_mapdef_preserves_api(self):
         """Test that osm_to_map_definition preserves MapDefinition API."""
-        pbf_file = "test_scenarios/osm_fixtures/sample_block.pbf"
+        pbf_file = "tests/fixtures/scenarios/osm_fixtures/sample_block.pbf"
 
         # Call with minimal arguments
         map_def = osm_to_map_definition(pbf_file=pbf_file)

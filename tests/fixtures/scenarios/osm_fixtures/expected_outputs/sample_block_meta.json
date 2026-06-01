@@ -18,6 +18,6 @@
     ],
     "pixel_per_meter": 0.25
   },
-  "pbf_file": "test_scenarios/osm_fixtures/sample_block.pbf",
+  "pbf_file": "tests/fixtures/scenarios/osm_fixtures/sample_block.pbf",
   "utm_zone": 32
 }

@@ -4,6 +4,10 @@ Date: 2026-05-30
 
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/1690>
 
+Status: Superseded for the moved root paths by
+[root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md).
+Keep this note as historical inventory evidence.
+
 Predecessors:
 
 - [Issue #1573 root-layout inventory](issue_1573_root_layout_inventory.md)
@@ -24,7 +28,7 @@ current repository context stack and the earlier root-layout notes listed above.
 
 | Path | Current evidence | Recommendation | Follow-up shape |
 | --- | --- | --- | --- |
-| `.agent/` | `AGENTS.md`, `docs/ai/repo_overview.md`, and repo-local skills point to `.agent/PLANS.md`. | Keep. | No cleanup unless the agent planning contract is replaced everywhere. |
+| `.agents/PLANS.md` | `AGENTS.md`, `docs/ai/repo_overview.md`, and repo-local skills point to `.agents/PLANS.md`. | Keep. | No cleanup unless the agent planning contract is replaced everywhere. |
 | `.agents/`, `.codex/`, `.opencode/`, `.gemini/` | Tracked compatibility mirrors and provider surfaces for currently supported agent workflows. | Keep. | Treat mirror changes as agent-workflow compatibility work, not root cleanup. |
 | `.cursorrules` | Pointer file content is `Repository instructions are canonical in AGENTS.md.`; `scripts/tools/sync_ai_config.py` and tests verify that pointer. | Keep. | Keep root-visible for editor compatibility. |
 | `.coverage` | No tracked root `.coverage` file is present; `.gitignore` ignores `/.coverage`; coverage config writes to `output/coverage/.coverage`. | Generated/ignored. | No deletion PR needed. If it reappears locally, discard it. |
@@ -34,9 +38,9 @@ current repository context stack and the earlier root-layout notes listed above.
 | `ACKNOWLEDGMENTS.md`, `CHANGELOG.md`, `LICENSE`, `README.md`, `AGENTS.md` | Standard repository metadata and AI entrypoints. | Keep. | No cleanup. |
 | `opencode.json` | Root OpenCode configuration. | Keep. | Treat as provider tooling config. |
 | `specs/` | Broad docs, schema tests, visual contract tests, examples, scripts, and runtime comments deep-link into `specs/...`. | Keep for now. | Defer any move to a dedicated compatibility migration; see the #1598/#1599 note. |
-| `model_ped/` | Pedestrian PPO scripts, collision benchmark, adversarial-pedestrian demo, examples manifest, changelog, and `tests/test_training_ped_ppo.py` reference `model_ped/`. | Keep. | A future artifact migration would need checkpoint provenance and path-compatibility handling. |
-| `test_pygame/` | `AGENTS.md`, `docs/dev_guide.md`, `pyproject.toml`, tests, examples, and scripts reference this GUI test path. | Keep. | Only move with a dedicated GUI-test path migration and headless pygame validation. |
-| `test_scenarios/` | OSM examples and tests reference `test_scenarios/osm_fixtures/sample_block.pbf`. | Keep for now. | Use the #1598/#1599 compatibility plan before any fixture move. |
+| `model/pedestrian/` | Pedestrian PPO scripts, collision benchmark, adversarial-pedestrian demo, examples manifest, changelog, and `tests/test_training_ped_ppo.py` reference `model/pedestrian/`. | Keep. | A future artifact migration would need checkpoint provenance and path-compatibility handling. |
+| `tests/pygame/` | `AGENTS.md`, `docs/dev_guide.md`, `pyproject.toml`, tests, examples, and scripts reference this GUI test path. | Keep. | Only move with a dedicated GUI-test path migration and headless pygame validation. |
+| `tests/fixtures/scenarios/` | OSM examples and tests reference `tests/fixtures/scenarios/osm_fixtures/sample_block.pbf`. | Keep for now. | Use the #1598/#1599 compatibility plan before any fixture move. |
 | `hooks/` | `.pre-commit-config.yaml` invokes `hooks/prevent_schema_duplicates.py`; `pyproject.toml` has path-specific lint rules. | Defer. | A future tooling PR may relocate it only if pre-commit and tests are updated together. |
 | `utilities/` | Refactoring docs and commands reference `utilities/migrate_environments.py`; `pyproject.toml` has path-specific lint rules. | Defer. | Possible docs/tooling relocation, but not without updating exact command references. |
 | `experiments/` | `docs/dev_guide.md`, `docs/README.md`, and registry validation tests describe `experiments/registry.yaml` as the question-first experiment registry. | Keep. | Do not collapse into `configs/` unless the registry workflow is replaced. |
@@ -51,7 +55,7 @@ current repository context stack and the earlier root-layout notes listed above.
 
 - Root `.coverage` is no longer a tracked deletion candidate on this branch; it is absent and
   explicitly ignored.
-- `specs/` and `test_scenarios/` have since been resolved by the #1598/#1599 compatibility note:
+- `specs/` and `tests/fixtures/scenarios/` have since been resolved by the #1598/#1599 compatibility note:
   keep both at root unless a dedicated migration preserves compatibility.
 - `output/repos/README.md` is the only tracked file under the otherwise ignored `output/` root.
   This does not block current workflows, but it is the cleanest small follow-up candidate if the
@@ -69,10 +73,10 @@ git ls-files | awk 'index($0,"/")==0{print $0}' | sort
 git status --ignored --short -uall
 git ls-files .coverage
 git check-ignore -v .coverage output/coverage/.coverage
-rg -nF ".agent/" AGENTS.md docs .github .vscode .agents
-rg -nF "model_ped/" AGENTS.md docs tests scripts examples robot_sf
-rg -nF "test_pygame/" AGENTS.md docs tests scripts examples pyproject.toml
-rg -nF "test_scenarios/" AGENTS.md docs tests scripts examples robot_sf pyproject.toml
+rg -nF ".agents/PLANS.md" AGENTS.md docs .github .vscode .agents
+rg -nF "model/pedestrian/" AGENTS.md docs tests scripts examples robot_sf
+rg -nF "tests/pygame/" AGENTS.md docs tests scripts examples pyproject.toml
+rg -nF "tests/fixtures/scenarios/" AGENTS.md docs tests scripts examples robot_sf pyproject.toml
 rg -nF "CITATION.cff" AGENTS.md docs tests configs .github
 rg -nF "hooks/" .pre-commit-config.yaml pyproject.toml AGENTS.md docs tests scripts .github
 rg -nF "utilities/" AGENTS.md docs tests scripts pyproject.toml .github

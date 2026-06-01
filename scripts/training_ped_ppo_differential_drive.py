@@ -42,7 +42,7 @@ def training(svg_map_path: str) -> None:
         - Creates multiple environment subprocesses.
         - Writes TensorBoard logs under ``./logs/ppo_logs/``.
         - Writes checkpoints under ``./model/backup``.
-        - Saves the final model under ``./model_ped/`` with a timestamp.
+        - Saves the final model under ``./model/pedestrian/`` with a timestamp.
 
     Raises:
         FileNotFoundError: If ``svg_map_path`` or the pretrained model path is invalid.
@@ -101,7 +101,7 @@ def training(svg_map_path: str) -> None:
         model.learn(total_timesteps=1_500_000, progress_bar=True, callback=combined_callback)
         now = datetime.datetime.now()
         filename = now.strftime("%Y-%m-%d_%H-%M-%S")
-        model.save(f"./model_ped/ppo_{filename}")
+        model.save(f"./model/pedestrian/ppo_{filename}")
         logger.info(f"Model saved as ppo_{filename}")
     finally:
         env.close()

@@ -128,7 +128,7 @@ uv run ruff check .
 ```bash
 # Run tests
 uv run pytest tests
-uv run pytest test_pygame  # GUI tests
+uv run pytest tests/pygame  # GUI tests
 
 # Code quality
 uv run ruff check .

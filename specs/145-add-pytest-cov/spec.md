@@ -129,7 +129,7 @@ Project maintainers can view historical coverage trends to understand whether te
 ## Assumptions
 
 - The project uses pytest as the primary testing framework (verified in `pyproject.toml` and existing test tasks)
-- Coverage tracking should focus on the `robot_sf/` directory, excluding `tests/`, `test_pygame/`, `examples/`, and `scripts/`
+- Coverage tracking should focus on the `robot_sf/` directory, excluding `tests/`, `tests/pygame/`, `examples/`, and `scripts/`
 - The CI/CD system has access to filesystem storage for caching coverage baselines between runs
 - Developers primarily interact with tests through VS Code tasks or direct `uv run pytest` commands
 - A 1% coverage decrease threshold is appropriate for triggering warnings (configurable if needed)

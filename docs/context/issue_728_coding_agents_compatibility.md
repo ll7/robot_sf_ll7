@@ -25,7 +25,7 @@ through tooling rather than informal convention:
 | Phase | Robot SF mapping |
 |---|---|
 | **Retrieval** | `context-map`, `what-context-needed`, `benchmark-overview`, `experiment-context` |
-| **Planning** | `quality-playbook`, `gh-issue-clarifier`, `.agent/PLANS.md` convention |
+| **Planning** | `quality-playbook`, `gh-issue-clarifier`, `.agents/PLANS.md` convention |
 | **Execution** | `gh-issue-autopilot`, `autoresearch`, `auto-improvement` |
 | **Verification** | `implementation-verification`, `pr-ready-check`, `review-benchmark-change` |
 

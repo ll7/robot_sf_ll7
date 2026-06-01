@@ -19,7 +19,7 @@ def test_load_and_visualize_states():
     playback using the RobotSF rendering system.
     """
     logger.info("Testing load and visualize states")
-    test_file = "test_pygame/recordings/2024-06-04_08-39-59.pkl"
+    test_file = "tests/pygame/recordings/2024-06-04_08-39-59.pkl"
 
     # Load the states from the file
     load_states_and_visualize(test_file)

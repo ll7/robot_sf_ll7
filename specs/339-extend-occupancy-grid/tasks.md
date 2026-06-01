@@ -393,14 +393,14 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
 
 ### Tests for User Story 4 (Visual & Integration)
 
-- [x] T068 [P] [US4] Visual test: Grid rendering at default configuration in `test_pygame/test_occupancy_visualization.py` (no crashes, grid visible)
-- [x] T069 [P] [US4] Visual test: Obstacle cells highlighted in `test_pygame/test_occupancy_visualization.py` (obstacles show yellow, pedestrians show red)
-- [x] T070 [P] [US4] Visual test: Free cells transparent in `test_pygame/test_occupancy_visualization.py` (background visible through free cells)
-- [x] T071 [P] [US4] Visual test: Ego-frame rotation in `test_pygame/test_occupancy_visualization.py` (grid rotates with robot heading)
-- [x] T072 [P] [US4] Visual test: World-frame alignment in `test_pygame/test_occupancy_visualization.py` (grid stays aligned to world regardless of robot heading)
-- [x] T073 [P] [US4] Visual test: Channel toggling in `test_pygame/test_occupancy_visualization.py` (toggle visibility, verify rendering changes)
-- [x] T074 [US4] Integration test: Full simulation with visualization in `test_pygame/test_occupancy_visualization.py` (run 100 steps, no performance regression, 30+ FPS maintained)
-- [x] T075 [US4] Integration test: Video recording with grid overlay in `test_pygame/test_occupancy_visualization.py` (if video recording enabled, grid appears in output)
+- [x] T068 [P] [US4] Visual test: Grid rendering at default configuration in `tests/pygame/test_occupancy_visualization.py` (no crashes, grid visible)
+- [x] T069 [P] [US4] Visual test: Obstacle cells highlighted in `tests/pygame/test_occupancy_visualization.py` (obstacles show yellow, pedestrians show red)
+- [x] T070 [P] [US4] Visual test: Free cells transparent in `tests/pygame/test_occupancy_visualization.py` (background visible through free cells)
+- [x] T071 [P] [US4] Visual test: Ego-frame rotation in `tests/pygame/test_occupancy_visualization.py` (grid rotates with robot heading)
+- [x] T072 [P] [US4] Visual test: World-frame alignment in `tests/pygame/test_occupancy_visualization.py` (grid stays aligned to world regardless of robot heading)
+- [x] T073 [P] [US4] Visual test: Channel toggling in `tests/pygame/test_occupancy_visualization.py` (toggle visibility, verify rendering changes)
+- [x] T074 [US4] Integration test: Full simulation with visualization in `tests/pygame/test_occupancy_visualization.py` (run 100 steps, no performance regression, 30+ FPS maintained)
+- [x] T075 [US4] Integration test: Video recording with grid overlay in `tests/pygame/test_occupancy_visualization.py` (if video recording enabled, grid appears in output)
 
 ### Implementation for User Story 4
 
@@ -572,7 +572,7 @@ Complete with visualization and 100% coverage. Recommended for weeks 7–12.
 - **Configuration**: `robot_sf/gym_env/unified_config.py` (GridConfig dataclass)
 - **Gymnasium integration**: `robot_sf/gym_env/environment.py` (grid in observation space)
 - **Visualization**: `robot_sf/render/sim_view.py` (pygame rendering)
-- **Tests**: `tests/test_occupancy_*.py` (4 files), `test_pygame/test_occupancy_visualization.py`
+- **Tests**: `tests/test_occupancy_*.py` (4 files), `tests/pygame/test_occupancy_visualization.py`
 - **Documentation**: `docs/dev/occupancy/Update_or_extend_occupancy.md` (usage guide)
 - **Examples**: `examples/advanced/` and `examples/quickstart/` (demo scripts)
 

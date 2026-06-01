@@ -161,7 +161,7 @@ robot_sf_ll7/
 │   ├── README.md      # Subtree documentation (PR review issues)
 │   └── .github/       # CI configuration (PR review issues)
 ├── tests/             # Main test suite (~43 tests, all passing)
-├── test_pygame/       # GUI tests (separate suite)
+├── tests/pygame/       # GUI tests (separate suite)
 ├── pyproject.toml     # Configuration (to be updated for pytest/ruff/coverage)
 ├── .github/
 │   └── workflows/

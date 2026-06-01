@@ -97,7 +97,7 @@ export const find_tests = tool({
     const root = context.worktree;
     const lookup = path.basename(args.repo_path);
     const stem = lookup.replace(path.extname(lookup), "").replace(/^test_/, "");
-    const dirs = existingDirs(root, ["tests", "test_pygame", "fast-pysf/tests"]);
+    const dirs = existingDirs(root, ["tests", "tests/pygame", "fast-pysf/tests"]);
     if (dirs.length === 0) {
       return JSON.stringify(
         { repo_path: args.repo_path, stem, matches: [], references: [] },

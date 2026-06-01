@@ -79,7 +79,7 @@ def main():
         potential_files = generated_candidates + [
             recordings_dir / "latest.pkl",
             Path("examples/recordings/2024-12-06_15-39-44.pkl"),
-            Path("test_pygame/recordings/demo.pkl"),
+            Path("tests/pygame/recordings/demo.pkl"),
         ]
 
         recording_file = None

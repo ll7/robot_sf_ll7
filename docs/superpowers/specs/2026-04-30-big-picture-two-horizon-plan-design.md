@@ -49,7 +49,7 @@ The refined plan should be anchored in these repository surfaces:
   - Camera-ready benchmark, release, SNQI, and reproducibility obligations.
 - `docs/context/issue_691_benchmark_fallback_policy.md`
   - Fallback or degraded execution is not benchmark-strengthening evidence.
-- `AGENTS.md` and `.agent/PLANS.md`
+- `AGENTS.md` and `.agents/PLANS.md`
   - Plans should be operational, evidence-backed, and validation-oriented.
 
 ## Proposed Structure

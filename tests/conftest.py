@@ -532,7 +532,7 @@ def sample_baseline_data():
 
 
 # ============================================================================
-# Occupancy Grid Fixtures (from conftest_occupancy.py)
+# Occupancy Grid Fixtures
 # ============================================================================
 
 

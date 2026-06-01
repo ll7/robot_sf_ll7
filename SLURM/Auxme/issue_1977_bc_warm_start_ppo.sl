@@ -23,6 +23,7 @@ LOG_LEVEL=${ISSUE1977_LOG_LEVEL:-WARNING}
 WANDB_ARTIFACT=${ISSUE1977_WANDB_ARTIFACT:-ll7/robot_sf/issue_1108_bc_warm_start_job12472:v0}
 PPO_CONFIG=${ISSUE1977_PPO_CONFIG:-configs/training/ppo_imitation/ppo_finetune_issue_1977_bc_warm_start_rerun.yaml}
 RUN_POLICY_ANALYSIS=${ISSUE1977_RUN_POLICY_ANALYSIS:-1}
+USE_SRUN=${ISSUE1977_USE_SRUN:-0}
 MODULES_AVAILABLE=0
 RUN_OUTPUT_DIR=""
 
@@ -66,12 +67,12 @@ ensure_module_command() {
 }
 
 run_in_allocation() {
-  if command -v srun >/dev/null 2>&1; then
+  if [[ "${USE_SRUN}" == "1" ]] && command -v srun >/dev/null 2>&1; then
     echo "[issue1977] Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
     srun --cpu_bind=cores --gpus-per-node=1 "$@"
   else
-    echo "[issue1977] srun unavailable on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}; PATH=${PATH}" >&2
-    echo "[issue1977] Running directly in the batch allocation." >&2
+    echo "[issue1977] Running directly in the batch allocation on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}." >&2
+    echo "[issue1977] Set ISSUE1977_USE_SRUN=1 to opt into srun; PATH=${PATH}" >&2
     "$@"
   fi
 }
@@ -123,6 +124,7 @@ echo "[issue1977] RESULTS_ROOT=${RESULTS_ROOT}"
 echo "[issue1977] WANDB_ARTIFACT=${WANDB_ARTIFACT}"
 echo "[issue1977] PPO_CONFIG=${PPO_CONFIG}"
 echo "[issue1977] RUN_POLICY_ANALYSIS=${RUN_POLICY_ANALYSIS}"
+echo "[issue1977] USE_SRUN=${USE_SRUN}"
 echo "[issue1977] git_commit=$(git rev-parse HEAD)"
 echo "[issue1977] git_branch=$(git branch --show-current || true)"
 

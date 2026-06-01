@@ -14,7 +14,8 @@ Provided capabilities:
 - measure artifact size ranges across runs (`measure_artifact_size_ranges`)
 - export DOI-ready bundle with:
   - payload
-  - `publication_manifest.json` (`benchmark-publication-bundle.v1`)
+  - `publication_manifest.json` (`benchmark-publication-bundle.v1` in the original issue #499
+    implementation; current publication docs use `benchmark-publication-bundle.v2`)
   - `checksums.sha256`
   - compressed archive (`.tar.gz`)
 
@@ -44,4 +45,3 @@ Coverage focus:
   - `docs/context/issue_499_artifact_size_report_2026-02-16.json`
 - Generated via:
   - `uv run python scripts/tools/benchmark_publication_bundle.py size-report ...`
-

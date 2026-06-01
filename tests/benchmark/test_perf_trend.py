@@ -145,7 +145,9 @@ def test_classic_matrix_keeps_high_density_gate_advisory() -> None:
     by_name = {scenario.scenario_name: scenario for scenario in scenarios}
 
     assert by_name["classic_cross_trap_low"].enforce_regression_gate is True
+    assert by_name["classic_cross_trap_low"].warm_runs == 3
     assert by_name["classic_cross_trap_medium"].enforce_regression_gate is True
+    assert by_name["classic_cross_trap_medium"].warm_runs == 2
     assert by_name["classic_cross_trap_high"].require_baseline is False
     assert by_name["classic_cross_trap_high"].enforce_regression_gate is False
 
@@ -193,7 +195,7 @@ def test_compare_with_history_no_reports() -> None:
 
 
 def test_compare_with_history_flags_startup_regression() -> None:
-    """Time-metric slowdown should produce startup-focused diagnostics."""
+    """Time-metric slowdown should produce startup-focused warning diagnostics."""
     current = [
         {
             "scenario_name": "classic_cross_trap_low",
@@ -243,9 +245,182 @@ def test_compare_with_history_flags_startup_regression() -> None:
             min_throughput_delta=0.75,
         ),
     )
-    assert result["status"] == "fail"
+    assert result["status"] == "warn"
     assert any("startup overhead" in d for d in result["diagnostics"])
     assert any(f["is_regression"] and f["metric"] == "env_create_sec" for f in result["findings"])
+
+
+def test_compare_with_history_warns_for_startup_coupled_warm_throughput() -> None:
+    """Warm throughput drop explained by first-step overhead should not fail history gating."""
+    current = [
+        {
+            "scenario_name": "classic_cross_trap_low",
+            "cold_median": {
+                "env_create_sec": 6.8,
+                "first_step_sec": 5.8,
+                "episode_sec": 5.8,
+                "steps_per_sec": 16.5,
+            },
+            "warm_median": {
+                "env_create_sec": 0.008,
+                "first_step_sec": 0.189,
+                "episode_sec": 0.243,
+                "steps_per_sec": 1006.5,
+            },
+        }
+    ]
+    history_reports = [
+        {
+            "schema_version": perf_trend.TREND_REPORT_SCHEMA_VERSION,
+            "scenario_results": [
+                {
+                    "scenario_name": "classic_cross_trap_low",
+                    "cold_median": {
+                        "env_create_sec": 7.2,
+                        "first_step_sec": 6.6,
+                        "episode_sec": 6.6,
+                        "steps_per_sec": 14.5,
+                    },
+                    "warm_median": {
+                        "env_create_sec": 0.0085,
+                        "first_step_sec": 0.00067,
+                        "episode_sec": 0.055,
+                        "steps_per_sec": 1736.0,
+                    },
+                }
+            ],
+        }
+    ]
+
+    result = perf_trend.compare_with_history(
+        current_results=current,
+        history_reports=history_reports,
+        thresholds=perf_trend.HistoryThresholds(
+            max_slowdown_pct=0.35,
+            max_throughput_drop_pct=0.30,
+            min_seconds_delta=0.10,
+            min_throughput_delta=0.75,
+        ),
+    )
+
+    assert result["status"] == "warn"
+    assert any("Startup-coupled steady metrics" in d for d in result["diagnostics"])
+    assert any(f["is_regression"] and f["metric"] == "steps_per_sec" for f in result["findings"])
+
+
+def test_compare_with_history_fails_for_unexplained_steady_regression() -> None:
+    """Steady regressions should still fail when not explained by first-step overhead."""
+    current = [
+        {
+            "scenario_name": "classic_cross_trap_low",
+            "cold_median": {
+                "env_create_sec": 1.1,
+                "first_step_sec": 0.10,
+                "episode_sec": 1.2,
+                "steps_per_sec": 16.0,
+            },
+            "warm_median": {
+                "env_create_sec": 0.01,
+                "first_step_sec": 0.001,
+                "episode_sec": 0.16,
+                "steps_per_sec": 600.0,
+            },
+        }
+    ]
+    history_reports = [
+        {
+            "schema_version": perf_trend.TREND_REPORT_SCHEMA_VERSION,
+            "scenario_results": [
+                {
+                    "scenario_name": "classic_cross_trap_low",
+                    "cold_median": {
+                        "env_create_sec": 1.0,
+                        "first_step_sec": 0.10,
+                        "episode_sec": 1.2,
+                        "steps_per_sec": 16.0,
+                    },
+                    "warm_median": {
+                        "env_create_sec": 0.01,
+                        "first_step_sec": 0.001,
+                        "episode_sec": 0.055,
+                        "steps_per_sec": 1736.0,
+                    },
+                }
+            ],
+        }
+    ]
+
+    result = perf_trend.compare_with_history(
+        current_results=current,
+        history_reports=history_reports,
+        thresholds=perf_trend.HistoryThresholds(
+            max_slowdown_pct=0.35,
+            max_throughput_drop_pct=0.30,
+            min_seconds_delta=0.10,
+            min_throughput_delta=0.75,
+        ),
+    )
+
+    assert result["status"] == "fail"
+    assert any("steady-state stepping" in d for d in result["diagnostics"])
+
+
+def test_compare_with_history_fails_for_mixed_startup_and_body_regression() -> None:
+    """Large first-step slowdown should not mask additional post-first-step slowdown."""
+    current = [
+        {
+            "scenario_name": "classic_cross_trap_low",
+            "cold_median": {
+                "env_create_sec": 1.1,
+                "first_step_sec": 0.10,
+                "episode_sec": 1.2,
+                "steps_per_sec": 16.0,
+            },
+            "warm_median": {
+                "env_create_sec": 0.01,
+                "first_step_sec": 5.1,
+                "episode_sec": 5.7,
+                "steps_per_sec": 20.0,
+            },
+        }
+    ]
+    history_reports = [
+        {
+            "schema_version": perf_trend.TREND_REPORT_SCHEMA_VERSION,
+            "scenario_results": [
+                {
+                    "scenario_name": "classic_cross_trap_low",
+                    "cold_median": {
+                        "env_create_sec": 1.0,
+                        "first_step_sec": 0.10,
+                        "episode_sec": 1.2,
+                        "steps_per_sec": 16.0,
+                    },
+                    "warm_median": {
+                        "env_create_sec": 0.01,
+                        "first_step_sec": 0.1,
+                        "episode_sec": 0.2,
+                        "steps_per_sec": 480.0,
+                    },
+                }
+            ],
+        }
+    ]
+
+    result = perf_trend.compare_with_history(
+        current_results=current,
+        history_reports=history_reports,
+        thresholds=perf_trend.HistoryThresholds(
+            max_slowdown_pct=0.35,
+            max_throughput_drop_pct=0.30,
+            min_seconds_delta=0.10,
+            min_throughput_delta=0.75,
+        ),
+    )
+
+    assert result["status"] == "fail"
+    assert any("spans startup and steady-state behavior" in d for d in result["diagnostics"])
+    assert any(f["is_regression"] and f["metric"] == "episode_sec" for f in result["findings"])
 
 
 def test_compare_with_history_passes_when_within_thresholds() -> None:

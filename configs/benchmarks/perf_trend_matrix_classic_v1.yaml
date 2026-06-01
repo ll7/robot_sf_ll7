@@ -5,7 +5,9 @@ scenarios:
     scenario_name: classic_cross_trap_low
     episode_steps: 96
     cold_runs: 1
-    warm_runs: 2
+    # Issue #1991: use an odd sample count so one transient first-step outlier
+    # cannot produce a midpoint median that looks like steady throughput regression.
+    warm_runs: 3
     baseline: configs/benchmarks/perf_baseline_classic_cold_warm_v1.json
     require_baseline: true
     max_slowdown_pct: 0.60

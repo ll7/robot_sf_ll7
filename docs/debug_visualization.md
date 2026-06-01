@@ -51,6 +51,20 @@ uv run python scripts/tools/rerun_debug_export.py \
 If `rerun-sdk` is absent, the command fails closed with an install hint instead of adding a required
 dependency to the repository.
 
+For static Three.js viewer exports, run the optional browser pixel smoke when browser automation is
+available:
+
+```bash
+uv sync --extra browser
+uv run python -m playwright install chromium
+uv run python scripts/validation/smoke_threejs_viewer_browser.py \
+  --viewer-dir output/threejs_viewer
+```
+
+The smoke serves the static viewer locally, opens it in headless Chromium, captures the canvas, and
+fails if the screenshot is blank or contains only the viewer background. Missing Playwright or
+Chromium support is reported as an actionable validation failure, not as a successful skip.
+
 ## Evidence Boundary
 
 Debug timelines are diagnostic visualization artifacts. They do not replace episode JSONL,

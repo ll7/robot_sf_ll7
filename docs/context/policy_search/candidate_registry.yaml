@@ -702,6 +702,26 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  shielded_ppo_issue1474_collision20_v1:
+    status: needs_repair
+    family: guarded_learning_policy
+    training_required: false
+    promotion_gate: tier_c
+    candidate_config_path: configs/policy_search/candidates/shielded_ppo_issue1474_collision20_v1.yaml
+    learned_policy_registry_id: shielded_ppo_issue1474_collision20_v1
+    hypothesis: >
+      Replacing the historical BR-06 v3 PPO checkpoint inside the frozen
+      risk_guarded_ppo_v1 runtime guard with the issue #1474 collision-20 repair
+      checkpoint should reduce unsafe PPO proposals while preserving enough
+      learned progress to pass the shielded-PPO smoke and nominal-sanity stop
+      gates. The first post-training smoke failed the launch-packet success
+      gate with an overconservative zero-motion timeout, so this candidate
+      should not be included in routine sweeps until repaired.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
   orca_prior_guarded_ppo_v1:
     status: implemented
     family: guarded_learning_policy

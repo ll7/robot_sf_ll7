@@ -1,0 +1,53 @@
+model_id: ppo_expert_issue_1474_shielded_repair_collision20_5m
+candidate_id: shielded_ppo_issue1474_collision20_v1
+verdict: eligible_for_research_only
+observation_t: current decision step; no future pedestrian state or outcome label is available to the deployed PPO or guard.
+observation_fields:
+  deployment_observable:
+    - robot pose, heading, radius, velocity, and active differential-drive limits
+    - current route goal encoded in the PPO observation
+    - local occupancy grid with obstacle and pedestrian channels centered on the robot
+    - current pedestrian positions, velocities, radii, and counts exposed by the Robot SF scenario
+    - static map obstacles exposed through the planner-facing occupancy-grid/SocNav wrapper
+  training_only:
+    - route-completion reward and advantage targets
+    - PPO rollout returns and optimizer state
+    - evaluation aggregates used for best-success checkpoint selection
+  forbidden_evaluation_time: []
+split_provenance:
+  training_data_source: on-policy PPO rollouts from configs/scenarios/classic_interactions_francis2023.yaml
+  validation_split: periodic 100-episode random-seed evaluation over the configured 48-scenario profile
+  test_split: not yet established; policy-search smoke and nominal_sanity are post-training gates, not held-out benchmark proof
+  checkpoint_or_model_provenance: W&B artifact ll7/robot_sf/ppo_expert_issue_1474_shielded_repair_collision20_5m-best-success:v5 from run d8w8uykh
+  privileged_training_inputs: PPO rewards, returns, advantages, and checkpoint-selection metrics only
+  privileged_training_inputs_enter_evaluation: false
+  normalization_statistics: route_completion_v3/BR-06 compatible PPO observation normalization embedded in the SB3 artifact
+  normalization_statistics_fit_on_training_only: true
+  evidence_source: SLURM job 12674 plus W&B artifact metadata; guarded smoke/nominal evidence pending
+action_contract:
+  output_family: velocity_command
+  frame: Robot SF local planner command frame
+  units: meters_per_second linear velocity and radians_per_second angular velocity
+  bounds: raw PPO action projected to v_max=2.0 and omega_max=1.0 before runtime guard handling
+  kinematics_compatibility: differential_drive
+  projection_policy: PPO unicycle action is adapted through the existing PPO planner wrapper and guarded_ppo command projection
+  raw_to_robot_sf_action: SB3 PPO prediction -> Robot SF PPO action adapter -> guarded_ppo proposal
+  guard_or_projection_policy: risk_guarded_ppo_v1 runtime guard remains active; unsafe proposals can be vetoed or replaced by fallback Risk-DWA
+per_step_logging:
+  raw_model_action: required by launch packet guard diagnostics
+  adapted_action: required by launch packet guard diagnostics
+  post_guard_action: required by launch packet guard diagnostics
+  guard_applied: required by launch packet guard diagnostics
+  guard_or_fallback_reason: required by launch packet guard diagnostics
+  observation_level: BR-06 SocNav/occupancy-grid observation contract
+  planner_observation_mode: dict/SocNav PPO observation wrapped by guarded_ppo
+  action_bounds: v_max=2.0, omega_max=1.0
+  action_projection_metadata: guard veto/fallback diagnostics required before benchmark escalation
+candidate_registry:
+  entry_planned: true
+  candidate_config_path: configs/policy_search/candidates/shielded_ppo_issue1474_collision20_v1.yaml
+  adapter_path: robot_sf/planner/guarded_ppo.py plus robot_sf/baselines/ppo.py
+  smoke_or_validation_command: uv run python scripts/validation/run_policy_search_candidate.py --candidate shielded_ppo_issue1474_collision20_v1 --stage smoke --workers 1
+  missing_checkpoint_policy: fail closed through model registry resolution error unless W&B artifact or local cache is available
+  unsupported_observation_policy: fail closed; do not fall back to another observation contract
+  guard_activation_policy: report as caveat; guard-mediated success must be separated from raw PPO behavior

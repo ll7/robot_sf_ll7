@@ -20,6 +20,11 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceFrame,
     load_simulation_trace_export,
 )
+from robot_sf.analysis_workbench.trace_annotation import (
+    TraceAnnotationSet,
+    TraceAnnotationSetValidationError,
+    load_trace_annotation_set,
+)
 
 ANNOTATION_KEYS = {
     "annotation",
@@ -37,7 +42,10 @@ ANNOTATION_KEYS = {
 }
 
 
-def render_trace_report(trace: SimulationTraceExport) -> str:
+def render_trace_report(
+    trace: SimulationTraceExport,
+    annotations: TraceAnnotationSet | None = None,
+) -> str:
     """Render a loaded trace export as Markdown.
 
     Returns:
@@ -55,6 +63,8 @@ def render_trace_report(trace: SimulationTraceExport) -> str:
         "",
     ]
     lines.extend(_trace_metadata(trace))
+    if annotations is not None:
+        lines.extend(_qualitative_annotations_section(annotations))
     lines.extend(_summary(trace))
     lines.extend(_event_summary(trace.frames))
     lines.extend(_planner_key_summary(trace.frames))
@@ -63,19 +73,47 @@ def render_trace_report(trace: SimulationTraceExport) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_trace_report(*, trace_path: Path, output: Path) -> Path:
+def write_trace_report(
+    *,
+    trace_path: Path,
+    output: Path,
+    annotation_path: Path | None = None,
+) -> Path:
     """Load a trace export and write a Markdown report.
 
     Raises:
         SimulationTraceExportValidationError: if ``trace_path`` is not a valid trace export.
+        TraceAnnotationSetValidationError: if ``annotation_path`` is invalid or mismatched.
         OSError: if input or output files cannot be read or written.
     """
 
     trace = load_simulation_trace_export(trace_path)
-    markdown = render_trace_report(trace)
+    annotations = _load_matching_annotations(annotation_path, trace)
+    markdown = render_trace_report(trace, annotations=annotations)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(markdown, encoding="utf-8")
     return output
+
+
+def _load_matching_annotations(
+    annotation_path: Path | None,
+    trace: SimulationTraceExport,
+) -> TraceAnnotationSet | None:
+    """Load optional annotations and fail closed when they target another trace."""
+
+    if annotation_path is None:
+        return None
+
+    annotations = load_trace_annotation_set(annotation_path)
+    if annotations.timeline.trace_id != trace.trace_id:
+        raise TraceAnnotationSetValidationError(
+            [
+                "/timeline/trace_id: annotation set references "
+                f"{annotations.timeline.trace_id!r}, expected report trace_id {trace.trace_id!r}"
+            ],
+            source=annotation_path,
+        )
+    return annotations
 
 
 def _trace_metadata(trace: SimulationTraceExport) -> list[str]:
@@ -336,6 +374,55 @@ def _escape_markdown_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
 
 
+def _qualitative_annotations_section(annotation_set: TraceAnnotationSet) -> list[str]:
+    """Render qualitative frame-range annotations as a compact Markdown section."""
+
+    intro = [
+        "## Qualitative Trace Annotations",
+        "",
+        (
+            "These annotations are validated analysis-workbench notes from "
+            f"`{annotation_set.annotation_set_id}`. They remain "
+            "`analysis_workbench_qualitative_only`, not benchmark evidence, and do not "
+            "replace benchmark summaries, episode JSONL, manifests, or paper-facing "
+            "evidence contracts."
+        ),
+        "",
+    ]
+    rows = [
+        (
+            annotation.annotation_id,
+            annotation.category,
+            annotation.evidence_type,
+            f"{annotation.anchor.frame_start}-{annotation.anchor.frame_end}",
+            ", ".join(annotation.anchor.event_ids) if annotation.anchor.event_ids else "none",
+            ", ".join(f"{entity.type}:{entity.id}" for entity in annotation.anchor.entities)
+            if annotation.anchor.entities
+            else "none",
+            annotation.summary,
+            annotation.details if annotation.details is not None else "none",
+        )
+        for annotation in annotation_set.annotations
+    ]
+    return (
+        intro
+        + _markdown_table(
+            (
+                "id",
+                "category",
+                "evidence_type",
+                "frames",
+                "events",
+                "entities",
+                "summary",
+                "details",
+            ),
+            rows,
+        )
+        + [""]
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """Build CLI parser for trace-report rendering."""
 
@@ -349,6 +436,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path("report.md"),
         help="Markdown output path. Defaults to ./report.md.",
     )
+    parser.add_argument(
+        "--annotations",
+        type=Path,
+        default=None,
+        help="Optional trace_annotation_set.v1 JSON for qualitative analysis annotations.",
+    )
     return parser
 
 
@@ -359,8 +452,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        output = write_trace_report(trace_path=args.trace, output=args.output)
-    except (OSError, ValueError, SimulationTraceExportValidationError) as exc:
+        output = write_trace_report(
+            trace_path=args.trace,
+            output=args.output,
+            annotation_path=args.annotations,
+        )
+    except (
+        OSError,
+        ValueError,
+        SimulationTraceExportValidationError,
+        TraceAnnotationSetValidationError,
+    ) as exc:
         print(f"{exc}", file=sys.stderr)
         return 1
 

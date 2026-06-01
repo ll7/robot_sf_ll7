@@ -30,13 +30,22 @@ uv run python scripts/tools/render_trace_report.py \
   --output output/debug/trace_report/report.md
 ```
 
-Qualitative frame-range annotations for trace fixtures use `trace_annotation_set.v1`. They anchor
-review comments to inclusive trace steps, optional planner event IDs, and robot or pedestrian
-entities while preserving a strict `analysis_workbench_qualitative_only` evidence boundary. The
-fixture added for issue #1962 is:
+Optional qualitative frame-range annotations use `trace_annotation_set.v1` and are included via
+`--annotations`. They anchor review comments to inclusive trace steps, optional planner event IDs,
+and robot or pedestrian entities while preserving a strict `analysis_workbench_qualitative_only`
+evidence boundary. The fixture added for issue #1962 is:
 
 ```text
 tests/fixtures/analysis_workbench/trace_annotation_set_v1/issue_1962_planner_sanity_open_annotations.json
+```
+
+Render a report with annotations:
+
+```bash
+uv run python scripts/tools/render_trace_report.py \
+  --trace tests/fixtures/analysis_workbench/simulation_trace_export_v1/planner_sanity_open_episode_0000.json \
+  --annotations tests/fixtures/analysis_workbench/trace_annotation_set_v1/issue_1962_planner_sanity_open_annotations.json \
+  --output output/debug/trace_report/annotated_report.md
 ```
 
 An optional Rerun output path is available when `rerun-sdk` is installed in the active environment:

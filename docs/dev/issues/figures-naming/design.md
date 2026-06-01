@@ -56,10 +56,14 @@ Optional suffixes:
 - `robot_sf/benchmark/figures.py`: FigureOrchestrator class for automated generation
 - `scripts/generate_figures.py`: CLI interface with `--auto-out-dir` flag
 - `docs/figures/`: Output directory with canonical folder structure
+- `docs/artifact_catalog.md`: `artifact_catalog.v1` contract for stable figure/table IDs,
+  checksums, generation commands, and claim boundaries once an artifact is reused across reports
 
 ## Acceptance Criteria
 - New runs with `--auto-out-dir` produce uniquely named folders with a `meta.json` file.
 - Docs show the pattern and provide a LaTeX include snippet using `_latest.txt`-resolved path.
 - Backward compatibility maintained with existing figure references.
+- Reusable figures/tables can be registered in an `artifact_catalog.v1` file without treating
+  generated paths as the semantic identity.
 
 **Status**: ✅ Design Complete - Ready for implementation

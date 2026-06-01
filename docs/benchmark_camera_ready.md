@@ -642,6 +642,23 @@ failure, fallback, degraded execution, or availability. Continue to interpret
 benchmark evidence through `availability_status`, `benchmark_success`, and the
 fail-closed fallback policy above.
 
+Canonical table exporter:
+
+```bash
+uv run robot_sf_bench export-canonical-table \
+  --table-id planner_outcome_summary \
+  --rows output/benchmarks/camera_ready/<campaign_id>/reports/planner_rows.json \
+  --out-dir output/benchmarks/camera_ready/<campaign_id>/reports/canonical_tables \
+  --source output/benchmarks/camera_ready/<campaign_id>/reports/campaign_summary.json
+```
+
+The exporter writes `csv`, `md`, and `tex` fragments plus
+`<table-id>.metadata.json` with source checksums, command, commit, row count, selected columns, and
+generated output paths. Named table contracts currently cover planner outcome, scenario-family,
+seed-variability, execution-mode, and artifact-source summaries. Fallback, degraded, failed, and
+not-available rows remain explicit table rows; the exporter only formats rows and records
+provenance, and does not recompute benchmark metrics or reinterpret row status.
+
 ## Notes on Experimental Planners
 
 Experimental planners are executed with explicit profile and prereq policy from

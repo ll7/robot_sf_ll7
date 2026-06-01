@@ -177,11 +177,11 @@ adapter-only proof are useful planning evidence, but they are not benchmark evid
 - `checkpoint_availability`: W&B artifact
   `ll7/robot_sf/ppo_expert_issue_1474_shielded_repair_collision20_5m-best-success:v5`.
 - `expected_dependencies`: local repo plus W&B artifact hydration.
-- `reproducibility_status`: training complete; first guarded smoke failed the launch-packet success
-  gate with an overconservative zero-motion timeout.
-- `integration_status`: staged candidate config, blocked from routine sweeps until repaired.
-- `benchmark_status`: blocked until the launch-packet smoke and nominal-sanity stop gates pass with
-  guard diagnostics present.
+- `reproducibility_status`: training complete; issue #2006 local guarded smoke passes the
+  launch-packet smoke gate after restoring the SocNav observation handoff.
+- `integration_status`: staged candidate config, prototype-gated until SLURM smoke replay or an
+  explicit maintainer escalation decision.
+- `benchmark_status`: blocked until nominal-sanity stop gates pass with guard diagnostics present.
 - `local_anchors`:
   - `configs/policy_search/candidates/shielded_ppo_issue1474_collision20_v1.yaml`
   - `configs/training/shielded_ppo_issue_1396_launch_packet.yaml`

@@ -131,6 +131,28 @@ def test_orca_residual_guarded_candidate_requests_training_observation_contract(
     )
 
 
+def test_shielded_ppo_issue1474_candidate_requests_training_observation_contract() -> None:
+    """Issue #1474 shielded-PPO repair should use the SocNav contract it trained with."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    _entry, payload, config, config_path = load_candidate_definition(
+        repo_root / "docs/context/policy_search/candidate_registry.yaml",
+        "shielded_ppo_issue1474_collision20_v1",
+    )
+
+    assert payload["algo"] == "guarded_ppo"
+    assert config["obs_mode"] == "dict"
+    assert config["observation_mode"] == "socnav_state"
+    assert config["model_id"] == "ppo_expert_issue_1474_shielded_repair_collision20_5m"
+    assert (
+        config_path
+        == (
+            repo_root
+            / "configs/policy_search/candidates/shielded_ppo_issue1474_collision20_v1.yaml"
+        ).resolve()
+    )
+
+
 def test_risk_surface_candidate_uses_smoke_progress_recovery_speed() -> None:
     """Risk-surface smoke candidate should opt into the 2 m/s local command envelope."""
     repo_root = Path(__file__).resolve().parents[2]

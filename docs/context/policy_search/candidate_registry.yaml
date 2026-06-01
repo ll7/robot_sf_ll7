@@ -715,8 +715,9 @@ candidates:
       checkpoint should reduce unsafe PPO proposals while preserving enough
       learned progress to pass the shielded-PPO smoke and nominal-sanity stop
       gates. The first post-training smoke failed the launch-packet success
-      gate with an overconservative zero-motion timeout, so this candidate
-      should not be included in routine sweeps until repaired.
+      gate with an overconservative zero-motion timeout; issue #2006 repaired
+      the local smoke handoff, but the row stays prototype-gated until SLURM
+      smoke replay and nominal-sanity escalation are explicitly approved.
     required_stages:
       - smoke
       - nominal_sanity

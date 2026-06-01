@@ -17,12 +17,16 @@ def _obs(
     robot=(0.0, 0.0),
     heading=0.0,
     goal=(2.0, 0.0),
+    next_goal=None,
     ped_positions=None,
     ped_velocities=None,
+    ped_count=None,
 ) -> dict[str, object]:
     """Build the minimal observation payload consumed by the guard tests."""
     ped_positions = [] if ped_positions is None else ped_positions
     ped_velocities = [] if ped_velocities is None else ped_velocities
+    next_goal = goal if next_goal is None else next_goal
+    ped_count = len(ped_positions) if ped_count is None else ped_count
     return {
         "robot": {
             "position": np.asarray(robot, dtype=float),
@@ -31,11 +35,12 @@ def _obs(
         },
         "goal": {
             "current": np.asarray(goal, dtype=float),
-            "next": np.asarray(goal, dtype=float),
+            "next": np.asarray(next_goal, dtype=float),
         },
         "pedestrians": {
             "positions": np.asarray(ped_positions, dtype=float),
             "velocities": np.asarray(ped_velocities, dtype=float),
+            "count": np.asarray([ped_count], dtype=float),
         },
     }
 
@@ -514,6 +519,42 @@ def test_guarded_ppo_goal_and_clear_branches() -> None:
     assert decision == "goal_reached"
 
     command, decision = guard.choose_command(_obs(ped_positions=[(2.0, 2.0)]), (0.3, 0.1))
+    assert command == (0.3, 0.1)
+    assert decision == "ppo_clear"
+
+
+def test_guarded_ppo_tracks_current_goal_before_next_waypoint() -> None:
+    """Near next waypoint should not short-circuit while the current goal remains far away."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config({"goal_tolerance": 0.3, "guard_near_field_distance": 0.5}),
+        fallback_adapter=_FallbackAdapter((0.1, 0.2)),
+    )
+
+    command, decision = guard.choose_command(
+        _obs(robot=(1.0, 1.0), goal=(5.0, 1.0), next_goal=(1.1, 1.0)),
+        (0.3, 0.1),
+    )
+
+    assert command == (0.3, 0.1)
+    assert decision == "ppo_clear"
+
+
+def test_guarded_ppo_honors_array_pedestrian_count_for_padded_rows() -> None:
+    """Padded zero pedestrian rows from SocNav observations should not become real blockers."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config({"guard_near_field_distance": 0.5}),
+        fallback_adapter=_FallbackAdapter((0.1, 0.2)),
+    )
+
+    command, decision = guard.choose_command(
+        _obs(
+            ped_positions=[(0.0, 0.0), (0.0, 0.0)],
+            ped_velocities=[(0.0, 0.0), (0.0, 0.0)],
+            ped_count=0,
+        ),
+        (0.3, 0.1),
+    )
+
     assert command == (0.3, 0.1)
     assert decision == "ppo_clear"
 

@@ -287,6 +287,8 @@ knowledge, not every transient iteration detail.
   [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
 * Issue #1474 Shielded PPO Repair Closeout (2026-06-01):
   [issue_1474_shielded_ppo_repair_closeout.md](issue_1474_shielded_ppo_repair_closeout.md)
+* Issue #2006 Guarded-PPO Zero-Motion Repair (2026-06-01):
+  [issue_2006_guarded_ppo_zero_motion_repair.md](issue_2006_guarded_ppo_zero_motion_repair.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
 * Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):

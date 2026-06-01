@@ -34,14 +34,14 @@
 Consolidate reusable helper logic currently scattered across examples and scripts into documented library modules under `robot_sf/`. Maintain behavior parity for all demos while transforming examples/scripts into thin orchestration layers. Deliver a discoverable helper catalog, updated documentation, and regression coverage to ensure extracted helpers remain reliable.
 
 ## Technical Context
-**Language/Version**: Python 3.11 (per repo toolchain)  
-**Primary Dependencies**: Internal `robot_sf` modules, NumPy, Loguru logging, MoviePy (recording), Stable-Baselines3 (policy loading)  
-**Storage**: File-based artifacts (configs, JSONL outputs, media); no new persistence required  
-**Testing**: Pytest suites (`tests/`, `test_pygame/`), validation scripts under `scripts/validation/`  
-**Target Platform**: macOS/Linux development environments with headless CI support  
-**Project Type**: single-project Python library + scripts  
-**Performance Goals**: Preserve existing simulation throughput (~20–25 steps/sec) and demo startup times (<1s env init)  
-**Constraints**: Must honor Constitution Principle XI (helpers in library), maintain Loguru-only logging, avoid breaking environment/benchmark contracts  
+**Language/Version**: Python 3.11 (per repo toolchain)
+**Primary Dependencies**: Internal `robot_sf` modules, NumPy, Loguru logging, MoviePy (recording), Stable-Baselines3 (policy loading)
+**Storage**: File-based artifacts (configs, JSONL outputs, media); no new persistence required
+**Testing**: Pytest suites (`tests/`, `tests/pygame/`), validation scripts under `scripts/validation/`
+**Target Platform**: macOS/Linux development environments with headless CI support
+**Project Type**: single-project Python library + scripts
+**Performance Goals**: Preserve existing simulation throughput (~20–25 steps/sec) and demo startup times (<1s env init)
+**Constraints**: Must honor Constitution Principle XI (helpers in library), maintain Loguru-only logging, avoid breaking environment/benchmark contracts
 **Scale/Scope**: Refactor all maintained demos/examples and high-use scripts; exclude one-off validation/debug scripts per clarification
 
 ## Constitution Check
@@ -181,12 +181,12 @@ ios/ or android/
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
 - Each contract → contract test task [P]
-- Each entity → model creation task [P] 
+- Each entity → model creation task [P]
 - Each user story → integration test task
 - Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Tests before implementation 
+- TDD order: Tests before implementation
 - Dependency order: Models before services before UI
 - Mark [P] for parallel execution (independent files)
 
@@ -202,8 +202,8 @@ ios/ or android/
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)  
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
+**Phase 3**: Task execution (/tasks command creates tasks.md)
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

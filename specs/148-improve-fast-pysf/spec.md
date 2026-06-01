@@ -91,7 +91,7 @@ As a developer using IDE autocomplete, I want improved type annotations in fast-
 - **FR-001**: System MUST execute fast-pysf tests when running `uv run pytest` from repository root
 - **FR-002**: System MUST report fast-pysf test results separately from robot_sf test results for debugging clarity
 - **FR-003**: System MUST support running fast-pysf tests in headless mode for CI environments
-- **FR-004**: System MUST preserve existing test execution behavior for robot_sf tests (`tests/`, `test_pygame/`)
+- **FR-004**: System MUST preserve existing test execution behavior for robot_sf tests (`tests/`, `tests/pygame/`)
 
 **PR Review Resolution**
 - **FR-005**: System MUST address all high-priority review comments (unreachable code, TODO verifications, magic numbers, documentation uncertainties)

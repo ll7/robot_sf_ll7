@@ -126,8 +126,8 @@ ios/ or android/
 1. **Extract entities from feature spec** → Documented in [`data-model.md`](./data-model.md) covering `ExtractorConfigurationProfile`, `ExtractorRunRecord`, `HardwareProfile`, and `TrainingRunSummary` with validation and relationships.
 
 2. **Generate contracts** from functional requirements:
-   - Authored JSON schema for `summary.json` in [`contracts/training_summary.schema.json`](./contracts/training_summary.schema.json).
-   - Defined Markdown summary structure in [`contracts/summary_markdown.md`](./contracts/summary_markdown.md).
+   - Authored JSON schema for `summary.json` in [`docs/contracts/training_summary.schema.json`](../../docs/contracts/training_summary.schema.json).
+   - Defined Markdown summary structure in [`docs/contracts/summary_markdown.md`](../../docs/contracts/summary_markdown.md).
 
 3. **Plan contract tests**:
    - Future pytest modules will validate JSON files against the schema and assert Markdown sections exist (to be generated during /tasks).

@@ -120,6 +120,8 @@ knowledge, not every transient iteration detail.
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
+* Root layout structured migration 2026-06-01:
+  [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md)
 * Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):
   [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
 * Issue #1583 high-risk root path boundaries:
@@ -283,6 +285,10 @@ knowledge, not every transient iteration detail.
   [issue_1398_metric_rollup_reconciliation.md](issue_1398_metric_rollup_reconciliation.md)
 * Issue #1396 Shielded PPO Repair Launch Packet:
   [issue_1396_shielded_ppo_launch_packet.md](issue_1396_shielded_ppo_launch_packet.md)
+* Issue #1474 Shielded PPO Repair Closeout (2026-06-01):
+  [issue_1474_shielded_ppo_repair_closeout.md](issue_1474_shielded_ppo_repair_closeout.md)
+* Issue #2006 Guarded-PPO Zero-Motion Repair (2026-06-01):
+  [issue_2006_guarded_ppo_zero_motion_repair.md](issue_2006_guarded_ppo_zero_motion_repair.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
 * Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):

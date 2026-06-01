@@ -1,5 +1,46 @@
 version: 1
 models:
+- model_id: ppo_expert_issue_1474_shielded_repair_collision20_5m
+  display_name: PPO issue-1474 shielded repair, collision-20 retrain (2026-06-01)
+  local_path: output/model_cache/ppo_expert_issue_1474_shielded_repair_collision20_5m/model.zip
+  config_path: configs/training/ppo/ablations/expert_ppo_issue_1474_shielded_repair_collision20_5m.yaml
+  commit: cc3e8552b0fa1ae47ddb3f42cd74443576c6e9c0
+  wandb_run_id: d8w8uykh
+  wandb_run_path: ll7/robot_sf/d8w8uykh
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  wandb_artifact_path: ll7/robot_sf/ppo_expert_issue_1474_shielded_repair_collision20_5m-best-success:v5
+  tags:
+  - ppo
+  - learned-policy
+  - learned-checkpoint
+  - issue-1474
+  - issue-1396
+  - shielded-ppo-repair
+  - collision-penalty-only
+  - br-06
+  - route-completion-v3
+  - research-candidate
+  benchmark_promotion:
+    claim_boundary: research_only
+    non_benchmark_reason: >
+      The checkpoint is a shielded-PPO repair candidate with successful training
+      and W&B artifact provenance, but it has not yet passed the guarded
+      policy-search smoke and nominal-sanity stop gates required by the launch
+      packet. Treat final training metrics as training evidence only.
+  notes:
+  - SLURM job 12674 completed on 2026-06-01 on a30 in 7h06m33s.
+  - Best-success artifact aliases are step-5000000, best-success, and latest;
+    registry pins the immutable W&B version v5.
+  - Final training eval at 5M steps reported success_rate=0.83, collision_rate=0.16,
+    SNQI=-0.102, path_efficiency=0.815, and eval_episode_return=27.926.
+  - Aggregate training manifest remains validation_state=draft; post-training
+    guarded smoke and nominal-sanity gates are required before stress or
+    benchmark escalation.
+  - >
+    Local synced artifact root:
+    output/slurm/issue1474-shielded-ppo-repair-job-12674.
 - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
   display_name: PPO issue-791 leader, eval-aligned large-capacity grid_socnav (2026-04-17,
     promoted)

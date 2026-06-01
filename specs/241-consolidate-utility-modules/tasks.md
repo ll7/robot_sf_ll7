@@ -153,7 +153,7 @@ This project follows the single-project Python library structure:
 **Purpose**: Final validation and cleanup
 
 - [x] T046 [P] Verify git history preserved for moved files: `git log --follow robot_sf/common/types.py` (should show history from robot_sf/util/types.py)
-- [x] T047 [P] Run GUI tests (if display available): `uv run pytest test_pygame` (expect: all passing, no import errors)
+- [x] T047 [P] Run GUI tests (if display available): `uv run pytest tests/pygame` (expect: all passing, no import errors)
 - [x] T048 Run final smoke test from quickstart.md validation section
 - [x] T049 [P] Review all changed files in git: `git diff --stat` (verify expected file changes only)
 - [x] T050 Stage all changes: `git add -A`

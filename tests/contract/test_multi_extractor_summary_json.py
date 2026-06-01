@@ -12,7 +12,9 @@ from robot_sf.training.multi_extractor_models import (
 )
 from robot_sf.training.multi_extractor_summary import write_summary_artifacts
 
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts" / "training_summary.schema.json"
+SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2] / "docs" / "contracts" / "training_summary.schema.json"
+)
 
 
 def test_summary_json_matches_contract(tmp_path):

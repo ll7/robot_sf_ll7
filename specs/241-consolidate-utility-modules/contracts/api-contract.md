@@ -216,7 +216,7 @@ All of the following **must pass** before merging:
 
 4. **GUI Tests** (if display available):
    ```bash
-   uv run pytest test_pygame
+   uv run pytest tests/pygame
    # Expected: All passing (no import errors)
    ```
 

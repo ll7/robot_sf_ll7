@@ -173,7 +173,7 @@ tests/
 ├── test_occupancy_edge_cases.py     (Edge cases + coverage for US5)
 └── test_occupancy_gymnasium.py      (Tests for US2)
 
-test_pygame/
+tests/pygame/
 └── test_occupancy_visualization.py  (Visual tests for US4)
 ```
 

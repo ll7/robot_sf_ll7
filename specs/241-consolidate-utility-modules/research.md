@@ -99,7 +99,7 @@ grep "^from robot_sf" robot_sf/util/types.py robot_sf/utils/seed_utils.py robot_
 3. After import updates: Run `uv run pytest tests` (should return to 893/893 passing)
 4. Run type check: `uvx ty check .`
 5. Run linting: `uv run ruff check .`
-6. Run GUI tests: `uv run pytest test_pygame` (if display available)
+6. Run GUI tests: `uv run pytest tests/pygame` (if display available)
 
 **Alternatives Considered**:
 - Writing new tests for import paths: Redundant, existing tests already verify behavior

@@ -32,7 +32,7 @@ from robot_sf.nav.osm_map_builder import (
 @pytest.fixture
 def pbf_fixture() -> str:
     """Path to test PBF file."""
-    return "test_scenarios/osm_fixtures/sample_block.pbf"
+    return "tests/fixtures/scenarios/osm_fixtures/sample_block.pbf"
 
 
 @pytest.fixture

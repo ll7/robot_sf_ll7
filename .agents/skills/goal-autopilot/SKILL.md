@@ -80,6 +80,9 @@ Record at start:
   saturated, or user stop.
 - Exclusions: blocked/decision-required issues, draft PRs, benchmark-heavy PRs that
   need manual review.
+- Coordination: implementation selection must use the `goal-issue-implementation` issue claim
+  protocol (`scripts/dev/issue_claim.py acquire <issue-number>`) before branching so concurrent
+  runs on different PCs do not implement the same issue.
 
 Do not ask for extra confirmation after this preflight.
 
@@ -91,6 +94,21 @@ Each cycle iteration follows a fixed phase order:
 2. `review` — delegate to `goal-pr-review` for all merge-eligible PRs.
 3. `merge` — delegate to `gh-pr-merger` for all `merge-ready` PRs.
 4. `discover` — delegate to `goal-issue-discovery` for bounded discovery.
+
+Before each phase, run a delegation checkpoint:
+
+- Choose the routed helper role for the phase when `ai-delegation-routing` is active:
+  queue scout, PR blocker reviewer, bounded editor, validation verifier, or discovery scout.
+- Start at least one eligible routed worker or Spark sidecar for any phase likely to exceed about
+  10 minutes, unless the next action is a local-only publication step or all routes are unavailable.
+- If no helper is used, record `delegation_skipped: <reason>` with one of: `tiny`,
+  `critical-path-blocker`, `route-unavailable`, `sensitive-context`, `pure-synthesis`, or
+  `local-publication-step`.
+
+Publication and final judgment remain local: delegates must not push, open, or merge PRs; change
+labels or project state; resolve review threads; or make final benchmark, paper, or safety claims
+unless the user explicitly grants that permission. Their output is route evidence that must be
+reviewed and validated before phase completion.
 
 Transitions:
 - After `implement`, proceed to `review`.
@@ -107,6 +125,9 @@ Do not reorder phases or skip a phase that has eligible work.
 Each delegate skill may fail. Handle failures per phase:
 
 - `implement` failure:
+  - If issue-claim acquisition fails: classify the issue as already claimed/running, record
+    `scripts/dev/issue_claim.py status <issue-number>` output, skip the issue, and continue to the
+    next candidate. Do not branch or make local edits for that issue.
   - If the issue is ambiguous: route to `issue-contract-maintainer`, mark skipped.
   - If validation fails twice: mark issue `blocked`, record the failing command
     and last error, and continue to the next eligible issue.

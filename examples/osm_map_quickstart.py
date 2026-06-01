@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     """Run OSM to MapDefinition conversion and rendering pipeline."""
     # Paths
-    pbf_file = "test_scenarios/osm_fixtures/sample_block.pbf"
+    pbf_file = "tests/fixtures/scenarios/osm_fixtures/sample_block.pbf"
     output_dir = "output/maps/osm_demo"
 
     pbf_path = Path(pbf_file)

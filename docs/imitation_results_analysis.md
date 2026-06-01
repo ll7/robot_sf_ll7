@@ -8,7 +8,7 @@ This guide explains how to generate a research-ready comparison between a baseli
 - Computes timesteps-to-convergence and sample-efficiency ratio
 - Compares success rate, collision rate, and SNQI means
 - Generates comparison figures (timesteps, performance bars)
-- Writes `summary.json` and `summary.md` compliant with `contracts/training_summary.schema.json`
+- Writes `summary.json` and `summary.md` compliant with `docs/contracts/training_summary.schema.json`
 
 ## Usage
 

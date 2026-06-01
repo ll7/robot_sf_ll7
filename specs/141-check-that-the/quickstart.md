@@ -31,6 +31,6 @@
 
 ## Validation Checklist
 - [ ] Timestamped directory contains per-extractor checkpoints and logs.
-- [ ] `summary.json` matches the schema in `contracts/training_summary.schema.json`.
+- [ ] `summary.json` matches the schema in `docs/contracts/training_summary.schema.json`.
 - [ ] `summary.md` lists hardware differences and extractor outcomes.
 - [ ] Skipped or failed extractors log actionable guidance in the console and Markdown summary.

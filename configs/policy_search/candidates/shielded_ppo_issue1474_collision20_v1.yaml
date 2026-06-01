@@ -1,0 +1,15 @@
+name: shielded_ppo_issue1474_collision20_v1
+algo: guarded_ppo
+base_config_path: configs/algos/guarded_ppo_relaxed_v2.yaml
+params:
+  model_id: ppo_expert_issue_1474_shielded_repair_collision20_5m
+  observation_mode: socnav_state
+  guard_rollout_steps: 5
+  guard_hard_ped_clearance: 0.44
+  guard_first_step_ped_clearance: 0.56
+  guard_min_ttc: 0.40
+  fallback_risk_dwa:
+    goal_progress_weight: 5.9
+    ped_clearance_weight: 1.8
+    ttc_weight: 0.26
+    progress_escape_enabled: true

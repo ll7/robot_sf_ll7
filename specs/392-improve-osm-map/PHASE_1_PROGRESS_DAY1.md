@@ -1,8 +1,8 @@
 # Phase 1 Implementation Progress Report
 
-**Date**: 2025-12-19  
-**Branch**: `392-Improve-osm-map-generation`  
-**Phase**: 1 of 4 (Core Importer & Rendering)  
+**Date**: 2025-12-19
+**Branch**: `392-Improve-osm-map-generation`
+**Phase**: 1 of 4 (Core Importer & Rendering)
 
 ---
 
@@ -11,7 +11,7 @@
 ### Summary
 Setup phase completed successfully. All infrastructure in place to begin core importer implementation.
 
-**Tasks Completed**: 2 of 21 (9.5%)  
+**Tasks Completed**: 2 of 21 (9.5%)
 **Code Added**: 2 new modules (406 lines), updated pyproject.toml, created PHASE_1_IMPLEMENTATION.md
 
 ---
@@ -118,7 +118,7 @@ T007, T008, T010, T011 (Parallelizable tag filtering & geometry)
 T012 (Obstacle derivation) → T013 (Entry point osm_to_map_definition)
 ```
 
-**Estimated Time**: 
+**Estimated Time**:
 - Core importer (T005–T013): ~3–4 days for single developer
 - With parallelization: ~2–3 days
 
@@ -133,21 +133,21 @@ T012 (Obstacle derivation) → T013 (Entry point osm_to_map_definition)
 
 ## Project Setup Completed
 
-✅ **Git repo**: Clean, on branch `392-Improve-osm-map-generation`  
-✅ **Dependencies**: All OSM packages installed and importable  
-✅ **Module structure**: Two modules created with stubs, imports working  
-✅ **Test directories**: `test_scenarios/osm_fixtures/` created  
-✅ **Configuration**: PHASE_1_IMPLEMENTATION.md guide created  
+✅ **Git repo**: Clean, on branch `392-Improve-osm-map-generation`
+✅ **Dependencies**: All OSM packages installed and importable
+✅ **Module structure**: Two modules created with stubs, imports working
+✅ **Test directories**: `tests/fixtures/scenarios/osm_fixtures/` created
+✅ **Configuration**: PHASE_1_IMPLEMENTATION.md guide created
 
 ---
 
 ## Code Quality Status
 
-**Ruff checks**: ✅ PASS (pre-commit hook passed)  
-**Format checks**: ✅ PASS (Ruff format completed)  
-**Import verification**: ✅ PASS (Both modules import)  
-**Type hints**: ✅ Complete on all stubs  
-**Docstrings**: ✅ Comprehensive on all functions  
+**Ruff checks**: ✅ PASS (pre-commit hook passed)
+**Format checks**: ✅ PASS (Ruff format completed)
+**Import verification**: ✅ PASS (Both modules import)
+**Type hints**: ✅ Complete on all stubs
+**Docstrings**: ✅ Comprehensive on all functions
 
 ---
 
@@ -165,8 +165,8 @@ All modules import successfully. Dependency sync complete.
 Ready to begin T001-T002 fixture preparation.
 ```
 
-**Files changed**: 5  
-**Insertions**: 1208  
+**Files changed**: 5
+**Insertions**: 1208
 **Commit**: `0a454aee`
 
 ---
@@ -203,7 +203,7 @@ python -c "from robot_sf.nav.osm_map_builder import OSMTagFilters; f = OSMTagFil
 ```
 
 **Create test fixture (T001)**:
-Visit https://extract.bbbike.org and download a single-block PBF export to `test_scenarios/osm_fixtures/sample_block.pbf`
+Visit https://extract.bbbike.org and download a single-block PBF export to `tests/fixtures/scenarios/osm_fixtures/sample_block.pbf`
 
 **Run quality checks locally before pushing**:
 ```bash

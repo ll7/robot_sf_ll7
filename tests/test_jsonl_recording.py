@@ -193,7 +193,7 @@ def test_directory_batch_loading():
 def test_legacy_pickle_compatibility():
     """Test backward compatibility with existing pickle files."""
     # This test uses the existing test pickle file
-    test_pickle_file = "test_pygame/recordings/2024-06-04_08-39-59.pkl"
+    test_pickle_file = "tests/pygame/recordings/2024-06-04_08-39-59.pkl"
 
     if not os.path.exists(test_pickle_file):
         pytest.skip("Test pickle file not available")

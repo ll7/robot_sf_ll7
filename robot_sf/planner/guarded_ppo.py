@@ -206,14 +206,21 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
-        goal = goal_next if np.linalg.norm(goal_next - robot_pos) > 1e-6 else goal_current
+        current_dist = float(np.linalg.norm(goal_current - robot_pos))
+        next_dist = float(np.linalg.norm(goal_next - robot_pos))
+        if current_dist > float(self.config.goal_tolerance):
+            goal = goal_current
+        elif next_dist > 1e-6:
+            goal = goal_next
+        else:
+            goal = goal_current
 
         ped_positions_raw = ped_state.get("positions")
         ped_velocities_raw = ped_state.get("velocities")
         ped_pos = np.asarray([] if ped_positions_raw is None else ped_positions_raw, dtype=float)
         ped_vel = np.asarray([] if ped_velocities_raw is None else ped_velocities_raw, dtype=float)
-        ped_count_raw = ped_state.get("count")
-        ped_count = int(ped_count_raw) if isinstance(ped_count_raw, int | np.integer) else None
+        ped_count_arr = self._as_1d_float(ped_state.get("count", []), pad=0)
+        ped_count = int(max(ped_count_arr[0], 0.0)) if ped_count_arr.size > 0 else None
         if (
             ped_pos.ndim == 1
             and ped_count is not None
@@ -230,8 +237,12 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             ped_vel = ped_vel.reshape(-1, 2)[:ped_count]
         if ped_pos.ndim != 2 or ped_pos.shape[-1] != 2:
             ped_pos = np.zeros((0, 2), dtype=float)
+        elif ped_count is not None:
+            ped_pos = ped_pos[: min(ped_count, ped_pos.shape[0])]
         if ped_vel.ndim != 2 or ped_vel.shape[-1] != 2 or ped_vel.shape[0] != ped_pos.shape[0]:
             ped_vel = np.zeros_like(ped_pos)
+        elif ped_count is not None:
+            ped_vel = ped_vel[: min(ped_count, ped_vel.shape[0])]
         return robot_pos, heading, goal, ped_pos, ped_vel
 
     def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:

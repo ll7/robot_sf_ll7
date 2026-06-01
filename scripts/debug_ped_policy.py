@@ -71,7 +71,7 @@ def make_env(svg_map_path):
 
 def get_file():
     """Get the latest model file."""
-    model_dir = Path("model_ped")
+    model_dir = Path("model/pedestrian")
     if not model_dir.exists():
         raise FileNotFoundError(f"Model directory not found: {model_dir}")
 
@@ -85,7 +85,7 @@ def get_file():
 def run():
     """Run the pedestrian policy debugger.
 
-    Loads the latest pedestrian model from the model_ped directory,
+    Loads the latest pedestrian model from the model/pedestrian directory,
     creates a pedestrian simulation environment, and runs the model
     for 10000 steps while collecting episode statistics.
     """

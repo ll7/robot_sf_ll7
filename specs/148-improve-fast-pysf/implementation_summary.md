@@ -110,12 +110,12 @@ All changes maintain backward compatibility and follow the project's quality sta
    - **File**: `pyproject.toml`
    - **Section**: `[tool.ty.src]`
    - **Change**: Updated exclude list to only exclude tests/examples/benchmarks, not entire fast-pysf directory
-   - **Before**: `exclude = ["tests", "test_pygame", "fast-pysf"]`
+   - **Before**: `exclude = ["tests", "tests/pygame", "fast-pysf"]`
    - **After**: 
      ```toml
      exclude = [
          "tests",
-         "test_pygame",
+         "tests/pygame",
          "fast-pysf/tests",
          "fast-pysf/examples",
          "fast-pysf/benchmarks"

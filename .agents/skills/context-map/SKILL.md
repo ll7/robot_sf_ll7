@@ -26,7 +26,7 @@ The objective is a compact map that reduces wrong-surface edits, not execution.
 - `docs/dev_guide.md`
 - `docs/code_review.md`
 - `.specify/memory/constitution.md`
-- `.agent/PLANS.md` for larger work
+- `.agents/PLANS.md` for larger work
 
 ## Workflow
 

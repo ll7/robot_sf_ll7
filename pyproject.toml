@@ -142,7 +142,7 @@ include = [
 ]
 exclude = [
     "/tests",
-    "/test_pygame",
+    "/tests/pygame",
     "/.git",
     "/.pytest_cache",
     "/__pycache__",
@@ -330,7 +330,7 @@ max-statements = 60
     "D417",
     "DOC201",
 ]
-"test_pygame/**/*.py" = [
+"tests/pygame/**/*.py" = [
     "S101",
     "T201",
     "BLE001",
@@ -413,7 +413,7 @@ source = ["robot_sf", "fast-pysf/pysocialforce"]
 omit = [
     "*/tests/*",
     "*/test_*",
-    "test_pygame/*",
+    "tests/pygame/*",
     "examples/*",
     "scripts/*",
     "fast-pysf/tests/*",
@@ -523,7 +523,7 @@ pyrvo2 = { path = "third_party/python-rvo2" }
 [tool.ty.src]
 exclude = [
     "tests",
-    "test_pygame",
+    "tests/pygame",
     "fast-pysf/tests",
     "fast-pysf/examples",
     "fast-pysf/benchmarks"

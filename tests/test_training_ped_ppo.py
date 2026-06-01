@@ -75,5 +75,5 @@ def test_training_closes_vectorized_env_after_success(monkeypatch) -> None:
     mod.training("fake-map.svg")
 
     assert learn_calls == [1_500_000]
-    assert save_paths == ["./model_ped/ppo_2026-04-01_12-00-00"]
+    assert save_paths == ["./model/pedestrian/ppo_2026-04-01_12-00-00"]
     assert close_calls == ["closed"]

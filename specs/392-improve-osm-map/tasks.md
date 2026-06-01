@@ -33,11 +33,11 @@ Tasks are organized by **user story** to enable independent, parallel implementa
 
 ### Subphase 1a: Project Setup & Fixture Preparation
 
-- [x] T001 Create test PBF fixture (single city block, <1MB) in `test_scenarios/osm_fixtures/sample_block.pbf`
+- [x] T001 Create test PBF fixture (single city block, <1MB) in `tests/fixtures/scenarios/osm_fixtures/sample_block.pbf`
   - **Acceptance**: Fixture loads without error; has buildings, footways, obstacles
   - **Requires**: bbbike.org extract or local OSM data
   
-- [x] T002 Create expected output fixtures (PNG, JSON metadata) in `test_scenarios/osm_fixtures/expected_outputs/`
+- [x] T002 Create expected output fixtures (PNG, JSON metadata) in `tests/fixtures/scenarios/osm_fixtures/expected_outputs/`
   - **Acceptance**: Reference PNG exists; metadata JSON has affine_transform
   - **Depends on**: T001
 
@@ -141,9 +141,9 @@ Tasks are organized by **user story** to enable independent, parallel implementa
   - **Runs as**: `uv run python examples/osm_map_quickstart.py`
 
 - [x] T019 Validate backward-compat: pygame visualization still works
-  - **Acceptance**: Existing test suite passes; `test_pygame` tests unaffected
+  - **Acceptance**: Existing test suite passes; `tests/pygame` tests unaffected
   - **File**: `tests/test_osm_backward_compat.py`
-  - **Test**: `tests/test_osm_backward_compat.py::test_pygame_visualization_unchanged`
+  - **Test**: `tests/test_osm_backward_compat.py::tests/pygame_visualization_unchanged`
   - **Spec Link**: SC-009 (Backward compatibility)
 
 - [x] T020 Validate backward-compat: sensor suite still works

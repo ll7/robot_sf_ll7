@@ -37,7 +37,7 @@ Successfully completed **Phase 1** (Core Importer & Rendering) and **Phase 2** (
 **Key Files**:
 - `robot_sf/nav/osm_map_builder.py` - Core importer (600+ lines)
 - `robot_sf/maps/osm_background_renderer.py` - PNG rendering
-- `test_scenarios/osm_fixtures/` - Test fixtures
+- `tests/fixtures/scenarios/osm_fixtures/` - Test fixtures
 - `tests/test_osm_map_builder.py` - 21 tests
 
 ### ✅ Phase 2: Visual Editor & YAML (COMPLETE)

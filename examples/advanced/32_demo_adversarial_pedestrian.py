@@ -3,13 +3,13 @@
 Usage:
     uv run python examples/advanced/32_demo_adversarial_pedestrian.py
     uv run python examples/advanced/32_demo_adversarial_pedestrian.py \
-        --ped-model model_ped/ppo_intersection.zip \
+        --ped-model model/pedestrian/ppo_intersection.zip \
         --map maps/svg_maps/masterthesis/intersection.svg
 
 Prerequisites:
     - maps/svg_maps/masterthesis/intersection.svg (default)
     - model/run_043.zip (default robot policy)
-    - model_ped/ppo_intersection.zip (default pedestrian policy)
+    - model/pedestrian/ppo_intersection.zip (default pedestrian policy)
 
 Expected Output:
     - Interactive pygame debug rollout and per-episode summary logs.
@@ -56,7 +56,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--ped-model",
-        default="model_ped/ppo_intersection.zip",
+        default="model/pedestrian/ppo_intersection.zip",
         help="Path to the trained pedestrian PPO checkpoint.",
     )
     parser.add_argument(

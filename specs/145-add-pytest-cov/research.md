@@ -50,7 +50,7 @@ This document captures research decisions for implementing non-intrusive code co
 source = ["robot_sf"]
 omit = [
     "*/tests/*",
-    "*/test_pygame/*",
+    "*/tests/pygame/*",
     "*/examples/*",
     "*/scripts/*",
     "*/__pycache__/*",

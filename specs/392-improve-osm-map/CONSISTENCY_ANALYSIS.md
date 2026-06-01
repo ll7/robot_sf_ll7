@@ -315,7 +315,7 @@ T016–T017 (rendering) → T019–T021 (validation) → [Phase 2]
 **Before Phase 1 Starts**:
 1. ✅ Review tasks.md task list (share with dev team)
 2. ⏳ (Optional) Generate data-model.md from plan.md "Module Design & APIs" section
-3. ✅ Acquire small PBF fixture (test_scenarios/osm_fixtures/) — coordinate with T001
+3. ✅ Acquire small PBF fixture (tests/fixtures/scenarios/osm_fixtures/) — coordinate with T001
 4. ✅ Create branch from `392-Improve-osm-map-generation` for feature development
 
 **Phase 1 Kickoff**:

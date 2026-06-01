@@ -50,14 +50,14 @@ T019,T020,T021 (validation)
 - [ ] PBF file loads without error
 - [ ] Contains buildings, footways, and obstacles
 - [ ] Size <1MB (single city block)
-- [ ] Located at: `test_scenarios/osm_fixtures/sample_block.pbf`
+- [ ] Located at: `tests/fixtures/scenarios/osm_fixtures/sample_block.pbf`
 
 **Implementation Notes**:
 - Source: https://extract.bbbike.org/ or local OSM data
 - Scope: Single urban block or campus quad
 - Validation: `osmnx.graph_from_file(pbf_file)` succeeds
 
-**Files Affected**: `test_scenarios/osm_fixtures/sample_block.pbf` (new)
+**Files Affected**: `tests/fixtures/scenarios/osm_fixtures/sample_block.pbf` (new)
 
 ---
 
@@ -67,15 +67,15 @@ T019,T020,T021 (validation)
 **Acceptance Criteria**:
 - [ ] Reference PNG exists
 - [ ] Metadata JSON with affine_transform field
-- [ ] Both located in `test_scenarios/osm_fixtures/expected_outputs/`
+- [ ] Both located in `tests/fixtures/scenarios/osm_fixtures/expected_outputs/`
 
 **Implementation Notes**:
 - Generated after T016–T017 complete
 - Used for regression testing in Phase 2+
 
 **Files Affected**: 
-- `test_scenarios/osm_fixtures/expected_outputs/sample_block_bg.png` (new)
-- `test_scenarios/osm_fixtures/expected_outputs/sample_block_meta.json` (new)
+- `tests/fixtures/scenarios/osm_fixtures/expected_outputs/sample_block_bg.png` (new)
+- `tests/fixtures/scenarios/osm_fixtures/expected_outputs/sample_block_meta.json` (new)
 
 ---
 

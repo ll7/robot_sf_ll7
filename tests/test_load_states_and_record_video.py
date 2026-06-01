@@ -31,7 +31,7 @@ def test_load_states_and_record_video(delete_video: bool = True):
 
     try:
         load_states_and_record_video(
-            "test_pygame/recordings/2024-06-04_08-39-59.pkl",
+            "tests/pygame/recordings/2024-06-04_08-39-59.pkl",
             str(output_path),
         )
 

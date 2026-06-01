@@ -19,7 +19,7 @@ Add pytest-cov integration to enable non-intrusive code coverage collection, CI/
 **Project Type**: Single Python library project (`robot_sf/`) with examples, scripts, and test suites  
 **Performance Goals**: Coverage collection overhead < 10% of test runtime (approximately 18-20 seconds added to ~3 minute test suite)  
 **Constraints**: Non-blocking CI (warnings only), no configuration required for default use, headless execution support  
-**Scale/Scope**: ~15k-20k lines in robot_sf/ library, ~170 existing tests, 3 test suites (tests/, test_pygame/, fast-pysf/tests)
+**Scale/Scope**: ~15k-20k lines in robot_sf/ library, ~170 existing tests, 3 test suites (tests/, tests/pygame/, fast-pysf/tests)
 
 ## Constitution Check
 

@@ -230,7 +230,7 @@ from robot_sf.common.errors import raise_fatal_with_remedy
 
 ### 2. Test Execution
 - Unit/integration tests: `uv run pytest tests` (893/893 passing)
-- GUI tests: `uv run pytest test_pygame` (if display available)
+- GUI tests: `uv run pytest tests/pygame` (if display available)
 - Fast-pysf subtree: `uv run pytest fast-pysf/tests` (12/12 passing)
 
 ### 3. Import Verification

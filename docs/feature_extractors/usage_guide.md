@@ -156,7 +156,7 @@ This runs all extractors with the default hyperparameters and saves timestamped 
 analysis.
 
 - Output artifacts include:
-  - `summary.json` / `summary.md` compliant with `contracts/training_summary.schema.json`.
+  - `summary.json` / `summary.md` compliant with `docs/contracts/training_summary.schema.json`.
   - Per-extractor convergence/sample-efficiency metrics (`convergence_timestep`, `sample_efficiency_ratio`, `baseline_target_reward`).
   - Learning curves and reward distributions under `<run>/extractors/<name>/figures/`.
   - Legacy `complete_results.json` for downstream scripts.

@@ -8,8 +8,8 @@
 - [X] T002 Ensure repository ignores timestamped outputs by adding (or verifying) `tmp/multi_extractor_training/` entry in `.gitignore` with a short comment.
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
-- [X] T003 [P] Add JSON contract test `tests/contract/test_multi_extractor_summary_json.py` validating `summary.json` against `contracts/training_summary.schema.json` using `jsonschema`.
-- [X] T004 [P] Add Markdown contract test `tests/contract/test_multi_extractor_summary_markdown.py` asserting required sections from `contracts/summary_markdown.md` exist in generated output.
+- [X] T003 [P] Add JSON contract test `tests/contract/test_multi_extractor_summary_json.py` validating `summary.json` against `docs/contracts/training_summary.schema.json` using `jsonschema`.
+- [X] T004 [P] Add Markdown contract test `tests/contract/test_multi_extractor_summary_markdown.py` asserting required sections from `docs/contracts/summary_markdown.md` exist in generated output.
 - [X] T005 [P] Add integration test `tests/integration/test_multi_extractor_single_thread.py` that runs `scripts/multi_extractor_training.py` in single-thread mode (with env guards) and asserts timestamped directories plus success statuses.
 - [X] T006 [P] Add integration test `tests/integration/test_multi_extractor_vectorized.py` that exercises a GPU/vectorized config, skipping gracefully when CUDA is unavailable, and verifies summary artifacts exist.
 - [X] T007 [P] Add unit test `tests/unit/test_hardware_profile_capture.py` covering the forthcoming hardware probe helper (platform, arch, GPU metadata, worker count).

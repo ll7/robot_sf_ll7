@@ -40,7 +40,7 @@ Expected Workflow:
     6. Close editor window to exit
 
 Dependencies:
-    - OSM PBF file at test_scenarios/osm_fixtures/sample_block.pbf
+    - OSM PBF file at tests/fixtures/scenarios/osm_fixtures/sample_block.pbf
     - Interactive display (unless --headless)
 """
 
@@ -256,8 +256,8 @@ def main() -> None:
     parser.add_argument(
         "--pbf-file",
         type=str,
-        default="test_scenarios/osm_fixtures/sample_block.pbf",
-        help="Path to OSM PBF file (default: test_scenarios/osm_fixtures/sample_block.pbf)",
+        default="tests/fixtures/scenarios/osm_fixtures/sample_block.pbf",
+        help="Path to OSM PBF file (default: tests/fixtures/scenarios/osm_fixtures/sample_block.pbf)",
     )
     parser.add_argument(
         "--pixels-per-meter",

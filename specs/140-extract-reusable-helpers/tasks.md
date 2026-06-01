@@ -40,7 +40,7 @@
 - [X] T026 Update `CHANGELOG.md` with a summary of the helper consolidation feature (public helper surface + example/script refactors).
 - [X] T027 Run formatting and linting (`uv run ruff check --fix .` followed by `uv run ruff check .`) to ensure style compliance.
 - [X] T028 Run unit tests (`uv run pytest tests`) and ensure newly added tests pass.
-- [ ] T029 Run rendering/headless tests (`uv run pytest test_pygame`) to validate frame capture changes.
+- [ ] T029 Run rendering/headless tests (`uv run pytest tests/pygame`) to validate frame capture changes.
 - [X] T030 Execute validation scripts `scripts/validation/test_basic_environment.sh` and `scripts/validation/test_complete_simulation.sh`, comparing outputs against regression expectations.
 - [X] T031 Update `specs/140-extract-reusable-helpers/plan.md` Progress Tracking to reflect completed phases and note any follow-up work discovered during implementation.
 - [ ] T032 Prepare implementation summary assets: helper catalog diff overview and example before/after snippets saved under `specs/140-extract-reusable-helpers/progress/` for PR context.

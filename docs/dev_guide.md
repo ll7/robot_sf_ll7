@@ -568,7 +568,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Local planner adapters: start from `docs/dev/planner_adapter_template.md` and the diagnostic
   `reference_adapter` path before adding a new map-runner planner key.
 - Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `output/`.
-- Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
+- Tests: core in `tests/`; GUI in `tests/pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
 - Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality (Ruff +
   advisory ty) → Type Check (advisory) → Run Tests (see VS Code Tasks).
 
@@ -635,7 +635,7 @@ uv run pytest -n auto tests  # → 881 tests
 uv run pytest -m "not slow" tests
 
 # 2. GUI/display-dependent tests (headless mode)  
-DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/pygame
 
 # 3. fast-pysf subtree tests - NOW PART OF UNIFIED SUITE
 uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
@@ -802,7 +802,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 - **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
 - **Dependencies**: `fast-pysf` git subtree for pedestrian physics (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
 - **Toolchain**: uv + Ruff + ty + pytest with VS Code tasks; run quality gates before pushing
-- **Testing**: Unit tests in `tests/`, GUI-dependent tests in `test_pygame/` (with headless env vars), integration tests for smoke/performance validation
+- **Testing**: Unit tests in `tests/`, GUI-dependent tests in `tests/pygame/` (with headless env vars), integration tests for smoke/performance validation
 - **Documentation**: Comprehensive docs under `docs/` with design principles, architecture, usage, and migration notes
   - Development notes: `docs/dev/*`
 
@@ -826,7 +826,7 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 - Add helpful comments to quickly understand the code’s purpose and logic.
 - Avoid duplication; prefer composition and reuse.
 - Keep public behavior backward‑compatible unless explicitly stated.
-- Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).
+- Write comprehensive unit tests for new features and bug fixes (GUI tests in `tests/pygame/`).
 - **Verify test value before investing fix effort** (see Test Significance Verification in Testing Strategy section).
 - Math vs numpy: use `math` for scalar ops/constants, `numpy` for vectorized/array ops, and avoid mixing within a single expression.
 
@@ -1406,7 +1406,7 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Quality gates: Minimal checks before pushing (install → lint/format → quality check → tests).
 
 ### Repository structure (key dirs)
-- `robot_sf/` (source), `examples/`, `tests/`, `test_pygame/`, `fast-pysf/` (subtree), `scripts/`, `model/`, `docs/`
+- `robot_sf/` (source), `examples/`, `tests/`, `tests/pygame/`, `fast-pysf/` (subtree), `scripts/`, `model/`, `docs/`
 
 ---
 
@@ -1484,7 +1484,7 @@ phase exits zero.
 1) Clarify requirements (ask concise, optioned questions)
 2) Draft design doc under `docs/` (link issue, add test plan)
 3) Implement with small, reviewed commits
-4) Add/extend tests in `tests/` or `test_pygame/`
+4) Add/extend tests in `tests/` or `tests/pygame/`
 5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality (Ruff + advisory ty) → Type Check (advisory) → Run Tests
 6) Update docs/diagrams; run “Generate UML” if classes changed
 7) Open PR with summary, risks, and links to docs/tests

@@ -7,7 +7,7 @@ regression_checks:
       - "render"
       - "docs"
     notes: "Must pass after refactoring helpers to ensure behavior parity."
-  - command: "uv run pytest test_pygame"
+  - command: "uv run pytest tests/pygame"
     description: "Headless rendering smoke tests validating frame capture pathways."
     frequency: "per-commit"
     categories:

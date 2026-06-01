@@ -433,13 +433,13 @@ examples/
 **Problem:**  
 Tests split across multiple locations:
 - `tests/` (881 tests)
-- `test_pygame/` (GUI tests)
+- `tests/pygame/` (GUI tests)
 - `fast-pysf/tests/` (12 tests)
 
 **Impact:**
 - 🟢 Minor: Already documented in dev_guide.md
 - 🟢 Current split makes sense (headless vs. GUI)
-- But: inconsistent naming (`test_pygame` vs `tests`)
+- But: inconsistent naming (`tests/pygame` vs `tests`)
 
 **Proposed Solution:**
 
@@ -447,7 +447,7 @@ Tests split across multiple locations:
 Current structure works:
 ```
 tests/              # Unit and integration tests
-test_pygame/        # GUI-dependent tests
+tests/pygame/        # GUI-dependent tests
 fast-pysf/tests/    # External dependency tests
 ```
 
@@ -458,7 +458,7 @@ Just improve documentation and naming clarity.
 tests/
   unit/             # Pure unit tests
   integration/      # Integration tests
-  gui/              # Move test_pygame here
+  gui/              # Move tests/pygame here
   external/         # fast-pysf tests (symlink?)
 ```
 

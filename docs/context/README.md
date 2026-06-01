@@ -120,6 +120,8 @@ knowledge, not every transient iteration detail.
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
+* Root layout structured migration 2026-06-01:
+  [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md)
 * Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):
   [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
 * Issue #1583 high-risk root path boundaries:

@@ -150,15 +150,15 @@ def _latest_ped_model_path() -> Path:
     """Find the latest pedestrian model checkpoint by modification time.
 
     Returns:
-        Most recently modified checkpoint under ``model_ped``.
+        Most recently modified checkpoint under ``model/pedestrian``.
     """
-    model_dir = Path(__file__).resolve().parents[1] / "model_ped"
+    model_dir = Path(__file__).resolve().parents[1] / "model/pedestrian"
     if not model_dir.exists():
         raise FileNotFoundError(f"Directory not found: {model_dir}")
 
     candidates = sorted(model_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
     if not candidates:
-        raise FileNotFoundError("No pedestrian model checkpoints found in model_ped/")
+        raise FileNotFoundError("No pedestrian model checkpoints found in model/pedestrian/")
     return candidates[-1]
 
 
@@ -348,7 +348,7 @@ def run_benchmark(
     ped_model_path = (
         _latest_ped_model_path()
         if ped_model_name_or_path == "latest"
-        else _resolve_model_path(ped_model_name_or_path, base_dir_name="model_ped")
+        else _resolve_model_path(ped_model_name_or_path, base_dir_name="model/pedestrian")
     )
     ped_model = load_trained_policy(str(ped_model_path))
 

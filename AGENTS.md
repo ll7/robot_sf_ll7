@@ -37,7 +37,7 @@ Treat the following files as the repository-native context stack for Agent-style
 - `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `docs/context/INDEX.md`: retrieval-first catalog for current context-note entry points, status
   rules, optional context tools, and curated context-pack scopes.
-- `.agent/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
+- `.agents/PLANS.md`: plan-writing convention for non-trivial work so intent, scope, and validation stay explicit.
 - `.agents/skills/`: canonical skill tree for execution workflows and repo-local context packs,
   mirrored at `.codex/skills/` and `.opencode/skills/` for compatibility.
 - `.agents/prompts/`, `.agents/commands/`, and `.agents/agents/`: canonical prompt, command,
@@ -164,7 +164,7 @@ Copilot, etc.) and the retrieval → planning → execution → verification dis
 - `docs/ai/awesome_copilot_adaptation.md` — decisions for the Awesome Copilot List adaptation.
 
 ## Project Structure & Module Organization
-Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `test_pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
+Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `tests/pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
 
 ## Durable Artifacts & Worktree Output
 
@@ -187,7 +187,7 @@ Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gy
 - Avoid committing bulky generated outputs directly unless the file is intentionally small, reviewable, and part of the source contract.
 
 ## Build, Test & Development Commands
-Set up dependencies with `uv sync --all-extras` and install hooks via `uv run pre-commit install`. Format and lint using `uv run ruff check .` followed by `uv run ruff format .`. Run the main suite with `uv run pytest tests`; add `-m "not slow"` to skip long benches. Headless GUI checks use `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame`. Validate the SocialForce backend with `uv run python -m pytest fast-pysf/tests -v`. Typical training workflows call `uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml`.
+Set up dependencies with `uv sync --all-extras` and install hooks via `uv run pre-commit install`. Format and lint using `uv run ruff check .` followed by `uv run ruff format .`. Run the main suite with `uv run pytest tests`; add `-m "not slow"` to skip long benches. Headless GUI checks use `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/pygame`. Validate the SocialForce backend with `uv run python -m pytest fast-pysf/tests -v`. Typical training workflows call `uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml`.
 
 For shared local + VS Code + Codex workflows, prefer:
 - `scripts/dev/ruff_fix_format.sh`
@@ -281,7 +281,7 @@ When referencing files in PRs, issue comments, docs, and agent responses, use re
 
 ## Planning Convention
 
-For non-trivial work, follow `.agent/PLANS.md`:
+For non-trivial work, follow `.agents/PLANS.md`:
 - restate the goal and boundaries first,
 - list evidence sources before implementation,
 - keep validation commands explicit,

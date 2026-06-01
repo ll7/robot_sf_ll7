@@ -24,7 +24,7 @@ from robot_sf.maps.osm_background_renderer import (
 @pytest.fixture
 def pbf_fixture() -> str:
     """Path to the test PBF fixture."""
-    return "test_scenarios/osm_fixtures/sample_block.pbf"
+    return "tests/fixtures/scenarios/osm_fixtures/sample_block.pbf"
 
 
 @pytest.fixture

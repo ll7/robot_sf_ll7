@@ -90,6 +90,11 @@ entries:
     freshness: maintained
     area: slurm
   - path: docs/context/issue_1690_root_layout_inventory.md
+    status: superseded
+    freshness: dated
+    area: root_layout
+    replacement: docs/context/root_layout_structured_migration_2026-06-01.md
+  - path: docs/context/root_layout_structured_migration_2026-06-01.md
     status: current
     freshness: maintained
     area: root_layout
@@ -98,13 +103,15 @@ entries:
     freshness: dated
     area: root_layout
   - path: docs/context/issue_1583_high_risk_root_boundaries.md
-    status: current
-    freshness: policy
+    status: superseded
+    freshness: dated
     area: root_layout
+    replacement: docs/context/root_layout_structured_migration_2026-06-01.md
   - path: docs/context/issue_1598_1599_root_compatibility_decisions.md
-    status: current
-    freshness: policy
+    status: superseded
+    freshness: dated
     area: root_layout
+    replacement: docs/context/root_layout_structured_migration_2026-06-01.md
   - path: docs/context/issue_1457_adversarial_generation_protocol.md
     status: current
     freshness: policy

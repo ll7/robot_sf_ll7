@@ -61,14 +61,14 @@ def make_env(svg_map_path: str):
 
 
 def get_latest_ped_model_file() -> Path:
-    """Return the most recent pedestrian policy checkpoint under model_ped/."""
-    model_dir = Path("model_ped")
+    """Return the most recent pedestrian policy checkpoint under model/pedestrian/."""
+    model_dir = Path("model/pedestrian")
     if not model_dir.exists():
-        raise FileNotFoundError("Directory not found: model_ped")
+        raise FileNotFoundError("Directory not found: model/pedestrian")
 
     candidates = sorted(model_dir.glob("*.zip"), key=lambda path: path.stat().st_mtime)
     if not candidates:
-        raise FileNotFoundError("No pedestrian model checkpoints found in model_ped")
+        raise FileNotFoundError("No pedestrian model checkpoints found in model/pedestrian")
 
     return candidates[-1]
 

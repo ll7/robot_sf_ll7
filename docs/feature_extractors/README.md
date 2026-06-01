@@ -107,7 +107,7 @@ uv run python scripts/analyze_feature_extractors.py \
 ```
 
 Each run writes:
-- `summary.json` / `summary.md` following `contracts/training_summary.schema.json` with metrics such as `convergence_timestep`, `sample_efficiency_timestep`, and `sample_efficiency_ratio` (baseline taken from `run.baseline_extractor` or the first extractor).
+- `summary.json` / `summary.md` following `docs/contracts/training_summary.schema.json` with metrics such as `convergence_timestep`, `sample_efficiency_timestep`, and `sample_efficiency_ratio` (baseline taken from `run.baseline_extractor` or the first extractor).
 - Per-extractor figures under `<run>/extractors/<name>/figures/` (`*_learning_curve.png`, `*_reward_distribution.png`).
 - Compatibility `complete_results.json` for legacy tooling.
 

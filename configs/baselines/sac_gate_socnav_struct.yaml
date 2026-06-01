@@ -8,6 +8,11 @@
 # frame to match the SAC training observation contract.
 # Do not promote to paper-facing matrices until checkpoint-specific quality-gate
 # evidence has been recorded.
+#
+# Artifact status (issue #1960, 2026-06-01): the referenced local checkpoint is
+# missing here and has no durable registry/release entry. Treat this config as
+# retire-pending and not benchmark evidence until issue #1764 recovers a
+# checksummed durable artifact or retires/rewrites the config.
 
 model_path: output/models/sac/sac_gate_socnav_struct_v1.zip
 

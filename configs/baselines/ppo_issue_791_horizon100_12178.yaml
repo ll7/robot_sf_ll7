@@ -19,6 +19,11 @@
 # baseline (configs/baselines/ppo_15m_grid_socnav.yaml) still points at the
 # Wave-5 leader. Promotion is gated on Phase D (camera-ready success_mean ≥ 0.50
 # AND max_steps_share ≤ 0.30) per the issue body.
+#
+# Artifact status (issue #1960, 2026-06-01): the referenced local checkpoint is
+# missing on this machine and has no durable registry/release entry. Treat this
+# config as non-runnable and not benchmark evidence until issue #1764 records a
+# durable source with checksum or retires the config.
 
 model_path: output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip
 

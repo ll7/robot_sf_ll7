@@ -1,5 +1,10 @@
 # Default DRL-VO baseline config for benchmark evaluation.
 # Use this file with `robot_sf_bench run --algo drl_vo --algo-config configs/baselines/drl_vo_default.yaml`.
+#
+# Artifact status (issue #1960, 2026-06-01): the referenced local checkpoint is
+# missing here and has no durable registry/release entry. Treat this config as
+# non-runnable and not benchmark evidence until issue #1764 records a durable
+# source with checksum or retires the config.
 
 model_path: output/model_cache/drl_vo_default.pt
 model_id: null

@@ -108,3 +108,6 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   no-op-versus-speed summary for the #1610 single-pedestrian speed perturbation pilot.
 - `issue_1945_orca_leave_group_speed_trace_2026-06-01/`: compact diagnostic-only ORCA
   closest-approach trace slices for the `francis2023_leave_group` speed-offset outcome flip.
+- `issue_1947_intersection_wait_timing_speed_trace_2026-06-01/`: compact diagnostic-only
+  closest-approach trace slices comparing `francis2023_intersection_wait` timing and speed
+  perturbation responses.

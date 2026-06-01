@@ -232,6 +232,8 @@ knowledge, not every transient iteration detail.
   [issue_1943_ped_speed_perturbation.md](issue_1943_ped_speed_perturbation.md)
 * Issue #1945 ORCA Leave-Group Speed Trace (2026-06-01):
   [issue_1945_orca_leave_group_speed_trace.md](issue_1945_orca_leave_group_speed_trace.md)
+* Issue #1947 Intersection-Wait Timing Vs Speed Trace (2026-06-01):
+  [issue_1947_intersection_wait_timing_speed_trace.md](issue_1947_intersection_wait_timing_speed_trace.md)
 * Issue #1304 pedestrian config boundary:
   [issue_1304_pedestrian_config_boundary.md](issue_1304_pedestrian_config_boundary.md)
 * Issue #1633 RobotEnv SNQI proxy extraction:

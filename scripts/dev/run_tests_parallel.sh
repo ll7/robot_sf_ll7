@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./common_setup.sh
-source "$SCRIPT_DIR/common_setup.sh"
-
 show_help() {
   cat <<'EOF'
 Usage: scripts/dev/run_tests_parallel.sh [wrapper-options] [pytest-args...]
@@ -32,6 +28,15 @@ Examples:
   scripts/dev/run_tests_parallel.sh --no-fast-fail tests
 EOF
 }
+
+if [[ "$#" -gt 0 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
+  show_help
+  exit 0
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./common_setup.sh
+source "$SCRIPT_DIR/common_setup.sh"
 
 fast_fail="${PYTEST_FAST_FAIL:-1}"
 dist_mode="${PYTEST_XDIST_DIST:-load}"

@@ -56,6 +56,13 @@ scripts/dev/sbatch_use_max_time.sh --time 08:00:00 SLURM/Auxme/auxme_gpu.sl
   and any issue/PR follow-up as `smoke` or `probe`, not as completed campaign evidence.
 - Do not let a GitHub `slurm` label alone justify submission. The label means cluster execution may
   be required; the config still needs a suitability check.
+- For long-running training jobs, include predeclared early-stop criteria in the experiment card or
+  launch packet before submission. The criteria must name the metric, threshold, check cadence,
+  minimum runtime or timesteps, exact cancel condition, and diagnostic-preservation action.
+- A cancelled Slurm run can be valid diagnostic evidence only when the stop rule was predeclared and
+  the branch, commit, config, logs, manifest, local output root, and durable artifact/preservation
+  status are recorded. Without that preservation trail, classify the run as failed, blocked, or
+  inconclusive rather than proof.
 - When adding a new batch script, include `#SBATCH --partition` and `#SBATCH --qos` so
   the wrapper can resolve the correct limit without extra flags.
 - If Slurm tools are unavailable in the current shell, fall back to a manual `sbatch`

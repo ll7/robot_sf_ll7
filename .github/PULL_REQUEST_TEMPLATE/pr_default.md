@@ -21,6 +21,12 @@ What changed, in one or two sentences.
 - Expected impact:
 - Why this is worth merging now:
 
+## Research Result Guidance
+- Target claim / hypothesis / blocker this should affect:
+- Comparator or baseline, if applicable:
+- Result classification: positive / negative / inconclusive / diagnostic-only / blocker-resolution / NA
+- Decision or stop rule, if applicable:
+
 ## Validation / Proof
 - Commands run:
 - Evidence that the change works here:

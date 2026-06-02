@@ -225,6 +225,26 @@ Research progress is the primary goal. Verification should be strong where claim
 cheap where risk is low. Any benchmark-facing, metric-facing, schema-facing, skill, or test change
 must still be backed by concrete evidence appropriate to the risk.
 
+For research-producing work, use the following as adapted guidance rather than a hard gate:
+research issues and PRs should prefer work that moves a claim boundary, closes or revises a
+hypothesis, records a useful negative result, synthesizes accumulated diagnostics, or unblocks a
+durable experiment. If a result remains diagnostic-only, label it that way and avoid treating it as
+claim movement.
+
+When practical, research issue contracts should name:
+
+- target claim or hypothesis;
+- comparator or baseline;
+- minimum valid evidence;
+- decision or stop rule;
+- expected artifacts and provenance plan;
+- parent issue, claim map, registry, context note, or synthesis surface to update.
+
+After several diagnostic child PRs under one research parent, prefer a synthesis pass before adding
+more exploratory families. The synthesis should classify what was learned, what stayed
+inconclusive, which families are redundant or negative, and what follow-up experiment, if any,
+should run next.
+
 - New local planners must be proven with an actual benchmark or targeted execution path that shows
   they run correctly in this repository.
 - Metric changes must include a clear proof that the updated metric now computes the intended values

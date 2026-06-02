@@ -10,6 +10,9 @@ body:
       value: |
         Use this form for research-validation work that needs a clear hypothesis, evidence grade,
         artifact policy, and executable validation path before implementation starts.
+        Research issues should preferably explain what claim boundary, hypothesis, negative
+        result, synthesis decision, or durable experiment blocker they are meant to change. Treat
+        that as adapted guidance, not a hard requirement for every small support issue.
   - type: textarea
     id: goal
     attributes:
@@ -53,12 +56,26 @@ body:
     id: acceptance
     attributes:
       label: Acceptance criteria
-      description: What must be true before this research issue is done?
+      description: What should be true before this research issue is done?
       placeholder: |
         - [ ] ...
         - [ ] ...
     validations:
       required: true
+  - type: textarea
+    id: research_result_guidance
+    attributes:
+      label: Research result guidance
+      description: Optional adapted guidance for claim movement, synthesis, or decision routing.
+      placeholder: |
+        Target claim or hypothesis:
+        Comparator or baseline:
+        Minimum valid evidence:
+        Decision or stop rule:
+        Expected artifacts:
+        Parent issue / claim map / context note to update:
+    validations:
+      required: false
   - type: textarea
     id: validation_command
     attributes:

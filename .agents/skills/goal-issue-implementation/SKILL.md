@@ -137,6 +137,14 @@ Prioritize by:
 - less semantic risk,
 - older queue age.
 
+When the user asks for research progress rather than generic issue throughput, treat this as
+adapted guidance: prefer issues that should close or revise a hypothesis, move a claim boundary,
+record a useful negative result, synthesize accumulated diagnostics, or unblock a durable
+experiment. Do not treat this as a hard eligibility rule; support issues may still be the right next
+step when they remove a concrete blocker. If the remaining queue is mostly docs cleanup or another
+diagnostic extension under an already-expanded research parent, propose a synthesis issue or
+synthesis pass before adding more exploratory children.
+
 ## Queue Exhaustion Audit
 
 Before declaring the implementation queue exhausted, first run the closed-issue state-label hygiene
@@ -154,6 +162,11 @@ before claiming that the active implementation queue is exhausted.
 Then run one final read-only implementability audit over:
 - open issues labeled `state:ready`,
 - open issues that lack any `state:*` label.
+
+If these local filters appear exhausted or dominated by blocked/SLURM-only work, run one bundled
+broad queue scout before declaring the queue empty. Prefer a cheap local or Qwen scan plus one
+substantial Copilot pass when available; treat scout output as a lead only, and confirm any proposed
+candidate with local `gh issue view` evidence before selecting, claiming, or reporting it as ready.
 
 The audit should classify whether each remaining issue is actually implementable on the current
 machine and with the available durable artifacts. If a supposedly ready issue needs unavailable

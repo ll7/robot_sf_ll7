@@ -74,7 +74,12 @@ def load_recipe_manifest(recipe_root: Path = DEFAULT_RECIPE_ROOT) -> RecipeManif
     """Load the curated SQL recipe manifest."""
 
     manifest_path = recipe_root / "manifest.yaml"
-    payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if not manifest_path.is_file():
+        raise RecipeValidationError(f"Recipe manifest file not found: {manifest_path}")
+    try:
+        payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise RecipeValidationError(f"Failed to parse manifest {manifest_path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise RecipeValidationError(f"{manifest_path}: expected mapping payload")
     schema_version = str(payload.get("schema_version", ""))
@@ -83,9 +88,10 @@ def load_recipe_manifest(recipe_root: Path = DEFAULT_RECIPE_ROOT) -> RecipeManif
             f"{manifest_path}: expected schema_version {RECIPE_SCHEMA_VERSION}, "
             f"got {schema_version!r}"
         )
-    recipes = tuple(
-        _recipe_from_payload(item, recipe_root=recipe_root) for item in payload["recipes"]
-    )
+    recipe_payloads = payload.get("recipes")
+    if not isinstance(recipe_payloads, list):
+        raise RecipeValidationError(f"{manifest_path}: recipes must be a list")
+    recipes = tuple(_recipe_from_payload(item, recipe_root=recipe_root) for item in recipe_payloads)
     return RecipeManifest(schema_version=schema_version, recipes=recipes)
 
 
@@ -102,13 +108,23 @@ def run_recipe(
     manifest = load_recipe_manifest(recipe_root)
     recipe = manifest.recipe(recipe_id)
     table_paths = _validate_recipe_inputs(recipe, export_dir=export_dir)
-    sql = recipe.sql_file.read_text(encoding="utf-8").format(
-        **{table: _read_parquet_sql(path) for table, path in table_paths.items()}
-    )
-    with duckdb.connect(database=":memory:") as connection:
-        cursor = connection.execute(sql)
-        rows = tuple(tuple(row) for row in cursor.fetchall())
-        columns = tuple(str(column[0]) for column in cursor.description)
+    if not recipe.sql_file.is_file():
+        raise RecipeValidationError(f"SQL recipe file not found: {recipe.sql_file}")
+    try:
+        sql = recipe.sql_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RecipeValidationError(f"Failed to read SQL recipe {recipe.sql_file}: {exc}") from exc
+    for table, path in table_paths.items():
+        sql = sql.replace(f"{{{table}}}", _read_parquet_sql(path))
+    try:
+        with duckdb.connect(database=":memory:") as connection:
+            cursor = connection.execute(sql)
+            rows = tuple(tuple(row) for row in cursor.fetchall())
+            columns = tuple(str(column[0]) for column in cursor.description or ())
+    except Exception as exc:
+        raise RecipeValidationError(
+            f"SQL execution failed for recipe '{recipe_id}': {exc}"
+        ) from exc
     _validate_output_columns(recipe, columns)
     if output_csv is not None:
         _write_csv(output_csv, columns, rows)
@@ -193,20 +209,28 @@ def main(argv: list[str] | None = None) -> int:
 def _recipe_from_payload(payload: dict[str, Any], *, recipe_root: Path) -> SqlRecipe:
     """Build one recipe from manifest data."""
 
-    recipe_id = str(payload["recipe_id"])
-    required_columns = {
-        str(table): tuple(str(column) for column in columns)
-        for table, columns in dict(payload.get("required_columns") or {}).items()
-    }
-    return SqlRecipe(
-        recipe_id=recipe_id,
-        title=str(payload["title"]),
-        sql_file=recipe_root / str(payload["sql_file"]),
-        required_tables=tuple(str(table) for table in payload["required_tables"]),
-        required_columns=required_columns,
-        output_columns=tuple(str(column) for column in payload["output_columns"]),
-        caveats=tuple(str(caveat) for caveat in payload.get("caveats") or ()),
-    )
+    if not isinstance(payload, dict):
+        raise RecipeValidationError("Manifest recipe entries must be mappings")
+    try:
+        recipe_id = str(payload["recipe_id"])
+        required_columns = {
+            str(table): tuple(str(column) for column in columns)
+            for table, columns in dict(payload.get("required_columns") or {}).items()
+        }
+        return SqlRecipe(
+            recipe_id=recipe_id,
+            title=str(payload["title"]),
+            sql_file=recipe_root / str(payload["sql_file"]),
+            required_tables=tuple(str(table) for table in payload["required_tables"]),
+            required_columns=required_columns,
+            output_columns=tuple(str(column) for column in payload["output_columns"]),
+            caveats=tuple(str(caveat) for caveat in payload.get("caveats") or ()),
+        )
+    except KeyError as exc:
+        field = str(exc.args[0])
+        raise RecipeValidationError(f"Manifest recipe is missing required field: {field}") from exc
+    except (TypeError, ValueError) as exc:
+        raise RecipeValidationError(f"Manifest recipe has invalid structure: {exc}") from exc
 
 
 def _validate_recipe_inputs(recipe: SqlRecipe, *, export_dir: Path) -> dict[str, Path]:
@@ -235,9 +259,12 @@ def _validate_columns(recipe: SqlRecipe, *, table_name: str, table_path: Path) -
     required_columns = set(recipe.required_columns.get(table_name, ()))
     if not required_columns:
         return
-    with duckdb.connect(database=":memory:") as connection:
-        cursor = connection.execute(f"DESCRIBE SELECT * FROM {_read_parquet_sql(table_path)}")
-        columns = {str(row[0]) for row in cursor.fetchall()}
+    try:
+        with duckdb.connect(database=":memory:") as connection:
+            cursor = connection.execute(f"DESCRIBE SELECT * FROM {_read_parquet_sql(table_path)}")
+            columns = {str(row[0]) for row in cursor.fetchall()}
+    except Exception as exc:
+        raise RecipeValidationError(f"Failed to read schema from {table_path}: {exc}") from exc
     missing = sorted(required_columns - columns)
     if missing:
         missing_text = ", ".join(f"{table_name}.{column}" for column in missing)
@@ -300,6 +327,8 @@ def _markdown_cell(value: Any) -> str:
 
     if value is None:
         return ""
+    if isinstance(value, float):
+        return f"{value:.4f}"
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 

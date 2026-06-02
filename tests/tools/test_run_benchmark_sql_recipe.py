@@ -176,3 +176,190 @@ def test_missing_required_column_reports_actionable_error(tmp_path: Path) -> Non
 
     with pytest.raises(RecipeValidationError, match="episodes\\.scenario_family"):
         run_recipe("planner_outcome_summary", export_dir=export_dir)
+
+
+def _write_recipe_root(
+    root: Path,
+    *,
+    manifest_recipe: str,
+    sql: str = "SELECT COUNT(*) AS episode_count FROM {episodes}",
+) -> Path:
+    """Write a tiny custom recipe root for hardening tests."""
+
+    (root / "sql").mkdir(parents=True)
+    (root / "sql" / "recipe.sql").write_text(sql, encoding="utf-8")
+    (root / "manifest.yaml").write_text(
+        "\n".join(
+            [
+                "schema_version: benchmark_sql_recipes.v1",
+                "recipes:",
+                manifest_recipe,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
+def _single_table_manifest_recipe() -> str:
+    """Return one manifest recipe that only depends on the episodes table."""
+
+    return "\n".join(
+        [
+            "  - recipe_id: custom",
+            "    title: Custom recipe",
+            "    sql_file: sql/recipe.sql",
+            "    required_tables:",
+            "      - episodes",
+            "    required_columns:",
+            "      episodes:",
+            "        - episode_id",
+            "    output_columns:",
+            "      - episode_count",
+            "    caveats:",
+            "      - fixture only",
+        ]
+    )
+
+
+def test_cli_reports_missing_manifest_without_traceback(tmp_path: Path, capsys) -> None:
+    """Missing manifests should fail closed through the CLI."""
+
+    export_dir = _export_fixture(tmp_path)
+
+    exit_code = main(
+        [
+            "--recipe",
+            "custom",
+            "--export-dir",
+            str(export_dir),
+            "--recipe-root",
+            str(tmp_path / "missing-recipes"),
+        ]
+    )
+
+    assert exit_code == 2
+    assert "Recipe manifest file not found" in capsys.readouterr().err
+
+
+def test_malformed_manifest_reports_recipe_validation_error(tmp_path: Path) -> None:
+    """Malformed YAML should be reported as recipe validation, not a parser traceback."""
+
+    recipe_root = tmp_path / "recipes"
+    recipe_root.mkdir()
+    (recipe_root / "manifest.yaml").write_text("recipes: [", encoding="utf-8")
+
+    with pytest.raises(RecipeValidationError, match="Failed to parse manifest"):
+        load_recipe_manifest(recipe_root)
+
+
+def test_manifest_missing_required_field_reports_actionable_error(tmp_path: Path) -> None:
+    """Missing manifest fields should name the missing field."""
+
+    recipe_root = tmp_path / "recipes"
+    _write_recipe_root(
+        recipe_root,
+        manifest_recipe="\n".join(
+            [
+                "  - recipe_id: custom",
+                "    title: Custom recipe",
+            ]
+        ),
+    )
+
+    with pytest.raises(RecipeValidationError, match="missing required field: sql_file"):
+        load_recipe_manifest(recipe_root)
+
+
+def test_manifest_invalid_recipe_structure_reports_actionable_error(tmp_path: Path) -> None:
+    """Malformed recipe field shapes should not leak TypeError or ValueError."""
+
+    recipe_root = tmp_path / "recipes"
+    _write_recipe_root(
+        recipe_root,
+        manifest_recipe="\n".join(
+            [
+                "  - recipe_id: custom",
+                "    title: Custom recipe",
+                "    sql_file: sql/recipe.sql",
+                "    required_tables: 42",
+                "    required_columns: not-a-mapping",
+                "    output_columns:",
+                "      - episode_count",
+            ]
+        ),
+    )
+
+    with pytest.raises(RecipeValidationError, match="invalid structure"):
+        load_recipe_manifest(recipe_root)
+
+
+def test_sql_literal_braces_do_not_break_placeholder_substitution(tmp_path: Path) -> None:
+    """SQL files may contain literal braces unrelated to table placeholders."""
+
+    export_dir = _export_fixture(tmp_path)
+    recipe_root = tmp_path / "recipes"
+    _write_recipe_root(
+        recipe_root,
+        manifest_recipe=_single_table_manifest_recipe(),
+        sql="SELECT '{literal brace}' AS note, COUNT(*) AS episode_count FROM {episodes}",
+    )
+
+    result = run_recipe("custom", export_dir=export_dir, recipe_root=recipe_root)
+
+    assert result.rows == (("{literal brace}", 3),)
+
+
+def test_missing_sql_file_reports_recipe_validation_error(tmp_path: Path) -> None:
+    """Missing SQL files should fail before read_text raises FileNotFoundError."""
+
+    export_dir = _export_fixture(tmp_path)
+    recipe_root = tmp_path / "recipes"
+    _write_recipe_root(recipe_root, manifest_recipe=_single_table_manifest_recipe())
+    (recipe_root / "sql" / "recipe.sql").unlink()
+
+    with pytest.raises(RecipeValidationError, match="SQL recipe file not found"):
+        run_recipe("custom", export_dir=export_dir, recipe_root=recipe_root)
+
+
+def test_sql_execution_errors_are_recipe_validation_errors(tmp_path: Path) -> None:
+    """DuckDB execution failures should be converted to clean validation errors."""
+
+    export_dir = _export_fixture(tmp_path)
+    recipe_root = tmp_path / "recipes"
+    _write_recipe_root(
+        recipe_root,
+        manifest_recipe=_single_table_manifest_recipe(),
+        sql="SELECT missing_column AS episode_count FROM {episodes}",
+    )
+
+    with pytest.raises(RecipeValidationError, match="SQL execution failed"):
+        run_recipe("custom", export_dir=export_dir, recipe_root=recipe_root)
+
+
+def test_unreadable_parquet_schema_reports_recipe_validation_error(tmp_path: Path) -> None:
+    """Unreadable Parquet files should fail closed during schema validation."""
+
+    export_dir = _export_fixture(tmp_path)
+    (export_dir / "episodes.parquet").write_bytes(b"not parquet")
+    recipe_root = tmp_path / "recipes"
+    _write_recipe_root(recipe_root, manifest_recipe=_single_table_manifest_recipe())
+
+    with pytest.raises(RecipeValidationError, match="Failed to read schema"):
+        run_recipe("custom", export_dir=export_dir, recipe_root=recipe_root)
+
+
+def test_markdown_float_cells_use_compact_fixed_precision(tmp_path: Path) -> None:
+    """Markdown output should avoid noisy binary float representations."""
+
+    export_dir = _export_fixture(tmp_path)
+    md_path = tmp_path / "summary.md"
+
+    run_recipe(
+        "planner_outcome_summary",
+        export_dir=export_dir,
+        output_markdown=md_path,
+    )
+
+    assert "0.5000" in md_path.read_text(encoding="utf-8")

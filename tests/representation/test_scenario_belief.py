@@ -124,3 +124,48 @@ def test_debug_projection_is_deterministic_and_exposes_uncertainty() -> None:
         < debug_a["agents"][0]["position"]["confidence"]
     )
     assert "policy_position" in debug_a["agents"][1]["missing_fields"]
+
+
+def test_adapter_tolerates_missing_optional_simulator_fields() -> None:
+    """The MVP adapter should fail soft for optional map and pedestrian velocity fields."""
+    simulator = SimpleNamespace(
+        ped_pos=np.array([], dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((1.0, 2.0), 0.0),
+                current_speed=None,
+                robot_velocity_xy=np.array([0.2, 0.3], dtype=np.float32),
+                config=SimpleNamespace(radius=0.4),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+
+    belief = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=RobotSimulationConfig(),
+        max_pedestrians=4,
+    )
+
+    obs = belief.to_socnav_struct()
+    assert obs["map"]["size"].tolist() == pytest.approx([50.0, 50.0])
+    assert obs["robot"]["speed"].tolist() == pytest.approx([0.0, 0.0])
+    assert obs["robot"]["velocity_xy"].tolist() == pytest.approx([0.2, 0.3])
+    assert obs["pedestrians"]["count"][0] == pytest.approx(0.0)
+
+
+def test_adapter_falls_back_when_pedestrian_velocity_shape_mismatches() -> None:
+    """Mismatched pedestrian velocities should not break the belief adapter."""
+    simulator = _simulator_fixture()
+    simulator.ped_vel = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)
+
+    belief = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=RobotSimulationConfig(),
+        max_pedestrians=4,
+    )
+
+    obs = belief.to_socnav_struct()
+    np.testing.assert_allclose(obs["pedestrians"]["velocities"], np.zeros((4, 2), dtype=np.float32))

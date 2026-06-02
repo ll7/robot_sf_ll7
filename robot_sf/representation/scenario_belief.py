@@ -328,11 +328,9 @@ def _scenario_belief_from_simulator(
     robot_pose = robot.pose
     robot_pos = np.asarray(robot_pose[0], dtype=np.float32)
     robot_heading = float(robot_pose[1])
-    robot_speed = tuple(
-        float(v) for v in np.asarray(robot.current_speed, dtype=np.float32).reshape(-1)
-    )
+    robot_speed = _robot_speed(robot)
     robot_velocity = _robot_velocity_xy(robot, robot_heading)
-    ped_positions = np.asarray(simulator.ped_pos, dtype=np.float32)
+    ped_positions = _pedestrian_positions(simulator)
     ped_velocities = _pedestrian_velocities(simulator, ped_positions)
     map_size = _map_size(simulator)
     timestep_s = float(getattr(simulator.config, "time_per_step_in_secs", 0.0) or 0.0)
@@ -454,22 +452,54 @@ def _visibility_states(
     return tuple(states)
 
 
+def _pedestrian_positions(simulator: Any) -> np.ndarray:
+    """Return pedestrian positions as a stable two-column array."""
+    ped_pos = getattr(simulator, "ped_pos", None)
+    if ped_pos is None:
+        return np.zeros((0, 2), dtype=np.float32)
+    arr = np.asarray(ped_pos, dtype=np.float32)
+    if arr.size == 0:
+        return np.zeros((0, 2), dtype=np.float32)
+    return arr.reshape(-1, 2)
+
+
 def _pedestrian_velocities(simulator: Any, ped_positions: np.ndarray) -> np.ndarray:
     """Return pedestrian velocities or a zero fallback matching positions."""
     try:
-        return np.asarray(simulator.ped_vel, dtype=np.float32)
+        ped_vel = getattr(simulator, "ped_vel", None)
+        if ped_vel is not None:
+            vel = np.asarray(ped_vel, dtype=np.float32).reshape(-1, 2)
+            if vel.shape == ped_positions.shape:
+                return vel
     except (AttributeError, TypeError, ValueError):
-        return np.zeros_like(ped_positions, dtype=np.float32)
+        pass
+    return np.zeros_like(ped_positions, dtype=np.float32)
+
+
+def _robot_speed(robot: Any) -> tuple[float, ...]:
+    """Return the existing SocNav robot speed field from current_speed."""
+    current_speed = getattr(robot, "current_speed", None)
+    if current_speed is None:
+        return (0.0, 0.0)
+    arr = np.asarray(current_speed, dtype=np.float32).reshape(-1)
+    if arr.size == 0:
+        return (0.0, 0.0)
+    return tuple(float(v) for v in arr)
 
 
 def _robot_velocity_xy(robot: Any, heading: float) -> np.ndarray:
     """Return robot world-frame XY velocity from state or current speed."""
-    velocity_xy = getattr(getattr(robot, "state", None), "velocity_xy", None)
+    state = getattr(robot, "state", None)
+    velocity_xy = getattr(state, "velocity_xy", None)
+    if velocity_xy is None:
+        velocity_xy = getattr(state, "robot_velocity_xy", None)
+    if velocity_xy is None:
+        velocity_xy = getattr(robot, "robot_velocity_xy", None)
     if velocity_xy is not None:
         arr = np.asarray(velocity_xy, dtype=np.float32).reshape(-1)
         if arr.size >= 2:
             return arr[:2]
-    current_speed = np.asarray(robot.current_speed, dtype=np.float32).reshape(-1)
+    current_speed = np.asarray(_robot_speed(robot), dtype=np.float32).reshape(-1)
     linear_speed = float(current_speed[0]) if current_speed.size > 0 else 0.0
     return np.array(
         [linear_speed * float(np.cos(heading)), linear_speed * float(np.sin(heading))],
@@ -479,11 +509,17 @@ def _robot_velocity_xy(robot: Any, heading: float) -> np.ndarray:
 
 def _map_size(simulator: Any) -> np.ndarray:
     """Return map size clipped to the existing SocNav position cap."""
+    map_def = getattr(simulator, "map_def", None)
+    if map_def is None:
+        return np.array([50.0, 50.0], dtype=np.float32)
     raw_size = np.asarray(
-        [float(simulator.map_def.width), float(simulator.map_def.height)],
+        [
+            float(getattr(map_def, "width", 50.0) or 50.0),
+            float(getattr(map_def, "height", 50.0) or 50.0),
+        ],
         dtype=np.float32,
     )
-    return np.minimum(raw_size, _map_position_cap(simulator.map_def))
+    return np.minimum(raw_size, _map_position_cap(map_def))
 
 
 def _empty_goal(source: BeliefSource) -> GoalBelief:

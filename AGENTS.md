@@ -263,6 +263,9 @@ Benchmark-specific policy:
 - If a planner, environment, or dependency cannot satisfy the contract needed for an accurate
   benchmark run, the run for that planner must fail closed with a clear error and an explicit
   `not available` or `failed` status.
+- If the intended proof fails or cannot be gathered, close the work as `blocked`, `diagnostic`, or
+  `not benchmark evidence` as appropriate, and record the next smallest proof step instead of
+  presenting the claim as complete.
 - Do not classify fallback execution as benchmark-strengthening evidence; report it as a limitation
   or exclusion reason with the exact condition that triggered it.
 - Benchmark reports and issue follow-ups should clearly identify whether a planner ran in

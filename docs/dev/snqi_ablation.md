@@ -19,10 +19,10 @@ CLI usage
 
 ```bash
 robot_sf_bench snqi-ablate \
-  --in results/episodes.jsonl \
-  --out results/ablation.md \
+  --in output/benchmarks/snqi/episodes.jsonl \
+  --out output/benchmarks/snqi/ablation.md \
   --snqi-weights model/snqi_canonical_weights_v1.json \
-  --snqi-baseline results/baseline_stats.json \
+  --snqi-baseline output/benchmarks/snqi/baseline_stats.json \
   --format md
 ```
 
@@ -39,7 +39,7 @@ API usage
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.ablation import compute_snqi_ablation, format_markdown
 
-records = read_jsonl("results/episodes.jsonl")
+records = read_jsonl("output/benchmarks/snqi/episodes.jsonl")
 weights = {...}
 baseline = {...}
 rows = compute_snqi_ablation(records, weights=weights, baseline=baseline)
@@ -52,12 +52,12 @@ Limit to top-5 groups and save a summary JSON:
 
 ```bash
 robot_sf_bench snqi-ablate \
-  --in results/episodes.jsonl \
-  --out results/ablation_top5.md \
+  --in output/benchmarks/snqi/episodes.jsonl \
+  --out output/benchmarks/snqi/ablation_top5.md \
   --snqi-weights model/snqi_canonical_weights_v1.json \
-  --snqi-baseline results/baseline_stats.json \
+  --snqi-baseline output/benchmarks/snqi/baseline_stats.json \
   --top 5 \
-  --summary-out results/ablation_summary.json \
+  --summary-out output/benchmarks/snqi/ablation_summary.json \
   --format md
 ```
 

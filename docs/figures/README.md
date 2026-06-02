@@ -50,6 +50,28 @@ uv run python scripts/generate_figures.py \
   --dmetrics collisions,comfort_exposure --force-field
 ```
 
+## Figure QA Validation
+
+Validate generated figure artifacts with deterministic, CI-friendly checks:
+
+```bash
+# Single figure file
+uv run python scripts/validation/validate_figure_artifacts.py docs/figures/fig-my-figure.png --artifact-id fig_my_figure
+
+# With caption metadata check
+uv run python scripts/validation/validate_figure_artifacts.py docs/figures/fig-my-figure.png --artifact-id fig_my_figure --caption docs/figures/captions.md
+
+# All figures in an artifact catalog
+uv run python scripts/validation/validate_figure_artifacts.py docs/figures/catalog.yaml --catalog
+
+# Machine-readable JSON report
+uv run python scripts/validation/validate_figure_artifacts.py docs/figures/fig-my-figure.png --artifact-id fig_my_figure --json
+```
+
+Checks performed: file existence, PNG/PDF signatures, valid PNG dimensions,
+minimum file size, catalog output formats, and caption file availability.
+Failures name the `artifact_id` and the failed check.
+
 ## Related
 
 - `docs/img/` - static images (screenshots, diagrams)

@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from loguru import logger
 
 
 def test_benchmark_with_visualization_integration():
@@ -111,3 +112,59 @@ def test_benchmark_visualization_creates_output_structure():
         )  # Then: Functions return artifact lists
         assert isinstance(plots, list)
         assert isinstance(videos, list)
+
+
+def test_log_manual_visualization_steps_logs_valid_commands(tmp_path: Path) -> None:
+    """Verify log_manual_visualization_steps logs valid CLI commands.
+
+    The function must not suggest commands that use aggregate JSON as input
+    or omit required CLI arguments. It should point to
+    scripts/generate_figures.py and valid robot_sf_bench commands with
+    episodes JSONL placeholders and required metric arguments.
+    """
+    from scripts.run_social_navigation_benchmark import log_manual_visualization_steps
+
+    # Create a minimal aggregated_results.json to simulate benchmark output root
+    agg_file = tmp_path / "aggregated_results.json"
+    agg_file.write_text(json.dumps({"dummy": True}), encoding="utf-8")
+    visuals_dir = tmp_path / "visualizations"
+
+    captured: list[str] = []
+
+    def collect(msg):
+        captured.append(str(msg))
+
+    handle = logger.add(collect, level="INFO", format="{message}")
+    try:
+        result = log_manual_visualization_steps(str(agg_file), str(visuals_dir))
+    finally:
+        logger.remove(handle)
+
+    assert result["success"] is True
+    full_log = "\n".join(captured)
+
+    # Must reference scripts/generate_figures.py as the primary option
+    assert "scripts/generate_figures.py" in full_log
+
+    # Must reference episodes JSONL placeholders, never the aggregate file
+    assert "episodes.jsonl" in full_log
+    assert "aggregated_results.json" not in full_log
+
+    generate_command = next(line for line in captured if "scripts/generate_figures.py" in line)
+    pareto_command = next(line for line in captured if "plot-pareto" in line)
+    distributions_command = next(line for line in captured if "plot-distributions" in line)
+
+    assert "--episodes" in generate_command
+    assert "--pareto-x collisions" in generate_command
+    assert "--pareto-y comfort_exposure" in generate_command
+    assert "--dmetrics collisions,comfort_exposure" in generate_command
+
+    assert "--in" in pareto_command
+    assert "--out " in pareto_command
+    assert "--out-dir" not in pareto_command
+    assert "--x-metric collisions" in pareto_command
+    assert "--y-metric comfort_exposure" in pareto_command
+
+    assert "--in" in distributions_command
+    assert "--out-dir" in distributions_command
+    assert "--metrics collisions,comfort_exposure" in distributions_command

@@ -1,4 +1,4 @@
-# Issue #2104 Component Ablation Pilot Evidence
+# Issue #2104 Component Ablation Pilot Evidence (2026-06-02)
 
 Date: 2026-06-02
 

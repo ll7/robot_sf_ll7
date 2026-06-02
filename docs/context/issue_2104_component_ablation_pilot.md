@@ -1,4 +1,4 @@
-# Issue #2104 Component Ablation Pilot
+# Issue #2104 Component Ablation Pilot (2026-06-02)
 
 Status: current diagnostic context for issue
 [#2104](https://github.com/ll7/robot_sf_ll7/issues/2104).

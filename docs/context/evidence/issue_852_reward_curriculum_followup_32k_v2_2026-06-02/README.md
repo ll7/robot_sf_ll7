@@ -1,4 +1,4 @@
-# Issue 852 32k reward-curriculum follow-up probe
+# Issue #852 32k Reward-Curriculum Follow-Up Probe (2026-06-02)
 
 This directory records the lightweight, reviewable provenance for the
 `goal-slurm-experiment` 32k PPO training probe submitted on 2026-06-02.

@@ -12,6 +12,13 @@ from robot_sf_carla_bridge.availability import (
     load_availability_schema,
     require_carla,
 )
+from robot_sf_carla_bridge.diagnostics import (
+    CARLA_REPLAY_DIAGNOSTICS_SCHEMA_VERSION,
+    DiagnosticsRow,
+    build_carla_replay_diagnostics,
+    load_carla_replay_diagnostics_schema,
+    write_carla_replay_diagnostics_outputs,
+)
 from robot_sf_carla_bridge.docker_runtime import (
     CARLA_DOCKER_IMAGE,
     CARLA_DOCKER_RUNTIME_SCHEMA_VERSION,
@@ -78,6 +85,7 @@ __all__ = [
     "CARLA_DOCKER_IMAGE",
     "CARLA_DOCKER_RUNTIME_SCHEMA_VERSION",
     "CARLA_PYTHON_API_REQUIREMENT",
+    "CARLA_REPLAY_DIAGNOSTICS_SCHEMA_VERSION",
     "DEFAULT_PARITY_METRICS",
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
@@ -87,6 +95,7 @@ __all__ = [
     "CarlaUnavailableError",
     "CertificateRef",
     "CommandResult",
+    "DiagnosticsRow",
     "MetricParityRow",
     "PedestrianReplaySpec",
     "Pose2D",
@@ -95,6 +104,7 @@ __all__ = [
     "SimulationSpec",
     "Waypoint2D",
     "build_carla_client_health_summary",
+    "build_carla_replay_diagnostics",
     "build_carla_server_container_command",
     "build_export_payload",
     "build_export_payload_from_map_definition",
@@ -107,6 +117,7 @@ __all__ = [
     "list_carla_bridge_schema_catalog",
     "load_availability_schema",
     "load_batch_validation_summary_schema",
+    "load_carla_replay_diagnostics_schema",
     "load_export_manifest_payloads",
     "load_export_manifest_schema",
     "load_export_schema",
@@ -124,6 +135,7 @@ __all__ = [
     "validate_carla_image",
     "validate_export_payload",
     "validate_t1_replay_catalog_payload",
+    "write_carla_replay_diagnostics_outputs",
     "write_export_payload",
     "write_export_records",
 ]

@@ -1,0 +1,106 @@
+schema_version: robot_sf.heldout_transfer_partitions.v1
+issue: 2128
+status: draft
+claim_boundary: >
+  Proposal-grade held-out scenario-family transfer protocol. This manifest separates benchmark-set
+  and held-out-family surfaces before execution; it is not benchmark evidence by itself.
+
+training_family_pool:
+  description: Families allowed for policy training and routine planner tuning.
+  scenario_matrix: configs/scenarios/sets/issue_2128_heldout_family_transfer_training_pool.yaml
+  scenario_families:
+    - classic_bottleneck
+    - classic_cross_trap
+    - classic_doorway
+    - classic_head_on_corridor
+    - classic_overtaking
+  leakage_rule: >
+    Learned policies and planner hyperparameters may use this pool, but any result from this pool
+    must be reported as benchmark-set or in-distribution performance, not held-out transfer.
+
+validation_family_pool:
+  description: Families allowed for checkpoint selection, early stopping, and threshold tuning.
+  scenario_matrix: configs/scenarios/sets/verified_simple_subset_v1.yaml
+  scenario_families:
+    - empty_map_frame_consistency
+    - single_pedestrian_crossing
+  leakage_rule: >
+    Any checkpoint, threshold, normalization, or reward setting selected with this pool must be
+    declared before held-out evaluation starts.
+
+benchmark_set_evaluation:
+  description: Known benchmark surface used for same-matrix comparison.
+  benchmark_config: configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml
+  scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
+  seeds: [111]
+  claim_label: benchmark_set_performance
+
+heldout_family_evaluation:
+  description: Pilot held-out family surface excluded from training, validation, and tuning.
+  benchmark_config: configs/benchmarks/issue_2128_heldout_family_transfer_pilot.yaml
+  scenario_matrix: configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml
+  seeds: [111]
+  scenario_families:
+    - classic_station_platform
+    - francis2023_intersection_wait
+  claim_label: heldout_family_transfer_pilot
+
+planner_inclusion:
+  include:
+    - goal
+    - social_force
+    - orca
+  learned_policy_rows:
+    required_before_inclusion:
+      - checkpoint_manifest
+      - training_scenario_surface
+      - normalization_manifest
+      - heldout_exposure_audit
+  execution_modes:
+    native: eligible for comparable transfer deltas when metrics and seeds match.
+    adapter: eligible only when adapter impact is explicitly documented.
+    fallback: visible caveat; excluded from successful transfer evidence.
+    degraded: visible caveat; excluded from successful transfer evidence.
+    failed: visible failure row; excluded from successful transfer evidence.
+    not_available: visible exclusion row; excluded from successful transfer evidence.
+
+metrics:
+  primary:
+    - success_rate
+    - collision_rate
+    - near_miss_rate
+    - low_progress_rate
+    - min_distance
+  uncertainty:
+    bootstrap_samples: 300
+    confidence: 0.95
+    seed: 123
+  reporting_rule: >
+    Benchmark-set and held-out-family metrics must be rendered in separate tables before any
+    transfer-delta table is computed.
+
+leakage_audit_required:
+  - partition_frozen_before_execution
+  - heldout_maps_not_used_for_training_or_tuning
+  - heldout_templates_not_used_for_reward_or_normalization
+  - checkpoint_selection_excludes_heldout_rows
+  - planner_hyperparameter_tuning_excludes_heldout_rows
+  - seed_schedule_fixed_before_execution
+  - fallback_degraded_failed_rows_visible
+  - artifact_catalog_has_source_checksums
+
+planned_outputs:
+  - path: output/benchmarks/issue2128_heldout_transfer/reports/summary_benchmark_set.csv
+    evidence_role: benchmark_set_table
+  - path: output/benchmarks/issue2128_heldout_transfer/reports/summary_heldout_family.csv
+    evidence_role: heldout_family_table
+  - path: output/benchmarks/issue2128_heldout_transfer/reports/scenario_family_breakdown.csv
+    evidence_role: family_breakdown_table
+  - path: output/benchmarks/issue2128_heldout_transfer/reports/transfer_delta.csv
+    evidence_role: comparable_delta_table
+  - path: output/benchmarks/issue2128_heldout_transfer/leakage_audit.md
+    evidence_role: leakage_audit_checklist
+  - path: output/benchmarks/issue2128_heldout_transfer/figures/fig_transfer_delta.png
+    evidence_role: transfer_delta_figure
+  - path: output/benchmarks/issue2128_heldout_transfer/artifact_catalog.yaml
+    evidence_role: artifact_catalog

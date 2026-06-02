@@ -47,6 +47,7 @@ def test_hazard_odd_rollup_emits_status_tables_and_provenance(tmp_path: Path) ->
     summary = json.loads((output / "hazard_odd_coverage_summary.json").read_text())
     assert summary["schema_version"] == "hazard_odd_coverage_rollup.v1"
     assert summary["executed_evidence"]["row_count"] == 2
+    assert "s_seed_only" not in summary["executed_evidence"]["scenario_ids"]
     assert summary["executed_evidence"]["caveated_row_count"] == 1
     assert summary["provenance"]["generation_commit"]
     assert summary["provenance"]["generated_artifacts"]
@@ -116,6 +117,16 @@ def _write_campaign_fixture(campaign_root: Path) -> Path:
                 "scenario_id": "s_partial",
                 "scenario_family": "family_partial",
                 "status": "fallback",
+            }
+        )
+    with (reports / "seed_episode_rows.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["scenario_id", "scenario_family", "status"])
+        writer.writeheader()
+        writer.writerow(
+            {
+                "scenario_id": "s_seed_only",
+                "scenario_family": "family_seed",
+                "status": "native",
             }
         )
     return campaign_root

@@ -19,6 +19,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
         result = run_from_args(args)
+    # CLI entrypoint: convert unexpected errors into parser errors while preserving details.
     except Exception as exc:
         parser.exit(2, f"{parser.prog}: error: {exc}\n")
     sys.stdout.write(json.dumps(result["outputs"], indent=2, sort_keys=True) + "\n")

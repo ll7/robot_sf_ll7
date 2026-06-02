@@ -13,6 +13,38 @@ def test_ci_step_timer_shell_syntax():
     assert subprocess.run(["bash", "-n", str(script)], check=False).returncode == 0
 
 
+def test_ci_step_timer_help_flag():
+    """--help prints usage and exits 0 without running any command."""
+    script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ci_step_timer.sh"
+    result = subprocess.run(
+        ["bash", str(script), "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "ci_step_timer step_start" not in result.stdout
+    assert "ci_step_timer step_end" not in result.stdout
+    assert "::group::" not in result.stdout
+
+
+def test_ci_step_timer_h_flag():
+    """-h prints usage and exits 0 without running any command."""
+    script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ci_step_timer.sh"
+    result = subprocess.run(
+        ["bash", str(script), "-h"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "ci_step_timer step_start" not in result.stdout
+    assert "ci_step_timer step_end" not in result.stdout
+    assert "::group::" not in result.stdout
+
+
 def test_ci_step_timer_requires_label_and_command():
     """Ensure the helper exits with usage info when arguments are missing."""
     script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ci_step_timer.sh"

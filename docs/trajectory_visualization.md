@@ -63,10 +63,10 @@ playback.run()
 
 ### Demo Script
 
-A complete demo is available in `examples/trajectory_demo.py`:
+A complete demo is available in `examples/advanced/14_trajectory_visualization.py`:
 
 ```bash
-python examples/trajectory_demo.py path/to/recording.pkl
+uv run python examples/advanced/14_trajectory_visualization.py
 ```
 
 ### Recorded-Step Analyzer Workflow

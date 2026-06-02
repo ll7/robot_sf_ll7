@@ -141,7 +141,7 @@ print('Trajectory data:', 'trajectory_data' in ep)
 from pathlib import Path
 from robot_sf.benchmark.full_classic.validation import validate_visual_manifests
 
-reports_dir = Path("results/full_classic_run/reports")
+reports_dir = Path("output/benchmarks/full_classic_run/reports")
 contracts = Path("specs/127-enhance-benchmark-visual/contracts")
 validate_visual_manifests(reports_dir, contracts)
 

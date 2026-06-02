@@ -221,7 +221,7 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
 ### Development Environment Specs
 - **CPU**: M-series Apple Silicon (ARM64)
 - **Memory**: 16+ GB recommended for multi-worker runs
-- **Storage**: SSD for results/ directory  
+- **Storage**: SSD for the repository's `output/` artifact directory
 - **Display**: Headless mode using SDL_VIDEODRIVER=dummy
 
 ### Performance Scaling

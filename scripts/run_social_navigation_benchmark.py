@@ -243,16 +243,48 @@ def aggregate_all_results(
 
 
 def log_manual_visualization_steps(aggregates_file: str, output_root: str) -> dict[str, Any]:
-    """Log manual visualization steps using CLI commands."""
-    logger.info("Logging manual visualization steps using CLI commands")
+    """Log manual visualization steps using valid CLI commands."""
+    logger.info("Logging manual visualization steps using valid CLI commands")
 
     try:
-        # For now, skip automatic figure generation as the API is not straightforward
-        # Users can run the CLI commands manually if needed
-        logger.info("Visualization generation skipped. Manual CLI commands available:")
-        logger.info(f"  robot_sf_bench plot-pareto --in {aggregates_file} --out-dir {output_root}")
+        # Derive the benchmark root from the aggregates file location
+        # (aggregates_file = <benchmark_root>/aggregated_results.json)
+        benchmark_root = Path(aggregates_file).resolve().parent
+        # Replace <algo> with the actual algo dir, e.g. sf_planner, ppo, random
+        episodes_placeholder = f"{benchmark_root}/<algo>/episodes/episodes.jsonl"
+
         logger.info(
-            f"  robot_sf_bench plot-distributions --in {aggregates_file} --out-dir {output_root}",
+            "Visualization generation skipped. "
+            "Manual CLI commands available (replace <algo> with a baseline directory):",
+        )
+
+        # Preferred: scripts/generate_figures.py produces all figures (Pareto,
+        # distributions, comparison table) from episodes JSONL in one invocation.
+        logger.info(
+            f"  uv run python scripts/generate_figures.py "
+            f"--episodes {episodes_placeholder} "
+            f"--out-dir {output_root} "
+            f"--pareto-x collisions --pareto-y comfort_exposure --pareto-pdf "
+            f"--dmetrics collisions,comfort_exposure --dists-pdf "
+            f"--table-metrics collisions,comfort_exposure",
+        )
+
+        # Alternative: robot_sf_bench plot-pareto (requires episodes JSONL for
+        # --in, a PNG path for --out, and both --x-metric/--y-metric).
+        logger.info(
+            f"  uv run robot_sf_bench plot-pareto "
+            f"--in {episodes_placeholder} "
+            f"--out {output_root}/pareto.png "
+            f"--x-metric collisions --y-metric comfort_exposure",
+        )
+
+        # Alternative: robot_sf_bench plot-distributions (requires episodes JSONL
+        # for --in, --out-dir, and --metrics).
+        logger.info(
+            f"  uv run robot_sf_bench plot-distributions "
+            f"--in {episodes_placeholder} "
+            f"--out-dir {output_root} "
+            f"--metrics collisions,comfort_exposure",
         )
 
         return {

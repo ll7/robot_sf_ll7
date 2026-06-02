@@ -17,6 +17,7 @@ def test_scan_file_reports_known_bad_active_doc_patterns(tmp_path: Path) -> None
         "\n".join(
             [
                 "Run `python scripts/missing_tool.py --demo`.",
+                "Run `python examples/missing_example.py --demo`.",
                 "Old output is under `output/results/demo.json`.",
                 "Use `robot_sf_bench run --suite core --episodes 10`.",
             ]
@@ -28,7 +29,7 @@ def test_scan_file_reports_known_bad_active_doc_patterns(tmp_path: Path) -> None
     diagnostics = checker.scan_file(Path("docs/quickstart.md"), tmp_path)
 
     rules = {diagnostic.rule for diagnostic in diagnostics}
-    assert len(diagnostics) == 4
+    assert len(diagnostics) == 6
     assert "bare-python-scripts-command" in rules
     assert "nested-output-results-path" in rules
     assert "unsupported-robot-sf-bench-run-flag" in rules

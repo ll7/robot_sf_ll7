@@ -72,8 +72,8 @@ RULES = (
     ),
     Rule(
         name="bare-python-scripts-command",
-        pattern=re.compile(r"\bpython\s+scripts/"),
-        message="script commands should normally use uv run python scripts/...",
+        pattern=re.compile(r"\bpython\s+(?:scripts|examples)/"),
+        message="script and example commands should normally use uv run python ...",
     ),
     Rule(
         name="setup-pip-install",
@@ -89,7 +89,7 @@ RULES = (
     ),
 )
 SCRIPT_COMMAND_RE = re.compile(
-    r"(?:uv\s+run\s+)?python\s+(?P<script>scripts/[A-Za-z0-9_./-]+\.py)\b"
+    r"(?:uv\s+run\s+)?python\s+(?P<script>(?:scripts|examples)/[A-Za-z0-9_./-]+\.py)\b"
 )
 
 

@@ -8,9 +8,9 @@ better). It can export to CSV and/or Markdown.
 Typical usage:
 
     uv run python scripts/ranking_table.py \
-      --episodes results/episodes.jsonl \
-      --out-csv results/ranking_snqi.csv \
-      --out-md results/ranking_snqi.md \
+      --episodes output/benchmarks/helper_examples/episodes.jsonl \
+      --out-csv output/benchmarks/helper_examples/ranking_snqi.csv \
+      --out-md output/benchmarks/helper_examples/ranking_snqi.md \
       --metric snqi \
       --group-by scenario_params.algo
 

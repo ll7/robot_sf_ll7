@@ -6,11 +6,11 @@ Find and export episodes that meet failure-like criteria across metrics.
 
 - Write JSON with episode IDs only:
 
-  robot_sf_bench extract-failures --in results/episodes.jsonl --out results/fail_ids.json --collision-threshold 1 --comfort-threshold 0.2 --near-miss-threshold 0 --ids-only
+  robot_sf_bench extract-failures --in output/benchmarks/helper_examples/episodes.jsonl --out output/benchmarks/helper_examples/fail_ids.json --collision-threshold 1 --comfort-threshold 0.2 --near-miss-threshold 0 --ids-only
 
 - Write matching full records as JSONL:
 
-  robot_sf_bench extract-failures --in results/episodes.jsonl --out results/failures.jsonl --collision-threshold 1 --comfort-threshold 0.2
+  robot_sf_bench extract-failures --in output/benchmarks/helper_examples/episodes.jsonl --out output/benchmarks/helper_examples/failures.jsonl --collision-threshold 1 --comfort-threshold 0.2
 
 ## Options
 
@@ -27,6 +27,6 @@ Find and export episodes that meet failure-like criteria across metrics.
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.failure_extractor import extract_failures
 
-records = read_jsonl("results/episodes.jsonl")
+records = read_jsonl("output/benchmarks/helper_examples/episodes.jsonl")
 fails = extract_failures(records, collision_threshold=1, comfort_threshold=0.2)
 ```

@@ -26,18 +26,19 @@ models:
     claim_boundary: research_only
     non_benchmark_reason: >
       The checkpoint is a shielded-PPO repair candidate with successful training
-      and W&B artifact provenance, but it has not yet passed the guarded
-      policy-search smoke and nominal-sanity stop gates required by the launch
-      packet. Treat final training metrics as training evidence only.
+      and W&B artifact provenance. The repaired guarded smoke replay passed on
+      SLURM, but valid nominal-sanity job 12703_0 reached only 0.1667 success
+      with zero collisions, below the launch-packet success floor. Treat final
+      training metrics as training evidence only.
   notes:
   - SLURM job 12674 completed on 2026-06-01 on a30 in 7h06m33s.
   - Best-success artifact aliases are step-5000000, best-success, and latest;
     registry pins the immutable W&B version v5.
   - Final training eval at 5M steps reported success_rate=0.83, collision_rate=0.16,
     SNQI=-0.102, path_efficiency=0.815, and eval_episode_return=27.926.
-  - Aggregate training manifest remains validation_state=draft; post-training
-    guarded smoke and nominal-sanity gates are required before stress or
-    benchmark escalation.
+  - Post-training guarded smoke passed after the issue #2006 handoff repair, but
+    nominal-sanity job 12703_0 returned decision=revise; do not run stress or
+    benchmark escalation without a learned-progress repair.
   - >
     Local synced artifact root:
     output/slurm/issue1474-shielded-ppo-repair-job-12674.

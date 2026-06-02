@@ -11,7 +11,7 @@ while optional capabilities are reported as present or missing.
 
 Options:
   --strict  Also fail when recommended CI-parity tools are missing.
-  -h, --help
+  -h, --help             Show help
 EOF
 }
 

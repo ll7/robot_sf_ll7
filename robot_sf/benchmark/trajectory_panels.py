@@ -184,7 +184,7 @@ def _select_from_override(override_csv: Path) -> list[RepresentativeEpisode]:
             if not trace_path.is_absolute():
                 trace_path = override_csv.parent / trace_path
             trace = load_simulation_trace_export(trace_path)
-            category = _classify_trace(trace)
+            category = str(row.get("category") or "").strip() or _classify_trace(trace)
             artifact_id = str(row.get("artifact_id") or "").strip() or _artifact_id(
                 trace, category=category
             )
@@ -249,7 +249,7 @@ def _min_numeric_planner_value(trace: SimulationTraceExport, key: str) -> float:
     values: list[float] = []
     for frame in trace.frames:
         value = frame.planner.get(key)
-        if isinstance(value, int | float):
+        if isinstance(value, int | float) and not isinstance(value, bool):
             values.append(float(value))
     return min(values) if values else float("inf")
 
@@ -257,9 +257,14 @@ def _min_numeric_planner_value(trace: SimulationTraceExport, key: str) -> float:
 def _robot_displacement(trace: SimulationTraceExport) -> float:
     """Return straight-line displacement between the first and last robot poses."""
 
-    start = trace.frames[0].robot["position"]
-    end = trace.frames[-1].robot["position"]
-    return ((float(end[0]) - float(start[0])) ** 2 + (float(end[1]) - float(start[1])) ** 2) ** 0.5
+    if not trace.frames:
+        return 0.0
+    try:
+        start = _xy(trace.frames[0].robot.get("position"))
+        end = _xy(trace.frames[-1].robot.get("position"))
+    except (KeyError, TypeError, ValueError, IndexError):
+        return 0.0
+    return ((end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2) ** 0.5
 
 
 def _artifact_id(trace: SimulationTraceExport, *, category: str) -> str:

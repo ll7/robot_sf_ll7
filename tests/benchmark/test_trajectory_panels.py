@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.analysis_workbench.simulation_trace_export import load_simulation_trace_export
 from robot_sf.benchmark.figure_qa import check_figure_file
 from robot_sf.benchmark.trajectory_panels import (
+    _robot_displacement,
     generate_trajectory_panel_bundle,
     select_representative_episodes,
 )
@@ -151,8 +153,8 @@ def test_select_representative_episodes_uses_manual_override_csv(tmp_path: Path)
     )
     override = tmp_path / "selection.csv"
     override.write_text(
-        "artifact_id,trace_path,panel_type,caption\n"
-        "manual_artifact,chosen.json,failure_mosaic,Reviewer selected failure\n",
+        "artifact_id,trace_path,panel_type,category,caption\n"
+        "manual_artifact,chosen.json,failure_mosaic,reviewer_bucket,Reviewer selected failure\n",
         encoding="utf-8",
     )
 
@@ -161,7 +163,47 @@ def test_select_representative_episodes_uses_manual_override_csv(tmp_path: Path)
     assert len(selected) == 1
     assert selected[0].artifact_id == "manual_artifact"
     assert selected[0].panel_type == "failure_mosaic"
+    assert selected[0].category == "reviewer_bucket"
     assert selected[0].caption == "Reviewer selected failure"
+
+
+def test_boolean_planner_values_do_not_trigger_near_miss(tmp_path: Path) -> None:
+    """Boolean planner fields should not be treated as numeric minimum TTC values."""
+
+    trace_path = _write_trace(
+        tmp_path / "success.json",
+        _trace_payload(
+            trace_id="trace-success",
+            planner_id="planner_a",
+            scenario_id="crossing",
+            episode_id="ep-success",
+            event="goal_reached",
+            final_position=(1.0, 0.0),
+            min_ttc=False,
+        ),
+    )
+
+    selected = select_representative_episodes([trace_path])
+
+    assert selected[0].category == "success"
+
+
+def test_malformed_robot_position_classifies_as_low_progress(tmp_path: Path) -> None:
+    """Malformed robot positions should fail closed instead of raising IndexError/KeyError."""
+
+    payload = _trace_payload(
+        trace_id="trace-malformed",
+        planner_id="planner_a",
+        scenario_id="crossing",
+        episode_id="ep-malformed",
+        event="advance",
+        final_position=(1.0, 0.0),
+    )
+    trace_path = _write_trace(tmp_path / "malformed.json", payload)
+    trace = load_simulation_trace_export(trace_path)
+    trace.frames[0].robot.pop("position")
+
+    assert _robot_displacement(trace) == 0.0
 
 
 def test_generate_trajectory_panel_bundle_writes_visual_artifacts(tmp_path: Path) -> None:

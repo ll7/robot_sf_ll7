@@ -33,7 +33,7 @@ to `NA` and state why.
 - Decision or stop rule, if applicable:
 - Parent issue, claim map, registry, context note, or synthesis surface to update:
 - New research/benchmark/metric/paper-facing analysis tool, if any: representative use on
-  durable/versioned input, or linked follow-up issue that names the decision, claim boundary, or
+  durable/versioned input, or a linked follow-up issue that names the decision, claim boundary, or
   synthesis surface it will update:
 
 ## Validation / Proof

@@ -1431,7 +1431,7 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Code implemented with tests (unit/integration; GUI when needed).
 - For research/benchmark/metric/paper-facing analysis-tool PRs: include one representative use on
   durable/versioned input (tracked config, model checkpoint, committed fixture, or versioned W&B
-  artifact) or link a concrete follow-up issue that names the decision, claim boundary, or
+  artifact), or link a concrete follow-up issue that names the decision, claim boundary, or
   synthesis surface the tool will update. Local-only `output/` files are not durable proof unless
   promoted or represented by a tracked manifest. Small support helpers (formatters, CLI wrappers,
   quick diagnostics) that make no research/benchmark/metric/paper claim are exempt.

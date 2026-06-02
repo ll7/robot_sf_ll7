@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
+from robot_sf.benchmark import baseline_stats
 from robot_sf.benchmark.cli import cli_main
 
 if TYPE_CHECKING:
@@ -78,6 +81,63 @@ def test_cli_baseline_subcommand(tmp_path: Path, capsys):
     # Should contain at least some baseline keys
     assert "time_to_goal_norm" in data
     assert "collisions" in data
+
+
+def test_cli_baseline_help_mentions_default_jsonl_path(capsys):
+    """TODO docstring. Document this function.
+
+    Args:
+        capsys: TODO docstring.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        cli_main(["baseline", "--help"])
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 0
+    assert "output/benchmarks/baseline_episodes.jsonl" in captured.out
+    assert "output/results/baseline_episodes.jsonl" not in captured.out
+
+
+def test_run_and_compute_baseline_uses_default_jsonl_path_when_omitted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_run_batch(*_args, **kwargs):
+        seen["out_path"] = kwargs["out_path"]
+
+    def fake_read_jsonl(path):
+        seen["read_path"] = path
+        return [{"metrics": {"collisions": 0}}]
+
+    def fake_compute(records, metrics=None):
+        seen["records"] = records
+        seen["metrics"] = metrics
+        return {"collisions": {"med": 0.0, "p95": 0.0}}
+
+    monkeypatch.setattr(baseline_stats, "run_batch", fake_run_batch)
+    monkeypatch.setattr(baseline_stats, "read_jsonl", fake_read_jsonl)
+    monkeypatch.setattr(baseline_stats, "compute_baseline_stats_from_records", fake_compute)
+
+    out_json = tmp_path / "baseline.json"
+    stats = baseline_stats.run_and_compute_baseline(
+        [],
+        out_json=out_json,
+        schema_path=SCHEMA_PATH,
+    )
+
+    assert seen["out_path"] == str(baseline_stats.DEFAULT_BASELINE_JSONL_PATH)
+    assert seen["read_path"] == str(baseline_stats.DEFAULT_BASELINE_JSONL_PATH)
+    assert seen["records"] == [{"metrics": {"collisions": 0}}]
+    assert stats == {"collisions": {"med": 0.0, "p95": 0.0}}
+    assert json.loads(out_json.read_text(encoding="utf-8")) == stats
 
 
 def test_cli_list_scenarios(tmp_path: Path, capsys):

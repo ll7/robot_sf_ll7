@@ -32,6 +32,8 @@ DEFAULT_METRICS: list[str] = [
     "energy",
 ]
 
+DEFAULT_BASELINE_JSONL_PATH = Path("output/benchmarks") / "baseline_episodes.jsonl"
+
 
 def _extract_metric_values(records: list[dict[str, Any]], key: str) -> list[float]:
     """Extract metric values from episode records.
@@ -101,8 +103,7 @@ def run_and_compute_baseline(  # noqa: PLR0913
     if out_jsonl is not None:
         tmp_jsonl = str(out_jsonl)
     else:
-        # default temp path under results/
-        tmp_jsonl = str(Path("output/results") / "baseline_episodes.jsonl")
+        tmp_jsonl = str(DEFAULT_BASELINE_JSONL_PATH)
 
     run_batch(
         scenarios_or_path,
@@ -133,6 +134,7 @@ def run_and_compute_baseline(  # noqa: PLR0913
 
 
 __all__ = [
+    "DEFAULT_BASELINE_JSONL_PATH",
     "DEFAULT_METRICS",
     "compute_baseline_stats_from_records",
     "run_and_compute_baseline",

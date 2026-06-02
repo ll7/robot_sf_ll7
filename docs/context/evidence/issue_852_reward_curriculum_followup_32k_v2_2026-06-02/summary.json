@@ -1,0 +1,65 @@
+{
+  "artifact_status": {
+    "durable_external_pointer": "https://wandb.ai/ll7/robot_sf/runs/8ukuycz6",
+    "local_output_is_durable": false,
+    "local_output_root": "output/slurm/issue791-reward-curriculum-job-12704"
+  },
+  "branch": "gse-852-32k-v2",
+  "commit": "4cd4329568ff",
+  "config": "configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_followup_32k_v2.yaml",
+  "evidence_claim": "compute-node training probe",
+  "issue": 852,
+  "job": {
+    "elapsed": "00:56:20",
+    "exit_code": "0:0",
+    "id": 12704,
+    "name": "gse-852-32k",
+    "node": "auxme-imech172",
+    "partition": "a30",
+    "qos": "a30-gpu",
+    "state": "COMPLETED"
+  },
+  "launcher": "SLURM/Auxme/issue_791_reward_curriculum.sl",
+  "metrics": {
+    "best_checkpoint": {
+      "collision_rate": 0.8285714285714286,
+      "comfort_exposure": 0.04207439386010814,
+      "eval_avg_step_reward": 0.104755445399232,
+      "eval_episode_return": -2.030066031632573,
+      "eval_step": 16384,
+      "meets_convergence": false,
+      "path_efficiency": 0.8808200742240215,
+      "selection_metric": "success_rate",
+      "snqi": -2.1016960532139635,
+      "success_rate": 0.17142857142857143
+    },
+    "final_checkpoint": {
+      "collision_rate": 0.8285714285714286,
+      "comfort_exposure": 0.04563492063492064,
+      "eval_avg_step_reward": -0.07606766864732636,
+      "eval_episode_return": -14.11985726243356,
+      "eval_step": 32768,
+      "path_efficiency": 0.8044397373929328,
+      "snqi": -2.2304741133078516,
+      "success_rate": 0.07142857142857142
+    },
+    "run_summary": {
+      "mean_collision_rate": 0.8357142857142857,
+      "mean_success_rate": 0.12142857142857143,
+      "total_timesteps_executed": 32768,
+      "train_env_steps_per_sec_mean": 10.65,
+      "wall_clock_hours": 0.9306702194116789
+    }
+  },
+  "policy_id": "ppo_expert_issue_852_reward_curriculum_followup_32k_v2",
+  "result_status": "completed_negative_probe",
+  "run_id": "ppo_expert_issue_852_reward_curriculum_followup_32k_v2_20260602T055544",
+  "seeds": [
+    123
+  ],
+  "warnings": [
+    "uni_campus_big.svg obstacle_13 self-intersection warning",
+    "scenario switching observation-space bound mismatches; initial bounds reused for compatibility"
+  ],
+  "worktree": "../robot_sf_ll7.worktrees/gse-852-32k-v2"
+}

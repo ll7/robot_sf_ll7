@@ -1,6 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/dev/pr_ready_check.sh [--help | -h]
+
+Runs PR readiness gates: ruff format/fix, pytest, coverage checks,
+docstring-todo diff/ratchet checks, and freshness stamp write.
+
+Environment variables:
+  BASE_REF            Base ref to compare against for coverage and freshness
+                      (default: origin/main)
+  PR_READY_MODE       Set to "final" for proof-on-committed-HEAD mode, or
+                      "interim" for work-in-progress feedback.
+                      Overrides PR_READY_FINAL when set.
+  PR_READY_FINAL      Legacy compatibility flag: "1", "true", "yes", or "on"
+                      for final mode; "0", "false", "no", "off" for interim.
+                      Ignored when PR_READY_MODE is set.
+EOF
+}
+
+if [ "$#" -gt 0 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
+  usage
+  exit 0
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"

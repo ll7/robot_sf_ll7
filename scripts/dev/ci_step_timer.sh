@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $# -eq 1 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
+  echo "Usage: scripts/dev/ci_step_timer.sh <label> <command> [args...]"
+  exit 0
+fi
+
 if [[ $# -lt 2 ]]; then
   echo "Usage: scripts/dev/ci_step_timer.sh <label> <command> [args...]" >&2
   exit 2

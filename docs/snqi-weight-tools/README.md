@@ -111,10 +111,10 @@ You can compute SNQI on the fly while generating episodes via the unified benchm
 ```bash
 uv run robot_sf_bench run \
   --matrix configs/baselines/example_matrix.yaml \
-  --out results/episodes.jsonl \
+  --out output/benchmarks/snqi/episodes.jsonl \
   --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
   --snqi-weights model/snqi_canonical_weights_v1.json \
-  --snqi-baseline results/baseline_stats.json
+  --snqi-baseline output/benchmarks/snqi/baseline_stats.json
 ```
 
 When both files are provided, each episode record will include `metrics.snqi` computed using the same canonical normalization (median/p95 with clamping). Missing baseline entries fall back to neutral (0) contribution. See the naming note above for `w_near` vs `w_near_misses`.
@@ -125,17 +125,17 @@ End-to-end (baseline stats + run):
 # 1) Generate baseline median/p95 stats from a scenario matrix
 uv run robot_sf_bench baseline \
   --matrix configs/baselines/example_matrix.yaml \
-  --out results/baseline_stats.json \
+  --out output/benchmarks/snqi/baseline_stats.json \
   --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
   --horizon 100 --dt 0.1 --record-forces
 
 # 2) Run the episodes and compute SNQI inline
 uv run robot_sf_bench run \
   --matrix configs/baselines/example_matrix.yaml \
-  --out results/episodes.jsonl \
+  --out output/benchmarks/snqi/episodes.jsonl \
   --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
   --snqi-weights model/snqi_canonical_weights_v1.json \
-  --snqi-baseline results/baseline_stats.json
+  --snqi-baseline output/benchmarks/snqi/baseline_stats.json
 ```
 
 Alternatively, if you have an output JSON from the optimization or recomputation tools, you can extract the recommended weights directly using `--snqi-weights-from`:
@@ -143,10 +143,10 @@ Alternatively, if you have an output JSON from the optimization or recomputation
 ```bash
 uv run robot_sf_bench run \
   --matrix configs/baselines/example_matrix.yaml \
-  --out results/episodes.jsonl \
+  --out output/benchmarks/snqi/episodes.jsonl \
   --schema robot_sf/benchmark/schemas/episode.schema.v1.json \
-  --snqi-weights-from results/snqi_opt_report.json \
-  --snqi-baseline results/baseline_stats.json
+  --snqi-weights-from output/benchmarks/snqi/snqi_opt_report.json \
+  --snqi-baseline output/benchmarks/snqi/baseline_stats.json
 ```
 
 Notes:

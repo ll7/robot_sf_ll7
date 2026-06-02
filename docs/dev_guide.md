@@ -1002,7 +1002,7 @@ Documentation should include:
 
 - Use visualizations to illustrate complex concepts or data flows
 - Include performance reports or benchmarks when relevant
-- Ensure all visual assets are stored in the `docs/img/`, `docs/figures` or `docs/video/` directories for easy access and consistency
+- Ensure all visual assets are stored in the `docs/img/`, `docs/figures/` or `docs/video/` directories for easy access and consistency
 - Generate figures using code when possible to ensure reproducibility
 - Figures should be exported in high-quality vector formats (e.g., SVG, PDF) for clarity
 

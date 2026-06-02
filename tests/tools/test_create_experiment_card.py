@@ -155,8 +155,8 @@ def test_output_and_expected_artifacts_have_artifact_ids() -> None:
             )
 
 
-def test_each_template_includes_slurm_early_stop_criteria() -> None:
-    """Experiment cards should predeclare stop rules before long Slurm training runs."""
+def test_training_templates_include_slurm_early_stop_criteria() -> None:
+    """Training-oriented experiment cards should predeclare Slurm stop rules."""
     expected_fields = {
         "metric",
         "threshold",
@@ -165,7 +165,8 @@ def test_each_template_includes_slurm_early_stop_criteria() -> None:
         "cancel_condition",
         "diagnostic_preservation_action",
     }
-    for template_name in TEMPLATE_NAMES:
+    training_templates = {"benchmark-analysis", "planner-ablation"}
+    for template_name in training_templates:
         record = _build_record(
             experiment_id=f"test_{template_name.replace('-', '_')}",
             issue="9999",
@@ -177,6 +178,21 @@ def test_each_template_includes_slurm_early_stop_criteria() -> None:
         assert all(
             str(value).startswith("TODO:") for value in record["early_stop_criteria"].values()
         )
+        assert "early_stop_criteria" in _find_todo_fields(record)
+
+
+def test_figure_table_pack_omits_slurm_early_stop_criteria() -> None:
+    """Figure/table rendering from existing records does not launch long Slurm training."""
+    record = _build_record(
+        experiment_id="test_figure_table_pack",
+        issue="9999",
+        issue_url="https://example.com/9999",
+        template_name="figure-table-pack",
+        output_root=Path("output/experiments"),
+    )
+
+    assert record["early_stop_criteria"] == {}
+    assert "early_stop_criteria" not in _find_todo_fields(record)
 
 
 def test_invalid_template_name_raises_key_error() -> None:

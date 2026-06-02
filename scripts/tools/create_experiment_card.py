@@ -39,6 +39,8 @@ REQUIRED_RECORD_FIELDS = (
     "status",
 )
 
+TODO_TRACKED_FIELDS = REQUIRED_RECORD_FIELDS + ("early_stop_criteria",)
+
 TEMPLATE_NAMES = ("benchmark-analysis", "planner-ablation", "figure-table-pack")
 
 ISSUE_URL_TEMPLATE = "https://github.com/ll7/robot_sf_ll7/issues/{issue}"
@@ -310,7 +312,7 @@ def _template_figure_table_pack(experiment_id: str, output_root: Path) -> Templa
                 "durable_reference_required": True,
             },
         ],
-        early_stop_criteria=_early_stop_criteria_template(),
+        early_stop_criteria={},
         evidence_grade="proposal",
         paper_relevance="exploratory",
         status="planned",
@@ -376,22 +378,25 @@ def _build_record(
     return record
 
 
+def _contains_todo(value: Any) -> bool:
+    """Return True when a scaffold value still contains a TODO placeholder."""
+    if isinstance(value, str):
+        return "TODO" in value
+    if isinstance(value, list):
+        return any(_contains_todo(item) for item in value)
+    if isinstance(value, dict):
+        return any(_contains_todo(item) for item in value.values())
+    return False
+
+
 def _find_todo_fields(record: dict[str, Any]) -> list[str]:
     fields: list[str] = []
-    for field_name in REQUIRED_RECORD_FIELDS:
+    for field_name in TODO_TRACKED_FIELDS:
         value = record.get(field_name)
         if value is None:
             fields.append(field_name)
-        elif isinstance(value, str) and "TODO" in value:
+        elif _contains_todo(value):
             fields.append(field_name)
-        elif isinstance(value, list):
-            if any(isinstance(item, str) and "TODO" in item for item in value):
-                fields.append(field_name)
-            elif any(
-                isinstance(item, dict) and any("TODO" in str(v) for v in item.values())
-                for item in value
-            ):
-                fields.append(field_name)
     return fields
 
 

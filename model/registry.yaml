@@ -36,7 +36,8 @@ models:
     registry pins the immutable W&B version v5.
   - Final training eval at 5M steps reported success_rate=0.83, collision_rate=0.16,
     SNQI=-0.102, path_efficiency=0.815, and eval_episode_return=27.926.
-  - Post-training guarded smoke passed after the issue #2006 handoff repair, but
+  - >
+    Post-training guarded smoke passed after the issue #2006 handoff repair, but
     nominal-sanity job 12703_0 returned decision=revise; do not run stress or
     benchmark escalation without a learned-progress repair.
   - >

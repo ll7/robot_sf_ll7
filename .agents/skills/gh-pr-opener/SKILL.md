@@ -43,6 +43,13 @@ Freshness check:
 5. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
 6. Run the review audit checklist for changed workflow/skill area.
 7. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
+   - For evidence-producing PRs, fill `Downstream Propagation` instead of leaving it implicit.
+     Check the parent issue, claim map or benchmark report, leaderboard or artifact catalog,
+     registry or config index, context index or memory note, and follow-up issue rows.
+   - For low-risk or non-evidence PRs, write a short `Not applicable because:` rationale so the
+     omission is intentional and reviewable.
+   - Recent example: PR #2044 promoted compact trace-viewer screenshot evidence and updated the
+     context index/catalog so the visual proof survived worktree cleanup.
 8. Open a ready PR by default using
    `gh pr create --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`.
    Use `--draft` only when the user explicitly requests draft status or when the branch is an
@@ -56,6 +63,7 @@ Freshness check:
   - implementation summary,
   - validation evidence,
   - artifact classification and provenance decision,
+  - downstream propagation decisions for evidence-producing changes,
   - follow-up issues, if any.
 - Do not commit large temporary artifacts from `output/`; use manifests or external artifact pointers.
 

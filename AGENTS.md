@@ -225,6 +225,26 @@ Research progress is the primary goal. Verification should be strong where claim
 cheap where risk is low. Any benchmark-facing, metric-facing, schema-facing, skill, or test change
 must still be backed by concrete evidence appropriate to the risk.
 
+For research-producing work, use the following as adapted guidance rather than a hard gate:
+research issues and PRs should prefer work that moves a claim boundary, closes or revises a
+hypothesis, records a useful negative result, synthesizes accumulated diagnostics, or unblocks a
+durable experiment. If a result remains diagnostic-only, label it that way and avoid treating it as
+claim movement.
+
+When practical, research issue contracts should name:
+
+- target claim or hypothesis;
+- comparator or baseline;
+- minimum valid evidence;
+- decision or stop rule;
+- expected artifacts and provenance plan;
+- parent issue, claim map, registry, context note, or synthesis surface to update.
+
+After several diagnostic child PRs under one research parent, prefer a synthesis pass before adding
+more exploratory families. The synthesis should classify what was learned, what stayed
+inconclusive, which families are redundant or negative, and what follow-up experiment, if any,
+should run next.
+
 - New local planners must be proven with an actual benchmark or targeted execution path that shows
   they run correctly in this repository.
 - Metric changes must include a clear proof that the updated metric now computes the intended values
@@ -243,6 +263,9 @@ Benchmark-specific policy:
 - If a planner, environment, or dependency cannot satisfy the contract needed for an accurate
   benchmark run, the run for that planner must fail closed with a clear error and an explicit
   `not available` or `failed` status.
+- If the intended proof fails or cannot be gathered, close the work as `blocked`, `diagnostic`, or
+  `not benchmark evidence` as appropriate, and record the next smallest proof step instead of
+  presenting the claim as complete.
 - Do not classify fallback execution as benchmark-strengthening evidence; report it as a limitation
   or exclusion reason with the exact condition that triggered it.
 - Benchmark reports and issue follow-ups should clearly identify whether a planner ran in
@@ -278,6 +301,12 @@ resolving lint or test failures locally before requesting review.
   `[ -d output ] && git status --ignored --short -uall output`. Decide whether each output is
   disposable, should remain ignored, should be represented by a tracked manifest or registry entry,
   or must be uploaded to a durable artifact store before the branch is handed off.
+- Fill the PR template's `Downstream Propagation` section for evidence-producing PRs. Check whether
+  the parent issue, claim map or benchmark report, leaderboard or artifact catalog, registry or
+  config index, context index or memory note, and deferred follow-up issue need updates. For
+  low-risk or not-applicable changes, state the reason explicitly instead of deleting the section.
+  PR #2044 is a recent small example: it promoted a compact trace-viewer screenshot and updated the
+  context index/catalog so the evidence remained discoverable after worktree cleanup.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

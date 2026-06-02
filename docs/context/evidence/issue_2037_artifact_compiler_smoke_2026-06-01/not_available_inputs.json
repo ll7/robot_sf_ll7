@@ -1,0 +1,15 @@
+{
+  "records": [
+    {
+      "input": "reports/seed_episode_rows.csv",
+      "reason": "optional input missing",
+      "status": "not_available"
+    },
+    {
+      "input": "reports/seed_variability_by_scenario.csv",
+      "reason": "optional input missing",
+      "status": "not_available"
+    }
+  ],
+  "schema_version": "benchmark_artifact_compiler.not_available.v1"
+}

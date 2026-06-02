@@ -243,7 +243,7 @@ EOF
 `scripts/dev/run_ci_local.sh` is the local CI-equivalent entrypoint for the shared
 validation phases. By default it runs `uv sync --all-extras --frozen`, migrates legacy artifacts,
 then delegates to `scripts/dev/ci_driver.sh` so local runs and `.github/workflows/ci.yml`
-share the same phase definitions (`lint`, `typecheck`, `test`, `smoke`, and
+share the same phase definitions (`lint`, `typecheck`, `test`, `examples-smoke`, `smoke`, and
 `artifact-policy`). Pass explicit phases to scope a run, for example
 `scripts/dev/run_ci_local.sh lint test`. After dependencies are already current, use
 `scripts/dev/run_ci_local.sh --no-setup lint test` for faster repeat local feedback.
@@ -1002,7 +1002,7 @@ Documentation should include:
 
 - Use visualizations to illustrate complex concepts or data flows
 - Include performance reports or benchmarks when relevant
-- Ensure all visual assets are stored in the `docs/img/`, `docs/figures` or `docs/video/` directories for easy access and consistency
+- Ensure all visual assets are stored in the `docs/img/`, `docs/figures/` or `docs/video/` directories for easy access and consistency
 - Generate figures using code when possible to ensure reproducibility
 - Figures should be exported in high-quality vector formats (e.g., SVG, PDF) for clarity
 
@@ -1012,10 +1012,11 @@ All figures must be **reproducible from code** and directly **integratable into 
   - Always export **vector PDFs** (`.pdf`) for inclusion in LaTeX.
   - Optionally export `.png` (300 dpi) for slides/presentations.
 - **Reproducibility**
-  - Each figure = **one standalone script** in `robot_sf/benchmark/figures/` or `scripts/figures/` (tracked under version control).
-  - Script must read data, generate plot, and save into `docs/figures/`.
+  - Each figure = one tracked script or CLI command in `robot_sf/benchmark/figures/`,
+    `scripts/generate_figures.py`, or the `robot_sf_bench` CLI.
+  - The generator must read data, generate the plot, and save into `docs/figures/`.
   - No manual edits in Illustrator, Inkscape, etc.
-  - Clear and unique filenames: `fig-<short-description>.py` and `fig-<short-description>.pdf`.
+  - Clear and unique output filenames: `fig-<short-description>.pdf`.
 - **Version control**
   - Scripts and generated figures go into version control.
   - Data files (if any) go into `output/figures/` (respecting the canonical artifact root).

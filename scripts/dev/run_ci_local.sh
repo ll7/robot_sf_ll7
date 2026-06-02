@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./common_setup.sh
-source "$SCRIPT_DIR/common_setup.sh"
-
 show_help() {
   cat <<'EOF'
 Usage: scripts/dev/run_ci_local.sh [--no-setup] [<phase> ...]
@@ -25,6 +21,15 @@ Examples:
   CI_DRIVER_EVENT_NAME=workflow_dispatch scripts/dev/run_ci_local.sh smoke
 EOF
 }
+
+if [[ "$#" -gt 0 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
+  show_help
+  exit 0
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./common_setup.sh
+source "$SCRIPT_DIR/common_setup.sh"
 
 load_default_phases() {
   mapfile -t default_phases < <("$SCRIPT_DIR/ci_driver.sh" --list-phases)

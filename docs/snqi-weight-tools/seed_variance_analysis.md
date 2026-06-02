@@ -5,9 +5,9 @@ Quantify variability across seeds using coefficient of variation (CV = std/mean)
 CLI usage
 
 - Compute seed variance grouped by scenario id:
-  - robot_sf_bench seed-variance --in results/episodes.jsonl --out results/seed_var.json --group-by scenario_id
+  - robot_sf_bench seed-variance --in output/benchmarks/episodes.jsonl --out output/benchmarks/seed_var.json --group-by scenario_id
 - Select metrics only:
-  - robot_sf_bench seed-variance --in results/episodes.jsonl --out results/seed_var_a.json --metrics success,collisions,curvature_mean
+  - robot_sf_bench seed-variance --in output/benchmarks/episodes.jsonl --out output/benchmarks/seed_var_a.json --metrics success,collisions,curvature_mean
 
 Output format
 
@@ -20,6 +20,6 @@ Programmatic usage
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.seed_variance import compute_seed_variance
 
-records = read_jsonl("results/episodes.jsonl")
+records = read_jsonl("output/benchmarks/episodes.jsonl")
 sv = compute_seed_variance(records, group_by="scenario_id", metrics=["success", "collisions"]) 
 ```

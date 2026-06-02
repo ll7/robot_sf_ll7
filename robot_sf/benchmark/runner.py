@@ -1812,6 +1812,7 @@ def run_batch(  # noqa: PLR0913
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
+    latency_stress_profile: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -1868,6 +1869,7 @@ def run_batch(  # noqa: PLR0913
             track_schema_version=track_schema_version,
             observation_noise=observation_noise,
             synthetic_actuation_profile=synthetic_actuation_profile,
+            latency_stress_profile=latency_stress_profile,
             workers=workers,
             resume=resume,
         )

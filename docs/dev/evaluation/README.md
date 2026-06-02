@@ -4,7 +4,7 @@ This folder documents small, programmatic helpers to analyze benchmark episode o
 Each script works on the JSONL produced by the benchmark runner and writes summaries to CSV/JSON/Markdown.
 
 - Location: `scripts/`
-- Input: episodes JSONL (`results/episodes.jsonl` or similar)
+- Input: episodes JSONL (`output/benchmarks/helper_examples/episodes.jsonl` or similar)
 - Grouping keys use dotted paths into the episode record (e.g., `scenario_params.algo`).
 
 ## 1) Seed variance (SNQI)
@@ -19,8 +19,8 @@ Example:
 
 ```bash
 uv run python scripts/seed_variance.py \
-  --episodes results/episodes.jsonl \
-  --out results/seed_variance.json \
+  --episodes output/benchmarks/helper_examples/episodes.jsonl \
+  --out output/benchmarks/helper_examples/seed_variance.json \
   --group-by scenario_params.algo
 ```
 
@@ -36,9 +36,9 @@ Example:
 
 ```bash
 uv run python scripts/ranking_table.py \
-  --episodes results/episodes.jsonl \
-  --out-csv results/ranking_snqi.csv \
-  --out-md results/ranking_snqi.md \
+  --episodes output/benchmarks/helper_examples/episodes.jsonl \
+  --out-csv output/benchmarks/helper_examples/ranking_snqi.csv \
+  --out-md output/benchmarks/helper_examples/ranking_snqi.md \
   --metric snqi \
   --group-by scenario_params.algo
 ```
@@ -57,16 +57,16 @@ Examples:
 ```bash
 # Lowest SNQI (worst), top-20
 uv run python scripts/failure_extractor.py \
-  --episodes results/episodes.jsonl \
-  --out results/worst_snqi.json \
+  --episodes output/benchmarks/helper_examples/episodes.jsonl \
+  --out output/benchmarks/helper_examples/worst_snqi.json \
   --metric metrics.snqi \
   --direction min \
   --top-k 20
 
 # Highest collision count, top-50
 uv run python scripts/failure_extractor.py \
-  --episodes results/episodes.jsonl \
-  --out results/most_collisions.json \
+  --episodes output/benchmarks/helper_examples/episodes.jsonl \
+  --out output/benchmarks/helper_examples/most_collisions.json \
   --metric metrics.collisions \
   --direction max \
   --top-k 50

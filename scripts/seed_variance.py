@@ -8,8 +8,8 @@ for each group. The output is a JSON mapping group → summary statistics.
 Typical usage (via uv):
 
     uv run python scripts/seed_variance.py \
-      --episodes results/episodes.jsonl \
-      --out results/seed_variance.json \
+      --episodes output/benchmarks/episodes.jsonl \
+      --out output/benchmarks/seed_variance.json \
       --group-by scenario_params.algo
 
 Inputs

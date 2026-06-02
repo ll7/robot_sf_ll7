@@ -122,6 +122,8 @@ knowledge, not every transient iteration detail.
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Root layout structured migration 2026-06-01:
   [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md)
+* Issue #2035 path-reference audit:
+  [issue_2035_path_reference_audit.md](issue_2035_path_reference_audit.md)
 * Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):
   [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
 * Issue #1583 high-risk root path boundaries:
@@ -144,6 +146,12 @@ knowledge, not every transient iteration detail.
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #2001 AMV Actuation Proxy Source Analysis (2026-06-01):
   [issue_2001_amv_actuation_proxy_source_analysis.md](issue_2001_amv_actuation_proxy_source_analysis.md)
+* Issue #2011 AMV Actuation Sensitivity Sweep (2026-06-01):
+  [issue_2011_amv_actuation_sensitivity_sweep.md](issue_2011_amv_actuation_sensitivity_sweep.md)
+* Issue #2014 Simulator Backend Decision Matrix (2026-06-01):
+  [issue_2014_simulator_backend_matrix.md](issue_2014_simulator_backend_matrix.md)
+* Issue #2016 Webots/Gazebo AMV Prototype Parity Audit (2026-06-01):
+  [issue_2016_webots_gazebo_amv_parity_audit.md](issue_2016_webots_gazebo_amv_parity_audit.md)
 * Issue #1414 parser capability metadata:
   [issue_1414_parser_capability_metadata.md](issue_1414_parser_capability_metadata.md)
 * Issue #1413 map catalog schema and sync checker:
@@ -275,6 +283,8 @@ knowledge, not every transient iteration detail.
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
 * Issue #1556 synthetic AMV actuation stress slice and #1570 claim boundary:
   [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
+* Issue #2011 AMV actuation-envelope sensitivity pilot:
+  [issue_2011_amv_actuation_sensitivity_sweep.md](issue_2011_amv_actuation_sensitivity_sweep.md)
 * Issue #1606 Full Classic placeholder retirement:
   [issue_1606_full_classic_placeholder_retirement.md](issue_1606_full_classic_placeholder_retirement.md)
 * Issue #1744 Latency Stress Preflight Contract (2026-05-30):
@@ -289,11 +299,21 @@ knowledge, not every transient iteration detail.
   [issue_1474_shielded_ppo_repair_closeout.md](issue_1474_shielded_ppo_repair_closeout.md)
 * Issue #2006 Guarded-PPO Zero-Motion Repair (2026-06-01):
   [issue_2006_guarded_ppo_zero_motion_repair.md](issue_2006_guarded_ppo_zero_motion_repair.md)
+* Issue #2008 Artifact Catalog Contract (2026-06-01):
+  [issue_2008_artifact_catalog.md](issue_2008_artifact_catalog.md)
+* Issue #2037 Artifact Compiler Smoke (2026-06-01):
+  [issue_2037_artifact_compiler_smoke.md](issue_2037_artifact_compiler_smoke.md)
+* Issue #2040 Artifact Publication Workflow (2026-06-01):
+  [issue_2040_artifact_publication_workflow.md](issue_2040_artifact_publication_workflow.md)
+* Issue #2034 Platformization Roadmap (2026-06-01):
+  [issue_2034_platformization_roadmap.md](issue_2034_platformization_roadmap.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
 * Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md) and
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
+* Issue #1966 ScenarioBelief Interface Design (2026-06-01):
+  [issue_1966_scenario_belief_interface.md](issue_1966_scenario_belief_interface.md)
 * Issue #1638 local model path preflight:
   [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
 * Issue #1960 local artifact retirement status:
@@ -322,6 +342,8 @@ knowledge, not every transient iteration detail.
   [issue_1677_sit_dataset_terms.md](issue_1677_sit_dataset_terms.md)
 * Issue #1689 Simulation Trace Export Schema (2026-05-30):
   [issue_1689_simulation_trace_export_schema.md](issue_1689_simulation_trace_export_schema.md)
+* Issue #2038 Real Trace Viewer Smoke (2026-06-01):
+  [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
   [issue_1676_proxemic_profile_comfort_slice.md](issue_1676_proxemic_profile_comfort_slice.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):
@@ -908,6 +930,9 @@ why a change was made rather than a full issue execution transcript.
 - [Issue #1169 CARLA Live T1 Oracle Replay](issue_1169_carla_live_replay.md)
   adds the Docker-backed live replay command, records a real CARLA `0.9.16` connection on
   `Town10HD_Opt`, and fails closed on static-geometry replay for the inherited #1111 payload.
+- [Issue #2015 MuJoCo AMV Micro-Backend Diagnostic](issue_2015_mujoco_amv_micro_backend.md)
+  records the optional diagnostic-only MuJoCo micro-backend probe for AMV command-trace actuation
+  response, with no routine dependency or calibrated/benchmark claim.
 
 ## DreamerV3 Notes
 

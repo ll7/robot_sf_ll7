@@ -713,11 +713,12 @@ candidates:
       Replacing the historical BR-06 v3 PPO checkpoint inside the frozen
       risk_guarded_ppo_v1 runtime guard with the issue #1474 collision-20 repair
       checkpoint should reduce unsafe PPO proposals while preserving enough
-      learned progress to pass the shielded-PPO smoke and nominal-sanity stop
-      gates. The first post-training smoke failed the launch-packet success
-      gate with an overconservative zero-motion timeout; issue #2006 repaired
-      the local smoke handoff, but the row stays prototype-gated until SLURM
-      smoke replay and nominal-sanity escalation are explicitly approved.
+      learned progress to pass the shielded-PPO smoke and nominal-sanity stop gates.
+      Issue #2029 replayed the smoke gate successfully after the issue #2006
+      handoff repair, but the valid workers=1 nominal-sanity replay for job
+      12703_0 reached only 0.1667 success with zero collisions. Keep the row
+      prototype-gated and do not escalate to stress/full-matrix evaluation without
+      a learned-progress repair.
     required_stages:
       - smoke
       - nominal_sanity

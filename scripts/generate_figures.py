@@ -5,7 +5,7 @@ and optionally scenario thumbnails plus a montage.
 
 Usage (example):
   uv run python scripts/generate_figures.py \
-    --episodes results/episodes.jsonl \
+    --episodes output/benchmarks/helper_examples/episodes.jsonl \
     --out-dir docs/figures \
     --pareto-x collisions --pareto-y comfort_exposure --pareto-pdf \
     --dmetrics collisions,comfort_exposure --dists-pdf \

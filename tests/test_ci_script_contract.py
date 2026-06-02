@@ -1,4 +1,27 @@
-"""Guard CI shell wrappers against drift in shared script contracts."""
+"""Guard CI shell wrappers against drift in shared script contracts.
+
+Help-behaviour contract
+-----------------------
+Selected ``scripts/dev/*.sh`` helpers with --help / -h usage support must
+handle both forms as cheap success paths: exit 0, print usage to stdout,
+and return before sourcing common_setup.sh or invoking heavy dependencies
+(uv, ruff, pytest, gh, etc.).
+
+Covered scripts (8 total):
+  pr_ready_check.sh, gh_comment.sh, run_worktree_shared_venv.sh,
+  run_tests_parallel.sh, run_ci_local.sh, ci_driver.sh,
+  check_runtime_requirements.sh, check_carla_runtime.sh
+
+Also covered (in tests/dev/): ci_step_timer.sh
+
+Excluded by policy (SLURM/training-oriented, not general-purpose helpers):
+  auxme_partition_status.sh, sbatch_*.sh
+
+Excluded (no usage/help support at all):
+  ruff_fix_format.sh, check_changed_coverage.sh, check_docstring_todos_diff.sh,
+  check_docstring_todos_ratchet.sh, check_docs_proof_consistency_diff.sh,
+  common_setup.sh (sourced, not invoked directly)
+"""
 
 from __future__ import annotations
 
@@ -7,13 +30,18 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
+GH_COMMENT = ROOT / "scripts" / "dev" / "gh_comment.sh"
 PYPROJECT = ROOT / "pyproject.toml"
 RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
 RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
+CHECK_RUNTIME_REQUIREMENTS = ROOT / "scripts" / "dev" / "check_runtime_requirements.sh"
+CHECK_CARLA_RUNTIME = ROOT / "scripts" / "dev" / "check_carla_runtime.sh"
 
 
 def test_ci_driver_smoke_uses_runtime_schema_and_output_matrix_path() -> None:
@@ -180,6 +208,181 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "pr_ready_freshness.py" in script_text
 
 
+def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: Path) -> None:
+    """Final PR proof should fail early when analytics extras are missing."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    for script_name in ("pr_ready_check.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'if [[ "$1" == "run" && "$2" == "python" ]]; then',
+                "  echo 'duckdb, pyarrow'",
+                "  exit 1",
+                "fi",
+                "echo 'unexpected uv invocation' >&2",
+                "exit 99",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "test fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script_dir / "pr_ready_check.sh")],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "PR_READY_MODE": "final",
+            "BASE_REF": "origin/main",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "Final PR readiness requires analytics dependencies" in result.stderr
+    assert "uv sync --all-extras" in result.stderr
+    assert "duckdb, pyarrow" in result.stderr
+    assert "ruff_fix_format" not in result.stderr
+
+
+def test_pr_ready_check_help_long() -> None:
+    """pr_ready_check.sh --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(PR_READY_CHECK), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "BASE_REF" in result.stdout
+    assert "PR_READY_MODE" in result.stdout
+    assert "PR_READY_FINAL" in result.stdout
+
+
+def test_pr_ready_check_help_short() -> None:
+    """pr_ready_check.sh -h prints usage and exits 0."""
+    result = subprocess.run(
+        [str(PR_READY_CHECK), "-h"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "BASE_REF" in result.stdout
+
+
+def test_pr_ready_check_help_does_not_invoke_gates(tmp_path: Path) -> None:
+    """--help should exit 0 before reaching heavy gate commands (uv, ruff, pytest)."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    for script_name in ("pr_ready_check.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        '#!/usr/bin/env bash\necho "uv should not be called for --help" >&2\nexit 99\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "test fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script_dir / "pr_ready_check.sh"), "--help"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "BASE_REF" in result.stdout
+    assert "PR_READY_MODE" in result.stdout
+    assert "PR_READY_FINAL" in result.stdout
+    assert "uv should not be called" not in result.stderr
+
+
 def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
     """Shared-venv validation must import from the active worktree, not the owning checkout."""
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
@@ -254,3 +457,269 @@ def test_worktree_shared_venv_helper_reports_relative_missing_env() -> None:
     assert result.returncode == 2
     assert f"Shared virtualenv not found or incomplete: {ROOT / missing_venv}" in result.stderr
     assert "cd:" not in result.stderr
+
+
+def test_gh_comment_has_valid_shell_syntax() -> None:
+    """gh_comment.sh should pass bash -n syntax check."""
+    syntax = subprocess.run(
+        ["bash", "-n", str(GH_COMMENT)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert syntax.returncode == 0, syntax.stderr
+
+
+def test_gh_comment_top_level_help_long() -> None:
+    """gh_comment.sh --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "pr <number>" in result.stdout
+    assert "issue <number>" in result.stdout
+
+
+def test_gh_comment_top_level_help_short() -> None:
+    """gh_comment.sh -h prints usage and exits 0."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "-h"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+
+
+def test_gh_comment_pr_help() -> None:
+    """gh_comment.sh pr --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "pr", "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "pr <number>" in result.stdout
+
+
+def test_gh_comment_issue_help() -> None:
+    """gh_comment.sh issue --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "issue", "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "issue <number>" in result.stdout
+
+
+def test_gh_comment_no_args_exits_2() -> None:
+    """gh_comment.sh with no arguments prints usage to stdout and exits 2."""
+    result = subprocess.run(
+        [str(GH_COMMENT)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "Usage:" in result.stdout
+
+
+def test_gh_comment_invalid_target_exits_2() -> None:
+    """gh_comment.sh with invalid target prints error to stderr and exits 2."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "invalid"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "target must be 'pr' or 'issue'" in result.stderr
+    assert "Usage:" in result.stdout
+
+
+# Help-behaviour contract tests.
+
+HELP_COVERED_SCRIPTS = [
+    PR_READY_CHECK,
+    GH_COMMENT,
+    RUN_WORKTREE_SHARED_VENV,
+    RUN_TESTS_PARALLEL,
+    RUN_CI_LOCAL,
+    CI_DRIVER,
+    CHECK_RUNTIME_REQUIREMENTS,
+    CHECK_CARLA_RUNTIME,
+]
+
+
+def _script_name(path: Path) -> str:
+    return path.name
+
+
+def _make_help_fixture_repo(
+    tmp_path: Path,
+    script_names: tuple[str, ...],
+) -> tuple[Path, Path, dict[str, str]]:
+    """Create a tiny repo where help paths prove they do not invoke uv-backed setup."""
+
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    for script_name in script_names:
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        '#!/usr/bin/env bash\necho "uv should not be called for --help" >&2\nexit 99\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "test fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+    }
+    return repo, script_dir, env
+
+
+@pytest.mark.parametrize("script", HELP_COVERED_SCRIPTS, ids=_script_name)
+def test_help_long_usage(script: Path) -> None:
+    """Every contract-covered script exits 0 with Usage: for --help."""
+    result = subprocess.run(
+        [str(script), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, f"{script.name} --help failed: {result.stderr}"
+    assert "Usage:" in result.stdout
+
+
+@pytest.mark.parametrize("script", HELP_COVERED_SCRIPTS, ids=_script_name)
+def test_help_short_usage(script: Path) -> None:
+    """Every contract-covered script exits 0 with Usage: for -h."""
+    result = subprocess.run(
+        [str(script), "-h"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, f"{script.name} -h failed: {result.stderr}"
+    assert "Usage:" in result.stdout
+
+
+# Cheap help: --help must not invoke heavy gates.
+
+
+def test_ci_driver_help_does_not_invoke_phases(tmp_path: Path) -> None:
+    """ci_driver.sh --help exits 0 before sourcing common_setup or running phases."""
+    repo, script_dir, env = _make_help_fixture_repo(tmp_path, ("ci_driver.sh", "common_setup.sh"))
+    result = subprocess.run(
+        [str(script_dir / "ci_driver.sh"), "--help"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "uv should not be called" not in result.stderr
+
+
+def test_run_tests_parallel_help_does_not_invoke_pytest(tmp_path: Path) -> None:
+    """run_tests_parallel.sh --help exits 0 before sourcing common_setup."""
+    repo, script_dir, env = _make_help_fixture_repo(
+        tmp_path,
+        ("run_tests_parallel.sh", "common_setup.sh"),
+    )
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--help"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "uv should not be called" not in result.stderr
+
+
+def test_run_ci_local_help_does_not_invoke_setup(tmp_path: Path) -> None:
+    """run_ci_local.sh --help exits 0 before sourcing common_setup or running phases."""
+    repo, script_dir, env = _make_help_fixture_repo(
+        tmp_path,
+        ("run_ci_local.sh", "common_setup.sh", "ci_driver.sh"),
+    )
+    result = subprocess.run(
+        [str(script_dir / "run_ci_local.sh"), "--help"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "uv should not be called" not in result.stderr

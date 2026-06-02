@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-05-31
+updated_at: 2026-06-01
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -49,6 +49,14 @@ entries:
     status: current
     freshness: policy
     area: benchmark_evidence
+  - path: docs/context/issue_2012_failure_mechanism_classifier.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1542_manuscript_claim_evidence_map.md
     status: current
     freshness: maintained
@@ -77,6 +85,10 @@ entries:
     status: current
     freshness: policy
     area: learned_policy
+  - path: docs/context/issue_1966_scenario_belief_interface.md
+    status: current
+    freshness: dated
+    area: learned_policy
   - path: docs/context/open_issues_training_split_audit_2026-05-30.md
     status: current
     freshness: dated
@@ -84,6 +96,22 @@ entries:
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained
+    area: carla_external_sim
+  - path: docs/context/issue_2013_backend_adapter_contract.md
+    status: current
+    freshness: policy
+    area: carla_external_sim
+  - path: docs/context/issue_2014_simulator_backend_matrix.md
+    status: current
+    freshness: dated
+    area: carla_external_sim
+  - path: docs/context/issue_2016_webots_gazebo_amv_parity_audit.md
+    status: current
+    freshness: dated
+    area: carla_external_sim
+  - path: docs/context/issue_2015_mujoco_amv_micro_backend.md
+    status: current
+    freshness: dated
     area: carla_external_sim
   - path: docs/context/slurm_issue_batch_status_2026-05-21.md
     status: current
@@ -97,6 +125,10 @@ entries:
   - path: docs/context/root_layout_structured_migration_2026-06-01.md
     status: current
     freshness: maintained
+    area: root_layout
+  - path: docs/context/issue_2035_path_reference_audit.md
+    status: current
+    freshness: dated
     area: root_layout
   - path: docs/context/issue_1573_root_layout_inventory.md
     status: historical
@@ -132,6 +164,26 @@ entries:
     status: current
     freshness: policy
     area: manual_control_trace
+  - path: docs/context/issue_2038_real_trace_viewer_smoke.md
+    status: current
+    freshness: evidence
+    area: manual_control_trace
+  - path: docs/context/issue_2040_artifact_publication_workflow.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
+  - path: docs/context/issue_2037_artifact_compiler_smoke.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2037_artifact_compiler_smoke_2026-06-01/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2034_platformization_roadmap.md
+    status: current
+    freshness: maintained
+    area: platformization
   - path: docs/context/evidence/README.md
     status: evidence
     freshness: evidence

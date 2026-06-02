@@ -12,7 +12,10 @@ Check these in order:
 3. Proof that the new or changed behavior actually works in this repository.
 4. Reproducibility of commands, configs, and artifacts.
 5. Scope discipline: no hidden workflow churn or speculative infrastructure.
-6. Test and documentation coverage proportional to the risk of the change.
+6. Downstream propagation completeness for evidence-producing PRs: parent issue, claim map or
+   benchmark report, leaderboard or artifact catalog, registry, context index, and follow-up issue
+   updates are either done or explicitly deferred.
+7. Test and documentation coverage proportional to the risk of the change.
 
 Reject changes that only add code or docs without task-appropriate proof.
 

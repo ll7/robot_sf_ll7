@@ -1,0 +1,32 @@
+schema_version: artifact_catalog.v1
+catalog_id: fixture_camera_ready_artifacts
+artifacts:
+  - artifact_id: fig_benchmark_outcome_matrix
+    artifact_kind: figure
+    source_kind: benchmark_campaign
+    source_files:
+      - path: source_summary.json
+        sha256: 5fc4b3bab48a71a2983fa692988668f636db992b87ca451c242468febea245ad
+    outputs:
+      png:
+        path: fig_benchmark_outcome_matrix.png
+        sha256: eedbd154d18d684d3e4963cc6e4c5180713ec6fbcb18561ae7f66997d493b3e7
+    caption_file:
+      path: captions.md
+      sha256: 31edf86d8bd42a79b573d348bb3b32ffca443b25384c8f512100103a72aa4e53
+    generation_command: uv run python scripts/tools/example_generator.py --fixture
+    generation_commit: fbc7e125
+    claim_boundary: fixture-only catalog contract; not benchmark evidence
+  - artifact_id: tab_planner_execution_modes
+    artifact_kind: table
+    source_kind: benchmark_campaign
+    source_files:
+      - path: source_summary.json
+        sha256: 5fc4b3bab48a71a2983fa692988668f636db992b87ca451c242468febea245ad
+    outputs:
+      md:
+        path: tab_planner_execution_modes.md
+        sha256: 5fb8c9672b43950ceeab0d6849b68975f25e6badba92fc3529571243984a8026
+    generation_command: uv run python scripts/tools/example_table_exporter.py --fixture
+    generation_commit: fbc7e125
+    claim_boundary: fixture-only catalog contract; not benchmark evidence

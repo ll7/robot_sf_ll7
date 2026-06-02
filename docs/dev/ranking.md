@@ -6,15 +6,15 @@ Produce a ranked table of groups (e.g., algorithms or scenarios) by the mean of 
 
 - Markdown table (default):
 
-  robot_sf_bench rank --in results/episodes.jsonl --out results/ranking.md --metric collisions
+  robot_sf_bench rank --in output/benchmarks/episodes.jsonl --out output/benchmarks/ranking.md --metric collisions
 
 - CSV output:
 
-  robot_sf_bench rank --in results/episodes.jsonl --out results/ranking.csv --metric snqi --format csv --descending
+  robot_sf_bench rank --in output/benchmarks/episodes.jsonl --out output/benchmarks/ranking.csv --metric snqi --format csv --descending
 
 - JSON output (raw rows):
 
-  robot_sf_bench rank --in results/episodes.jsonl --out results/ranking.json --metric comfort_exposure --format json --top 10
+  robot_sf_bench rank --in output/benchmarks/episodes.jsonl --out output/benchmarks/ranking.json --metric comfort_exposure --format json --top 10
 
 ### Options
 
@@ -31,7 +31,7 @@ Produce a ranked table of groups (e.g., algorithms or scenarios) by the mean of 
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.ranking import compute_ranking, format_markdown
 
-records = read_jsonl("results/episodes.jsonl")
+records = read_jsonl("output/benchmarks/episodes.jsonl")
 rows = compute_ranking(records, metric="collisions", group_by="scenario_params.algo")
 print(format_markdown(rows, "collisions"))
 ```

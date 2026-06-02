@@ -29,7 +29,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Fill Constitution Check section from constitution
    - Evaluate gates (ERROR if violations unjustified)
    - Phase 0: Generate research.md (resolve all NEEDS CLARIFICATION)
-   - Phase 1: Generate data-model.md, contracts/, quickstart.md
+   - Phase 1: Generate data-model.md, feature-local contracts/ under $SPECS_DIR, quickstart.md
    - Phase 1: Update agent context by running the agent script
    - Re-evaluate Constitution Check post-design
 
@@ -72,7 +72,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 2. **Generate API contracts** from functional requirements:
    - For each user action → endpoint
    - Use standard REST/GraphQL patterns
-   - Output OpenAPI/GraphQL schema to `/contracts/`
+   - Output OpenAPI/GraphQL schema to `$SPECS_DIR/contracts/`
 
 3. **Agent context update**:
    - Run `.specify/scripts/bash/update-agent-context.sh copilot`
@@ -81,7 +81,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Add only new technology from current plan
    - Preserve manual additions between markers
 
-**Output**: data-model.md, /contracts/*, quickstart.md, agent-specific file
+**Output**: data-model.md, $SPECS_DIR/contracts/*, quickstart.md, agent-specific file
 
 ## Key rules
 

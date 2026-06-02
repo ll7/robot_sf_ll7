@@ -9,8 +9,8 @@ Typical usage:
 
         # Lowest SNQI (worst), top-20
         uv run python scripts/failure_extractor.py \
-            --episodes results/episodes.jsonl \
-            --out results/worst_snqi.json \
+            --episodes output/benchmarks/helper_examples/episodes.jsonl \
+            --out output/benchmarks/helper_examples/worst_snqi.json \
             --metric metrics.snqi \
             --direction min \
             --top-k 20

@@ -112,9 +112,14 @@ Nightly behavior:
 
 Regression diagnostics include whether degradation is startup-dominated
 (`env_create_sec`/`first_step_sec`) or steady-state-dominated (`episode_sec`/`steps_per_sec`).
+If a warm `episode_sec` or `steps_per_sec` history regression is explained by same-phase
+`first_step_sec` overhead, the history comparison reports a warning and lists the startup-coupled
+steady metrics instead of failing the nightly gate as a steady-state regression.
 
 High-density gate policy:
 - `classic_cross_trap_low` and `classic_cross_trap_medium` are blocking in the matrix.
+- `classic_cross_trap_low` uses three warm samples so one transient first-step outlier cannot
+  control an even-sample median.
 - `classic_cross_trap_high` remains advisory (`enforce_regression_gate: false`) until enough
   nightly history exists to distinguish stable degradation from hardware/runtime noise.
 - Issue #513 local calibration on 2026-05-02 found no local history reports under

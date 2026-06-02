@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
 import subprocess
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -16,10 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-os.environ.setdefault("MPLBACKEND", "Agg")
-
 import yaml
-from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
 
 from robot_sf.benchmark.artifact_catalog import sha256_file
 from robot_sf.benchmark.hazard_traceability import (
@@ -57,7 +54,7 @@ _EXCLUDED_CERT_STATUSES = {
     "excluded",
     "ineligible",
 }
-_SCENARIO_ID_FIELDS = ("scenario_id", "scenario", "scenario_name", "scenario_key", "scenario")
+_SCENARIO_ID_FIELDS = ("scenario_id", "scenario", "scenario_name", "scenario_key")
 _SCENARIO_FAMILY_FIELDS = ("scenario_family", "family", "scenario_set", "map_family")
 _CAMPAIGN_TABLES = (
     "reports/campaign_table.csv",
@@ -571,7 +568,8 @@ def _write_status_figure(
     values = [counts[label] for label in labels]
     colors = [_status_color(label) for label in labels]
 
-    fig, ax = plt.subplots(figsize=(7, 3.5))
+    fig = Figure(figsize=(7, 3.5))
+    ax = fig.subplots()
     ax.bar(labels, values, color=colors)
     ax.set_ylabel("Rows")
     ax.set_title("Hazard and ODD coverage status")
@@ -581,7 +579,6 @@ def _write_status_figure(
         ax.text(index, value + 0.05, str(value), ha="center", va="bottom")
     fig.tight_layout()
     fig.savefig(path, dpi=160)
-    plt.close(fig)
     return path
 
 
@@ -849,8 +846,9 @@ def _git_commit() -> str:
             ["git", "rev-parse", "--short=12", "HEAD"],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=5,
         ).strip()
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.SubprocessError):
         return "unknown"
 
 

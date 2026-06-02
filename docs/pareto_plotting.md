@@ -12,8 +12,8 @@ Generate a PNG plot grouped by algorithm (default):
 
 ```bash
 robot_sf_bench plot-pareto \
-  --in results/episodes.jsonl \
-  --out results/pareto.png \
+  --in output/benchmarks/episodes.jsonl \
+  --out output/benchmarks/pareto.png \
   --x-metric collisions \
   --y-metric comfort_exposure
 ```
@@ -31,10 +31,10 @@ Options
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.plots import save_pareto_png
 
-records = read_jsonl("results/episodes.jsonl")
+records = read_jsonl("output/benchmarks/episodes.jsonl")
 meta = save_pareto_png(
     records,
-    out_path="results/pareto.png",
+    out_path="output/benchmarks/pareto.png",
     x_metric="collisions",
     y_metric="comfort_exposure",
     title="Collisions vs Comfort"

@@ -16,8 +16,8 @@ Basic usage:
 
 ```
 robot_sf_bench plot-distributions \
-  --in results/episodes.jsonl \
-  --out-dir docs/figures \
+  --in output/benchmarks/episodes.jsonl \
+  --out-dir output/benchmarks/distributions \
   --metrics collisions,comfort_exposure
 ```
 
@@ -34,14 +34,14 @@ Options:
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
 
-records = read_jsonl("results/episodes.jsonl")
+records = read_jsonl("output/benchmarks/episodes.jsonl")
 grouped = collect_grouped_values(
     records,
     metrics=["collisions", "comfort_exposure"],
     group_by="scenario_params.algo",
     fallback_group_by="scenario_id",
 )
-meta = save_distributions(grouped, out_dir="docs/figures", bins=30, kde=True, out_pdf=True)
+meta = save_distributions(grouped, out_dir="output/benchmarks/distributions", bins=30, kde=True, out_pdf=True)
 print(meta)
 ```
 

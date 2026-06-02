@@ -14,7 +14,7 @@ Optional (GPU):
 ## Install
 1) Install uv (one-time):
    - macOS (Homebrew): `brew install uv`
-   - Or: `pipx install uv` (or `pip install --user uv`)
+   - Or use the official installer: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 2) Sync dependencies (respects `uv.lock`):
    - `uv sync`

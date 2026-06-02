@@ -1306,10 +1306,10 @@ summary = compute_aggregates_with_ci(
 ## Training and examples
 ### Available demos
 ```bash
-uv run python examples/demo_offensive.py
-uv run python examples/demo_defensive.py
-uv run python examples/demo_pedestrian.py
-uv run python examples/demo_refactored_environments.py
+uv run python examples/quickstart/01_basic_robot.py
+uv run python examples/quickstart/02_trained_model.py
+uv run python examples/quickstart/03_custom_map.py
+uv run python examples/advanced/06_pedestrian_env_factory.py
 ```
 
 ### Training scripts
@@ -1397,7 +1397,7 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 
 ## Common issues and solutions
 ### Build issues
-- uv not found → `pip install uv` (or use official installer)
+- uv not found → `curl -LsSf https://astral.sh/uv/install.sh | sh` (or use the package manager path in `docs/ENVIRONMENT.md`)
 - ffmpeg missing → `sudo apt-get install -y ffmpeg`
 
 ### Runtime issues

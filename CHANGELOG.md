@@ -518,7 +518,7 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
   + All helper functions include comprehensive docstrings, error handling, and Loguru logging compliance.
 * Episode Video Artifacts (MVP):
   + New CLI flags for benchmark runner: `--no-video` and `--video-renderer=synthetic|sim-view|none`.
-  + Synthetic lightweight encoder that renders a red-dot path from robot positions and writes per‑episode MP4s under `results/videos/`.
+  + Synthetic lightweight encoder that renders a red-dot path from robot positions and writes per‑episode MP4s under `results/videos/`. <!-- active-docs-check: allow historical changelog path -->
   + Episode JSON schema extension to include optional `video` manifest `{path, format, filesize_bytes, frames, renderer}`.
   + End‑to‑end wiring through CLI → batch runner → worker → episode; deterministic file naming `video_<episode_id>.mp4`.
   + Tests: CLI integration (`tests/test_cli_run_video.py`) and programmatic API (`tests/unit/test_runner_video.py`), both skipped when MoviePy/ffmpeg unavailable.

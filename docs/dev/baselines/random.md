@@ -19,7 +19,7 @@ from robot_sf.benchmark.runner import run_batch
 
 summary = run_batch(
     scenarios_or_path="configs/baselines/example_matrix.yaml",
-    out_path="results/episodes_random.jsonl",
+    out_path="output/benchmarks/episodes_random.jsonl",
     algo="random",
     algo_config_path="configs/baselines/random.yaml",
     workers=2,
@@ -32,7 +32,7 @@ CLI:
 ```bash
 robot_sf_bench run \
   --matrix configs/baselines/example_matrix.yaml \
-  --out results/episodes_random.jsonl \
+  --out output/benchmarks/episodes_random.jsonl \
   --algo random \
   --algo-config configs/baselines/random.yaml
 ```
@@ -74,4 +74,3 @@ Notes:
 
 - Establish a naive lower bound for metrics and SNQI
 - Validate scenario setups and pipeline correctness before benchmarking stronger baselines
-

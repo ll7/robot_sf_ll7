@@ -238,7 +238,7 @@ If visualization is requested without the required extras, commands will emit a 
 
 Install the package in editable mode for external usage (optional):
 ```bash
-uv run python -m pip install -e .
+uv sync --all-extras
 ```
 
 ## Quick Start
@@ -402,7 +402,7 @@ Use `--external-weights-file` (recompute) or `--initial-weights-file` (optimizat
 ## Recommended Workflows
 ### A. Establish Baseline & Strategy Comparison
 ```bash
-python scripts/recompute_snqi_weights.py \
+uv run python scripts/recompute_snqi_weights.py \
   --episodes episodes.jsonl \
   --baseline baseline_stats.json \
   --compare-strategies --compare-normalization \
@@ -410,17 +410,17 @@ python scripts/recompute_snqi_weights.py \
 ```
 ### B. Optimize Weights Then Validate
 ```bash
-python scripts/snqi_weight_optimization.py \
+uv run python scripts/snqi_weight_optimization.py \
   --episodes episodes.jsonl --baseline baseline_stats.json \
   --method both --sensitivity --seed 17 \
   --output optimized.json
-python scripts/snqi_sensitivity_analysis.py \
+uv run python scripts/snqi_sensitivity_analysis.py \
   --episodes episodes.jsonl --baseline baseline_stats.json \
   --weights optimized.json --output sensitivity_results/ --skip-visualizations
 ```
 ### C. Evaluate External Weight Proposal
 ```bash
-python scripts/recompute_snqi_weights.py \
+uv run python scripts/recompute_snqi_weights.py \
   --episodes episodes.jsonl --baseline baseline_stats.json \
   --external-weights-file candidate_weights.json \
   --strategy default --output eval_candidate.json

@@ -140,8 +140,8 @@ def _required_carla_summary_rows(carla_summary: dict[str, Any]) -> list[Diagnost
 
 
 def _replay_status_row(carla_summary: dict[str, Any]) -> DiagnosticsRow:
-    mode = str(carla_summary.get("mode", "")).lower()
-    status = str(carla_summary.get("status", "")).lower()
+    mode = str(carla_summary.get("mode") or "").lower()
+    status = str(carla_summary.get("status") or "").lower()
     degraded = next((value for value in (mode, status) if value in DEGRADED_MODES), None)
     if degraded:
         return DiagnosticsRow(
@@ -185,7 +185,7 @@ def _map_coordinate_row(carla_summary: dict[str, Any]) -> DiagnosticsRow:
     carla_map = _nested_get(carla_summary, ("carla", "map"))
     alignment = carla_summary.get("coordinate_alignment")
     if carla_map and isinstance(alignment, dict):
-        replay_mode = str(alignment.get("replay_mode", "")).lower()
+        replay_mode = str(alignment.get("replay_mode") or "").lower()
         if replay_mode in DEGRADED_MODES:
             return DiagnosticsRow(
                 axis="map_coordinate_frame",
@@ -304,7 +304,7 @@ def _unsupported_semantic_rows(carla_summary: dict[str, Any]) -> list[Diagnostic
     unsupported = carla_summary.get("unsupported")
     if isinstance(unsupported, dict):
         for key, value in sorted(unsupported.items()):
-            if key == "boundary":
+            if key in ("boundary", "reason"):
                 continue
             rows.append(
                 DiagnosticsRow(
@@ -339,14 +339,14 @@ def _metrics(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _degraded_reason(carla_summary: dict[str, Any]) -> str | None:
-    mode = str(carla_summary.get("mode", "")).lower()
-    status = str(carla_summary.get("status", "")).lower()
+    mode = str(carla_summary.get("mode") or "").lower()
+    status = str(carla_summary.get("status") or "").lower()
     degraded = next((value for value in (mode, status) if value in DEGRADED_MODES), None)
     if degraded is not None:
         return f"CARLA replay mode/status is not native/comparable: {degraded}"
     alignment = carla_summary.get("coordinate_alignment")
     if isinstance(alignment, dict):
-        replay_mode = str(alignment.get("replay_mode", "")).lower()
+        replay_mode = str(alignment.get("replay_mode") or "").lower()
         if replay_mode in DEGRADED_MODES:
             return f"coordinate replay mode is not native/comparable: {replay_mode}"
     return None
@@ -408,8 +408,15 @@ def _write_rows_csv(path: Path, rows: Sequence[dict[str, Any]], *, field_name: s
                 {
                     field_name: row["axis"],
                     "status": row["status"],
-                    "robot_sf_value": json.dumps(row.get("robot_sf_value"), sort_keys=True),
-                    "carla_value": json.dumps(row.get("carla_value"), sort_keys=True),
+                    "robot_sf_value": _csv_json_cell(row.get("robot_sf_value")),
+                    "carla_value": _csv_json_cell(row.get("carla_value")),
                     "reason": row.get("reason") or "",
                 }
             )
+
+
+def _csv_json_cell(value: Any) -> str:
+    """Return a CSV cell for an optional JSON value, leaving missing values empty."""
+    if value is None:
+        return ""
+    return json.dumps(value, sort_keys=True)

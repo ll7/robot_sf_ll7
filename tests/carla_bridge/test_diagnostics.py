@@ -103,6 +103,7 @@ def test_build_carla_replay_diagnostics_preserves_degraded_and_unsupported_seman
     )
     assert unsupported["status"] == "unsupported"
     assert unsupported["carla_value"] == 1
+    assert all(row["axis"] != "carla_summary.reason" for row in report["unsupported_semantics"])
 
 
 def test_write_carla_replay_diagnostics_outputs_writes_markdown_and_csv(tmp_path: Path) -> None:
@@ -118,6 +119,7 @@ def test_write_carla_replay_diagnostics_outputs_writes_markdown_and_csv(tmp_path
     with (tmp_path / "carla_capability_matrix.csv").open(encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     assert rows[0]["axis"] == "summary_schema_version"
+    assert rows[0]["robot_sf_value"] == ""
 
 
 def test_diagnostics_cli_writes_outputs(monkeypatch, tmp_path: Path, capsys) -> None:

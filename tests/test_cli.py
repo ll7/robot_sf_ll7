@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from robot_sf.benchmark import baseline_stats
+from robot_sf.benchmark import cli as benchmark_cli
 from robot_sf.benchmark.cli import cli_main
 
 if TYPE_CHECKING:
@@ -138,6 +139,58 @@ def test_run_and_compute_baseline_uses_default_jsonl_path_when_omitted(
     assert seen["records"] == [{"metrics": {"collisions": 0}}]
     assert stats == {"collisions": {"med": 0.0, "p95": 0.0}}
     assert json.loads(out_json.read_text(encoding="utf-8")) == stats
+
+
+def test_cli_baseline_omitted_jsonl_forwards_default_sentinel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_run_and_compute_baseline(
+        scenarios_or_path,
+        *,
+        out_json,
+        out_jsonl,
+        schema_path,
+        **_kwargs,
+    ):
+        seen["scenarios_or_path"] = scenarios_or_path
+        seen["out_json"] = out_json
+        seen["out_jsonl"] = out_jsonl
+        seen["schema_path"] = schema_path
+        return {"collisions": {"med": 0.0, "p95": 0.0}}
+
+    monkeypatch.setattr(
+        benchmark_cli,
+        "run_and_compute_baseline",
+        fake_run_and_compute_baseline,
+    )
+
+    out_json = tmp_path / "baseline.json"
+    rc = cli_main(
+        [
+            "baseline",
+            "--matrix",
+            "configs/baselines/example_matrix.yaml",
+            "--out",
+            str(out_json),
+            "--schema",
+            SCHEMA_PATH,
+        ],
+    )
+
+    assert rc == 0
+    assert seen["scenarios_or_path"] == "configs/baselines/example_matrix.yaml"
+    assert seen["out_json"] == str(out_json)
+    assert seen["out_jsonl"] is None
+    assert seen["schema_path"] == SCHEMA_PATH
 
 
 def test_cli_list_scenarios(tmp_path: Path, capsys):

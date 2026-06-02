@@ -15,6 +15,29 @@ comparison against `27dbe5xu` and `b60iopxt` were not recovered.
 
 No new training was launched for this classification pass.
 
+## Follow-Up Rerun Result 2026-06-02
+
+Issue #1977 launched a repaired vectorized continuation from the preserved W&B dataset and BC
+checkpoint. The infrastructure repair worked, but full job `12689` was cancelled after `14:47:53`
+because the training signal stayed extremely low.
+
+```yaml
+classification: cancelled_intermediate_negative_diagnostic
+job_id: 12689
+job_name: gse-1977-bcppo
+last_logged_total_timesteps: 5361664
+last_logged_success_rate: 0
+last_logged_fps: 100
+final_checkpoint: missing
+policy_analysis: missing
+compact_manifest: docs/context/evidence/issue_1977_bc_warm_start_cancelled_2026-06-02/artifact_manifest.md
+```
+
+This does not change the original recoverability classification into success. It strengthens the
+rerun conclusion: the preserved inputs can be hydrated and the current vectorized fine-tune path can
+run, but the same run shape should not receive another long allocation without a learned-progress
+redesign or a narrower intermediate-checkpoint analysis question.
+
 ## Artifact Table
 
 | Artifact class | Status | Evidence | Next action |

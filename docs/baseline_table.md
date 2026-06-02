@@ -6,8 +6,8 @@ Generate a per-group metric table (means) across selected metrics. Useful for qu
 
 ```sh
 robot_sf_bench table \
-  --in results/episodes.jsonl \
-  --out results/baseline_table.md \
+  --in output/benchmarks/episodes.jsonl \
+  --out output/benchmarks/baseline_table.md \
   --metrics collisions,comfort_exposure,time_to_goal \
   --format md
 ```
@@ -24,10 +24,10 @@ Options:
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.report_table import compute_table, format_markdown
 
-records = read_jsonl("results/episodes.jsonl")
+records = read_jsonl("output/benchmarks/episodes.jsonl")
 rows = compute_table(records, metrics=["collisions", "comfort_exposure"]) 
 md = format_markdown(rows, metrics=["collisions", "comfort_exposure"]) 
-open("results/baseline_table.md", "w").write(md)
+open("output/benchmarks/baseline_table.md", "w").write(md)
 ```
 
 Notes:

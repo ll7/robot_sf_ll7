@@ -599,6 +599,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Avoid mass docstring sweeps; improve documentation incrementally as code changes.
 - Use `uv run python scripts/validation/check_docstring_todos.py --mode report` to inspect the current placeholder backlog by top-level area and file.
 - `scripts/validation/docstring_todo_baseline.json` is an increase-only ratchet. Update it with `--mode write-baseline` only after an intentional cleanup or maintainer-approved backlog change.
+- Use `uv run python scripts/validation/check_active_doc_examples.py` to report stale active-doc command and artifact examples. Add `--fail-on-diagnostic` when a PR or CI lane should fail on new hits, and use an inline `active-docs-check: allow` marker only for intentional examples.
 
 ### Map Bounds Format
 

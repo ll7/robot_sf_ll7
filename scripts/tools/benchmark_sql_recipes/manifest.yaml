@@ -1,0 +1,83 @@
+schema_version: benchmark_sql_recipes.v1
+recipes:
+  - recipe_id: planner_outcome_summary
+    title: Planner-by-scenario-family outcome summary
+    sql_file: sql/planner_outcome_summary.sql
+    required_tables:
+      - episodes
+      - metrics
+    required_columns:
+      episodes:
+        - episode_id
+        - algo
+        - scenario_family
+      metrics:
+        - episode_id
+        - metric_path
+        - value_bool
+        - value_number
+    output_columns:
+      - algo
+      - scenario_family
+      - episode_count
+      - success_rate
+      - collision_rate
+      - mean_min_ttc
+      - mean_clearance
+    caveats:
+      - Derived from Parquet exports; JSONL remains the source of truth.
+      - Success and collision rates reflect exported metric rows, not recomputed metrics.
+  - recipe_id: failure_near_miss_mining
+    title: Failure and near-miss mining
+    sql_file: sql/failure_near_miss_mining.sql
+    required_tables:
+      - episodes
+      - metrics
+    required_columns:
+      episodes:
+        - episode_id
+        - algo
+        - scenario_family
+        - seed
+        - termination_reason
+      metrics:
+        - episode_id
+        - metric_path
+        - value_number
+    output_columns:
+      - episode_id
+      - algo
+      - scenario_family
+      - seed
+      - termination_reason
+      - collisions
+      - min_ttc
+      - clearance
+    caveats:
+      - Near-miss threshold is a recipe filter for triage, not a benchmark metric change.
+      - Missing metric rows are surfaced as nulls except for collision filtering.
+  - recipe_id: seed_variability_by_planner
+    title: Seed variability by planner and scenario family
+    sql_file: sql/seed_variability_by_planner.sql
+    required_tables:
+      - episodes
+      - metrics
+    required_columns:
+      episodes:
+        - episode_id
+        - algo
+        - scenario_family
+        - seed
+      metrics:
+        - episode_id
+        - metric_path
+        - value_bool
+    output_columns:
+      - algo
+      - scenario_family
+      - seed_count
+      - mean_seed_success_rate
+      - success_rate_stddev
+    caveats:
+      - Stddev is null when fewer than two seeds are present.
+      - Use as a diagnostic for follow-up design, not as standalone benchmark evidence.

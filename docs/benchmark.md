@@ -216,3 +216,29 @@ ORDER BY e.algo, e.scenario_family;
 
 Use `--overwrite` only when replacing a known derived export. The metadata file records that the
 Parquet files are derived views so downstream reports can trace back to the canonical JSONL input.
+
+### Curated DuckDB Recipes
+
+For repeatable analysis without notebooks, run a curated SQL recipe against the Parquet export:
+
+```bash
+uv run python scripts/tools/run_benchmark_sql_recipe.py \
+  --recipe planner_outcome_summary \
+  --export-dir output/benchmarks/classic_interactions/parquet \
+  --output-csv output/benchmarks/classic_interactions/tables/planner_outcome_summary.csv \
+  --output-markdown output/benchmarks/classic_interactions/tables/planner_outcome_summary.md
+```
+
+Recipes live under `scripts/tools/benchmark_sql_recipes/` with a manifest that records stable
+recipe IDs, required tables and columns, output columns, and caveats. The runner validates required
+Parquet files and columns before executing SQL so schema drift fails closed instead of producing
+misleading zeros.
+
+Initial recipes:
+
+- `planner_outcome_summary`: planner-by-scenario-family success, collision, and safety summary.
+- `failure_near_miss_mining`: rows for failures, collisions, and low-minimum-TTC episodes.
+- `seed_variability_by_planner`: seed-level success variability by planner and scenario family.
+
+Recipe outputs are derived analysis artifacts. Use them as inputs to table or figure generation
+only together with the source Parquet export metadata and the original JSONL provenance.

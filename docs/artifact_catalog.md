@@ -50,7 +50,7 @@ artifacts:
       tex:
         path: tables/tab_planner_execution_modes.tex
         sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-    generation_command: uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root output/benchmarks/camera_ready/<campaign_id> --output output/benchmarks/publication_candidates/camera_ready_tables_v1 --catalog-id camera_ready_tables_v1
+    generation_command: uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root output/benchmarks/camera_ready/<campaign_id> --output output/benchmarks/publication_candidates/<campaign_id> --catalog-id camera_ready_tables_v1
     generation_commit: fbc7e125
     claim_boundary: Benchmark summary table; not raw episode evidence.
 ```

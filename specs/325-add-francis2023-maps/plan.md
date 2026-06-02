@@ -128,7 +128,7 @@
 - Verify new maps (local):
   - `source .venv/bin/activate`
   - `MPLCONFIGDIR=$PWD/output/tmp/mplconfig XDG_CACHE_HOME=$PWD/output/tmp/cache MPLBACKEND=Agg \\`
-    `python scripts/validation/verify_maps.py --scope francis2023_crowd_navigation.svg --mode local`
+    `uv run python scripts/validation/verify_maps.py --scope francis2023_crowd_navigation.svg --mode local`
   - Repeat for: `francis2023_parallel_traffic.svg`, `francis2023_perpendicular_traffic.svg`,
     `francis2023_circular_crossing.svg`, `francis2023_robot_crowding.svg`.
 - Generate previews (full style for routes/zones):

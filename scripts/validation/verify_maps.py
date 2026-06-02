@@ -7,16 +7,16 @@ completeness, and runtime compatibility.
 Usage Examples
 --------------
 Validate all maps locally:
-    python scripts/validation/verify_maps.py --scope all --mode local
+    uv run python scripts/validation/verify_maps.py --scope all --mode local
 
 Validate CI-enabled maps only:
-    python scripts/validation/verify_maps.py --scope ci --mode ci
+    uv run python scripts/validation/verify_maps.py --scope ci --mode ci
 
 Validate specific map:
-    python scripts/validation/verify_maps.py --scope classic_doorway.svg --mode local
+    uv run python scripts/validation/verify_maps.py --scope classic_doorway.svg --mode local
 
 Output structured JSON manifest:
-    python scripts/validation/verify_maps.py --scope all --output output/validation/map_verification.json
+    uv run python scripts/validation/verify_maps.py --scope all --output output/validation/map_verification.json
 
 See Also
 --------

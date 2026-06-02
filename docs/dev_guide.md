@@ -1429,6 +1429,12 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Requirements clarified (with options/assumptions recorded).
 - Design doc added/updated and linked (if non‑trivial).
 - Code implemented with tests (unit/integration; GUI when needed).
+- For research/benchmark/metric/paper-facing analysis-tool PRs: include one representative use on
+  durable/versioned input (tracked config, model checkpoint, committed fixture, or versioned W&B
+  artifact) or link a concrete follow-up issue that names the decision, claim boundary, or
+  synthesis surface the tool will update. Local-only `output/` files are not durable proof unless
+  promoted or represented by a tracked manifest. Small support helpers (formatters, CLI wrappers,
+  quick diagnostics) that make no research/benchmark/metric/paper claim are exempt.
 - Ruff clean and “Check Code Quality (Ruff + advisory ty)” reviewed locally.
 - Advisory typecheck reviewed. Fix practical findings in touched files and stable contracts, and
   document any meaningful remaining findings in the PR when they affect the change.

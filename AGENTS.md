@@ -312,6 +312,12 @@ resolving lint or test failures locally before requesting review.
   claim/hypothesis/blocker, comparator/baseline, evidence tier, result classification,
   decision/stop rule, and synthesis surface/update target.
   For support/tooling/docs-only PRs with no research claim, use `NA` and state why.
+- When a PR adds a new research, benchmark, metric, or paper-facing analysis tool, either use it
+  once on durable/versioned input in the same PR, or link a concrete follow-up issue that names the
+  decision, claim boundary, benchmark report, registry, context note, or synthesis surface the tool
+  will update. Disposable local `output/` files do not count as durable proof unless represented by
+  a tracked manifest, registry entry, context note, or external artifact pointer. Small support
+  helpers that are not intended to support research interpretation may state `NA` with that reason.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

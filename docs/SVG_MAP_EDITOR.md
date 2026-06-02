@@ -124,17 +124,17 @@ After creating or modifying a map, you can validate it using the map verificatio
 
 Validate a specific map:
 ```bash
-python scripts/validation/verify_maps.py --scope your_map.svg --mode local
+uv run python scripts/validation/verify_maps.py --scope your_map.svg --mode local
 ```
 
 Validate all maps:
 ```bash
-python scripts/validation/verify_maps.py --scope all --mode local
+uv run python scripts/validation/verify_maps.py --scope all --mode local
 ```
 
 Validate with structured output:
 ```bash
-python scripts/validation/verify_maps.py --scope all --output output/validation/map_verification.json
+uv run python scripts/validation/verify_maps.py --scope all --output output/validation/map_verification.json
 ```
 
 #### What Gets Checked

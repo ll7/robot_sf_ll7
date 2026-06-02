@@ -30,6 +30,31 @@ uv run python scripts/tools/render_trace_report.py \
   --output output/debug/trace_report/report.md
 ```
 
+To generate reusable static trajectory panels and failure mosaics from the same trace-export
+format, run:
+
+```bash
+uv run python scripts/tools/render_trajectory_panels.py \
+  --trace tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
+  --output-dir output/debug/trajectory_panels \
+  --commit "$(git rev-parse --short HEAD)"
+```
+
+The panel bundle writes `trajectory_panels/*.png`, `trajectory_panels/*.pdf`, optional
+`failure_mosaics/*.png` and `.pdf`, `representative_episode_selection.csv`,
+`trajectory_panel_manifest.json`, and `captions.md`. The manifest records source trace paths,
+SHA-256 checksums, generation command, generation commit, artifact IDs, output checksums, and the
+`diagnostic_only` claim boundary. Use `--selection-csv` with columns `artifact_id`, `trace_path`,
+`panel_type`, and `caption` when a reviewer needs to pin representative episodes manually.
+
+After generating panels, validate the raster/vector outputs and caption file with:
+
+```bash
+uv run python scripts/validation/validate_figure_artifacts.py \
+  output/debug/trajectory_panels/trajectory_panels/<artifact_id>.png \
+  --caption output/debug/trajectory_panels/captions.md
+```
+
 Qualitative frame-range annotations for trace fixtures use `trace_annotation_set.v1`. They anchor
 review comments to inclusive trace steps, optional planner event IDs, and robot or pedestrian
 entities while preserving a strict `analysis_workbench_qualitative_only` evidence boundary. The

@@ -243,7 +243,7 @@ EOF
 `scripts/dev/run_ci_local.sh` is the local CI-equivalent entrypoint for the shared
 validation phases. By default it runs `uv sync --all-extras --frozen`, migrates legacy artifacts,
 then delegates to `scripts/dev/ci_driver.sh` so local runs and `.github/workflows/ci.yml`
-share the same phase definitions (`lint`, `typecheck`, `test`, `smoke`, and
+share the same phase definitions (`lint`, `typecheck`, `test`, `examples-smoke`, `smoke`, and
 `artifact-policy`). Pass explicit phases to scope a run, for example
 `scripts/dev/run_ci_local.sh lint test`. After dependencies are already current, use
 `scripts/dev/run_ci_local.sh --no-setup lint test` for faster repeat local feedback.

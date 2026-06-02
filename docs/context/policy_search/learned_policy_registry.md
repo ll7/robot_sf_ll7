@@ -189,6 +189,8 @@ adapter-only proof are useful planning evidence, but they are not benchmark evid
   - `docs/context/policy_search/reports/2026-06-02_shielded_ppo_issue1474_collision20_v1_nominal_sanity.md`
   - `docs/context/issue_1396_shielded_ppo_launch_packet.md`
   - `docs/context/issue_1474_shielded_ppo_repair_closeout.md`
+  - `docs/context/issue_2006_guarded_ppo_zero_motion_repair.md`
+  - `docs/context/policy_search/reports/2026-06-02_shielded_ppo_issue1474_collision20_v1_smoke.md`
 
 ### `orca_residual_guarded_ppo_v0`
 

@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./common_setup.sh
-source "$SCRIPT_DIR/common_setup.sh"
-
-readonly PHASES=("lint" "typecheck" "test" "examples-smoke" "smoke" "artifact-policy")
-
 show_help() {
   cat <<'EOF'
 Usage: scripts/dev/ci_driver.sh [--list-phases] <phase> [<phase> ...]
@@ -31,6 +25,17 @@ Examples:
   scripts/dev/ci_driver.sh --list-phases
 EOF
 }
+
+if [[ "$#" -gt 0 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  show_help
+  exit 0
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./common_setup.sh
+source "$SCRIPT_DIR/common_setup.sh"
+
+readonly PHASES=("lint" "typecheck" "test" "examples-smoke" "smoke" "artifact-policy")
 
 list_phases() {
   printf "%s\n" "${PHASES[@]}"
@@ -281,11 +286,6 @@ fi
 
 if [[ "$1" == "--list-phases" ]]; then
   list_phases
-  exit 0
-fi
-
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-  show_help
   exit 0
 fi
 

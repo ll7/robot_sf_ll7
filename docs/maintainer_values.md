@@ -17,6 +17,10 @@ and what remains uncertain.
 Fallback or degraded benchmark execution is never success evidence. It may be useful diagnostic
 information only when labeled that way.
 
+When the intended proof fails or cannot be gathered, close the work as `blocked`, `diagnostic`, or
+`not benchmark evidence` as appropriate, and record the next smallest proof step. Do not relabel an
+unproven result as complete just to preserve momentum.
+
 ## Exploration
 
 Exploration is encouraged, including new planner families, research directions, and workflow ideas.
@@ -50,6 +54,8 @@ Use validation proportional to risk.
 - Paper-grade or benchmark-strength claims should name the exact claim, command/config/seed path,
   artifact provenance, metric/schema mode, sample size or statistics, fallback/degraded exclusions,
   limitations, and reproduction path before they are treated as established.
+- When validation cannot prove the intended claim, report the observed evidence and the failed or
+  missing proof separately, then hand off the next concrete proof step.
 
 ## Work Collection
 

@@ -75,7 +75,7 @@ DEFAULT_ARTIFACT_CATEGORIES: dict[str, ArtifactCategory] = {
         relative_path=Path("benchmarks"),
         description="Benchmark summaries, JSONL outputs, and performance reports.",
         retention_hint="keep-latest",
-        producers=("scripts/benchmark02.py", "scripts/validation/performance_smoke_test.py"),
+        producers=("scripts/benchmark_workers.py", "scripts/validation/performance_smoke_test.py"),
     ),
     "recordings": ArtifactCategory(
         name="recordings",

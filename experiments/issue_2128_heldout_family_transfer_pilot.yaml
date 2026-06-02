@@ -1,0 +1,70 @@
+schema_version: experiment-record.v1
+experiment_id: issue_2128_heldout_family_transfer_pilot
+issue: 2128
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/2128
+question: >
+  When planners or learned policies are tuned on a known scenario-family pool, which outcome
+  patterns persist on the issue #2128 held-out station-platform and Francis-style scenario-family
+  pilot under fixed seeds, fixed metrics, and explicit leakage controls?
+hypothesis: >
+  Core planners that are robust on the benchmark-set surface will retain the same qualitative safety
+  ordering on the held-out pilot, but transfer deltas will expose larger uncertainty and any
+  fallback, degraded, failed, or not-available rows must remain visible exclusions rather than
+  success evidence.
+config:
+  - configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
+  - configs/benchmarks/issue_2128_heldout_family_transfer_pilot.yaml
+  - configs/scenarios/sets/issue_2128_heldout_family_transfer_training_pool.yaml
+  - configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml
+command: |
+  uv run python scripts/tools/validate_heldout_transfer_partitions.py \
+    configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
+  uv run robot_sf_bench validate-config \
+    --matrix configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml
+  uv run python scripts/tools/run_camera_ready_benchmark.py \
+    --config configs/benchmarks/issue_2128_heldout_family_transfer_pilot.yaml \
+    --mode preflight \
+    --label issue2128-heldout-transfer-pilot \
+    --output-root output/benchmarks/issue2128_heldout_transfer \
+    --log-level WARNING
+  # After review, run the pilot and render separate benchmark-set, held-out-family,
+  # scenario-family breakdown, and transfer-delta artifacts before interpreting results.
+inputs:
+  - path: docs/context/issue_2128_heldout_scenario_family_transfer_protocol.md
+  - path: configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
+  - path: configs/benchmarks/issue_2128_heldout_family_transfer_pilot.yaml
+  - path: configs/scenarios/sets/issue_2128_heldout_family_transfer_training_pool.yaml
+  - path: configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml
+outputs:
+  - path: output/benchmarks/issue2128_heldout_transfer/
+    durable_reference: null
+    evidence_role: local staging only until promoted
+expected_artifacts:
+  - name: benchmark_set_summary_table
+    path: output/benchmarks/issue2128_heldout_transfer/reports/summary_benchmark_set.csv
+    durable_reference_required: true
+  - name: heldout_family_summary_table
+    path: output/benchmarks/issue2128_heldout_transfer/reports/summary_heldout_family.csv
+    durable_reference_required: true
+  - name: scenario_family_breakdown_table
+    path: output/benchmarks/issue2128_heldout_transfer/reports/scenario_family_breakdown.csv
+    durable_reference_required: true
+  - name: transfer_delta_table
+    path: output/benchmarks/issue2128_heldout_transfer/reports/transfer_delta.csv
+    durable_reference_required: true
+  - name: transfer_delta_figure
+    path: output/benchmarks/issue2128_heldout_transfer/figures/fig_transfer_delta.png
+    durable_reference_required: true
+  - name: leakage_audit
+    path: output/benchmarks/issue2128_heldout_transfer/leakage_audit.md
+    durable_reference_required: true
+  - name: artifact_catalog
+    path: output/benchmarks/issue2128_heldout_transfer/artifact_catalog.yaml
+    durable_reference_required: true
+evidence_grade: proposal
+paper_relevance: exploratory
+status: planned
+notes: >
+  This record is proposal evidence only. Held-out transfer interpretation requires a completed
+  leakage audit, native or explicitly eligible planner execution modes, durable artifact references,
+  and separate benchmark-set versus held-out-family summaries.

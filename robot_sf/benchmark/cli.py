@@ -1424,7 +1424,7 @@ def _add_baseline_subparser(
         default=None,
         help=(
             "Optional path to write intermediate episode JSONL "
-            f"(default {DEFAULT_BASELINE_JSONL_PATH})"
+            f"(default {DEFAULT_BASELINE_JSONL_PATH!s})"
         ),
     )
     p.add_argument("--schema", default=DEFAULT_SCHEMA_PATH, help="Schema path for validation")

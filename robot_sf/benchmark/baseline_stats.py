@@ -32,7 +32,7 @@ DEFAULT_METRICS: list[str] = [
     "energy",
 ]
 
-DEFAULT_BASELINE_JSONL_PATH = Path("output/benchmarks") / "baseline_episodes.jsonl"
+DEFAULT_BASELINE_JSONL_PATH: Path = Path("output/benchmarks") / "baseline_episodes.jsonl"
 
 
 def _extract_metric_values(records: list[dict[str, Any]], key: str) -> list[float]:

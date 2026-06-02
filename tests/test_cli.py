@@ -85,11 +85,7 @@ def test_cli_baseline_subcommand(tmp_path: Path, capsys):
 
 
 def test_cli_baseline_help_mentions_default_jsonl_path(capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        capsys: TODO docstring.
-    """
+    """Verify baseline help advertises the current default JSONL path."""
     with pytest.raises(SystemExit) as excinfo:
         cli_main(["baseline", "--help"])
 
@@ -103,12 +99,7 @@ def test_run_and_compute_baseline_uses_default_jsonl_path_when_omitted(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
-    """
+    """Verify the helper uses the default JSONL path when none is provided."""
     seen: dict[str, object] = {}
 
     def fake_run_batch(*_args, **kwargs):
@@ -145,12 +136,7 @@ def test_cli_baseline_omitted_jsonl_forwards_default_sentinel(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
-    """
+    """Verify the CLI forwards omitted --jsonl as the helper's default sentinel."""
     seen: dict[str, object] = {}
 
     def fake_run_and_compute_baseline(

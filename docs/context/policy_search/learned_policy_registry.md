@@ -109,7 +109,7 @@ adapter-only proof are useful planning evidence, but they are not benchmark evid
 | --- | --- | --- | --- | --- | --- |
 | `ppo_issue791_best_v1` | `learned_baseline` | `implemented` | `comparison_available` | `comparison_available` | Best current learned-only baseline for success-oriented comparison; not a safety promotion because paper-matrix collision rate is worse than ORCA. |
 | `guarded_ppo_orca_prior` | `guarded_policy` | `implemented` | `smoke_proven` | `not_benchmark_evidence` | Inference-only guarded variants are exhausted as a tuning lane; further value requires training a residual or learned risk component. |
-| `shielded_ppo_issue1474_collision20_v1` | `guarded_policy` | `staged` | `smoke_failed` | `blocked` | Issue #1474 retrained the PPO proposal policy with the launch-packet collision-20 reward delta and W&B artifact provenance; the first runtime-guarded smoke timed out with zero motion, so nominal-sanity escalation is blocked until the guard handoff is repaired. |
+| `shielded_ppo_issue1474_collision20_v1` | `guarded_policy` | `staged` | `smoke_proven` | `smoke_only` | Issue #1474 retrained the PPO proposal policy with the launch-packet collision-20 reward delta and W&B artifact provenance; issue #2006 repaired the zero-motion handoff, and #2029 replayed the smoke gate successfully on SLURM. Nominal-sanity remains required before any promotion or stress/full-matrix escalation. |
 | `orca_residual_guarded_ppo_v0` | `residual_policy` | `staged` | `launch_packet` | `smoke_only` | Runtime residual surface exists, but learned residual training/checkpoint lineage is pending and fallback/degraded rows remain caveats. |
 | `learned_risk_model_v1` | `auxiliary_risk` | `staged` | `launch_packet` | `not_benchmark_evidence` | Pre-SLURM launch packet only; hard guards remain authoritative and learned risk may only add auxiliary candidate cost. |
 | `predictive_planner_v1` | `predictive_model` | `implemented` | `comparison_available` | `comparison_available` | Uses a learned pedestrian predictor inside a planner stack; evidence applies to the configured predictive planner, not a general learned local policy. |
@@ -177,16 +177,19 @@ adapter-only proof are useful planning evidence, but they are not benchmark evid
 - `checkpoint_availability`: W&B artifact
   `ll7/robot_sf/ppo_expert_issue_1474_shielded_repair_collision20_5m-best-success:v5`.
 - `expected_dependencies`: local repo plus W&B artifact hydration.
-- `reproducibility_status`: training complete; issue #2006 local guarded smoke passes the
-  launch-packet smoke gate after restoring the SocNav observation handoff.
-- `integration_status`: staged candidate config, prototype-gated until SLURM smoke replay or an
-  explicit maintainer escalation decision.
-- `benchmark_status`: blocked until nominal-sanity stop gates pass with guard diagnostics present.
+- `reproducibility_status`: training complete; issue #2006 local guarded smoke and issue #2029
+  SLURM replay pass the launch-packet smoke gate after restoring the SocNav observation handoff.
+- `integration_status`: staged candidate config, prototype-gated until nominal-sanity is explicitly
+  submitted and interpreted.
+- `benchmark_status`: smoke-only until nominal-sanity stop gates pass with guard diagnostics
+  present.
 - `local_anchors`:
   - `configs/policy_search/candidates/shielded_ppo_issue1474_collision20_v1.yaml`
   - `configs/training/shielded_ppo_issue_1396_launch_packet.yaml`
   - `docs/context/issue_1396_shielded_ppo_launch_packet.md`
   - `docs/context/issue_1474_shielded_ppo_repair_closeout.md`
+  - `docs/context/issue_2006_guarded_ppo_zero_motion_repair.md`
+  - `docs/context/policy_search/reports/2026-06-02_shielded_ppo_issue1474_collision20_v1_smoke.md`
 
 ### `orca_residual_guarded_ppo_v0`
 

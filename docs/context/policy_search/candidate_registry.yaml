@@ -716,8 +716,9 @@ candidates:
       learned progress to pass the shielded-PPO smoke and nominal-sanity stop
       gates. The first post-training smoke failed the launch-packet success
       gate with an overconservative zero-motion timeout; issue #2006 repaired
-      the local smoke handoff, but the row stays prototype-gated until SLURM
-      smoke replay and nominal-sanity escalation are explicitly approved.
+      the handoff and issue #2029 replayed the smoke gate successfully on
+      SLURM, but the row stays prototype-gated until nominal-sanity escalation
+      is explicitly approved and interpreted.
     required_stages:
       - smoke
       - nominal_sanity

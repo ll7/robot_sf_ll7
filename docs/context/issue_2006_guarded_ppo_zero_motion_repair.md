@@ -54,8 +54,26 @@ The repaired local smoke passed the launch-packet smoke gate:
 The guard diagnostics were `decision_counts.ppo_clear=71`, replacing the previous
 `decision_counts.goal_reached=80` zero-motion timeout.
 
+## SLURM Replay
+
+Issue #2029 replayed the repaired handoff through SLURM on 2026-06-02:
+
+- job: `12700_0` / `rsf-pol-smoke`, `COMPLETED`, exit `0:0`, elapsed `00:00:58`;
+- commit: `2b86ef4cf5c10553ae2a0cf32c91a243164c44d2`;
+- run id: `issue2029_shielded_ppo_smoke_replay`;
+- summary:
+  `output/policy_search/shielded_ppo_issue1474_collision20_v1/smoke/issue2029_shielded_ppo_smoke_replay/summary.json`;
+- report:
+  `docs/context/policy_search/reports/2026-06-02_shielded_ppo_issue1474_collision20_v1_smoke.md`;
+- decision: `pass`;
+- smoke metrics: `success_rate=1.0`, `collision_rate=0.0`, `near_miss_rate=0.0`,
+  `mean_avg_speed=1.9997802215217393`;
+- guard diagnostics: `shield_decision_count=71`, `shield_intervention_count=0`,
+  `shield_override_count=0`, `decision_counts.ppo_clear=71`.
+
 ## Boundary
 
-This is local smoke evidence, not benchmark promotion evidence. The local machine context forbids
-SLURM submission from this host, so SLURM smoke replay remains a follow-up gate before any
-nominal-sanity, stress, or full-matrix escalation.
+The zero-motion handoff blocker is repaired for both local and SLURM smoke. This remains
+single-episode smoke evidence, not benchmark promotion evidence. Nominal-sanity is the next gate;
+do not run stress or full-matrix escalation unless nominal-sanity passes with guard diagnostics and
+artifact provenance recorded.

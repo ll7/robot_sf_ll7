@@ -1,10 +1,8 @@
-# Issue #749 PPO fine-tune config for the BC-preinitialized challenger.
+# Issue #1977 clean BC warm-start PPO rerun.
 #
-# The pretrained policy id is produced by
-# bc_pretrain_issue_749_v10_warm_start.yaml. The full run is intentionally
-# expensive and should be launched only after the issue #749 trajectory dataset
-# has a durable manifest.
-run_id: issue_749_ppo_finetune_v10_warm_start
+# This consumes the durable #1108/#749 W&B preservation artifact rather than
+# recollecting the dataset or retraining the BC checkpoint before PPO fine-tuning.
+run_id: issue_1977_ppo_finetune_v10_warm_start_rerun
 pretrained_policy_id: issue_749_bc_preinit_v10_policy
 dataset_id: issue_749_b60iopxt_v10_eval_trajectories
 training_config: ../ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml

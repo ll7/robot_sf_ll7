@@ -228,6 +228,48 @@ def test_fine_tuning_config_structure(tmp_path, monkeypatch):
     assert len(config.random_seeds) == 2
 
 
+def test_ppo_finetuning_config_treats_blank_execution_values_as_auto():
+    """Null or blank execution values should use the automatic runtime defaults."""
+    from robot_sf.training.imitation_config import PPOFineTuningConfig
+
+    config = PPOFineTuningConfig.from_raw(
+        run_id="test_ppo_finetune_blank_execution",
+        pretrained_policy_id="test_bc_policy",
+        total_timesteps=1000,
+        random_seeds=(42,),
+        worker_mode=None,
+        device=" ",
+    )
+
+    assert config.worker_mode == "auto"
+    assert config.device == "auto"
+
+
+def test_load_ppo_finetuning_config_treats_blank_execution_values_as_auto(tmp_path):
+    """YAML null or blank execution values should not become literal strings."""
+    from scripts.training.train_ppo_with_pretrained_policy import load_ppo_finetuning_config
+
+    config_path = tmp_path / "ppo_finetune.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "run_id: test_ppo_finetune_blank_yaml",
+                "pretrained_policy_id: test_bc_policy",
+                "total_timesteps: 1000",
+                "random_seeds: [42]",
+                "worker_mode:",
+                "device: ' '",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_ppo_finetuning_config(config_path)
+
+    assert config.worker_mode == "auto"
+    assert config.device == "auto"
+
+
 def test_issue_749_warm_start_configs_load():
     """Issue #749 configs should preserve the BC -> PPO warm-start contract."""
     from scripts.training.pretrain_from_expert import load_bc_config
@@ -245,6 +287,10 @@ def test_issue_749_warm_start_configs_load():
     assert bc_config.policy_output_id == "issue_749_bc_preinit_v10_policy"
     assert fine_tune_config.pretrained_policy_id == bc_config.policy_output_id
     assert fine_tune_config.total_timesteps == 10_000_000
+    assert fine_tune_config.num_envs == 22
+    assert fine_tune_config.worker_mode == "subproc"
+    assert fine_tune_config.device == "cpu"
+    assert fine_tune_config.checkpoint_freq == 500_000
     assert fine_tune_config.snqi_weights_path is not None
     assert fine_tune_config.snqi_weights_path.name == "snqi_weights_camera_ready_v3.json"
     assert fine_tune_config.snqi_baseline_path is not None
@@ -253,6 +299,7 @@ def test_issue_749_warm_start_configs_load():
     assert fine_tune_config.env_overrides["observation_mode"] == "socnav_struct"
     assert bc_config.env_overrides["predictive_foresight_enabled"] is True
     assert fine_tune_config.env_overrides["include_grid_in_observation"] is True
+    assert fine_tune_config.env_overrides["predictive_foresight_device"] == "cuda"
     assert bc_config.env_factory_kwargs["reward_name"] == "route_completion_v3"
     assert fine_tune_config.env_factory_kwargs["reward_name"] == "route_completion_v3"
 

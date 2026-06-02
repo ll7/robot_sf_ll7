@@ -7,6 +7,7 @@ training with PPO to maximize performance while leveraging the pre-trained initi
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -16,7 +17,9 @@ from loguru import logger
 
 try:
     from stable_baselines3 import PPO
-    from stable_baselines3.common.callbacks import BaseCallback
+    from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
+    from stable_baselines3.common.utils import get_schedule_fn
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 except ImportError as exc:
     raise RuntimeError("This script requires 'stable_baselines3' package.") from exc
 
@@ -35,6 +38,36 @@ from scripts.training.imitation_env_contract import (
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+_AUTO_NUM_ENVS_THROUGHPUT_RESERVED_CORES = 2
+_AUTO_NUM_ENVS_THROUGHPUT_HEADROOM_GIB = 8.0
+_AUTO_NUM_ENVS_THROUGHPUT_ENV_BUDGET_GIB = 3.0
+
+_ALLOWED_PPO_HYPERPARAMS = {
+    "learning_rate",
+    "batch_size",
+    "n_epochs",
+    "ent_coef",
+    "clip_range",
+    "target_kl",
+    "gamma",
+    "gae_lambda",
+    "vf_coef",
+    "max_grad_norm",
+}
+_PPO_PARAM_COERCIONS = {
+    "learning_rate": float,
+    "batch_size": int,
+    "n_epochs": int,
+    "ent_coef": float,
+    "clip_range": float,
+    "target_kl": lambda value: None if value is None else float(value),
+    "gamma": float,
+    "gae_lambda": float,
+    "vf_coef": float,
+    "max_grad_norm": float,
+}
 
 
 class TimestepTracker(BaseCallback):
@@ -58,6 +91,221 @@ class TimestepTracker(BaseCallback):
             self.timesteps_to_convergence = self.num_timesteps
             self.converged = True
         return True
+
+
+def _parse_num_envs(raw: object) -> int | str | None:
+    """Parse num_envs setting from a fine-tune YAML file."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in {"auto", "auto_throughput"}:
+            return "auto_throughput"
+        if normalized == "auto_stable":
+            return "auto_stable"
+    return max(1, int(raw))
+
+
+def _slurm_allocated_cpus() -> int | None:
+    """Return the Slurm CPU allocation visible to this process, when available."""
+    for key in ("SLURM_CPUS_PER_TASK", "SLURM_JOB_CPUS_PER_NODE"):
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        token = raw.split("(", 1)[0].split(",", 1)[0].strip()
+        try:
+            value = int(token)
+        except ValueError:
+            continue
+        if value > 0:
+            return value
+    return None
+
+
+def _read_cgroup_memory_gib(path: Path) -> float | None:
+    """Read a cgroup memory-limit file and return GiB, filtering out sentinel values."""
+    try:
+        raw = path.read_text().strip()
+        if raw in ("max", ""):
+            return None
+        value = int(raw)
+        if value <= 0 or value >= 2**63:
+            return None
+        return float(value) / float(1024**3)
+    except (OSError, ValueError):
+        return None
+
+
+def _slurm_memory_gib() -> float | None:
+    """Return the Slurm memory allocation in GiB when exported."""
+    for slurm_key in ("SLURM_MEM_PER_NODE", "SLURM_MEM_PER_CPU"):
+        slurm_mem_mb = os.environ.get(slurm_key)
+        if slurm_mem_mb is None:
+            continue
+        try:
+            memory_gib = float(slurm_mem_mb) / 1024.0
+        except (ValueError, TypeError):
+            continue
+        if memory_gib <= 0:
+            continue
+        if slurm_key == "SLURM_MEM_PER_CPU":
+            allocated_cpus = _slurm_allocated_cpus()
+            if allocated_cpus is None:
+                continue
+            memory_gib *= allocated_cpus
+        return memory_gib
+    return None
+
+
+def _host_memory_gib() -> float | None:
+    """Return available host memory in GiB, preferring SLURM/cgroup limits over sysconf."""
+
+    slurm_memory_gib = _slurm_memory_gib()
+    if slurm_memory_gib is not None:
+        return slurm_memory_gib
+
+    cgroup_gib = _read_cgroup_memory_gib(Path("/sys/fs/cgroup/memory.max"))
+    if cgroup_gib is not None:
+        return cgroup_gib
+    cgroup_gib = _read_cgroup_memory_gib(Path("/sys/fs/cgroup/memory/memory.limit_in_bytes"))
+    if cgroup_gib is not None:
+        return cgroup_gib
+
+    if not hasattr(os, "sysconf"):
+        return None
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        phys_pages = os.sysconf("SC_PHYS_PAGES")
+    except (OSError, ValueError):
+        return None
+    if not isinstance(page_size, int) or not isinstance(phys_pages, int):
+        return None
+    total_bytes = page_size * phys_pages
+    return float(total_bytes) / float(1024**3) if total_bytes > 0 else None
+
+
+def _describe_num_envs_resolution(config: PPOFineTuningConfig) -> dict[str, object]:
+    """Return structured details explaining fine-tune environment parallelism."""
+    if isinstance(config.num_envs, int):
+        resolved = max(1, int(config.num_envs))
+        return {
+            "requested": int(config.num_envs),
+            "mode": "fixed",
+            "slurm_cpus": None,
+            "logical_cpus": None,
+            "memory_cap": None,
+            "resolved": resolved,
+            "decision": "explicit config integer",
+        }
+
+    mode = (
+        str(config.num_envs).strip().lower()
+        if isinstance(config.num_envs, str)
+        else "single_env_legacy"
+    )
+    if mode == "auto":
+        mode = "auto_throughput"
+    if mode == "single_env_legacy":
+        return {
+            "requested": None,
+            "mode": mode,
+            "slurm_cpus": None,
+            "logical_cpus": None,
+            "memory_cap": None,
+            "resolved": 1,
+            "decision": "legacy fine-tune default",
+        }
+    if mode not in {"auto_throughput", "auto_stable"}:
+        raise ValueError("num_envs must be an int or one of {'auto', 'auto_throughput'}")
+    if mode == "auto_stable":
+        raise ValueError("PPO fine-tuning supports auto/auto_throughput, not auto_stable")
+
+    slurm_cpus = _slurm_allocated_cpus()
+    logical_cpus = max(1, slurm_cpus or (os.cpu_count() or 1))
+    reserve = max(0, int(config.num_envs_reserve_cores))
+    cpu_target = max(1, logical_cpus - _AUTO_NUM_ENVS_THROUGHPUT_RESERVED_CORES - reserve)
+    memory_cap = None
+    host_memory_gib = _host_memory_gib()
+    if host_memory_gib is not None:
+        usable_gib = max(0.0, host_memory_gib - _AUTO_NUM_ENVS_THROUGHPUT_HEADROOM_GIB)
+        memory_cap = max(1, int(usable_gib // _AUTO_NUM_ENVS_THROUGHPUT_ENV_BUDGET_GIB))
+    resolved = cpu_target if memory_cap is None else max(1, min(cpu_target, memory_cap))
+    limiter = "cpu target" if memory_cap is None or cpu_target <= memory_cap else "memory cap"
+    return {
+        "requested": config.num_envs,
+        "mode": mode,
+        "slurm_cpus": slurm_cpus,
+        "logical_cpus": logical_cpus,
+        "memory_cap": memory_cap,
+        "resolved": resolved,
+        "decision": f"throughput heuristic; limited by {limiter}",
+    }
+
+
+def _resolve_num_envs(config: PPOFineTuningConfig) -> int:
+    """Resolve the number of fine-tuning envs."""
+    return int(_describe_num_envs_resolution(config)["resolved"])
+
+
+def _resolve_worker_mode(config: PPOFineTuningConfig, num_envs: int) -> str:
+    """Resolve fine-tune worker mode."""
+    mode = str(config.worker_mode).strip().lower()
+    if mode == "auto":
+        return "subproc" if num_envs > 1 else "dummy"
+    if mode not in {"dummy", "subproc"}:
+        raise ValueError("worker_mode must be one of {'auto', 'dummy', 'subproc'}")
+    if mode == "subproc" and num_envs == 1:
+        return "dummy"
+    return mode
+
+
+def _resolve_ppo_hyperparams(config: PPOFineTuningConfig) -> dict[str, object]:
+    """Return validated PPO hyperparameter overrides for fine-tuning."""
+    params = {"learning_rate": config.learning_rate}
+    params.update(config.ppo_hyperparams)
+    unknown = set(params) - _ALLOWED_PPO_HYPERPARAMS
+    if unknown:
+        unknown_list = ", ".join(sorted(unknown))
+        raise ValueError(f"ppo_hyperparams has unsupported keys: {unknown_list}")
+    return {key: _PPO_PARAM_COERCIONS[key](value) for key, value in params.items()}
+
+
+def _apply_finetune_hyperparams(model: PPO, config: PPOFineTuningConfig) -> None:
+    """Apply config-level PPO overrides after loading the warm-start checkpoint."""
+    params = _resolve_ppo_hyperparams(config)
+    if "learning_rate" in params:
+        value = float(params["learning_rate"])
+        model.learning_rate = value
+        model.lr_schedule = get_schedule_fn(value)
+    if "clip_range" in params:
+        model.clip_range = get_schedule_fn(float(params["clip_range"]))
+    for key, attr_name, coerce in (
+        ("batch_size", "batch_size", int),
+        ("n_epochs", "n_epochs", int),
+        ("ent_coef", "ent_coef", float),
+        ("target_kl", "target_kl", lambda value: value),
+        ("gamma", "gamma", float),
+        ("gae_lambda", "gae_lambda", float),
+        ("vf_coef", "vf_coef", float),
+        ("max_grad_norm", "max_grad_norm", float),
+    ):
+        if key in params:
+            setattr(model, attr_name, coerce(params[key]))
+    rollout_buffer = getattr(model, "rollout_buffer", None)
+    if rollout_buffer is not None:
+        for key in ("gamma", "gae_lambda"):
+            if key in params:
+                setattr(rollout_buffer, key, float(params[key]))
+    logger.info(
+        "Applied fine-tune PPO hyperparameters: learning_rate={} batch_size={} "
+        "n_epochs={} ent_coef={} clip_range={} target_kl={}",
+        getattr(model, "learning_rate", "<unchanged>"),
+        getattr(model, "batch_size", "<unchanged>"),
+        getattr(model, "n_epochs", "<unchanged>"),
+        getattr(model, "ent_coef", "<unchanged>"),
+        float(params["clip_range"]) if "clip_range" in params else "<unchanged>",
+        getattr(model, "target_kl", "<unchanged>"),
+    )
 
 
 def _load_dataset_metadata(dataset_id: str | None) -> dict[str, Any]:
@@ -96,7 +344,7 @@ def _metadata_observation_keys(metadata: dict[str, Any]) -> tuple[str, ...] | No
     return tuple(str(key) for key in keys)
 
 
-def _make_finetuning_env(config: PPOFineTuningConfig, *, context: str):
+def _make_finetuning_env(config: PPOFineTuningConfig, *, context: str, seed: int | None = None):
     """Create the fine-tuning/eval env using the pretrained observation contract."""
     metadata = _load_dataset_metadata(config.dataset_id)
     env = make_training_contract_env(
@@ -105,12 +353,70 @@ def _make_finetuning_env(config: PPOFineTuningConfig, *, context: str):
         scenario_config_path=config.scenario_config_path
         or _metadata_path(metadata, "scenario_config"),
         scenario_id=config.scenario_id,
-        seed=config.random_seeds[0] if config.random_seeds else None,
+        seed=seed if seed is not None else config.random_seeds[0] if config.random_seeds else None,
         observation_keys=_metadata_observation_keys(metadata),
         env_overrides=config.env_overrides,
         env_factory_kwargs=config.env_factory_kwargs,
     )
     return maybe_flatten_env_observations(env, context=context)
+
+
+def _make_vec_finetuning_env(config: PPOFineTuningConfig) -> DummyVecEnv | SubprocVecEnv:
+    """Create a vectorized fine-tuning env for PPO continuation."""
+    num_envs = _resolve_num_envs(config)
+    worker_mode = _resolve_worker_mode(config, num_envs)
+    base_seed = int(config.random_seeds[0]) if config.random_seeds else 0
+
+    def _factory(index: int):
+        def _make_env():
+            seed = base_seed + index if config.random_seeds else None
+            return _make_finetuning_env(
+                config,
+                context=f"PPO fine-tuning worker {index}",
+                seed=seed,
+            )
+
+        return _make_env
+
+    env_fns = [_factory(index) for index in range(num_envs)]
+    logger.info(
+        "Fine-tuning envs initialized num_envs={} worker_mode={} resolution={}",
+        num_envs,
+        worker_mode,
+        _describe_num_envs_resolution(config),
+    )
+    if worker_mode == "subproc":
+        return SubprocVecEnv(env_fns)
+    return DummyVecEnv(env_fns)
+
+
+def _checkpoint_callback(
+    config: PPOFineTuningConfig, *, num_envs: int
+) -> CheckpointCallback | None:
+    """Build a periodic checkpoint callback using aggregate timestep frequency."""
+    if config.checkpoint_freq is None:
+        return None
+    checkpoint_freq = int(config.checkpoint_freq)
+    if checkpoint_freq <= 0:
+        return None
+    checkpoint_dir = config.checkpoint_dir or (
+        common.get_expert_policy_dir() / "checkpoints" / config.run_id
+    )
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    # SB3 callback save_freq counts VecEnv step calls, while num_timesteps advances by num_envs.
+    save_freq = max(1, checkpoint_freq // max(1, int(num_envs)))
+    logger.info(
+        "Enabled periodic fine-tune checkpoints every ~{} timesteps at {} (save_freq={})",
+        checkpoint_freq,
+        checkpoint_dir,
+        save_freq,
+    )
+    return CheckpointCallback(
+        save_freq=save_freq,
+        save_path=str(checkpoint_dir),
+        name_prefix=config.run_id,
+        verbose=1,
+    )
 
 
 def _evaluate_policy_metrics(
@@ -204,25 +510,31 @@ def run_ppo_finetuning(
     if not pretrained_path.exists() and not dry_run:
         raise FileNotFoundError(f"Pre-trained policy not found: {pretrained_path}")
 
-    # Create environment from the same observation contract used by BC pre-training.
-    env = _make_finetuning_env(config, context="PPO fine-tuning")
-
     if not dry_run:
+        # Create vectorized environments from the same observation contract used by BC pre-training.
+        env = _make_vec_finetuning_env(config)
+        num_envs = int(getattr(env, "num_envs", 1))
+
         # Load pre-trained model
         logger.info("Loading pre-trained policy from {}", pretrained_path)
-        model = PPO.load(str(pretrained_path), env=env)
+        model = PPO.load(str(pretrained_path), env=env, device=config.device)
 
-        # Update learning rate for fine-tuning
-        model.learning_rate = config.learning_rate
+        # Apply fine-tune overrides after loading because SB3 restores checkpoint attributes.
+        _apply_finetune_hyperparams(model, config)
 
         # Setup callback
         timestep_tracker = TimestepTracker()
+        callbacks: list[BaseCallback] = [timestep_tracker]
+        checkpoint_cb = _checkpoint_callback(config, num_envs=num_envs)
+        if checkpoint_cb is not None:
+            callbacks.append(checkpoint_cb)
+        callback = CallbackList(callbacks)
 
         # Fine-tune
         logger.info("Fine-tuning PPO for {} timesteps", config.total_timesteps)
         model.learn(
             total_timesteps=config.total_timesteps,
-            callback=timestep_tracker,
+            callback=callback,
             reset_num_timesteps=False,  # Continue from pre-trained timesteps
         )
 
@@ -232,14 +544,14 @@ def run_ppo_finetuning(
         model.save(str(policy_path))
 
         convergence_timesteps = timestep_tracker.timesteps_to_convergence or config.total_timesteps
+        env.close()
     else:
         # Dry run
+        num_envs = _resolve_num_envs(config)
         policy_path = common.get_expert_policy_dir() / f"{config.run_id}_finetuned.zip"
         policy_path.parent.mkdir(parents=True, exist_ok=True)
         policy_path.write_text("dry-run-finetuned-checkpoint", encoding="utf-8")
         convergence_timesteps = 1000  # Placeholder for dry run
-
-    env.close()
 
     logger.success(
         "PPO fine-tuning complete, policy saved to {}, converged at {} timesteps",
@@ -306,6 +618,13 @@ def run_ppo_finetuning(
         notes=[
             f"PPO fine-tuning from pretrained policy {config.pretrained_policy_id}",
             f"Converged at {convergence_timesteps} timesteps",
+            f"num_envs={num_envs} (resolved from raw config: {config.num_envs})",
+            f"worker_mode={_resolve_worker_mode(config, num_envs)} (resolved from raw config: {config.worker_mode})",
+            f"device={config.device}",
+            (
+                "checkpoint_freq="
+                f"{config.checkpoint_freq if config.checkpoint_freq is not None else 'disabled'}"
+            ),
             "snqi_formula=robot_sf.benchmark.snqi.compute_snqi",
             (
                 "snqi_weights_source="
@@ -377,6 +696,15 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
         scenario_id=raw.get("scenario_id"),
         env_overrides=dict(raw.get("env_overrides") or {}),
         env_factory_kwargs=dict(raw.get("env_factory_kwargs") or {}),
+        num_envs=_parse_num_envs(raw.get("num_envs")),
+        num_envs_reserve_cores=int(raw.get("num_envs_reserve_cores", 0)),
+        worker_mode=str(raw.get("worker_mode") or "auto").strip() or "auto",
+        device=str(raw.get("device") or "auto").strip() or "auto",
+        ppo_hyperparams=dict(raw.get("ppo_hyperparams") or {}),
+        checkpoint_freq=(
+            int(raw["checkpoint_freq"]) if raw.get("checkpoint_freq") is not None else None
+        ),
+        checkpoint_dir=_resolve_optional_path("checkpoint_dir"),
     )
 
 

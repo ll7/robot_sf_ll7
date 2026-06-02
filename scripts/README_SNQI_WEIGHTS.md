@@ -32,14 +32,14 @@ norm_metric = (value - baseline_median) / (baseline_p95 - baseline_median)
 **Usage**:
 ```bash
 # Recompute weights using Pareto optimization
-python scripts/recompute_snqi_weights.py \
+uv run python scripts/recompute_snqi_weights.py \
     --episodes episodes.jsonl \
     --baseline baseline_stats.json \
     --strategy pareto \
     --output weights_optimized.json
 
 # Compare all strategies
-python scripts/recompute_snqi_weights.py \
+uv run python scripts/recompute_snqi_weights.py \
     --episodes episodes.jsonl \
     --baseline baseline_stats.json \
     --compare-strategies \
@@ -70,7 +70,7 @@ python scripts/recompute_snqi_weights.py \
 **Usage**:
 ```bash
 # Run optimization with both methods
-python scripts/snqi_weight_optimization.py \
+uv run python scripts/snqi_weight_optimization.py \
     --episodes episodes.jsonl \
     --baseline baseline_stats.json \
     --output weights_optimized.json \
@@ -78,7 +78,7 @@ python scripts/snqi_weight_optimization.py \
     --sensitivity
 
 # Grid search only with custom resolution
-python scripts/snqi_weight_optimization.py \
+uv run python scripts/snqi_weight_optimization.py \
     --episodes episodes.jsonl \
     --baseline baseline_stats.json \
     --output weights_grid.json \
@@ -105,14 +105,14 @@ python scripts/snqi_weight_optimization.py \
 **Usage**:
 ```bash
 # Full sensitivity analysis with visualizations
-python scripts/snqi_sensitivity_analysis.py \
+uv run python scripts/snqi_sensitivity_analysis.py \
     --episodes episodes.jsonl \
     --baseline baseline_stats.json \
     --weights weights.json \
     --output analysis_results/
 
 # Quick analysis without plots
-python scripts/snqi_sensitivity_analysis.py \
+uv run python scripts/snqi_sensitivity_analysis.py \
     --episodes episodes.jsonl \
     --baseline baseline_stats.json \
     --weights weights.json \
@@ -203,7 +203,7 @@ Required Python packages:
 
 Install with:
 ```bash
-pip install numpy scipy matplotlib seaborn pandas
+uv sync --all-extras
 ```
 
 ## Example Workflow
@@ -220,7 +220,7 @@ pip install numpy scipy matplotlib seaborn pandas
 
 3. **Recompute optimal weights**:
    ```bash
-   python scripts/snqi_weight_optimization.py \
+   uv run python scripts/snqi_weight_optimization.py \
        --episodes episodes.jsonl \
        --baseline baseline_stats.json \
        --output weights_optimized.json \
@@ -229,7 +229,7 @@ pip install numpy scipy matplotlib seaborn pandas
 
 4. **Perform detailed sensitivity analysis**:
    ```bash
-   python scripts/snqi_sensitivity_analysis.py \
+   uv run python scripts/snqi_sensitivity_analysis.py \
        --episodes episodes.jsonl \
        --baseline baseline_stats.json \
        --weights weights_optimized.json \
@@ -238,7 +238,7 @@ pip install numpy scipy matplotlib seaborn pandas
 
 5. **Compare different strategies**:
    ```bash
-   python scripts/recompute_snqi_weights.py \
+   uv run python scripts/recompute_snqi_weights.py \
        --episodes episodes.jsonl \
        --baseline baseline_stats.json \
        --compare-strategies \

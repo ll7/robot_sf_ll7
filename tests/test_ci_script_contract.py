@@ -258,6 +258,104 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
     assert "ruff_fix_format" not in result.stderr
 
 
+def test_pr_ready_check_help_long() -> None:
+    """pr_ready_check.sh --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(PR_READY_CHECK), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "BASE_REF" in result.stdout
+    assert "PR_READY_MODE" in result.stdout
+    assert "PR_READY_FINAL" in result.stdout
+
+
+def test_pr_ready_check_help_short() -> None:
+    """pr_ready_check.sh -h prints usage and exits 0."""
+    result = subprocess.run(
+        [str(PR_READY_CHECK), "-h"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "BASE_REF" in result.stdout
+
+
+def test_pr_ready_check_help_does_not_invoke_gates(tmp_path: Path) -> None:
+    """--help should exit 0 before reaching heavy gate commands (uv, ruff, pytest)."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    for script_name in ("pr_ready_check.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        '#!/usr/bin/env bash\necho "uv should not be called for --help" >&2\nexit 99\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "test fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script_dir / "pr_ready_check.sh"), "--help"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "BASE_REF" in result.stdout
+    assert "PR_READY_MODE" in result.stdout
+    assert "PR_READY_FINAL" in result.stdout
+    assert "uv should not be called" not in result.stderr
+
+
 def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
     """Shared-venv validation must import from the active worktree, not the owning checkout."""
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")

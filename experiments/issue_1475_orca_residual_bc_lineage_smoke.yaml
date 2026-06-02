@@ -1,0 +1,47 @@
+schema_version: experiment-record.v1
+experiment_id: issue_1475_orca_residual_bc_lineage_smoke
+issue: 1475
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/1475
+question: >
+  Can the ORCA-residual behavior-cloning lineage packet produce a bounded learned residual policy
+  that passes smoke gates before any nominal training escalation?
+hypothesis: >
+  A smoke-first ORCA-residual BC run can expose whether the lineage packet is executable and whether
+  residual clipping, guard veto/fallback rate, collision, and success signals justify nominal
+  escalation; fallback or degraded rows must remain exclusions rather than learned-residual success.
+config:
+  - configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+  - configs/policy_search/promotion_gates.yaml
+command: |
+  uv run python scripts/validation/validate_orca_residual_lineage_packet.py \
+    --config configs/training/orca_residual/orca_residual_bc_issue_1428.yaml \
+    --json
+  # After pending artifact aliases are replaced by concrete durable pointers, run the smoke job
+  # described in docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md.
+inputs:
+  - path: configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+  - path: docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
+  - path: configs/policy_search/promotion_gates.yaml
+outputs:
+  - path: output/slurm/issue1475_orca_residual_bc_smoke/
+    durable_reference: null
+    evidence_role: smoke staging only until promoted
+expected_artifacts:
+  - name: residual_dataset_manifest
+    path: output/slurm/issue1475_orca_residual_bc_smoke/dataset_manifest.yaml
+    durable_reference_required: true
+  - name: residual_dataset_npz
+    path: output/slurm/issue1475_orca_residual_bc_smoke/dataset.npz
+    durable_reference_required: true
+  - name: learned_residual_checkpoint
+    path: output/slurm/issue1475_orca_residual_bc_smoke/checkpoints/
+    durable_reference_required: true
+  - name: smoke_diagnostics_report
+    path: output/slurm/issue1475_orca_residual_bc_smoke/diagnostics_report.md
+    durable_reference_required: true
+evidence_grade: proposal
+paper_relevance: exploratory
+status: blocked_on_slurm
+notes: >
+  Nominal escalation is disallowed until the smoke result records success, collision, residual
+  clipping, guard veto/fallback rate, fallback/degraded status, and durable artifact pointer status.

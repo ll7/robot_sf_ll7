@@ -1,0 +1,38 @@
+schema_version: experiment-record.v1
+experiment_id: issue_1610_perturbation_criticality_synthesis
+issue: 1610
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/1610
+question: >
+  After the bounded perturbation-criticality child chain, which scenario feature perturbations are
+  useful diagnostic instruments, which are redundant, and what reusable summary schema should govern
+  any next perturbation-family work?
+hypothesis: >
+  A synthesis pass over the completed child PRs can separate useful perturbation families from
+  redundant or invalid ones, define a criticality_summary.v1 contract, and prevent further one-off
+  perturbation pilots until the mechanism-level evidence is consolidated.
+config:
+  - docs/context/issue_691_benchmark_fallback_policy.md
+command: |
+  # After #1959 and its related child evidence are complete, synthesize the child PR artifacts
+  # into a compact context note and registry/schema recommendation. Do not run a new factorial
+  # perturbation campaign from the parent issue.
+  uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml
+inputs:
+  - path: docs/context/issue_691_benchmark_fallback_policy.md
+  - path: docs/context/catalog.yaml
+outputs:
+  - path: docs/context/issue_1610_perturbation_criticality_synthesis.md
+    durable_reference: tracked_context_note
+    evidence_role: synthesis note
+expected_artifacts:
+  - name: criticality_summary_contract
+    path: docs/context/issue_1610_perturbation_criticality_synthesis.md
+  - name: child_evidence_inventory
+    path: docs/context/issue_1610_perturbation_criticality_synthesis.md
+evidence_grade: proposal
+paper_relevance: exploratory
+status: planned_synthesis_after_child_issue
+notes: >
+  Issue #1610 is a parent/umbrella and should not launch new perturbation-family execution directly.
+  This record tracks the next synthesis step described in the issue routing update, not a benchmark
+  campaign result.

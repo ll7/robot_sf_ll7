@@ -1,0 +1,38 @@
+schema_version: experiment-record.v1
+experiment_id: issue_1488_adversarial_search_synthesis
+issue: 1488
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/1488
+question: >
+  Does the completed adversarial-search child chain support closing the parent campaign, deferring
+  it, or opening exactly one bounded follow-up for the remaining replay-determinism or synthesis gap?
+hypothesis: >
+  A parent-level synthesis over #1500, #1501, #1502, #1503, and #1878 can classify the current
+  adversarial-search evidence without restarting broad execution, preserving the boundary between
+  stress-search diagnostics and nominal benchmark evidence.
+config:
+  - configs/adversarial_routes/default.yaml
+command: |
+  # Execute through the current bounded synthesis child (#1963), not directly from #1488.
+  # The synthesis should inspect the completed child evidence and record stop/defer/continue.
+  uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml
+inputs:
+  - path: configs/adversarial_routes/default.yaml
+  - path: docs/context/issue_1433_adversarial_edge_case_search_design.md
+  - path: docs/context/issue_1434_stress_uncertainty_coverage_schema.md
+  - path: docs/context/issue_1457_adversarial_generation_protocol.md
+outputs:
+  - path: docs/context/issue_1488_adversarial_search_synthesis.md
+    durable_reference: tracked_context_note
+    evidence_role: synthesis note
+expected_artifacts:
+  - name: adversarial_child_inventory
+    path: docs/context/issue_1488_adversarial_search_synthesis.md
+  - name: stop_defer_continue_decision
+    path: docs/context/issue_1488_adversarial_search_synthesis.md
+evidence_grade: proposal
+paper_relevance: exploratory
+status: blocked_on_child_issue_1963
+notes: >
+  Issue #1488 is an umbrella. The issue body currently routes implementation to #1963 after #1878
+  closed; this card records that route and avoids opening a new adversarial campaign from the
+  parent.

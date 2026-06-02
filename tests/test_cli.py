@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
+from robot_sf.benchmark import baseline_stats
+from robot_sf.benchmark import cli as benchmark_cli
 from robot_sf.benchmark.cli import cli_main
 
 if TYPE_CHECKING:
@@ -78,6 +82,101 @@ def test_cli_baseline_subcommand(tmp_path: Path, capsys):
     # Should contain at least some baseline keys
     assert "time_to_goal_norm" in data
     assert "collisions" in data
+
+
+def test_cli_baseline_help_mentions_default_jsonl_path(capsys):
+    """Verify baseline help advertises the current default JSONL path."""
+    with pytest.raises(SystemExit) as excinfo:
+        cli_main(["baseline", "--help"])
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 0
+    assert "output/benchmarks/baseline_episodes.jsonl" in captured.out
+    assert "output/results/baseline_episodes.jsonl" not in captured.out
+
+
+def test_run_and_compute_baseline_uses_default_jsonl_path_when_omitted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Verify the helper uses the default JSONL path when none is provided."""
+    seen: dict[str, object] = {}
+
+    def fake_run_batch(*_args, **kwargs):
+        seen["out_path"] = kwargs["out_path"]
+
+    def fake_read_jsonl(path):
+        seen["read_path"] = path
+        return [{"metrics": {"collisions": 0}}]
+
+    def fake_compute(records, metrics=None):
+        seen["records"] = records
+        seen["metrics"] = metrics
+        return {"collisions": {"med": 0.0, "p95": 0.0}}
+
+    monkeypatch.setattr(baseline_stats, "run_batch", fake_run_batch)
+    monkeypatch.setattr(baseline_stats, "read_jsonl", fake_read_jsonl)
+    monkeypatch.setattr(baseline_stats, "compute_baseline_stats_from_records", fake_compute)
+
+    out_json = tmp_path / "baseline.json"
+    stats = baseline_stats.run_and_compute_baseline(
+        [],
+        out_json=out_json,
+        schema_path=SCHEMA_PATH,
+    )
+
+    assert seen["out_path"] == str(baseline_stats.DEFAULT_BASELINE_JSONL_PATH)
+    assert seen["read_path"] == str(baseline_stats.DEFAULT_BASELINE_JSONL_PATH)
+    assert seen["records"] == [{"metrics": {"collisions": 0}}]
+    assert stats == {"collisions": {"med": 0.0, "p95": 0.0}}
+    assert json.loads(out_json.read_text(encoding="utf-8")) == stats
+
+
+def test_cli_baseline_omitted_jsonl_forwards_default_sentinel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Verify the CLI forwards omitted --jsonl as the helper's default sentinel."""
+    seen: dict[str, object] = {}
+
+    def fake_run_and_compute_baseline(
+        scenarios_or_path,
+        *,
+        out_json,
+        out_jsonl,
+        schema_path,
+        **_kwargs,
+    ):
+        seen["scenarios_or_path"] = scenarios_or_path
+        seen["out_json"] = out_json
+        seen["out_jsonl"] = out_jsonl
+        seen["schema_path"] = schema_path
+        return {"collisions": {"med": 0.0, "p95": 0.0}}
+
+    monkeypatch.setattr(
+        benchmark_cli,
+        "run_and_compute_baseline",
+        fake_run_and_compute_baseline,
+    )
+
+    out_json = tmp_path / "baseline.json"
+    rc = cli_main(
+        [
+            "baseline",
+            "--matrix",
+            "configs/baselines/example_matrix.yaml",
+            "--out",
+            str(out_json),
+            "--schema",
+            SCHEMA_PATH,
+        ],
+    )
+
+    assert rc == 0
+    assert seen["scenarios_or_path"] == "configs/baselines/example_matrix.yaml"
+    assert seen["out_json"] == str(out_json)
+    assert seen["out_jsonl"] is None
+    assert seen["schema_path"] == SCHEMA_PATH
 
 
 def test_cli_list_scenarios(tmp_path: Path, capsys):

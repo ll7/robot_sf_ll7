@@ -29,7 +29,10 @@ from robot_sf.benchmark.aggregate import compute_aggregates as _agg_compute
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_compute_ci
 from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
-from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
+from robot_sf.benchmark.baseline_stats import (
+    DEFAULT_BASELINE_JSONL_PATH,
+    run_and_compute_baseline,
+)
 from robot_sf.benchmark.benchmark_claim import (
     BenchmarkClaimError,
     build_benchmark_claim,
@@ -1419,7 +1422,10 @@ def _add_baseline_subparser(
     p.add_argument(
         "--jsonl",
         default=None,
-        help="Optional path to write intermediate episode JSONL (default output/results/baseline_episodes.jsonl)",
+        help=(
+            "Optional path to write intermediate episode JSONL "
+            f"(default {DEFAULT_BASELINE_JSONL_PATH!s})"
+        ),
     )
     p.add_argument("--schema", default=DEFAULT_SCHEMA_PATH, help="Schema path for validation")
     p.add_argument("--base-seed", type=int, default=0)

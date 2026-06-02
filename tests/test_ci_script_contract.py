@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
+GH_COMMENT = ROOT / "scripts" / "dev" / "gh_comment.sh"
 PYPROJECT = ROOT / "pyproject.toml"
 RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
@@ -331,3 +332,105 @@ def test_worktree_shared_venv_helper_reports_relative_missing_env() -> None:
     assert result.returncode == 2
     assert f"Shared virtualenv not found or incomplete: {ROOT / missing_venv}" in result.stderr
     assert "cd:" not in result.stderr
+
+
+def test_gh_comment_has_valid_shell_syntax() -> None:
+    """gh_comment.sh should pass bash -n syntax check."""
+    syntax = subprocess.run(
+        ["bash", "-n", str(GH_COMMENT)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert syntax.returncode == 0, syntax.stderr
+
+
+def test_gh_comment_top_level_help_long() -> None:
+    """gh_comment.sh --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "pr <number>" in result.stdout
+    assert "issue <number>" in result.stdout
+
+
+def test_gh_comment_top_level_help_short() -> None:
+    """gh_comment.sh -h prints usage and exits 0."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "-h"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+
+
+def test_gh_comment_pr_help() -> None:
+    """gh_comment.sh pr --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "pr", "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "pr <number>" in result.stdout
+
+
+def test_gh_comment_issue_help() -> None:
+    """gh_comment.sh issue --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "issue", "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "issue <number>" in result.stdout
+
+
+def test_gh_comment_no_args_exits_2() -> None:
+    """gh_comment.sh with no arguments prints usage to stdout and exits 2."""
+    result = subprocess.run(
+        [str(GH_COMMENT)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "Usage:" in result.stdout
+
+
+def test_gh_comment_invalid_target_exits_2() -> None:
+    """gh_comment.sh with invalid target prints error to stderr and exits 2."""
+    result = subprocess.run(
+        [str(GH_COMMENT), "invalid"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "target must be 'pr' or 'issue'" in result.stderr
+    assert "Usage:" in result.stdout

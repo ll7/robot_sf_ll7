@@ -18,6 +18,11 @@ Notes:
 EOF
 }
 
+if [ "$#" -gt 0 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
+  usage
+  exit 0
+fi
+
 if [ "$#" -lt 1 ]; then
   usage
   exit 2
@@ -58,6 +63,10 @@ while [ "$#" -gt 0 ]; do
     --current)
       use_current_pr=true
       shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
       ;;
     -*)
       echo "Error: unknown option '$1'." >&2

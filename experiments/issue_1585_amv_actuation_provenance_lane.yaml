@@ -1,0 +1,39 @@
+schema_version: experiment-record.v1
+experiment_id: issue_1585_amv_actuation_provenance_lane
+issue: 1585
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/1585
+question: >
+  What source class, if any, can support a calibrated or explicitly proxy AMV actuation envelope
+  without promoting synthetic diagnostics into paper-facing calibration evidence?
+hypothesis: >
+  A real command-response trace or accepted official/platform-class specification is required for a
+  calibrated AMV envelope; if only proxy sources are available, the claim boundary must remain
+  platform_class_proxy and #1559 should stay blocked for hardware-calibrated profile work.
+config:
+  - scripts/tools/manage_external_data.py
+command: |
+  uv run python scripts/tools/manage_external_data.py explain amv-calibration
+  # If a maintainer provides an accepted local source bundle, stage it explicitly:
+  uv run python scripts/tools/manage_external_data.py stage amv-calibration \
+    --source <local-file-or-dir>
+inputs:
+  - path: scripts/tools/manage_external_data.py
+  - path: docs/context/issue_2001_amv_actuation_proxy_source_analysis.md
+outputs:
+  - path: output/external_data/amv-calibration/
+    durable_reference: null
+    evidence_role: local/provenance staging only
+expected_artifacts:
+  - name: amv_calibration_provenance_manifest
+    path: output/external_data/amv-calibration/provenance_manifest.yaml
+    durable_reference_required: true
+  - name: source_field_support_table
+    path: docs/context/issue_1585_amv_actuation_source_decision.md
+evidence_grade: proposal
+paper_relevance: exploratory
+status: blocked_on_external_data
+notes: >
+  This single card covers the #1585/#2000/#2001 lane. Issue #2000 remains blocked until a real
+  AMV-like command-response trace exists. Issue #2001 is closed as analysis-only proxy-source work.
+  Neither branch permits calibrated profile claims without supported source fields, units,
+  provenance, and access constraints.

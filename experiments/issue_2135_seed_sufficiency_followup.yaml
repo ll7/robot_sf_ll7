@@ -1,0 +1,40 @@
+schema_version: experiment-record.v1
+experiment_id: issue_2135_seed_sufficiency_followup
+issue: 2135
+issue_url: https://github.com/ll7/robot_sf_ll7/pull/2135
+question: >
+  Which existing camera-ready or active campaign report bundles have enough seed evidence for stable
+  planner ranking interpretation, and which should remain diagnostic-only or underpowered?
+hypothesis: >
+  The seed-sufficiency analyzer from #2135 can identify rank flips, scenario-family winner changes,
+  missing intervals, and underpowered surfaces from existing report folders, tightening the claim
+  boundary before future seed schedules are interpreted as stable benchmark evidence.
+config:
+  - scripts/tools/analyze_seed_sufficiency.py
+command: |
+  uv run python scripts/tools/analyze_seed_sufficiency.py \
+    --campaign-root <existing-campaign-report-root> \
+    --output-dir output/analysis/seed_sufficiency/<campaign-id>
+inputs:
+  - path: scripts/tools/analyze_seed_sufficiency.py
+  - path: docs/context/issue_2125_seed_sufficiency_ranking_stability.md
+outputs:
+  - path: output/analysis/seed_sufficiency/
+    durable_reference: null
+    evidence_role: local diagnostic staging only until promoted
+expected_artifacts:
+  - name: seed_sufficiency_summary_json
+    path: output/analysis/seed_sufficiency/<campaign-id>/summary.json
+    durable_reference_required: true
+  - name: seed_sufficiency_rank_stability_csv
+    path: output/analysis/seed_sufficiency/<campaign-id>/rank_stability.csv
+    durable_reference_required: true
+  - name: seed_sufficiency_markdown_report
+    path: output/analysis/seed_sufficiency/<campaign-id>/report.md
+    durable_reference_required: true
+evidence_grade: proposal
+paper_relevance: exploratory
+status: planned
+notes: >
+  This card is follow-through from the merged #2135 analyzer. It records the next durable-use path
+  for existing campaign bundles; it does not run analysis or claim seed sufficiency by itself.

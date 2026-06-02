@@ -7,4 +7,10 @@ records:
   - issue_1108_bc_warm_start_ppo.yaml
   - issue_1236_adversarial_optimizer_sampler.yaml
   - issue_1151_manual_control_mvp_collection.yaml
+  - issue_1470_oracle_imitation_dataset_collection.yaml
+  - issue_1475_orca_residual_bc_lineage_smoke.yaml
+  - issue_1610_perturbation_criticality_synthesis.yaml
+  - issue_1488_adversarial_search_synthesis.yaml
+  - issue_1585_amv_actuation_provenance_lane.yaml
   - issue_2128_heldout_family_transfer_pilot.yaml
+  - issue_2135_seed_sufficiency_followup.yaml

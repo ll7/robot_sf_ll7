@@ -307,6 +307,11 @@ resolving lint or test failures locally before requesting review.
   low-risk or not-applicable changes, state the reason explicitly instead of deleting the section.
   PR #2044 is a recent small example: it promoted a compact trace-viewer screenshot and updated the
   context index/catalog so the evidence remained discoverable after worktree cleanup.
+- For research-labelled, benchmark-labelled, metric-facing, paper-facing, or other
+  evidence-producing PRs, fill the `Research Result Guidance` section with the target
+  claim/hypothesis/blocker, comparator/baseline, evidence tier, result classification,
+  decision/stop rule, and synthesis surface/update target.
+  For support/tooling/docs-only PRs with no research claim, use `NA` and state why.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

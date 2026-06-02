@@ -22,10 +22,16 @@ What changed, in one or two sentences.
 - Why this is worth merging now:
 
 ## Research Result Guidance
+Required for research-labelled, benchmark-labelled, metric-facing, paper-facing, or other
+evidence-producing PRs. For support/tooling/docs-only PRs that make no research claim, set fields
+to `NA` and state why.
+
 - Target claim / hypothesis / blocker this should affect:
 - Comparator or baseline, if applicable:
+- Evidence tier: full benchmark / targeted smoke / diagnostic probe / launch packet / docs-only / NA
 - Result classification: positive / negative / inconclusive / diagnostic-only / blocker-resolution / NA
 - Decision or stop rule, if applicable:
+- Parent issue, claim map, registry, context note, or synthesis surface to update:
 
 ## Validation / Proof
 - Commands run:

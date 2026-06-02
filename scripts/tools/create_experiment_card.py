@@ -13,7 +13,15 @@ from typing import Any
 
 import yaml
 
-from scripts.tools.validate_experiment_registry import VALID_EVIDENCE_GRADES, VALID_PAPER_RELEVANCE
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.tools.validate_experiment_registry import (  # noqa: E402
+    VALID_EVIDENCE_GRADES,
+    VALID_PAPER_RELEVANCE,
+    validate_registry,
+)
 
 REQUIRED_RECORD_FIELDS = (
     "experiment_id",
@@ -107,7 +115,7 @@ def _resolve_issue_url(issue: str, override: str) -> str:
 
 
 def _template_benchmark_analysis(experiment_id: str, output_root: Path) -> TemplateDef:
-    output_path = str(output_root)
+    output_path = output_root.as_posix()
     return TemplateDef(
         question=(
             "TODO: How does {candidate} compare against {baseline} on {scenario_set} "
@@ -176,7 +184,7 @@ def _template_benchmark_analysis(experiment_id: str, output_root: Path) -> Templ
 
 
 def _template_planner_ablation(experiment_id: str, output_root: Path) -> TemplateDef:
-    output_path = str(output_root)
+    output_path = output_root.as_posix()
     return TemplateDef(
         question=(
             "TODO: Does {planner_variant} change {metric} compared to {baseline_planner} "
@@ -245,8 +253,8 @@ def _template_planner_ablation(experiment_id: str, output_root: Path) -> Templat
 
 
 def _template_figure_table_pack(experiment_id: str, output_root: Path) -> TemplateDef:
-    output_path = str(output_root)
-    record_path = str(output_root / f"{experiment_id}.yaml")
+    output_path = output_root.as_posix()
+    record_path = (output_root / f"{experiment_id}.yaml").as_posix()
     return TemplateDef(
         question=(
             "TODO: What publication-ready figures and tables can be produced from "
@@ -371,7 +379,7 @@ def _find_todo_fields(record: dict[str, Any]) -> list[str]:
 def _write_record_yaml(path: Path, record: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(record, f, default_flow_style=False, sort_keys=False)
+        yaml.safe_dump(record, f, default_flow_style=False, sort_keys=False)
 
 
 def _validate_generated_record(record: dict[str, Any]) -> list[str]:
@@ -453,8 +461,6 @@ def _validate_record_for_cli(record: dict[str, Any]) -> list[str]:
                 "records": [record_path.name],
             },
         )
-        from scripts.tools.validate_experiment_registry import validate_registry
-
         return validate_registry(registry_path)
 
 

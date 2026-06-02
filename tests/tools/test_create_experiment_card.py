@@ -60,6 +60,13 @@ def test_each_template_covers_required_fields(tmp_path: Path) -> None:
             assert req_field in record, (
                 f"template {template_name!r} missing required field {req_field!r}"
             )
+            assert record[req_field] is not None, (
+                f"template {template_name!r} required field {req_field!r} must be populated"
+            )
+            if isinstance(record[req_field], str):
+                assert record[req_field].strip(), (
+                    f"template {template_name!r} required field {req_field!r} must not be blank"
+                )
 
 
 def test_each_template_marks_todo_in_question_and_hypothesis() -> None:

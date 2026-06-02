@@ -29,7 +29,7 @@ DEFAULT_ROOT_FILES = (
     Path("CHANGELOG.md"),
     Path("ACKNOWLEDGMENTS.md"),
 )
-DEFAULT_SCAN_ROOTS = (Path("docs"), Path("scripts"))
+DEFAULT_SCAN_ROOTS = (Path("docs"), Path("examples"), Path("scripts"))
 SPEC_DOC_NAMES = {"quickstart.md", "readme.md"}
 TEXT_SUFFIXES = {".md", ".py", ".rst", ".txt"}
 
@@ -186,11 +186,11 @@ def _normalize_explicit_paths(paths: Sequence[str], repo_root: Path) -> list[Pat
     normalized: list[Path] = []
     for raw_path in paths:
         path = Path(raw_path)
-        if path.is_absolute():
-            try:
-                path = path.resolve().relative_to(repo_root)
-            except ValueError as exc:
-                raise ValueError(f"path is outside repository: {raw_path}") from exc
+        absolute_path = path if path.is_absolute() else repo_root / path
+        try:
+            path = absolute_path.resolve().relative_to(repo_root)
+        except ValueError:
+            raise ValueError(f"path must stay inside repository: {raw_path}")
         if ".." in path.parts:
             raise ValueError(f"path must stay inside repository: {raw_path}")
         normalized.append(path)
@@ -223,14 +223,29 @@ def _phantom_script_diagnostics(
 def _rule_matches(rule: Rule, line: str) -> bool:
     """Return whether rule matches a line after rule-specific false-positive handling."""
     for match in rule.pattern.finditer(line):
-        if rule.name == "bare-python-scripts-command" and "uv run" in line[: match.start()]:
+        if rule.name == "bare-python-scripts-command" and _is_uv_run_python_match(
+            line, match.start()
+        ):
             continue
         return True
     return False
 
 
+def _is_uv_run_python_match(line: str, python_start: int) -> bool:
+    """Return whether the matched ``python scripts/...`` belongs to a ``uv run`` command."""
+    prefix = line[:python_start]
+    command_segment = re.split(r"&&|\|\||;|`", prefix)[-1]
+    return re.search(r"\buv\s+run\b", command_segment) is not None
+
+
 def scan_file(path: Path, repo_root: Path) -> list[Diagnostic]:
-    """Scan one repository-relative text file."""
+    """Scan one repository-relative text file and return stale-example diagnostics.
+
+    The scanner reads UTF-8 text, returns no diagnostics for undecodable binary-ish files, skips
+    lines with explicit active-doc allow markers, applies each line rule with rule-specific
+    false-positive handling, ignores historical legacy-results mentions, and appends diagnostics
+    for missing script paths found by command examples.
+    """
     absolute_path = repo_root / path
     try:
         lines = absolute_path.read_text(encoding="utf-8").splitlines()

@@ -78,6 +78,12 @@ incomplete.
 - docs-only guidance:
   verify every referenced path and command, and ensure the guidance matches the current repo
   workflow.
+- new research, benchmark, metric, or paper-facing analysis tool:
+  require one representative use on durable/versioned input, or a linked follow-up issue that names
+  the decision, claim boundary, benchmark report, registry, context note, or synthesis surface the
+  tool will update. Local-only `output/` files are not durable proof unless promoted or represented
+  by a tracked manifest, registry entry, context note, or external artifact pointer. Small support
+  helpers with no research-interpretation role may be marked `NA` with that reason.
 
 ## Documentation Review
 

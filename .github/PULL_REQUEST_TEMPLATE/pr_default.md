@@ -32,8 +32,20 @@ to `NA` and state why.
 - Result classification: positive / negative / inconclusive / diagnostic-only / blocker-resolution / NA
 - Decision or stop rule, if applicable:
 - Parent issue, claim map, registry, context note, or synthesis surface to update:
+- New research/benchmark/metric/paper-facing analysis tool, if any: representative use on
+  durable/versioned input, or a linked follow-up issue that names the decision, claim boundary, or
+  synthesis surface it will update:
 
 ## Validation / Proof
+For research/benchmark/metric/paper-facing analysis-tool PRs: include one
+representative use on durable/versioned input (tracked config, model
+checkpoint, committed fixture, or versioned W&B artifact), or link a
+concrete follow-up issue that names the decision, claim boundary, or
+synthesis surface the tool will update. Local-only `output/` files are
+not durable proof unless promoted or represented by a tracked manifest.
+Small support helpers (formatters, CLI wrappers, quick diagnostics)
+that make no research/benchmark/metric/paper claim are exempt.
+
 - Commands run:
 - Evidence that the change works here:
 - Benchmarks or smoke tests, if applicable:

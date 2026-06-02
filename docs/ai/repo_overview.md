@@ -87,6 +87,8 @@ Then branch by task type:
   `.agents/skills/review-and-refactor/`, and `.agents/skills/update-docs-on-code-change/`: quality
   and maintenance skills for risk-proportional validation, AI-output evaluation, narrow refactors,
   and doc-sync
+- `docs/ai/skillopt_agent_skill_adoption.md`: boundaries for importing SkillOpt-derived
+  repo-agent skills without treating optimized text as benchmark, planner, or paper-claim evidence
 
 ## Working Style Defaults
 

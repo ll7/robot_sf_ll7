@@ -309,7 +309,8 @@ resolving lint or test failures locally before requesting review.
   context index/catalog so the evidence remained discoverable after worktree cleanup.
 - For research-labelled, benchmark-labelled, metric-facing, paper-facing, or other
   evidence-producing PRs, fill the `Research Result Guidance` section with the target
-  claim/hypothesis, comparator, evidence tier, result classification, stop rule, and update target.
+  claim/hypothesis/blocker, comparator/baseline, evidence tier, result classification,
+  decision/stop rule, and synthesis surface/update target.
   For support/tooling/docs-only PRs with no research claim, use `NA` and state why.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch

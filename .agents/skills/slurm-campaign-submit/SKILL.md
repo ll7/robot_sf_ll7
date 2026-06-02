@@ -41,12 +41,21 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
      compute-node-only dependency, GPU, queue/runtime parity proof, or explicit maintainer approval;
    - when a short run is submitted to SLURM anyway, label it as a smoke/probe in the job label,
      handoff note, issue comment, and PR text, not as completed campaign evidence.
-5. Run any campaign-specific launch-packet validator before `sbatch` when one exists under `scripts/validation/`.
-6. Submit with explicit config and job name; capture job ID plus stdout/stderr paths.
-7. Record output root and expected artifacts: manifest, checkpoint, report, metrics, videos, or release bundle.
-8. Classify status as `submitted`, `blocked`, or `failed_preflight`; classify failures as config, cluster capacity, wrapper, dependency, or unknown.
-9. Hand artifact classification to `artifact-provenance` before downstream reports depend on local `output/`.
-10. After completion, route results before rerunning: `completed_needs_analysis` goes to the
+5. For long-running training submissions, confirm the experiment card or launch packet predeclares
+   early-stop criteria: metric, threshold, check cadence, minimum runtime or timesteps, cancel
+   condition, and diagnostic-preservation action. If these are missing, classify the candidate as
+   `blocked-needs-scope` until the card is updated.
+6. Run any campaign-specific launch-packet validator before `sbatch` when one exists under `scripts/validation/`.
+7. Submit with explicit config and job name; capture job ID plus stdout/stderr paths.
+8. Record output root and expected artifacts: manifest, checkpoint, report, metrics, videos, or release bundle.
+9. Classify status as `submitted`, `blocked`, or `failed_preflight`; classify failures as config, cluster capacity, wrapper, dependency, or unknown.
+10. Hand artifact classification to `artifact-provenance` before downstream reports depend on local `output/`.
+11. After completion or predeclared cancellation, route results before rerunning:
+    - cancelled runs may be diagnostic evidence only when the early-stop criteria were declared and
+      the configured preservation action captured logs, manifest, config, commit, and artifact
+      status;
+    - unplanned cancellations stay `failed_preflight`, `blocked`, or `inconclusive` until triaged;
+    - `completed_needs_analysis` goes to the
     relevant analysis skill or context note, while `failed_preflight` or early wrapper failures must
     be fixed in a worktree before resubmission.
 
@@ -55,6 +64,8 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
 - Do not infer live cluster capacity from stale logs.
 - Do not submit from an unintended branch or dirty tree without calling that out.
 - Do not treat a queued job as completed evidence.
+- Do not cancel a low-signal training job as diagnostic evidence unless the early-stop rule was
+  predeclared and the diagnostic-preservation action has been completed.
 - Do not treat a `resource:slurm` issue as runnable when its latest comments require durable
   artifact pointers, exact commits, maintainer confirmation, or a concrete launcher first.
 - Do not let an issue's `slurm` label override the suitability gate. A `slurm` label means the

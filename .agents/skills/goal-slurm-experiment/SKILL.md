@@ -123,6 +123,9 @@ Do not use it for:
      candidate-specific helper under `scripts/dev/`.
    - Use a short skill-owned job name: `gse-<issue>-<slug>`.
    - Capture job id, branch, commit, config path, SLURM script, output root, and stdout/stderr path.
+   - For long-running training, capture the predeclared early-stop criteria from the experiment card
+     or launch packet: metric, threshold, check cadence, minimum runtime/timesteps, cancel
+     condition, and diagnostic-preservation action.
    - Immediately check `squeue`, `sacct`, and early stderr when the job starts.
 
 8. Monitor with long, low-churn intervals.
@@ -134,6 +137,10 @@ Do not use it for:
    - Do not open a PR or commit for every scheduled eval gate. Preserve interim eval metrics in an
      issue comment or local note only when they change the operational decision, expose a new
      failure mode, or the user explicitly wants live reporting.
+   - If a predeclared low-signal cancel condition is met, complete the preservation action before
+     cancelling or immediately after cancellation: record branch, commit, config, logs, manifest,
+     output root, and durable artifact status. Label the result diagnostic or failed as appropriate,
+     not benchmark proof.
    - Make the durable context-note update and PR after the job finishes, fails, or reaches a
      campaign decision point that changes what should run next.
    - Keep interim metrics labeled as live training state, not benchmark or guarded-policy evidence.
@@ -167,6 +174,8 @@ fresh rerun is the stated next action.
   decision-changing signal before opening durable follow-up PRs.
 - Do not treat queued, running, fallback, degraded, or local-only `output/` artifacts as completed
   evidence.
+- Do not treat a cancelled low-signal run as useful diagnostic evidence unless the early-stop
+  criteria were declared before submission and the preservation action was completed.
 - Do not spend a training allocation on a bug that can be fixed from logs, config inspection, a
   validator, or a cheap local preflight.
 - Keep benchmark and paper-facing claims conditional until durable artifacts and analysis exist.

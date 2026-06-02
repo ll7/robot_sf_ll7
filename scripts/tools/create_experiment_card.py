@@ -58,6 +58,7 @@ class TemplateDef:
     inputs: list[str] | list[dict[str, str]]
     outputs: list[dict[str, str]]
     expected_artifacts: list[dict[str, str]]
+    early_stop_criteria: dict[str, str]
     evidence_grade: str
     paper_relevance: str
     status: str
@@ -171,6 +172,7 @@ def _template_benchmark_analysis(experiment_id: str, output_root: Path) -> Templ
                 "durable_reference_required": False,
             },
         ],
+        early_stop_criteria=_early_stop_criteria_template(),
         evidence_grade="proposal",
         paper_relevance="exploratory",
         status="planned",
@@ -240,6 +242,7 @@ def _template_planner_ablation(experiment_id: str, output_root: Path) -> Templat
                 "durable_reference_required": False,
             },
         ],
+        early_stop_criteria=_early_stop_criteria_template(),
         evidence_grade="proposal",
         paper_relevance="exploratory",
         status="planned",
@@ -307,6 +310,7 @@ def _template_figure_table_pack(experiment_id: str, output_root: Path) -> Templa
                 "durable_reference_required": True,
             },
         ],
+        early_stop_criteria=_early_stop_criteria_template(),
         evidence_grade="proposal",
         paper_relevance="exploratory",
         status="planned",
@@ -324,6 +328,20 @@ _TEMPLATES = {
     "planner-ablation": _template_planner_ablation,
     "figure-table-pack": _template_figure_table_pack,
 }
+
+
+def _early_stop_criteria_template() -> dict[str, str]:
+    """Return the predeclared early-stop block for Slurm training launch packets."""
+    return {
+        "metric": "TODO: primary progress metric, e.g. eval/success_rate",
+        "threshold": "TODO: minimum acceptable value or trend",
+        "check_cadence": "TODO: eval interval or wall-clock cadence",
+        "minimum_runtime_or_timesteps": "TODO: do not cancel before this floor",
+        "cancel_condition": "TODO: exact condition that justifies cancellation",
+        "diagnostic_preservation_action": (
+            "TODO: manifest/log/artifact/context note to preserve before cancellation is complete"
+        ),
+    }
 
 
 def _build_record(
@@ -348,6 +366,7 @@ def _build_record(
         "inputs": tpl.inputs,
         "outputs": tpl.outputs,
         "expected_artifacts": tpl.expected_artifacts,
+        "early_stop_criteria": tpl.early_stop_criteria,
         "evidence_grade": tpl.evidence_grade,
         "paper_relevance": tpl.paper_relevance,
         "status": tpl.status,
@@ -427,6 +446,7 @@ def _write_checklist(path: Path, todo_fields: list[str], template_name: str) -> 
             "### Evidence Promotion",
             "",
             "- [ ] Run experiment and verify outputs match `expected_artifacts`",
+            "- [ ] Fill `early_stop_criteria` before submitting long Slurm training jobs",
             "- [ ] Promote durable artifacts (W&B / release storage / docs/context/evidence/)",
             "- [ ] Add `durable_reference` to each artifact in the record",
             "- [ ] Update `evidence_grade` (proposal to observed) and `paper_relevance` if applicable",
@@ -436,6 +456,20 @@ def _write_checklist(path: Path, todo_fields: list[str], template_name: str) -> 
             "",
             "  Local `output/` paths are disposable worktree artifacts.",
             "  Until `durable_reference` is set, these are not paper-facing evidence.",
+            "",
+            "### Slurm Early-Stop Criteria",
+            "",
+            "Before submitting a long Slurm training job, predeclare:",
+            "",
+            "- [ ] metric",
+            "- [ ] threshold",
+            "- [ ] check cadence",
+            "- [ ] minimum runtime or timesteps",
+            "- [ ] cancel condition",
+            "- [ ] diagnostic preservation action",
+            "",
+            "A cancelled run can be useful diagnostic evidence only when the stop rule was",
+            "predeclared and the logs, manifest, config, commit, and relevant outputs are preserved.",
             "",
             "### Update Flow",
             "",

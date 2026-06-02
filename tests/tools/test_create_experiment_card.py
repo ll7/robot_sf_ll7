@@ -155,6 +155,30 @@ def test_output_and_expected_artifacts_have_artifact_ids() -> None:
             )
 
 
+def test_each_template_includes_slurm_early_stop_criteria() -> None:
+    """Experiment cards should predeclare stop rules before long Slurm training runs."""
+    expected_fields = {
+        "metric",
+        "threshold",
+        "check_cadence",
+        "minimum_runtime_or_timesteps",
+        "cancel_condition",
+        "diagnostic_preservation_action",
+    }
+    for template_name in TEMPLATE_NAMES:
+        record = _build_record(
+            experiment_id=f"test_{template_name.replace('-', '_')}",
+            issue="9999",
+            issue_url="https://example.com/9999",
+            template_name=template_name,
+            output_root=Path("output/experiments"),
+        )
+        assert set(record["early_stop_criteria"]) == expected_fields
+        assert all(
+            str(value).startswith("TODO:") for value in record["early_stop_criteria"].values()
+        )
+
+
 def test_invalid_template_name_raises_key_error() -> None:
     """Passing an unrecognised template name should raise KeyError."""
     with pytest.raises(KeyError):
@@ -188,3 +212,7 @@ def test_cli_writes_to_requested_output_root(tmp_path: Path) -> None:
     assert (output_root / "issue_2103_smoke.yaml").is_file()
     assert (output_root / "CHECKLIST.md").is_file()
     assert not (output_root / "issue_2103_smoke" / "issue_2103_smoke.yaml").exists()
+
+    checklist = (output_root / "CHECKLIST.md").read_text(encoding="utf-8")
+    assert "Slurm Early-Stop Criteria" in checklist
+    assert "diagnostic preservation action" in checklist

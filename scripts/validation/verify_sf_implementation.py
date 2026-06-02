@@ -199,9 +199,9 @@ def main():
         print("🎉 All verification tests passed!")
         print("\nImplementation is ready for use once dependencies are available.")
         print("\nNext steps:")
-        print("1. Install dependencies: pip install numpy pysocialforce pytest")
-        print("2. Run tests: pytest tests/baselines/ tests/integration/")
-        print("3. Try CLI: python -m robot_sf.benchmark.cli list-algorithms")
+        print("1. Install dependencies: uv sync --all-extras")
+        print("2. Run tests: uv run pytest tests/baselines/ tests/integration/")
+        print("3. Try CLI: uv run python -m robot_sf.benchmark.cli list-algorithms")
         return 0
     else:
         print("❌ Some tests failed - implementation needs fixes")

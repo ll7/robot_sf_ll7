@@ -7,7 +7,7 @@ This directory contains scripts for recomputing and analyzing Social Navigation 
 Run the validation script to verify everything works:
 
 ```bash
-python scripts/validate_snqi_scripts.py
+uv run python scripts/validate_snqi_scripts.py
 ```
 
 ## Demo Workflow
@@ -15,7 +15,7 @@ python scripts/validate_snqi_scripts.py
 See a complete example with generated data:
 
 ```bash
-python scripts/example_snqi_workflow.py
+uv run python scripts/example_snqi_workflow.py
 ```
 
 ## Basic Usage
@@ -24,7 +24,7 @@ python scripts/example_snqi_workflow.py
 
 ```bash
 # Compare all weight strategies
-python scripts/recompute_snqi_weights.py \
+uv run python scripts/recompute_snqi_weights.py \
     --episodes your_episodes.jsonl \
     --baseline your_baseline_stats.json \
     --compare-strategies \
@@ -35,7 +35,7 @@ python scripts/recompute_snqi_weights.py \
 
 ```bash
 # Run differential evolution optimization with sensitivity analysis
-python scripts/snqi_weight_optimization.py \
+uv run python scripts/snqi_weight_optimization.py \
     --episodes your_episodes.jsonl \
     --baseline your_baseline_stats.json \
     --output optimized_weights.json \
@@ -47,7 +47,7 @@ python scripts/snqi_weight_optimization.py \
 
 ```bash
 # Full sensitivity analysis with visualizations
-python scripts/snqi_sensitivity_analysis.py \
+uv run python scripts/snqi_sensitivity_analysis.py \
     --episodes your_episodes.jsonl \
     --baseline your_baseline_stats.json \
     --weights optimized_weights.json \
@@ -85,7 +85,7 @@ Optional (for visualizations):
 
 Install with:
 ```bash
-pip install numpy scipy matplotlib seaborn pandas
+uv sync --all-extras
 ```
 
 ## Key Features

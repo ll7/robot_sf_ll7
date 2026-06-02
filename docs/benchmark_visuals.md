@@ -95,14 +95,14 @@ but new code should migrate to the Full Classic pipeline.
 #### Plots Not Generating
 **Symptoms**: No PDF files created, or empty/placeholder PDFs
 **Causes**:
-- Missing matplotlib: `pip install matplotlib`
+- Missing matplotlib: run `uv sync --all-extras`
 - Invalid episode data: Check JSONL format and metric fields
 - Permission issues: Ensure output directory is writable
 
 **Solutions**:
 ```bash
 # Install dependencies
-uv add matplotlib
+uv sync --all-extras
 
 # Check episode data
 uv run python -c "import json; print(json.loads(open('episodes.jsonl').readline()))"
@@ -111,14 +111,14 @@ uv run python -c "import json; print(json.loads(open('episodes.jsonl').readline(
 #### Videos Not Generating
 **Symptoms**: No MP4 files created, or placeholder videos
 **Causes**:
-- Missing moviepy: `pip install moviepy`
+- Missing moviepy: run `uv sync --all-extras`
 - No trajectory data: Episodes lack position/time data
 - Environment issues: Factory functions unavailable
 
 **Solutions**:
 ```bash
 # Install dependencies  
-uv add moviepy
+uv sync --all-extras
 
 # Check trajectory data
 uv run python -c "
@@ -170,7 +170,7 @@ validate_visual_manifests(reports_dir, contracts)
 ```
 VisualizationError: Missing visualization dependencies: matplotlib
 ```
-**Solution**: Install missing packages with `uv add matplotlib moviepy`
+**Solution**: Install the repository extras with `uv sync --all-extras`
 
 #### "No episode data found"
 ```

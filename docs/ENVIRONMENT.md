@@ -136,6 +136,6 @@ img_env = make_image_robot_env(render_options=RenderOptions(max_fps_override=24)
 Each factory emits an INFO creation line with effective recording and fps settings plus WARNING lines for precedence events.
 
 ### Performance Guard
-Test `tests/perf/test_factory_creation_perf.py` ensures mean creation time remains within the regression budget relative to `results/factory_perf_baseline.json`.
+Test `tests/perf/test_factory_creation_perf.py` ensures mean creation time remains within the regression budget relative to `output/benchmarks/factory_perf_baseline.json`.
 
 See detailed migration guidance in `docs/dev/issues/130-improve-environment-factory/migration.md`.

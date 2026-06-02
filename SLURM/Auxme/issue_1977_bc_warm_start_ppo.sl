@@ -172,9 +172,16 @@ for relative, destination in mappings.items():
     source = source_root / relative
     if not source.is_file():
         raise FileNotFoundError(f"artifact file missing after download: {relative}")
+    source_sha = sha256(source)
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
-    print(f"[issue1977] hydrated {relative} -> {destination} sha256={sha256(destination)}")
+    dest_sha = sha256(destination)
+    if source_sha != dest_sha:
+        raise RuntimeError(
+            f"sha256 mismatch for {relative}: source={source_sha} "
+            f"destination={dest_sha} artifact_digest={artifact.digest}"
+        )
+    print(f"[issue1977] hydrated {relative} -> {destination} sha256={dest_sha}")
 
 print(f"[issue1977] artifact_digest={artifact.digest}")
 PY

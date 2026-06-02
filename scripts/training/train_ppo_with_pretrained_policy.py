@@ -122,8 +122,55 @@ def _slurm_allocated_cpus() -> int | None:
     return None
 
 
+def _read_cgroup_memory_gib(path: Path) -> float | None:
+    """Read a cgroup memory-limit file and return GiB, filtering out sentinel values."""
+    try:
+        raw = path.read_text().strip()
+        if raw in ("max", ""):
+            return None
+        value = int(raw)
+        if value <= 0 or value >= 2**63:
+            return None
+        return float(value) / float(1024**3)
+    except (OSError, ValueError):
+        return None
+
+
+def _slurm_memory_gib() -> float | None:
+    """Return the Slurm memory allocation in GiB when exported."""
+    for slurm_key in ("SLURM_MEM_PER_NODE", "SLURM_MEM_PER_CPU"):
+        slurm_mem_mb = os.environ.get(slurm_key)
+        if slurm_mem_mb is None:
+            continue
+        try:
+            memory_gib = float(slurm_mem_mb) / 1024.0
+        except (ValueError, TypeError):
+            continue
+        if memory_gib <= 0:
+            continue
+        if slurm_key == "SLURM_MEM_PER_CPU":
+            allocated_cpus = _slurm_allocated_cpus()
+            if allocated_cpus is None:
+                continue
+            memory_gib *= allocated_cpus
+        return memory_gib
+    return None
+
+
 def _host_memory_gib() -> float | None:
-    """Return visible host memory in GiB when the platform exposes it."""
+    """Return available host memory in GiB, preferring SLURM/cgroup limits over sysconf."""
+
+    slurm_memory_gib = _slurm_memory_gib()
+    if slurm_memory_gib is not None:
+        return slurm_memory_gib
+
+    cgroup_gib = _read_cgroup_memory_gib(Path("/sys/fs/cgroup/memory.max"))
+    if cgroup_gib is not None:
+        return cgroup_gib
+    cgroup_gib = _read_cgroup_memory_gib(Path("/sys/fs/cgroup/memory/memory.limit_in_bytes"))
+    if cgroup_gib is not None:
+        return cgroup_gib
+
     if not hasattr(os, "sysconf"):
         return None
     try:
@@ -500,6 +547,7 @@ def run_ppo_finetuning(
         env.close()
     else:
         # Dry run
+        num_envs = _resolve_num_envs(config)
         policy_path = common.get_expert_policy_dir() / f"{config.run_id}_finetuned.zip"
         policy_path.parent.mkdir(parents=True, exist_ok=True)
         policy_path.write_text("dry-run-finetuned-checkpoint", encoding="utf-8")
@@ -570,8 +618,8 @@ def run_ppo_finetuning(
         notes=[
             f"PPO fine-tuning from pretrained policy {config.pretrained_policy_id}",
             f"Converged at {convergence_timesteps} timesteps",
-            f"num_envs={config.num_envs if config.num_envs is not None else 1}",
-            f"worker_mode={config.worker_mode}",
+            f"num_envs={num_envs} (resolved from raw config: {config.num_envs})",
+            f"worker_mode={_resolve_worker_mode(config, num_envs)} (resolved from raw config: {config.worker_mode})",
             f"device={config.device}",
             (
                 "checkpoint_freq="

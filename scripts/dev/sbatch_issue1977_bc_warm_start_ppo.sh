@@ -39,9 +39,19 @@ Options:
 EOF
 }
 
+require_value() {
+  local flag="$1"
+  if [[ $# -lt 2 || -z "$2" || ( "$flag" != "--sbatch-arg" && "$2" == --* ) ]]; then
+    echo "Missing value for ${flag}" >&2
+    usage >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --config)
+      require_value "$@"
       PPO_CONFIG="$2"
       shift 2
       ;;
@@ -50,6 +60,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --wandb-artifact)
+      require_value "$@"
       WANDB_ARTIFACT="$2"
       shift 2
       ;;
@@ -58,6 +69,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --partition)
+      require_value "$@"
       PARTITION="$2"
       shift 2
       ;;
@@ -66,6 +78,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --qos)
+      require_value "$@"
       QOS="$2"
       shift 2
       ;;
@@ -74,6 +87,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --time)
+      require_value "$@"
       TIME_LIMIT="$2"
       shift 2
       ;;
@@ -86,6 +100,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --sbatch-arg)
+      require_value "$@"
       EXTRA_SBATCH_ARGS+=("$2")
       shift 2
       ;;

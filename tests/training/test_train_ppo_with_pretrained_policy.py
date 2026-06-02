@@ -14,6 +14,7 @@ from robot_sf.training.imitation_config import PPOFineTuningConfig
 from scripts.training.train_ppo_with_pretrained_policy import (
     _checkpoint_callback,
     _describe_num_envs_resolution,
+    _host_memory_gib,
     _load_dataset_metadata,
     _parse_num_envs,
     _resolve_num_envs,
@@ -61,6 +62,27 @@ def test_resolve_num_envs_defaults_to_legacy_single_env() -> None:
 
     assert _resolve_num_envs(config) == 1
     assert details["mode"] == "single_env_legacy"
+
+
+def test_host_memory_prefers_slurm_mem_per_node(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Auto-throughput sizing should respect the job memory allocation before host RAM."""
+
+    monkeypatch.setenv("SLURM_MEM_PER_NODE", "98304")
+    monkeypatch.delenv("SLURM_MEM_PER_CPU", raising=False)
+
+    assert _host_memory_gib() == 96.0
+
+
+def test_host_memory_uses_slurm_mem_per_cpu_allocation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Per-CPU Slurm memory limits should be multiplied by allocated CPUs."""
+
+    monkeypatch.delenv("SLURM_MEM_PER_NODE", raising=False)
+    monkeypatch.setenv("SLURM_MEM_PER_CPU", "4096")
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "6")
+
+    assert _host_memory_gib() == 24.0
 
 
 def test_checkpoint_callback_divides_frequency_by_vec_env_count(tmp_path: Path) -> None:

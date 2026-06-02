@@ -420,6 +420,9 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     assert pyproject["project"]["scripts"]["robot-sf-carla-docker-runtime"] == (
         "robot_sf_carla_bridge.cli:carla_docker_runtime_main"
     )
+    assert pyproject["project"]["scripts"]["robot-sf-carla-replay-diagnostics"] == (
+        "scripts.carla_bridge.diagnose_replay_semantics:main"
+    )
     hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
     assert {"include": "robot_sf_carla_bridge"} in hatchling_packages
     assert (

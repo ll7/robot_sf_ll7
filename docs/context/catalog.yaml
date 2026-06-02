@@ -105,6 +105,10 @@ entries:
     status: current
     freshness: maintained
     area: carla_external_sim
+  - path: docs/context/issue_2122_carla_replay_diagnostics.md
+    status: current
+    freshness: maintained
+    area: carla_external_sim
   - path: docs/context/issue_2013_backend_adapter_contract.md
     status: current
     freshness: policy

@@ -129,7 +129,7 @@ scenarios:
 # Run all scenarios with parallel workers
 uv run python -m robot_sf.benchmark.cli run \
   --scenarios configs/scenarios/my_experiment.yaml \
-  --output results/my_experiment_episodes.jsonl \
+  --output output/benchmark_quickstart/my_experiment_episodes.jsonl \
   --workers 4 \
   --resume  # Skip already completed episodes
 ```
@@ -140,8 +140,8 @@ uv run python -m robot_sf.benchmark.cli run \
 ```bash
 # Compute baseline metrics for comparison
 uv run python -m robot_sf.benchmark.cli baseline \
-  --episodes results/my_experiment_episodes.jsonl \
-  --output results/my_experiment_baseline.jsonl \
+  --episodes output/benchmark_quickstart/my_experiment_episodes.jsonl \
+  --output output/benchmark_quickstart/my_experiment_baseline.jsonl \
   --workers 4
 ```
 
@@ -149,8 +149,8 @@ uv run python -m robot_sf.benchmark.cli baseline \
 ```bash
 # Generate summary statistics with bootstrap CIs
 uv run python -m robot_sf.benchmark.cli aggregate \
-  --in results/my_experiment_episodes.jsonl \
-  --out results/my_experiment_summary.json \
+  --in output/benchmark_quickstart/my_experiment_episodes.jsonl \
+  --out output/benchmark_quickstart/my_experiment_summary.json \
   --bootstrap-samples 1000 \
   --bootstrap-confidence 0.95 \
   --bootstrap-seed 42
@@ -166,19 +166,19 @@ uv run python -m robot_sf.benchmark.cli aggregate \
 for ALGO in "social_force" "ppo" "random"; do
   uv run python -m robot_sf.benchmark.cli run \
     --scenarios configs/scenarios/comparison_study.yaml \
-    --output results/episodes_${ALGO}.jsonl \
+    --output output/benchmark_quickstart/episodes_${ALGO}.jsonl \
     --algo $ALGO \
     --workers 4 \
     --resume
 done
 
 # Combine results for comparison
-cat results/episodes_*.jsonl > results/episodes_combined.jsonl
+cat output/benchmark_quickstart/episodes_*.jsonl > output/benchmark_quickstart/episodes_combined.jsonl
 
 # Aggregate by algorithm
 uv run python -m robot_sf.benchmark.cli aggregate \
-  --in results/episodes_combined.jsonl \
-  --out results/comparison_summary.json \
+  --in output/benchmark_quickstart/episodes_combined.jsonl \
+  --out output/benchmark_quickstart/comparison_summary.json \
   --group-by "scenario_params.algo" \
   --bootstrap-samples 1000
 ```
@@ -187,14 +187,14 @@ uv run python -m robot_sf.benchmark.cli aggregate \
 ```bash
 # Recompute SNQI with custom weights
 uv run python -m robot_sf.benchmark.cli snqi-recompute \
-  --episodes results/my_experiment_episodes.jsonl \
-  --output results/recomputed_episodes.jsonl \
+  --episodes output/benchmark_quickstart/my_experiment_episodes.jsonl \
+  --output output/benchmark_quickstart/recomputed_episodes.jsonl \
   --weights configs/snqi_weights/custom_weights.json
 
 # Weight sensitivity analysis
 uv run python -m robot_sf.benchmark.cli snqi-weight-ablation \
-  --episodes results/my_experiment_episodes.jsonl \
-  --output results/weight_ablation/ \
+  --episodes output/benchmark_quickstart/my_experiment_episodes.jsonl \
+  --output output/benchmark_quickstart/weight_ablation/ \
   --base-weights configs/snqi_weights/canonical_v1.json \
   --ablation-factors 0.5 0.8 1.2 1.5 2.0
 ```
@@ -210,7 +210,7 @@ uv run python -m robot_sf.benchmark.cli generate-scenarios \
 # Execute sweep with high parallelism
 uv run python -m robot_sf.benchmark.cli run \
   --scenarios configs/scenarios/full_sweep.yaml \
-  --output results/parameter_sweep_episodes.jsonl \
+  --output output/benchmark_quickstart/parameter_sweep_episodes.jsonl \
   --workers 8 \
   --resume \
   --batch-size 50
@@ -222,20 +222,20 @@ uv run python -m robot_sf.benchmark.cli run \
 ```bash
 # Generate all standard figures
 uv run python -m robot_sf.benchmark.cli figures \
-  --episodes results/my_experiment_episodes.jsonl \
-  --output-dir results/figures/ \
+  --episodes output/benchmark_quickstart/my_experiment_episodes.jsonl \
+  --output-dir output/benchmark_quickstart/figures/ \
   --figure-types distribution pareto force_field thumbnails table
 
 # Individual figure types
 uv run python -m robot_sf.benchmark.cli figure-distribution \
-  --episodes results/my_experiment_episodes.jsonl \
-  --output results/figures/distribution.png \
+  --episodes output/benchmark_quickstart/my_experiment_episodes.jsonl \
+  --output output/benchmark_quickstart/figures/distribution.png \
   --metric "metrics.snqi" \
   --group-by "scenario_params.algo"
 
 uv run python -m robot_sf.benchmark.cli figure-pareto \
-  --episodes results/my_experiment_episodes.jsonl \
-  --output results/figures/pareto.png \
+  --episodes output/benchmark_quickstart/my_experiment_episodes.jsonl \
+  --output output/benchmark_quickstart/figures/pareto.png \
   --x-metric "metrics.time_to_goal" \
   --y-metric "metrics.snqi"
 ```
@@ -247,7 +247,7 @@ from robot_sf.benchmark.aggregate import read_jsonl, compute_aggregates_with_ci
 import matplotlib.pyplot as plt
 
 # Load results
-episodes = read_jsonl("results/my_experiment_episodes.jsonl")
+episodes = read_jsonl("output/benchmark_quickstart/my_experiment_episodes.jsonl")
 
 # Custom aggregation
 summary = compute_aggregates_with_ci(
@@ -266,22 +266,22 @@ plt.errorbar(densities, snqi_means, yerr=[[ci[1]-m for ci, m in zip(snqi_cis, sn
 plt.xlabel("Pedestrian Density")
 plt.ylabel("SNQI Score")
 plt.title("Social Navigation Performance vs Pedestrian Density")
-plt.savefig("results/figures/custom_analysis.png", dpi=300)
+plt.savefig("output/benchmark_quickstart/figures/custom_analysis.png", dpi=300)
 ```
 
 ### Trajectory Analysis
 ```bash
 # Extract and visualize trajectories
 uv run python -m robot_sf.benchmark.cli extract-trajectories \
-  --episodes results/my_experiment_episodes.jsonl \
-  --output results/trajectories/ \
+  --episodes output/benchmark_quickstart/my_experiment_episodes.jsonl \
+  --output output/benchmark_quickstart/trajectories/ \
   --scenario-filter "dense_navigation" \
   --format pickle
 
 # Generate trajectory animations  
 uv run python examples/trajectory_demo.py \
-  --trajectory-file results/trajectories/dense_navigation_42.pkl \
-  --output results/animations/dense_navigation_42.mp4
+  --trajectory-file output/benchmark_quickstart/trajectories/dense_navigation_42.pkl \
+  --output output/benchmark_quickstart/animations/dense_navigation_42.mp4
 ```
 
 ## Interpretation Guidelines
@@ -351,7 +351,7 @@ uv run python -m robot_sf.benchmark.cli run --workers 2  # Reduce parallelism
 # Symptom: JSON decode errors in JSONL files
 # Solution: Validate and recover
 uv run python -m robot_sf.benchmark.cli validate-episodes \
-  --episodes results/problematic_episodes.jsonl \
+  --episodes output/benchmark_quickstart/problematic_episodes.jsonl \
   --fix-corruption
 ```
 
@@ -389,23 +389,23 @@ cd robot_sf_ll7
 # 2. Run comparison (10 minutes)
 uv run python -m robot_sf.benchmark.cli run \
   --scenarios configs/baselines/quick_assessment.yaml \
-  --output results/policy_comparison.jsonl \
+  --output output/benchmark_quickstart/policy_comparison.jsonl \
   --workers 4
 
 # 3. Generate summary (2 minutes)  
 uv run python -m robot_sf.benchmark.cli aggregate \
-  --in results/policy_comparison.jsonl \
-  --out results/policy_summary.json \
+  --in output/benchmark_quickstart/policy_comparison.jsonl \
+  --out output/benchmark_quickstart/policy_summary.json \
   --bootstrap-samples 500
 
 # 4. Visualize (2 minutes)
 uv run python -m robot_sf.benchmark.cli figure-pareto \
-  --episodes results/policy_comparison.jsonl \
-  --output results/policy_pareto.png \
+  --episodes output/benchmark_quickstart/policy_comparison.jsonl \
+  --output output/benchmark_quickstart/policy_pareto.png \
   --x-metric "metrics.time_to_goal" \
   --y-metric "metrics.snqi"
 
-echo "✓ Results in results/policy_summary.json and results/policy_pareto.png"
+echo "✓ Results in output/benchmark_quickstart/policy_summary.json and output/benchmark_quickstart/policy_pareto.png"
 ```
 
 ### Workflow 2: Comprehensive Research Study
@@ -426,34 +426,34 @@ uv run python -m robot_sf.benchmark.cli generate-scenarios \
 # 2. Execute full study (2-3 hours, can run overnight)
 uv run python -m robot_sf.benchmark.cli run \
   --scenarios configs/scenarios/comprehensive_study.yaml \
-  --output results/comprehensive_episodes.jsonl \
+  --output output/benchmark_quickstart/comprehensive_episodes.jsonl \
   --workers 8 \
   --resume
 
 # 3. Generate all analyses (15 minutes)
 uv run python -m robot_sf.benchmark.cli aggregate \
-  --in results/comprehensive_episodes.jsonl \
-  --out results/comprehensive_summary.json \
+  --in output/benchmark_quickstart/comprehensive_episodes.jsonl \
+  --out output/benchmark_quickstart/comprehensive_summary.json \
   --group-by "scenario_params.map_file" \
   --bootstrap-samples 2000 \
   --bootstrap-confidence 0.95
 
 # 4. Create publication figures (10 minutes)
 uv run python -m robot_sf.benchmark.cli figures \
-  --episodes results/comprehensive_episodes.jsonl \
-  --output-dir results/publication_figures/ \
+  --episodes output/benchmark_quickstart/comprehensive_episodes.jsonl \
+  --output-dir output/benchmark_quickstart/publication_figures/ \
   --figure-types distribution pareto force_field table \
   --publication-quality \
   --dpi 300
 
 # 5. Generate LaTeX table
 uv run python -m robot_sf.benchmark.cli table \
-  --summary results/comprehensive_summary.json \
-  --output results/publication_figures/results_table.tex \
+  --summary output/benchmark_quickstart/comprehensive_summary.json \
+  --output output/benchmark_quickstart/publication_figures/results_table.tex \
   --format latex \
   --precision 3
 
-echo "✓ Comprehensive study complete. See results/publication_figures/"
+echo "✓ Comprehensive study complete. See output/benchmark_quickstart/publication_figures/"
 ```
 
 ### Workflow 3: SNQI Weight Sensitivity Analysis
@@ -464,30 +464,30 @@ echo "✓ Comprehensive study complete. See results/publication_figures/"
 # 1. Baseline experiment (15 minutes)
 uv run python -m robot_sf.benchmark.cli run \
   --scenarios configs/baselines/snqi_analysis.yaml \
-  --output results/snqi_base_episodes.jsonl \
+  --output output/benchmark_quickstart/snqi_base_episodes.jsonl \
   --workers 4
 
 # 2. Weight ablation study (20 minutes)
 uv run python -m robot_sf.benchmark.cli snqi-weight-ablation \
-  --episodes results/snqi_base_episodes.jsonl \
-  --output results/weight_ablation/ \
+  --episodes output/benchmark_quickstart/snqi_base_episodes.jsonl \
+  --output output/benchmark_quickstart/weight_ablation/ \
   --base-weights model/snqi_canonical_weights_v1.json \
   --ablation-factors 0.5 0.8 1.0 1.2 1.5 2.0 \
   --components safety_score comfort_score efficiency_score
 
 # 3. Analyze weight sensitivity (5 minutes)
 uv run python -m robot_sf.benchmark.cli analyze-weight-sensitivity \
-  --ablation-dir results/weight_ablation/ \
-  --output results/weight_sensitivity_report.json \
-  --plot results/weight_sensitivity.png
+  --ablation-dir output/benchmark_quickstart/weight_ablation/ \
+  --output output/benchmark_quickstart/weight_sensitivity_report.json \
+  --plot output/benchmark_quickstart/weight_sensitivity.png
 
 # 4. Generate ranking stability analysis (5 minutes)  
 uv run python examples/benchmarks/snqi_full_flow.py \
-  --episodes results/snqi_base_episodes.jsonl \
-  --ablation-results results/weight_ablation/ \
-  --output results/ranking_stability.png
+  --episodes output/benchmark_quickstart/snqi_base_episodes.jsonl \
+  --ablation-results output/benchmark_quickstart/weight_ablation/ \
+  --output output/benchmark_quickstart/ranking_stability.png
 
-echo "✓ Weight sensitivity analysis complete. See results/weight_sensitivity_report.json"
+echo "✓ Weight sensitivity analysis complete. See output/benchmark_quickstart/weight_sensitivity_report.json"
 ```
 
 ---
@@ -507,35 +507,35 @@ After completing this quickstart:
 ## 3. Compute Baseline Stats & SNQI Weights
 ```
 robot_sf_bench baseline \
-  --episodes results/episodes.jsonl \
-  --output results/baseline_stats.json
+  --episodes output/benchmark_quickstart/episodes.jsonl \
+  --output output/benchmark_quickstart/baseline_stats.json
 
 robot_sf_snqi recompute \
-  --baseline-stats results/baseline_stats.json \
-  --out weights/snqi_weights_v1.json
+  --baseline-stats output/benchmark_quickstart/baseline_stats.json \
+  --out output/benchmark_quickstart/snqi_weights_v1.json
 ```
 
 ## 4. Aggregate Metrics with Confidence Intervals
 ```
 robot_sf_bench aggregate \
-  --in results/episodes.jsonl \
-  --out results/summary_ci.json \
+  --in output/benchmark_quickstart/episodes.jsonl \
+  --out output/benchmark_quickstart/summary_ci.json \
   --bootstrap-samples 1000 --bootstrap-confidence 0.95 --bootstrap-seed 42
 ```
 
 ## 5. Generate Figures & Tables
 ```
-python scripts/generate_figures.py \
-  --episodes results/episodes.jsonl \
-  --table-summary results/summary_ci.json \
+uv run python scripts/generate_figures.py \
+  --episodes output/benchmark_quickstart/episodes.jsonl \
+  --table-summary output/benchmark_quickstart/summary_ci.json \
   --table-include-ci --table-tex \
-  --out-dir docs/figures/episodes_run_v1
+  --out-dir output/benchmark_quickstart/figures/episodes_run_v1
 ```
 Artifacts: Pareto plots, distribution plots, force-field figures, scenario thumbnails, baseline table (Markdown + LaTeX), SNQI ablation outputs.
 
 ## 6. SNQI Ablation (Sensitivity)
 ```
-robot_sf_snqi ablation --episodes results/episodes.jsonl --summary-out results/snqi_ablation.json
+robot_sf_snqi ablation --episodes output/benchmark_quickstart/episodes.jsonl --summary-out output/benchmark_quickstart/snqi_ablation.json
 ```
 
 ## 7. Resume Behavior (Incremental Additions)
@@ -545,12 +545,13 @@ Re-run step 2 with new algorithms or extended repetitions; existing episodes are
 Run steps 2–5 with a different seed (e.g., 456) and compare aggregated metrics—expect differences within bootstrap CIs.
 
 ## Outputs Summary
+All artifacts are written under `output/benchmark_quickstart/`:
 - episodes.jsonl (raw per-episode lines)
 - episodes.jsonl.manifest.json (resume index)
 - baseline_stats.json (normalization stats)
 - snqi_weights_v1.json (weights artifact)
 - summary_ci.json (aggregated metrics + optional CIs)
-- docs/figures/... (visual assets & tables)
+- figures/... (visual assets & tables)
 - snqi_ablation.json (component influence)
 
 ## Next Steps
@@ -569,7 +570,7 @@ from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.schema import load_scenario_matrix
 
 scenarios = load_scenario_matrix("configs/baselines/scenario_matrix.yaml")
-run_batch(scenarios, "results/episodes.jsonl", workers=4, resume=True)
+run_batch(scenarios, "output/benchmark_quickstart/episodes.jsonl", workers=4, resume=True)
 
 # Step 4: Aggregate with CIs  
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci

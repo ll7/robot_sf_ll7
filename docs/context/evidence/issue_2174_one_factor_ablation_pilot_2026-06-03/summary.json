@@ -1,0 +1,65 @@
+{
+  "claim_boundary": "diagnostic-only",
+  "generated_at": "2026-06-03T19:01:17.205453+00:00",
+  "git_hash": "715816738a143ca4c4984ddb5dc57876d6cf7171",
+  "horizon": 80,
+  "issue": 2174,
+  "manifest": "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml",
+  "schema_version": "robot-sf-one-factor-ablation-pilot.v1",
+  "selected_comparisons": [
+    "static_escape_only_minus_base"
+  ],
+  "workers": 2,
+  "candidate_results": {
+    "hybrid_rule_v3_fast_progress": {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.3959925710567398,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 48.43994739704067,
+        "success_rate": 0.0
+      }
+    },
+    "issue_2170_static_escape_only": {
+      "candidate": "issue_2170_static_escape_only",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.3959925710567398,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 64.76842205697903,
+        "success_rate": 0.0
+      }
+    }
+  },
+  "effect_rows": [
+    {
+      "comparison_id": "static_escape_only_minus_base",
+      "a": "static_escape_only",
+      "a_candidate": "issue_2170_static_escape_only",
+      "b": "base_fast_progress",
+      "b_candidate": "hybrid_rule_v3_fast_progress",
+      "interpretation": "static clearance escape without recentering",
+      "status": "ok",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": 0.0,
+      "runtime_sec_delta": 16.328474659938365
+    }
+  ]
+}

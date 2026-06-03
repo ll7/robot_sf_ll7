@@ -1,0 +1,2 @@
+contract_id,scenario,scenario_family,status,evidence_rows,caveated_rows,reason
+classic_cross_trap_low_amv_contract,classic_cross_trap_low,cross_trap,covered,21,0,represented by non-caveated executed row evidence

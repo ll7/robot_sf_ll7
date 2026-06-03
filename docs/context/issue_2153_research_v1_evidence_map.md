@@ -31,7 +31,7 @@ blocker or diagnostic mechanism, but they are not successful benchmark evidence 
 | --- | --- | --- | --- | --- | --- |
 | `research-v1.amv.model_behavior` | AMV-aware social-force or interaction-model behavior improves a named mechanism without breaking existing planner contracts. | Configured model term, unit/integration tests, diagnostics showing the term activates on intended scenarios, and no paper-facing performance language until calibrated evidence exists. | `diagnostic` | Issue [#2154](https://github.com/ll7/robot_sf_ll7/issues/2154) added an optional AMMV-aware Social Force term, config contract, metadata diagnostics, and targeted tests; see [issue_2154_ammv_social_force_model.md](issue_2154_ammv_social_force_model.md). | Run a paired classical Social Force versus AMMV-aware diagnostic on a named AMMV scenario/config/seed before considering candidate benchmark evidence. |
 | `research-v1.amv.benchmark_matrix` | A frozen AMV social-navigation matrix can support reproducible planner comparison work. | Tracked config/protocol note, scenario families, planner rows, seed policy, artifact policy, fail-closed row semantics, and config validation. | `candidate` | Issue [#2155](https://github.com/ll7/robot_sf_ll7/issues/2155) freezes the matrix contract with 23 scenarios in 11 families, 12 planner rows in 4 families, paper_eval_s5 seed policy, and fail-closed fallback handling. No benchmark run is implied by this status. `docs/context/issue_2155_research_v1_ammv_matrix.md` is the contract note. | Move to `diagnostic` or retain `candidate` after a named campaign execution with artifact provenance. |
-| `research-v1.amv.scenario_criticality` | Hazard and ODD coverage can identify critical AMV social-navigation scenarios. | Tracked coverage report, scenario taxonomy, ODD/hazard mapping, row status counts, and explicit missing-coverage list. | `proposal` | Issue [#2156](https://github.com/ll7/robot_sf_ll7/issues/2156) is the report lane. Existing seed and perturbation notes remain diagnostic unless a stronger matrix supports them. | Generate the #2156 coverage report after the selected matrix surface is clear. |
+| `research-v1.amv.scenario_criticality` | Hazard and ODD coverage can identify critical AMV social-navigation scenarios. | Tracked coverage report, scenario taxonomy, ODD/hazard mapping, row status counts, and explicit missing-coverage list. | `candidate` | Issue [#2164](https://github.com/ll7/robot_sf_ll7/issues/2164) joins the tracked #1484 cross-kinematics AMV rows to issue-specific metadata for `classic_cross_trap_low`: hazard statuses `covered=3`, ODD supported claims `covered=2`, scenario contract `covered=1`. This is selected-scenario coverage evidence only, not full matrix or paper-ready evidence. | Broaden coverage by adding scenario contracts and hazard mappings for the rest of the research-v1 matrix before making full scenario-criticality claims. |
 | `research-v1.amv.transfer_boundary` | CARLA or alternate-simulator replay can bound where Robot SF AMV evidence transfers. | Native/aligned fixture or replay semantics diagnostics, adapter status, durable trace/replay artifacts, and fail-closed exclusions. | `blocked` | [issue_2014_simulator_backend_matrix.md](issue_2014_simulator_backend_matrix.md) recommends trace/report work before full integration. CARLA parity remains blocked by replay/actor-spawn gaps in the manuscript map. | Use #2158 for a diagnostic pack; do not use it as parity evidence until the CARLA gates close. |
 | `research-v1.amv.calibrated_actuation` | AMV actuation profiles are calibrated enough for paper-facing AMV claims. | Direct hardware or accepted proxy-source manifest, field-level source boundaries, runtime metrics, checksums or durable pointers, and unavailable-field handling. | `blocked` | [issue_2001_amv_actuation_proxy_source_analysis.md](issue_2001_amv_actuation_proxy_source_analysis.md) supports longitudinal proxy values only. [issue_2011_amv_actuation_sensitivity_sweep.md](issue_2011_amv_actuation_sensitivity_sweep.md) produced `accepted_unavailable_only` rows, not benchmark evidence. | Resolve the missing runtime/provenance fields before claim movement; keep yaw, angular acceleration, latency, and update rate synthetic or unavailable until sourced. |
 | `research-v1.amv.failure_case_review` | Representative failure-case traces can explain mechanisms worth testing next. | Selected cases, trace-viewer pack, qualitative tags, row statuses, and no aggregation beyond observed cases. | `proposal` | Issue [#2159](https://github.com/ll7/robot_sf_ll7/issues/2159) is qualitative and speculative until cases are selected. | Build the #2159 review pack after claim IDs and matrix/report lanes provide selection criteria. |
@@ -65,6 +65,7 @@ git diff --check
 Artifact class: tracked context note. No generated benchmark, replay, training, or local `output/`
 artifact was created for this map. Diagnostic-only and proposal-only evidence is intentionally not
 promoted to benchmark or paper-facing status here.
+
 ## Issue #2156 Hazard/ODD Diagnostic Update
 
 Issue [#2156](https://github.com/ll7/robot_sf_ll7/issues/2156) generated a
@@ -81,3 +82,15 @@ non-claims. This keeps `research-v1.amv.scenario_criticality` diagnostic rather
 than candidate or paper-ready evidence. The smallest next proof step is to add
 or select scenario contracts and hazard mappings that name the executed AMV
 scenarios, then rerun the same rollup.
+
+### Issue #2164 AMV Hazard/ODD Join Update 2026-06-03
+
+Issue [#2164](https://github.com/ll7/robot_sf_ll7/issues/2164) adds
+issue-specific metadata for `classic_cross_trap_low` and promotes
+`docs/context/evidence/issue_2164_amv_hazard_odd_join_2026-06-03/`. The rerun
+reads 42 row-level records and reports hazard statuses `covered=3`, ODD
+supported claims `covered=2`, and scenario contract status `covered=1`.
+
+This upgrades `research-v1.amv.scenario_criticality` to `candidate` only for the
+selected cross-trap AMV slice. It does not imply full research-v1 matrix
+coverage, safety certification, transfer evidence, or paper-ready support.

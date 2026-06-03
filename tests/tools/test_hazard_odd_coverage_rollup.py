@@ -8,10 +8,37 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from robot_sf.benchmark import hazard_odd_coverage
 from scripts.tools import hazard_odd_coverage_rollup as cli
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def test_campaign_row_loader_deduplicates_overlapping_report_tables(tmp_path: Path) -> None:
+    """Overlapping campaign tables should not inflate execution evidence counts."""
+    reports = tmp_path / "campaign" / "reports"
+    reports.mkdir(parents=True)
+    for filename in ("campaign_table.csv", "seed_episode_rows.csv"):
+        with (reports / filename).open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=["scenario_id", "scenario_family", "status"],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "scenario_id": "s_overlap",
+                    "scenario_family": "family_overlap",
+                    "status": "native",
+                }
+            )
+
+    rows, inputs = hazard_odd_coverage._load_campaign_rows(tmp_path / "campaign")
+
+    assert len(rows) == 1
+    assert rows[0].scenario_id == "s_overlap"
+    assert len([item for item in inputs if item["sha256"] is not None]) == 2
 
 
 def test_hazard_odd_rollup_emits_status_tables_and_provenance(tmp_path: Path) -> None:
@@ -46,8 +73,8 @@ def test_hazard_odd_rollup_emits_status_tables_and_provenance(tmp_path: Path) ->
     assert exit_code == 0
     summary = json.loads((output / "hazard_odd_coverage_summary.json").read_text())
     assert summary["schema_version"] == "hazard_odd_coverage_rollup.v1"
-    assert summary["executed_evidence"]["row_count"] == 2
-    assert "s_seed_only" not in summary["executed_evidence"]["scenario_ids"]
+    assert summary["executed_evidence"]["row_count"] == 3
+    assert "s_seed_only" in summary["executed_evidence"]["scenario_ids"]
     assert summary["executed_evidence"]["caveated_row_count"] == 1
     assert summary["provenance"]["generation_commit"]
     assert summary["provenance"]["generated_artifacts"]
@@ -59,6 +86,7 @@ def test_hazard_odd_rollup_emits_status_tables_and_provenance(tmp_path: Path) ->
         "h_partial": "partial",
         "h_missing": "missing",
         "h_excluded": "excluded",
+        "h_seed_only": "covered",
     }
 
     odd_rows = summary["odd_boundaries"]
@@ -144,12 +172,14 @@ def _write_hazard_mapping(path: Path) -> Path:
             _hazard("h_partial"),
             _hazard("h_missing"),
             _hazard("h_excluded"),
+            _hazard("h_seed_only"),
         ],
         "scenario_mappings": [
             _hazard_mapping("m_full", ["s_full"], ["h_full"]),
             _hazard_mapping("m_partial", ["s_partial"], ["h_partial"]),
             _hazard_mapping("m_missing", ["s_missing"], ["h_missing"]),
             _hazard_mapping("m_excluded", ["s_excluded"], ["h_excluded"]),
+            _hazard_mapping("m_seed_only", ["s_seed_only"], ["h_seed_only"]),
         ],
         "provenance": {
             "source_issue": "fixture",

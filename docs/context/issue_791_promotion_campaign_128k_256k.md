@@ -771,6 +771,13 @@ preserved on PR #2152, but the next useful `goal-slurm-experiment` submission is
 `SLURM/Auxme/issue_791_attention_head.sl`. Confidence: 82%; this would change if later artifact
 analysis finds a metric or evaluation mismatch in W&B run `8t3zd8sr`.
 
+Submission update: job `12730` (`gse-852-attn231`) was submitted on 2026-06-03 from branch
+`gse-852-asym10m-s123` at commit `ddcf48a2` with `ISSUE791_WANDB_POLICY=require`. Early log output
+confirmed the repaired attention launcher runs directly inside the batch allocation instead of the
+old eager-`srun` path. Treat this as the active `goal-slurm-experiment` training lane until it
+finishes, then compare seed-231 attention-only against seed-123 attention-only and the leader-family
+replicas before making any promotion claim.
+
 Verification on 2026-04-29:
 
 ```bash

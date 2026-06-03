@@ -40,3 +40,9 @@ selection, and guard overlays remain partly confounded.
 The next executable step is a purpose-built one-factor manifest on a smaller scenario slice with
 identical seeds. That follow-up should separate one-factor rows from grouped rows before making
 stronger component-contribution claims.
+
+Issue [#2170](https://github.com/ll7/robot_sf_ll7/issues/2170) now freezes that pre-execution
+contract; see
+[issue_2170_one_factor_hybrid_component_manifest.md](issue_2170_one_factor_hybrid_component_manifest.md).
+It remains proposal/pre-execution evidence until the planned candidate rows are implemented and the
+compact matrix is run with durable effect-size outputs.

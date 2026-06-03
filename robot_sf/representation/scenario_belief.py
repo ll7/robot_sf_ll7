@@ -31,6 +31,33 @@ class VisibilityState(StrEnum):
 
 
 @dataclass(frozen=True)
+class TrackedAgentMetadata:
+    """Tracking-specific diagnostic metadata for tracked-agent beliefs.
+
+    This is representation/diagnostic-only evidence. It does not claim real-sensor
+    calibration, benchmark improvement, or SNQI movement.
+    """
+
+    track_id: str
+    detection_count: int = 0
+    missed_detections: int = 0
+    track_age_s: float = 0.0
+    last_detection_s: float = 0.0
+    is_coasted: bool = False
+
+    def to_debug_dict(self) -> dict[str, Any]:
+        """Return deterministic JSON/YAML-ready tracking metadata."""
+        return {
+            "track_id": self.track_id,
+            "detection_count": self.detection_count,
+            "missed_detections": self.missed_detections,
+            "track_age_s": round(float(self.track_age_s), 6),
+            "last_detection_s": round(float(self.last_detection_s), 6),
+            "is_coasted": self.is_coasted,
+        }
+
+
+@dataclass(frozen=True)
 class BeliefSource:
     """Provenance for a value or entity inside a ScenarioBelief."""
 
@@ -100,10 +127,11 @@ class EntityBelief:
     source: BeliefSource
     last_observed_age_s: float = 0.0
     missing_fields: tuple[str, ...] = ()
+    tracking: TrackedAgentMetadata | None = None
 
     def to_debug_dict(self) -> dict[str, Any]:
         """Return deterministic JSON/YAML-ready entity metadata."""
-        return {
+        result: dict[str, Any] = {
             "entity_id": self.entity_id,
             "entity_type": self.entity_type,
             "position": self.position.to_debug_dict(),
@@ -116,6 +144,9 @@ class EntityBelief:
             "last_observed_age_s": round(float(self.last_observed_age_s), 6),
             "missing_fields": list(self.missing_fields),
         }
+        if self.tracking is not None:
+            result["tracking"] = self.tracking.to_debug_dict()
+        return result
 
 
 @dataclass(frozen=True)
@@ -132,6 +163,80 @@ class GoalBelief:
             "current": self.current.to_debug_dict(),
             "next": self.next.to_debug_dict(),
             "source": self.source.to_debug_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class AgentProjectionDiff:
+    """Per-agent comparison entry for projection/diagnostics inspection.
+
+    This is representation/diagnostic-only evidence. It does not claim benchmark
+    improvement, SNQI movement, or paper-facing performance.
+    """
+
+    entity_id: str
+    position_diff: float
+    velocity_diff: float
+    visibility_oracle: str
+    visibility_partial: str
+    confidence_oracle: float
+    confidence_partial: float
+    missing_fields_oracle: tuple[str, ...]
+    missing_fields_partial: tuple[str, ...]
+    in_policy_oracle: bool
+    in_policy_partial: bool
+
+    def to_debug_dict(self) -> dict[str, Any]:
+        """Return deterministic JSON/YAML-ready agent diff entry."""
+        return {
+            "entity_id": self.entity_id,
+            "position_diff": round(float(self.position_diff), 6),
+            "velocity_diff": round(float(self.velocity_diff), 6),
+            "visibility_oracle": self.visibility_oracle,
+            "visibility_partial": self.visibility_partial,
+            "confidence_oracle": round(float(self.confidence_oracle), 6),
+            "confidence_partial": round(float(self.confidence_partial), 6),
+            "missing_fields_oracle": list(self.missing_fields_oracle),
+            "missing_fields_partial": list(self.missing_fields_partial),
+            "in_policy_oracle": self.in_policy_oracle,
+            "in_policy_partial": self.in_policy_partial,
+        }
+
+
+@dataclass(frozen=True)
+class ProjectionDiff:
+    """Compact structured diff between two ScenarioBelief projections.
+
+    This is representation/diagnostic-only evidence. It does not claim benchmark
+    improvement, SNQI movement, or paper-facing performance.
+    """
+
+    agent_diffs: tuple[AgentProjectionDiff, ...]
+    total_agents_oracle: int
+    total_agents_partial: int
+    visible_agents_oracle: int
+    visible_agents_partial: int
+    ego_position_diff: float
+    ego_heading_diff: float
+    goal_current_diff: float
+    goal_next_diff: float
+    agent_count_match: bool
+    policy_key_set_match: bool
+
+    def to_debug_dict(self) -> dict[str, Any]:
+        """Return deterministic JSON/YAML-ready projection diff."""
+        return {
+            "agent_diffs": [d.to_debug_dict() for d in self.agent_diffs],
+            "total_agents_oracle": self.total_agents_oracle,
+            "total_agents_partial": self.total_agents_partial,
+            "visible_agents_oracle": self.visible_agents_oracle,
+            "visible_agents_partial": self.visible_agents_partial,
+            "ego_position_diff": round(float(self.ego_position_diff), 6),
+            "ego_heading_diff": round(float(self.ego_heading_diff), 6),
+            "goal_current_diff": round(float(self.goal_current_diff), 6),
+            "goal_next_diff": round(float(self.goal_next_diff), 6),
+            "agent_count_match": self.agent_count_match,
+            "policy_key_set_match": self.policy_key_set_match,
         }
 
 
@@ -156,6 +261,39 @@ class ScenarioBelief:
     pedestrian_radius: float
     schema_version: str = SCENARIO_BELIEF_SCHEMA_VERSION
     design_parent_issue: int = DESIGN_PARENT_ISSUE
+
+    def diagnostic_summary(self) -> dict[str, Any]:
+        """Return compact diagnostic summary for quick representation-quality inspection.
+
+        This is diagnostic-only evidence. It does not claim benchmark improvement,
+        SNQI movement, or paper-facing performance.
+        """
+        vis_counts: dict[str, int] = {}
+        for state in VisibilityState:
+            vis_counts[state.value] = 0
+        for agent in self.agents:
+            vis_counts[agent.visibility_state.value] += 1
+
+        return {
+            "frame_id": self.frame_id,
+            "sim_time_s": round(float(self.sim_time_s), 6),
+            "schema_version": self.schema_version,
+            "adapter": self.source_summary.adapter,
+            "total_agents": len(self.agents),
+            "visible_count": vis_counts[VisibilityState.VISIBLE.value],
+            "occluded_count": vis_counts[VisibilityState.OCCLUDED.value],
+            "out_of_range_count": vis_counts[VisibilityState.OUT_OF_RANGE.value],
+            "outside_fov_count": vis_counts[VisibilityState.OUTSIDE_FOV.value],
+            "unknown_count": vis_counts[VisibilityState.UNKNOWN.value],
+            "agents_with_missing_data": sum(1 for a in self.agents if a.missing_fields),
+            "agents_not_observed_this_step": sum(
+                1 for a in self.agents if a.last_observed_age_s > 0.0
+            ),
+            "agents_with_tracking_meta": sum(1 for a in self.agents if a.tracking is not None),
+            "coasted_agents": sum(
+                1 for a in self.agents if a.tracking is not None and a.tracking.is_coasted
+            ),
+        }
 
     def policy_projection_keys(self) -> tuple[str, ...]:
         """Return the stable top-level key set used by the SOCNAV_STRUCT projection."""
@@ -248,6 +386,133 @@ class ScenarioBelief:
         """
         position_cap = np.asarray(self.map_size, dtype=np.float32)
         return np.clip(values, 0.0, position_cap).astype(np.float32)
+
+
+def _in_policy_projection(
+    agents: tuple[EntityBelief, ...],
+    robot_pos: np.ndarray,
+    max_pedestrians: int,
+) -> frozenset[str]:
+    """Return entity_ids that pass the visibility + sort + cap policy filter.
+
+    This mirrors the agent-selection logic in ``ScenarioBelief.to_socnav_struct``
+    so diagnostic code can check per-agent policy membership without reimplementing
+    the full projection.
+    """
+    visible = [a for a in agents if a.visibility_state is VisibilityState.VISIBLE]
+    sorted_visible = sorted(
+        visible,
+        key=lambda a: (
+            float(np.linalg.norm(a.position.as_array() - robot_pos)),
+            a.entity_id,
+        ),
+    )[:max_pedestrians]
+    return frozenset(a.entity_id for a in sorted_visible)
+
+
+def compute_projection_diff(
+    oracle: ScenarioBelief,
+    partial: ScenarioBelief,
+    *,
+    max_pedestrians: int | None = None,
+) -> ProjectionDiff:
+    """Compute a compact structured diff between an oracle and partial-observation belief.
+
+    This is diagnostic-only evidence. It does not claim benchmark improvement,
+    SNQI movement, or paper-facing performance.
+
+    Args:
+        oracle: High-confidence oracle-source ScenarioBelief.
+        partial: Visibility-limited or otherwise degraded ScenarioBelief.
+        max_pedestrians: Cap for policy-projection membership (defaults to oracle's).
+
+    Returns:
+        ProjectionDiff: Per-agent and summary diff metadata.
+    """
+    if max_pedestrians is None:
+        max_pedestrians = oracle.max_pedestrians
+
+    oracle_by_id = {a.entity_id: a for a in oracle.agents}
+    partial_by_id = {a.entity_id: a for a in partial.agents}
+    all_ids = sorted(set(oracle_by_id.keys()) | set(partial_by_id.keys()))
+
+    robot_pos_oracle = oracle.ego.position.as_array()
+    robot_pos_partial = partial.ego.position.as_array()
+
+    oracle_policy_set = _in_policy_projection(oracle.agents, robot_pos_oracle, max_pedestrians)
+    partial_policy_set = _in_policy_projection(partial.agents, robot_pos_partial, max_pedestrians)
+
+    agent_diffs: list[AgentProjectionDiff] = []
+    for eid in all_ids:
+        oa = oracle_by_id.get(eid)
+        pa = partial_by_id.get(eid)
+
+        pos_oa = oa.position.as_array() if oa else np.zeros(2, dtype=np.float32)
+        pos_pa = pa.position.as_array() if pa else np.zeros(2, dtype=np.float32)
+        vel_oa = oa.velocity.as_array() if oa else np.zeros(2, dtype=np.float32)
+        vel_pa = pa.velocity.as_array() if pa else np.zeros(2, dtype=np.float32)
+
+        pos_diff = float(np.linalg.norm(pos_oa - pos_pa))
+        vel_diff = float(np.linalg.norm(vel_oa - vel_pa))
+
+        agent_diffs.append(
+            AgentProjectionDiff(
+                entity_id=eid,
+                position_diff=pos_diff,
+                velocity_diff=vel_diff,
+                visibility_oracle=oa.visibility_state.value
+                if oa
+                else VisibilityState.UNKNOWN.value,
+                visibility_partial=pa.visibility_state.value
+                if pa
+                else VisibilityState.UNKNOWN.value,
+                confidence_oracle=oa.position.confidence if oa else 0.0,
+                confidence_partial=pa.position.confidence if pa else 0.0,
+                missing_fields_oracle=oa.missing_fields if oa else (),
+                missing_fields_partial=pa.missing_fields if pa else (),
+                in_policy_oracle=eid in oracle_policy_set,
+                in_policy_partial=eid in partial_policy_set,
+            )
+        )
+
+    ego_pos_diff = float(np.linalg.norm(robot_pos_oracle - robot_pos_partial))
+    ego_heading_diff = _wrap_angle(oracle.ego.heading - partial.ego.heading)
+
+    oracle_goal = oracle.goals[0] if oracle.goals else _empty_goal(oracle.source_summary)
+    partial_goal = partial.goals[0] if partial.goals else _empty_goal(partial.source_summary)
+    goal_current_diff = float(
+        np.linalg.norm(
+            np.asarray(oracle_goal.current.mean_xy, dtype=np.float32)
+            - np.asarray(partial_goal.current.mean_xy, dtype=np.float32),
+        )
+    )
+    goal_next_diff = float(
+        np.linalg.norm(
+            np.asarray(oracle_goal.next.mean_xy, dtype=np.float32)
+            - np.asarray(partial_goal.next.mean_xy, dtype=np.float32),
+        )
+    )
+
+    oracle_keys = set(oracle.to_socnav_struct().keys())
+    partial_keys = set(partial.to_socnav_struct().keys())
+
+    return ProjectionDiff(
+        agent_diffs=tuple(agent_diffs),
+        total_agents_oracle=len(oracle.agents),
+        total_agents_partial=len(partial.agents),
+        visible_agents_oracle=sum(
+            1 for a in oracle.agents if a.visibility_state is VisibilityState.VISIBLE
+        ),
+        visible_agents_partial=sum(
+            1 for a in partial.agents if a.visibility_state is VisibilityState.VISIBLE
+        ),
+        ego_position_diff=ego_pos_diff,
+        ego_heading_diff=ego_heading_diff,
+        goal_current_diff=goal_current_diff,
+        goal_next_diff=goal_next_diff,
+        agent_count_match=len(oracle.agents) == len(partial.agents),
+        policy_key_set_match=oracle_keys == partial_keys,
+    )
 
 
 def scenario_belief_from_simulator_oracle(
@@ -404,6 +669,18 @@ def _agent_belief(
     confidence = 0.98 if visible else 0.35
     variance = 0.01 if visible else 1.0
     missing_fields = () if visible else ("policy_position", "policy_velocity")
+    tracking = (
+        None
+        if visible
+        else TrackedAgentMetadata(
+            track_id=f"track_ped_{idx:03d}",
+            detection_count=0,
+            missed_detections=3,
+            track_age_s=1.0,
+            last_detection_s=1.0,
+            is_coasted=True,
+        )
+    )
     return EntityBelief(
         entity_id=f"ped_{idx:03d}",
         entity_type="pedestrian",
@@ -416,6 +693,7 @@ def _agent_belief(
         source=source,
         last_observed_age_s=0.0 if visible else 1.0,
         missing_fields=missing_fields,
+        tracking=tracking,
     )
 
 

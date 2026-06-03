@@ -353,6 +353,35 @@ git diff --check
 - Complexity risk: graph, grid, ray, image, and fused projections can expand quickly; keep the first
   implementation slice narrow.
 
+### Issue #2157 Diagnostics Slice 2026-06-03
+
+Issue #2157 extends the MVP with diagnostic metadata and projection-diff tools for
+representation-quality inspection. The slice adds:
+
+- `TrackedAgentMetadata` dataclass with detection count, missed detections, track age,
+  last-detection timestamp, and coasted flag.
+- `EntityBelief.tracking` optional field populated for non-visible agents.
+- `AgentProjectionDiff` and `ProjectionDiff` dataclasses for structured oracle-vs-partial
+  comparison.
+- `compute_projection_diff()` function that returns a per-agent diff with visibility,
+  confidence, missing-fields, and policy-membership changes.
+- `ScenarioBelief.diagnostic_summary()` method returning a compact dict with
+  per-visibility-state counts, missing-data counts, not-observed-this-step counts, and
+  tracking-metadata counts.
+
+Claim boundary: this is representation/diagnostic-only evidence. It does not claim benchmark
+improvement, SNQI movement, calibrated real-sensor uncertainty, or paper-facing performance.
+Existing `SOCNAV_STRUCT` projection keys are unchanged.
+
+Validation recorded for the diagnostics slice:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/representation/test_scenario_belief.py -q
+scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check robot_sf/representation tests/representation
+scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check robot_sf/representation tests/representation
+git diff --check
+```
+
 ## Design-Only Validation
 
 Use cheap validation for this design-only note:

@@ -9,7 +9,9 @@ import pytest
 
 from robot_sf.gym_env.unified_config import ObservationVisibilitySettings, RobotSimulationConfig
 from robot_sf.representation import (
+    TrackedAgentMetadata,
     VisibilityState,
+    compute_projection_diff,
     scenario_belief_from_simulator_oracle,
     scenario_belief_from_visibility_limited_simulator,
 )
@@ -169,3 +171,174 @@ def test_adapter_falls_back_when_pedestrian_velocity_shape_mismatches() -> None:
 
     obs = belief.to_socnav_struct()
     np.testing.assert_allclose(obs["pedestrians"]["velocities"], np.zeros((4, 2), dtype=np.float32))
+
+
+def test_tracking_metadata_populated_for_non_visible_agents() -> None:
+    """Non-visible agents should carry TrackedAgentMetadata diagnostics."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        fov_degrees=90.0,
+    )
+    simulator = _simulator_fixture()
+    partial = scenario_belief_from_visibility_limited_simulator(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    visible_agents = [a for a in partial.agents if a.visibility_state is VisibilityState.VISIBLE]
+    non_visible_agents = [
+        a for a in partial.agents if a.visibility_state is not VisibilityState.VISIBLE
+    ]
+
+    for agent in visible_agents:
+        assert agent.tracking is None, f"visible agent {agent.entity_id} should not have tracking"
+
+    for agent in non_visible_agents:
+        assert agent.tracking is not None, f"non-visible agent {agent.entity_id} missing tracking"
+        assert agent.tracking.is_coasted is True
+        assert agent.tracking.missed_detections == 3
+        assert agent.tracking.track_age_s == pytest.approx(1.0)
+        debug = agent.tracking.to_debug_dict()
+        assert debug["track_id"] == f"track_{agent.entity_id}"
+        assert debug["is_coasted"] is True
+
+
+def test_diagnostic_summary_reports_visibility_counts() -> None:
+    """diagnostic_summary should report per-visibility-state counts and metadata."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        fov_degrees=90.0,
+    )
+    simulator = _simulator_fixture()
+    partial = scenario_belief_from_visibility_limited_simulator(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+    oracle = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    oracle_summary = oracle.diagnostic_summary()
+    assert oracle_summary["total_agents"] == 2
+    assert oracle_summary["visible_count"] == 2
+    assert oracle_summary["occluded_count"] == 0
+    assert oracle_summary["agents_with_missing_data"] == 0
+    assert oracle_summary["agents_not_observed_this_step"] == 0
+    assert oracle_summary["coasted_agents"] == 0
+    assert oracle_summary["adapter"] == "simulator_oracle"
+
+    partial_summary = partial.diagnostic_summary()
+    assert partial_summary["total_agents"] == 2
+    assert partial_summary["visible_count"] == 1
+    assert partial_summary["outside_fov_count"] == 1
+    assert partial_summary["agents_with_missing_data"] == 1
+    assert partial_summary["agents_not_observed_this_step"] == 1
+    assert partial_summary["agents_with_tracking_meta"] == 1
+    assert partial_summary["coasted_agents"] == 1
+    assert partial_summary["adapter"] == "visibility_limited_simulator"
+
+
+def test_compute_projection_diff_detects_oracle_vs_partial_differences() -> None:
+    """compute_projection_diff should report per-agent and summary diffs."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        fov_degrees=90.0,
+    )
+    simulator = _simulator_fixture()
+    oracle = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+    partial = scenario_belief_from_visibility_limited_simulator(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    diff = compute_projection_diff(oracle, partial)
+
+    assert diff.total_agents_oracle == 2
+    assert diff.total_agents_partial == 2
+    assert diff.visible_agents_oracle == 2
+    assert diff.visible_agents_partial == 1
+    assert diff.agent_count_match is True
+    assert diff.policy_key_set_match is True
+    assert diff.ego_position_diff == pytest.approx(0.0)
+
+    agent_diffs_by_id = {d.entity_id: d for d in diff.agent_diffs}
+    assert len(agent_diffs_by_id) == 2
+
+    fov_agent = agent_diffs_by_id["ped_001"]
+    assert fov_agent.visibility_oracle == "visible"
+    assert fov_agent.visibility_partial == "outside_fov"
+    assert fov_agent.in_policy_oracle is True
+    assert fov_agent.in_policy_partial is False
+    assert fov_agent.confidence_oracle > fov_agent.confidence_partial
+    assert "policy_position" in fov_agent.missing_fields_partial
+
+
+def test_compute_projection_diff_empty_agents() -> None:
+    """compute_projection_diff should handle empty agent tuples."""
+    env_config = RobotSimulationConfig()
+    empty_sim = SimpleNamespace(
+        ped_pos=np.zeros((0, 2), dtype=np.float32),
+        ped_vel=np.zeros((0, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=0.4),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=8.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    oracle = scenario_belief_from_simulator_oracle(
+        empty_sim,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+    partial = scenario_belief_from_visibility_limited_simulator(
+        empty_sim,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    diff = compute_projection_diff(oracle, partial)
+    assert diff.total_agents_oracle == 0
+    assert diff.total_agents_partial == 0
+    assert diff.visible_agents_oracle == 0
+    assert diff.visible_agents_partial == 0
+    assert len(diff.agent_diffs) == 0
+    assert diff.agent_count_match is True
+
+
+def test_tracked_agent_metadata_to_debug_dict_produces_deterministic_output() -> None:
+    """TrackedAgentMetadata.to_debug_dict should be stable and JSON-ready."""
+    meta = TrackedAgentMetadata(
+        track_id="track_ped_001",
+        detection_count=5,
+        missed_detections=2,
+        track_age_s=3.0,
+        last_detection_s=2.5,
+        is_coasted=False,
+    )
+    debug = meta.to_debug_dict()
+    assert debug["track_id"] == "track_ped_001"
+    assert debug["detection_count"] == 5
+    assert debug["missed_detections"] == 2
+    assert debug["track_age_s"] == 3.0
+    assert debug["last_detection_s"] == 2.5
+    assert debug["is_coasted"] is False
+    # second call should match
+    assert meta.to_debug_dict() == debug

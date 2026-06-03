@@ -148,6 +148,8 @@ knowledge, not every transient iteration detail.
   [issue_2001_amv_actuation_proxy_source_analysis.md](issue_2001_amv_actuation_proxy_source_analysis.md)
 * Issue #2011 AMV Actuation Sensitivity Sweep (2026-06-01):
   [issue_2011_amv_actuation_sensitivity_sweep.md](issue_2011_amv_actuation_sensitivity_sweep.md)
+* Issue #2104 Component Ablation Pilot (2026-06-02):
+  [issue_2104_component_ablation_pilot.md](issue_2104_component_ablation_pilot.md)
 * Issue #2014 Simulator Backend Decision Matrix (2026-06-01):
   [issue_2014_simulator_backend_matrix.md](issue_2014_simulator_backend_matrix.md)
 * Issue #2016 Webots/Gazebo AMV Prototype Parity Audit (2026-06-01):

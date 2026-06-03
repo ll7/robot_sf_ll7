@@ -47,7 +47,7 @@ Source: `configs/scenarios/issue_2155_research_v1_ammv.yaml`
 
 ## Planner Row Families
 
-14 planners in 4 families:
+12 planner rows in 4 families:
 
 | Family | Key | Algo | Benchmark profile | Prereq policy |
 |---|---|---|---|---|

@@ -97,6 +97,34 @@ def test_can_create_group_from_assigned_pedestrians():
     assert groups.groups[new_gid] == ped_ids
 
 
+def test_groups_as_lists_reuses_snapshot_until_grouping_changes():
+    """Group list conversion should avoid repeated list materialization when stable."""
+    groups = init_groups()
+
+    first = groups.groups_as_lists
+    second = groups.groups_as_lists
+
+    assert second is first
+
+
+def test_groups_as_lists_cache_invalidates_when_grouping_changes():
+    """Join/leave style grouping mutations should refresh the cached list snapshot."""
+    groups = init_groups()
+    first = groups.groups_as_lists
+
+    groups.add_to_group(5, 0)
+    after_join = groups.groups_as_lists
+
+    assert after_join is not first
+    assert 5 in after_join[0]
+
+    groups.new_group({5})
+    after_leave = groups.groups_as_lists
+
+    assert after_leave is not after_join
+    assert after_leave[-1] == [5]
+
+
 # def test_can_reassign_pedestrians_to_existing_group():
 #     ped_ids, old_gid, target_gid = {0, 1, 2}, 0, 1
 #     groups = init_groups()

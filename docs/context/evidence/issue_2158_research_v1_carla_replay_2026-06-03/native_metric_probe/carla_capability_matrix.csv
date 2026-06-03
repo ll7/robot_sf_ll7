@@ -1,0 +1,11 @@
+axis,status,robot_sf_value,carla_value,reason
+summary_schema_version,available,,"""carla-docker-runtime.v1""",
+replay_status,available,,"""oracle-replay""",
+carla_map,not_available,,,required CARLA summary field missing
+actor_summary,not_available,,,required CARLA summary field missing
+replay_status,available,,"""oracle-replay""",
+static_geometry_support,not_available,,,static-geometry replay support metadata is absent
+map_coordinate_frame,not_available,,"{""coordinate_alignment"": null, ""map"": null}",map or coordinate-frame metadata is missing
+timing_step_sync,not_available,,,trajectory step synchronization metadata is missing
+robot_pose_terminal_event,available,"{""collision"": false, ""success"": true}","{""collision"": false, ""success"": true}",
+pedestrian_replay,not_available,,,actor summary does not expose pedestrian replay count

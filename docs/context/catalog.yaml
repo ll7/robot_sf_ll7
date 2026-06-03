@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-01
+updated_at: 2026-06-03
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -70,6 +70,10 @@ entries:
     freshness: maintained
     area: benchmark_release
   - path: docs/context/issue_2153_research_v1_evidence_map.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
+  - path: docs/context/issue_2155_research_v1_ammv_matrix.md
     status: current
     freshness: maintained
     area: benchmark_release

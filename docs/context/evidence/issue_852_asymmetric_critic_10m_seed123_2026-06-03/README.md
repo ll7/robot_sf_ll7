@@ -77,4 +77,24 @@ The log includes recurring warnings that should remain caveats for downstream in
 ## Files
 
 - `summary.json`: compact metrics, paths, and artifact status for this run.
+- `single_factor_10m_seed123_triad.json`: compact W&B-backed comparison against the attention-only
+  and reward-curriculum-only seed-123 10M siblings.
 - `SHA256SUMS`: checksums for key ignored local artifacts.
+
+## Seed-123 10M Triad Comparison
+
+W&B-backed comparison on 2026-06-03 found that the attention-only seed-123 10M arm outperformed
+both the reward-curriculum-only and asymmetric-critic-only arms on best success, collision, and
+SNQI:
+
+| Job | Arm | Best success | Best collision | Best SNQI | Best step | Final success | W&B |
+|----:|-----|-------------:|---------------:|----------:|----------:|--------------:|-----|
+| 12233 | attention-only | 0.8857 | 0.1143 | 0.1513 | 9.96M | 0.8714 | [8t3zd8sr](https://wandb.ai/ll7/robot_sf/runs/8t3zd8sr) |
+| 12234 | reward-curriculum-only | 0.8714 | 0.1286 | 0.0889 | 8.91M | 0.8429 | [sg0iwfal](https://wandb.ai/ll7/robot_sf/runs/sg0iwfal) |
+| 12719 | asymmetric-critic-only | 0.8714 | 0.1286 | 0.1241 | 7.86M | 0.8429 | [y59octg5](https://wandb.ai/ll7/robot_sf/runs/y59octg5) |
+
+Interpretation: the asymmetric-critic-only run remains meaningful single-factor attribution
+evidence, especially because it reaches the leader-relevant band without attention or reward
+curriculum. However, this comparison does not support spending the next robustness allocation on
+`asymmetric_critic_only_10m_env22_seed231`; the better next training candidate is the attention-only
+seed-231 replication.

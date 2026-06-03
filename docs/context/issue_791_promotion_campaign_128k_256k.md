@@ -754,13 +754,22 @@ job `12719` completed.
 
 | Job | Arm | Best success | Best collision | Best step | Final success | Final collision | Decision |
 |----:|-----|-------------:|---------------:|----------:|--------------:|----------------:|----------|
-| 12719 | asymmetric-critic-only 10M, seed 123 | 0.8714 | 0.1286 | 7.86M | 0.8429 | 0.1571 | strong single-factor evidence; preserve and compare against sibling 10M arms |
+| 12233 | attention-only 10M, seed 123 | 0.8857 | 0.1143 | 9.96M | 0.8714 | 0.1286 | strongest seed-123 10M single-factor arm; replicate next |
+| 12234 | reward-curriculum-only 10M, seed 123 | 0.8714 | 0.1286 | 8.91M | 0.8429 | 0.1571 | useful but below attention-only |
+| 12719 | asymmetric-critic-only 10M, seed 123 | 0.8714 | 0.1286 | 7.86M | 0.8429 | 0.1571 | strong attribution evidence, but not the next robustness allocation |
 
 This result does not meet the strict convergence target, but it reaches a leader-relevant band
 without the attention head or reward curriculum. Treat it as strong single-factor attribution
 evidence, not as paper-grade evidence until artifact provenance is made durable beyond local
 `output/`. Compact provenance is tracked in
 `docs/context/evidence/issue_852_asymmetric_critic_10m_seed123_2026-06-03/`.
+
+Follow-up decision on 2026-06-03: the seed-123 10M triad favors attention-only, not
+asymmetric-critic-only, for the next robustness allocation. The asymmetric result is still
+preserved on PR #2152, but the next useful `goal-slurm-experiment` submission is
+`configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed231.yaml` through
+`SLURM/Auxme/issue_791_attention_head.sl`. Confidence: 82%; this would change if later artifact
+analysis finds a metric or evaluation mismatch in W&B run `8t3zd8sr`.
 
 Verification on 2026-04-29:
 

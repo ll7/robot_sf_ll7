@@ -145,6 +145,14 @@ knowledge, not every transient iteration detail.
 
   [issue_2153_research_v1_evidence_map.md](issue_2153_research_v1_evidence_map.md)
 
+* Issue #2154 AMMV-aware Social Force model slice:
+
+  [issue_2154_ammv_social_force_model.md](issue_2154_ammv_social_force_model.md)
+
+* Issue #2155 research-v1 AMMV matrix contract:
+
+  [issue_2155_research_v1_ammv_matrix.md](issue_2155_research_v1_ammv_matrix.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

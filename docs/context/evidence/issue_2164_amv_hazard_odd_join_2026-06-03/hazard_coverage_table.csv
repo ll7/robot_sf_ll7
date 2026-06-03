@@ -1,0 +1,4 @@
+hazard_id,status,severity,evidence_rows,caveated_rows,matched_scenarios,supporting_metrics,reason
+robot_pedestrian_collision,covered,safety,21,0,classic_cross_trap_low,collision_rate,represented by non-caveated executed row evidence
+near_miss,covered,safety,21,0,classic_cross_trap_low,"near_miss, min_distance",represented by non-caveated executed row evidence
+pedestrian_flow_disruption,covered,social,21,0,classic_cross_trap_low,"comfort_exposure, path_efficiency",represented by non-caveated executed row evidence

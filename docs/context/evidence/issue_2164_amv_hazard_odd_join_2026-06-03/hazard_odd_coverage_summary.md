@@ -1,0 +1,16 @@
+# Hazard And ODD Coverage Summary
+
+Coverage rollup separates metadata-only contract surfaces from executed benchmark evidence. Fallback, degraded, failed, and not_available rows remain caveats and are not success evidence.
+
+- Executed/row-level records read: 42
+- Hazard statuses: covered=3
+- ODD boundary statuses: covered=2, excluded=8
+- Scenario contract statuses: covered=1
+
+## Interpretation Caveats
+
+- `covered` requires at least one non-caveated executed row.
+- `partial` preserves fallback, degraded, failed, or not_available row caveats.
+- `missing` means metadata maps the category but no executed row represented it.
+- `excluded` comes from ODD exclusions or fail-closed scenario certification metadata.
+- `unavailable` means an optional metadata surface or campaign table was absent.

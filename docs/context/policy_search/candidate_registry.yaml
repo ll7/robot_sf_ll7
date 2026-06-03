@@ -105,6 +105,69 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  issue_2170_static_escape_only:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/issue_2170_static_escape_only.yaml
+    hypothesis: >
+      One-factor diagnostic row for #2104/#2174: enable static clearance escape on the fast-progress
+      baseline while keeping recenter, corridor transit, corridor subgoal, and continuous static
+      checks disabled.
+    required_stages:
+      - smoke
+
+  issue_2170_static_recenter_only:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/issue_2170_static_recenter_only.yaml
+    hypothesis: >
+      One-factor diagnostic row for #2104/#2174: enable static recenter scoring on the fast-progress
+      baseline while keeping static escape, corridor transit, corridor subgoal, and continuous
+      static checks disabled.
+    required_stages:
+      - smoke
+
+  issue_2170_static_escape_recenter_no_transit:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/issue_2170_static_escape_recenter_no_transit.yaml
+    hypothesis: >
+      One-factor diagnostic row for #2104/#2174: combine static escape and recenter without static
+      corridor-transit terms so the recenter increment after escape can be compared separately.
+    required_stages:
+      - smoke
+
+  issue_2170_continuous_static_checks_only:
+    status: experimental_spike
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/issue_2170_continuous_static_checks_only.yaml
+    hypothesis: >
+      One-factor diagnostic row for #2104/#2174: add corridor subgoals and continuous static
+      clearance checks on top of the grouped static baseline to isolate the continuous-check
+      increment.
+    required_stages:
+      - smoke
+
+  issue_2170_scenario_adaptive_orca_selector_only:
+    status: experimental_spike
+    family: scenario_adaptive_classical
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/issue_2170_scenario_adaptive_orca_selector_only.yaml
+    hypothesis: >
+      One-factor diagnostic row for #2104/#2174: apply only the static Francis leave-group tuned
+      ORCA selector on the fast-progress baseline, without bundled static escape or recenter terms.
+    required_stages:
+      - smoke
+
   scenario_adaptive_hybrid_orca_v1:
     status: implemented
     family: scenario_adaptive_classical

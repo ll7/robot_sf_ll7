@@ -8,10 +8,37 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from robot_sf.benchmark import hazard_odd_coverage
 from scripts.tools import hazard_odd_coverage_rollup as cli
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def test_campaign_row_loader_deduplicates_overlapping_report_tables(tmp_path: Path) -> None:
+    """Overlapping campaign tables should not inflate execution evidence counts."""
+    reports = tmp_path / "campaign" / "reports"
+    reports.mkdir(parents=True)
+    for filename in ("campaign_table.csv", "seed_episode_rows.csv"):
+        with (reports / filename).open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=["scenario_id", "scenario_family", "status"],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "scenario_id": "s_overlap",
+                    "scenario_family": "family_overlap",
+                    "status": "native",
+                }
+            )
+
+    rows, inputs = hazard_odd_coverage._load_campaign_rows(tmp_path / "campaign")
+
+    assert len(rows) == 1
+    assert rows[0].scenario_id == "s_overlap"
+    assert len([item for item in inputs if item["sha256"] is not None]) == 2
 
 
 def test_hazard_odd_rollup_emits_status_tables_and_provenance(tmp_path: Path) -> None:

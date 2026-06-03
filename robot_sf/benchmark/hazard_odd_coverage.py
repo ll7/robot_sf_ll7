@@ -207,7 +207,16 @@ def _load_campaign_rows(campaign_root: Path) -> tuple[list[CampaignRow], list[di
                 row = {field: _cell(raw_row.get(field)) for field in (reader.fieldnames or [])}
                 rows.append(_campaign_row(path, index, row))
         inputs.append(_input_ref(path, "available", f"loaded {relative}"))
-    return rows, inputs
+    # Deduplicate across tables so overlapping execution rows cannot inflate
+    # evidence_rows or caveated_rows.
+    seen: set[tuple[str, str, tuple[str, ...]]] = set()
+    deduplicated: list[CampaignRow] = []
+    for row in rows:
+        key = (row.scenario_id, row.scenario_family, row.execution_labels)
+        if key not in seen:
+            seen.add(key)
+            deduplicated.append(row)
+    return deduplicated, inputs
 
 
 def _campaign_row(path: Path, index: int, row: Mapping[str, str]) -> CampaignRow:

@@ -65,6 +65,7 @@ git diff --check
 Artifact class: tracked context note. No generated benchmark, replay, training, or local `output/`
 artifact was created for this map. Diagnostic-only and proposal-only evidence is intentionally not
 promoted to benchmark or paper-facing status here.
+
 ## Issue #2156 Hazard/ODD Diagnostic Update
 
 Issue [#2156](https://github.com/ll7/robot_sf_ll7/issues/2156) generated a
@@ -82,7 +83,7 @@ than candidate or paper-ready evidence. The smallest next proof step is to add
 or select scenario contracts and hazard mappings that name the executed AMV
 scenarios, then rerun the same rollup.
 
-## Issue #2164 AMV Hazard/ODD Join Update
+### Issue #2164 AMV Hazard/ODD Join Update 2026-06-03
 
 Issue [#2164](https://github.com/ll7/robot_sf_ll7/issues/2164) adds
 issue-specific metadata for `classic_cross_trap_low` and promotes

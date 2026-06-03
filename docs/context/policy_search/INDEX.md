@@ -22,6 +22,7 @@ It points to the smallest authority surface for common agent questions.
 | One-factor component manifest | `../issue_2170_one_factor_hybrid_component_manifest.md` | Pre-execution contract for the next one-factor hybrid component ablation slice. |
 | Worker-scaling diagnostic | `../issue_2172_benchmark_worker_scaling.md` | Local runtime profile helper and compact evidence for policy-search worker scaling. |
 | One-factor ablation pilot | `../issue_2174_one_factor_ablation_pilot.md` | First executable one-factor comparison and runner for the #2170 manifest. |
+| Remaining one-factor h80 comparisons | `../issue_2176_remaining_one_factor_h80.md` | Remaining selected h80 component comparisons; diagnostic-only with a partial selector row. |
 
 ## Lifecycle Routing
 

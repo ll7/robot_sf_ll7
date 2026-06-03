@@ -46,3 +46,11 @@ contract; see
 [issue_2170_one_factor_hybrid_component_manifest.md](issue_2170_one_factor_hybrid_component_manifest.md).
 It remains proposal/pre-execution evidence until the planned candidate rows are implemented and the
 compact matrix is run with durable effect-size outputs.
+
+Update 2026-06-03: Issue [#2174](https://github.com/ll7/robot_sf_ll7/issues/2174) and Issue
+[#2176](https://github.com/ll7/robot_sf_ll7/issues/2176) executed the h80 staged pilot. See
+[issue_2174_one_factor_ablation_pilot.md](issue_2174_one_factor_ablation_pilot.md) and
+[issue_2176_remaining_one_factor_h80.md](issue_2176_remaining_one_factor_h80.md). The clean h80
+rows did not move success, collision, or near-miss rates; the selector-only row is partial because
+3/18 jobs failed, consistent with a local missing `rvo2` dependency. The parent research question
+therefore remains open for h500 execution or a selector-row rerun after the dependency is available.

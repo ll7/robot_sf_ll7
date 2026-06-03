@@ -161,6 +161,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2170_one_factor_hybrid_component_manifest.md](issue_2170_one_factor_hybrid_component_manifest.md)
 
+* Issue #2172 benchmark worker scaling diagnostic:
+
+  [issue_2172_benchmark_worker_scaling.md](issue_2172_benchmark_worker_scaling.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

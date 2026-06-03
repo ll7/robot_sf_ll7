@@ -54,3 +54,9 @@ Update 2026-06-03: Issue [#2174](https://github.com/ll7/robot_sf_ll7/issues/2174
 rows did not move success, collision, or near-miss rates; the selector-only row is partial because
 3/18 jobs failed, consistent with a local missing `rvo2` dependency. The parent research question
 therefore remains open for h500 execution or a selector-row rerun after the dependency is available.
+
+Issue [#2178](https://github.com/ll7/robot_sf_ll7/issues/2178) completes that selector rerun after
+syncing the `orca` extra. See
+[issue_2178_selector_orca_extra_h80.md](issue_2178_selector_orca_extra_h80.md). The corrected h80
+selector row writes 18/18 jobs with zero failures and stays flat on success, collision, and
+near-miss rate.

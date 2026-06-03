@@ -71,3 +71,8 @@ selector-only failed jobs so a complete denominator can be compared before any h
 - No one-factor causality claim for the partial selector row.
 - Raw `output/` files are disposable; this note and the compact evidence bundle are the durable
   review surfaces.
+
+Update 2026-06-03: [issue_2178_selector_orca_extra_h80.md](issue_2178_selector_orca_extra_h80.md)
+reruns the selector comparison after syncing the `orca` extra and proving `import rvo2`. The rerun
+wrote 18/18 selector rows with zero failed jobs, removing this note's selector denominator caveat.
+The corrected h80 selector row remains flat on success, collision, and near-miss rates.

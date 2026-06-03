@@ -173,6 +173,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2176_remaining_one_factor_h80.md](issue_2176_remaining_one_factor_h80.md)
 
+* Issue #2178 selector ORCA-extra h80 rerun:
+
+  [issue_2178_selector_orca_extra_h80.md](issue_2178_selector_orca_extra_h80.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

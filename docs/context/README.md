@@ -157,6 +157,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2155_research_v1_ammv_matrix.md](issue_2155_research_v1_ammv_matrix.md)
 
+* Issue #2170 one-factor hybrid component ablation manifest:
+
+  [issue_2170_one_factor_hybrid_component_manifest.md](issue_2170_one_factor_hybrid_component_manifest.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

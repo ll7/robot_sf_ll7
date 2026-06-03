@@ -11,7 +11,7 @@ from copy import deepcopy
 from dataclasses import fields
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, TextIO
 
 import numpy as np
 import yaml
@@ -3410,12 +3410,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     forces_arr = np.array(forces, dtype=float, copy=True)
                     if forces_arr.shape != peds.shape:
                         forces_arr = np.zeros_like(peds, dtype=float)
-            else:
-                forces_arr = np.zeros_like(peds, dtype=float)
 
             robot_positions.append(robot_pos)
             ped_positions.append(peds)
-            ped_forces.append(forces_arr)
+            if record_forces:
+                ped_forces.append(forces_arr)
 
             meta = info.get("meta", {}) if isinstance(info, dict) else {}
             step_collision = collision_event(info)
@@ -3475,7 +3474,11 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         robot_pos_arr, config.sim_config.time_per_step_in_secs
     )
     ped_pos_arr = _stack_ped_positions(ped_positions)
-    ped_forces_arr = _stack_ped_positions(ped_forces, fill_value=np.nan)
+    ped_forces_arr = (
+        _stack_ped_positions(ped_forces, fill_value=np.nan)
+        if record_forces
+        else np.zeros_like(ped_pos_arr, dtype=float)
+    )
 
     obstacles = (
         sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def is not None else None
@@ -3684,12 +3687,22 @@ def _scenario_with_episode_seed_defaults(
 
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:
     """Validate an episode record and append it as JSONL."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("a", encoding="utf-8") as handle:
+        _write_validated_to_handle(handle, schema, record)
+
+
+def _write_validated_to_handle(
+    handle: TextIO,
+    schema: dict[str, Any],
+    record: dict[str, Any],
+) -> None:
+    """Validate one episode record and append it to an open JSONL handle."""
     violations = validate_episode_success_integrity(record)
     if violations:
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(record, schema)
-    with out_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, sort_keys=True) + "\n")
+    handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
 def _run_map_job_worker(
@@ -4248,28 +4261,32 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     }
     batch_started = time.perf_counter()
     if workers <= 1:
-        for scenario, seed in jobs:
-            try:
-                rec = _run_map_job_worker((scenario, seed, fixed_params))
-                bridge_update = _apply_worker_metadata_bridge(
-                    rec,
-                    feasibility_totals=feasibility_totals,
-                    runtime_algorithm_contract=runtime_algorithm_contract,
-                )
-                adapter_samples_seen = adapter_samples_seen or bridge_update.adapter_requested_seen
-                adapter_native_steps += bridge_update.adapter_native_steps
-                adapter_adapted_steps += bridge_update.adapter_adapted_steps
-                runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
-                _write_validated(out_path, schema, rec)
-                wrote += 1
-            except Exception as exc:  # pragma: no cover - error path
-                failures.append(
-                    {
-                        "scenario_id": scenario.get("name", "unknown"),
-                        "seed": seed,
-                        "error": repr(exc),
-                    }
-                )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("a", encoding="utf-8") as handle:
+            for scenario, seed in jobs:
+                try:
+                    rec = _run_map_job_worker((scenario, seed, fixed_params))
+                    bridge_update = _apply_worker_metadata_bridge(
+                        rec,
+                        feasibility_totals=feasibility_totals,
+                        runtime_algorithm_contract=runtime_algorithm_contract,
+                    )
+                    adapter_samples_seen = (
+                        adapter_samples_seen or bridge_update.adapter_requested_seen
+                    )
+                    adapter_native_steps += bridge_update.adapter_native_steps
+                    adapter_adapted_steps += bridge_update.adapter_adapted_steps
+                    runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
+                    _write_validated_to_handle(handle, schema, rec)
+                    wrote += 1
+                except Exception as exc:  # pragma: no cover - error path
+                    failures.append(
+                        {
+                            "scenario_id": scenario.get("name", "unknown"),
+                            "seed": seed,
+                            "error": repr(exc),
+                        }
+                    )
     else:
         results_by_idx: dict[int, dict[str, Any]] = {}
         with ProcessPoolExecutor(max_workers=int(workers)) as ex:
@@ -4301,20 +4318,22 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             "error": repr(exc),
                         }
                     )
-        for idx in sorted(results_by_idx):
-            try:
-                _write_validated(out_path, schema, results_by_idx[idx])
-                wrote += 1
-            except Exception as exc:  # pragma: no cover - write/validate path
-                rec = results_by_idx[idx]
-                failures.append(
-                    {
-                        "scenario_id": rec.get("scenario_id")
-                        or rec.get("scenario", {}).get("name", "unknown"),
-                        "seed": rec.get("seed", -1),
-                        "error": repr(exc),
-                    }
-                )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("a", encoding="utf-8") as handle:
+            for idx in sorted(results_by_idx):
+                try:
+                    _write_validated_to_handle(handle, schema, results_by_idx[idx])
+                    wrote += 1
+                except Exception as exc:  # pragma: no cover - write/validate path
+                    rec = results_by_idx[idx]
+                    failures.append(
+                        {
+                            "scenario_id": rec.get("scenario_id")
+                            or rec.get("scenario", {}).get("name", "unknown"),
+                            "seed": rec.get("seed", -1),
+                            "error": repr(exc),
+                        }
+                    )
 
     impact_contract = algo_contract.get("adapter_impact")
     if (

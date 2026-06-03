@@ -4,6 +4,7 @@ import warnings
 
 import numpy as np
 import pysocialforce as pysf
+from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
 from pysocialforce.scene import PedState
 
 
@@ -32,6 +33,61 @@ def test_can_simulate_with_populated_map():
     for _ in range(10):
         simulator.step()
         print(simulator.states.ped_positions)
+
+
+def test_compute_forces_accumulates_multiple_force_components():
+    """compute_forces should sum each force component explicitly into an array."""
+    state = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+        ],
+        dtype=float,
+    )
+
+    def make_forces(_, __):
+        return [
+            lambda: np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+            lambda: np.array([[5.0, 6.0], [7.0, 8.0]], dtype=float),
+        ]
+
+    simulator = pysf.Simulator(state=state, make_forces=make_forces)
+    forces = simulator.compute_forces()
+
+    assert isinstance(forces, np.ndarray)
+    assert forces.shape == (2, 2)
+    assert np.array_equal(forces, np.array([[6.0, 8.0], [10.0, 12.0]], dtype=float))
+
+
+def test_simulator_v2_step_accumulates_multiple_force_components():
+    """Simulator_v2 stepping should feed the combined force array to pedestrian state."""
+    state = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+        ],
+        dtype=float,
+    )
+    captured_forces = []
+
+    def populate(_, __):
+        states = PedestrianStates(state)
+        groupings = PedestrianGroupings(states, {})
+        return states, groupings, []
+
+    def make_forces(_, __):
+        return [
+            lambda: np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+            lambda: np.array([[5.0, 6.0], [7.0, 8.0]], dtype=float),
+        ]
+
+    simulator = pysf.Simulator_v2(make_forces=make_forces, populate=populate)
+    simulator.peds.step = lambda force: captured_forces.append(force.copy())
+
+    simulator.step()
+
+    assert len(captured_forces) == 1
+    assert np.array_equal(captured_forces[0], np.array([[6.0, 8.0], [10.0, 12.0]], dtype=float))
 
 
 def test_capped_velocity_handles_zero_desired_speed_without_runtime_warning():

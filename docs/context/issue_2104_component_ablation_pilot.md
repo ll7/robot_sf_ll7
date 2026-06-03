@@ -66,3 +66,9 @@ h500; see [issue_2180_one_factor_h500.md](issue_2180_one_factor_h500.md). All ei
 write 18/18 rows with zero failures. The strongest positive direction is recentering, while static
 escape alone is flat, grouped corridor-transit terms are flat, and continuous static checks trade
 fewer near misses for fewer successes.
+
+Issue [#2182](https://github.com/ll7/robot_sf_ll7/issues/2182) synthesizes the component effects;
+see [issue_2182_component_effect_synthesis.md](issue_2182_component_effect_synthesis.md). The
+first-pass Issue #2104 acceptance criteria are now mostly satisfied for local diagnostic purposes,
+with remaining uncertainty limited to broader-slice/paper-facing causality rather than the compact
+component-ablation deliverable itself.

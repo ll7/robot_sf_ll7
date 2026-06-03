@@ -1,0 +1,170 @@
+{
+  "capability_matrix": [
+    {
+      "axis": "summary_schema_version",
+      "carla_value": "carla-docker-runtime.v1",
+      "reason": null,
+      "robot_sf_value": null,
+      "status": "available"
+    },
+    {
+      "axis": "replay_status",
+      "carla_value": "oracle-replay",
+      "reason": null,
+      "robot_sf_value": null,
+      "status": "available"
+    },
+    {
+      "axis": "carla_map",
+      "carla_value": null,
+      "reason": "required CARLA summary field missing",
+      "robot_sf_value": null,
+      "status": "not_available"
+    },
+    {
+      "axis": "actor_summary",
+      "carla_value": null,
+      "reason": "required CARLA summary field missing",
+      "robot_sf_value": null,
+      "status": "not_available"
+    },
+    {
+      "axis": "replay_status",
+      "carla_value": {
+        "mode": "oracle-replay-adapted",
+        "status": "oracle-replay"
+      },
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "static_geometry_support",
+      "carla_value": null,
+      "reason": "static-geometry replay support metadata is absent",
+      "robot_sf_value": null,
+      "status": "not_available"
+    },
+    {
+      "axis": "map_coordinate_frame",
+      "carla_value": {
+        "coordinate_alignment": null,
+        "map": null
+      },
+      "reason": "map or coordinate-frame metadata is missing",
+      "robot_sf_value": null,
+      "status": "not_available"
+    },
+    {
+      "axis": "timing_step_sync",
+      "carla_value": null,
+      "reason": "trajectory step synchronization metadata is missing",
+      "robot_sf_value": null,
+      "status": "not_available"
+    },
+    {
+      "axis": "robot_pose_terminal_event",
+      "carla_value": {
+        "collision": false,
+        "success": false
+      },
+      "reason": "success/collision terminal fields are not present in both inputs",
+      "robot_sf_value": {
+        "collision": null,
+        "success": null
+      },
+      "status": "not_available"
+    },
+    {
+      "axis": "pedestrian_replay",
+      "carla_value": null,
+      "reason": "actor summary does not expose pedestrian replay count",
+      "robot_sf_value": null,
+      "status": "not_available"
+    }
+  ],
+  "interpretation_boundary": "Diagnostics classify comparability surfaces only; they are not simulator-equivalence or benchmark-transfer evidence by themselves.",
+  "metric_fields": [
+    {
+      "axis": "success",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "collision",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "ttc_min_s",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "min_distance_m",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "comfort",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "jerk",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "curvature",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "intervention_rate",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    },
+    {
+      "axis": "snqi",
+      "carla_value": null,
+      "reason": "CARLA replay mode/status is not native/comparable: oracle-replay-adapted",
+      "robot_sf_value": null,
+      "status": "degraded"
+    }
+  ],
+  "schema_version": "carla-replay-diagnostics.v1",
+  "status": "degraded",
+  "unsupported_semantics": [
+    {
+      "axis": "sensor_perception_replay",
+      "carla_value": null,
+      "reason": "CARLA replay diagnostics do not compare sensor or perception pipelines",
+      "robot_sf_value": null,
+      "status": "unsupported"
+    },
+    {
+      "axis": "broad_simulator_equivalence",
+      "carla_value": null,
+      "reason": "live replay diagnostics are not simulator-equivalence evidence",
+      "robot_sf_value": null,
+      "status": "unsupported"
+    }
+  ]
+}

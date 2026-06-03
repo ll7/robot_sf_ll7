@@ -1,0 +1,3 @@
+axis,status,robot_sf_value,carla_value,reason
+sensor_perception_replay,unsupported,,,CARLA replay diagnostics do not compare sensor or perception pipelines
+broad_simulator_equivalence,unsupported,,,live replay diagnostics are not simulator-equivalence evidence

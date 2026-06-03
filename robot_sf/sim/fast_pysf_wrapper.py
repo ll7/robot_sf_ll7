@@ -237,6 +237,30 @@ class FastPysfWrapper:
 
         return total
 
+    def get_forces_at_points(self, points: Sequence[Sequence[float]], **kwargs) -> np.ndarray:
+        """Compute force vectors for a batch of 2D sample points.
+
+        The batched API intentionally preserves ``get_forces_at`` semantics by
+        evaluating each point through that method. Empty batches return an
+        array with shape ``(0, 2)`` so callers can stack force snapshots safely.
+
+        Returns:
+            Array of force vectors with shape ``(N, 2)``.
+        """
+        points_arr = np.asarray(points, dtype=float)
+        if points_arr.size == 0:
+            return np.zeros((0, 2), dtype=float)
+        if points_arr.ndim == 1:
+            points_arr = points_arr.reshape(1, 2)
+        elif points_arr.shape[-1] != 2:
+            raise ValueError("points must have shape (N, 2)")
+        else:
+            points_arr = points_arr.reshape(-1, 2)
+
+        return np.asarray(
+            [self.get_forces_at(point, **kwargs) for point in points_arr], dtype=float
+        )
+
     def get_force_field(self, xs: Sequence[float], ys: Sequence[float], **kwargs) -> np.ndarray:
         """Sample forces on the grid defined by 1D arrays `xs`, `ys`.
 
@@ -247,7 +271,7 @@ class FastPysfWrapper:
         xs = np.asarray(xs, dtype=float)
         ys = np.asarray(ys, dtype=float)
         pts = np.stack(np.meshgrid(xs, ys), -1).reshape(-1, 2)
-        forces = np.vstack([self.get_forces_at(p, **kwargs) for p in pts])
+        forces = self.get_forces_at_points(pts, **kwargs)
         return forces.reshape(len(ys), len(xs), 2)
 
     def build_force_grid_cache(

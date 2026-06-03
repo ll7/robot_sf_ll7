@@ -1077,10 +1077,7 @@ def _simulate_episode_with_policy(
     initial_ped_pos = sim.peds.pos().copy()
     peds_pos_traj.append(initial_ped_pos)
     if record_forces:
-        forces = np.zeros_like(initial_ped_pos, dtype=float)
-        for i, p in enumerate(initial_ped_pos):
-            forces[i] = wrapper.get_forces_at(p)
-        ped_forces_traj.append(forces)
+        ped_forces_traj.append(wrapper.get_forces_at_points(initial_ped_pos))
     else:
         ped_forces_traj.append(np.zeros_like(initial_ped_pos, dtype=float))
     robot_pos_traj.append(robot_pos.copy())
@@ -1114,10 +1111,7 @@ def _simulate_episode_with_policy(
         peds_pos_traj.append(ped_pos_next)
 
         if record_forces:
-            forces = np.zeros_like(ped_pos_next, dtype=float)
-            for i, p in enumerate(ped_pos_next):
-                forces[i] = wrapper.get_forces_at(p)
-            ped_forces_traj.append(forces)
+            ped_forces_traj.append(wrapper.get_forces_at_points(ped_pos_next))
         else:
             ped_forces_traj.append(np.zeros_like(ped_pos_next, dtype=float))
 

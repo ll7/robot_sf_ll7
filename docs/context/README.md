@@ -149,6 +149,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2154_ammv_social_force_model.md](issue_2154_ammv_social_force_model.md)
 
+* Issue #2168 AMMV-aware Social Force paired diagnostic:
+
+  [issue_2168_ammv_social_force_pair_diagnostic.md](issue_2168_ammv_social_force_pair_diagnostic.md)
+
 * Issue #2155 research-v1 AMMV matrix contract:
 
   [issue_2155_research_v1_ammv_matrix.md](issue_2155_research_v1_ammv_matrix.md)

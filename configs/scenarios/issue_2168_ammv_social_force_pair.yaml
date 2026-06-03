@@ -1,0 +1,12 @@
+# Issue #2168 paired AMMV-aware Social Force diagnostic slice.
+#
+# This intentionally selects one named AMMV matrix scenario for a local diagnostic
+# comparison. It is not a benchmark-strength or paper-facing scenario set.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - archetypes/classic_head_on_corridor.yaml
+select_scenarios:
+  - classic_head_on_corridor_low
+map_search_paths:
+  - ../../maps/svg_maps

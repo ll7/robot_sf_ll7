@@ -77,6 +77,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2168_ammv_social_force_pair_diagnostic.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2155_research_v1_ammv_matrix.md
     status: current
     freshness: maintained

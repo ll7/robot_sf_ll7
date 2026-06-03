@@ -31,6 +31,12 @@ evidence, and it does not show improved planner performance on the research-v1 A
 
 ## Next Proof Step
 
-Run a paired classical Social Force versus AMMV-aware Social Force diagnostic on a named AMMV
-scenario/config/seed and promote only a compact summary with command, config, seed, commit, and
-fallback/degraded exclusions.
+Issue [#2168](https://github.com/ll7/robot_sf_ll7/issues/2168) ran the paired diagnostic on
+`classic_head_on_corridor_low`; see
+[issue_2168_ammv_social_force_pair_diagnostic.md](issue_2168_ammv_social_force_pair_diagnostic.md)
+and `docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/`.
+
+The result remains diagnostic: benchmark adapter rows were identical and did not surface AMMV
+metadata, while a direct `SocialForcePlanner` mechanism probe showed AMMV force activation. The
+next proof step is to either wire AMMV-aware Social Force into a benchmark execution path that
+surfaces AMMV diagnostics or explicitly keep the AMMV term as mechanism-only evidence.

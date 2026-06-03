@@ -103,3 +103,56 @@ def test_ped_simulator_step_once_rejects_mismatched_ego_ped_action_count(ego_ped
 
     with pytest.raises(ValueError, match="expected 1 ego pedestrian action"):
         simulator.step_once([(0.0, 0.0)], ego_ped_actions=ego_ped_actions)
+
+
+def test_simulator_step_once_forwards_cached_group_lists(monkeypatch) -> None:
+    """Simulator.step_once should pass the cached group-list snapshot to PySF stepping."""
+    map_def = _minimal_map()
+    config = RobotSimulationConfig(
+        map_pool=MapDefinitionPool(map_defs={"test": map_def}),
+        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.0]),
+    )
+    simulator = init_simulators(
+        config,
+        map_def,
+        num_robots=1,
+        random_start_pos=False,
+        peds_have_obstacle_forces=True,
+    )[0]
+
+    captured: dict[str, list[list[int]] | None] = {"groups": None}
+    initial_group_lists = simulator.groups.groups_as_lists
+
+    def _capture_group_lists(_ped_forces, groups: list[list[int]]) -> None:
+        captured["groups"] = groups
+
+    monkeypatch.setattr(simulator.pysf_sim.peds, "step", _capture_group_lists)
+    simulator.step_once([(0.0, 0.0)])
+
+    assert captured["groups"] is initial_group_lists
+
+
+def test_ped_simulator_step_once_forwards_cached_group_lists(monkeypatch) -> None:
+    """PedSimulator.step_once should pass the cached group-list snapshot to PySF stepping."""
+    map_def = _minimal_map()
+    config = PedestrianSimulationConfig(
+        map_pool=MapDefinitionPool(map_defs={"test": map_def}),
+        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.0]),
+    )
+    simulator = init_ped_simulators(
+        config,
+        map_def,
+        random_start_pos=False,
+        peds_have_obstacle_forces=True,
+    )[0]
+
+    captured: dict[str, list[list[int]] | None] = {"groups": None}
+    initial_group_lists = simulator.groups.groups_as_lists
+
+    def _capture_group_lists(_ped_forces, groups: list[list[int]]) -> None:
+        captured["groups"] = groups
+
+    monkeypatch.setattr(simulator.pysf_sim.peds, "step", _capture_group_lists)
+    simulator.step_once([(0.0, 0.0)], ego_ped_actions=[(0.0, 0.0)])
+
+    assert captured["groups"] is initial_group_lists

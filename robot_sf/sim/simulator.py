@@ -224,7 +224,6 @@ class Simulator:
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
-
         self.reset_state()
         for behavior in self.peds_behaviors:
             behavior.reset()

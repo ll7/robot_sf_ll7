@@ -1,0 +1,72 @@
+{
+  "schema_version": "robot-sf-one-factor-ablation-pilot.v1",
+  "issue": 2178,
+  "parent_issue": 2104,
+  "predecessor_issue": 2176,
+  "manifest_issue": 2170,
+  "claim_boundary": "diagnostic-only",
+  "result_classification": "complete_h80_selector_rerun",
+  "generated_at": "2026-06-03T19:55:55.288787+00:00",
+  "git_hash": "7e26c28980d4ed3671c3d1583979d37423b066ab",
+  "horizon": 80,
+  "workers": 2,
+  "orca_import_proof": {
+    "command": "uv run python -c 'import rvo2; print(rvo2.__name__)'",
+    "exit_code": 0,
+    "stdout": "rvo2"
+  },
+  "manifest": "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml",
+  "selected_comparisons": [
+    "selector_only_minus_grouped_static"
+  ],
+  "candidate_results": {
+    "hybrid_rule_v3_fast_progress_static_escape": {
+      "candidate": "hybrid_rule_v3_fast_progress_static_escape",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.4858860664338829,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 66.38080525497207,
+        "success_rate": 0.0
+      }
+    },
+    "issue_2170_scenario_adaptive_orca_selector_only": {
+      "candidate": "issue_2170_scenario_adaptive_orca_selector_only",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.389458389062321,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 56.51612786803162,
+        "success_rate": 0.0
+      }
+    }
+  },
+  "effect_rows": [
+    {
+      "comparison_id": "selector_only_minus_grouped_static",
+      "a_candidate": "issue_2170_scenario_adaptive_orca_selector_only",
+      "b_candidate": "hybrid_rule_v3_fast_progress_static_escape",
+      "interpretation": "static scenario-adaptive ORCA selector",
+      "status": "ok",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": -0.09642767737156177,
+      "runtime_sec_delta": -9.864677386940457
+    }
+  ]
+}

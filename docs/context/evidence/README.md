@@ -101,7 +101,7 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   the #1610 scenario perturbation criticality pilot.
 - `issue_1939_corridor_trace_response_2026-05-31/`: compact diagnostic-only closest-approach trace
   slices for the `classic_head_on_corridor_low` pedestrian-route-offset response observed in the
-  #1610/#1937 pilot.
+  Issue #1610/Issue #1937 pilot.
 - `issue_1941_ped_timing_phase_2026-05-31/`: compact diagnostic-only paired
   no-op-versus-start-delay summary for the #1610 single-pedestrian timing phase perturbation pilot.
 - `issue_1943_ped_speed_perturbation_2026-05-31/`: compact diagnostic-only paired
@@ -118,3 +118,6 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   single-pedestrian phase grid.
 - `issue_1953_intersection_wait_speed_grid_trace_2026-06-01/`: compact diagnostic-only
   closest-approach trace slices for the strongest #1951 intersection-wait speed-grid response.
+- `issue_2176_remaining_one_factor_h80_2026-06-03/`: compact diagnostic-only h80 summary for the
+  remaining selected Issue #2170 one-factor hybrid component comparisons, including the partial
+  selector-only row caveat.

@@ -1,0 +1,233 @@
+{
+  "schema_version": "robot-sf-one-factor-ablation-pilot.v1",
+  "issue": 2176,
+  "parent_issue": 2104,
+  "manifest_issue": 2170,
+  "claim_boundary": "diagnostic-only",
+  "result_classification": "partial_h80_local_diagnostic",
+  "generated_at": "2026-06-03T19:29:55.981488+00:00",
+  "git_hash": "10c6142f28d2057a80408fa7c0af9e0b49817e8e",
+  "horizon": 80,
+  "workers": 2,
+  "manifest": "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml",
+  "selected_comparisons": [
+    "static_recenter_only_minus_base",
+    "escape_recenter_pair_minus_static_escape_only",
+    "grouped_transit_minus_escape_recenter_pair",
+    "continuous_checks_minus_grouped_static",
+    "selector_only_minus_grouped_static",
+    "speed_progress_2p4_minus_base"
+  ],
+  "candidate_results": {
+    "hybrid_rule_v3_fast_progress": {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.3959925710567398,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 49.2400654660305,
+        "success_rate": 0.0
+      }
+    },
+    "hybrid_rule_v3_fast_progress_static_escape": {
+      "candidate": "hybrid_rule_v3_fast_progress_static_escape",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.4858860664338829,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 65.52505390602164,
+        "success_rate": 0.0
+      }
+    },
+    "hybrid_rule_v3_progress_2p4": {
+      "candidate": "hybrid_rule_v3_progress_2p4",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.406799162931882,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 49.141411743999925,
+        "success_rate": 0.0
+      }
+    },
+    "issue_2170_continuous_static_checks_only": {
+      "candidate": "issue_2170_continuous_static_checks_only",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.4849303791156918,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 67.184579503024,
+        "success_rate": 0.0
+      }
+    },
+    "issue_2170_scenario_adaptive_orca_selector_only": {
+      "candidate": "issue_2170_scenario_adaptive_orca_selector_only",
+      "decision": "tracked",
+      "episodes": 15,
+      "exit_code": 0,
+      "failed_jobs": 3,
+      "status": "partial",
+      "total_jobs": 18,
+      "written": 15,
+      "summary": {
+        "collision_rate": 0.13333333333333333,
+        "mean_avg_speed": 1.4445983656460262,
+        "near_miss_rate": 0.13333333333333333,
+        "runtime_sec": 52.93076920002932,
+        "success_rate": 0.0
+      }
+    },
+    "issue_2170_static_escape_only": {
+      "candidate": "issue_2170_static_escape_only",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.3959925710567398,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 64.6563785590115,
+        "success_rate": 0.0
+      }
+    },
+    "issue_2170_static_escape_recenter_no_transit": {
+      "candidate": "issue_2170_static_escape_recenter_no_transit",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.4858860664338829,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 65.64512313104933,
+        "success_rate": 0.0
+      }
+    },
+    "issue_2170_static_recenter_only": {
+      "candidate": "issue_2170_static_recenter_only",
+      "decision": "tracked",
+      "episodes": 18,
+      "exit_code": 0,
+      "failed_jobs": 0,
+      "status": "ok",
+      "total_jobs": 18,
+      "written": 18,
+      "summary": {
+        "collision_rate": 0.1111111111111111,
+        "mean_avg_speed": 1.4858860664338829,
+        "near_miss_rate": 0.2777777777777778,
+        "runtime_sec": 65.50293387006968,
+        "success_rate": 0.0
+      }
+    }
+  },
+  "effect_rows": [
+    {
+      "comparison_id": "static_recenter_only_minus_base",
+      "a_candidate": "issue_2170_static_recenter_only",
+      "b_candidate": "hybrid_rule_v3_fast_progress",
+      "interpretation": "static recentering without static escape",
+      "status": "ok",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": 0.08989349537714308,
+      "runtime_sec_delta": 16.26286840403918
+    },
+    {
+      "comparison_id": "escape_recenter_pair_minus_static_escape_only",
+      "a_candidate": "issue_2170_static_escape_recenter_no_transit",
+      "b_candidate": "issue_2170_static_escape_only",
+      "interpretation": "recentering effect after static escape is enabled",
+      "status": "ok",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": 0.08989349537714308,
+      "runtime_sec_delta": 0.988744572037831
+    },
+    {
+      "comparison_id": "grouped_transit_minus_escape_recenter_pair",
+      "a_candidate": "hybrid_rule_v3_fast_progress_static_escape",
+      "b_candidate": "issue_2170_static_escape_recenter_no_transit",
+      "interpretation": "static corridor-transit terms after escape and recentering",
+      "status": "ok",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": 0.0,
+      "runtime_sec_delta": -0.12006922502769157
+    },
+    {
+      "comparison_id": "continuous_checks_minus_grouped_static",
+      "a_candidate": "issue_2170_continuous_static_checks_only",
+      "b_candidate": "hybrid_rule_v3_fast_progress_static_escape",
+      "interpretation": "continuous static-clearance checks",
+      "status": "ok",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": -0.0009556873181910674,
+      "runtime_sec_delta": 1.6595255970023572
+    },
+    {
+      "comparison_id": "selector_only_minus_grouped_static",
+      "a_candidate": "issue_2170_scenario_adaptive_orca_selector_only",
+      "b_candidate": "hybrid_rule_v3_fast_progress_static_escape",
+      "interpretation": "static scenario-adaptive ORCA selector; partial row because 3/18 jobs failed",
+      "status": "partial",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.022222222222222227,
+      "near_miss_rate_delta": -0.14444444444444446,
+      "mean_avg_speed_delta": -0.04128770078785671,
+      "runtime_sec_delta": -12.594284705992322
+    },
+    {
+      "comparison_id": "speed_progress_2p4_minus_base",
+      "a_candidate": "hybrid_rule_v3_progress_2p4",
+      "b_candidate": "hybrid_rule_v3_fast_progress",
+      "interpretation": "grouped speed-envelope/progress-pressure sensitivity",
+      "status": "ok",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": 0.010806591875142102,
+      "runtime_sec_delta": -0.09865372203057632
+    }
+  ]
+}

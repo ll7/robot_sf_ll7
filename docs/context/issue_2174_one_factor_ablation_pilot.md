@@ -54,3 +54,7 @@ rows are executed.
 Run the remaining selected comparisons with the same tool, preferably at the manifest h500 horizon
 or with a documented staged horizon ladder. Report each row as diagnostic-only until all comparator
 rows execute without fallback, degraded, unavailable, or failed status.
+
+Update 2026-06-03: [issue_2176_remaining_one_factor_h80.md](issue_2176_remaining_one_factor_h80.md)
+runs the remaining selected h80 comparisons. It keeps the result diagnostic-only and reports the
+selector-only row as partial because 3/18 jobs failed.

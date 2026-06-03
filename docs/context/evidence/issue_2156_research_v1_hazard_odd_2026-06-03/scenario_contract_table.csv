@@ -1,0 +1,2 @@
+contract_id,scenario,scenario_family,status,evidence_rows,caveated_rows,reason
+station_platform_waiting_passengers_medium_contract,station_platform_waiting_passengers_medium,station_platform,missing,0,0,"metadata present but no executed row matched: station_platform_waiting_passengers_medium, station_platform"

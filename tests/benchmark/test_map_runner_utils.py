@@ -3405,6 +3405,9 @@ def test_run_map_batch_parallel_writes_results_in_job_order(
     )
 
     assert result["written"] == 2
+    assert result["workers"] == 2
+    assert result["parallel_execution"] is True
+    assert result["batch_runtime_sec"] >= 0.0
     lines = out_path.read_text(encoding="utf-8").splitlines()
     records = [json.loads(line) for line in lines]
     assert records[0]["episode_id"].startswith("slow-")
@@ -3496,6 +3499,9 @@ def test_run_map_batch_filters_and_validation(
         resume=False,
     )
     assert result["total_jobs"] == 1
+    assert result["workers"] == 1
+    assert result["parallel_execution"] is False
+    assert result["batch_runtime_sec"] >= 0.0
 
 
 def test_run_map_batch_rejects_invalid_experimental_ped_impact_controls(

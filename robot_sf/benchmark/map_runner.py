@@ -4246,6 +4246,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "max_abs_delta_linear": 0.0,
         "max_abs_delta_angular": 0.0,
     }
+    batch_started = time.perf_counter()
     if workers <= 1:
         for scenario, seed in jobs:
             try:
@@ -4396,6 +4397,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
 
     summary = {
         "total_jobs": total_jobs,
+        "workers": int(workers),
+        "parallel_execution": bool(workers > 1),
+        "batch_runtime_sec": float(max(time.perf_counter() - batch_started, 0.0)),
         "written": wrote,
         "successful_jobs": wrote,
         "failed_jobs": len(failures),

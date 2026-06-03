@@ -20,6 +20,7 @@ It points to the smallest authority surface for common agent questions.
 | H500/latest policy-search analysis | `reports/2026-05-05_full_matrix_h500_analysis.md` | Current h500 leader analysis and caveats. |
 | Component ablation pilot | `../issue_2104_component_ablation_pilot.md` | Retrospective grouped-component pilot for leading hybrid candidates; diagnostic only, not one-factor proof. |
 | One-factor component manifest | `../issue_2170_one_factor_hybrid_component_manifest.md` | Pre-execution contract for the next one-factor hybrid component ablation slice. |
+| Worker-scaling diagnostic | `../issue_2172_benchmark_worker_scaling.md` | Local runtime profile helper and compact evidence for policy-search worker scaling. |
 
 ## Lifecycle Routing
 

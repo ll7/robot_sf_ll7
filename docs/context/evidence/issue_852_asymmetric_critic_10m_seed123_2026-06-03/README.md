@@ -1,4 +1,4 @@
-# Issue 852 asymmetric-critic-only 10M seed-123 run
+# Issue #852 Asymmetric-Critic-Only 10M Seed-123 Run
 
 This directory records compact, reviewable provenance for the issue #852 single-factor
 asymmetric-critic-only 10M run submitted through `goal-slurm-experiment`.

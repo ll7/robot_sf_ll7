@@ -745,7 +745,7 @@ least implausible single-factor arms recover with horizon:
 Both configs passed `train_ppo.py --dry-run` before submission. Do not expand this to the full
 single-factor 10M grid unless one of these two runs crosses the leader-relevant band.
 
-### Asymmetric-critic 10M queue-fill completion on 2026-06-03
+### Issue #791 Promotion Campaign 128k 256k on 2026-06-03
 
 The remaining seed-123 single-factor arm was submitted later through the `goal-slurm-experiment`
 lane to complete the seed-123 10M triad. The first attempt, job `12718`, failed before training

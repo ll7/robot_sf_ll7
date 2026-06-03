@@ -1,0 +1,8 @@
+component,comparison,classification,success_delta,collision_delta,near_miss_delta,avg_speed_delta,runtime_delta_sec,interpretation
+static_escape_only,static_escape_only_minus_base,neutral,0.000,0.000,0.000,0.000,27.690,"No independent h500 outcome gain; adds runtime."
+static_recenter_only,static_recenter_only_minus_base,supported,+0.056,0.000,0.000,+0.075,17.418,"One-row success gain over base with no collision or near-miss penalty."
+recenter_after_static_escape,escape_recenter_pair_minus_static_escape_only,supported,+0.111,0.000,0.000,+0.116,-12.234,"Two-row success gain over static escape alone; strongest positive component signal."
+corridor_transit_terms,grouped_transit_minus_escape_recenter_pair,neutral,0.000,0.000,0.000,-0.000,-0.128,"No measurable effect after escape plus recentering."
+continuous_static_checks,continuous_checks_minus_grouped_static,trade_off,-0.111,0.000,-0.222,-0.071,11.542,"Near-miss reduction but two-row success loss and runtime cost."
+scenario_adaptive_orca_selector,selector_only_minus_grouped_static,weaker,-0.056,0.000,0.000,-0.057,-10.289,"Faster but one-row success loss versus grouped static."
+speed_progress_2p4,speed_progress_2p4_minus_base,weaker,-0.056,0.000,+0.111,-0.004,5.369,"One-row success loss plus near-miss increase versus base."

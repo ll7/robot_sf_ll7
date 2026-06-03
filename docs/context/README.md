@@ -181,6 +181,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2180_one_factor_h500.md](issue_2180_one_factor_h500.md)
 
+* Issue #2182 component effect synthesis:
+
+  [issue_2182_component_effect_synthesis.md](issue_2182_component_effect_synthesis.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

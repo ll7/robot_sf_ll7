@@ -127,3 +127,5 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_2180_one_factor_h500_2026-06-03/`: compact local h500 diagnostic summary for the
   Issue #2170 one-factor hybrid component manifest after all rows completed 18/18 with zero failed
   jobs.
+- `issue_2182_component_synthesis_2026-06-03/`: compact component-effect classification table
+  synthesized from the Issue #2180 h500 run for Issue #2104 closeout.

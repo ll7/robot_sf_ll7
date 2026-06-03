@@ -75,6 +75,7 @@
   ],
   "selection_decision": {
     "blocked_submission": "asymmetric_critic_only_10m_env22_seed231",
+    "blocked_submission_reason": "Do not spend the next robustness allocation on the asymmetric-critic-only seed-231 lane from this triad; keep it as attribution evidence.",
     "confidence": 0.82,
     "reason": "Seed-123 attention-only outperformed the reward-curriculum-only and asymmetric-critic-only arms on best success, collision, and SNQI. The asymmetric arm remains useful attribution evidence, but the next robustness allocation should replicate the stronger attention-only arm.",
     "selected_submission": "attention_only_10m_env22_seed231"

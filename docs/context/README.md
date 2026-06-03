@@ -140,6 +140,11 @@ knowledge, not every transient iteration detail.
   [issue_1543_predictive_v2_negative_audit.md](issue_1543_predictive_v2_negative_audit.md)
 * Issue #1542 manuscript claim evidence map:
   [issue_1542_manuscript_claim_evidence_map.md](issue_1542_manuscript_claim_evidence_map.md)
+
+* Issue #2153 research-v1 evidence map and claim gate:
+
+  [issue_2153_research_v1_evidence_map.md](issue_2153_research_v1_evidence_map.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

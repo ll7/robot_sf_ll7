@@ -79,6 +79,13 @@ class SFPlannerConfig:
     speed_scale_to_vmax: bool = True  # Scale desired speed up to v_max (aggressive)
     interaction_weight: float = 3.0  # Stronger repulsion to maintain clearance
 
+    # AMMV-aware interaction (vehicle-awareness for pedestrian response)
+    ammv_aware_enabled: bool = False  # Toggle AMMV-aware interaction term
+    ammv_repulsion_amplitude: float = 3.0  # Strength of speed-scaled repulsion [N]
+    ammv_repulsion_range: float = 0.5  # Spatial range of AMMV-effect [m]
+    ammv_speed_factor: float = 0.3  # Robot speed amplification factor
+    ammv_diagnostics_enabled: bool = False  # Track AMMV force components
+
 
 class BasePolicy:
     """Interface for benchmark baseline policies."""
@@ -198,6 +205,8 @@ class SocialForcePlanner(BasePolicy):
         self._last_position: np.ndarray | None = None
         self._last_velocity: np.ndarray | None = None
         self._robot_state: dict[str, Any] | None = None
+        self._last_ammv_force: np.ndarray | None = None
+        self._last_ammv_diagnostics: dict[str, Any] = self._empty_ammv_diagnostics()
 
     def _parse_config(self, config: dict[str, Any] | SFPlannerConfig) -> SFPlannerConfig:
         """Normalize config input into an SFPlannerConfig.
@@ -227,6 +236,8 @@ class SocialForcePlanner(BasePolicy):
         self._last_position = None
         self._last_velocity = None
         self._robot_state = None
+        self._last_ammv_force = None
+        self._last_ammv_diagnostics = self._empty_ammv_diagnostics()
 
     def configure(self, config: dict[str, Any] | SFPlannerConfig) -> None:
         """Update the planner configuration.
@@ -269,7 +280,7 @@ class SocialForcePlanner(BasePolicy):
             "radius": robot_radius,
         }
 
-        total_force = self._compute_total_force(robot_pos, robot_goal, robot_vel)
+        total_force = self._compute_total_force(robot_pos, robot_goal, robot_vel, obs.agents)
         action = self._force_to_action(total_force, robot_pos, robot_vel, robot_goal, dt)
 
         self._last_position = robot_pos.copy()
@@ -346,6 +357,7 @@ class SocialForcePlanner(BasePolicy):
         robot_pos: np.ndarray,
         robot_goal: np.ndarray,
         robot_vel: np.ndarray,
+        agent_states: list[dict[str, Any]],
     ) -> np.ndarray:
         """Compute total acceleration-like force (desired + interactions).
 
@@ -379,7 +391,8 @@ class SocialForcePlanner(BasePolicy):
         )
         interactions *= self.config.interaction_weight
 
-        total = desired + interactions
+        ammv_force = self._compute_ammv_aware_force(robot_pos, robot_vel, agent_states)
+        total = desired + interactions + ammv_force
         # Replace any NaNs/Infs defensively
         total = np.nan_to_num(
             total,
@@ -396,6 +409,151 @@ class SocialForcePlanner(BasePolicy):
                 self._rng.normal(0.0, self.config.noise_std, size=2),
                 dtype=float,
             )
+        return total
+
+    @staticmethod
+    def _empty_ammv_diagnostics() -> dict[str, Any]:
+        """Return an empty diagnostic payload for the optional AMMV term."""
+        return {
+            "enabled": False,
+            "agent_count": 0,
+            "intrusion_count": 0,
+            "max_force_magnitude": 0.0,
+            "min_lateral_clearance": None,
+            "min_time_to_collision": None,
+            "agents": [],
+        }
+
+    def _store_ammv_diagnostics(
+        self,
+        ammv_force: np.ndarray,
+        diagnostics: dict[str, Any],
+    ) -> None:
+        """Store AMMV force and diagnostics when tracking is enabled."""
+        if self.config.ammv_diagnostics_enabled:
+            self._last_ammv_force = ammv_force.copy()
+        self._last_ammv_diagnostics = diagnostics
+
+    def _compute_ammv_aware_force(
+        self,
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        agent_states: list[dict[str, Any]],
+    ) -> np.ndarray:
+        """AMMV-aware speed-dependent repulsion from nearby pedestrians.
+
+        Models stronger pedestrian repulsion when the robot moves faster,
+        reflecting the intuition that pedestrians give more clearance to
+        fast-moving vehicles. Force magnitude scales with robot speed and
+        decays exponentially with distance.
+
+        Returns:
+            AMMV-aware force vector, or zeros when disabled or no pedestrians.
+        """
+        diagnostics = self._empty_ammv_diagnostics()
+        diagnostics["enabled"] = self.config.ammv_aware_enabled
+
+        if not self.config.ammv_aware_enabled:
+            self._last_ammv_diagnostics = diagnostics
+            ammv_force = np.zeros(2, dtype=float)
+            self._store_ammv_diagnostics(ammv_force, diagnostics)
+            return ammv_force
+
+        ped_pos = np.asarray([a["position"] for a in agent_states], dtype=float)
+        n_peds = ped_pos.shape[0]
+        if n_peds == 0:
+            self._last_ammv_diagnostics = diagnostics
+            ammv_force = np.zeros(2, dtype=float)
+            self._store_ammv_diagnostics(ammv_force, diagnostics)
+            return ammv_force
+        ped_vels = np.asarray(
+            [a.get("velocity", [0.0, 0.0]) for a in agent_states],
+            dtype=float,
+        )
+
+        robot_speed = float(np.linalg.norm(robot_vel))
+        speed_mult = 1.0 + self.config.ammv_speed_factor * robot_speed
+        ref_dir = (
+            robot_vel / robot_speed
+            if robot_speed > self.EPSILON
+            else np.array([1.0, 0.0], dtype=float)
+        )
+
+        total = np.zeros(2, dtype=float)
+        agent_rows: list[dict[str, float | bool | None]] = []
+        intrusion_count = 0
+        max_force_magnitude = 0.0
+        min_lateral_clearance: float | None = None
+        min_time_to_collision: float | None = None
+
+        for i in range(n_peds):
+            diff = robot_pos - ped_pos[i]
+            dist = float(np.linalg.norm(diff))
+            if dist < self.EPSILON:
+                continue
+
+            effective_range = self.config.ammv_repulsion_range * speed_mult
+            if dist > effective_range:
+                continue
+
+            direction = diff / dist
+            magnitude = (
+                self.config.ammv_repulsion_amplitude * speed_mult * np.exp(-dist / effective_range)
+            )
+            total += direction * magnitude
+
+            ped_vel = ped_vels[i]
+            relative_pos = ped_pos[i] - robot_pos
+            relative_vel = ped_vel - robot_vel
+            lateral_clearance = abs(
+                float(ref_dir[0] * relative_pos[1] - ref_dir[1] * relative_pos[0])
+            )
+            closing_speed = -float(np.dot(relative_pos, relative_vel)) / max(dist, self.EPSILON)
+            time_to_collision = dist / closing_speed if closing_speed > self.EPSILON else None
+            intrusion = lateral_clearance <= self.config.ammv_repulsion_range or (
+                time_to_collision is not None
+                and time_to_collision <= max(self.config.dt, self.EPSILON)
+            )
+            intrusion_count += int(intrusion)
+            max_force_magnitude = max(
+                max_force_magnitude, float(np.linalg.norm(direction * magnitude))
+            )
+            min_lateral_clearance = (
+                lateral_clearance
+                if min_lateral_clearance is None
+                else min(min_lateral_clearance, lateral_clearance)
+            )
+            if time_to_collision is not None:
+                min_time_to_collision = (
+                    time_to_collision
+                    if min_time_to_collision is None
+                    else min(min_time_to_collision, time_to_collision)
+                )
+            agent_rows.append(
+                {
+                    "distance": dist,
+                    "relative_bearing": float(np.arctan2(relative_pos[1], relative_pos[0])),
+                    "speed": float(np.linalg.norm(ped_vel)),
+                    "time_to_collision": time_to_collision,
+                    "lateral_clearance": lateral_clearance,
+                    "force_magnitude": float(np.linalg.norm(direction * magnitude)),
+                    "intrusion": intrusion,
+                }
+            )
+
+        diagnostics.update(
+            {
+                "agent_count": len(agent_rows),
+                "intrusion_count": intrusion_count,
+                "max_force_magnitude": max_force_magnitude,
+                "min_lateral_clearance": min_lateral_clearance,
+                "min_time_to_collision": min_time_to_collision,
+                "agents": agent_rows,
+            }
+        )
+
+        self._store_ammv_diagnostics(total, diagnostics)
+
         return total
 
     def _force_to_action(
@@ -511,12 +669,24 @@ class SocialForcePlanner(BasePolicy):
         config_hash = hashlib.sha256(json.dumps(config_dict, sort_keys=True).encode()).hexdigest()[
             :16
         ]
-        return {
+        metadata: dict[str, Any] = {
             "algorithm": "social_force",
             "config": config_dict,
             "config_hash": config_hash,
             "status": "ok",
         }
+        if self.config.ammv_diagnostics_enabled:
+            ammv_force = (
+                self._last_ammv_force
+                if self._last_ammv_force is not None
+                else np.zeros(2, dtype=float)
+            )
+            ammv_mag = float(np.linalg.norm(ammv_force))
+            metadata["ammv_force_magnitude"] = ammv_mag
+            metadata["ammv_force_x"] = float(ammv_force[0])
+            metadata["ammv_force_y"] = float(ammv_force[1])
+            metadata["ammv_diagnostics"] = self._last_ammv_diagnostics
+        return metadata
 
 
 __all__ = ["Observation", "SFPlannerConfig", "SocialForcePlanner"]

@@ -287,6 +287,58 @@ class TestSocialForcePlanner:
         # Config should be serializable
         config_str = json.dumps(metadata["config"])
         assert isinstance(config_str, str)
+        assert "ammv_diagnostics" not in metadata
+
+    def test_ammv_aware_term_changes_enabled_action_and_metadata(self):
+        """AMMV enabled should produce different action and populate metadata diagnostics."""
+        config = SFPlannerConfig(
+            v_max=2.0,
+            desired_speed=1.0,
+            noise_std=0.0,
+            action_space="velocity",
+            ammv_aware_enabled=True,
+            ammv_repulsion_amplitude=2.0,
+            ammv_repulsion_range=1.0,
+            ammv_speed_factor=0.5,
+            ammv_diagnostics_enabled=True,
+        )
+        baseline_config = SFPlannerConfig(
+            v_max=2.0,
+            desired_speed=1.0,
+            noise_std=0.0,
+            action_space="velocity",
+        )
+        obs = Observation(
+            dt=0.1,
+            robot={
+                "position": [0.0, 0.0],
+                "velocity": [1.0, 0.0],
+                "goal": [4.0, 0.0],
+                "radius": 0.3,
+            },
+            agents=[
+                {
+                    "position": [0.3, 0.1],
+                    "velocity": [0.0, 0.0],
+                    "radius": 0.3,
+                }
+            ],
+            obstacles=[],
+        )
+
+        baseline_action = SocialForcePlanner(baseline_config, seed=42).step(obs)
+        planner = SocialForcePlanner(config, seed=42)
+        action = planner.step(obs)
+        metadata = planner.get_metadata()
+
+        assert action["vy"] != pytest.approx(baseline_action["vy"])
+        assert metadata["ammv_force_magnitude"] > 0.0
+        diagnostics = metadata["ammv_diagnostics"]
+        assert diagnostics["enabled"] is True
+        assert diagnostics["agent_count"] == 1
+        assert diagnostics["intrusion_count"] == 1
+        assert diagnostics["max_force_magnitude"] > 0.0
+        assert diagnostics["agents"][0]["force_magnitude"] > 0.0
 
     def test_close_cleanup(self, planner: SocialForcePlanner):
         """Test that close cleans up resources."""
@@ -347,6 +399,207 @@ class TestObservation:
         action = planner.step(obs)
 
         assert set(action) == {"vx", "vy"}
+
+
+class TestAMMVAwareConfig:
+    """Tests for AMMV-aware config parameters."""
+
+    def test_ammv_defaults_are_disabled(self):
+        """AMMV-aware features should be disabled by default."""
+        config = SFPlannerConfig()
+        assert config.ammv_aware_enabled is False
+        assert config.ammv_diagnostics_enabled is False
+
+    def test_ammv_config_from_dict(self):
+        """AMMV-aware config should accept dict construction."""
+        config = SFPlannerConfig(
+            ammv_aware_enabled=True,
+            ammv_repulsion_amplitude=5.0,
+            ammv_repulsion_range=1.0,
+            ammv_speed_factor=0.5,
+            ammv_diagnostics_enabled=True,
+        )
+        assert config.ammv_aware_enabled is True
+        assert config.ammv_repulsion_amplitude == 5.0
+        assert config.ammv_repulsion_range == 1.0
+        assert config.ammv_speed_factor == 0.5
+        assert config.ammv_diagnostics_enabled is True
+
+    def test_ammv_defaults_preserved_on_partial_dict(self):
+        """Partial dict should preserve ammv defaults."""
+        config = SFPlannerConfig(**{"v_max": 3.0})
+        assert config.ammv_aware_enabled is False
+        assert config.ammv_repulsion_amplitude == 3.0
+        assert config.ammv_repulsion_range == 0.5
+        assert config.ammv_speed_factor == 0.3
+        assert config.ammv_diagnostics_enabled is False
+
+    def test_ammv_metadata_with_diagnostics(self):
+        """Metadata should include AMMV diagnostics when enabled and after step."""
+        planner = SocialForcePlanner(
+            SFPlannerConfig(noise_std=0.0, ammv_diagnostics_enabled=True),
+            seed=42,
+        )
+        obs = Observation(
+            dt=0.1,
+            robot={
+                "position": [0.0, 0.0],
+                "velocity": [0.0, 0.0],
+                "goal": [1.0, 0.0],
+                "radius": 0.3,
+            },
+            agents=[{"position": [0.3, 0.0], "velocity": [0.0, 0.0], "radius": 0.3}],
+            obstacles=[],
+        )
+        planner.step(obs)
+        metadata = planner.get_metadata()
+        # Diagnostics fields should be present
+        assert "ammv_force_magnitude" in metadata
+        assert "ammv_force_x" in metadata
+        assert "ammv_force_y" in metadata
+
+    def test_ammv_metadata_without_diagnostics(self):
+        """Metadata should NOT include AMMV diagnostics when disabled."""
+        planner = SocialForcePlanner(SFPlannerConfig(noise_std=0.0), seed=42)
+        metadata = planner.get_metadata()
+        assert "ammv_force_magnitude" not in metadata
+        assert "ammv_force_x" not in metadata
+        assert "ammv_force_y" not in metadata
+
+
+class TestSocialForcePlannerAMMV:
+    """Tests for AMMV-aware interaction in SocialForcePlanner."""
+
+    @pytest.fixture
+    def base_config(self):
+        """Provide default AMMV test configuration."""
+        return SFPlannerConfig(v_max=2.0, desired_speed=1.0, noise_std=0.0, action_space="velocity")
+
+    def test_ammv_disabled_equals_baseline(self):
+        """Disabled AMMV should produce same action as baseline config."""
+        planner_baseline = SocialForcePlanner(
+            SFPlannerConfig(noise_std=0.0, ammv_aware_enabled=False), seed=42
+        )
+        planner_ammv_disabled = SocialForcePlanner(
+            SFPlannerConfig(noise_std=0.0, ammv_aware_enabled=False), seed=42
+        )
+        obs = Observation(
+            dt=0.1,
+            robot={
+                "position": [0.0, 0.0],
+                "velocity": [0.0, 0.0],
+                "goal": [2.0, 0.0],
+                "radius": 0.3,
+            },
+            agents=[{"position": [0.5, 0.0], "velocity": [0.0, 0.0], "radius": 0.3}],
+            obstacles=[],
+        )
+        act1 = planner_baseline.step(obs)
+        act2 = planner_ammv_disabled.step(obs)
+        assert abs(act1["vx"] - act2["vx"]) < 1e-10
+        assert abs(act1["vy"] - act2["vy"]) < 1e-10
+
+    def test_ammv_enabled_changes_action(self):
+        """Enabled AMMV should produce different action from baseline."""
+        planner_base = SocialForcePlanner(
+            SFPlannerConfig(noise_std=0.0, ammv_aware_enabled=False), seed=42
+        )
+        planner_ammv = SocialForcePlanner(
+            SFPlannerConfig(
+                noise_std=0.0,
+                ammv_aware_enabled=True,
+                ammv_repulsion_amplitude=10.0,
+                ammv_repulsion_range=2.0,
+            ),
+            seed=42,
+        )
+        obs = Observation(
+            dt=0.1,
+            robot={
+                "position": [0.0, 0.0],
+                "velocity": [0.0, 0.0],
+                "goal": [2.0, 0.0],
+                "radius": 0.3,
+            },
+            agents=[{"position": [0.5, 0.0], "velocity": [0.0, 0.0], "radius": 0.3}],
+            obstacles=[],
+        )
+        act_base = planner_base.step(obs)
+        act_ammv = planner_ammv.step(obs)
+        assert abs(act_ammv["vx"] - act_base["vx"]) > 0.001
+
+    def test_ammv_force_scales_with_speed(self):
+        """AMMV-aware force magnitude should increase with robot speed."""
+        planner_fast = SocialForcePlanner(
+            SFPlannerConfig(
+                noise_std=0.0,
+                ammv_aware_enabled=True,
+                ammv_diagnostics_enabled=True,
+                ammv_repulsion_amplitude=5.0,
+                ammv_repulsion_range=2.0,
+                ammv_speed_factor=0.5,
+            ),
+            seed=42,
+        )
+        planner_slow = SocialForcePlanner(
+            SFPlannerConfig(
+                noise_std=0.0,
+                ammv_aware_enabled=True,
+                ammv_diagnostics_enabled=True,
+                ammv_repulsion_amplitude=5.0,
+                ammv_repulsion_range=2.0,
+                ammv_speed_factor=0.5,
+            ),
+            seed=42,
+        )
+        base_obs = {
+            "dt": 0.1,
+            "robot": {
+                "position": [0.0, 0.0],
+                "goal": [2.0, 0.0],
+                "radius": 0.3,
+            },
+            "agents": [{"position": [0.5, 0.0], "velocity": [0.0, 0.0], "radius": 0.3}],
+            "obstacles": [],
+        }
+        fast_obs = Observation(
+            **{**base_obs, "robot": {**base_obs["robot"], "velocity": [2.0, 0.0]}}
+        )
+        slow_obs = Observation(
+            **{**base_obs, "robot": {**base_obs["robot"], "velocity": [0.1, 0.0]}}
+        )
+
+        planner_fast.step(fast_obs)
+        meta_fast = planner_fast.get_metadata()
+        planner_slow.step(slow_obs)
+        meta_slow = planner_slow.get_metadata()
+
+        assert meta_fast["ammv_force_magnitude"] > meta_slow["ammv_force_magnitude"]
+
+    def test_ammv_no_pedestrians_no_effect(self):
+        """AMMV force should be zero when no pedestrians present."""
+        planner = SocialForcePlanner(
+            SFPlannerConfig(
+                noise_std=0.0,
+                ammv_aware_enabled=True,
+                ammv_diagnostics_enabled=True,
+            ),
+            seed=42,
+        )
+        obs = Observation(
+            dt=0.1,
+            robot={
+                "position": [0.0, 0.0],
+                "velocity": [1.0, 0.0],
+                "goal": [2.0, 0.0],
+                "radius": 0.3,
+            },
+            agents=[],
+            obstacles=[],
+        )
+        planner.step(obs)
+        meta = planner.get_metadata()
+        assert meta["ammv_force_magnitude"] == 0.0
 
 
 if __name__ == "__main__":

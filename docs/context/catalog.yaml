@@ -73,6 +73,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2154_ammv_social_force_model.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2155_research_v1_ammv_matrix.md
     status: current
     freshness: maintained

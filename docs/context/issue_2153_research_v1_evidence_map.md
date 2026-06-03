@@ -65,3 +65,19 @@ git diff --check
 Artifact class: tracked context note. No generated benchmark, replay, training, or local `output/`
 artifact was created for this map. Diagnostic-only and proposal-only evidence is intentionally not
 promoted to benchmark or paper-facing status here.
+## Issue #2156 Hazard/ODD Diagnostic Update
+
+Issue [#2156](https://github.com/ll7/robot_sf_ll7/issues/2156) generated a
+compact hazard/ODD coverage diagnostic pack at
+`docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/`. It ran
+the existing rollup against the tracked cross-kinematics AMV evidence bundle
+from `docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28`.
+
+The report read 21 executed row-level records, but the current
+hazard/ODD/scenario-contract metadata did not join those executed rows to the
+intended hazard categories. Hazard statuses therefore remain `missing=5`; ODD
+supported claims remain `partial=2`; excluded ODD claims remain explicit
+non-claims. This keeps `research-v1.amv.scenario_criticality` diagnostic rather
+than candidate or paper-ready evidence. The smallest next proof step is to add
+or select scenario contracts and hazard mappings that name the executed AMV
+scenarios, then rerun the same rollup.

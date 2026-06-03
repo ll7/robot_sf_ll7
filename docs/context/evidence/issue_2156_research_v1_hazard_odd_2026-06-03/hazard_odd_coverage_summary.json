@@ -1,0 +1,287 @@
+{
+  "campaign_root": "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28",
+  "claim_boundary": "Coverage rollup separates metadata-only contract surfaces from executed benchmark evidence. Fallback, degraded, failed, and not_available rows remain caveats and are not success evidence.",
+  "executed_evidence": {
+    "caveated_row_count": 0,
+    "execution_labels": [
+      "adapter",
+      "available",
+      "native",
+      "ok",
+      "true"
+    ],
+    "non_caveated_row_count": 21,
+    "row_count": 21,
+    "scenario_families": [],
+    "scenario_ids": []
+  },
+  "generated_at_utc": "2026-06-03T12:01:38.451296+00:00",
+  "hazards": [
+    {
+      "caveated_rows": 0,
+      "evidence_rows": 0,
+      "hazard_id": "robot_pedestrian_collision",
+      "matched_scenarios": "",
+      "reason": "metadata present but no executed row matched: classic_crossing, crossing, station_platform",
+      "severity": "safety",
+      "status": "missing",
+      "supporting_metrics": "collision_rate"
+    },
+    {
+      "caveated_rows": 0,
+      "evidence_rows": 0,
+      "hazard_id": "near_miss",
+      "matched_scenarios": "",
+      "reason": "metadata present but no executed row matched: classic_crossing, crossing, francis2023_blind_corner, observation_visibility_blind_corner_smoke, station_platform",
+      "severity": "safety",
+      "status": "missing",
+      "supporting_metrics": "min_ttc, pet"
+    },
+    {
+      "caveated_rows": 0,
+      "evidence_rows": 0,
+      "hazard_id": "blind_corner_emergence",
+      "matched_scenarios": "",
+      "reason": "metadata present but no executed row matched: francis2023_blind_corner, observation_visibility_blind_corner_smoke",
+      "severity": "safety",
+      "status": "missing",
+      "supporting_metrics": "min_ttc, clearance"
+    },
+    {
+      "caveated_rows": 0,
+      "evidence_rows": 0,
+      "hazard_id": "keep_clear_violation",
+      "matched_scenarios": "",
+      "reason": "metadata present but no executed row matched: station_platform",
+      "severity": "operational",
+      "status": "missing",
+      "supporting_metrics": "keep_clear_intrusion_s"
+    },
+    {
+      "caveated_rows": 0,
+      "evidence_rows": 0,
+      "hazard_id": "pedestrian_flow_disruption",
+      "matched_scenarios": "",
+      "reason": "metadata present but no executed row matched: classic_crossing, crossing, station_platform",
+      "severity": "social",
+      "status": "missing",
+      "supporting_metrics": "comfort_exposure_s, path_efficiency"
+    }
+  ],
+  "metadata_inputs": [
+    {
+      "path": "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/campaign_table.csv",
+      "reason": "loaded reports/campaign_table.csv",
+      "sha256": "b2e7b025e3613a0f6438ab351842b21f967a08138ce2493ee9f706c9be1274c8",
+      "status": "available"
+    },
+    {
+      "path": "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/seed_episode_rows.csv",
+      "reason": "available but not loaded because a higher-precedence evidence table was used",
+      "sha256": "3ecd884a7d2bc7782cbd8880ea9dd5efb44e67b4971fba344e405d3cb11bf46e",
+      "status": "available"
+    },
+    {
+      "path": "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/episode_summary.csv",
+      "reason": "optional campaign table missing",
+      "sha256": null,
+      "status": "unavailable"
+    },
+    {
+      "path": "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml",
+      "reason": "loaded hazard mapping",
+      "sha256": "801af07468cf5573f29dd9ac1a4a951beec265da12fc726b6f679ec8fbaf3189",
+      "status": "available"
+    },
+    {
+      "path": "configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml",
+      "reason": "loaded 1 ODD contract(s)",
+      "sha256": "f5158d5f7b31b2a44a6790e683155d6161dc5d4c8e7ff5e2cd41220d7a665d81",
+      "status": "available"
+    },
+    {
+      "path": "configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml",
+      "reason": "loaded 1 scenario contract(s)",
+      "sha256": "de78e540dac67b962ba472ee1211d4eff3954d98c7f4a4900a8cc19a7c843f98",
+      "status": "available"
+    },
+    {
+      "path": null,
+      "reason": "scenario_cert.v1 file not supplied",
+      "sha256": null,
+      "status": "unavailable"
+    },
+    {
+      "path": "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/amv_coverage_summary.json",
+      "reason": "could not load coverage report: Unsupported stress/uncertainty coverage schema_version: 'benchmark-amv-coverage-summary.v1'",
+      "sha256": "d063389cb24e8f2e3b78c00cb55f154bfb7035cf1c0bda739b1bd4ba5f4bd0d6",
+      "status": "unavailable"
+    }
+  ],
+  "odd_boundaries": [
+    {
+      "boundary_id": "benchmark_evidence_boundary",
+      "boundary_type": "supported_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD metadata is linked, but executed evidence is absent or caveated",
+      "status": "partial"
+    },
+    {
+      "boundary_id": "counterexample_operating_assumptions",
+      "boundary_type": "supported_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD metadata is linked, but executed evidence is absent or caveated",
+      "status": "partial"
+    },
+    {
+      "boundary_id": "safety_certification",
+      "boundary_type": "excluded_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD contract explicitly excludes this claim or operating condition",
+      "status": "excluded"
+    },
+    {
+      "boundary_id": "legal_compliance",
+      "boundary_type": "excluded_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD contract explicitly excludes this claim or operating condition",
+      "status": "excluded"
+    },
+    {
+      "boundary_id": "real_world_deployment_readiness",
+      "boundary_type": "excluded_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD contract explicitly excludes this claim or operating condition",
+      "status": "excluded"
+    },
+    {
+      "boundary_id": "public-road autonomy",
+      "boundary_type": "excluded_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD contract explicitly excludes this claim or operating condition",
+      "status": "excluded"
+    },
+    {
+      "boundary_id": "wet_or_icy_surface_dynamics",
+      "boundary_type": "excluded_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD contract explicitly excludes this claim or operating condition",
+      "status": "excluded"
+    },
+    {
+      "boundary_id": "vehicle_traffic_interaction",
+      "boundary_type": "excluded_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD contract explicitly excludes this claim or operating condition",
+      "status": "excluded"
+    },
+    {
+      "boundary_id": "legal_safety_certification",
+      "boundary_type": "excluded_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD contract explicitly excludes this claim or operating condition",
+      "status": "excluded"
+    },
+    {
+      "boundary_id": "human_subject_acceptability_validation",
+      "boundary_type": "excluded_claim",
+      "caveated_rows": 0,
+      "contract_id": "low_speed_public_space_v1",
+      "evidence_rows": 0,
+      "reason": "ODD contract explicitly excludes this claim or operating condition",
+      "status": "excluded"
+    }
+  ],
+  "provenance": {
+    "checksums": {
+      "path": "docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/checksums.sha256",
+      "sha256": "f50f6980cdf4b3d53f2f223d3f99039e548ec2355ebd3aa0f69fc591bbc9cd4b"
+    },
+    "generated_artifacts": [
+      {
+        "artifact_id": "hazard_coverage_table_csv",
+        "path": "docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/hazard_coverage_table.csv",
+        "sha256": "51d313306550ce46c2958260ee18ed44f8ba88adbcfccb8a42272a447cfb2b6e"
+      },
+      {
+        "artifact_id": "odd_boundary_table_csv",
+        "path": "docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/odd_boundary_table.csv",
+        "sha256": "72af2b3d0719f75f19159a7e3d4bb7dacc413acfdf21c24ce13b1e3f5332e1fc"
+      },
+      {
+        "artifact_id": "scenario_contract_table_csv",
+        "path": "docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/scenario_contract_table.csv",
+        "sha256": "5f73ba2299f1d126da7591ebe16b0b9b4ae8eb935783d4757ac853a481a8b6ce"
+      },
+      {
+        "artifact_id": "hazard_odd_coverage_summary_md",
+        "path": "docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/hazard_odd_coverage_summary.md",
+        "sha256": "984195d7388a026450dfaa5614f8b56d1feff90f46bd4b66578e1ad6c8c7d9f1"
+      },
+      {
+        "artifact_id": "coverage_status_figure_png",
+        "path": "docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/coverage_status_summary.png",
+        "sha256": "ca29527d255699efc133743b73bb3bfee41a9944d74a47c7bf4b2af16a3905c0"
+      }
+    ],
+    "generation_command": "uv run python scripts/tools/hazard_odd_coverage_rollup.py --campaign-root docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28 --output docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03 --report-id issue_2156_research_v1_hazard_odd_cross_kinematics --hazard-traceability configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml --odd-contract configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml --scenario-contract configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml --stress-uncertainty-coverage docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/amv_coverage_summary.json",
+    "generation_commit": "0b5a2efcdd73",
+    "source_files": [
+      {
+        "path": "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/campaign_table.csv",
+        "sha256": "b2e7b025e3613a0f6438ab351842b21f967a08138ce2493ee9f706c9be1274c8"
+      },
+      {
+        "path": "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/seed_episode_rows.csv",
+        "sha256": "3ecd884a7d2bc7782cbd8880ea9dd5efb44e67b4971fba344e405d3cb11bf46e"
+      },
+      {
+        "path": "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml",
+        "sha256": "801af07468cf5573f29dd9ac1a4a951beec265da12fc726b6f679ec8fbaf3189"
+      },
+      {
+        "path": "configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml",
+        "sha256": "f5158d5f7b31b2a44a6790e683155d6161dc5d4c8e7ff5e2cd41220d7a665d81"
+      },
+      {
+        "path": "configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml",
+        "sha256": "de78e540dac67b962ba472ee1211d4eff3954d98c7f4a4900a8cc19a7c843f98"
+      }
+    ]
+  },
+  "report_id": "issue_2156_research_v1_hazard_odd_cross_kinematics",
+  "scenario_contracts": [
+    {
+      "caveated_rows": 0,
+      "contract_id": "station_platform_waiting_passengers_medium_contract",
+      "evidence_rows": 0,
+      "reason": "metadata present but no executed row matched: station_platform_waiting_passengers_medium, station_platform",
+      "scenario": "station_platform_waiting_passengers_medium",
+      "scenario_family": "station_platform",
+      "status": "missing"
+    }
+  ],
+  "schema_version": "hazard_odd_coverage_rollup.v1",
+  "stress_uncertainty_coverage": {
+    "error": "Unsupported stress/uncertainty coverage schema_version: 'benchmark-amv-coverage-summary.v1'",
+    "status": "unavailable"
+  }
+}

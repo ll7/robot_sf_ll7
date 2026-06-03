@@ -24,6 +24,25 @@ def make_simple_sim():
     return sim
 
 
+def make_no_obstacle_sim():
+    """Create a simulator with pedestrians but no obstacles."""
+    state = np.array(
+        [
+            [0.0, 0.0, 0.1, 0.0, 5.0, 0.0, 1.0],
+            [1.0, 0.25, -0.1, 0.0, 5.0, 0.0, 1.0],
+        ],
+    )
+    return Simulator(state=state, obstacles=[])
+
+
+def make_no_pedestrian_sim():
+    """Create a simulator with obstacles but no pedestrians."""
+    return Simulator(
+        state=np.empty((0, 7), dtype=float),
+        obstacles=[(2.0, 2.0, -1.0, 1.0)],
+    )
+
+
 def test_get_forces_at_point():
     """TODO docstring. Document this function."""
     sim = make_simple_sim()
@@ -53,6 +72,26 @@ def test_get_forces_at_points_matches_pointwise_force_queries():
     assert batched == pytest.approx(pointwise)
 
 
+def test_get_forces_at_points_uses_batched_path_for_social_obstacle_and_desired(monkeypatch):
+    """Batched force sampling should not call pointwise queries for safe kwargs."""
+    sim = make_simple_sim()
+    wrapper = FastPysfWrapper(sim)
+
+    points = np.array([[0.5, 0.0], [1.5, 0.25], [2.0, -0.5]], dtype=float)
+    kwargs = {"include_desired": True, "desired_goal": [5.0, 0.0]}
+    pointwise = np.vstack([wrapper.get_forces_at(point, **kwargs) for point in points])
+
+    def fail_pointwise(*_args, **_kwargs):
+        raise AssertionError("get_forces_at_points should use the batched force path")
+
+    monkeypatch.setattr(wrapper, "get_forces_at", fail_pointwise)
+
+    batched = wrapper.get_forces_at_points(points, **kwargs)
+
+    assert batched.shape == (len(points), 2)
+    assert batched == pytest.approx(pointwise)
+
+
 def test_get_forces_at_points_empty_returns_empty_force_rows():
     """Empty point batches should keep the force vector axis."""
     sim = make_simple_sim()
@@ -62,6 +101,37 @@ def test_get_forces_at_points_empty_returns_empty_force_rows():
 
     assert forces.shape == (0, 2)
     assert forces.dtype == float
+
+
+def test_get_forces_at_points_matches_pointwise_without_obstacles():
+    """Batched force sampling should handle simulations with no obstacles."""
+    sim = make_no_obstacle_sim()
+    wrapper = FastPysfWrapper(sim)
+
+    points = np.array([[-0.25, 0.0], [0.5, 0.25], [2.0, -0.5]], dtype=float)
+    batched = wrapper.get_forces_at_points(points)
+    pointwise = np.vstack([wrapper.get_forces_at(point) for point in points])
+
+    assert batched.shape == (len(points), 2)
+    assert batched == pytest.approx(pointwise)
+
+
+def test_get_forces_at_points_matches_pointwise_without_pedestrians():
+    """Batched force sampling should handle obstacle-only simulations."""
+    sim = make_no_pedestrian_sim()
+    wrapper = FastPysfWrapper(sim)
+
+    points = np.array([[0.5, 0.0], [1.5, 0.25], [2.0, -0.5]], dtype=float)
+    batched = wrapper.get_forces_at_points(points, include_desired=True, desired_goal=[5.0, 0.0])
+    pointwise = np.vstack(
+        [
+            wrapper.get_forces_at(point, include_desired=True, desired_goal=[5.0, 0.0])
+            for point in points
+        ],
+    )
+
+    assert batched.shape == (len(points), 2)
+    assert batched == pytest.approx(pointwise)
 
 
 def test_get_force_field():

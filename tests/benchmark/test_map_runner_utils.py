@@ -3208,7 +3208,7 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         _fake_run_map_job_worker,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -3383,18 +3383,17 @@ def test_run_map_batch_parallel_writes_results_in_job_order(
             time.sleep(0.05)
         return {"episode_id": f"{scenario['name']}-{seed}"}
 
-    def fake_write(out_path_arg, schema, record):
+    def fake_write(handle, schema, record):
         """Capture JSONL writes for the parallel test."""
-        out_path_arg.parent.mkdir(parents=True, exist_ok=True)
-        with out_path_arg.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        del schema
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
         ThreadPoolExecutor,
     )
     monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated", fake_write)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated_to_handle", fake_write)
 
     result = run_map_batch(
         [scenario_one, scenario_two],
@@ -3445,7 +3444,7 @@ def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
         raise RuntimeError("forced write failure")
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated", fake_write)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated_to_handle", fake_write)
 
     result = run_map_batch(
         scenarios,
@@ -3488,7 +3487,7 @@ def test_run_map_batch_filters_and_validation(
         lambda job: {"episode_id": "ep1"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
     result = run_map_batch(
@@ -3600,7 +3599,7 @@ def test_run_map_batch_filters_per_scenario_kinematics_preflight(
         lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -3676,7 +3675,7 @@ def test_run_map_batch_validates_effective_scenario_algo_overrides(
         lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -3711,7 +3710,7 @@ def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
     )
     monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -3785,7 +3784,7 @@ def test_run_map_batch_parallel_preserves_runtime_metadata_bridge(
         ThreadPoolExecutor,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -4042,6 +4041,132 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
     lines = out_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
     assert "hrvo_smoke" in lines[0]
+
+
+def test_run_map_episode_skips_force_buffer_reads_when_not_recording(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """record_forces=False should avoid per-step force reads and preserve zero semantics."""
+
+    class _DummySim:
+        """Simulator stub whose force buffer must not be read in this test."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+
+        @property
+        def last_ped_forces(self) -> np.ndarray:
+            raise AssertionError("last_ped_forces should not be read when record_forces=False")
+
+        def iter_obstacle_segments(self):
+            """Return obstacle segments exposed by the simulator stub."""
+            return [((0.5, -0.5), (0.5, 0.5))]
+
+    class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.action_space = None
+
+        def reset(self, seed: int | None = None):
+            """Return a compact map-runner observation."""
+            _ = seed
+            obs = {
+                "robot": {
+                    "position": np.array([0.0, 0.0], dtype=np.float32),
+                    "heading": np.array([0.0], dtype=np.float32),
+                    "speed": np.array([0.0, 0.0], dtype=np.float32),
+                    "radius": np.array([0.5], dtype=np.float32),
+                },
+                "goal": {
+                    "current": np.array([2.0, 0.0], dtype=np.float32),
+                    "next": np.array([0.0, 0.0], dtype=np.float32),
+                },
+                "pedestrians": {
+                    "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                    "velocities": np.zeros((1, 2), dtype=np.float32),
+                    "radius": np.array([0.4], dtype=np.float32),
+                    "count": np.array([1.0], dtype=np.float32),
+                },
+                "map": {"size": np.array([5.0, 4.0], dtype=np.float32)},
+                "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+            }
+            return obs, {}
+
+        def step(self, action):
+            """Move once and terminate successfully."""
+            _ = action
+            obs, _ = self.reset()
+            return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            """Accept cleanup from map-runner code."""
+            return None
+
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "robot_config": HolonomicDriveSettings(
+                max_speed=1.0,
+                max_angular_speed=1.0,
+                command_mode="vx_vy",
+            ),
+        },
+    )
+    captured: dict[str, np.ndarray] = {}
+
+    def fake_compute_all_metrics(ep, *args, **kwargs):
+        """Capture metric inputs and return a successful terminal metric."""
+        del args, kwargs
+        captured["ped_forces"] = ep.ped_forces
+        captured["peds_pos"] = ep.peds_pos
+        return {"success": 1.0, "collisions": 0.0}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics", fake_compute_all_metrics
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
+    )
+
+    record = _run_map_episode(
+        {"name": "no_force_recording", "simulation_config": {"max_episode_steps": 1}},
+        123,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=tmp_path / "scenarios.yaml",
+    )
+
+    assert record["scenario_id"] == "no_force_recording"
+    assert captured["ped_forces"].shape == captured["peds_pos"].shape
+    assert np.array_equal(captured["ped_forces"], np.zeros_like(captured["peds_pos"]))
 
 
 def _normalize_episode_record(record: dict[str, object]) -> dict[str, object]:

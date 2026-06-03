@@ -745,6 +745,23 @@ least implausible single-factor arms recover with horizon:
 Both configs passed `train_ppo.py --dry-run` before submission. Do not expand this to the full
 single-factor 10M grid unless one of these two runs crosses the leader-relevant band.
 
+### Asymmetric-critic 10M queue-fill completion on 2026-06-03
+
+The remaining seed-123 single-factor arm was submitted later through the `goal-slurm-experiment`
+lane to complete the seed-123 10M triad. The first attempt, job `12718`, failed before training
+with an `srun` symbol lookup error. The wrapper was repaired to make `srun` opt-in, and replacement
+job `12719` completed.
+
+| Job | Arm | Best success | Best collision | Best step | Final success | Final collision | Decision |
+|----:|-----|-------------:|---------------:|----------:|--------------:|----------------:|----------|
+| 12719 | asymmetric-critic-only 10M, seed 123 | 0.8714 | 0.1286 | 7.86M | 0.8429 | 0.1571 | strong single-factor evidence; preserve and compare against sibling 10M arms |
+
+This result does not meet the strict convergence target, but it reaches a leader-relevant band
+without the attention head or reward curriculum. Treat it as strong single-factor attribution
+evidence, not as paper-grade evidence until artifact provenance is made durable beyond local
+`output/`. Compact provenance is tracked in
+`docs/context/evidence/issue_852_asymmetric_critic_10m_seed123_2026-06-03/`.
+
 Verification on 2026-04-29:
 
 ```bash

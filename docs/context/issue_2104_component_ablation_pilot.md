@@ -60,3 +60,9 @@ syncing the `orca` extra. See
 [issue_2178_selector_orca_extra_h80.md](issue_2178_selector_orca_extra_h80.md). The corrected h80
 selector row writes 18/18 jobs with zero failures and stays flat on success, collision, and
 near-miss rate.
+
+Issue [#2180](https://github.com/ll7/robot_sf_ll7/issues/2180) runs the one-factor manifest at
+h500; see [issue_2180_one_factor_h500.md](issue_2180_one_factor_h500.md). All eight candidates
+write 18/18 rows with zero failures. The strongest positive direction is recentering, while static
+escape alone is flat, grouped corridor-transit terms are flat, and continuous static checks trade
+fewer near misses for fewer successes.

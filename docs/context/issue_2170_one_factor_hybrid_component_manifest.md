@@ -98,3 +98,8 @@ git diff --check
 Implement the planned candidate config rows, validate that the policy-search loader can resolve each
 row, then open a separate execution issue or PR that runs the compact matrix and promotes durable
 effect-size evidence. Keep grouped and one-factor rows separate in the interpretation.
+
+Update 2026-06-03: [issue_2180_one_factor_h500.md](issue_2180_one_factor_h500.md) executes the
+manifest at h500 with zero failed rows. The h500 result points toward recentering as the clearest
+positive component and does not support static escape alone, corridor-transit terms, selector-only,
+or speed/progress-2.4 as independent gains on this slice.

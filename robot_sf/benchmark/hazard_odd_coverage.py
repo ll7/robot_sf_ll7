@@ -196,20 +196,10 @@ def _load_campaign_rows(campaign_root: Path) -> tuple[list[CampaignRow], list[di
 
     rows: list[CampaignRow] = []
     inputs: list[dict[str, Any]] = []
-    loaded_evidence_table = False
     for relative in _CAMPAIGN_TABLES:
         path = campaign_root / relative
         if not path.exists():
             inputs.append(_input_ref(path, "unavailable", "optional campaign table missing"))
-            continue
-        if loaded_evidence_table:
-            inputs.append(
-                _input_ref(
-                    path,
-                    "available",
-                    "available but not loaded because a higher-precedence evidence table was used",
-                )
-            )
             continue
         with path.open(newline="", encoding="utf-8") as handle:
             reader = csv.DictReader(handle)
@@ -217,7 +207,6 @@ def _load_campaign_rows(campaign_root: Path) -> tuple[list[CampaignRow], list[di
                 row = {field: _cell(raw_row.get(field)) for field in (reader.fieldnames or [])}
                 rows.append(_campaign_row(path, index, row))
         inputs.append(_input_ref(path, "available", f"loaded {relative}"))
-        loaded_evidence_table = True
     return rows, inputs
 
 

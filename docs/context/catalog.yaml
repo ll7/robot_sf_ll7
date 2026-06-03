@@ -105,6 +105,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2180_one_factor_h500.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_750_paper_results_handoff.md
     status: current
     freshness: maintained

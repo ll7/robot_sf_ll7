@@ -24,6 +24,7 @@ It points to the smallest authority surface for common agent questions.
 | One-factor ablation pilot | `../issue_2174_one_factor_ablation_pilot.md` | First executable one-factor comparison and runner for the #2170 manifest. |
 | Remaining one-factor h80 comparisons | `../issue_2176_remaining_one_factor_h80.md` | Remaining selected h80 component comparisons; diagnostic-only with a partial selector row. |
 | Selector ORCA-extra h80 rerun | `../issue_2178_selector_orca_extra_h80.md` | Corrected selector-only comparison after proving `rvo2`; diagnostic-only h80 evidence. |
+| One-factor h500 component run | `../issue_2180_one_factor_h500.md` | Complete h500 execution of the #2170 manifest; recentering is the clearest positive component signal. |
 
 ## Lifecycle Routing
 

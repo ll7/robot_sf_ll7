@@ -124,3 +124,6 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_2178_selector_orca_extra_h80_2026-06-03/`: compact diagnostic-only h80 summary for the
   corrected selector-only one-factor comparison after syncing the `orca` extra and proving `rvo2`
   availability.
+- `issue_2180_one_factor_h500_2026-06-03/`: compact local h500 diagnostic summary for the
+  Issue #2170 one-factor hybrid component manifest after all rows completed 18/18 with zero failed
+  jobs.

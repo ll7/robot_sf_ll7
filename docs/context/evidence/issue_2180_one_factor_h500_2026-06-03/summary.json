@@ -1,0 +1,157 @@
+{
+  "schema_version": "robot-sf-one-factor-ablation-pilot.v1",
+  "issue": 2180,
+  "parent_issue": 2104,
+  "manifest_issue": 2170,
+  "claim_boundary": "diagnostic-h500-local",
+  "result_classification": "complete_h500_one_factor_diagnostic",
+  "generated_at": "2026-06-03T20:35:15.021315+00:00",
+  "git_hash": "8458e124a94914a472fff6ea35f145a6d78e6516",
+  "horizon": 500,
+  "workers": 2,
+  "mode": "native",
+  "orca_import_proof": {
+    "command": "uv run python -c 'import rvo2; print(rvo2.__name__)'",
+    "exit_code": 0,
+    "stdout": "rvo2"
+  },
+  "manifest": "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml",
+  "selected_comparisons": [
+    "static_escape_only_minus_base",
+    "static_recenter_only_minus_base",
+    "escape_recenter_pair_minus_static_escape_only",
+    "grouped_transit_minus_escape_recenter_pair",
+    "continuous_checks_minus_grouped_static",
+    "selector_only_minus_grouped_static",
+    "speed_progress_2p4_minus_base"
+  ],
+  "candidate_status": {
+    "total_candidates": 8,
+    "total_jobs": 144,
+    "written": 144,
+    "failed_jobs": 0
+  },
+  "effect_rows": [
+    {
+      "comparison_id": "static_escape_only_minus_base",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": 0.0,
+      "runtime_sec_delta": 27.689788205025252,
+      "status": "ok"
+    },
+    {
+      "comparison_id": "static_recenter_only_minus_base",
+      "success_rate_delta": 0.05555555555555558,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": 0.07455998096816874,
+      "runtime_sec_delta": 17.41772928496357,
+      "status": "ok"
+    },
+    {
+      "comparison_id": "escape_recenter_pair_minus_static_escape_only",
+      "success_rate_delta": 0.11111111111111116,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": 0.11648890897022635,
+      "runtime_sec_delta": -12.233933166076895,
+      "status": "ok"
+    },
+    {
+      "comparison_id": "grouped_transit_minus_escape_recenter_pair",
+      "success_rate_delta": 0.0,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": -0.00017346296085984925,
+      "runtime_sec_delta": -0.12814938795054331,
+      "status": "ok"
+    },
+    {
+      "comparison_id": "continuous_checks_minus_grouped_static",
+      "success_rate_delta": -0.11111111111111116,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": -0.22222222222222227,
+      "mean_avg_speed_delta": -0.07062208258764491,
+      "runtime_sec_delta": 11.5419269099948,
+      "status": "ok"
+    },
+    {
+      "comparison_id": "selector_only_minus_grouped_static",
+      "success_rate_delta": -0.05555555555555558,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.0,
+      "mean_avg_speed_delta": -0.056882107302533624,
+      "runtime_sec_delta": -10.288798318011686,
+      "status": "ok"
+    },
+    {
+      "comparison_id": "speed_progress_2p4_minus_base",
+      "success_rate_delta": -0.05555555555555558,
+      "collision_rate_delta": 0.0,
+      "near_miss_rate_delta": 0.11111111111111105,
+      "mean_avg_speed_delta": -0.004244730352564563,
+      "runtime_sec_delta": 5.368940479995217,
+      "status": "ok"
+    }
+  ],
+  "candidate_results": {
+    "hybrid_rule_v3_fast_progress": {
+      "success_rate": 0.7222222222222222,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.6111111111111112,
+      "mean_avg_speed": 1.1345653250604533,
+      "runtime_sec": 133.99326950201066
+    },
+    "hybrid_rule_v3_fast_progress_static_escape": {
+      "success_rate": 0.8333333333333334,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.6111111111111112,
+      "mean_avg_speed": 1.2508807710698198,
+      "runtime_sec": 149.32097515300848
+    },
+    "hybrid_rule_v3_progress_2p4": {
+      "success_rate": 0.6666666666666666,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.7222222222222222,
+      "mean_avg_speed": 1.1303205947078887,
+      "runtime_sec": 139.36220998200588
+    },
+    "issue_2170_continuous_static_checks_only": {
+      "success_rate": 0.7222222222222222,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.3888888888888889,
+      "mean_avg_speed": 1.1802586884821749,
+      "runtime_sec": 160.86290206300328
+    },
+    "issue_2170_scenario_adaptive_orca_selector_only": {
+      "success_rate": 0.7777777777777778,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.6111111111111112,
+      "mean_avg_speed": 1.1939986637672861,
+      "runtime_sec": 139.0321768349968
+    },
+    "issue_2170_static_escape_only": {
+      "success_rate": 0.7222222222222222,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.6111111111111112,
+      "mean_avg_speed": 1.1345653250604533,
+      "runtime_sec": 161.6830577070359
+    },
+    "issue_2170_static_escape_recenter_no_transit": {
+      "success_rate": 0.8333333333333334,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.6111111111111112,
+      "mean_avg_speed": 1.2510542340306796,
+      "runtime_sec": 149.44912454095902
+    },
+    "issue_2170_static_recenter_only": {
+      "success_rate": 0.7777777777777778,
+      "collision_rate": 0.1111111111111111,
+      "near_miss_rate": 0.6111111111111112,
+      "mean_avg_speed": 1.209125306028622,
+      "runtime_sec": 151.41099878697423
+    }
+  }
+}

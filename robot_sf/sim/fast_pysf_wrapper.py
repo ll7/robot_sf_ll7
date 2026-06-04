@@ -156,6 +156,7 @@ class FastPysfWrapper:
             return total
 
         n, n_prime, lambda_importance, gamma, factor = self._social_params()
+        factor = float(factor)
         for i in range(ped_pos.shape[0]):
             other_pos = ped_pos[i]
             other_vel = ped_vel[i]
@@ -170,7 +171,10 @@ class FastPysfWrapper:
                     float(lambda_importance),
                     float(gamma),
                 )
-                total += np.array([f_x, f_y], dtype=float) * float(factor)
+                f_x *= factor
+                f_y *= factor
+                total[0] += f_x
+                total[1] += f_y
             except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
                 d = p - other_pos
                 r = np.linalg.norm(d)
@@ -190,6 +194,7 @@ class FastPysfWrapper:
             return forces
 
         n, n_prime, lambda_importance, gamma, factor = self._social_params()
+        factor = float(factor)
         query_vel = np.zeros(2, dtype=float)
         for i, point in enumerate(points):
             try:
@@ -203,7 +208,8 @@ class FastPysfWrapper:
                     float(lambda_importance),
                     float(gamma),
                 )
-                forces[i] = np.array([force_x, force_y], dtype=float) * float(factor)
+                forces[i, 0] = force_x * factor
+                forces[i, 1] = force_y * factor
             except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
                 forces[i] = self._compute_social_force_at_point(point)
         return forces

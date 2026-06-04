@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import numpy as np
 import pytest
 
 from robot_sf.common.types import Line2D, Rect
@@ -9,7 +12,7 @@ from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSim
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.sim.sim_config import SimulationSettings
-from robot_sf.sim.simulator import init_ped_simulators, init_simulators
+from robot_sf.sim.simulator import PedSimulator, init_ped_simulators, init_simulators
 
 
 def _minimal_map() -> MapDefinition:
@@ -156,3 +159,12 @@ def test_ped_simulator_step_once_forwards_cached_group_lists(monkeypatch) -> Non
     simulator.step_once([(0.0, 0.0)], ego_ped_actions=[(0.0, 0.0)])
 
     assert captured["groups"] is initial_group_lists
+
+
+def test_ped_simulator_ped_and_ego_pos_returns_pysf_position_view() -> None:
+    """Combined pedestrian positions should reuse the PySF state position view."""
+    positions = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float)
+    simulator = PedSimulator.__new__(PedSimulator)
+    simulator.pysf_state = SimpleNamespace(ped_positions=positions)
+
+    assert simulator.ped_and_ego_pos is positions

@@ -44,6 +44,9 @@ def _pedestrian_coords_with_ego(sim: PedSimulator) -> np.ndarray:
     Returns:
         np.ndarray: Combined ``(N + 1, 2)`` coordinate array.
     """
+    combined_positions = getattr(sim, "ped_and_ego_pos", None)
+    if combined_positions is not None:
+        return combined_positions
     return np.concatenate((sim.ped_pos, np.asarray(sim.ego_ped_pos)[None, :]), axis=0)
 
 

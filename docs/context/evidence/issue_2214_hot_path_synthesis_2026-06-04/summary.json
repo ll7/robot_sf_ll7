@@ -1,0 +1,46 @@
+{
+  "issue": 2214,
+  "date": "2026-06-04",
+  "classification": "startup_dominated_no_measured_single_row_speedup",
+  "evidence_tier": "diagnostic_local_synthesis",
+  "baseline_commit": "5eead086fceac0bbdd00bb10ec133a612dfc5b25",
+  "named_wave_tip_commit": "c125d5ae",
+  "measured_current_commit": "5bd87d58d4869e8420943301e45de1a8dc6513a1",
+  "measurements": [
+    {
+      "surface": "performance_smoke_env_creation_sec",
+      "baseline": 3.308379650115967,
+      "current": 3.2472727298736572,
+      "delta_pct": -1.8470268691717257,
+      "status": "inconclusive_warn"
+    },
+    {
+      "surface": "performance_smoke_reset_throughput_resets_per_sec",
+      "baseline": 830.4894661808966,
+      "current": 790.5428226779252,
+      "delta_pct": -4.810010880687953,
+      "status": "inconclusive_no_speedup"
+    },
+    {
+      "surface": "policy_search_smoke_batch_runtime_sec",
+      "baseline": 9.860541814938188,
+      "current": 10.057262154994532,
+      "delta_pct": 1.995025733403106,
+      "status": "inconclusive_no_speedup"
+    }
+  ],
+  "excluded_measurements": [
+    {
+      "surface": "simulation_step_throughput_pytest",
+      "reason": "both revisions skipped under the local threshold; the pytest artifact path did not leave a stable worktree snapshot for durable synthesis"
+    }
+  ],
+  "prior_evidence": {
+    "issue_2172_worker_scaling": {
+      "workers_1_runtime_sec": 86.314,
+      "workers_2_runtime_sec": 48.14,
+      "speedup": 1.793
+    }
+  },
+  "interpretation": "The measured local smoke surfaces are cold/startup dominated and do not support a broad end-to-end speedup claim for the hot-path wave. Prior worker-scaling evidence remains the stronger route for near-term wall-clock improvement."
+}

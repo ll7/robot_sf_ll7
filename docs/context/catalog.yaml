@@ -137,6 +137,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2214_hot_path_synthesis.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2174_one_factor_ablation_pilot.md
     status: current
     freshness: maintained

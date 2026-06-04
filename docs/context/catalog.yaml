@@ -252,6 +252,10 @@ entries:
     status: current
     freshness: maintained
     area: manual_control_trace
+  - path: docs/context/issue_2227_mechanism_panels.md
+    status: current
+    freshness: evidence
+    area: manual_control_trace
   - path: docs/context/issue_2040_artifact_publication_workflow.md
     status: current
     freshness: maintained

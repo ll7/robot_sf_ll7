@@ -1,0 +1,40 @@
+{
+  "issue": 2227,
+  "created_at": "2026-06-04",
+  "claim_boundary": "diagnostic_artifact_gap_not_panel_evidence",
+  "result_classification": "blocked_on_trace_regeneration",
+  "paper_facing": false,
+  "available_panel_tooling": [
+    "scripts/tools/render_trajectory_panels.py",
+    "robot_sf/benchmark/trajectory_panels.py",
+    "docs/debug_visualization.md"
+  ],
+  "available_generic_simulation_trace_exports": [
+    "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json",
+    "tests/fixtures/analysis_workbench/simulation_trace_export_v1/planner_sanity_open_episode_0000.json"
+  ],
+  "mechanism_summary_inputs": [
+    "docs/context/evidence/issue_2180_one_factor_h500_2026-06-03/summary.json",
+    "docs/context/evidence/issue_2182_component_synthesis_2026-06-03/component_effects.csv",
+    "docs/context/evidence/issue_1692_topology_hypothesis_probe_2026-05-30/summary.json"
+  ],
+  "historical_non_matching_trace_inputs": [
+    "docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/traces/"
+  ],
+  "missing_inputs": [
+    {
+      "mechanism": "static_recentering",
+      "required": "matched baseline/intervention simulation_trace_export.v1 traces with representative success/failure selection"
+    },
+    {
+      "mechanism": "topology_guided_recovery",
+      "required": "matched baseline/intervention simulation_trace_export.v1 traces with topology hypothesis and command-source switching evidence"
+    }
+  ],
+  "recommended_next_steps": [
+    "select one static-recentering case from issue 2170/2180/2182 evidence",
+    "select one topology-guided case from issue 1692 diagnostics",
+    "regenerate or export simulation_trace_export.v1 traces for each selected baseline/intervention pair",
+    "render trajectory panels with an explicit selection CSV and promote only compact figures, captions, and manifests"
+  ]
+}

@@ -796,14 +796,13 @@ class RobotEnv(BaseEnv):
         if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
             obs = {"agent_obs": obs}
 
-        step_ped_positions = None
+        step_ped_positions = getattr(self.simulator, "ped_pos", np.zeros((0, 2)))
 
         # T044: Update occupancy grid if enabled
         if self.occupancy_grid is not None:
             obstacles, obstacle_polygons = self._get_static_grid_obstacles()
             # Extract updated pedestrian positions and radii
-            ped_positions = self.simulator.ped_pos
-            step_ped_positions = ped_positions
+            ped_positions = step_ped_positions
             ped_radii = getattr(self.simulator, "ped_radii", None)
             if ped_radii is None:
                 ped_radii = [0.35] * len(ped_positions)
@@ -856,7 +855,14 @@ class RobotEnv(BaseEnv):
         self.last_action = action
 
         # Telemetry update
-        self._emit_telemetry(reward, term, False, action, reward_dict)
+        self._emit_telemetry(
+            reward,
+            term,
+            False,
+            action,
+            reward_dict,
+            ped_positions_override=step_ped_positions,
+        )
         self._latest_observation = obs
 
         # if recording is enabled, record the state
@@ -981,6 +987,7 @@ class RobotEnv(BaseEnv):
         truncated: bool,
         action: Any,
         meta: dict[str, Any] | None = None,
+        ped_positions_override: Any | None = None,
     ) -> None:
         """Record telemetry and update live pane if enabled."""
         if self._telemetry_session is None:
@@ -994,7 +1001,11 @@ class RobotEnv(BaseEnv):
             or self.state.is_collision_with_obst
             or self.state.is_collision_with_robot
         )
-        ped_positions = getattr(self.simulator, "ped_pos", np.zeros((0, 2)))
+        ped_positions = np.asarray(
+            ped_positions_override
+            if ped_positions_override is not None
+            else getattr(self.simulator, "ped_pos", np.zeros((0, 2)))
+        )
         robot_pos = np.asarray(self.simulator.robot_poses[0][0], dtype=float)
         min_ped_distance = None
         if ped_positions.size > 0:

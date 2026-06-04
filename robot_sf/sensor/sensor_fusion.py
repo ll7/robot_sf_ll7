@@ -152,8 +152,9 @@ class SensorFusion:
         The unnormalized observation space.
     use_next_goal : bool
         Whether to use the next goal in the observation.
-    drive_state_cache : List[np.ndarray]
-        A cache of previous drive states.
+    drive_state_cache : deque[None]
+        Warm-history markers for drive state. Concrete temporal values are stored
+        in ``stacked_drive_state``.
     lidar_state_cache : List[np.ndarray]
         A cache of previous LiDAR states.
     cache_steps : int
@@ -165,7 +166,7 @@ class SensorFusion:
     target_sensor: Callable[[], tuple[float, float, float]]
     unnormed_obs_space: spaces.Dict
     use_next_goal: bool
-    drive_state_cache: list[np.ndarray] = field(init=False, default_factory=list)
+    drive_state_cache: deque[None] = field(init=False, default_factory=deque)
     lidar_state_cache: list[np.ndarray] = field(init=False, default_factory=list)
     cache_steps: int = field(init=False)
 
@@ -178,6 +179,7 @@ class SensorFusion:
         """
         self.cache_steps = self.unnormed_obs_space[OBS_RAYS].shape[0]
         self.stacked_drive_state = np.zeros((self.cache_steps, 5), dtype=np.float32)
+        self._drive_state_buffer = np.zeros(5, dtype=np.float32)
         self.stacked_lidar_state = np.zeros(
             (self.cache_steps, len(self.lidar_sensor())),
             dtype=np.float32,
@@ -208,22 +210,20 @@ class SensorFusion:
         # If not using the next goal, set the next target angle to 0.0
         next_target_angle = next_target_angle if self.use_next_goal else 0.0
 
-        # Combine the robot speed and target sensor data into the drive state
-        drive_state = np.array(
-            [speed_x, speed_rot, target_distance, target_angle, next_target_angle],
-            dtype=np.float32,
-        )
+        # Combine the robot speed and target sensor data into the reusable current-state buffer.
+        drive_state = self._drive_state_buffer
+        drive_state[:] = (speed_x, speed_rot, target_distance, target_angle, next_target_angle)
 
         # Populate history with the current state on first call to avoid zeros.
         if len(self.drive_state_cache) == 0:
             for _ in range(self.cache_steps):
-                self.drive_state_cache.append(drive_state)
+                self.drive_state_cache.append(None)
                 self.lidar_state_cache.append(lidar_state)
             self.stacked_drive_state = fill_history_stack(self.stacked_drive_state, drive_state)
             self.stacked_lidar_state = fill_history_stack(self.stacked_lidar_state, lidar_state)
         else:
             # Add current states as the newest row so temporal stacks are oldest-to-newest.
-            self.drive_state_cache.append(drive_state)
+            self.drive_state_cache.append(None)
             self.lidar_state_cache.append(lidar_state)
             self.stacked_drive_state = append_history_row(self.stacked_drive_state, drive_state)
             self.stacked_lidar_state = append_history_row(self.stacked_lidar_state, lidar_state)

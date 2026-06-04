@@ -40,8 +40,8 @@ class ImageSensorFusion:
     use_next_goal: bool
     use_image_obs: bool = False
 
-    # Inherited from SensorFusion
-    drive_state_cache: deque = field(init=False, default_factory=deque)
+    # Drive-state cache stores warm-history markers; stacked_drive_state owns values.
+    drive_state_cache: deque[None] = field(init=False, default_factory=deque)
     lidar_state_cache: deque = field(init=False, default_factory=deque)
     image_state_cache: deque = field(init=False, default_factory=deque)
     cache_steps: int = field(init=False)
@@ -58,6 +58,7 @@ class ImageSensorFusion:
             lidar_shape = 5
 
         self.stacked_drive_state = np.zeros((self.cache_steps, 5), dtype=np.float32)
+        self._drive_state_buffer = np.zeros(5, dtype=np.float32)
         self.stacked_lidar_state = np.zeros((self.cache_steps, lidar_shape), dtype=np.float32)
 
         # Initialize caches for sensors
@@ -101,10 +102,9 @@ class ImageSensorFusion:
         # If not using the next goal, set the next target angle to 0.0
         next_target_angle = next_target_angle if self.use_next_goal else 0.0
 
-        # Combine the robot speed and target sensor data into the drive state
-        drive_state = np.array(
-            [speed_x, speed_rot, target_distance, target_angle, next_target_angle],
-        )
+        # Combine the robot speed and target sensor data into the reusable current-state buffer.
+        drive_state = self._drive_state_buffer
+        drive_state[:] = (speed_x, speed_rot, target_distance, target_angle, next_target_angle)
 
         # Get image state if enabled
         image_state = None
@@ -117,7 +117,7 @@ class ImageSensorFusion:
         """Initialize caches if they are empty."""
         if len(self.drive_state_cache) == 0:
             for _ in range(self.cache_steps):
-                self.drive_state_cache.append(sensor_data["drive_state"])
+                self.drive_state_cache.append(None)
                 self.lidar_state_cache.append(sensor_data["lidar_state"])
                 if self.use_image_obs and sensor_data["image_state"] is not None:
                     self.image_state_cache.append(sensor_data["image_state"])
@@ -130,7 +130,7 @@ class ImageSensorFusion:
 
     def _update_sensor_caches(self, sensor_data: dict):
         """Update sensor caches with current data."""
-        self.drive_state_cache.append(sensor_data["drive_state"])
+        self.drive_state_cache.append(None)
         self.lidar_state_cache.append(sensor_data["lidar_state"])
 
     def _update_stacked_states(self, sensor_data: dict):

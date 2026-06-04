@@ -10,6 +10,12 @@ maintenance workflow and full discoverability surface.
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 
+For failure-mechanism work, start with
+[issue_2012_failure_mechanism_classifier.md](issue_2012_failure_mechanism_classifier.md) for the
+paired-horizon executable classifier and
+[issue_2220_failure_mechanism_taxonomy.md](issue_2220_failure_mechanism_taxonomy.md) for the
+mechanism-level interpretation vocabulary and confidence classes.
+
 ## When To Update An Existing Note
 
 Prefer updating an existing note when:

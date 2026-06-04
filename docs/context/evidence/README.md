@@ -55,6 +55,9 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_1569_amv_actuation_smoke_2026-05-27/`: compact local smoke summary for the synthetic AMV
   actuation-envelope stress slice, including row-status classification, actuation diagnostics, and
   the explicit non-paper-facing claim boundary.
+- `issue_2224_amv_actuation_ranking_2026-06-04/`: compact matched `amv_actuation_smoke`
+  comparison showing `actuation_aware_hybrid_rule_v0` reduced command clipping versus
+  `hybrid_rule_v3_fast_progress` on one smoke row, while both candidates still timed out.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and

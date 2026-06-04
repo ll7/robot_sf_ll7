@@ -1,0 +1,56 @@
+{
+  "schema_version": "policy_search_actuation_comparison.v1",
+  "issue": 2224,
+  "generated_at": "2026-06-04",
+  "stage": "amv_actuation_smoke",
+  "scenario_filter": [
+    "classic_cross_trap_high"
+  ],
+  "synthetic_actuation_profile": {
+    "name": "amv-actuation-stress-v0",
+    "claim_scope": "synthetic-only",
+    "claim_boundary": "diagnostic-only"
+  },
+  "rows": [
+    {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "episodes": 1,
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "failure_mode_counts": {
+        "timeout_low_progress": 1
+      },
+      "mean_min_distance": 2.1571130736972806,
+      "mean_avg_speed": 1.662309936770821,
+      "command_clip_fraction_mean": 0.275,
+      "yaw_rate_saturation_fraction_mean": 0.0,
+      "signed_braking_peak_m_s2_mean": -2.5
+    },
+    {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "episodes": 1,
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "failure_mode_counts": {
+        "timeout_low_progress": 1
+      },
+      "mean_min_distance": 2.3627177685565335,
+      "mean_avg_speed": 1.667037499328765,
+      "command_clip_fraction_mean": 0.1875,
+      "yaw_rate_saturation_fraction_mean": 0.0,
+      "signed_braking_peak_m_s2_mean": -2.5
+    }
+  ],
+  "delta_actuation_aware_vs_fast_progress": {
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "command_clip_fraction_mean": -0.0875,
+    "yaw_rate_saturation_fraction_mean": 0.0,
+    "signed_braking_peak_m_s2_mean": 0.0,
+    "mean_min_distance": 0.2056046948592529
+  },
+  "classification": "diagnostic_direction_only",
+  "claim_boundary": "Synthetic diagnostic only; not calibrated AMV hardware evidence and not paper-facing planner-ranking evidence."
+}

@@ -205,6 +205,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2231_mechanism_aware_ranking.md](issue_2231_mechanism_aware_ranking.md)
 
+* Issue #2224 synthetic AMV actuation ranking diagnostic:
+
+  [issue_2224_amv_actuation_ranking.md](issue_2224_amv_actuation_ranking.md)
+
 * Issue #2234 predictive perturbation criticality protocol:
 
   [issue_2234_predictive_perturbation_criticality.md](issue_2234_predictive_perturbation_criticality.md)

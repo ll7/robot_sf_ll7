@@ -77,6 +77,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2228_research_dashboard.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2153_research_v1_evidence_map.md
     status: current
     freshness: maintained

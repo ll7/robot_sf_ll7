@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 import yaml
 
+from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.map_runner import (
     _apply_planner_selector_v2_context,
     _build_policy,
@@ -1751,10 +1752,59 @@ def test_velocity_and_ped_stack_helpers() -> None:
     assert np.allclose(vel, 0.0)
     assert np.allclose(acc, 0.0)
 
-    traj = [np.array([[0.0, 0.0]]), np.array([[1.0, 1.0], [2.0, 2.0]])]
-    stacked = _stack_ped_positions(traj)
-    assert stacked.shape == (2, 2, 2)
     assert _stack_ped_positions([]).shape == (0, 0, 2)
+
+
+def test_stack_ped_positions_uses_np_stack_for_fixed_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use the fixed-count fast path when every non-empty timestep has the same shape."""
+    original_stack = np.stack
+    stack_calls: list[tuple[tuple[int, ...], ...]] = []
+
+    def _recording_stack(arrays: list[np.ndarray]) -> np.ndarray:
+        stack_calls.append(tuple(arr.shape for arr in arrays))
+        return original_stack(arrays)
+
+    monkeypatch.setattr(map_runner.np, "stack", _recording_stack)
+    traj = [
+        np.array([[0.0, 0.0], [1.0, 1.0]], dtype=float),
+        np.array([[2.0, 2.0], [3.0, 3.0]], dtype=float),
+    ]
+
+    stacked = _stack_ped_positions(traj)
+
+    assert stack_calls == [((2, 2), (2, 2))]
+    assert np.allclose(stacked, original_stack(traj))
+
+
+def test_stack_ped_positions_pads_variable_count_with_nan() -> None:
+    """Pad variable-count pedestrian timesteps with NaN by default."""
+    traj = [
+        np.array([[0.0, 0.0]], dtype=float),
+        np.array([[1.0, 1.0], [2.0, 2.0]], dtype=float),
+    ]
+
+    stacked = _stack_ped_positions(traj)
+
+    assert stacked.shape == (2, 2, 2)
+    assert np.allclose(stacked[0, 0], [0.0, 0.0])
+    assert np.isnan(stacked[0, 1]).all()
+    assert np.allclose(stacked[1], traj[1])
+
+
+def test_stack_ped_positions_uses_fill_value_for_padded_rows() -> None:
+    """Honor a custom fill value on padded variable-count rows."""
+    traj = [
+        np.empty((0, 2), dtype=float),
+        np.array([[1.0, 1.0], [2.0, 2.0]], dtype=float),
+    ]
+
+    stacked = _stack_ped_positions(traj, fill_value=-1.0)
+
+    assert stacked.shape == (2, 2, 2)
+    assert np.allclose(stacked[0], -1.0)
+    assert np.allclose(stacked[1], traj[1])
 
 
 def test_map_runner_metadata_and_normalization_helpers() -> None:

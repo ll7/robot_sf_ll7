@@ -209,6 +209,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2234_predictive_perturbation_criticality.md](issue_2234_predictive_perturbation_criticality.md)
 
+* Issue #2226 seed sufficiency recommendation:
+
+  [issue_2226_seed_sufficiency_recommendation.md](issue_2226_seed_sufficiency_recommendation.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

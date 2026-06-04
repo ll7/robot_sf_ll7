@@ -129,3 +129,6 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   jobs.
 - `issue_2182_component_synthesis_2026-06-03/`: compact component-effect classification table
   synthesized from the Issue #2180 h500 run for Issue #2104 closeout.
+- `issue_2225_learned_policy_failure_synthesis_2026-06-04/`: compact learned-policy failure-mode
+  evidence table synthesizing BC warm-start PPO, shielded PPO repair, ORCA-residual BC, learned risk
+  model, and oracle imitation status against hybrid-rule mechanism evidence for Issue #2225.

@@ -185,7 +185,7 @@ knowledge, not every transient iteration detail.
 
   [issue_2182_component_effect_synthesis.md](issue_2182_component_effect_synthesis.md)
 
-* Issue #2225 learned-policy failure synthesis:
+* Issue #2225 Learned-Policy Failure Synthesis (2026-06-04):
 
   [issue_2225_learned_policy_failure_synthesis.md](issue_2225_learned_policy_failure_synthesis.md)
 

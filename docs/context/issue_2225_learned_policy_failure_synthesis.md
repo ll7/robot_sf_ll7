@@ -1,4 +1,4 @@
-# Issue #2225 Learned-Policy Failure Synthesis
+# Issue #2225 Learned-Policy Failure Synthesis (2026-06-04)
 
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/2225>
 Date: 2026-06-04
@@ -11,7 +11,7 @@ without launching new training or treating fallback, degraded, or local-only out
 evidence.
 
 The compact evidence table lives at
-`docs/context/evidence/issue_2225_learned_policy_failure_synthesis_2026-06-04/failure_modes.csv`.
+[failure_modes.csv](evidence/issue_2225_learned_policy_failure_synthesis_2026-06-04/failure_modes.csv).
 
 ## Evidence Summary
 

@@ -58,15 +58,6 @@ PYSF_TAU_INDEX = 6
 MIN_HEADING_SPEED_MPS = 1e-6
 
 
-def _cartesian_velocity(speed: float, heading: float) -> np.ndarray:
-    """Convert scalar speed plus heading into PySF ``(vx, vy)`` components.
-
-    Returns:
-        np.ndarray: Cartesian velocity vector with shape ``(2,)``.
-    """
-    return np.array([speed * cos(heading), speed * sin(heading)], dtype=float)
-
-
 def _heading_from_velocity(velocity_xy: np.ndarray, fallback_heading: float) -> float:
     """Derive a heading from a PySF velocity vector or keep the fallback heading.
 
@@ -530,7 +521,9 @@ class PedSimulator(Simulator):
         pysf_states = self.pysf_state.pysf_states()
         ego_speed, ego_heading = self.ego_ped.current_speed
         pysf_states[-1, PYSF_POSITION_SLICE] = self.ego_ped.pos
-        pysf_states[-1, PYSF_VELOCITY_SLICE] = _cartesian_velocity(ego_speed, ego_heading)
+        ego_velocity = pysf_states[-1, PYSF_VELOCITY_SLICE]
+        ego_velocity[0] = ego_speed * cos(ego_heading)
+        ego_velocity[1] = ego_speed * sin(ego_heading)
 
     def reset_state(self):
         """Reset robot and ego pedestrian state.

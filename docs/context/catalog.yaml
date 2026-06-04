@@ -232,6 +232,10 @@ entries:
     status: current
     freshness: evidence
     area: manual_control_trace
+  - path: docs/context/issue_2236_trace_mechanism_evidence_rubric.md
+    status: current
+    freshness: maintained
+    area: manual_control_trace
   - path: docs/context/issue_2040_artifact_publication_workflow.md
     status: current
     freshness: maintained

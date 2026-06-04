@@ -723,6 +723,9 @@ Try to increase the test coverage over time by adding tests when touching code. 
 # Run tests (coverage collected automatically)
 uv run pytest tests
 
+# Run a focused local check and discard generated coverage output after success
+scripts/dev/run_focused_tests.sh tests/test_force_flags.py -q
+
 # View HTML report (preferred helper)
 uv run python scripts/coverage/open_coverage_report.py
 

@@ -90,6 +90,38 @@ def test_socnav_observation_clips_positions_to_map_aware_cap() -> None:
     assert obs["map"]["size"].tolist() == pytest.approx([120.0, 80.0])
 
 
+def test_socnav_observation_rotates_pedestrian_velocities_to_ego_frame() -> None:
+    """Pedestrian velocities should be rotated into the robot heading frame."""
+    env_config = RobotSimulationConfig()
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[2.0, 0.0], [0.0, 3.0]], dtype=np.float32),
+        ped_vel=np.array([[1.0, 0.0], [0.0, 2.0]], dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), np.pi / 2.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+
+    obs = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    ).next_obs()
+
+    np.testing.assert_allclose(
+        obs["pedestrians"]["velocities"][:2],
+        np.array([[0.0, -1.0], [2.0, 0.0]], dtype=np.float32),
+        atol=1e-6,
+    )
+
+
 def test_socnav_observation_visibility_filters_fov_without_mutating_ground_truth() -> None:
     """Planner-facing pedestrian observations should honor opt-in FOV settings only."""
     env_config = RobotSimulationConfig()

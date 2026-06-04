@@ -2986,6 +2986,9 @@ def _stack_ped_positions(traj: list[np.ndarray], *, fill_value: float = np.nan) 
     """
     if not traj:
         return np.zeros((0, 0, 2), dtype=float)
+    first_shape = traj[0].shape
+    if all(arr.shape == first_shape for arr in traj):
+        return np.stack(traj).astype(float, copy=False)
     max_k = max(p.shape[0] for p in traj)
     stacked = np.full((len(traj), max_k, 2), fill_value, dtype=float)
     for i, arr in enumerate(traj):

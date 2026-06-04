@@ -29,6 +29,14 @@ deliberately versioned, non-regenerable binary fixture after an explicit maintai
 artifact can be regenerated from tracked configs, seed schedules, commands, and commits, it is fine
 to leave it ignored or delete it locally once the durable summary/report evidence is preserved.
 
+## Review Fallback
+
+When automated AI review is rate-limited, unavailable, or configured to skip a small evidence file
+under this tree, reviewers should apply the fallback checklist in `docs/code_review.md`. CSV
+evidence is not exempt from review merely because broad CSV filters exist: inspect the header,
+representative rows, provenance fields, parent-issue conclusion alignment, and explicit claim
+boundary before merging an evidence-producing PR.
+
 ## Current Bundles
 
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that

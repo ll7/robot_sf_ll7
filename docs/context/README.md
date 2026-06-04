@@ -201,6 +201,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2225_learned_policy_failure_synthesis.md](issue_2225_learned_policy_failure_synthesis.md)
 
+* Issue #2234 predictive perturbation criticality protocol:
+
+  [issue_2234_predictive_perturbation_criticality.md](issue_2234_predictive_perturbation_criticality.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

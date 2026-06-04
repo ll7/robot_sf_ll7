@@ -489,6 +489,11 @@ class PedSimulator(Simulator):
         return self.pysf_state.ped_positions[:-1]  # Exclude the ego pedestrian
 
     @property
+    def ped_and_ego_pos(self):
+        """Return current NPC and ego pedestrian positions as one PySF-backed view."""
+        return self.pysf_state.ped_positions
+
+    @property
     def ped_vel(self):
         """Return current velocities for NPC pedestrians only."""
         return self.pysf_state.ped_velocities[:-1]

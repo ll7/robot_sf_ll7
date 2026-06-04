@@ -182,6 +182,26 @@ def test_ego_position_correct_in_states(env):
         ), "Ego pedestrian position does not match the simulator state"
 
 
+def test_combined_pedestrian_position_view_includes_ego_row(env) -> None:
+    """PedSimulator should expose the full PySF pedestrian position array."""
+    _, _ = env.reset()
+
+    old_stacked_output = np.concatenate(
+        (
+            env.simulator.ped_pos,
+            np.asarray(env.simulator.ego_ped_pos)[None, :],
+        ),
+        axis=0,
+    )
+
+    combined_positions = env.simulator.ped_and_ego_pos
+
+    assert np.shares_memory(combined_positions, env.simulator.pysf_state.pysf_states())
+    assert combined_positions.shape[0] == env.simulator.ped_pos.shape[0] + 1
+    np.testing.assert_allclose(combined_positions, old_stacked_output)
+    np.testing.assert_allclose(combined_positions[-1], env.simulator.ego_ped_pos)
+
+
 def test_ego_social_force_state_preserves_tau_and_uses_cartesian_velocity(env) -> None:
     """Keep the ego row compatible with PySF's state layout while syncing motion."""
     _, _ = env.reset()

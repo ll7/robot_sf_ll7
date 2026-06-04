@@ -85,6 +85,29 @@ incomplete.
   by a tracked manifest, registry entry, context note, or external artifact pointer. Small support
   helpers with no research-interpretation role may be marked `NA` with that reason.
 
+## Evidence Artifact Fallback Review
+
+Use this checklist for evidence-producing PRs when automated AI review is rate-limited, unavailable,
+or path-filtered in a way that may skip small durable evidence files such as CSV tables under
+`docs/context/evidence/`.
+
+- Confirm every linked issue, PR, context note, config, script, and evidence path resolves from a
+  fresh checkout.
+- Confirm copied evidence files are intentionally small and reviewable. Large raw logs, videos,
+  model caches, coverage HTML, and raw episode JSONL should stay out of git unless a narrow fixture
+  reason is stated.
+- For CSV evidence, inspect the header and at least one representative row. Verify column names,
+  units, seed/scenario/planner identifiers, and status fields match the surrounding Markdown or
+  JSON summary.
+- Check that parent issue conclusions, PR text, and context-note wording agree on result
+  classification: benchmark evidence, smoke evidence, diagnostic-only, blocked, or proposal.
+- Check claim-boundary language explicitly separates observed evidence from hypotheses, future
+  work, fallback/degraded execution, and paper-facing claims.
+- Check generated evidence points back to a reproducible command, commit, config or scenario
+  matrix, seed policy, and durable artifact/provenance decision.
+- If an evidence CSV or other small table is path-filtered out of automated review, state in the PR
+  review or merge note that this manual fallback checklist covered it.
+
 ## Documentation Review
 
 Docs changes should be rejected if they:

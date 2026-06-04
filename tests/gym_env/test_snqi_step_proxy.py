@@ -41,6 +41,32 @@ def test_snqi_proxy_reports_near_miss_and_force_exposure() -> None:
     assert metrics["jerk_mean"] == 0.0
 
 
+def test_snqi_proxy_uses_ped_position_override_without_reading_simulator_ped_pos() -> None:
+    """A step-local pedestrian snapshot should avoid a second simulator ped_pos read."""
+
+    class SimulatorWithGuardedPedPos:
+        """Simulator stub whose pedestrian positions must come from the override."""
+
+        robot_poses = [((0.0, 0.0), 0.0)]
+        last_ped_forces = np.array([[3.0, 0.0], [0.1, 0.0]], dtype=float)
+
+        @property
+        def ped_pos(self):
+            raise AssertionError("ped_pos should not be read when an override is provided")
+
+    proxy = StepSNQIProxy()
+
+    metrics = proxy.compute_step_metrics(
+        SimulatorWithGuardedPedPos(),
+        dt=0.1,
+        ped_positions_override=np.array([[0.30, 0.0], [2.0, 0.0]], dtype=float),
+    )
+
+    assert metrics["near_misses"] == 1.0
+    assert metrics["force_exceed_events"] == 1.0
+    assert metrics["comfort_exposure"] == 0.5
+
+
 def test_snqi_proxy_accumulates_running_jerk_mean() -> None:
     """Step proxy should keep finite-difference jerk state across calls."""
     proxy = StepSNQIProxy()

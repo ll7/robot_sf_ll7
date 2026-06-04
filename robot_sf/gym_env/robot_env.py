@@ -796,11 +796,14 @@ class RobotEnv(BaseEnv):
         if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
             obs = {"agent_obs": obs}
 
+        step_ped_positions = None
+
         # T044: Update occupancy grid if enabled
         if self.occupancy_grid is not None:
             obstacles, obstacle_polygons = self._get_static_grid_obstacles()
             # Extract updated pedestrian positions and radii
             ped_positions = self.simulator.ped_pos
+            step_ped_positions = ped_positions
             ped_radii = getattr(self.simulator, "ped_radii", None)
             if ped_radii is None:
                 ped_radii = [0.35] * len(ped_positions)
@@ -833,6 +836,7 @@ class RobotEnv(BaseEnv):
             self._snqi_proxy.compute_step_metrics(
                 self.simulator,
                 dt=float(self.state.d_t),
+                ped_positions_override=step_ped_positions,
             )
         )
         # add the action space to dict

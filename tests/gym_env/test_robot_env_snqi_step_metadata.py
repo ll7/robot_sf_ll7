@@ -7,6 +7,8 @@ import pytest
 
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy, compute_snqi_step_proxies
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.occupancy_grid import GridConfig
 
 
 class _FakeSimulator:
@@ -74,3 +76,42 @@ def test_robot_env_step_info_includes_snqi_proxy_fields() -> None:
     for key in ("near_misses", "force_exceed_events", "comfort_exposure", "jerk_mean"):
         assert key in meta
         assert np.isfinite(float(meta[key]))
+
+
+def test_robot_env_reuses_occupancy_grid_ped_positions_for_snqi_proxy() -> None:
+    """RobotEnv.step should pass its occupancy-grid pedestrian snapshot to SNQI metrics."""
+    config = RobotSimulationConfig(
+        use_occupancy_grid=True,
+        grid_config=GridConfig(width=4.0, height=4.0, resolution=0.5),
+        include_grid_in_observation=False,
+    )
+    env = make_robot_env(config=config, reward_name="snqi_step")
+    captured: dict[str, object] = {}
+
+    def capture_compute_step_metrics(
+        simulator,
+        *,
+        dt: float,
+        ped_positions_override=None,
+    ) -> dict[str, float]:
+        captured["simulator"] = simulator
+        captured["dt"] = dt
+        captured["ped_positions_override"] = ped_positions_override
+        return {
+            "near_misses": 0.0,
+            "force_exceed_events": 0.0,
+            "comfort_exposure": 0.0,
+            "jerk_mean": 0.0,
+        }
+
+    try:
+        env.reset(seed=11)
+        env._snqi_proxy.compute_step_metrics = capture_compute_step_metrics  # type: ignore[method-assign]
+
+        env.step(np.array([0.2, 0.0], dtype=np.float32))
+    finally:
+        env.close()
+
+    assert captured["simulator"] is env.simulator
+    assert captured["ped_positions_override"] is not None
+    assert np.asarray(captured["ped_positions_override"]).shape[-1] >= 2

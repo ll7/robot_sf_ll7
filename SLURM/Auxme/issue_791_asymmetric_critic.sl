@@ -84,12 +84,11 @@ if [[ "${MODULES_AVAILABLE}" == "1" ]]; then
 fi
 
 run_in_allocation() {
-  if command -v srun >/dev/null 2>&1; then
+  if [[ "${ISSUE791_USE_SRUN:-0}" == "1" ]] && command -v srun >/dev/null 2>&1 && [[ -n "${SLURM_JOB_ID:-}" ]] && srun --version >/dev/null 2>&1; then
     echo "[issue791] Launching with srun on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}."
     srun --cpu_bind=cores --gpus-per-node=1 "$@"
   else
-    echo "[issue791] srun unavailable on node ${SLURMD_NODENAME:-${HOSTNAME:-unknown}}; PATH=${PATH}" >&2
-    echo "[issue791] Running directly in the batch allocation." >&2
+    echo "[issue791] Running directly inside the batch allocation; set ISSUE791_USE_SRUN=1 to opt into srun." >&2
     "$@"
   fi
 }

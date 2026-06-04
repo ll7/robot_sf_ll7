@@ -745,6 +745,56 @@ least implausible single-factor arms recover with horizon:
 Both configs passed `train_ppo.py --dry-run` before submission. Do not expand this to the full
 single-factor 10M grid unless one of these two runs crosses the leader-relevant band.
 
+### Issue #791 Promotion Campaign 128k 256k on 2026-06-03
+
+The remaining seed-123 single-factor arm was submitted later through the `goal-slurm-experiment`
+lane to complete the seed-123 10M triad. The first attempt, job `12718`, failed before training
+with an `srun` symbol lookup error. The wrapper was repaired to make `srun` opt-in, and replacement
+job `12719` completed.
+
+| Job | Arm | Best success | Best collision | Best step | Final success | Final collision | Decision |
+|----:|-----|-------------:|---------------:|----------:|--------------:|----------------:|----------|
+| 12233 | attention-only 10M, seed 123 | 0.8857 | 0.1143 | 9.96M | 0.8714 | 0.1286 | strongest seed-123 10M single-factor arm; replicate next |
+| 12234 | reward-curriculum-only 10M, seed 123 | 0.8714 | 0.1286 | 8.91M | 0.8429 | 0.1571 | useful but below attention-only |
+| 12719 | asymmetric-critic-only 10M, seed 123 | 0.8714 | 0.1286 | 7.86M | 0.8429 | 0.1571 | strong attribution evidence, but not the next robustness allocation |
+
+This result does not meet the strict convergence target, but it reaches a leader-relevant band
+without the attention head or reward curriculum. Treat it as strong single-factor attribution
+evidence, not as paper-grade evidence until artifact provenance is made durable beyond local
+`output/`. Compact provenance is tracked in
+`docs/context/evidence/issue_852_asymmetric_critic_10m_seed123_2026-06-03/`.
+
+Follow-up decision on 2026-06-03: the seed-123 10M triad favors attention-only, not
+asymmetric-critic-only, for the next robustness allocation. The asymmetric result is still
+preserved on PR #2152, but the next useful `goal-slurm-experiment` submission is
+`configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed231.yaml` through
+`SLURM/Auxme/issue_791_attention_head.sl`. Confidence: 82%; this would change if later artifact
+analysis finds a metric or evaluation mismatch in W&B run `8t3zd8sr`.
+
+Submission update: job `12730` (`gse-852-attn231`) was submitted on 2026-06-03 from branch
+`gse-852-asym10m-s123` at commit `ddcf48a2` with `ISSUE791_WANDB_POLICY=require`. Early log output
+confirmed the repaired attention launcher runs directly inside the batch allocation instead of the
+old eager-`srun` path. Treat this as the active `goal-slurm-experiment` training lane until it
+finishes, then compare seed-231 attention-only against seed-123 attention-only and the leader-family
+replicas before making any promotion claim.
+
+Completion update on 2026-06-04: job `12730` completed successfully in 14h57m03s. The final 10M
+checkpoint was also the best checkpoint: success `0.8857`, collision `0.1143`, SNQI `0.1439`, eval
+return `22.31`. This matches the seed-123 attention-only best success/collision (`0.8857` /
+`0.1143`) with slightly lower SNQI (`0.1439` vs `0.1513`). Treat this as useful attention-only
+replication evidence, not a promotion claim, because the strict convergence target still fails on
+collision. Compact provenance is tracked in
+`docs/context/evidence/issue_852_attention_only_10m_seed231_2026-06-04/`.
+
+Queue-fill update on 2026-06-04: the next `goal-slurm-experiment` slot was assigned to
+`configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed1337.yaml` to complete a
+three-seed attention-only variance band after seeds 123 and 231 matched on best success/collision.
+Job `12746` (`gse-852-attn1337`) was submitted from branch `gse-852-asym10m-s123` at commit
+`93a8039a` through `SLURM/Auxme/issue_791_attention_head.sl` with
+`ISSUE791_WANDB_POLICY=require`. Early log output confirmed W&B is required/enabled and the repaired
+attention launcher runs directly inside the batch allocation. Treat this as the active
+`goal-slurm-experiment` training lane until it finishes.
+
 Verification on 2026-04-29:
 
 ```bash

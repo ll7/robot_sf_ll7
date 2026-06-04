@@ -10,6 +10,12 @@ from typing import Any
 
 import yaml
 
+_ACTUATION_METRICS = (
+    "command_clip_fraction_mean",
+    "yaw_rate_saturation_fraction_mean",
+    "signed_braking_peak_m_s2_mean",
+)
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -48,6 +54,16 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _optional_float(raw: Any) -> float | None:
+    """Return a numeric value when one is present, otherwise ``None``."""
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def main() -> int:
     """Compare candidate summaries against each other and baseline gates."""
     args = parse_args()
@@ -69,6 +85,10 @@ def main() -> int:
         classic = classic_raw if isinstance(classic_raw, dict) else {}
         francis_raw = family.get("francis2023")
         francis = francis_raw if isinstance(francis_raw, dict) else {}
+        synthetic_actuation_raw = summary.get("synthetic_actuation")
+        synthetic_actuation = (
+            synthetic_actuation_raw if isinstance(synthetic_actuation_raw, dict) else {}
+        )
         rows.append(
             {
                 "candidate": str(payload.get("candidate", "unknown")),
@@ -78,6 +98,10 @@ def main() -> int:
                 "near_miss_rate": float(summary.get("near_miss_rate", 0.0)),
                 "classic_collision_rate": float(classic.get("collision_rate", 0.0)),
                 "francis_collision_rate": float(francis.get("collision_rate", 0.0)),
+                **{
+                    metric_name: _optional_float(synthetic_actuation.get(metric_name))
+                    for metric_name in _ACTUATION_METRICS
+                },
                 "summary_json": str(summary_path),
             }
         )
@@ -93,6 +117,7 @@ def main() -> int:
                 "near_miss_rate": baseline.get("near_miss_rate"),
                 "classic_collision_rate": baseline.get("classic_collision_rate"),
                 "francis_collision_rate": baseline.get("francis_collision_rate"),
+                **{metric_name: None for metric_name in _ACTUATION_METRICS},
                 "summary_json": None,
             }
         )
@@ -104,15 +129,18 @@ def main() -> int:
     lines = [
         "# Policy Search Comparison",
         "",
-        "| Candidate | Stage | Success | Collision | Near Miss | Classic Coll. | Francis Coll. |",
-        "|---|---|---:|---:|---:|---:|---:|",
+        "| Candidate | Stage | Success | Collision | Near Miss | Classic Coll. | Francis Coll. | Command Clip | Yaw Saturation | Signed Braking Peak |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         lines.append(
             f"| {row['candidate']} | {row['stage']} | {row['success_rate']:.4f} | {row['collision_rate']:.4f} | "
             f"{row['near_miss_rate'] if row['near_miss_rate'] is not None else 'n/a'} | "
             f"{row['classic_collision_rate'] if row['classic_collision_rate'] is not None else 'n/a'} | "
-            f"{row['francis_collision_rate'] if row['francis_collision_rate'] is not None else 'n/a'} |"
+            f"{row['francis_collision_rate'] if row['francis_collision_rate'] is not None else 'n/a'} | "
+            f"{row['command_clip_fraction_mean'] if row['command_clip_fraction_mean'] is not None else 'n/a'} | "
+            f"{row['yaw_rate_saturation_fraction_mean'] if row['yaw_rate_saturation_fraction_mean'] is not None else 'n/a'} | "
+            f"{row['signed_braking_peak_m_s2_mean'] if row['signed_braking_peak_m_s2_mean'] is not None else 'n/a'} |"
         )
     md_path = output_dir / "comparison.md"
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

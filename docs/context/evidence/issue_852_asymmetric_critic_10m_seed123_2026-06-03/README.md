@@ -1,4 +1,4 @@
-# Issue 852 asymmetric-critic-only 10M seed-123 run
+# Issue #852 Asymmetric-Critic-Only 10M Seed-123 Run
 
 This directory records compact, reviewable provenance for the issue #852 single-factor
 asymmetric-critic-only 10M run submitted through `goal-slurm-experiment`.
@@ -21,10 +21,10 @@ the local artifacts are promoted or otherwise tied to a durable retrieval path.
   `configs/training/ppo/ablations/single_factor/asymmetric_critic_only_10m_env22_seed123.yaml`
 - Launcher: `SLURM/Auxme/issue_791_asymmetric_critic.sl`
 - W&B run: <https://wandb.ai/ll7/robot_sf/runs/y59octg5>
-- Local Slurm log:
-  `output/slurm/12719-issue791-asymmetric-critic.out`
-- Synced local artifact root:
-  `output/slurm/issue791-asymmetric-critic-job-12719/`
+- Local Slurm log: gitignored local output from job `12719`; see `SHA256SUMS`
+  for source-artifact checksums.
+- Synced local artifact root: gitignored job-local benchmark output from job
+  `12719`; see `SHA256SUMS` for source-artifact checksums.
 
 Local `output/` paths are ignored and non-durable. W&B is the durable external pointer observed at
 completion; do not rely on this worktree-local output root in future checkouts.

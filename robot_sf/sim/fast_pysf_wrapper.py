@@ -195,11 +195,10 @@ class FastPysfWrapper:
 
         n, n_prime, lambda_importance, gamma, factor = self._social_params()
         factor = float(factor)
-        query_vel = np.zeros(2, dtype=float)
+        vel_diffs = -np.asarray(ped_vel, dtype=float)
         for i, point in enumerate(points):
             try:
                 pos_diffs = (point - ped_pos).astype(float)
-                vel_diffs = (query_vel - ped_vel).astype(float)
                 force_x, force_y = pf_forces.social_force_single_ped(
                     pos_diffs,
                     vel_diffs,

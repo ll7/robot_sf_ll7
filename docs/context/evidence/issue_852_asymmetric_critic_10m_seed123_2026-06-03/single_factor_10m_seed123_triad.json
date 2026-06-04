@@ -1,0 +1,83 @@
+{
+  "artifact_status": {
+    "durable_external_pointers": [
+      "https://wandb.ai/ll7/robot_sf/runs/8t3zd8sr",
+      "https://wandb.ai/ll7/robot_sf/runs/sg0iwfal",
+      "https://wandb.ai/ll7/robot_sf/runs/y59octg5"
+    ],
+    "local_output_is_durable": false,
+    "source": "W&B run summaries plus tracked asymmetric evidence bundle"
+  },
+  "comparison_date": "2026-06-03",
+  "comparison_status": "diagnostic_attribution_evidence_not_paper_grade",
+  "issue": 852,
+  "runs": [
+    {
+      "arm": "attention_only",
+      "best_checkpoint": {
+        "collision_rate": 0.11428571428571428,
+        "eval_step": 9961472,
+        "snqi": 0.15127764769065527,
+        "success_rate": 0.8857142857142857
+      },
+      "config": "configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed123.yaml",
+      "final_checkpoint": {
+        "collision_rate": 0.12857142857142856,
+        "eval_step": 10000000,
+        "snqi": 0.09349857739587068,
+        "success_rate": 0.8714285714285714
+      },
+      "job": 12233,
+      "policy_id": "ppo_expert_issue_852_attention_only_10m_env22_seed123",
+      "seed": 123,
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/8t3zd8sr"
+    },
+    {
+      "arm": "reward_curriculum_only",
+      "best_checkpoint": {
+        "collision_rate": 0.12857142857142856,
+        "eval_step": 8912896,
+        "snqi": 0.08886935553168637,
+        "success_rate": 0.8714285714285714
+      },
+      "config": "configs/training/ppo/ablations/single_factor/reward_curriculum_only_10m_env22_seed123.yaml",
+      "final_checkpoint": {
+        "collision_rate": 0.15714285714285714,
+        "eval_step": 10000000,
+        "snqi": 0.05742513068385254,
+        "success_rate": 0.8428571428571429
+      },
+      "job": 12234,
+      "policy_id": "ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed123",
+      "seed": 123,
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/sg0iwfal"
+    },
+    {
+      "arm": "asymmetric_critic_only",
+      "best_checkpoint": {
+        "collision_rate": 0.12857142857142856,
+        "eval_step": 7864320,
+        "snqi": 0.12411288753018082,
+        "success_rate": 0.8714285714285714
+      },
+      "config": "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_10m_env22_seed123.yaml",
+      "final_checkpoint": {
+        "collision_rate": 0.15714285714285714,
+        "eval_step": 10000000,
+        "snqi": -0.003963786113635721,
+        "success_rate": 0.8428571428571429
+      },
+      "job": 12719,
+      "policy_id": "ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed123",
+      "seed": 123,
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/y59octg5"
+    }
+  ],
+  "selection_decision": {
+    "blocked_submission": "asymmetric_critic_only_10m_env22_seed231",
+    "blocked_submission_reason": "Do not spend the next robustness allocation on the asymmetric-critic-only seed-231 lane from this triad; keep it as attribution evidence.",
+    "confidence": 0.82,
+    "reason": "Seed-123 attention-only outperformed the reward-curriculum-only and asymmetric-critic-only arms on best success, collision, and SNQI. The asymmetric arm remains useful attribution evidence, but the next robustness allocation should replicate the stronger attention-only arm.",
+    "selected_submission": "attention_only_10m_env22_seed231"
+  }
+}

@@ -63,6 +63,18 @@ complete:
 - result classification, such as positive, negative, diagnostic-only, blocked, or inconclusive;
 - parent issue, dashboard, registry, claim map, context note, or synthesis surface to update.
 
+Use this compact template when drafting the issue body, PR body, or synthesis note:
+
+```md
+- Target: <hypothesis, claim, blocker, or research question>
+- Baseline/Comparator: <baseline or comparator>
+- Evidence Tier And Claim Boundary: <tier and boundary>
+- Decision/Stop Rule: <decision or stop rule>
+- Evidence And Provenance Plan: <compact durable evidence and provenance plan>
+- Result Classification: <positive, negative, diagnostic-only, blocked, or inconclusive>
+- Update Surface: <parent issue, dashboard, registry, claim map, context note, or synthesis surface>
+```
+
 After several diagnostic children accumulate under one research parent, prefer a synthesis pass
 before adding another exploratory child. The synthesis should name what was learned, what stayed
 inconclusive, which lanes are redundant or negative, and the next smallest experiment or follow-up

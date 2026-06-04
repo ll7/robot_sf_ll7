@@ -786,6 +786,15 @@ replication evidence, not a promotion claim, because the strict convergence targ
 collision. Compact provenance is tracked in
 `docs/context/evidence/issue_852_attention_only_10m_seed231_2026-06-04/`.
 
+Queue-fill update on 2026-06-04: the next `goal-slurm-experiment` slot was assigned to
+`configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed1337.yaml` to complete a
+three-seed attention-only variance band after seeds 123 and 231 matched on best success/collision.
+Job `12746` (`gse-852-attn1337`) was submitted from branch `gse-852-asym10m-s123` at commit
+`93a8039a` through `SLURM/Auxme/issue_791_attention_head.sl` with
+`ISSUE791_WANDB_POLICY=require`. Early log output confirmed W&B is required/enabled and the repaired
+attention launcher runs directly inside the batch allocation. Treat this as the active
+`goal-slurm-experiment` training lane until it finishes.
+
 Verification on 2026-04-29:
 
 ```bash

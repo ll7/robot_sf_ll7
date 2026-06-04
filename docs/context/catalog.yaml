@@ -61,6 +61,10 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2230_amv_actuation_evidence_ladder.md
+    status: current
+    freshness: policy
+    area: benchmark_evidence
   - path: docs/context/issue_2125_seed_sufficiency_ranking_stability.md
     status: current
     freshness: maintained

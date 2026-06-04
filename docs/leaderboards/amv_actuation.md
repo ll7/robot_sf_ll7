@@ -1,9 +1,11 @@
 # AMV Actuation Leaderboard
 
 This page covers synthetic AMV actuation surfaces. These rows are diagnostic unless a linked
-claim-map decision explicitly promotes them. The first populated rows come from compact tracked
-evidence for Issue #1569, whose own summary says the smoke does not strengthen AMV performance
-claims.
+claim-map decision explicitly promotes them. Interpret every row through the
+[AMV actuation evidence ladder](../context/issue_2230_amv_actuation_evidence_ladder.md): synthetic
+diagnostics are not platform-class proxy evidence or hardware-calibrated AMV evidence. The first
+populated rows come from compact tracked evidence for Issue #1569, whose own summary says the smoke
+does not strengthen AMV performance claims.
 
 | planner | suite | success | collision | near_miss | low_progress | min_distance | runtime | benchmark_track | evidence_uri | status | claim_boundary |
 | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- | --- |

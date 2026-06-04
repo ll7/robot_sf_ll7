@@ -89,6 +89,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2222_perturbation_criticality_metric.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2234_predictive_perturbation_criticality.md
     status: proposal
     freshness: maintained

@@ -778,6 +778,14 @@ old eager-`srun` path. Treat this as the active `goal-slurm-experiment` training
 finishes, then compare seed-231 attention-only against seed-123 attention-only and the leader-family
 replicas before making any promotion claim.
 
+Completion update on 2026-06-04: job `12730` completed successfully in 14h57m03s. The final 10M
+checkpoint was also the best checkpoint: success `0.8857`, collision `0.1143`, SNQI `0.1439`, eval
+return `22.31`. This matches the seed-123 attention-only best success/collision (`0.8857` /
+`0.1143`) with slightly lower SNQI (`0.1439` vs `0.1513`). Treat this as useful attention-only
+replication evidence, not a promotion claim, because the strict convergence target still fails on
+collision. Compact provenance is tracked in
+`docs/context/evidence/issue_852_attention_only_10m_seed231_2026-06-04/`.
+
 Verification on 2026-04-29:
 
 ```bash

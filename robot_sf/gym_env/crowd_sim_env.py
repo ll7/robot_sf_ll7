@@ -260,6 +260,8 @@ class CrowdSimEnv(gym.Env):
         array = np.asarray(values, dtype=dtype)
         if array.ndim != 2 or array.shape[1] != 2:
             raise ValueError(f"expected pedestrian matrix with shape (N, 2), got {array.shape}")
+        if array.shape[0] == self._pedestrian_capacity:
+            return array.copy() if np.shares_memory(array, values) else array
         if array.shape[0] > self._pedestrian_capacity:
             raise ValueError(
                 "CrowdSimEnv observation exceeds fixed pedestrian capacity: "

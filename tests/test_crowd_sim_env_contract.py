@@ -274,6 +274,64 @@ def test_crowd_sim_env_observation_space_stays_static_across_resets(monkeypatch)
     assert obs["positions"][1:].tolist() == [[0.0, 0.0], [0.0, 0.0]]
 
 
+def test_pad_pedestrian_matrix_full_capacity_uses_copy_fast_path(monkeypatch):
+    """Full-capacity pedestrian matrices should be normalized via copy, not padded."""
+    monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
+    env = CrowdSimEnv(
+        _config(
+            sim_config=SimulationSettings(
+                sim_time_in_secs=0.2,
+                time_per_step_in_secs=0.1,
+                max_total_pedestrians=2,
+            )
+        )
+    )
+
+    source = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+    original_zeros = crowd_sim_env.np.zeros
+
+    def fail_on_padding_allocation(shape, *args, **kwargs):
+        if shape == (2, 2):
+            raise AssertionError("full-capacity input should not allocate a padded matrix")
+        return original_zeros(shape, *args, **kwargs)
+
+    monkeypatch.setattr(crowd_sim_env.np, "zeros", fail_on_padding_allocation)
+
+    result = env._pad_pedestrian_matrix(source, dtype=np.float32)
+    source[0, 0] = 99.0
+
+    assert result.dtype == np.float32
+    assert result.tolist() == [[1.0, 2.0], [3.0, 4.0]]
+    assert not np.shares_memory(result, source)
+
+
+def test_pad_pedestrian_matrix_partial_padding_and_overflow(monkeypatch):
+    """Short pedestrian matrices should be padded, while overflow should fail closed."""
+    monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
+    env = CrowdSimEnv(
+        _config(
+            sim_config=SimulationSettings(
+                sim_time_in_secs=0.2,
+                time_per_step_in_secs=0.1,
+                max_total_pedestrians=3,
+            )
+        )
+    )
+
+    padded = env._pad_pedestrian_matrix(np.array([[1, 2], [3, 4]]), dtype=np.float32)
+
+    assert padded.dtype == np.float32
+    assert padded.tolist() == [[1.0, 2.0], [3.0, 4.0], [0.0, 0.0]]
+
+    try:
+        env._pad_pedestrian_matrix(np.ones((4, 2)), dtype=np.float32)
+    except ValueError as exc:
+        assert "exceeds fixed pedestrian capacity" in str(exc)
+        assert "4 > 3" in str(exc)
+    else:
+        raise AssertionError("CrowdSimEnv accepted more pedestrians than its fixed capacity")
+
+
 def test_crowd_sim_env_screen_fallback_and_existing_view_reset(monkeypatch):
     """Renderer fallback should use the screen and keep map state current after reset."""
     monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)

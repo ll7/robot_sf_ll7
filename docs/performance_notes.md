@@ -4,6 +4,23 @@
 
 ## Performance Baselines
 
+### Hot-Path Optimization Wave Synthesis (2026-06-04)
+
+Issue #2214 compared the pre-wave baseline
+`5eead086fceac0bbdd00bb10ec133a612dfc5b25` with current main
+`5bd87d58d4869e8420943301e45de1a8dc6513a1` after the simulator hot-path
+allocation and snapshot-reuse PRs. The local smoke surfaces did not show a broad
+end-to-end speedup: reset throughput was 4.8% lower and one-candidate policy
+smoke runtime was 2.0% higher on the current revision, while environment
+creation was 1.8% faster but still warning-classified.
+
+Treat this as diagnostic, startup-dominated evidence rather than a performance
+claim. The stronger recent wall-clock signal remains the issue #2172 worker
+scaling diagnostic, where the 18-job h80 nominal-sanity run improved by 1.793x
+from one to two workers. See
+`docs/context/issue_2214_hot_path_synthesis.md` for the derived evidence and
+follow-up direction.
+
 ### Environment Performance (as of 2025-01-19)
 
 **Environment Creation**:

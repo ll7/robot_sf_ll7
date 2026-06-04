@@ -179,6 +179,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2172_benchmark_worker_scaling.md](issue_2172_benchmark_worker_scaling.md)
 
+* Issue #2214 hot-path optimization synthesis:
+
+  [issue_2214_hot_path_synthesis.md](issue_2214_hot_path_synthesis.md)
+
 * Issue #2174 one-factor hybrid component ablation pilot:
 
   [issue_2174_one_factor_ablation_pilot.md](issue_2174_one_factor_ablation_pilot.md)
@@ -756,6 +760,9 @@ knowledge, not every transient iteration detail.
 * [Issue #815 SAC Cold/Warm Performance Profile](./issue_815_sac_perf_cold_warm.md)
   cold/warm harness evidence showing the remaining issue-815 SAC simulator cost is localized to
   cold startup and lazy first-step initialization, not warm steady-state stepping.
+* [Issue #2214 Hot-Path Optimization Synthesis](./issue_2214_hot_path_synthesis.md)
+  records the 2026-06-04 diagnostic comparison for the simulator hot-path optimization wave and
+  classifies the local smoke evidence as startup dominated rather than a broad speedup claim.
 
 ## Planner Integration Notes
 

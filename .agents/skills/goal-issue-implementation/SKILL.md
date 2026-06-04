@@ -140,10 +140,12 @@ Prioritize by:
 When the user asks for research progress rather than generic issue throughput, treat this as
 adapted guidance: prefer issues that should close or revise a hypothesis, move a claim boundary,
 record a useful negative result, synthesize accumulated diagnostics, or unblock a durable
-experiment. Do not treat this as a hard eligibility rule; support issues may still be the right next
-step when they remove a concrete blocker. If the remaining queue is mostly docs cleanup or another
-diagnostic extension under an already-expanded research parent, propose a synthesis issue or
-synthesis pass before adding more exploratory children.
+experiment. Use the compact research-result contract in
+`docs/context/goal_driven_agent_loops_2026-05-13.md` when drafting the issue/PR proof surface. Do
+not treat this as a hard eligibility rule; support issues may still be the right next step when they
+remove a concrete blocker. If the remaining queue is mostly docs cleanup or another diagnostic
+extension under an already-expanded research parent, propose a synthesis issue or synthesis pass
+before adding more exploratory children.
 
 ## Queue Exhaustion Audit
 

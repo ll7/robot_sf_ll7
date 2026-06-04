@@ -1,9 +1,14 @@
+"""Tests for policy-search candidate comparison reports."""
+
 from __future__ import annotations
 
 import json
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _write_summary(
@@ -39,6 +44,7 @@ def _write_summary(
 def test_compare_policy_search_candidates_includes_synthetic_actuation_metrics(
     tmp_path: Path,
 ) -> None:
+    """Synthetic actuation summaries are preserved in comparison artifacts."""
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
     gates = tmp_path / "gates.yaml"

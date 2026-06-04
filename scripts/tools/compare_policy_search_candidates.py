@@ -117,7 +117,7 @@ def main() -> int:
                 "near_miss_rate": baseline.get("near_miss_rate"),
                 "classic_collision_rate": baseline.get("classic_collision_rate"),
                 "francis_collision_rate": baseline.get("francis_collision_rate"),
-                **{metric_name: None for metric_name in _ACTUATION_METRICS},
+                **dict.fromkeys(_ACTUATION_METRICS),
                 "summary_json": None,
             }
         )

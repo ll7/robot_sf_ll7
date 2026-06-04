@@ -197,6 +197,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2225_learned_policy_failure_synthesis.md](issue_2225_learned_policy_failure_synthesis.md)
 
+* Issue #2231 mechanism-aware ranking comparison:
+
+  [issue_2231_mechanism_aware_ranking.md](issue_2231_mechanism_aware_ranking.md)
+
 * Issue #1530 optional planner preflight audit:
   [issue_1530_optional_preflight_audit.md](issue_1530_optional_preflight_audit.md)
 * Issue #1348 capability-aware map catalog design:

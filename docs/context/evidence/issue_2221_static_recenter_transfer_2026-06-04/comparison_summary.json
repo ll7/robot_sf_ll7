@@ -1,0 +1,86 @@
+{
+  "issue": 2221,
+  "date": "2026-06-04",
+  "classification": "slice_local",
+  "evidence_tier": "diagnostic_transfer_smoke",
+  "claim_boundary": "Static recentering did not improve the two-scenario held-out family smoke over the matched fast-progress base; this is not paper-facing transfer evidence.",
+  "transfer_axis": "heldout_scenario_family",
+  "config": "configs/policy_search/transfer/issue_2221_static_recenter_heldout_smoke.yaml",
+  "scenario_matrix": "configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml",
+  "partition_manifest": "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml",
+  "seed_list": [
+    111
+  ],
+  "horizon": 500,
+  "baseline": {
+    "candidate": "hybrid_rule_v3_fast_progress",
+    "report": "docs/context/policy_search/reports/2026-06-04_hybrid_rule_v3_fast_progress_full_matrix.md",
+    "episodes": 2,
+    "success_rate": 0.5,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.5,
+    "termination_reason_counts": {
+      "max_steps": 1,
+      "success": 1
+    },
+    "failure_mode_counts": {
+      "near_miss_intrusive": 1
+    }
+  },
+  "mechanism": {
+    "candidate": "issue_2170_static_recenter_only",
+    "mechanism": "static_recentering",
+    "report": "docs/context/policy_search/reports/2026-06-04_issue_2170_static_recenter_only_full_matrix.md",
+    "episodes": 2,
+    "success_rate": 0.5,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.5,
+    "termination_reason_counts": {
+      "max_steps": 1,
+      "success": 1
+    },
+    "failure_mode_counts": {
+      "near_miss_intrusive": 1
+    }
+  },
+  "deltas": {
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0
+  },
+  "scenario_rows": [
+    {
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 111,
+      "baseline_success": false,
+      "mechanism_success": false,
+      "baseline_termination": "max_steps",
+      "mechanism_termination": "max_steps",
+      "baseline_collisions": 0,
+      "mechanism_collisions": 0,
+      "baseline_near_misses": 60,
+      "mechanism_near_misses": 60,
+      "baseline_min_clearance": 0.35276993907976384,
+      "mechanism_min_clearance": 0.35276993907976384
+    },
+    {
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 111,
+      "baseline_success": true,
+      "mechanism_success": true,
+      "baseline_termination": "success",
+      "mechanism_termination": "success",
+      "baseline_collisions": 0,
+      "mechanism_collisions": 0,
+      "baseline_near_misses": 0,
+      "mechanism_near_misses": 0,
+      "baseline_min_clearance": 6.644662921476591,
+      "mechanism_min_clearance": 6.644662921476591
+    }
+  ],
+  "limitations": [
+    "Only two held-out scenario-family episodes with one seed were run.",
+    "The compared rows execute through the existing hybrid-rule adapter path, so this is eligible diagnostic adapter evidence rather than native planner-family proof.",
+    "Identical terminal outcomes do not rule out micro-level score changes, but they do fail the protocol support rule for promoting static recentering beyond the discovery slice."
+  ]
+}

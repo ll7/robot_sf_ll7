@@ -126,6 +126,8 @@ knowledge, not every transient iteration detail.
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #2232 planner mechanism transfer benchmark protocol:
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
+* Issue #2221 static-recentering transfer smoke:
+  [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Root layout structured migration 2026-06-01:

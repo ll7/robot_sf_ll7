@@ -112,6 +112,12 @@ benchmark issue.
   success or low-progress delta without worsening collision or near-miss rate, and all comparable
   rows are native or explicitly eligible adapter rows.
 
+2026-06-04 follow-up result: [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
+executed the two-scenario held-out family smoke and classified static recentering as `slice_local`.
+The mechanism row exactly matched the base on success, collision, near-miss, termination, and
+per-scenario outcomes, so it did not pass this protocol's support rule. Treat static recentering as
+local discovery-slice evidence unless a broader pre-registered expansion overturns the pilot.
+
 ## Reporting Contract
 
 The follow-up PR or issue should include the research-result template from

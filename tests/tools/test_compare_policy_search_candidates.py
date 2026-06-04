@@ -64,10 +64,7 @@ def test_compare_policy_search_candidates_includes_synthetic_actuation_metrics(
         braking_peak=-2.5,
     )
     gates.write_text(
-        "baselines:\n"
-        "  goal:\n"
-        "    success_rate: 0.1\n"
-        "    collision_rate: 0.2\n",
+        "baselines:\n  goal:\n    success_rate: 0.1\n    collision_rate: 0.2\n",
         encoding="utf-8",
     )
 

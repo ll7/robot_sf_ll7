@@ -21,10 +21,10 @@ provenance is reviewed.
   `configs/training/ppo/ablations/single_factor/attention_only_10m_env22_seed231.yaml`
 - Launcher: `SLURM/Auxme/issue_791_attention_head.sl`
 - W&B run: <https://wandb.ai/ll7/robot_sf/runs/28w3leex>
-- Local Slurm log:
-  `output/slurm/12730-issue791-attention-head.out`
-- Synced local artifact root:
-  `output/slurm/issue791-attention-head-job-12730/`
+- Local Slurm log: gitignored local output from job `12730`; see `SHA256SUMS` for
+  source-artifact checksums.
+- Synced local artifact root: gitignored job-local benchmark output from job `12730`; see
+  `SHA256SUMS` for source-artifact checksums.
 
 Local `output/` paths are ignored and non-durable. W&B is the durable external pointer observed at
 completion; do not rely on this worktree-local output root in future checkouts.

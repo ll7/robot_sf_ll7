@@ -219,6 +219,8 @@ knowledge, not every transient iteration detail.
   [issue_1348_capability_map_catalog_design.md](issue_1348_capability_map_catalog_design.md)
 * Issue #2001 AMV Actuation Proxy Source Analysis (2026-06-01):
   [issue_2001_amv_actuation_proxy_source_analysis.md](issue_2001_amv_actuation_proxy_source_analysis.md)
+* Issue #2230 AMV Actuation Evidence Ladder (2026-06-04):
+  [issue_2230_amv_actuation_evidence_ladder.md](issue_2230_amv_actuation_evidence_ladder.md)
 * Issue #2011 AMV Actuation Sensitivity Sweep (2026-06-01):
   [issue_2011_amv_actuation_sensitivity_sweep.md](issue_2011_amv_actuation_sensitivity_sweep.md)
 * Issue #2104 Component Ablation Pilot (2026-06-02):
@@ -358,6 +360,8 @@ knowledge, not every transient iteration detail.
   [issue_1546_amv_actuation_envelope_stress_slice.md](issue_1546_amv_actuation_envelope_stress_slice.md)
 * Issue #1556 synthetic AMV actuation stress slice and #1570 claim boundary:
   [issue_1556_amv_actuation_stress_slice.md](issue_1556_amv_actuation_stress_slice.md)
+* Issue #2230 AMV actuation evidence ladder:
+  [issue_2230_amv_actuation_evidence_ladder.md](issue_2230_amv_actuation_evidence_ladder.md)
 * Issue #2011 AMV actuation-envelope sensitivity pilot:
   [issue_2011_amv_actuation_sensitivity_sweep.md](issue_2011_amv_actuation_sensitivity_sweep.md)
 * Issue #1606 Full Classic placeholder retirement:

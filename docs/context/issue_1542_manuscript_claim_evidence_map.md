@@ -9,6 +9,9 @@ Date: 2026-05-26
 
 Latest AMV claim-boundary update: Issue #1570 on 2026-05-31.
 
+AMV actuation evidence ladder:
+[issue_2230_amv_actuation_evidence_ladder.md](issue_2230_amv_actuation_evidence_ladder.md).
+
 ## Purpose
 
 This note maps current manuscript candidate claims to durable evidence, negative evidence, blockers,
@@ -140,8 +143,9 @@ paper-facing.
 | Evidence level | Current status | Claim use |
 | --- | --- | --- |
 | Synthetic diagnostics | Implemented by Issue #1556 using `amv-actuation-stress-v0` and `paper_facing: false`. | May describe a software stress diagnostic and artifact/provenance contract only. |
+| Platform-class proxy | Issue #2001 accepts a TRL e-scooter source for longitudinal acceleration and braking/deceleration only. | May describe field-limited adjacent-platform proxy values, not full AMV truth or unsupported yaw/latency/update-rate fields. |
 | Compact smoke evidence | Issue #1569 produced a valid local 45-episode smoke; Issue #1572/Issue #1582 later repaired the metadata contract for future summaries. | May say the diagnostic slice runs and emits actuation metrics locally; must also state that task success was 0.0 and the evidence is non-paper-facing. |
-| Calibrated/paper-facing evidence | Blocked on Issue #1559 and its source/provenance follow-ups. | No paper-facing AMV actuation claim yet; no hardware, deployment, safety, or real-AMV envelope language from synthetic-only evidence. |
+| Calibrated/paper-facing evidence | Blocked on Issue #1559, issue #1585, and real command-response trace issue #2000. | No paper-facing AMV actuation claim yet; no hardware, deployment, safety, or real-AMV envelope language from synthetic-only or proxy-only evidence. |
 
 ### Known Caveats
 

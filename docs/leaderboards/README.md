@@ -13,7 +13,7 @@ promotion claim.
 | --- | --- | --- |
 | [Smoke](smoke.md) | Policy-search and benchmark smoke rows with durable report or compact-summary evidence. | initial rows |
 | [Nominal Sanity](nominal_sanity.md) | Nominal-sanity policy-search rows. | initial row |
-| [AMV Actuation](amv_actuation.md) | Synthetic AMV actuation smoke and diagnostic rows. | initial rows |
+| [AMV Actuation](amv_actuation.md) | Synthetic AMV actuation smoke and diagnostic rows; interpret through the [AMV actuation evidence ladder](../context/issue_2230_amv_actuation_evidence_ladder.md). | initial rows |
 | [LiDAR 2D](lidar_2d.md) | LiDAR learned-policy smoke rows. | initial row |
 
 ## Row Contract

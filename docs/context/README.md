@@ -421,6 +421,8 @@ knowledge, not every transient iteration detail.
   [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md)
 * Issue #2236 Trace Mechanism Evidence Rubric (2026-06-04):
   [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md)
+* Issue #2227 Mechanism Panel Readiness (2026-06-04):
+  [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
   [issue_1676_proxemic_profile_comfort_slice.md](issue_1676_proxemic_profile_comfort_slice.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):

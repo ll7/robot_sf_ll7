@@ -173,6 +173,7 @@ def test_summarize_hypotheses_counts_sources_and_progress() -> None:
             {
                 "topology_status": "ok",
                 "selected_local_command_source": "dynamic_window",
+                "topology_command_influence": {"selected_hypothesis_id": "primary_route"},
                 "topology_hypotheses": [
                     {
                         "rank": 0,
@@ -186,6 +187,7 @@ def test_summarize_hypotheses_counts_sources_and_progress() -> None:
             {
                 "topology_status": "ok",
                 "selected_local_command_source": "path_follow_0.5m",
+                "topology_command_influence": {"selected_hypothesis_id": "masked_cell_5_12"},
                 "topology_hypotheses": [
                     {
                         "rank": 0,
@@ -214,3 +216,8 @@ def test_summarize_hypotheses_counts_sources_and_progress() -> None:
         "min_static_clearance_m": 0.2,
         "min_dynamic_clearance_m": 1.0,
     }
+    assert summary["topology_command_influence_counts"] == {
+        "masked_cell_5_12": 1,
+        "primary_route": 1,
+    }
+    assert summary["hypothesis_switch_count"] == 1

@@ -102,7 +102,8 @@ Recommended first follow-up: issue
 [#2221](https://github.com/ll7/robot_sf_ll7/issues/2221), the existing static-recentering transfer
 benchmark issue.
 
-- base row: the same hybrid-rule base used by the Issue #2170/#2180 one-factor manifest;
+- base row: the same hybrid-rule base used by the
+  [Issue #2170/#2180 one-factor manifest](issue_2170_one_factor_hybrid_component_manifest.md);
 - mechanism row: static recentering enabled without adding static escape, corridor-transit terms, or
   selector behavior;
 - transfer axis: scenario family, using the Issue #2128 held-out-family partition contract as the

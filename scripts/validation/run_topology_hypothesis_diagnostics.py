@@ -468,12 +468,17 @@ def _summarize_hypotheses(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
     influence_examples: list[dict[str, Any]] = []
     influence_counts: Counter[str] = Counter()
+    previous_hypothesis_id: str | None = None
+    hypothesis_switch_count = 0
     for row in steps:
         influence = row.get("topology_command_influence")
         if not isinstance(influence, dict):
             continue
         hypothesis_id = str(influence.get("selected_hypothesis_id") or "unknown")
         influence_counts[hypothesis_id] += 1
+        if previous_hypothesis_id is not None and hypothesis_id != previous_hypothesis_id:
+            hypothesis_switch_count += 1
+        previous_hypothesis_id = hypothesis_id
         if len(influence_examples) >= 10:
             continue
         influence_examples.append(
@@ -491,6 +496,7 @@ def _summarize_hypotheses(steps: list[dict[str, Any]]) -> dict[str, Any]:
         "selected_source_counts": dict(sorted(selected_source_counts.items())),
         "hypothesis_progress_by_rank": progress_by_rank,
         "topology_command_influence_counts": dict(sorted(influence_counts.items())),
+        "hypothesis_switch_count": hypothesis_switch_count,
         "topology_command_influence_examples": influence_examples,
     }
 
@@ -510,6 +516,7 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
         f"- Topology status counts: `{summary['topology_status_counts']}`",
         f"- Selected local command sources: `{summary['selected_source_counts']}`",
         f"- Topology command influence counts: `{summary['topology_command_influence_counts']}`",
+        f"- Hypothesis switch count: `{summary['hypothesis_switch_count']}`",
         "",
         "## Hypothesis Progress",
         "",

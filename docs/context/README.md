@@ -461,6 +461,8 @@ knowledge, not every transient iteration detail.
   [issue_1288_jsonl_orjson_append.md](issue_1288_jsonl_orjson_append.md)
 * Issue #1692 topology-hypothesis trace probe:
   [issue_1692_topology_hypothesis_probe.md](issue_1692_topology_hypothesis_probe.md)
+* Issue #2223 topology-hypothesis planning diagnostic:
+  [issue_2223_topology_hypothesis_planning.md](issue_2223_topology_hypothesis_planning.md)
 * Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:

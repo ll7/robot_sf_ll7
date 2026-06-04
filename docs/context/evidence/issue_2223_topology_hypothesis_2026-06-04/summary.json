@@ -1,0 +1,68 @@
+{
+  "issue": 2223,
+  "date": "2026-06-04",
+  "classification": "explanation_signal_without_mitigation",
+  "evidence_tier": "diagnostic_trace_smoke",
+  "claim_boundary": "Topology-hypothesis planning exposed alternate-route diagnostics and selected topology commands on the bottleneck slice, but did not improve the matched h160 progress outcome.",
+  "scenario_id": "classic_realworld_double_bottleneck_high",
+  "seed": 111,
+  "horizon": 160,
+  "baseline": {
+    "candidate": "hybrid_rule_v3_fast_progress",
+    "selected_source_counts": {
+      "dynamic_window": 158,
+      "path_follow_0.5m": 2
+    },
+    "net_goal_progress_m": -12.788488995011456,
+    "final_goal_distance_m": 14.788489995011457,
+    "closest_robot_ped_distance_m": 1.8981515427137179,
+    "collision_flag_counts": {
+      "pedestrian": 0,
+      "obstacle": 0,
+      "robot": 0
+    },
+    "fallback_count": 0
+  },
+  "topology_guided": {
+    "candidate": "topology_guided_hybrid_rule_v0",
+    "diagnostic_only": true,
+    "claim_boundary": "diagnostic_only",
+    "selected_source_counts": {
+      "dynamic_window": 121,
+      "path_follow_0.5m": 2,
+      "route_guide": 4,
+      "topology_hypothesis": 33
+    },
+    "topology_status_counts": {
+      "insufficient_hypotheses": 70,
+      "ok": 90
+    },
+    "topology_command_influence_counts": {
+      "primary_route": 33
+    },
+    "hypothesis_switch_count": 0,
+    "net_goal_progress_m": -12.825825119039795,
+    "final_goal_distance_m": 14.825826119039796,
+    "closest_robot_ped_distance_m": 1.944036597811866,
+    "collision_flag_counts": {
+      "pedestrian": 0,
+      "obstacle": 0,
+      "robot": 0
+    },
+    "fallback_count": 0
+  },
+  "deltas_topology_minus_baseline": {
+    "final_goal_distance_m": 0.03733612402833871,
+    "net_goal_progress_m": -0.03733612402833871,
+    "closest_robot_ped_distance_m": 0.0458850550981481,
+    "pedestrian_collision_flags": 0,
+    "obstacle_collision_flags": 0,
+    "robot_collision_flags": 0
+  },
+  "interpretation": [
+    "Topology alternatives were available for 90 of 160 diagnostic steps and the topology command won 33 steps, so the mechanism is active enough to explain command-source changes on this bottleneck slice.",
+    "All topology-command wins selected the primary route and the explicit hypothesis switch count was 0, so this run does not show active switching between alternate route hypotheses.",
+    "The matched topology-guided step diagnostic had slightly worse final goal distance than the base row and no success within h160, so it does not mitigate the bottleneck failure under this proof step.",
+    "Both rows had zero collision flags and no fallback count; this is diagnostic adapter evidence, not benchmark-strength planner improvement."
+  ]
+}

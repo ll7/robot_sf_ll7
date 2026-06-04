@@ -1,0 +1,28 @@
+{
+  "issue": 2222,
+  "created_at": "2026-06-04",
+  "schema_version": "criticality_metric.v1",
+  "claim_boundary": "diagnostic_only_metric_contract",
+  "source_notes": [
+    "docs/context/issue_1965_perturbation_criticality_synthesis.md",
+    "docs/context/issue_2234_predictive_perturbation_criticality.md",
+    "docs/context/issue_1542_manuscript_claim_evidence_map.md"
+  ],
+  "classification_table": "docs/context/evidence/issue_2222_criticality_metric_2026-06-04/criticality_metric_summary.csv",
+  "decision": {
+    "stop_new_families_until": [
+      "held-out validation protocol is run for the high-signal intersection_wait speed/start-delay family",
+      "a writer emits criticality_metric.v1 rows from paired perturbation outputs"
+    ],
+    "next_protocol": "docs/context/issue_2234_predictive_perturbation_criticality.md",
+    "paper_facing": false
+  },
+  "status_exclusions": [
+    "invalid",
+    "fallback",
+    "degraded",
+    "missing",
+    "failed",
+    "not_available"
+  ]
+}

@@ -1,0 +1,8 @@
+perturbation_family,source_notes,criticality_class,validity_status,routing,outcome_flip_rate,min_distance_delta_m,mechanism_label,claim_boundary,caveat
+robot_route_offset,"issue_1904;issue_1933;issue_1935",low,interpretable,stop,0.0,0.000667,low-criticality route-offset diagnostic,diagnostic_only,"Terminal metrics neutral; min-distance near zero across expanded slices."
+pedestrian_route_offset,issue_1937,medium,interpretable,trace_review,0.0,0.0978,corridor-sensitive route-pedestrian clearance,diagnostic_only,"Route-only scenario support; terminal metrics neutral."
+single_pedestrian_start_delay_offset,"issue_1941;issue_1947;issue_1951",high,interpretable,controlled_followup,0.0,4.159358,intersection-wait phase/timing sensitivity,diagnostic_only,"Strong local clearance response; explicit single-pedestrian timing only."
+single_pedestrian_speed_offset,"issue_1943;issue_1945;issue_1947;issue_1951;issue_1953",high,interpretable,heldout_protocol,null,-2.002917,intersection-wait speed/phase sensitivity,diagnostic_only,"One ORCA seed-local outcome flip is trace-inspected but not replicated."
+single_pedestrian_wait_duration_offset,"issue_1949;issue_1951",flat,interpretable,consolidate,0.0,0.0,low-sensitivity wait-duration negative control,diagnostic_only,"One wait-bearing scenario and current magnitudes only."
+single_pedestrian_trajectory_waypoint_offset,issue_1957,smoke_only,incomplete,controlled_followup,0.0,0.034080,spatial single-pedestrian path-shape smoke,diagnostic_only,"One planner and two seeds only."
+pedestrian_density_offset,issue_1959,smoke_only,incomplete,consolidate,0.0,0.0,density-axis smoke,diagnostic_only,"Density-to-count behavior is route/runtime dependent."

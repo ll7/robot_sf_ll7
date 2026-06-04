@@ -418,8 +418,8 @@ When a delegated worker produces a reusable workflow lesson, include an
 ## Race-Condition / Multi-Agent Safety
 
 - Operate one implementation branch at a time by default.
-- Use `scripts/dev/issue_claim.py acquire <issue-number>` as the first write after candidate
-  selection and duplicate-PR checks. The remote `agent-claims/issue-<number>` ref is the atomic
+- Use `uv run python scripts/dev/issue_claim.py acquire <issue-number>` as the first write after
+  candidate selection and duplicate-PR checks. The remote `agent-claims/issue-<number>` ref is the atomic
   cross-machine claim; labels, assignments, Project #5 status, and comments are secondary visibility
   signals.
 - If acquiring the claim fails, do not branch or implement. Record the existing claim status and

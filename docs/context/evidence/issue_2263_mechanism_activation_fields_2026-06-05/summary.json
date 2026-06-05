@@ -1,0 +1,45 @@
+{
+  "schema": "issue_2263_mechanism_activation_fields.v1",
+  "issue": 2263,
+  "date": "2026-06-05",
+  "status": "report_contract_added",
+  "canonical_surface": {
+    "schema": ".agents/skills/schemas/trace_mechanism_summary.v1.yaml",
+    "skill": ".agents/skills/trace-mechanism-review/SKILL.md",
+    "rubric": "docs/context/issue_2236_trace_mechanism_evidence_rubric.md"
+  },
+  "mechanism_activation_fields": [
+    "activated",
+    "activation_count",
+    "changed_command_source",
+    "changed_outcome",
+    "likely_failure_reason"
+  ],
+  "example_cases": [
+    {
+      "source": "issue_2168_ammv_social_force_pair_diagnostic",
+      "mechanism_activation": {
+        "activated": true,
+        "activation_count": 1,
+        "changed_command_source": "unknown",
+        "changed_outcome": false,
+        "likely_failure_reason": "Benchmark adapter rows did not surface AMMV metadata and retained identical terminal metrics."
+      },
+      "claim_status": "unresolved",
+      "interpretation": "Direct-path mechanism activation only; not benchmark-strength AMV evidence."
+    },
+    {
+      "source": "issue_2261_static_recenter_slice_local",
+      "mechanism_activation": {
+        "activated": "unknown",
+        "activation_count": "unknown",
+        "changed_command_source": "unknown",
+        "changed_outcome": false,
+        "likely_failure_reason": "Held-out smoke preserved terminal outcomes and did not preserve activation or command-source telemetry."
+      },
+      "claim_status": "unresolved",
+      "interpretation": "Slice-local diagnostic boundary; exact causal activation state remains unknown."
+    }
+  ],
+  "claim_boundary": "The mechanism_activation block is diagnostic unless tied to benchmark-valid row status, controlled baseline/intervention identity, durable artifacts, and a measured outcome change."
+}

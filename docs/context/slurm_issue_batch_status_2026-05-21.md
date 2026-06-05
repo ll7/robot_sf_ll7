@@ -107,19 +107,19 @@ slurm_issue_status:
   state: not_submitted
   source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: not_submitted
-  branch: issue-1397-oracle-imitation-launch-packet
-  commit: unknown
+  branch: issue-2271-oracle-imitation-preflight
+  commit: e0ca196e63aead9e8491eb7f022d3a0e98c4a126
   config_path:
     - configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
-  output_root: missing
+  output_root: job-local ROBOT_SF_ARTIFACT_ROOT; synced to RESULTS_ROOT on SLURM job exit
   stdout_stderr_path: missing
-  durable_artifact_pointer_status: missing dataset manifest, checksum, split validation, and artifact pointer
-  next_action: validate the launch packet at the exact collection commit and select durable dataset storage before submission
+  durable_artifact_pointer_status: pending concrete W&B aliases, generated trace manifest checksum, generated dataset checksum, and final dataset manifest
+  next_action: submit from an allowed Auxme login node only after rerunning the validator and wrapper dry-run at the intended collection commit
   closure_condition: dataset manifest, checksums, split/leakage validation, and durable artifact pointer exist, or the trail is closed failed/inconclusive/rerun-required
-  last_update: 2026-05-30
-  comparison_status: pending split/leakage validation
-  status_basis: issue body and docs/context/policy_search/SLURM/003_imitation_oracle_dataset_campaign.md
-  notes_non_evidence: issue body names candidate launch commit 034ac79e, but the exact collection commit is not recorded as the execution commit
+  last_update: 2026-06-05
+  comparison_status: launch packet valid; collection output still absent
+  status_basis: docs/context/issue_2271_oracle_imitation_trace_preflight.md
+  notes_non_evidence: local preflight only; no SLURM job submitted, no trace collection, no final imitation NPZ dataset, and no learned-policy evidence
 ```
 
 ### Issue #1472 Learned Risk Model v1 SLURM Campaign
@@ -210,22 +210,26 @@ slurm_issue_status:
     - configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
     - configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml
     - SLURM/Auxme/issue_1475_orca_residual_bc.sl
+    - docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
   output_root: output/slurm/issue1475-orca-residual-bc-job-12749
   stdout_stderr_path:
     - output/slurm/12749-issue1475-orca-residual-bc.out
     - output/slurm/12749-issue1475-orca-residual-bc.err
-  durable_artifact_pointer_status: compact evidence tracked; raw dataset, checkpoint, logs, and smoke JSONL remain local non-durable artifacts
-  next_action: revise the ORCA-residual BC candidate or smoke gate target for low-progress timeout behavior before any rerun or nominal_sanity submission
-  closure_condition: smoke records success, collision, residual clipping, guard rates, fallback/degraded status, and durable artifact status before any nominal escalation
+  durable_artifact_pointer_status: compact summary and smoke report tracked; raw output paths remain local and non-durable
+  next_action: revise ORCA-residual BC candidate or smoke gate target for low-progress timeout behavior before rerun or nominal_sanity submission
+  closure_condition: revised bounded smoke records success, collision, residual clipping, guard rates, fallback/degraded status, and durable artifact status before nominal escalation
   last_update: 2026-06-05
   comparison_status: >
-    Slurm smoke runner produced one valid row, but the #1475 gate failed closed because success_rate=0.0
-    and collision_rate=0.0. The episode timed out with low progress on planner_sanity_simple.
-  status_basis: issue comments, squeue/sacct, Slurm logs, tracked compact evidence, and local output inspection
+    Slurm smoke runner produced one valid row, but the Issue #1475 gate failed closed because
+    success_rate=0.0 and collision_rate=0.0. The episode timed out with low progress on
+    planner_sanity_simple, so nominal escalation is blocked.
+  status_basis: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json and docs/context/policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md
   notes_non_evidence: >
     Job 12749 intentionally did not run nominal_sanity. The runner-level decision was pass because
-    JSONL/summary artifacts were produced, but this is not a #1475 success. Local output paths remain
-    scratch until promoted through durable artifact pointers.
+    JSONL/summary artifacts were produced, but this is diagnostic smoke status only:
+    success_rate=0.0 with timeout_low_progress is revise evidence, not learned-residual success
+    evidence. Raw local output paths remain scratch unless promoted through durable artifact
+    pointers.
 ```
 
 ### Issue #1108 BC Warm-Start PPO Artifact Rescue

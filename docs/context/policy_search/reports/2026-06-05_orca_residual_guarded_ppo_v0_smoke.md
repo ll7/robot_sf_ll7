@@ -9,8 +9,8 @@ pass
 failed_closed / revise.
 
 The smoke runner produced one valid episode row, so the runner-level decision is `pass`, but the
-#1475 wrapper gate exited nonzero because `success_rate=0.0` and success is required before nominal
-escalation. Do not submit `nominal_sanity` from this result.
+Issue #1475 wrapper gate exited nonzero because `success_rate=0.0` and success is required before
+nominal escalation. Do not submit `nominal_sanity` from this result.
 
 ## Hypothesis
 
@@ -23,7 +23,10 @@ Unsafe PPO proposals can be reinterpreted as a bounded residual over the nominal
 - Algorithm: `guarded_ppo`
 - Scenario matrix: `configs/scenarios/single/planner_sanity_simple.yaml`
 - Seed manifest: `suite default`
-- Summary JSON: `output/slurm/issue1475-orca-residual-bc-job-12749/policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/summary.json`
+- Summary JSON: local artifact id
+  `issue1475-orca-residual-bc-job-12749/policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/summary.json`;
+  tracked checksum summary:
+  `docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json`
 - Git commit: `5faaa318d609f87730757d7fbda65b799178b5c5`
 
 ## Aggregate Results

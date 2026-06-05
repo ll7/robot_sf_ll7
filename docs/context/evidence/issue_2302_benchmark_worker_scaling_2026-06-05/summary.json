@@ -1,0 +1,173 @@
+{
+  "schema_version": "robot-sf-benchmark-worker-scaling-repeat-profile.v1",
+  "issue": 2302,
+  "generated_at": "2026-06-05T10:50:00+00:00",
+  "git_hash": "82d7819f11e3703b0c511988af99aa983098f76f",
+  "claim_boundary": "diagnostic-only",
+  "candidate": "hybrid_rule_v3_fast_progress",
+  "stage": "nominal_sanity",
+  "horizon": 80,
+  "jobs_per_repeat": 18,
+  "episodes_per_repeat": 18,
+  "repeats": 2,
+  "worker_counts": [
+    1,
+    2,
+    4,
+    6
+  ],
+  "machine_scope": "local machine context; not a cross-host benchmark default recommendation",
+  "warnings": [
+    "map_search_paths entry missing: configs/maps/svg_maps",
+    "invalid polygon self-intersection in uni_campus_big.svg obstacle_13"
+  ],
+  "median_rows": [
+    {
+      "workers": 1,
+      "runtime_sec_median": 86.4915033504949,
+      "seconds_per_job_median": 4.805083519471939,
+      "speedup_vs_1_worker_median": 1.0,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "workers": 2,
+      "runtime_sec_median": 48.273164859449025,
+      "seconds_per_job_median": 2.6818424921916124,
+      "speedup_vs_1_worker_median": 1.7916855856214673,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "workers": 4,
+      "runtime_sec_median": 28.98027033742983,
+      "seconds_per_job_median": 1.6100150187461018,
+      "speedup_vs_1_worker_median": 2.984522315294006,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "workers": 6,
+      "runtime_sec_median": 23.65355993853882,
+      "seconds_per_job_median": 1.3140866632521566,
+      "speedup_vs_1_worker_median": 3.656671090694849,
+      "status": "ok",
+      "decision": "revise"
+    }
+  ],
+  "marginal_runtime_reduction": [
+    {
+      "from_workers": 1,
+      "to_workers": 2,
+      "runtime_reduction_fraction": 0.4418642314738862,
+      "speedup_ratio": 1.7916855856214673
+    },
+    {
+      "from_workers": 2,
+      "to_workers": 4,
+      "runtime_reduction_fraction": 0.39965282754013604,
+      "speedup_ratio": 1.665762262006346
+    },
+    {
+      "from_workers": 4,
+      "to_workers": 6,
+      "runtime_reduction_fraction": 0.18380518968077274,
+      "speedup_ratio": 1.2251972922436174
+    }
+  ],
+  "repeat_rows": [
+    {
+      "repeat": 1,
+      "workers": 1,
+      "runtime_sec": 87.14727268298157,
+      "seconds_per_job": 4.841515149054532,
+      "speedup_vs_1_worker": 1.0,
+      "batch_runtime_sec": 87.140422114986,
+      "parallel_execution": false,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "repeat": 1,
+      "workers": 2,
+      "runtime_sec": 48.411725127953105,
+      "seconds_per_job": 2.6895402848862835,
+      "speedup_vs_1_worker": 1.8001273958457311,
+      "batch_runtime_sec": 48.40595077897888,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "repeat": 1,
+      "workers": 4,
+      "runtime_sec": 29.229598979931325,
+      "seconds_per_job": 1.6238666099961847,
+      "speedup_vs_1_worker": 2.9814734284522957,
+      "batch_runtime_sec": 29.223871823982336,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "repeat": 1,
+      "workers": 6,
+      "runtime_sec": 23.60326405300293,
+      "seconds_per_job": 1.3112924473890517,
+      "speedup_vs_1_worker": 3.692170391657938,
+      "batch_runtime_sec": 23.597512271022424,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "repeat": 2,
+      "workers": 1,
+      "runtime_sec": 85.83573401800822,
+      "seconds_per_job": 4.7686518898893455,
+      "speedup_vs_1_worker": 1.0,
+      "batch_runtime_sec": 85.83023039600812,
+      "parallel_execution": false,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "repeat": 2,
+      "workers": 2,
+      "runtime_sec": 48.134604590944946,
+      "seconds_per_job": 2.6741446994969413,
+      "speedup_vs_1_worker": 1.7832437753972035,
+      "batch_runtime_sec": 48.128795086056925,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "repeat": 2,
+      "workers": 4,
+      "runtime_sec": 28.730941694928333,
+      "seconds_per_job": 1.5961634274960186,
+      "speedup_vs_1_worker": 2.9875712021357166,
+      "batch_runtime_sec": 28.724874443025328,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "revise"
+    },
+    {
+      "repeat": 2,
+      "workers": 6,
+      "runtime_sec": 23.703855824074708,
+      "seconds_per_job": 1.3168808791152615,
+      "speedup_vs_1_worker": 3.6211717897317603,
+      "batch_runtime_sec": 23.698120455024764,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "revise"
+    }
+  ],
+  "interpretation": {
+    "observed": "The repeated 18-job h80 nominal-sanity slice continued to improve above two workers through six workers, with median speedup of 2.98x at four workers and 3.66x at six workers versus one worker.",
+    "limitation": "All candidate decisions remained revise, and this was a local diagnostic slice rather than benchmark-strength evidence for policy quality or a cross-machine default.",
+    "recommendation": "Use four workers as the next conservative profiling baseline when local CPU budget permits; gather heavier or pedestrian-dense evidence before changing benchmark defaults to six workers."
+  }
+}

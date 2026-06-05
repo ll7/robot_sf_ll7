@@ -108,6 +108,10 @@ knowledge, not every transient iteration detail.
   [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md)).
 * Open-issue execution improvement plan 2026-05-30:
   [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md)
+* Issue #2272 ORCA-residual launch packet status:
+  [issue_2272_orca_residual_launch_packet_status.md](issue_2272_orca_residual_launch_packet_status.md)
+* Issue #2271 oracle-imitation trace preflight:
+  [issue_2271_oracle_imitation_trace_preflight.md](issue_2271_oracle_imitation_trace_preflight.md)
 * Thursday development review 2026-05-21:
   [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Worktree training preservation audit 2026-05-25:
@@ -122,12 +126,20 @@ knowledge, not every transient iteration detail.
   [issue_1508_carla_native_aligned_eligibility.md](issue_1508_carla_native_aligned_eligibility.md)
 * Issue #1509 CARLA native fixture certification:
   [issue_1509_carla_native_fixture_certification.md](issue_1509_carla_native_fixture_certification.md)
+* Issue #2276 CARLA parity lane decision:
+  [issue_2276_carla_parity_lane_decision.md](issue_2276_carla_parity_lane_decision.md)
 * Issue #1894 SLURM job finalizer:
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #2232 planner mechanism transfer benchmark protocol:
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
+* Issue #2282 topology selection instrumentation smoke:
+  [issue_2282_topology_selection_instrumentation.md](issue_2282_topology_selection_instrumentation.md)
+* Issue #2266 Static-Recenter Activation Diagnostic 2026-06-05:
+  [issue_2266_static_recenter_activation.md](issue_2266_static_recenter_activation.md)
+* Issue #2261 Static-Recenter Slice-Local Explanation:
+  [issue_2261_static_recenter_slice_local.md](issue_2261_static_recenter_slice_local.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Root layout structured migration 2026-06-01:
@@ -148,6 +160,8 @@ knowledge, not every transient iteration detail.
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)
 * Issue #1543 predictive v2 negative audit:
   [issue_1543_predictive_v2_negative_audit.md](issue_1543_predictive_v2_negative_audit.md)
+* Issue #2275 predictive-v2 fate decision:
+  [issue_2275_predictive_v2_fate.md](issue_2275_predictive_v2_fate.md)
 * Issue #1542 manuscript claim evidence map:
   [issue_1542_manuscript_claim_evidence_map.md](issue_1542_manuscript_claim_evidence_map.md)
 
@@ -158,6 +172,22 @@ knowledge, not every transient iteration detail.
 * Issue #2153 research-v1 evidence map and claim gate:
 
   [issue_2153_research_v1_evidence_map.md](issue_2153_research_v1_evidence_map.md)
+
+* Issue #2269 research-v1 trace case selection:
+
+  [issue_2269_research_v1_trace_case_selection.md](issue_2269_research_v1_trace_case_selection.md)
+
+* Issue #2280 research-v1 first trace review:
+
+  [issue_2280_research_v1_first_trace_review.md](issue_2280_research_v1_first_trace_review.md)
+
+* Issue #2281 research-v1 trace review pack:
+
+  [issue_2281_research_v1_trace_review_pack.md](issue_2281_research_v1_trace_review_pack.md)
+
+* Issue #2263 mechanism activation report fields:
+
+  [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
 
 * Issue #2154 AMMV-aware Social Force model slice:
 
@@ -178,6 +208,14 @@ knowledge, not every transient iteration detail.
 * Issue #2172 benchmark worker scaling diagnostic:
 
   [issue_2172_benchmark_worker_scaling.md](issue_2172_benchmark_worker_scaling.md)
+
+* Issue #2302 benchmark worker scaling continuation:
+
+  [issue_2302_benchmark_worker_scaling.md](issue_2302_benchmark_worker_scaling.md)
+
+* Issue #2304 stress-slice benchmark worker scaling diagnostic:
+
+  [issue_2304_benchmark_worker_scaling_stress.md](issue_2304_benchmark_worker_scaling_stress.md)
 
 * Issue #2214 hot-path optimization synthesis:
 
@@ -207,6 +245,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2225_learned_policy_failure_synthesis.md](issue_2225_learned_policy_failure_synthesis.md)
 
+* Issue #2274 hybrid-learning component evidence status matrix:
+
+  [issue_2274_hybrid_component_matrix.md](issue_2274_hybrid_component_matrix.md)
+
 * Issue #2231 mechanism-aware ranking comparison:
 
   [issue_2231_mechanism_aware_ranking.md](issue_2231_mechanism_aware_ranking.md)
@@ -214,6 +256,12 @@ knowledge, not every transient iteration detail.
 * Issue #2224 synthetic AMV actuation ranking diagnostic:
 
   [issue_2224_amv_actuation_ranking.md](issue_2224_amv_actuation_ranking.md)
+* Issue #2268 AMV Timeout Decomposition 2026-06-05:
+
+  [issue_2268_amv_timeout_decomposition.md](issue_2268_amv_timeout_decomposition.md)
+* Issue #2259 AMV Clipping Versus Success Boundary:
+
+  [issue_2259_amv_clipping_success_boundary.md](issue_2259_amv_clipping_success_boundary.md)
 
 * Issue #2234 predictive perturbation criticality protocol:
 
@@ -400,6 +448,8 @@ knowledge, not every transient iteration detail.
   [issue_2034_platformization_roadmap.md](issue_2034_platformization_roadmap.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
+* Issue #2273 learned-risk trace manifest preflight:
+  [issue_2273_learned_risk_trace_preflight.md](issue_2273_learned_risk_trace_preflight.md)
 * Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md) and
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
@@ -409,6 +459,8 @@ knowledge, not every transient iteration detail.
   [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
 * Issue #1960 local artifact retirement status:
   [issue_1960_local_artifact_retirement.md](issue_1960_local_artifact_retirement.md)
+* Issue #2277 local artifact classification:
+  [issue_2277_local_artifact_classification.md](issue_2277_local_artifact_classification.md)
 * Issue #1845 report grouping contracts:
   [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:
@@ -437,8 +489,12 @@ knowledge, not every transient iteration detail.
   [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md)
 * Issue #2236 Trace Mechanism Evidence Rubric (2026-06-04):
   [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md)
+* Issue #2263 Mechanism Activation Report Fields (2026-06-05):
+  [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
 * Issue #2227 Mechanism Panel Readiness (2026-06-04):
   [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md)
+* Issue #2270 Mechanism Panel Candidate Manifest (2026-06-05):
+  [issue_2270_panel_candidate_manifest.md](issue_2270_panel_candidate_manifest.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
   [issue_1676_proxemic_profile_comfort_slice.md](issue_1676_proxemic_profile_comfort_slice.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):
@@ -467,6 +523,8 @@ knowledge, not every transient iteration detail.
   [issue_1692_topology_hypothesis_probe.md](issue_1692_topology_hypothesis_probe.md)
 * Issue #2223 topology-hypothesis planning diagnostic:
   [issue_2223_topology_hypothesis_planning.md](issue_2223_topology_hypothesis_planning.md)
+* Issue #2258 Topology Primary-Route Audit 2026-06-05:
+  [issue_2258_topology_primary_route_audit.md](issue_2258_topology_primary_route_audit.md)
 * Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
@@ -1059,3 +1117,7 @@ why a change was made rather than a full issue execution transcript.
   defines the canonical evidence matrix schema that the synthesis consumer (#1489) will reference
   when component campaigns complete. Includes field contracts, evidence-tier vocabulary,
   non-evidence/failure-mode enumeration, guard-authority constraints, and consumer rules.
+* [Issue #2274 Hybrid-Learning Component Evidence Status Matrix](issue_2274_hybrid_component_matrix.md)
+  classifies learned risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC
+  warm-start PPO before Issue #1489 synthesis. It records blockers, next actions, and the
+  conclusion that Issue #1489 remains blocked from comparative synthesis.

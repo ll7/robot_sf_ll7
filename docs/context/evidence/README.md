@@ -66,6 +66,9 @@ boundary before merging an evidence-producing PR.
 - `issue_2224_amv_actuation_ranking_2026-06-04/`: compact matched `amv_actuation_smoke`
   comparison showing `actuation_aware_hybrid_rule_v0` reduced command clipping versus
   `hybrid_rule_v3_fast_progress` on one smoke row, while both candidates still timed out.
+- `issue_2259_amv_clipping_success_boundary_2026-06-05/`: compact parent-lane synthesis for
+  Issue #2259, separating synthetic command-feasibility improvement from unchanged navigation
+  success and keeping calibrated AMV actuation blocked.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and
@@ -143,3 +146,21 @@ boundary before merging an evidence-producing PR.
 - `issue_2225_learned_policy_failure_synthesis_2026-06-04/`: compact learned-policy failure-mode
   evidence table synthesizing BC warm-start PPO, shielded PPO repair, ORCA-residual BC, learned risk
   model, and oracle imitation status against hybrid-rule mechanism evidence for Issue #2225.
+- `issue_2261_static_recenter_slice_local_2026-06-05/`: compact analysis-only summary for
+  Issue #2261, explaining why static recentering stays slice-local after the held-out smoke and
+  naming the missing activation trace needed for definitive attribution.
+- `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
+  Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
+  and baseline artifact URIs despite a valid launch packet fixture.
+- `issue_2275_predictive_v2_fate_2026-06-05/`: compact decision matrix for Issue #2275 / parent
+  Issue #1490, recording the stop-old-expansion decision after the #1543 negative audit and #1897
+  failed coupling gate.
+- `issue_2274_hybrid_component_matrix_2026-06-05/`: validator-readable hybrid-learning component
+  status matrix for Issue #2274 / parent Issue #1489, with compact CSV and YAML rows for learned
+  risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC warm-start PPO.
+- `issue_2269_research_v1_trace_case_selection_2026-06-05/`: analysis-only case-selection
+  manifest for Issue #2269 / parent Issue #2159, selecting five research-v1 trace-review cases and
+  separating trace-slice-ready cases from AMV-specific trace-export blockers.
+- `issue_2270_panel_candidate_manifest_2026-06-05/`: analysis-only panel candidate manifest for
+  Issue #2270 / parent Issue #2227, recording static-recenter and topology panel candidates that
+  remain blocked on durable `simulation_trace_export.v1` trace pairs.

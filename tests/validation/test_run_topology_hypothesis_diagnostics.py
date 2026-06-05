@@ -174,6 +174,34 @@ def test_summarize_hypotheses_counts_sources_and_progress() -> None:
                 "topology_status": "ok",
                 "selected_local_command_source": "dynamic_window",
                 "topology_command_influence": {"selected_hypothesis_id": "primary_route"},
+                "planner_route_corridor": {
+                    "topology_hypotheses": [
+                        {
+                            "hypothesis_id": "primary_route",
+                            "score": -8.0,
+                            "score_rank": 0,
+                            "score_margin_to_selected": 0.0,
+                            "score_components": {
+                                "length_penalty": -10.0,
+                                "static_clearance_bonus": 2.0,
+                            },
+                            "selection_outcome": "selected",
+                            "rejection_reason": None,
+                        },
+                        {
+                            "hypothesis_id": "masked_cell_5_12",
+                            "score": -9.5,
+                            "score_rank": 1,
+                            "score_margin_to_selected": 1.5,
+                            "score_components": {
+                                "length_penalty": -11.0,
+                                "static_clearance_bonus": 1.5,
+                            },
+                            "selection_outcome": "rejected",
+                            "rejection_reason": "lower_topology_selection_score",
+                        },
+                    ]
+                },
                 "topology_hypotheses": [
                     {
                         "rank": 0,
@@ -221,3 +249,34 @@ def test_summarize_hypotheses_counts_sources_and_progress() -> None:
         "primary_route": 1,
     }
     assert summary["hypothesis_switch_count"] == 1
+    assert summary["topology_selection_score_examples"] == [
+        {
+            "step": -1,
+            "hypotheses": [
+                {
+                    "hypothesis_id": "primary_route",
+                    "score": -8.0,
+                    "score_rank": 0,
+                    "score_margin_to_selected": 0.0,
+                    "score_components": {
+                        "length_penalty": -10.0,
+                        "static_clearance_bonus": 2.0,
+                    },
+                    "selection_outcome": "selected",
+                    "rejection_reason": None,
+                },
+                {
+                    "hypothesis_id": "masked_cell_5_12",
+                    "score": -9.5,
+                    "score_rank": 1,
+                    "score_margin_to_selected": 1.5,
+                    "score_components": {
+                        "length_penalty": -11.0,
+                        "static_clearance_bonus": 1.5,
+                    },
+                    "selection_outcome": "rejected",
+                    "rejection_reason": "lower_topology_selection_score",
+                },
+            ],
+        }
+    ]

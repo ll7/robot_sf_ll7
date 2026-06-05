@@ -57,6 +57,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_1272_validation_falsification_strategy.md
+    status: current
+    freshness: policy
+    area: benchmark_evidence
   - path: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
     status: current
     freshness: evidence
@@ -66,6 +70,14 @@ entries:
     freshness: policy
     area: benchmark_evidence
   - path: docs/context/issue_2224_amv_actuation_ranking.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2268_amv_timeout_decomposition.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2259_amv_clipping_success_boundary.md
     status: current
     freshness: evidence
     area: benchmark_evidence
@@ -89,7 +101,23 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2266_static_recenter_activation.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2261_static_recenter_slice_local.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2223_topology_hypothesis_planning.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2258_topology_primary_route_audit.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2282_topology_selection_instrumentation.md
     status: current
     freshness: evidence
     area: benchmark_evidence
@@ -117,6 +145,30 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2269_research_v1_trace_case_selection.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2280_research_v1_first_trace_review.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2280_first_trace_review_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2281_research_v1_trace_review_pack.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2281_trace_review_pack_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2263_mechanism_activation_report_fields.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2154_ammv_social_force_model.md
     status: current
     freshness: maintained
@@ -134,6 +186,14 @@ entries:
     freshness: maintained
     area: benchmark_release
   - path: docs/context/issue_2172_benchmark_worker_scaling.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
+  - path: docs/context/issue_2302_benchmark_worker_scaling.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
+  - path: docs/context/issue_2304_benchmark_worker_scaling_stress.md
     status: current
     freshness: maintained
     area: benchmark_release
@@ -193,9 +253,45 @@ entries:
     status: current
     freshness: dated
     area: learned_policy
+  - path: docs/context/issue_2272_orca_residual_launch_packet_status.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/issue_2271_oracle_imitation_trace_preflight.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2271_oracle_imitation_trace_preflight_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/issue_2277_local_artifact_classification.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2277_local_artifact_classification_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained
+    area: carla_external_sim
+  - path: docs/context/issue_2276_carla_parity_lane_decision.md
+    status: current
+    freshness: evidence
+    area: carla_external_sim
+  - path: docs/context/evidence/issue_2276_carla_parity_lane_decision_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
     area: carla_external_sim
   - path: docs/context/issue_2122_carla_replay_diagnostics.md
     status: current
@@ -276,7 +372,15 @@ entries:
     status: current
     freshness: maintained
     area: manual_control_trace
+  - path: docs/context/evidence/issue_2263_mechanism_activation_fields_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: manual_control_trace
   - path: docs/context/issue_2227_mechanism_panels.md
+    status: current
+    freshness: evidence
+    area: manual_control_trace
+  - path: docs/context/issue_2270_panel_candidate_manifest.md
     status: current
     freshness: evidence
     area: manual_control_trace

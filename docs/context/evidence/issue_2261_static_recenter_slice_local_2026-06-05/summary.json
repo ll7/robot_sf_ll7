@@ -1,0 +1,105 @@
+{
+  "issue": 2261,
+  "date": "2026-06-05",
+  "evidence_tier": "analysis_only",
+  "classification": "slice_local_boundary",
+  "recommendation": "narrow",
+  "confidence": {
+    "do_not_promote_transfer_claim": 0.78,
+    "exact_causal_explanation": 0.55
+  },
+  "source_evidence": {
+    "local_positive_signal": "docs/context/issue_2180_one_factor_h500.md",
+    "heldout_transfer_smoke": "docs/context/issue_2221_static_recenter_transfer.md",
+    "activation_gap": "docs/context/issue_2266_static_recenter_activation.md",
+    "heldout_summary": "docs/context/evidence/issue_2221_static_recenter_transfer_2026-06-04/comparison_summary.json",
+    "activation_summary": "docs/context/evidence/issue_2266_static_recenter_activation_2026-06-05/summary.json"
+  },
+  "observed_results": {
+    "issue_2180_local_h500": {
+      "candidate": "issue_2170_static_recenter_only",
+      "baseline": "hybrid_rule_v3_fast_progress",
+      "rows": 18,
+      "success_delta": 0.056,
+      "collision_delta": 0.0,
+      "near_miss_delta": 0.0,
+      "claim_boundary": "directional local diagnostic component evidence"
+    },
+    "issue_2221_heldout_smoke": {
+      "candidate": "issue_2170_static_recenter_only",
+      "baseline": "hybrid_rule_v3_fast_progress",
+      "seed_list": [111],
+      "horizon": 500,
+      "episodes": 2,
+      "success_delta": 0.0,
+      "collision_delta": 0.0,
+      "near_miss_delta": 0.0,
+      "terminal_outcomes_preserved": true
+    }
+  },
+  "scenario_fit": [
+    {
+      "scenario_id": "classic_station_platform_medium",
+      "observed_terminal_outcome": "max_steps for both baseline and static recenter",
+      "observed_near_misses": 60,
+      "observed_collisions": 0,
+      "config_signal": {
+        "ped_density": 0.05,
+        "metadata_archetype": "station_platform",
+        "flow": "bi"
+      },
+      "interpretation": "The held-out failure looks pedestrian-intrusive and progress-limited, not a clean static-obstacle recentering local minimum. The nearest-pedestrian gate may suppress useful recentering, but this is not proven without per-step trace evidence.",
+      "activation_proven": false
+    },
+    {
+      "scenario_id": "francis2023_intersection_wait",
+      "observed_terminal_outcome": "success for both baseline and static recenter",
+      "observed_near_misses": 0,
+      "observed_collisions": 0,
+      "config_signal": {
+        "ped_density": 0.0,
+        "metadata_archetype": "intersection_wait",
+        "behavior": "wait"
+      },
+      "interpretation": "The baseline already solved the row, so the held-out smoke did not provide a failed static-local-minimum case for static recentering to rescue.",
+      "activation_proven": false
+    }
+  ],
+  "mechanism_gates": {
+    "source": "robot_sf/planner/hybrid_rule_local_planner.py",
+    "requires": [
+      "stalled_progress",
+      "start_dist > goal_far_distance",
+      "nearest_ped >= slow_distance_human",
+      "candidate.linear <= freezing_speed_threshold",
+      "abs(candidate.angular) >= deadlock_rotation_threshold",
+      "probed forward heading clears static obstacles"
+    ],
+    "thresholds": {
+      "slow_distance_human": 1.0,
+      "freezing_speed_threshold": 0.05,
+      "goal_far_distance": 0.8,
+      "deadlock_rotation_threshold": 0.15,
+      "static_recenter_probe_speed": 0.3
+    }
+  },
+  "missing_evidence": [
+    "static-recenter activation count",
+    "first activation step",
+    "selected command source",
+    "per-step selected_terms.static_recenter",
+    "progress or trajectory delta"
+  ],
+  "next_smallest_proof": {
+    "type": "instrumented_heldout_rerun",
+    "first_target": "classic_station_platform_medium seed 111",
+    "required_fields": [
+      "selected_terms.static_recenter",
+      "selected_source",
+      "nearest_pedestrian_distance",
+      "progress_windows",
+      "route_progress_delta"
+    ]
+  },
+  "claim_boundary": "analysis-only diagnostic explanation; no benchmark-strength or paper-facing transfer claim"
+}

@@ -128,6 +128,8 @@ knowledge, not every transient iteration detail.
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
+* Issue #2282 topology selection instrumentation smoke:
+  [issue_2282_topology_selection_instrumentation.md](issue_2282_topology_selection_instrumentation.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Root layout structured migration 2026-06-01:

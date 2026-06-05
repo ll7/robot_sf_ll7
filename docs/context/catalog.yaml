@@ -97,6 +97,10 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2282_topology_selection_instrumentation.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2231_mechanism_aware_ranking.md
     status: current
     freshness: maintained

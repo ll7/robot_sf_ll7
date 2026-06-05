@@ -145,6 +145,47 @@ def _static_clearance_summary(
     }
 
 
+def _topology_score_payload(
+    config: TopologyGuidedLocalPolicyConfig,
+    *,
+    route_remaining: float,
+    static_clearance_min: float | None,
+) -> dict[str, Any]:
+    """Return score and score components for one topology hypothesis."""
+    length_penalty = -float(config.length_weight) * float(route_remaining)
+    static_clearance_bonus = 0.0
+    if static_clearance_min is not None:
+        static_clearance_bonus = float(config.static_clearance_weight) * float(static_clearance_min)
+    score = length_penalty + static_clearance_bonus
+    return {
+        "score": float(score),
+        "score_components": {
+            "length_penalty": float(length_penalty),
+            "static_clearance_bonus": float(static_clearance_bonus),
+        },
+    }
+
+
+def _annotate_topology_selection(
+    hypotheses: list[dict[str, Any]],
+    *,
+    selected: dict[str, Any],
+) -> None:
+    """Annotate topology hypotheses with rank, score margin, and rejection reason."""
+    selected_score = float(selected["score"])
+    for score_rank, item in enumerate(
+        sorted(hypotheses, key=lambda item: float(item["score"]), reverse=True)
+    ):
+        item["score_rank"] = int(score_rank)
+        item["score_margin_to_selected"] = float(selected_score - float(item["score"]))
+        if item["hypothesis_id"] == selected["hypothesis_id"]:
+            item["selection_outcome"] = "selected"
+            item["rejection_reason"] = None
+        else:
+            item["selection_outcome"] = "rejected"
+            item["rejection_reason"] = "lower_topology_selection_score"
+
+
 def build_topology_guided_local_policy_config(
     cfg: dict[str, Any] | None,
 ) -> TopologyGuidedLocalPolicyConfig:
@@ -327,9 +368,11 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             )
             route_remaining = _path_length(route_path.path, resolution=resolution)
             static_min = clearance["static_clearance_min_m"]
-            score = -float(self.topology_config.length_weight) * route_remaining
-            if static_min is not None:
-                score += float(self.topology_config.static_clearance_weight) * float(static_min)
+            score_payload = _topology_score_payload(
+                self.topology_config,
+                route_remaining=route_remaining,
+                static_clearance_min=static_min,
+            )
             hypotheses.append(
                 {
                     "hypothesis_id": route_path.hypothesis_id,
@@ -338,7 +381,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                     if route_path.blocked_cell is not None
                     else None,
                     "path_cell_count": len(route_path.path),
-                    "score": float(score),
+                    **score_payload,
                     "route_remaining_distance_m": float(route_remaining),
                     **clearance,
                     "route_corridor": geometry,
@@ -352,12 +395,14 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 "min_hypotheses": int(self.topology_config.min_hypotheses),
             }
         selected = max(hypotheses, key=lambda item: float(item["score"]))
+        _annotate_topology_selection(hypotheses, selected=selected)
         return {
             "status": "ok",
             "reason": "selected_scored_route_hypothesis",
             "hypothesis_count": len(hypotheses),
             "selected_hypothesis_id": selected["hypothesis_id"],
             "selected_rank": int(selected["rank"]),
+            "selected_score": float(selected["score"]),
             "hypotheses": hypotheses,
         }
 

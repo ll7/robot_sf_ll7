@@ -10,6 +10,7 @@ privileged map reconstruction path.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 import numpy as np
@@ -99,9 +100,17 @@ def lidar_ray_angles(num_rays: int, *, visual_angle_portion: float = 1.0) -> np.
         raise ValueError("num_rays must be > 0")
     if not 0.0 < visual_angle_portion <= 1.0:
         raise ValueError("visual_angle_portion must be within (0, 1]")
+    return _cached_lidar_ray_angles(int(num_rays), float(visual_angle_portion))
+
+
+@lru_cache(maxsize=32)
+def _cached_lidar_ray_angles(num_rays: int, visual_angle_portion: float) -> np.ndarray:
+    """Return immutable cached ray angles for stable LiDAR grid configurations."""
     lower = -np.pi * visual_angle_portion
     upper = np.pi * visual_angle_portion
-    return np.linspace(lower, upper, int(num_rays) + 1, dtype=float)[:-1]
+    angles = np.linspace(lower, upper, num_rays + 1, dtype=float)[:-1]
+    angles.setflags(write=False)
+    return angles
 
 
 def lidar_rays_to_ego_occupancy_grid(

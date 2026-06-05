@@ -1,0 +1,87 @@
+{
+  "issue": 2258,
+  "date": "2026-06-05",
+  "classification": "primary_route_dominance_with_alternatives_present",
+  "evidence_tier": "diagnostic_trace_smoke",
+  "claim_boundary": "Diagnostic-only analysis of one scenario/seed/horizon; not benchmark-strength mitigation evidence.",
+  "source_issue": 2223,
+  "candidate": "topology_guided_hybrid_rule_v0",
+  "scenario_id": "classic_realworld_double_bottleneck_high",
+  "seed": 111,
+  "horizon": 160,
+  "regenerated_trace_storage": "raw trace regenerated locally under ignored output; compact tracked evidence is this summary plus manifest.md",
+  "topology_status_counts": {
+    "insufficient_hypotheses": 70,
+    "ok": 90
+  },
+  "pre_scoring_inventory": {
+    "csv": "topology_hypothesis_inventory.csv",
+    "rows": 160,
+    "hypothesis_count_distribution": {
+      "0": 52,
+      "1": 18,
+      "2": 55,
+      "3": 35
+    },
+    "primary_route_present_steps": 108,
+    "primary_route_absent_steps": 52,
+    "missing_trace_fields": [
+      "per_hypothesis_selection_scores",
+      "candidate_rejection_reasons"
+    ]
+  },
+  "ok_hypothesis_count_distribution": [
+    {
+      "hypothesis_count": 2,
+      "steps": 55
+    },
+    {
+      "hypothesis_count": 3,
+      "steps": 35
+    }
+  ],
+  "selected_source_counts": {
+    "dynamic_window": 121,
+    "path_follow_0.5m": 2,
+    "route_guide": 4,
+    "topology_hypothesis": 33
+  },
+  "topology_command_wins": {
+    "total": 33,
+    "selected_hypothesis_counts": {
+      "primary_route": 33
+    },
+    "ok_steps_with_alternatives": 28,
+    "insufficient_steps_primary_only": {
+      "count": 5,
+      "steps": [
+        92,
+        93,
+        94,
+        95,
+        96
+      ]
+    }
+  },
+  "primary_route_distance_dominance": {
+    "ok_steps_primary_shorter_or_equal_best_alternative": 88,
+    "ok_steps_alternative_shorter": 2,
+    "ok_command_wins_primary_shorter_or_equal_best_alternative": 27,
+    "ok_command_wins_alternative_shorter": 1,
+    "alternative_shorter_command_win_example": {
+      "step": 159,
+      "selected_hypothesis_id": "primary_route",
+      "primary_route_remaining_distance_m": 15.725483633921867,
+      "best_alternative_remaining_distance_m": 15.559798206503725,
+      "best_alternative_id": "masked_cell_75_103"
+    }
+  },
+  "hypothesis_switch_count": 0,
+  "interpretation": [
+    "Topology alternatives were present on 90 of 160 steps, so the strongest absence-only explanation is contradicted for this slice.",
+    "Primary route dominance is mostly explained by route length: primary_route was shorter than or tied with the best alternative on 88 of 90 ok steps.",
+    "Topology-command wins inherited the selected hypothesis and therefore did not create corrective rerouting; all 33 selected primary_route.",
+    "The current compact trace does not preserve enough per-hypothesis selection-score detail to fully explain the single ok command-win step where a masked alternative had a shorter remaining route."
+  ],
+  "recommendation": "Revise or instrument topology hypothesis generation/selection before retuning downstream scoring; keep topology_guided_hybrid_rule_v0 diagnostic-only until a non-primary hypothesis can win under a predeclared proof."
+}

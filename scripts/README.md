@@ -693,7 +693,7 @@ uv run python scripts/tools/migrate_artifacts.py
 uv run robot-sf-migrate-artifacts
 ```
 
-**Details**: Consolidates `results/`, `recordings/`, `htmlcov/`, `coverage.json` into `output/`
+**Details**: Consolidates legacy `results/`, `recordings/`, `htmlcov/`, `coverage.json` into `output/`
 
 ### `tools/check_artifact_root.py`
 

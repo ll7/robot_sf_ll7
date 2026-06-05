@@ -72,6 +72,9 @@ blocked_references:
     field: model_path
     value: output/models/missing/model.zip
     reason: Synthetic missing checkpoint is local-only.
+    availability: unavailable
+    decision: recover_or_retire
+    next_action: Recover the checkpoint before use, or retire this config.
 """.strip()
         + "\n",
     )
@@ -151,10 +154,12 @@ def test_plan_classifies_present_missing_registered_and_promoted_local_configs(
     assert present["claim_boundary"] == "not benchmark evidence until durable artifact exists"
 
     missing = rows["configs/baselines/missing.yaml"]
-    assert missing["classification"] == "retire_candidate"
+    assert missing["classification"] == "unavailable"
+    assert missing["availability"] == "unavailable"
+    assert missing["decision"] == "recover_or_retire"
     assert missing["artifact"]["exists"] is False
     assert missing["blocker_reason"] == "Synthetic missing checkpoint is local-only."
-    assert "recover the checkpoint" in missing["action"]
+    assert "Recover the checkpoint before use" in missing["action"]
 
     registered = rows["configs/baselines/registered.yaml"]
     assert registered["classification"] == "already_registered"
@@ -202,7 +207,7 @@ def test_write_report_emits_json_and_issue_table(tmp_path: Path, capsys) -> None
     assert payload["schema_version"] == "robot-sf-model-artifact-promotion-plan.v1"
     assert [row["classification"] for row in payload["rows"]] == [
         "promotable",
-        "retire_candidate",
+        "unavailable",
         "already_registered",
     ]
     stdout = capsys.readouterr().out
@@ -236,3 +241,4 @@ def test_initial_issue_config_list_gets_one_row_per_config() -> None:
         path.as_posix() for path in plan_model_artifact_promotion.INITIAL_TARGET_CONFIGS
     ]
     assert all(row["claim_boundary"] for row in report["rows"])
+    assert {row["availability"] for row in report["rows"]} == {"unavailable"}

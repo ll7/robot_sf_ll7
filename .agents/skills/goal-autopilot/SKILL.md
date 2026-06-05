@@ -81,8 +81,8 @@ Record at start:
 - Exclusions: blocked/decision-required issues, draft PRs, benchmark-heavy PRs that
   need manual review.
 - Coordination: implementation selection must use the `goal-issue-implementation` issue claim
-  protocol (`scripts/dev/issue_claim.py acquire <issue-number>`) before branching so concurrent
-  runs on different PCs do not implement the same issue.
+  protocol (`uv run python scripts/dev/issue_claim.py acquire <issue-number>`) before branching so
+  concurrent runs on different PCs do not implement the same issue.
 
 Do not ask for extra confirmation after this preflight.
 
@@ -126,8 +126,8 @@ Each delegate skill may fail. Handle failures per phase:
 
 - `implement` failure:
   - If issue-claim acquisition fails: classify the issue as already claimed/running, record
-    `scripts/dev/issue_claim.py status <issue-number>` output, skip the issue, and continue to the
-    next candidate. Do not branch or make local edits for that issue.
+    `uv run python scripts/dev/issue_claim.py status <issue-number>` output, skip the issue, and
+    continue to the next candidate. Do not branch or make local edits for that issue.
   - If the issue is ambiguous: route to `issue-contract-maintainer`, mark skipped.
   - If validation fails twice: mark issue `blocked`, record the failing command
     and last error, and continue to the next eligible issue.

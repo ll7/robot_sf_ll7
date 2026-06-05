@@ -8,6 +8,7 @@ from importlib.resources import files
 from typing import Any
 
 from robot_sf_carla_bridge.availability import AVAILABILITY_SCHEMA_VERSION
+from robot_sf_carla_bridge.diagnostics import CARLA_REPLAY_DIAGNOSTICS_SCHEMA_VERSION
 from robot_sf_carla_bridge.export import (
     BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
     EXPORT_MANIFEST_SCHEMA_VERSION,
@@ -59,6 +60,11 @@ def list_carla_bridge_schema_catalog() -> dict[str, Any]:
                 "name": "t0_batch_validation_summary",
                 "loader": "load_batch_validation_summary_schema",
                 "schema_version": BATCH_VALIDATION_SUMMARY_SCHEMA_VERSION,
+            },
+            {
+                "name": "carla_replay_diagnostics",
+                "loader": "load_carla_replay_diagnostics_schema",
+                "schema_version": CARLA_REPLAY_DIAGNOSTICS_SCHEMA_VERSION,
             },
             {
                 "name": "schema_catalog",

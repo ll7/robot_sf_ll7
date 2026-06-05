@@ -1,0 +1,76 @@
+{
+  "issue": 2266,
+  "date": "2026-06-05",
+  "classification": "activation_evidence_missing_terminal_outcomes_identical",
+  "evidence_tier": "analysis_only",
+  "claim_boundary": "Activation diagnostics only over the #2221 held-out static-recenter smoke; not transfer evidence, planner-improvement evidence, or paper-facing evidence.",
+  "source_issue": 2221,
+  "parent_issue": 2261,
+  "baseline_candidate": "hybrid_rule_v3_fast_progress",
+  "mechanism_candidate": "issue_2170_static_recenter_only",
+  "scenario_matrix": "configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml",
+  "seed_list": [
+    111
+  ],
+  "horizon": 500,
+  "rows": [
+    {
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 111,
+      "baseline_termination": "max_steps",
+      "mechanism_termination": "max_steps",
+      "baseline_success": false,
+      "mechanism_success": false,
+      "baseline_near_misses": 60,
+      "mechanism_near_misses": 60,
+      "baseline_collisions": 0,
+      "mechanism_collisions": 0,
+      "activation_count": null,
+      "first_activation_step": null,
+      "command_source_changed": null,
+      "progress_or_trajectory_delta_available": false,
+      "terminal_outcome_changed": false,
+      "missing_fields": [
+        "activation_trace",
+        "selected_command_source",
+        "progress_or_trajectory_delta"
+      ]
+    },
+    {
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 111,
+      "baseline_termination": "success",
+      "mechanism_termination": "success",
+      "baseline_success": true,
+      "mechanism_success": true,
+      "baseline_near_misses": 0,
+      "mechanism_near_misses": 0,
+      "baseline_collisions": 0,
+      "mechanism_collisions": 0,
+      "activation_count": null,
+      "first_activation_step": null,
+      "command_source_changed": null,
+      "progress_or_trajectory_delta_available": false,
+      "terminal_outcome_changed": false,
+      "missing_fields": [
+        "activation_trace",
+        "selected_command_source",
+        "progress_or_trajectory_delta"
+      ]
+    }
+  ],
+  "available_evidence": [
+    "per-scenario terminal outcome",
+    "per-scenario near-miss count",
+    "per-scenario collision count",
+    "aggregate success, collision, near-miss, and termination counts"
+  ],
+  "missing_evidence": [
+    "static-recenter activation count",
+    "first activation step",
+    "selected command source",
+    "trajectory or route-progress delta"
+  ],
+  "source_manifest_note": "Raw JSONL outputs were used to derive the tracked #2221 summaries and are intentionally not tracked.",
+  "recommendation": "Treat the #2221 static-recenter transfer result as terminal-metric slice-local evidence only; locate untracked run outputs or add/preserve trace-level activation and command-source data before using #2261 to explain whether the mechanism failed by non-activation or ineffective activation."
+}

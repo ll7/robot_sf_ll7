@@ -1,0 +1,6 @@
+hazard_id,status,severity,evidence_rows,caveated_rows,matched_scenarios,supporting_metrics,reason
+robot_pedestrian_collision,missing,safety,0,0,,collision_rate,"metadata present but no executed row matched: classic_crossing, crossing, station_platform"
+near_miss,missing,safety,0,0,,"min_ttc, pet","metadata present but no executed row matched: classic_crossing, crossing, francis2023_blind_corner, observation_visibility_blind_corner_smoke, station_platform"
+blind_corner_emergence,missing,safety,0,0,,"min_ttc, clearance","metadata present but no executed row matched: francis2023_blind_corner, observation_visibility_blind_corner_smoke"
+keep_clear_violation,missing,operational,0,0,,keep_clear_intrusion_s,metadata present but no executed row matched: station_platform
+pedestrian_flow_disruption,missing,social,0,0,,"comfort_exposure_s, path_efficiency","metadata present but no executed row matched: classic_crossing, crossing, station_platform"

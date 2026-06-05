@@ -447,7 +447,9 @@ class SocNavObservationFusion:
             vy = ped_velocities[:, 1]
             ego_vx = cos_h * vx + sin_h * vy
             ego_vy = -sin_h * vx + cos_h * vy
-            padded_vel[: ped_velocities.shape[0]] = np.stack([ego_vx, ego_vy], axis=1)
+            valid_velocity_count = ped_velocities.shape[0]
+            padded_vel[:valid_velocity_count, 0] = ego_vx
+            padded_vel[:valid_velocity_count, 1] = ego_vy
 
         goal = np.asarray(self.simulator.goal_pos[self.robot_index], dtype=np.float32)
         next_goal = self.simulator.next_goal_pos[self.robot_index]

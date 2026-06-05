@@ -22,6 +22,11 @@ def test_checked_in_baseline_local_paths_are_explicitly_blocked() -> None:
 
     assert rows
     assert {row.status for row in rows} == {"blocked"}
+    assert {row.availability for row in rows} == {"unavailable"}
+    assert {row.decision for row in rows} == {
+        "unavailable_recover_or_retire",
+        "unavailable_retire_or_rewrite",
+    }
     assert {
         "configs/baselines/ppo_15m_grid_socnav_holonomic.yaml",
         "configs/baselines/ppo_issue_576_br06_v2_15m.yaml",
@@ -127,6 +132,7 @@ blocked_references:
     )
 
     assert rows[0].status == "blocked"
+    assert rows[0].availability == ""
     assert rows[0].reason == "Synthetic local artifact is not durable."
     with pytest.raises(ValueError, match="Synthetic local artifact is not durable") as exc_info:
         validate_no_local_model_artifacts(

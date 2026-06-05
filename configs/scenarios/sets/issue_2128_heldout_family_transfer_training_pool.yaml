@@ -1,0 +1,20 @@
+# Training/tuning-eligible scenario-family pool for the issue #2128 pilot.
+#
+# This is a partition manifest surface, not a benchmark claim surface. Held-out
+# pilot families are intentionally absent.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_bottleneck.yaml
+  - ../archetypes/classic_cross_trap.yaml
+  - ../archetypes/classic_doorway.yaml
+  - ../archetypes/classic_head_on_corridor.yaml
+  - ../archetypes/classic_overtaking.yaml
+select_scenarios:
+  - classic_bottleneck_low
+  - classic_cross_trap_low
+  - classic_doorway_low
+  - classic_head_on_corridor_low
+  - classic_overtaking_low
+map_search_paths:
+  - ../../../maps/svg_maps

@@ -18,6 +18,14 @@ It points to the smallest authority surface for common agent questions.
 | SLURM handoffs | `SLURM/todo.md`, `../slurm_issue_batch_status_2026-05-21.md` | Local handoff index plus execution-status ledger for training or long-run work. |
 | Current portfolio interpretation | `portfolio_overview_2026-05-05.md` | Broad snapshot of leaders, gaps, and reproduction commands from the May 2026 sweep. |
 | H500/latest policy-search analysis | `reports/2026-05-05_full_matrix_h500_analysis.md` | Current h500 leader analysis and caveats. |
+| Component ablation pilot | `../issue_2104_component_ablation_pilot.md` | Retrospective grouped-component pilot for leading hybrid candidates; diagnostic only, not one-factor proof. |
+| One-factor component manifest | `../issue_2170_one_factor_hybrid_component_manifest.md` | Pre-execution contract for the next one-factor hybrid component ablation slice. |
+| Worker-scaling diagnostics | `../issue_2172_benchmark_worker_scaling.md`, `../issue_2302_benchmark_worker_scaling.md`, `../issue_2304_benchmark_worker_scaling_stress.md` | Local runtime profile helper and compact evidence for policy-search worker scaling, including nominal-sanity and stress-slice 1/2/4/6-worker continuations. |
+| One-factor ablation pilot | `../issue_2174_one_factor_ablation_pilot.md` | First executable one-factor comparison and runner for the #2170 manifest. |
+| Remaining one-factor h80 comparisons | `../issue_2176_remaining_one_factor_h80.md` | Remaining selected h80 component comparisons; diagnostic-only with a partial selector row. |
+| Selector ORCA-extra h80 rerun | `../issue_2178_selector_orca_extra_h80.md` | Corrected selector-only comparison after proving `rvo2`; diagnostic-only h80 evidence. |
+| One-factor h500 component run | `../issue_2180_one_factor_h500.md` | Complete h500 execution of the #2170 manifest; recentering is the clearest positive component signal. |
+| Component effect synthesis | `../issue_2182_component_effect_synthesis.md` | Closeout synthesis for #2104 component classifications and acceptance mapping. |
 
 ## Lifecycle Routing
 

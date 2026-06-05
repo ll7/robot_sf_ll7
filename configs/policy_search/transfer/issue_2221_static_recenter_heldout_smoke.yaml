@@ -1,0 +1,19 @@
+stage_order:
+  - full_matrix
+
+stages:
+  full_matrix:
+    scenario_matrix: configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml
+    seed_list: [111]
+    benchmark_profile: experimental
+    horizon: 500
+    dt: 0.1
+    workers: 1
+    requires_slurm: false
+    paper_facing: false
+    mechanism_transfer:
+      issue: 2221
+      mechanism: static_recentering
+      transfer_axis: heldout_scenario_family
+      claim_boundary: diagnostic_transfer_smoke
+      partition_manifest: configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml

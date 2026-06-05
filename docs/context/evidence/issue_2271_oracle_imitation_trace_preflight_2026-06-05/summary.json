@@ -1,0 +1,75 @@
+{
+  "schema_version": "oracle_imitation_trace_preflight.v1",
+  "issue": 2271,
+  "parent_issue": 1470,
+  "created_at": "2026-06-05T10:50:31Z",
+  "preflight_commit": "e0ca196e63aead9e8491eb7f022d3a0e98c4a126",
+  "decision": "submit_ready_handoff_no_submit",
+  "claim_boundary": "launch packet and wrapper dry-run only; not collected trace evidence, not final dataset evidence, and not imitation-training evidence",
+  "validated_inputs": {
+    "launch_packet": "configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml",
+    "wrapper": "scripts/dev/sbatch_oracle_imitation_traces_issue1470.sh",
+    "batch_script": "SLURM/Auxme/issue_1470_oracle_imitation_traces.sl",
+    "source_candidate": "hybrid_rule_v3_static_margin0_waypoint2",
+    "dataset_id": "issue_1397_oracle_imitation_v1"
+  },
+  "commands": [
+    {
+      "command": "uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml --json",
+      "result": "status=valid; scenario_count=6; episode_count=12"
+    },
+    {
+      "command": "scripts/dev/sbatch_oracle_imitation_traces_issue1470.sh --dry-run --no-status",
+      "result": "resolved sbatch command without submission"
+    }
+  ],
+  "resolved_sbatch": {
+    "submitted": false,
+    "command": "sbatch --time=06:00:00 --partition=a30 --qos=a30-gpu --job-name=rsf-1470-oracle-traces --export=ALL,ISSUE1470_SPLIT=train,ISSUE1470_HORIZON=500,ISSUE1470_WORKERS=1 SLURM/Auxme/issue_1470_oracle_imitation_traces.sl",
+    "partition": "a30",
+    "qos": "a30-gpu",
+    "time": "06:00:00",
+    "job_name": "rsf-1470-oracle-traces",
+    "split": "train",
+    "horizon": 500,
+    "workers": 1
+  },
+  "artifact_expectations": {
+    "trace_directory_name": "oracle_imitation/issue1470_train_candidate_traces",
+    "dry_run_fixture": "docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/dry_run_dataset_stub.json",
+    "dry_run_fixture_sha256": "eb5ef938d15725ff29a013a196216d093dd549ae58ae805e642c98441777529f",
+    "future_dataset_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_manifest:pending",
+    "future_dataset_npz_uri": "wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_npz:pending",
+    "required_before_training": [
+      "record SLURM job id",
+      "record generated trace manifest checksum",
+      "replace pending durable artifact aliases with concrete aliases or run ids",
+      "record generated dataset and manifest checksums before imitation training"
+    ]
+  },
+  "split_expectations": {
+    "train_seeds": [
+      201,
+      202,
+      203,
+      204,
+      205,
+      206
+    ],
+    "validation_seeds": [
+      101,
+      102,
+      103
+    ],
+    "evaluation_seeds": [
+      111,
+      112,
+      113
+    ],
+    "rules": [
+      "validation/evaluation seeds must not leak into train",
+      "hard-slice recovery examples stay out of evaluation unless predeclared",
+      "generated trace and dataset manifests need recorded checksums before imitation training starts"
+    ]
+  }
+}

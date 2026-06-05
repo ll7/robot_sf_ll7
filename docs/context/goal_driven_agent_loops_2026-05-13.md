@@ -43,6 +43,44 @@ area, inspecting command output, or performing narrow mechanical edits with clea
 The main agent remains responsible for planning, integration, validation, GitHub writes, and final
 judgment.
 
+## Research-Result Mode
+
+When a user asks the loops to prioritize research results or research directions, issue selection
+should favor work that changes what the repository can honestly claim. Good candidates close or
+revise a hypothesis, move a claim boundary, record a useful negative result, synthesize accumulated
+diagnostics, or unblock a durable experiment. Support, cleanup, and simulator-speed work can still
+win when they remove a concrete blocker, but they should not crowd out research-result issues by
+default.
+
+Research-result issues and PRs must state the compact evidence contract before treating the work as
+complete:
+
+- target hypothesis, claim, blocker, or research question;
+- baseline or comparator;
+- evidence tier and claim boundary;
+- decision or stop rule;
+- compact durable evidence and provenance plan;
+- result classification, such as positive, negative, diagnostic-only, blocked, or inconclusive;
+- parent issue, dashboard, registry, claim map, context note, or synthesis surface to update.
+
+Use this compact template when drafting the issue body, PR body, or synthesis note:
+
+```md
+- Target: <hypothesis, claim, blocker, or research question>
+- Baseline/Comparator: <baseline or comparator>
+- Evidence Tier And Claim Boundary: <tier and boundary>
+- Decision/Stop Rule: <decision or stop rule>
+- Evidence And Provenance Plan: <compact durable evidence and provenance plan>
+- Result Classification: <positive, negative, diagnostic-only, blocked, or inconclusive>
+- Update Surface: <parent issue, dashboard, registry, claim map, context note, or synthesis surface>
+```
+
+After several diagnostic children accumulate under one research parent, prefer a synthesis pass
+before adding another exploratory child. The synthesis should name what was learned, what stayed
+inconclusive, which lanes are redundant or negative, and the next smallest experiment or follow-up
+that would change the conclusion. This is guidance for research-mode routing, not a universal gate
+on low-risk maintenance.
+
 ## Loop Boundaries
 
 `goal-issue-discovery` may create broad proposal issues, not only observed bug reports. Every new

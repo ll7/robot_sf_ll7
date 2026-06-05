@@ -54,6 +54,18 @@ class ForceContext(Protocol):
 ForceFactory = Callable[[ForceContext, SimulatorConfig], list[forces.Force]]
 
 
+def _sum_forces_explicitly(force_list: list[forces.Force], ped_state: PedState) -> np.ndarray:
+    """Accumulate force components without generator-sum intermediate arrays.
+
+    Returns:
+        np.ndarray: Combined force array for all pedestrians.
+    """
+    combined = np.zeros_like(ped_state.pos())
+    for force in force_list:
+        combined += force()
+    return combined
+
+
 def make_forces(sim: ForceContext, config: SimulatorConfig) -> list[forces.Force]:
     """Initialize forces required for simulation.
 
@@ -183,7 +195,7 @@ class Simulator_v2:
         """
         Performs a single step in the simulation.
         """
-        forces = sum(force() for force in self.forces)
+        forces = _sum_forces_explicitly(self.forces, self.peds)
         self.peds.step(forces)
         for behavior in self.behaviors:
             behavior.step()
@@ -237,7 +249,7 @@ class Simulator:
         Returns:
             np.ndarray: Combined force array for all pedestrians.
         """
-        return sum(force() for force in self.forces)
+        return _sum_forces_explicitly(self.forces, self.peds)
 
     @property
     def current_state(self) -> SimState:

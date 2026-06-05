@@ -418,6 +418,38 @@ def _route_hypotheses_for_observation(  # noqa: C901
     return hypotheses
 
 
+def _selection_score_example(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Return compact per-hypothesis selection-score evidence for one step."""
+    route_corridor = row.get("planner_route_corridor")
+    if not isinstance(route_corridor, dict):
+        return None
+    scored_hypotheses = route_corridor.get("topology_hypotheses")
+    if not isinstance(scored_hypotheses, list):
+        return None
+
+    example_rows: list[dict[str, Any]] = []
+    for item in scored_hypotheses:
+        if not isinstance(item, dict) or "score" not in item:
+            continue
+        example_rows.append(
+            {
+                "hypothesis_id": item.get("hypothesis_id"),
+                "score": item.get("score"),
+                "score_rank": item.get("score_rank"),
+                "score_margin_to_selected": item.get("score_margin_to_selected"),
+                "score_components": item.get("score_components", {}),
+                "selection_outcome": item.get("selection_outcome"),
+                "rejection_reason": item.get("rejection_reason"),
+            }
+        )
+    if not example_rows:
+        return None
+    return {
+        "step": int(row.get("step", -1)),
+        "hypotheses": example_rows,
+    }
+
+
 def _summarize_hypotheses(steps: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate hypothesis availability, route progress, and selected sources."""
     selected_source_counts = Counter(
@@ -468,30 +500,41 @@ def _summarize_hypotheses(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
     influence_examples: list[dict[str, Any]] = []
     influence_counts: Counter[str] = Counter()
+    selection_score_examples: list[dict[str, Any]] = []
+    previous_hypothesis_id: str | None = None
+    hypothesis_switch_count = 0
     for row in steps:
         influence = row.get("topology_command_influence")
         if not isinstance(influence, dict):
-            continue
-        hypothesis_id = str(influence.get("selected_hypothesis_id") or "unknown")
-        influence_counts[hypothesis_id] += 1
-        if len(influence_examples) >= 10:
-            continue
-        influence_examples.append(
-            {
-                "step": int(row.get("step", -1)),
-                "selected_hypothesis_id": hypothesis_id,
-                "reason": influence.get("reason"),
-                "selected_score": influence.get("selected_score"),
-                "selected_terms": influence.get("selected_terms", {}),
-            }
-        )
+            influence = {}
+        else:
+            hypothesis_id = str(influence.get("selected_hypothesis_id") or "unknown")
+            influence_counts[hypothesis_id] += 1
+            if previous_hypothesis_id is not None and hypothesis_id != previous_hypothesis_id:
+                hypothesis_switch_count += 1
+            previous_hypothesis_id = hypothesis_id
+            if len(influence_examples) < 10:
+                influence_examples.append(
+                    {
+                        "step": int(row.get("step", -1)),
+                        "selected_hypothesis_id": hypothesis_id,
+                        "reason": influence.get("reason"),
+                        "selected_score": influence.get("selected_score"),
+                        "selected_terms": influence.get("selected_terms", {}),
+                    }
+                )
+
+        if len(selection_score_examples) < 10 and (example := _selection_score_example(row)):
+            selection_score_examples.append(example)
 
     return {
         "topology_status_counts": dict(sorted(availability_counts.items())),
         "selected_source_counts": dict(sorted(selected_source_counts.items())),
         "hypothesis_progress_by_rank": progress_by_rank,
         "topology_command_influence_counts": dict(sorted(influence_counts.items())),
+        "hypothesis_switch_count": hypothesis_switch_count,
         "topology_command_influence_examples": influence_examples,
+        "topology_selection_score_examples": selection_score_examples,
     }
 
 
@@ -510,6 +553,7 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
         f"- Topology status counts: `{summary['topology_status_counts']}`",
         f"- Selected local command sources: `{summary['selected_source_counts']}`",
         f"- Topology command influence counts: `{summary['topology_command_influence_counts']}`",
+        f"- Hypothesis switch count: `{summary['hypothesis_switch_count']}`",
         "",
         "## Hypothesis Progress",
         "",
@@ -546,6 +590,29 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
                 f"{terms.get('corridor_subgoal_route_progress')} | "
                 f"{terms.get('corridor_subgoal_tangent_alignment')} |"
             )
+
+    if summary["topology_selection_score_examples"]:
+        lines.extend(
+            [
+                "",
+                "## Topology Selection Score Examples",
+                "",
+                "| Step | Hypothesis | Outcome | Rejection reason | Score | Margin to selected | Length penalty | Static clearance bonus |",
+                "|---:|---|---|---|---:|---:|---:|---:|",
+            ]
+        )
+        for example in summary["topology_selection_score_examples"]:
+            for item in example.get("hypotheses", []):
+                terms = item.get("score_components", {})
+                if not isinstance(terms, dict):
+                    terms = {}
+                lines.append(
+                    "| "
+                    f"{example['step']} | {item.get('hypothesis_id')} | "
+                    f"{item.get('selection_outcome')} | {item.get('rejection_reason')} | "
+                    f"{item.get('score')} | {item.get('score_margin_to_selected')} | "
+                    f"{terms.get('length_penalty')} | {terms.get('static_clearance_bonus')} |"
+                )
 
     lines.extend(
         [

@@ -599,6 +599,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Avoid mass docstring sweeps; improve documentation incrementally as code changes.
 - Use `uv run python scripts/validation/check_docstring_todos.py --mode report` to inspect the current placeholder backlog by top-level area and file.
 - `scripts/validation/docstring_todo_baseline.json` is an increase-only ratchet. Update it with `--mode write-baseline` only after an intentional cleanup or maintainer-approved backlog change.
+- Use `uv run python scripts/validation/check_active_doc_examples.py` to report stale active-doc command and artifact examples. Add `--fail-on-diagnostic` when a PR or CI lane should fail on new hits, and use an inline `active-docs-check: allow` marker only for intentional examples.
 
 ### Map Bounds Format
 
@@ -721,6 +722,9 @@ Try to increase the test coverage over time by adding tests when touching code. 
 ```bash
 # Run tests (coverage collected automatically)
 uv run pytest tests
+
+# Run a focused local check and discard generated coverage output after success
+scripts/dev/run_focused_tests.sh tests/test_force_flags.py -q
 
 # View HTML report (preferred helper)
 uv run python scripts/coverage/open_coverage_report.py
@@ -1305,10 +1309,10 @@ summary = compute_aggregates_with_ci(
 ## Training and examples
 ### Available demos
 ```bash
-uv run python examples/demo_offensive.py
-uv run python examples/demo_defensive.py
-uv run python examples/demo_pedestrian.py
-uv run python examples/demo_refactored_environments.py
+uv run python examples/quickstart/01_basic_robot.py
+uv run python examples/quickstart/02_trained_model.py
+uv run python examples/quickstart/03_custom_map.py
+uv run python examples/advanced/06_pedestrian_env_factory.py
 ```
 
 ### Training scripts
@@ -1396,7 +1400,7 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 
 ## Common issues and solutions
 ### Build issues
-- uv not found → `pip install uv` (or use official installer)
+- uv not found → `curl -LsSf https://astral.sh/uv/install.sh | sh` (or use the package manager path in `docs/ENVIRONMENT.md`)
 - ffmpeg missing → `sudo apt-get install -y ffmpeg`
 
 ### Runtime issues
@@ -1428,6 +1432,12 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Requirements clarified (with options/assumptions recorded).
 - Design doc added/updated and linked (if non‑trivial).
 - Code implemented with tests (unit/integration; GUI when needed).
+- For research/benchmark/metric/paper-facing analysis-tool PRs: include one representative use on
+  durable/versioned input (tracked config, model checkpoint, committed fixture, or versioned W&B
+  artifact), or link a concrete follow-up issue that names the decision, claim boundary, or
+  synthesis surface the tool will update. Local-only `output/` files are not durable proof unless
+  promoted or represented by a tracked manifest. Small support helpers (formatters, CLI wrappers,
+  quick diagnostics) that make no research/benchmark/metric/paper claim are exempt.
 - Ruff clean and “Check Code Quality (Ruff + advisory ty)” reviewed locally.
 - Advisory typecheck reviewed. Fix practical findings in touched files and stable contracts, and
   document any meaningful remaining findings in the PR when they affect the change.

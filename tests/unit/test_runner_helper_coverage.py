@@ -35,6 +35,63 @@ class _FakeClip:
         self.closed = True
 
 
+class _FakePeds:
+    """Minimal pedestrian state for force-sampling runner tests."""
+
+    def __init__(self) -> None:
+        self._positions = [
+            np.array([[0.0, 0.0], [1.0, 0.0]], dtype=float),
+            np.array([[0.1, 0.0], [1.1, 0.0]], dtype=float),
+        ]
+        self._index = 0
+
+    def pos(self) -> np.ndarray:
+        """Return current fake pedestrian positions."""
+        return self._positions[self._index]
+
+    def advance(self) -> None:
+        """Advance to the next fake pedestrian frame."""
+        self._index = min(self._index + 1, len(self._positions) - 1)
+
+
+class _FakeSimulator:
+    """Tiny simulator surface used by ``_simulate_episode_with_policy``."""
+
+    def __init__(self) -> None:
+        self.peds = _FakePeds()
+
+    def step(self) -> None:
+        """Advance fake pedestrian state."""
+        self.peds.advance()
+
+
+class _FakeScenario:
+    """Scenario result stand-in with the runner attributes under test."""
+
+    def __init__(self) -> None:
+        self.simulator = _FakeSimulator()
+        self.obstacles: list[tuple[float, float, float, float]] = []
+
+
+class _BatchOnlyFastPysfWrapper:
+    """Fake wrapper that proves the runner uses batch force sampling."""
+
+    calls: list[np.ndarray] = []
+
+    def __init__(self, simulator: _FakeSimulator) -> None:
+        self.simulator = simulator
+
+    def get_forces_at(self, point: np.ndarray) -> np.ndarray:
+        """Fail if the old per-point call path is used."""
+        raise AssertionError("runner should sample force snapshots with get_forces_at_points")
+
+    def get_forces_at_points(self, points: np.ndarray) -> np.ndarray:
+        """Return deterministic force rows for the supplied points."""
+        points_arr = np.asarray(points, dtype=float)
+        self.calls.append(points_arr.copy())
+        return points_arr + np.array([10.0, 20.0])
+
+
 def test_load_baseline_planner_covers_import_and_config_branches(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -161,6 +218,44 @@ def test_emit_video_skip_appends_notes_when_logging_fails(
     )
 
     assert record["notes"] == "existing; video skipped (synthetic): encode-failed error=boom"
+
+
+def test_simulate_episode_force_snapshots_use_batch_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Recorded force snapshots should route through FastPysfWrapper batch sampling."""
+    _BatchOnlyFastPysfWrapper.calls = []
+    scenario = _FakeScenario()
+    monkeypatch.setattr(runner_mod, "generate_scenario", lambda params, seed: scenario)
+    monkeypatch.setattr(runner_mod, "FastPysfWrapper", _BatchOnlyFastPysfWrapper)
+
+    def _stationary_policy(
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+        ped_positions: np.ndarray,
+        dt: float,
+    ) -> np.ndarray:
+        return np.zeros(2, dtype=float)
+
+    *_, peds_pos_traj, ped_forces_traj, _obstacles, _goal, _reached = (
+        runner_mod._simulate_episode_with_policy(
+            {},
+            seed=7,
+            robot_policy=_stationary_policy,
+            horizon=1,
+            dt=0.1,
+            robot_start=None,
+            robot_goal=None,
+            record_forces=True,
+        )
+    )
+
+    assert len(_BatchOnlyFastPysfWrapper.calls) == 2
+    assert _BatchOnlyFastPysfWrapper.calls[0] == pytest.approx(peds_pos_traj[0])
+    assert _BatchOnlyFastPysfWrapper.calls[1] == pytest.approx(peds_pos_traj[1])
+    assert ped_forces_traj[0] == pytest.approx(peds_pos_traj[0] + np.array([10.0, 20.0]))
+    assert ped_forces_traj[1] == pytest.approx(peds_pos_traj[1] + np.array([10.0, 20.0]))
 
 
 def test_try_encode_synthetic_video_handles_missing_moviepy_and_unwritable_path(

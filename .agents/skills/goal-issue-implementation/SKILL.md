@@ -140,10 +140,12 @@ Prioritize by:
 When the user asks for research progress rather than generic issue throughput, treat this as
 adapted guidance: prefer issues that should close or revise a hypothesis, move a claim boundary,
 record a useful negative result, synthesize accumulated diagnostics, or unblock a durable
-experiment. Do not treat this as a hard eligibility rule; support issues may still be the right next
-step when they remove a concrete blocker. If the remaining queue is mostly docs cleanup or another
-diagnostic extension under an already-expanded research parent, propose a synthesis issue or
-synthesis pass before adding more exploratory children.
+experiment. Use the compact research-result contract in
+`docs/context/goal_driven_agent_loops_2026-05-13.md` when drafting the issue/PR proof surface. Do
+not treat this as a hard eligibility rule; support issues may still be the right next step when they
+remove a concrete blocker. If the remaining queue is mostly docs cleanup or another diagnostic
+extension under an already-expanded research parent, propose a synthesis issue or synthesis pass
+before adding more exploratory children.
 
 ## Queue Exhaustion Audit
 
@@ -416,8 +418,8 @@ When a delegated worker produces a reusable workflow lesson, include an
 ## Race-Condition / Multi-Agent Safety
 
 - Operate one implementation branch at a time by default.
-- Use `scripts/dev/issue_claim.py acquire <issue-number>` as the first write after candidate
-  selection and duplicate-PR checks. The remote `agent-claims/issue-<number>` ref is the atomic
+- Use `uv run python scripts/dev/issue_claim.py acquire <issue-number>` as the first write after
+  candidate selection and duplicate-PR checks. The remote `agent-claims/issue-<number>` ref is the atomic
   cross-machine claim; labels, assignments, Project #5 status, and comments are secondary visibility
   signals.
 - If acquiring the claim fails, do not branch or implement. Record the existing claim status and

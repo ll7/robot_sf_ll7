@@ -173,13 +173,24 @@ class PedestrianGroupings:
     states: PedestrianStates
     groups: dict[int, set[int]] = field(default_factory=dict)
     group_by_ped_id: dict[int, int] = field(default_factory=dict)
+    _groups_as_lists_cache: list[list[int]] | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+
+    def _invalidate_groups_as_lists_cache(self) -> None:
+        """Mark the cached numpy-friendly group list snapshot stale."""
+        self._groups_as_lists_cache = None
 
     @property
     def groups_as_lists(self) -> list[list[int]]:
         # info: this facilitates slicing over numpy arrays
         #       for some reason, numpy cannot slide over indices provided as set ...
         """Return pedestrian group ids as lists (numpy-friendly)."""
-        return [list(ped_ids) for ped_ids in self.groups.values()]
+        if self._groups_as_lists_cache is None:
+            self._groups_as_lists_cache = [list(ped_ids) for ped_ids in self.groups.values()]
+        return self._groups_as_lists_cache
 
     @property
     def group_ids(self) -> set[int]:
@@ -221,6 +232,7 @@ class PedestrianGroupings:
                 old_gid = self.group_by_ped_id[ped_id]
                 self.groups[old_gid].remove(ped_id)
             self.group_by_ped_id[ped_id] = new_gid
+        self._invalidate_groups_as_lists_cache()
         return new_gid
 
     def add_to_group(self, ped_id: int, group_id: int) -> None:
@@ -234,6 +246,7 @@ class PedestrianGroupings:
             self.groups[group_id] = set()
         self.groups[group_id].add(ped_id)
         self.group_by_ped_id[ped_id] = group_id
+        self._invalidate_groups_as_lists_cache()
 
     def ensure_group_for_ped(self, ped_id: int) -> int:
         """Ensure a pedestrian belongs to a group, creating a single-member group if needed.
@@ -251,6 +264,7 @@ class PedestrianGroupings:
         for ped_id in ped_ids:
             self.new_group({ped_id})
         self.groups[group_id].clear()
+        self._invalidate_groups_as_lists_cache()
 
     def redirect_group(self, group_id: int, new_goal: Vec2D):
         """Redirect all members of a group to a new goal."""

@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 import yaml
 
+from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.map_runner import (
     _apply_planner_selector_v2_context,
     _build_policy,
@@ -116,6 +117,8 @@ def test_parse_algo_config_reports_blocked_local_artifact_follow_up() -> None:
     message = str(exc_info.value)
     assert "https://github.com/ll7/robot_sf_ll7/issues/1764" in message
     assert "DRL-VO default checkpoint" in message
+    assert "unavailable local artifact" in message
+    assert "decision=unavailable_recover_or_retire" in message
 
 
 def test_build_policy_rejects_sac_default_local_output_model_path() -> None:
@@ -1751,10 +1754,59 @@ def test_velocity_and_ped_stack_helpers() -> None:
     assert np.allclose(vel, 0.0)
     assert np.allclose(acc, 0.0)
 
-    traj = [np.array([[0.0, 0.0]]), np.array([[1.0, 1.0], [2.0, 2.0]])]
-    stacked = _stack_ped_positions(traj)
-    assert stacked.shape == (2, 2, 2)
     assert _stack_ped_positions([]).shape == (0, 0, 2)
+
+
+def test_stack_ped_positions_uses_np_stack_for_fixed_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use the fixed-count fast path when every non-empty timestep has the same shape."""
+    original_stack = np.stack
+    stack_calls: list[tuple[tuple[int, ...], ...]] = []
+
+    def _recording_stack(arrays: list[np.ndarray]) -> np.ndarray:
+        stack_calls.append(tuple(arr.shape for arr in arrays))
+        return original_stack(arrays)
+
+    monkeypatch.setattr(map_runner.np, "stack", _recording_stack)
+    traj = [
+        np.array([[0.0, 0.0], [1.0, 1.0]], dtype=float),
+        np.array([[2.0, 2.0], [3.0, 3.0]], dtype=float),
+    ]
+
+    stacked = _stack_ped_positions(traj)
+
+    assert stack_calls == [((2, 2), (2, 2))]
+    assert np.allclose(stacked, original_stack(traj))
+
+
+def test_stack_ped_positions_pads_variable_count_with_nan() -> None:
+    """Pad variable-count pedestrian timesteps with NaN by default."""
+    traj = [
+        np.array([[0.0, 0.0]], dtype=float),
+        np.array([[1.0, 1.0], [2.0, 2.0]], dtype=float),
+    ]
+
+    stacked = _stack_ped_positions(traj)
+
+    assert stacked.shape == (2, 2, 2)
+    assert np.allclose(stacked[0, 0], [0.0, 0.0])
+    assert np.isnan(stacked[0, 1]).all()
+    assert np.allclose(stacked[1], traj[1])
+
+
+def test_stack_ped_positions_uses_fill_value_for_padded_rows() -> None:
+    """Honor a custom fill value on padded variable-count rows."""
+    traj = [
+        np.empty((0, 2), dtype=float),
+        np.array([[1.0, 1.0], [2.0, 2.0]], dtype=float),
+    ]
+
+    stacked = _stack_ped_positions(traj, fill_value=-1.0)
+
+    assert stacked.shape == (2, 2, 2)
+    assert np.allclose(stacked[0], -1.0)
+    assert np.allclose(stacked[1], traj[1])
 
 
 def test_map_runner_metadata_and_normalization_helpers() -> None:
@@ -2461,6 +2513,19 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     synthetic_meta = record["algorithm_metadata"]["synthetic_actuation"]
     assert synthetic_meta["profile"]["name"] == "amv-actuation-stress-v0"
     assert synthetic_meta["summary"]["status"] == "ok"
+    trace = synthetic_meta["trace"]
+    assert trace["schema_version"] == "synthetic-actuation-step-trace.v1"
+    assert trace["dt"] == pytest.approx(0.1)
+    assert trace["initial_goal_distance_m"] == pytest.approx(math.sqrt(2.0))
+    assert len(trace["steps"]) == 4
+    first_step = trace["steps"][0]
+    assert first_step["step"] == 0
+    assert first_step["requested_linear_m_s"] == pytest.approx(3.0)
+    assert first_step["command_clipped"] is False
+    assert first_step["route_progress_from_start_m"] == pytest.approx(0.0)
+    assert first_step["distance_to_goal_m"] == pytest.approx(math.sqrt(2.0))
+    assert any(step["command_clipped"] is True for step in trace["steps"])
+    assert any(step["yaw_rate_saturated"] is True for step in trace["steps"])
     assert float(record["metrics"]["command_clip_fraction"]) > 0.0
     assert float(record["metrics"]["yaw_rate_saturation_fraction"]) > 0.0
     assert record["metrics"]["signed_braking_peak_m_s2"] == pytest.approx(0.0)
@@ -2613,7 +2678,21 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
             _ = obs
             return 0.0, 0.0
 
-        _policy._planner_stats = lambda: {"solver_failures": 2, "fallback_stop_count": 2}
+        _policy._planner_stats = lambda: {
+            "solver_failures": 2,
+            "fallback_stop_count": 2,
+            "last_decision": {
+                "selected_source": "rotate_left",
+                "selected_command": [0.0, -0.6],
+                "selected_score": 1.25,
+                "selected_terms": {
+                    "static_recenter": 1.0,
+                    "route_arc_progress": 0.0,
+                    "goal_progress": -0.1,
+                },
+                "progress_windows": {"3s": 0.0},
+            },
+        }
         return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
 
     monkeypatch.setattr(
@@ -2650,12 +2729,22 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
         algo="goal",
         algo_config_path=None,
         scenario_path=Path("."),
+        record_planner_decision_trace=True,
     )
 
-    assert record["algorithm_metadata"]["planner_runtime"] == {
-        "solver_failures": 2,
-        "fallback_stop_count": 2,
-    }
+    planner_runtime = record["algorithm_metadata"]["planner_runtime"]
+    assert planner_runtime["solver_failures"] == 2
+    assert planner_runtime["fallback_stop_count"] == 2
+    trace = record["algorithm_metadata"]["planner_decision_trace"]
+    assert trace["schema_version"] == "planner-decision-trace.v1"
+    assert trace["initial_goal_distance_m"] == pytest.approx(1.0)
+    assert len(trace["steps"]) == 1
+    step = trace["steps"][0]
+    assert step["selected_source"] == "rotate_left"
+    assert step["selected_command"] == [0.0, -0.6]
+    assert step["selected_score"] == pytest.approx(1.25)
+    assert step["static_recenter"] == pytest.approx(1.0)
+    assert step["progress_windows"]["3s"] == pytest.approx(0.0)
 
 
 def test_run_map_episode_snapshots_planner_runtime_before_close(
@@ -3208,7 +3297,7 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         _fake_run_map_job_worker,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -3383,18 +3472,17 @@ def test_run_map_batch_parallel_writes_results_in_job_order(
             time.sleep(0.05)
         return {"episode_id": f"{scenario['name']}-{seed}"}
 
-    def fake_write(out_path_arg, schema, record):
+    def fake_write(handle, schema, record):
         """Capture JSONL writes for the parallel test."""
-        out_path_arg.parent.mkdir(parents=True, exist_ok=True)
-        with out_path_arg.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        del schema
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
         ThreadPoolExecutor,
     )
     monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated", fake_write)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated_to_handle", fake_write)
 
     result = run_map_batch(
         [scenario_one, scenario_two],
@@ -3405,6 +3493,9 @@ def test_run_map_batch_parallel_writes_results_in_job_order(
     )
 
     assert result["written"] == 2
+    assert result["workers"] == 2
+    assert result["parallel_execution"] is True
+    assert result["batch_runtime_sec"] >= 0.0
     lines = out_path.read_text(encoding="utf-8").splitlines()
     records = [json.loads(line) for line in lines]
     assert records[0]["episode_id"].startswith("slow-")
@@ -3442,7 +3533,7 @@ def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
         raise RuntimeError("forced write failure")
 
     monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated", fake_write)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated_to_handle", fake_write)
 
     result = run_map_batch(
         scenarios,
@@ -3485,7 +3576,7 @@ def test_run_map_batch_filters_and_validation(
         lambda job: {"episode_id": "ep1"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
     result = run_map_batch(
@@ -3496,6 +3587,9 @@ def test_run_map_batch_filters_and_validation(
         resume=False,
     )
     assert result["total_jobs"] == 1
+    assert result["workers"] == 1
+    assert result["parallel_execution"] is False
+    assert result["batch_runtime_sec"] >= 0.0
 
 
 def test_run_map_batch_rejects_invalid_experimental_ped_impact_controls(
@@ -3594,7 +3688,7 @@ def test_run_map_batch_filters_per_scenario_kinematics_preflight(
         lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -3670,7 +3764,7 @@ def test_run_map_batch_validates_effective_scenario_algo_overrides(
         lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -3705,7 +3799,7 @@ def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
     )
     monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -3779,7 +3873,7 @@ def test_run_map_batch_parallel_preserves_runtime_metadata_bridge(
         ThreadPoolExecutor,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated",
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -4036,6 +4130,132 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
     lines = out_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
     assert "hrvo_smoke" in lines[0]
+
+
+def test_run_map_episode_skips_force_buffer_reads_when_not_recording(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """record_forces=False should avoid per-step force reads and preserve zero semantics."""
+
+    class _DummySim:
+        """Simulator stub whose force buffer must not be read in this test."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+
+        @property
+        def last_ped_forces(self) -> np.ndarray:
+            raise AssertionError("last_ped_forces should not be read when record_forces=False")
+
+        def iter_obstacle_segments(self):
+            """Return obstacle segments exposed by the simulator stub."""
+            return [((0.5, -0.5), (0.5, 0.5))]
+
+    class _DummyEnv:
+        """Environment stub for map-runner episode tests."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.action_space = None
+
+        def reset(self, seed: int | None = None):
+            """Return a compact map-runner observation."""
+            _ = seed
+            obs = {
+                "robot": {
+                    "position": np.array([0.0, 0.0], dtype=np.float32),
+                    "heading": np.array([0.0], dtype=np.float32),
+                    "speed": np.array([0.0, 0.0], dtype=np.float32),
+                    "radius": np.array([0.5], dtype=np.float32),
+                },
+                "goal": {
+                    "current": np.array([2.0, 0.0], dtype=np.float32),
+                    "next": np.array([0.0, 0.0], dtype=np.float32),
+                },
+                "pedestrians": {
+                    "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                    "velocities": np.zeros((1, 2), dtype=np.float32),
+                    "radius": np.array([0.4], dtype=np.float32),
+                    "count": np.array([1.0], dtype=np.float32),
+                },
+                "map": {"size": np.array([5.0, 4.0], dtype=np.float32)},
+                "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+            }
+            return obs, {}
+
+        def step(self, action):
+            """Move once and terminate successfully."""
+            _ = action
+            obs, _ = self.reset()
+            return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            """Accept cleanup from map-runner code."""
+            return None
+
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "robot_config": HolonomicDriveSettings(
+                max_speed=1.0,
+                max_angular_speed=1.0,
+                command_mode="vx_vy",
+            ),
+        },
+    )
+    captured: dict[str, np.ndarray] = {}
+
+    def fake_compute_all_metrics(ep, *args, **kwargs):
+        """Capture metric inputs and return a successful terminal metric."""
+        del args, kwargs
+        captured["ped_forces"] = ep.ped_forces
+        captured["peds_pos"] = ep.peds_pos
+        return {"success": 1.0, "collisions": 0.0}
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics", fake_compute_all_metrics
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
+    )
+
+    record = _run_map_episode(
+        {"name": "no_force_recording", "simulation_config": {"max_episode_steps": 1}},
+        123,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=tmp_path / "scenarios.yaml",
+    )
+
+    assert record["scenario_id"] == "no_force_recording"
+    assert captured["ped_forces"].shape == captured["peds_pos"].shape
+    assert np.array_equal(captured["ped_forces"], np.zeros_like(captured["peds_pos"]))
 
 
 def _normalize_episode_record(record: dict[str, object]) -> dict[str, object]:

@@ -142,6 +142,7 @@ class LidarScannerSettings:
     scan_noise: list[float] = field(default_factory=lambda: [0.005, 0.002])
     detect_other_robots: bool = True
     angle_opening: Range = field(init=False)
+    ray_offsets: np.ndarray = field(init=False)
 
     def __post_init__(self):
         """Validate scanner settings and derive the symmetric angular opening.
@@ -149,6 +150,8 @@ class LidarScannerSettings:
         ``visual_angle_portion`` is a fraction of a full circle, so ``1.0``
         scans 360 degrees and ``1 / 3`` scans 120 degrees. ``scan_noise`` stores
         scan-loss and corruption probabilities, both constrained to ``[0, 1]``.
+        ``ray_offsets`` is a precomputed heading-independent linspace of ray
+        angles relative to the sensor heading, rebuilt once on construction.
         """
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
@@ -160,6 +163,9 @@ class LidarScannerSettings:
             raise ValueError("Scan noise probabilities must be within [0, 1]!")
 
         self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)
+        self.ray_offsets = np.linspace(
+            self.angle_opening[0], self.angle_opening[1], self.num_rays + 1
+        )[:-1]
 
     @classmethod
     def ego_pedestrian_lidar(cls) -> "LidarScannerSettings":
@@ -442,10 +448,9 @@ def lidar_ray_scan(
         _dynamic_objects_to_circle_array(occ) if settings.detect_other_robots else None
     )
 
-    lower = robot_orient + settings.angle_opening[0]
-    upper = robot_orient + settings.angle_opening[1]
-    ray_angles = np.linspace(lower, upper, settings.num_rays + 1)[:-1]
-    ray_angles = np.array([(angle + np.pi * 2) % (np.pi * 2) for angle in ray_angles])
+    ray_offsets = settings.ray_offsets
+    ray_angles = robot_orient + ray_offsets
+    ray_angles = np.mod(ray_angles + np.pi * 2, np.pi * 2)
 
     if isinstance(occ, EgoPedContinuousOccupancy):
         enemy_pos = np.array([occ.enemy_coords])

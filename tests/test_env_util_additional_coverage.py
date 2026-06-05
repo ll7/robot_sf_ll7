@@ -11,6 +11,7 @@ from robot_sf.common.types import Rect
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
 from robot_sf.gym_env.env_util import (
     AgentType,
+    _pedestrian_coords_with_ego,
     create_spaces,
     create_spaces_with_image,
     init_collision_and_sensors,
@@ -211,6 +212,39 @@ def test_init_ped_spaces_and_collision_sensor_initialization() -> None:
     assert "rays" in robot_obs
     assert "drive_state" in ego_obs
     assert "rays" in ego_obs
+
+
+def test_pedestrian_coords_with_ego_preserves_order_and_shape() -> None:
+    """Fallback pedestrian coordinate helper should append ego pedestrian as final row."""
+    map_def = _minimal_map_def()
+    sim = _FakePedSim(map_def)
+    sim.ped_pos = np.array([[1.8, 1.8], [2.1, 2.4]], dtype=np.float64)
+    sim.ego_ped_pos = np.array([1.4, 1.1], dtype=np.float64)
+
+    coords = _pedestrian_coords_with_ego(sim)
+
+    assert coords.shape == (3, 2)
+    assert np.array_equal(coords[:2], sim.ped_pos)
+    assert np.array_equal(coords[2], sim.ego_ped_pos)
+
+
+def test_pedestrian_coords_with_ego_prefers_combined_simulator_view() -> None:
+    """Pedestrian coordinate helper should use the simulator-provided combined view."""
+    map_def = _minimal_map_def()
+    sim = _FakePedSim(map_def)
+    sim.ped_pos = np.array([[1.8, 1.8], [2.1, 2.4]], dtype=np.float64)
+    sim.ego_ped_pos = np.array([1.4, 1.1], dtype=np.float64)
+    combined = np.array([[1.8, 1.8], [2.1, 2.4], [1.4, 1.1]], dtype=np.float64)
+    sim.ped_and_ego_pos = combined
+    expected_old_stacked_output = np.concatenate(
+        (sim.ped_pos, np.asarray(sim.ego_ped_pos)[None, :]),
+        axis=0,
+    )
+
+    coords = _pedestrian_coords_with_ego(sim)
+
+    assert coords is combined
+    np.testing.assert_array_equal(coords, expected_old_stacked_output)
 
 
 def test_create_spaces_with_image_error_paths_and_grid_extension() -> None:

@@ -99,7 +99,36 @@ class FastPysfWrapper:
         dir_unit = dir_vec / dist if dist != 0 else np.zeros(2)
 
         tau = float(self.sim.config.desired_force_config.relaxation_time)
-        # Compute a robust max_speed without triggering numpy warnings
+        max_speed = self._mean_pedestrian_max_speed()
+        v_des = dir_unit * max_speed
+        f_des = (v_des - np.zeros(2)) / tau
+        f_des = f_des * float(self.sim.config.desired_force_config.factor)
+        return f_des
+
+    def _compute_desired_forces_at_points(
+        self,
+        points: np.ndarray,
+        desired_goal: Sequence[float],
+    ) -> np.ndarray:
+        """Compute desired forces for a batch of 2D query points.
+
+        Returns:
+            Desired-force vectors with shape ``(N, 2)``.
+        """
+        goal = np.asarray(desired_goal, dtype=float).reshape(2)
+        dir_vecs = goal - points
+        distances = np.linalg.norm(dir_vecs, axis=1)
+        dir_units = np.zeros_like(points, dtype=float)
+        nonzero = distances != 0
+        dir_units[nonzero] = dir_vecs[nonzero] / distances[nonzero, np.newaxis]
+
+        tau = float(self.sim.config.desired_force_config.relaxation_time)
+        max_speed = self._mean_pedestrian_max_speed()
+        desired_forces = (dir_units * max_speed) / tau
+        return desired_forces * float(self.sim.config.desired_force_config.factor)
+
+    def _mean_pedestrian_max_speed(self) -> float:
+        """Return the finite positive pedestrian max-speed mean used for desired force."""
         max_speed = 1.0
         try:
             speeds = np.asarray(self.sim.peds.max_speeds, dtype=float)
@@ -108,12 +137,8 @@ class FastPysfWrapper:
                 if np.any(finite):
                     max_speed = float(speeds[finite].mean())
         except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
-            # Fall back to default 1.0 if anything goes wrong in numeric ops
             max_speed = 1.0
-        v_des = dir_unit * max_speed
-        f_des = (v_des - np.zeros(2)) / tau
-        f_des = f_des * float(self.sim.config.desired_force_config.factor)
-        return f_des
+        return max_speed
 
     def _compute_social_force_at_point(self, p: np.ndarray) -> np.ndarray:
         """Compute the repulsive social force from all pedestrians at a point.
@@ -131,6 +156,7 @@ class FastPysfWrapper:
             return total
 
         n, n_prime, lambda_importance, gamma, factor = self._social_params()
+        factor = float(factor)
         for i in range(ped_pos.shape[0]):
             other_pos = ped_pos[i]
             other_vel = ped_vel[i]
@@ -145,13 +171,47 @@ class FastPysfWrapper:
                     float(lambda_importance),
                     float(gamma),
                 )
-                total += np.array([f_x, f_y], dtype=float) * float(factor)
+                f_x *= factor
+                f_y *= factor
+                total[0] += f_x
+                total[1] += f_y
             except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
                 d = p - other_pos
                 r = np.linalg.norm(d)
                 if r > 1e-6:
                     total += (d / (r * r)) * 1.0
         return total
+
+    def _compute_social_forces_at_points(self, points: np.ndarray) -> np.ndarray:
+        """Compute pedestrian-social forces for a batch of 2D query points.
+
+        Returns:
+            Social-force vectors with shape ``(N, 2)``.
+        """
+        forces = np.zeros((points.shape[0], 2), dtype=float)
+        ped_pos, ped_vel = self._ped_positions_and_velocities()
+        if ped_pos.shape[0] == 0:
+            return forces
+
+        n, n_prime, lambda_importance, gamma, factor = self._social_params()
+        factor = float(factor)
+        vel_diffs = -np.asarray(ped_vel, dtype=float)
+        for i, point in enumerate(points):
+            try:
+                pos_diffs = (point - ped_pos).astype(float)
+                force_x, force_y = pf_forces.social_force_single_ped(
+                    pos_diffs,
+                    vel_diffs,
+                    int(n),
+                    int(n_prime),
+                    float(lambda_importance),
+                    float(gamma),
+                )
+                forces[i, 0] = force_x * factor
+                forces[i, 1] = force_y * factor
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+                forces[i] = self._compute_social_force_at_point(point)
+        return forces
 
     def _compute_obstacle_force_at_point(self, p: np.ndarray) -> np.ndarray:
         """Compute the repulsive obstacle force at a given point.
@@ -181,6 +241,31 @@ class FastPysfWrapper:
                 # ignore obstacle errors
                 pass
         return total
+
+    def _compute_obstacle_forces_at_points(self, points: np.ndarray) -> np.ndarray:
+        """Compute obstacle forces for a batch of 2D query points.
+
+        Returns:
+            Obstacle-force vectors with shape ``(N, 2)``.
+        """
+        forces = np.zeros((points.shape[0], 2), dtype=float)
+        raw_obs = self._get_obstacles_raw()
+        if raw_obs is None or len(raw_obs) == 0:
+            return forces
+
+        try:
+            pf_forces.all_obstacle_forces(
+                forces,
+                points.astype(float),
+                np.asarray(raw_obs, dtype=float),
+                float(self.sim.peds.agent_radius),
+            )
+            return forces * float(self.sim.config.obstacle_force_config.factor)
+        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+            return np.asarray(
+                [self._compute_obstacle_force_at_point(point) for point in points],
+                dtype=float,
+            )
 
     def _compute_robot_force_at_point(self, p: np.ndarray, robot_state: dict) -> np.ndarray:
         # Defensive: try common names for robot interaction functions
@@ -237,6 +322,51 @@ class FastPysfWrapper:
 
         return total
 
+    def get_forces_at_points(self, points: Sequence[Sequence[float]], **kwargs) -> np.ndarray:
+        """Compute force vectors for a batch of 2D sample points.
+
+        The batched API preserves ``get_forces_at`` semantics while reusing
+        fast-pysf kernels for social and obstacle contributions. Empty batches
+        return an array with shape ``(0, 2)`` so callers can stack force
+        snapshots safely.
+
+        Returns:
+            Array of force vectors with shape ``(N, 2)``.
+        """
+        points_arr = np.asarray(points, dtype=float)
+        if points_arr.size == 0:
+            return np.zeros((0, 2), dtype=float)
+        if points_arr.ndim == 1:
+            points_arr = points_arr.reshape(1, 2)
+        elif points_arr.shape[-1] != 2:
+            raise ValueError("points must have shape (N, 2)")
+        else:
+            points_arr = points_arr.reshape(-1, 2)
+
+        if set(kwargs) - {"include_desired", "desired_goal", "include_robot", "robot_state"}:
+            return np.asarray(
+                [self.get_forces_at(point, **kwargs) for point in points_arr],
+                dtype=float,
+            )
+
+        include_desired = bool(kwargs.get("include_desired", False))
+        desired_goal = kwargs.get("desired_goal")
+        include_robot = bool(kwargs.get("include_robot", False))
+        robot_state = kwargs.get("robot_state")
+
+        if include_robot and robot_state is not None:
+            return np.asarray(
+                [self.get_forces_at(point, **kwargs) for point in points_arr],
+                dtype=float,
+            )
+
+        forces = np.zeros((points_arr.shape[0], 2), dtype=float)
+        if include_desired and desired_goal is not None:
+            forces += self._compute_desired_forces_at_points(points_arr, desired_goal)
+        forces += self._compute_social_forces_at_points(points_arr)
+        forces += self._compute_obstacle_forces_at_points(points_arr)
+        return forces
+
     def get_force_field(self, xs: Sequence[float], ys: Sequence[float], **kwargs) -> np.ndarray:
         """Sample forces on the grid defined by 1D arrays `xs`, `ys`.
 
@@ -247,7 +377,7 @@ class FastPysfWrapper:
         xs = np.asarray(xs, dtype=float)
         ys = np.asarray(ys, dtype=float)
         pts = np.stack(np.meshgrid(xs, ys), -1).reshape(-1, 2)
-        forces = np.vstack([self.get_forces_at(p, **kwargs) for p in pts])
+        forces = self.get_forces_at_points(pts, **kwargs)
         return forces.reshape(len(ys), len(xs), 2)
 
     def build_force_grid_cache(

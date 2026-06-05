@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CARLA replay diagnostics report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "interpretation_boundary",
+    "capability_matrix",
+    "metric_fields",
+    "unsupported_semantics"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "carla-replay-diagnostics.v1"
+    },
+    "status": {
+      "enum": ["available", "degraded", "not_available"]
+    },
+    "interpretation_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capability_matrix": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostics_row"
+      }
+    },
+    "metric_fields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostics_row"
+      }
+    },
+    "unsupported_semantics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostics_row"
+      }
+    }
+  },
+  "$defs": {
+    "diagnostics_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axis", "status", "robot_sf_value", "carla_value", "reason"],
+      "properties": {
+        "axis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": ["available", "degraded", "not_available", "unsupported"]
+        },
+        "robot_sf_value": {},
+        "carla_value": {},
+        "reason": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

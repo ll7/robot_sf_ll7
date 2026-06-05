@@ -1,0 +1,145 @@
+version: 1
+issue: 2104
+status: retrospective_pilot
+claim_scope: diagnostic_only
+created_at: 2026-06-02
+source_evidence:
+  bundle: docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/README.md
+  table: docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports/seed_variability_by_scenario.csv
+  campaign_id: issue1454-s10-h500-candidates
+  command: >-
+    uv run python scripts/tools/run_camera_ready_benchmark.py --config
+    configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml
+    --campaign-id issue1454-s10-h500-candidates
+  campaign_commit: 4941ac48f1f4e65053bbfcbbc94a55a336fad9ea
+  durable_archive:
+    release: https://github.com/ll7/robot_sf_ll7/releases/tag/artifact/issue1454-s10-h500-candidates-2026-05-23
+    archive: issue1454-s10-h500-candidates-2026-05-23.tar.zst
+    sha256: 44ec1d4eb89d450eb204398a3807185ce9bdd4aae0eeb5e55af0704fd4a8b0fc
+
+scenario_slice:
+  source: issue_1454_s10_h500_candidates
+  horizon: 500
+  scenario_count: 48
+  seed_policy:
+    mode: seed-set
+    seeds:
+      - 111
+      - 112
+      - 113
+      - 114
+      - 115
+      - 116
+      - 117
+      - 118
+      - 119
+      - 120
+  note: >-
+    This pilot reuses already tracked scenario/seed rows. It is not a newly executed
+    one-factor experiment, and interaction effects remain confounded.
+
+metrics:
+  primary:
+    - success
+    - collisions
+    - near_misses
+    - time_to_goal_norm
+  diagnostic:
+    - snqi
+  caveats:
+    - SNQI is diagnostic only for this campaign because the preserved evidence note records an SNQI contract failure.
+    - Runtime is represented by time_to_goal_norm, not wall-clock planner runtime.
+
+candidate_rows:
+  - candidate: hybrid_rule_v3_fast_progress
+    role: base_fast_progress
+    components:
+      progress_pressure: enabled
+      speed_envelope: fast
+      static_escape: disabled
+      continuous_static_checks: disabled
+      scenario_adaptive_orca_selector: disabled
+      collision_guard_overlay: disabled
+
+  - candidate: hybrid_rule_v3_fast_progress_static_escape
+    role: grouped_static_escape
+    components:
+      progress_pressure: enabled
+      speed_envelope: fast
+      static_escape: grouped_static_escape_and_recenter
+      continuous_static_checks: disabled
+      scenario_adaptive_orca_selector: disabled
+      collision_guard_overlay: disabled
+
+  - candidate: hybrid_rule_v3_fast_progress_static_escape_continuous
+    role: grouped_continuous_static_checks
+    components:
+      progress_pressure: enabled
+      speed_envelope: fast
+      static_escape: grouped_static_escape_and_recenter
+      continuous_static_checks: enabled
+      scenario_adaptive_orca_selector: disabled
+      collision_guard_overlay: disabled
+
+  - candidate: scenario_adaptive_hybrid_orca_v1
+    role: scenario_adaptive_orca_selector
+    components:
+      progress_pressure: enabled
+      speed_envelope: fast
+      static_escape: grouped_static_escape_and_recenter
+      continuous_static_checks: disabled
+      scenario_adaptive_orca_selector: enabled
+      collision_guard_overlay: disabled
+
+  - candidate: scenario_adaptive_hybrid_orca_v2_collision_guard
+    role: collision_guard_overlay
+    components:
+      progress_pressure: enabled
+      speed_envelope: fast
+      static_escape: grouped_static_escape_and_recenter
+      continuous_static_checks: disabled
+      scenario_adaptive_orca_selector: enabled
+      collision_guard_overlay: enabled
+
+  - candidate: orca
+    role: selector_reference
+    components:
+      progress_pressure: not_applicable
+      speed_envelope: not_applicable
+      static_escape: not_applicable
+      continuous_static_checks: not_applicable
+      scenario_adaptive_orca_selector: reference_only
+      collision_guard_overlay: not_applicable
+
+comparisons:
+  - id: static_escape_minus_fast_progress
+    a: hybrid_rule_v3_fast_progress_static_escape
+    b: hybrid_rule_v3_fast_progress
+    interpretation: grouped static escape/recenter effect on the fast-progress base.
+
+  - id: continuous_static_checks_minus_static_escape
+    a: hybrid_rule_v3_fast_progress_static_escape_continuous
+    b: hybrid_rule_v3_fast_progress_static_escape
+    interpretation: continuous static-check variant on top of grouped static escape.
+
+  - id: scenario_adaptive_v1_minus_static_escape
+    a: scenario_adaptive_hybrid_orca_v1
+    b: hybrid_rule_v3_fast_progress_static_escape
+    interpretation: scenario-adaptive ORCA selector effect relative to the static-escape hybrid row.
+
+  - id: collision_guard_v2_minus_v1
+    a: scenario_adaptive_hybrid_orca_v2_collision_guard
+    b: scenario_adaptive_hybrid_orca_v1
+    interpretation: collision-guard overlay effect within the scenario-adaptive family.
+
+  - id: scenario_adaptive_v1_minus_orca
+    a: scenario_adaptive_hybrid_orca_v1
+    b: orca
+    interpretation: hybrid selector row versus ORCA reference behavior.
+
+next_execution_step:
+  recommendation: >-
+    If this retrospective pilot is useful, execute a purpose-built one-factor manifest
+    on a smaller scenario slice so static escape, recentering, route guidance, speed,
+    and guard overlays are toggled independently instead of inferred from historical
+    grouped candidates.

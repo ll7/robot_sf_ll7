@@ -38,6 +38,18 @@ class AgentType(Enum):
     PEDESTRIAN = 2
 
 
+def _pedestrian_coords_with_ego(sim: PedSimulator) -> np.ndarray:
+    """Return social pedestrian coordinates followed by ego pedestrian coordinates.
+
+    Returns:
+        np.ndarray: Combined ``(N + 1, 2)`` coordinate array.
+    """
+    combined_positions = getattr(sim, "ped_and_ego_pos", None)
+    if combined_positions is not None:
+        return combined_positions
+    return np.concatenate((sim.ped_pos, np.asarray(sim.ego_ped_pos)[None, :]), axis=0)
+
+
 def make_grid_observation_spaces(
     grid_config: GridConfig,
 ) -> tuple[spaces.Box, dict[str, spaces.Space]]:
@@ -448,8 +460,7 @@ def init_ped_collision_and_sensors(
             get_agent_pose=lambda: sim.robot_poses[0],
             get_goal_coords=lambda: sim.goal_pos[0],
             get_obstacle_coords=sim.get_obstacle_lines,
-            get_pedestrian_coords=lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
-            # Add ego pedestrian to pedestrian positions, np.vstack might lead to performance issues
+            get_pedestrian_coords=lambda: _pedestrian_coords_with_ego(sim),
             agent_radius=robot_config.radius,
             ped_radius=sim_config.ped_radius,
             goal_radius=sim_config.goal_radius,

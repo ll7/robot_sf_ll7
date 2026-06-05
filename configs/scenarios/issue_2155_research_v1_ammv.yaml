@@ -1,0 +1,81 @@
+## Research-v1 AMMV Social-Navigation Scenario Matrix
+#
+# Issue: #2155
+# Purpose: Compact scenario families for reproducible AMV social-navigation
+#   planner comparison.  This is a research-v1 frozen contract, not a
+#   paper-facing or camera-ready release surface.
+#
+# Selection rationale:
+#   - Classic interaction archetypes cover fundamental social navigation
+#     mechanisms at low/medium density.
+#   - Francis 2023 singles add sparse AMV-relevant interactions (blind
+#     corner, narrow passage, intersection negotiation, parallel traffic).
+#   - Higher-density and known-blocked scenarios (socnav_bench assets,
+#     route-clearance excluded rows) are intentionally excluded.
+#
+# Canonical validation:
+#   robot_sf_bench validate-config --matrix configs/scenarios/issue_2155_research_v1_ammv.yaml
+#   robot_sf_bench preview-scenarios --matrix configs/scenarios/issue_2155_research_v1_ammv.yaml
+#
+# See docs/context/issue_2155_research_v1_ammv_matrix.md for the full contract.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - archetypes/classic_bottleneck.yaml
+  - archetypes/classic_doorway.yaml
+  - archetypes/classic_head_on_corridor.yaml
+  - archetypes/classic_overtaking.yaml
+  - archetypes/classic_cross_trap.yaml
+  - archetypes/classic_t_intersection.yaml
+  - archetypes/classic_merging.yaml
+  - archetypes/classic_group_crossing.yaml
+  - archetypes/classic_urban_crossing.yaml
+  - single/francis2023_frontal_approach.yaml
+  - single/francis2023_pedestrian_obstruction.yaml
+  - single/francis2023_blind_corner.yaml
+  - single/francis2023_narrow_hallway.yaml
+  - single/francis2023_narrow_doorway.yaml
+  - single/francis2023_down_path.yaml
+  - single/francis2023_intersection_wait.yaml
+  - single/francis2023_intersection_proceed.yaml
+  - single/francis2023_robot_overtaking.yaml
+  - single/francis2023_pedestrian_overtaking.yaml
+  - single/francis2023_parallel_traffic.yaml
+
+select_scenarios:
+  # Classic bottleneck - narrow constraint navigation
+  - classic_bottleneck_low
+  - classic_bottleneck_medium
+  # Classic doorway - passage negotiation
+  - classic_doorway_low
+  - classic_doorway_medium
+  # Classic head-on corridor - frontal encounter
+  - classic_head_on_corridor_low
+  - classic_head_on_corridor_medium
+  # Classic overtaking - passing slower traffic
+  - classic_overtaking_low
+  # Classic cross-trap - crossing traffic
+  - classic_cross_trap_low
+  # Classic t-intersection - junction
+  - classic_t_intersection_low
+  # Classic merging - merge interaction
+  - classic_merging_low
+  # Classic group crossing - group interaction
+  - classic_group_crossing_low
+  # Classic urban crossing - street crossing
+  - classic_urban_crossing_medium
+  # Francis 2023 - sparse AMV-relevant interactions
+  - francis2023_frontal_approach
+  - francis2023_pedestrian_obstruction
+  - francis2023_blind_corner
+  - francis2023_narrow_hallway
+  - francis2023_narrow_doorway
+  - francis2023_down_path
+  - francis2023_intersection_wait
+  - francis2023_intersection_proceed
+  - francis2023_robot_overtaking
+  - francis2023_pedestrian_overtaking
+  - francis2023_parallel_traffic
+
+map_search_paths:
+  - ../../maps/svg_maps

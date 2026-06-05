@@ -1,0 +1,85 @@
+{
+  "claim_boundary": "Metadata-only quarantine summary; not benchmark evidence and not an artifact publication.",
+  "created_at": "2026-06-05T14:23:43Z",
+  "issue": 2313,
+  "parent_issue": 1764,
+  "rows": [
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "classification": "unavailable",
+      "config_path": "configs/baselines/ppo_issue_791_horizon100_12178.yaml",
+      "decision": "unavailable_recover_or_retire",
+      "field": "model_path",
+      "surface": "local_experimental"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "classification": "unavailable",
+      "config_path": "configs/baselines/ppo_issue_856_all_scenarios_12223.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "field": "model_path",
+      "surface": "local_experimental"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "classification": "unavailable",
+      "config_path": "configs/baselines/sac_gate_socnav_struct.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "field": "model_path",
+      "surface": "local_experimental"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "classification": "unavailable",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "field": "model_path",
+      "surface": "local_experimental"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "classification": "unavailable",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego_multi.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "field": "model_path",
+      "surface": "local_experimental"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "classification": "unavailable",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego_safe.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "field": "model_path",
+      "surface": "local_experimental"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "classification": "unavailable",
+      "config_path": "configs/baselines/drl_vo_default.yaml",
+      "decision": "unavailable_recover_or_retire",
+      "field": "model_path",
+      "surface": "local_experimental"
+    }
+  ],
+  "schema_version": "local-baseline-quarantine-summary.v1",
+  "summary": {
+    "blocked_references": 7,
+    "classification_counts": {
+      "unavailable": 7
+    },
+    "decision_counts": {
+      "unavailable_recover_or_retire": 2,
+      "unavailable_retire_or_rewrite": 5
+    },
+    "missing_artifacts_in_clean_worktree": 7,
+    "total_local_only_references": 7,
+    "unblocked_references": 0
+  }
+}

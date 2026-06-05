@@ -124,6 +124,46 @@ def test_image_sensor_fusion_first_observation_prefills_history() -> None:
     )
 
 
+def test_image_sensor_fusion_history_is_oldest_to_newest() -> None:
+    """ImageSensorFusion should keep earlier rows stable when the current buffer is reused."""
+    robot_obs = spaces.Box(low=-10.0, high=10.0, shape=(2,), dtype=np.float32)
+    target_obs = spaces.Box(low=-10.0, high=10.0, shape=(3,), dtype=np.float32)
+    lidar_obs = spaces.Box(low=0.0, high=10.0, shape=(2,), dtype=np.float32)
+    timesteps = 3
+
+    _norm_space, orig_space = fused_sensor_space(timesteps, robot_obs, target_obs, lidar_obs)
+    lidar_samples = iter(
+        [
+            np.array([0.0, 0.0], dtype=np.float32),
+            np.array([1.0, 1.0], dtype=np.float32),
+        ]
+    )
+    speed_samples = iter([(1.0, 0.0), (2.0, 0.0)])
+    target_samples = iter([(1.0, 0.0, 0.0), (2.0, 0.0, 0.0)])
+    fusion = ImageSensorFusion(
+        lidar_sensor=lambda: next(lidar_samples),
+        robot_speed_sensor=lambda: next(speed_samples),
+        target_sensor=lambda: next(target_samples),
+        image_sensor=None,
+        unnormed_obs_space=orig_space,
+        use_next_goal=True,
+        use_image_obs=False,
+    )
+
+    fusion.next_obs()
+    obs = fusion.next_obs()
+
+    assert np.allclose(obs[OBS_RAYS], [[0.0, 0.0], [0.0, 0.0], [0.1, 0.1]])
+    assert np.allclose(
+        obs[OBS_DRIVE_STATE],
+        [
+            [0.1, 0.0, 0.1, 0.0, 0.0],
+            [0.1, 0.0, 0.1, 0.0, 0.0],
+            [0.2, 0.0, 0.2, 0.0, 0.0],
+        ],
+    )
+
+
 def test_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
     """Reset should clear both cache metadata and concrete temporal stack arrays."""
     robot_obs = spaces.Box(low=-10.0, high=10.0, shape=(2,), dtype=np.float32)

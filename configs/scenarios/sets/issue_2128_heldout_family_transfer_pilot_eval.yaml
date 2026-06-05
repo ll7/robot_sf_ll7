@@ -1,0 +1,11 @@
+# Small held-out scenario-family pilot surface for issue #2128.
+#
+# This set is proposal-grade. It is intentionally narrow so the protocol can be
+# reviewed before running a larger transfer matrix.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_station_platform.yaml
+  - ../single/francis2023_intersection_wait.yaml
+map_search_paths:
+  - ../../../maps/svg_maps

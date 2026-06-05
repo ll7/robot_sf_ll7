@@ -1,0 +1,40 @@
+{
+  "candidate": "hybrid_rule_v3_fast_progress",
+  "claim_boundary": "diagnostic-only",
+  "generated_at": "2026-06-03T18:29:20.359314+00:00",
+  "git_hash": "2159fd43d119d764259814d8f9cbac388fa9a0ca",
+  "horizon": 80,
+  "issue": 2172,
+  "rows": [
+    {
+      "batch_runtime_sec": 86.30838280700846,
+      "batch_workers": 1,
+      "decision": "revise",
+      "episodes": 18,
+      "exit_code": 0,
+      "jobs": 18,
+      "parallel_execution": false,
+      "runtime_sec": 86.31387022102717,
+      "seconds_per_job": 4.795215012279288,
+      "speedup_vs_min_workers": 1.0,
+      "status": "ok",
+      "workers": 1
+    },
+    {
+      "batch_runtime_sec": 48.13376480201259,
+      "batch_workers": 2,
+      "decision": "revise",
+      "episodes": 18,
+      "exit_code": 0,
+      "jobs": 18,
+      "parallel_execution": true,
+      "runtime_sec": 48.139501333003864,
+      "seconds_per_job": 2.674416740722437,
+      "speedup_vs_min_workers": 1.792994688996735,
+      "status": "ok",
+      "workers": 2
+    }
+  ],
+  "schema_version": "robot-sf-benchmark-worker-scaling-profile.v1",
+  "stage": "nominal_sanity"
+}

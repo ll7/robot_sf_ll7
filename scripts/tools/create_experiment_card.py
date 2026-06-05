@@ -39,6 +39,8 @@ REQUIRED_RECORD_FIELDS = (
     "status",
 )
 
+TODO_TRACKED_FIELDS = REQUIRED_RECORD_FIELDS + ("early_stop_criteria",)
+
 TEMPLATE_NAMES = ("benchmark-analysis", "planner-ablation", "figure-table-pack")
 
 ISSUE_URL_TEMPLATE = "https://github.com/ll7/robot_sf_ll7/issues/{issue}"
@@ -58,6 +60,7 @@ class TemplateDef:
     inputs: list[str] | list[dict[str, str]]
     outputs: list[dict[str, str]]
     expected_artifacts: list[dict[str, str]]
+    early_stop_criteria: dict[str, str]
     evidence_grade: str
     paper_relevance: str
     status: str
@@ -171,6 +174,7 @@ def _template_benchmark_analysis(experiment_id: str, output_root: Path) -> Templ
                 "durable_reference_required": False,
             },
         ],
+        early_stop_criteria=_early_stop_criteria_template(),
         evidence_grade="proposal",
         paper_relevance="exploratory",
         status="planned",
@@ -240,6 +244,7 @@ def _template_planner_ablation(experiment_id: str, output_root: Path) -> Templat
                 "durable_reference_required": False,
             },
         ],
+        early_stop_criteria=_early_stop_criteria_template(),
         evidence_grade="proposal",
         paper_relevance="exploratory",
         status="planned",
@@ -307,6 +312,7 @@ def _template_figure_table_pack(experiment_id: str, output_root: Path) -> Templa
                 "durable_reference_required": True,
             },
         ],
+        early_stop_criteria={},
         evidence_grade="proposal",
         paper_relevance="exploratory",
         status="planned",
@@ -324,6 +330,20 @@ _TEMPLATES = {
     "planner-ablation": _template_planner_ablation,
     "figure-table-pack": _template_figure_table_pack,
 }
+
+
+def _early_stop_criteria_template() -> dict[str, str]:
+    """Return the predeclared early-stop block for Slurm training launch packets."""
+    return {
+        "metric": "TODO: primary progress metric, e.g. eval/success_rate",
+        "threshold": "TODO: minimum acceptable value or trend",
+        "check_cadence": "TODO: eval interval or wall-clock cadence",
+        "minimum_runtime_or_timesteps": "TODO: do not cancel before this floor",
+        "cancel_condition": "TODO: exact condition that justifies cancellation",
+        "diagnostic_preservation_action": (
+            "TODO: manifest/log/artifact/context note to preserve before cancellation is complete"
+        ),
+    }
 
 
 def _build_record(
@@ -348,6 +368,7 @@ def _build_record(
         "inputs": tpl.inputs,
         "outputs": tpl.outputs,
         "expected_artifacts": tpl.expected_artifacts,
+        "early_stop_criteria": tpl.early_stop_criteria,
         "evidence_grade": tpl.evidence_grade,
         "paper_relevance": tpl.paper_relevance,
         "status": tpl.status,
@@ -357,22 +378,25 @@ def _build_record(
     return record
 
 
+def _contains_todo(value: Any) -> bool:
+    """Return True when a scaffold value still contains a TODO placeholder."""
+    if isinstance(value, str):
+        return "TODO" in value
+    if isinstance(value, list):
+        return any(_contains_todo(item) for item in value)
+    if isinstance(value, dict):
+        return any(_contains_todo(item) for item in value.values())
+    return False
+
+
 def _find_todo_fields(record: dict[str, Any]) -> list[str]:
     fields: list[str] = []
-    for field_name in REQUIRED_RECORD_FIELDS:
+    for field_name in TODO_TRACKED_FIELDS:
         value = record.get(field_name)
         if value is None:
             fields.append(field_name)
-        elif isinstance(value, str) and "TODO" in value:
+        elif _contains_todo(value):
             fields.append(field_name)
-        elif isinstance(value, list):
-            if any(isinstance(item, str) and "TODO" in item for item in value):
-                fields.append(field_name)
-            elif any(
-                isinstance(item, dict) and any("TODO" in str(v) for v in item.values())
-                for item in value
-            ):
-                fields.append(field_name)
     return fields
 
 
@@ -427,6 +451,7 @@ def _write_checklist(path: Path, todo_fields: list[str], template_name: str) -> 
             "### Evidence Promotion",
             "",
             "- [ ] Run experiment and verify outputs match `expected_artifacts`",
+            "- [ ] Fill `early_stop_criteria` before submitting long Slurm training jobs",
             "- [ ] Promote durable artifacts (W&B / release storage / docs/context/evidence/)",
             "- [ ] Add `durable_reference` to each artifact in the record",
             "- [ ] Update `evidence_grade` (proposal to observed) and `paper_relevance` if applicable",
@@ -436,6 +461,20 @@ def _write_checklist(path: Path, todo_fields: list[str], template_name: str) -> 
             "",
             "  Local `output/` paths are disposable worktree artifacts.",
             "  Until `durable_reference` is set, these are not paper-facing evidence.",
+            "",
+            "### Slurm Early-Stop Criteria",
+            "",
+            "Before submitting a long Slurm training job, predeclare:",
+            "",
+            "- [ ] metric",
+            "- [ ] threshold",
+            "- [ ] check cadence",
+            "- [ ] minimum runtime or timesteps",
+            "- [ ] cancel condition",
+            "- [ ] diagnostic preservation action",
+            "",
+            "A cancelled run can be useful diagnostic evidence only when the stop rule was",
+            "predeclared and the logs, manifest, config, commit, and relevant outputs are preserved.",
             "",
             "### Update Flow",
             "",

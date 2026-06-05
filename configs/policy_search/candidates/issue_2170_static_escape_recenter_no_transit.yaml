@@ -1,0 +1,20 @@
+name: issue_2170_static_escape_recenter_no_transit
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  max_linear_speed: 3.0
+  max_linear_accel: 3.0
+  static_clearance_escape_enabled: true
+  static_clearance_escape_min_clearance: 1.0
+  static_clearance_escape_max_speed: 0.3
+  static_clearance_escape_tolerance: 0.05
+  static_recenter_enabled: true
+  static_recenter_weight: 0.7
+  static_recenter_probe_speed: 0.3
+  static_corridor_transit_enabled: false
+  corridor_subgoal_enabled: false
+  continuous_static_clearance_enabled: false
+scenario_overrides:
+  francis2023_perpendicular_traffic:
+    very_slow_speed: 0.6
+    static_clearance_escape_max_speed: 0.6

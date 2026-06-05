@@ -49,12 +49,12 @@ def test_resume_identity_is_algorithm_aware(
         )
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
-    def _fake_write(_out: Path, _schema: dict, record: dict[str, str]) -> None:
+    def _fake_write(_handle, _schema: dict, record: dict[str, str]) -> None:
         """Record written episode IDs without touching JSONL output."""
         written_ids.add(record["episode_id"])
 
     monkeypatch.setattr(map_runner, "_run_map_job_worker", _fake_worker)
-    monkeypatch.setattr(map_runner, "_write_validated", _fake_write)
+    monkeypatch.setattr(map_runner, "_write_validated_to_handle", _fake_write)
 
     out_path = tmp_path / "episodes.jsonl"
     out_path.write_text("", encoding="utf-8")
@@ -123,7 +123,7 @@ def test_resume_identity_uses_identity_algo_observation_mode(
         "_run_map_job_worker",
         lambda job: runs.append(job) or {"algorithm_metadata": {}},
     )
-    monkeypatch.setattr(map_runner, "_write_validated", lambda *args, **kwargs: None)
+    monkeypatch.setattr(map_runner, "_write_validated_to_handle", lambda *args, **kwargs: None)
 
     monkeypatch.setattr(
         map_runner,
@@ -191,7 +191,7 @@ def test_resume_identity_uses_identity_algo_observation_level(
         "_run_map_job_worker",
         lambda job: runs.append(job) or {"algorithm_metadata": {}},
     )
-    monkeypatch.setattr(map_runner, "_write_validated", lambda *args, **kwargs: None)
+    monkeypatch.setattr(map_runner, "_write_validated_to_handle", lambda *args, **kwargs: None)
 
     monkeypatch.setattr(
         map_runner,
@@ -241,12 +241,12 @@ def test_resume_identity_includes_algo_config_hash(
         )
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
-    def _fake_write(_out: Path, _schema: dict, record: dict[str, str]) -> None:
+    def _fake_write(_handle, _schema: dict, record: dict[str, str]) -> None:
         """Record written episode IDs for resume-index simulation."""
         written_ids.add(record["episode_id"])
 
     monkeypatch.setattr(map_runner, "_run_map_job_worker", _fake_worker)
-    monkeypatch.setattr(map_runner, "_write_validated", _fake_write)
+    monkeypatch.setattr(map_runner, "_write_validated_to_handle", _fake_write)
 
     cfg_a = tmp_path / "algo_a.yaml"
     cfg_b = tmp_path / "algo_b.yaml"
@@ -416,12 +416,12 @@ def test_resume_identity_uses_effective_latency_profile_dt(
         )
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
-    def _fake_write(_out: Path, _schema: dict, record: dict[str, str]) -> None:
+    def _fake_write(_handle, _schema: dict, record: dict[str, str]) -> None:
         """Record written episode IDs without touching JSONL output."""
         written_ids.add(record["episode_id"])
 
     monkeypatch.setattr(map_runner, "_run_map_job_worker", _fake_worker)
-    monkeypatch.setattr(map_runner, "_write_validated", _fake_write)
+    monkeypatch.setattr(map_runner, "_write_validated_to_handle", _fake_write)
 
     out_path = tmp_path / "episodes.jsonl"
     out_path.write_text("", encoding="utf-8")
@@ -538,12 +538,12 @@ def test_resume_identity_uses_identity_benchmark_track(
         )
         return {"episode_id": map_runner._compute_map_episode_id(identity_payload, int(seed))}
 
-    def _fake_write(_out: Path, _schema: dict, record: dict[str, str]) -> None:
+    def _fake_write(_handle, _schema: dict, record: dict[str, str]) -> None:
         """Record written episode IDs without touching JSONL output."""
         written_ids.add(record["episode_id"])
 
     monkeypatch.setattr(map_runner, "_run_map_job_worker", _fake_worker)
-    monkeypatch.setattr(map_runner, "_write_validated", _fake_write)
+    monkeypatch.setattr(map_runner, "_write_validated_to_handle", _fake_write)
 
     out_path = tmp_path / "episodes.jsonl"
     out_path.write_text("", encoding="utf-8")

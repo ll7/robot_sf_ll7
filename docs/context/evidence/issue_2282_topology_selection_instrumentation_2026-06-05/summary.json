@@ -1,0 +1,62 @@
+{
+  "issue": 2282,
+  "date": "2026-06-05",
+  "classification": "topology_selection_score_instrumentation_smoke",
+  "evidence_tier": "smoke",
+  "claim_boundary": "Instrumentation-only evidence; not planner mitigation, benchmark-strength planner performance evidence, or paper-facing evidence.",
+  "source_issue": 2258,
+  "candidate": "topology_guided_hybrid_rule_v0",
+  "scenario_id": "classic_realworld_double_bottleneck_high",
+  "seed": 111,
+  "horizon": 160,
+  "diagnostic_status": "diagnostic_complete",
+  "topology_status_counts": {
+    "insufficient_hypotheses": 70,
+    "ok": 90
+  },
+  "selected_source_counts": {
+    "dynamic_window": 121,
+    "path_follow_0.5m": 2,
+    "route_guide": 4,
+    "topology_hypothesis": 33
+  },
+  "new_fields": [
+    "score_components.length_penalty",
+    "score_components.static_clearance_bonus",
+    "score_rank",
+    "score_margin_to_selected",
+    "selection_outcome",
+    "rejection_reason",
+    "summary.topology_selection_score_examples"
+  ],
+  "score_example_count": 10,
+  "first_score_example": {
+    "step": 1,
+    "hypotheses": [
+      {
+        "hypothesis_id": "primary_route",
+        "score": -14.828023294990286,
+        "score_rank": 0,
+        "score_margin_to_selected": 0.0,
+        "score_components": {
+          "length_penalty": -14.948023296778425,
+          "static_clearance_bonus": 0.12000000178813934
+        },
+        "selection_outcome": "selected",
+        "rejection_reason": null
+      },
+      {
+        "hypothesis_id": "masked_cell_71_87",
+        "score": -15.296652452074925,
+        "score_rank": 1,
+        "score_margin_to_selected": 0.4686291570846386,
+        "score_components": {
+          "length_penalty": -15.416652453863064,
+          "static_clearance_bonus": 0.12000000178813934
+        },
+        "selection_outcome": "rejected",
+        "rejection_reason": "lower_topology_selection_score"
+      }
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+schema_version: experiment-record.v1
+experiment_id: issue_1470_oracle_imitation_dataset_collection
+issue: 1470
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/1470
+question: >
+  Can the issue #1397 oracle-imitation launch packet produce a durable, leakage-safe oracle
+  trajectory dataset for the declared train, validation, and evaluation split contract?
+hypothesis: >
+  The hybrid_rule_v3_static_margin0_waypoint2 oracle source can generate the planned oracle
+  imitation dataset if the launch packet validates at the collection commit, train seeds remain
+  disjoint from validation/evaluation and paper_eval_s20, and generated artifacts are promoted with
+  checksums and durable pointers.
+config:
+  - configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+  - configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+  - configs/benchmarks/seed_sets_v1.yaml
+command: |
+  uv run python scripts/validation/validate_oracle_imitation_launch_packet.py \
+    --config configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml \
+    --json
+  # Submit only on a SLURM-capable worker after recording the exact collection commit,
+  # durable artifact destination, output root, and stdout/stderr paths:
+  uv run python scripts/training/collect_expert_trajectories.py \
+    --dataset-id issue_1397_oracle_imitation_v1 \
+    --policy-id hybrid_rule_v3_static_margin0_waypoint2 \
+    --scenario-config configs/policy_search/nominal_sanity_matrix.yaml \
+    --seeds 201 202 203 204 205 206
+inputs:
+  - path: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+  - path: docs/context/issue_1397_oracle_imitation_launch_packet.md
+  - path: docs/context/policy_search/contracts/oracle_imitation_dataset_split.md
+outputs:
+  - path: output/datasets/issue_1397_oracle_imitation_v1/
+    durable_reference: null
+    evidence_role: local staging only until promoted
+expected_artifacts:
+  - name: dataset_manifest
+    path: output/datasets/issue_1397_oracle_imitation_v1/manifest.yaml
+    durable_reference_required: true
+  - name: dataset_npz
+    path: output/datasets/issue_1397_oracle_imitation_v1/dataset.npz
+    durable_reference_required: true
+  - name: dataset_checksum
+    path: output/datasets/issue_1397_oracle_imitation_v1/checksums.sha256
+    durable_reference_required: true
+  - name: split_leakage_validation
+    path: output/datasets/issue_1397_oracle_imitation_v1/split_leakage_validation.json
+    durable_reference_required: true
+evidence_grade: proposal
+paper_relevance: exploratory
+status: blocked_on_slurm
+notes: >
+  This card is a launch packet only. Issue #1470 remains blocked until a SLURM-capable worker,
+  exact collection commit, and durable dataset destination are recorded. Generated worktree-local
+  output is not benchmark or training evidence until the manifest, checksums, split/leakage proof,
+  and artifact pointers exist.

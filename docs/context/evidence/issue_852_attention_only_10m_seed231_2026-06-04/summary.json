@@ -2,7 +2,7 @@
   "artifact_status": {
     "durable_external_pointer": "https://wandb.ai/ll7/robot_sf/runs/28w3leex",
     "local_output_is_durable": false,
-    "local_output_root": "output/slurm/issue791-attention-head-job-12730"
+    "local_output_root": "gitignored local Slurm job output for job 12730; see SHA256SUMS for source-artifact checksums"
   },
   "branch": "gse-852-asym10m-s123",
   "commit": "ddcf48a2",

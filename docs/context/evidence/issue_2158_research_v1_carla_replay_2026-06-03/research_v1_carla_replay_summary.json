@@ -1,0 +1,90 @@
+{
+  "aggregate_status_counts": {
+    "available": 12,
+    "degraded": 10,
+    "not_available": 35,
+    "unsupported": 6
+  },
+  "cases": [
+    {
+      "capability_status_counts": {
+        "available": 4,
+        "not_available": 6
+      },
+      "case_id": "native_metric_probe",
+      "interpretation_boundary": "Diagnostics classify comparability surfaces only; they are not simulator-equivalence or benchmark-transfer evidence by themselves.",
+      "metric_status_counts": {
+        "available": 3,
+        "not_available": 6
+      },
+      "report": "docs/context/evidence/issue_2158_research_v1_carla_replay_2026-06-03/native_metric_probe/carla_replay_diagnostics.json",
+      "source_issue": 1467,
+      "status": "available",
+      "unsupported_semantics": [
+        "sensor_perception_replay",
+        "broad_simulator_equivalence"
+      ]
+    },
+    {
+      "capability_status_counts": {
+        "available": 3,
+        "not_available": 7
+      },
+      "case_id": "native_spawn_probe",
+      "interpretation_boundary": "Diagnostics classify comparability surfaces only; they are not simulator-equivalence or benchmark-transfer evidence by themselves.",
+      "metric_status_counts": {
+        "not_available": 9
+      },
+      "report": "docs/context/evidence/issue_2158_research_v1_carla_replay_2026-06-03/native_spawn_probe/carla_replay_diagnostics.json",
+      "source_issue": 1442,
+      "status": "available",
+      "unsupported_semantics": [
+        "sensor_perception_replay",
+        "broad_simulator_equivalence"
+      ]
+    },
+    {
+      "capability_status_counts": {
+        "available": 2,
+        "degraded": 1,
+        "not_available": 7
+      },
+      "case_id": "pr_promoted_fixture",
+      "interpretation_boundary": "Diagnostics classify comparability surfaces only; they are not simulator-equivalence or benchmark-transfer evidence by themselves.",
+      "metric_status_counts": {
+        "degraded": 9
+      },
+      "report": "docs/context/evidence/issue_2158_research_v1_carla_replay_2026-06-03/pr_promoted_fixture/carla_replay_diagnostics.json",
+      "source_issue": 1509,
+      "status": "degraded",
+      "unsupported_semantics": [
+        "sensor_perception_replay",
+        "broad_simulator_equivalence"
+      ]
+    }
+  ],
+  "claim_boundary": "transfer-boundary diagnostic evidence only; not CARLA parity proof and not benchmark success evidence",
+  "inputs": {
+    "native_metric_probe": {
+      "carla": "docs/context/evidence/issue_1467_carla_replay_metrics_2026-05-24/live_replay_native_metric_probe.json",
+      "robot_sf": "docs/context/evidence/issue_1467_carla_replay_metrics_2026-05-24/robot_sf_metrics_reference.json",
+      "source_issue": 1467
+    },
+    "native_spawn_probe": {
+      "carla": "docs/context/evidence/issue_1442_carla_native_spawn_probe_2026-05-24/live_replay_native_probe.json",
+      "robot_sf": "docs/context/evidence/issue_1442_carla_native_spawn_probe_2026-05-24/robot_sf_metrics_reference.json",
+      "source_issue": 1442
+    },
+    "pr_promoted_fixture": {
+      "carla": "docs/context/evidence/issue_1509_carla_native_fixture_2026-05-31/live_replay_pr_promoted.json",
+      "robot_sf": "docs/context/evidence/issue_1509_carla_native_fixture_2026-05-31/t0/pr_promoted_planner_smoke.json",
+      "source_issue": 1509
+    }
+  },
+  "issue": 2158,
+  "schema_version": "research_v1_carla_replay_diagnostic_pack.v1",
+  "unsupported_semantic_counts": {
+    "broad_simulator_equivalence": 3,
+    "sensor_perception_replay": 3
+  }
+}

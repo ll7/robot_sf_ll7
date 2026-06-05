@@ -1,0 +1,117 @@
+{
+  "ammv_config": "configs/baselines/social_force_ammv_aware.yaml",
+  "benchmark_evidence": false,
+  "benchmark_probe": {
+    "ammv_social_force": {
+      "ammv_metadata_present": false,
+      "avg_speed_mean_mps": 1.215808440582241,
+      "collision_count_total": 0,
+      "episode_count": 3,
+      "execution_modes": [
+        "adapter"
+      ],
+      "mean_clearance_mean_m": 13.675172417469673,
+      "min_clearance_min_m": 0.48436720607506123,
+      "ped_force_mean_mean": 0.3837889479541881,
+      "ped_force_q95_mean": 1.3521642322040668,
+      "scenario_ids": [
+        "classic_head_on_corridor_low"
+      ],
+      "seeds": [
+        111,
+        112,
+        113
+      ],
+      "sha256": "1b1660f42f42fc3f82692b01da7fc99db4dcb271c02c3c2ac42f1240ab4a3902",
+      "source_label": "worktree-local-ammv-jsonl",
+      "source_note": "worktree-local disposable benchmark JSONL; tracked evidence keeps checksum only",
+      "status_counts": {
+        "failure": 3
+      },
+      "success_rate": 0.0
+    },
+    "default_social_force": {
+      "ammv_metadata_present": false,
+      "avg_speed_mean_mps": 1.215808440582241,
+      "collision_count_total": 0,
+      "episode_count": 3,
+      "execution_modes": [
+        "adapter"
+      ],
+      "mean_clearance_mean_m": 13.675172417469673,
+      "min_clearance_min_m": 0.48436720607506123,
+      "ped_force_mean_mean": 0.3837889479541881,
+      "ped_force_q95_mean": 1.3521642322040668,
+      "scenario_ids": [
+        "classic_head_on_corridor_low"
+      ],
+      "seeds": [
+        111,
+        112,
+        113
+      ],
+      "sha256": "80c11120f0521c7a4d1a59361bf45cae3eb9d4b021af883909d4b5292588a7f6",
+      "source_label": "worktree-local-default-jsonl",
+      "source_note": "worktree-local disposable benchmark JSONL; tracked evidence keeps checksum only",
+      "status_counts": {
+        "failure": 3
+      },
+      "success_rate": 0.0
+    }
+  },
+  "classification": "diagnostic",
+  "commands": {
+    "ammv_run": "uv run robot_sf_bench run --matrix configs/scenarios/issue_2168_ammv_social_force_pair.yaml --out <worktree-local-ammv-jsonl> --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --record-forces --no-video --video-renderer none --algo social_force --algo-config configs/baselines/social_force_ammv_aware.yaml --workers 1 --no-resume --structured-output json",
+    "default_run": "uv run robot_sf_bench run --matrix configs/scenarios/issue_2168_ammv_social_force_pair.yaml --out <worktree-local-default-jsonl> --base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --record-forces --no-video --video-renderer none --algo social_force --workers 1 --no-resume --structured-output json",
+    "preview": "uv run robot_sf_bench preview-scenarios --matrix configs/scenarios/issue_2168_ammv_social_force_pair.yaml",
+    "validate": "uv run robot_sf_bench validate-config --matrix configs/scenarios/issue_2168_ammv_social_force_pair.yaml"
+  },
+  "git_head": "636bb1061b31720728cb5b6f61a2ba47c9474ae4",
+  "limitations": [
+    "One selected diagnostic slice only; no benchmark-strength or paper-facing claim.",
+    "Benchmark runner episode records did not surface AMMV force/intrusion metadata.",
+    "Both planner rows ran in adapter mode under differential-drive benchmark execution.",
+    "Pedestrian lateral deviation and speed adaptation are unsupported by the direct robot-planner mechanism probe."
+  ],
+  "mechanism_probe": {
+    "dt": 0.1,
+    "name": "issue_2168_close_front_agent_probe",
+    "paired_delta": {
+      "final_robot_lateral_offset_m": 0.20105900578397903,
+      "max_abs_lateral_velocity_mps": -0.21487587760444726,
+      "mean_robot_speed_mps": -0.07693660565437543,
+      "min_robot_ped_clearance_m": 0.03567658214654895
+    },
+    "seed": 42,
+    "status": "diagnostic",
+    "steps": 20,
+    "traces": {
+      "ammv_social_force": {
+        "final_robot_lateral_offset_m": 0.41024412665149007,
+        "interaction_duration_steps_clearance_lt_0p5m": 11,
+        "max_abs_lateral_velocity_mps": 1.7845429077305992,
+        "max_ammv_force_magnitude": 2.6418021882844833,
+        "max_intrusion_count": 1,
+        "mean_robot_speed_mps": 1.923063393516744,
+        "min_robot_ped_clearance_m": -0.12227633087863654
+      },
+      "default_social_force": {
+        "final_robot_lateral_offset_m": 0.20918512086751104,
+        "interaction_duration_steps_clearance_lt_0p5m": 9,
+        "max_abs_lateral_velocity_mps": 1.9994187853350465,
+        "max_ammv_force_magnitude": 0.0,
+        "max_intrusion_count": 0,
+        "mean_robot_speed_mps": 1.9999999991711195,
+        "min_robot_ped_clearance_m": -0.1579529130251855
+      }
+    },
+    "unsupported_requested_fields": {
+      "pedestrian_lateral_deviation": "unsupported: SocialForcePlanner is a robot planner and does not update pedestrian trajectories in this direct mechanism probe",
+      "pedestrian_speed_adaptation": "unsupported: pedestrian dynamics are simulator-owned, not planner-owned"
+    }
+  },
+  "paper_facing": false,
+  "scenario_config": "configs/scenarios/issue_2168_ammv_social_force_pair.yaml",
+  "scenario_id": "classic_head_on_corridor_low",
+  "schema_version": "issue_2168_ammv_social_force_pair_diagnostic.v1"
+}

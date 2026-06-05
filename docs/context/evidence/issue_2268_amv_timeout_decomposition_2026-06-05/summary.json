@@ -1,0 +1,70 @@
+{
+  "issue": 2268,
+  "date": "2026-06-05",
+  "classification": "route_progress_blocker_with_feasibility_improvement",
+  "evidence_tier": "analysis_only",
+  "claim_boundary": "Diagnostic-only analysis of one synthetic AMV actuation smoke row; not benchmark-strength, hardware-calibrated, safety, or paper-facing evidence.",
+  "source_issue": 2224,
+  "source_pr": 2249,
+  "stage": "amv_actuation_smoke",
+  "scenario_filter": [
+    "classic_cross_trap_high"
+  ],
+  "synthetic_actuation_profile": "amv-actuation-stress-v0",
+  "rows": [
+    {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "episodes": 1,
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "failure_mode": "timeout_low_progress",
+      "failure_count": 1,
+      "mean_command_clip_fraction": 0.275,
+      "mean_yaw_rate_saturation_fraction": 0.0,
+      "mean_signed_braking_peak_m_s2": -2.5,
+      "mean_avg_speed": 1.662309936770821,
+      "mean_min_distance": 2.157113073697281
+    },
+    {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "episodes": 1,
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "failure_mode": "timeout_low_progress",
+      "failure_count": 1,
+      "mean_command_clip_fraction": 0.1875,
+      "mean_yaw_rate_saturation_fraction": 0.0,
+      "mean_signed_braking_peak_m_s2": -2.5,
+      "mean_avg_speed": 1.667037499328765,
+      "mean_min_distance": 2.3627177685565335
+    }
+  ],
+  "delta_actuation_aware_vs_fast_progress": {
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "mean_command_clip_fraction": -0.0875,
+    "mean_yaw_rate_saturation_fraction": 0.0,
+    "mean_signed_braking_peak_m_s2": 0.0,
+    "mean_avg_speed": 0.004727562557943961,
+    "mean_min_distance": 0.2056046948592529
+  },
+  "timeout_classification": {
+    "likely_blocker": "route_progress",
+    "confidence": 0.72,
+    "observed_evidence": [
+      "both candidates ended with timeout_low_progress",
+      "both candidates had zero success",
+      "command clipping improved for the actuation-aware candidate",
+      "mean average speed, yaw saturation, and signed braking peak were effectively unchanged"
+    ],
+    "missing_evidence": [
+      "per-step route-progress time series",
+      "per-step command-feasibility and saturation traces",
+      "deadlock or oscillation feature timeline"
+    ]
+  },
+  "recommendation": "Keep actuation_aware_hybrid_rule_v0 diagnostic-only; add or preserve trace-level route-progress and command-feasibility signals before proposing broader AMV actuation variants or benchmark claims."
+}

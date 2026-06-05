@@ -778,12 +778,12 @@ old eager-`srun` path. Treat this as the active `goal-slurm-experiment` training
 finishes, then compare seed-231 attention-only against seed-123 attention-only and the leader-family
 replicas before making any promotion claim.
 
-Completion update on 2026-06-04: job `12730` completed successfully in 14h57m03s. The final 10M
-checkpoint was also the best checkpoint: success `0.8857`, collision `0.1143`, SNQI `0.1439`, eval
-return `22.31`. This matches the seed-123 attention-only best success/collision (`0.8857` /
-`0.1143`) with slightly lower SNQI (`0.1439` vs `0.1513`). Treat this as useful attention-only
-replication evidence, not a promotion claim, because the strict convergence target still fails on
-collision. Compact provenance is tracked in
+Completion update at 2026-06-03T21:30:51 UTC: job `12730` completed successfully in 14h57m03s. The
+final 10M checkpoint was also the best checkpoint: success `0.8857`, collision `0.1143`, SNQI
+`0.1439`, eval return `22.31`. This matches the seed-123 attention-only best success/collision
+(`0.8857` / `0.1143`) with slightly lower SNQI (`0.1439` vs `0.1513`). Treat this as useful
+attention-only replication evidence, not a promotion claim, because the strict convergence target
+still fails on collision. Compact provenance is tracked in
 `docs/context/evidence/issue_852_attention_only_10m_seed231_2026-06-04/`.
 
 Queue-fill update on 2026-06-04: the next `goal-slurm-experiment` slot was assigned to
@@ -795,12 +795,12 @@ Job `12746` (`gse-852-attn1337`) was submitted from branch `gse-852-asym10m-s123
 attention launcher runs directly inside the batch allocation. Treat this as the active
 `goal-slurm-experiment` training lane until it finishes.
 
-Completion update on 2026-06-05: job `12746` completed successfully in 16h44m30s. The final 10M
-checkpoint was also the best checkpoint: success `0.8714`, collision `0.1286`, SNQI `0.0544`, eval
-return `21.91`. This is weaker than attention-only seeds 123 and 231, which both reached `0.8857`
-success / `0.1143` collision. The three-seed band still supports attention-only as a strong
-single-factor mechanism, but not as a converged promotion candidate because all three seeds miss the
-strict collision target. Compact provenance is tracked in
+Completion update at 2026-06-04T22:39:23 UTC: job `12746` completed successfully in 16h44m30s. The
+final 10M checkpoint was also the best checkpoint: success `0.8714`, collision `0.1286`, SNQI
+`0.0544`, eval return `21.91`. This is weaker than attention-only seeds 123 and 231, which both
+reached `0.8857` success / `0.1143` collision. The three-seed band still supports attention-only as a
+strong single-factor mechanism, but not as a converged promotion candidate because all three seeds
+miss the strict collision target. Compact provenance is tracked in
 `docs/context/evidence/issue_852_attention_only_10m_seed1337_2026-06-05/`.
 
 Verification on 2026-04-29:

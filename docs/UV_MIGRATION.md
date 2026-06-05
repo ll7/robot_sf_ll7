@@ -66,8 +66,8 @@ This document outlines the migration from the old pip/requirements.txt setup to 
 ```bash
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
-# or
-pip install uv
+# or install with Homebrew on macOS
+brew install uv
 ```
 
 ### 2. Remove old virtual environment (if exists)

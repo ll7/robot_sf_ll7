@@ -1,4 +1,4 @@
-# Issue 852 attention-only 10M seed-1337 run
+# Issue #852 Attention-Only 10M Seed-1337 Run
 
 This directory records compact, reviewable provenance for the issue #852 attention-only 10M
 seed-1337 run submitted to complete the three-seed attention-only variance band after seeds 123 and

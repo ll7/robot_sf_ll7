@@ -1,0 +1,19 @@
+name: issue_2170_scenario_adaptive_orca_selector_only
+algo: hybrid_rule_local_planner
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  max_linear_speed: 3.0
+  max_linear_accel: 3.0
+scenario_overrides:
+  francis2023_perpendicular_traffic:
+    very_slow_speed: 0.6
+scenario_algo_overrides:
+  francis2023_leave_group:
+    algo: orca
+    base_config_path: configs/algos/issue707_orca_tuned.yaml
+    params:
+      max_linear_speed: 1.15
+      orca_time_horizon: 5.0
+      orca_obstacle_margin: 0.14
+      orca_symmetry_bias: 0.22
+      orca_head_on_bias: 0.30

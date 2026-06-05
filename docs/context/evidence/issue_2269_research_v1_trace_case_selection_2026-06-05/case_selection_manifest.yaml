@@ -1,0 +1,184 @@
+schema_version: research_v1_trace_case_selection.v1
+issue: 2269
+parent_issue: 2159
+created_at: "2026-06-05"
+status: diagnostic_case_selection
+claim_boundary: case_selection_only_not_rendered_analysis
+paper_facing: false
+summary:
+  selected_case_count: 5
+  durable_case_ready_count: 3
+  amv_specific_blocked_count: 2
+  stop_condition_triggered: false
+  reason: >-
+    At least three durable compact trace-slice cases exist, so the manifest selects them and also
+    records two higher-priority AMV-specific research-v1 cases that need renderable trace exports.
+cases:
+  - id: ammv_head_on_corridor_mechanism_activation
+    claim_id: research-v1.amv.model_behavior
+    priority: 1
+    durable_case_ready: false
+    case_status: selected_blocked_on_renderable_trace_export
+    scenario_id: classic_head_on_corridor_low
+    planners_or_variants: [default_social_force, ammv_social_force]
+    seeds: [111, 112, 113]
+    row_status: diagnostic_adapter_rows_failed_direct_mechanism_probe_activated
+    reason_selected: >-
+      This is the closest research-v1 AMV-specific mechanism case: adapter-mode benchmark rows were
+      identical failures, but the direct SocialForcePlanner probe activated the AMMV force term and
+      changed robot lateral behavior.
+    source_evidence:
+      - docs/context/issue_2153_research_v1_evidence_map.md
+      - docs/context/issue_2168_ammv_social_force_pair_diagnostic.md
+      - docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/summary.json
+      - docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/README.md
+    durable_inputs_present:
+      - compact diagnostic summary
+      - direct mechanism probe metrics
+      - checksums for disposable benchmark JSONL inputs
+    missing_render_inputs:
+      - matched simulation_trace_export.v1 traces for default and AMMV variants
+      - AMMV metadata surfaced through executable benchmark rows
+      - pedestrian lateral-deviation and speed-adaptation traces
+    required_render_inputs:
+      - durable://research_v1_trace_review/ammv_head_on_corridor/default_social_force_trace.json
+      - durable://research_v1_trace_review/ammv_head_on_corridor/ammv_social_force_trace.json
+    recommended_next_action: >-
+      Add or export AMMV-aware benchmark traces that preserve force/intrusion metadata before
+      rendering this case.
+    claim_boundary: diagnostic mechanism activation only; not benchmark or paper evidence
+  - id: amv_cross_trap_hazard_odd_slice
+    claim_id: research-v1.amv.scenario_criticality
+    priority: 2
+    durable_case_ready: false
+    case_status: selected_blocked_on_trace_slice_export
+    scenario_id: classic_cross_trap_low
+    planners_or_variants:
+      - goal
+      - orca
+      - social_force
+      - ppo
+      - prediction_planner
+      - sacadrl
+      - socnav_sampling
+    seeds: [111]
+    row_status: candidate_coverage_slice_non_caveated_rows
+    reason_selected: >-
+      This is the strongest research-v1 AMV scenario-criticality slice: Issue #2164 links
+      cross-trap executed rows to hazard, ODD, and scenario-contract coverage, but it does not yet
+      preserve a trace-review slice.
+    source_evidence:
+      - docs/context/issue_2153_research_v1_evidence_map.md
+      - docs/context/evidence/issue_2164_amv_hazard_odd_join_2026-06-03/hazard_odd_coverage_summary.json
+      - docs/context/evidence/issue_2164_amv_hazard_odd_join_2026-06-03/hazard_coverage_table.csv
+      - docs/context/evidence/issue_2164_amv_hazard_odd_join_2026-06-03/scenario_contract_table.csv
+      - docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/campaign_summary.json
+    durable_inputs_present:
+      - hazard and ODD coverage summary
+      - scenario contract table
+      - compact cross-kinematics campaign reports
+    missing_render_inputs:
+      - selected per-planner trace slices for classic_cross_trap_low
+      - qualitative frame ranges for a failure/safety case
+      - trace-viewer annotation set
+    required_render_inputs:
+      - durable://research_v1_trace_review/amv_cross_trap/selected_trace_slices.json
+      - durable://research_v1_trace_review/amv_cross_trap/annotation_set.json
+    recommended_next_action: >-
+      Select one or two planner rows from the non-caveated cross-trap evidence and export compact
+      closest-approach or simulation_trace_export.v1 slices before rendering.
+    claim_boundary: selected-scenario coverage only; not full matrix or paper-ready evidence
+  - id: head_on_corridor_route_offset_response
+    claim_id: research-v1.amv.failure_case_review
+    priority: 3
+    durable_case_ready: true
+    case_status: selected_trace_slices_available
+    scenario_id: classic_head_on_corridor_low
+    planners_or_variants: [goal, orca, scenario_adaptive_hybrid_orca_v2_collision_guard]
+    seeds: [111, 112, 113, 114]
+    row_status: completed_trace_pairs
+    reason_selected: >-
+      Provides a durable route-offset trace-response case over the same head-on corridor family
+      used by AMMV diagnostics, with 12 completed no-op-versus-perturbed trace pairs.
+    source_evidence:
+      - docs/context/issue_1939_corridor_trace_response.md
+      - docs/context/evidence/issue_1939_corridor_trace_response_2026-05-31/closest_approach_trace_slices.json
+      - docs/context/evidence/issue_1939_corridor_trace_response_2026-05-31/report.md
+    durable_inputs_present:
+      - compact closest-approach trace slices
+      - no-op and perturbed frame windows
+      - planner, seed, termination, and delta metadata
+    missing_render_inputs:
+      - trace-viewer annotation set
+      - rendered case report
+    required_render_inputs:
+      - docs/context/evidence/issue_1939_corridor_trace_response_2026-05-31/closest_approach_trace_slices.json
+      - durable://research_v1_trace_review/head_on_corridor_route_offset/annotation_set.json
+    recommended_next_action: >-
+      Use this as a first render/review child because durable compact trace slices already exist.
+    claim_boundary: diagnostic local trace inspection only
+  - id: leave_group_speed_outcome_flip
+    claim_id: research-v1.amv.failure_case_review
+    priority: 4
+    durable_case_ready: true
+    case_status: selected_trace_slices_available
+    scenario_id: francis2023_leave_group
+    planners_or_variants: [orca]
+    seeds: [258, 259, 260]
+    row_status: completed_trace_pairs_with_one_collision_to_success_flip
+    reason_selected: >-
+      Durable ORCA speed-offset trace slices include a seed where the no-op row collided and the
+      perturbed row succeeded, giving the pack a concrete outcome-flip candidate.
+    source_evidence:
+      - docs/context/issue_1945_orca_leave_group_speed_trace.md
+      - docs/context/evidence/issue_1945_orca_leave_group_speed_trace_2026-06-01/closest_approach_trace_slices.json
+      - docs/context/evidence/issue_1945_orca_leave_group_speed_trace_2026-06-01/report.md
+    durable_inputs_present:
+      - compact closest-approach trace slices
+      - no-op and speed-offset frame windows
+      - termination and clearance deltas
+    missing_render_inputs:
+      - trace-viewer annotation set
+      - rendered case report
+    required_render_inputs:
+      - docs/context/evidence/issue_1945_orca_leave_group_speed_trace_2026-06-01/closest_approach_trace_slices.json
+      - durable://research_v1_trace_review/leave_group_speed_flip/annotation_set.json
+    recommended_next_action: >-
+      Render seed 258 first because it has the clearest collision-to-success terminal contrast.
+    claim_boundary: diagnostic local trace inspection only
+  - id: intersection_wait_speed_p050_phase_response
+    claim_id: research-v1.amv.failure_case_review
+    priority: 5
+    durable_case_ready: true
+    case_status: selected_trace_slices_available
+    scenario_id: francis2023_intersection_wait
+    planners_or_variants: [goal, orca, scenario_adaptive_hybrid_orca_v2_collision_guard]
+    seeds: [240, 241, 242]
+    row_status: completed_trace_pairs_same_termination_strong_clearance_delta
+    reason_selected: >-
+      The p050 speed-grid trace has nine completed pairs with strong negative clearance deltas and
+      stable max-steps terminations, making it a clean phase-response explanation case.
+    source_evidence:
+      - docs/context/issue_1953_intersection_wait_speed_grid_trace.md
+      - docs/context/evidence/issue_1953_intersection_wait_speed_grid_trace_2026-06-01/closest_approach_trace_slices_speed_h1_p050.json
+      - docs/context/evidence/issue_1953_intersection_wait_speed_grid_trace_2026-06-01/report_speed_h1_p050.md
+      - docs/context/evidence/issue_1953_intersection_wait_speed_grid_trace_2026-06-01/focus_speed_h1_p050_summary.json
+    durable_inputs_present:
+      - compact closest-approach trace slices
+      - per-seed closest-frame table
+      - focused p050 summary
+    missing_render_inputs:
+      - trace-viewer annotation set
+      - rendered case report
+    required_render_inputs:
+      - docs/context/evidence/issue_1953_intersection_wait_speed_grid_trace_2026-06-01/closest_approach_trace_slices_speed_h1_p050.json
+      - durable://research_v1_trace_review/intersection_wait_speed_p050/annotation_set.json
+    recommended_next_action: >-
+      Use this after one outcome-flip case to add a same-termination phase-sensitivity explanation.
+    claim_boundary: diagnostic local trace inspection only
+next_steps:
+  first_render_child: head_on_corridor_route_offset_response
+  first_amv_specific_trace_export_child: ammv_head_on_corridor_mechanism_activation
+  pack_assembly_gate: >-
+    Build the Issue #2159 pack only after at least one selected case has rendered trace-review
+    output and annotation provenance.

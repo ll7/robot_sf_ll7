@@ -321,6 +321,26 @@ First implementation target:
 - emit compact debug JSON with uncertainty/source fields;
 - assert no drift in existing observation keys.
 
+### Issue #2105 MVP Slice 2026-06-02
+
+Issue #2105 implements the first narrow code proof for the MVP decoupling test. The slice adds
+`robot_sf/representation/scenario_belief.py` with a typed `ScenarioBelief` dataclass contract,
+simulator-oracle and visibility-limited simulator adapters, a `SOCNAV_STRUCT`-compatible policy
+projection, and deterministic debug metadata.
+
+Claim boundary: this is representation and compatibility evidence only. It does not claim benchmark
+improvement, SNQI movement, calibrated real-sensor uncertainty, or paper-facing performance.
+
+Validation recorded for the MVP slice:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/representation -q
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/sensor tests/test_socnav_observation.py tests/test_socnav_observation_mode.py tests/test_sensor_fusion_stack.py tests/test_range_sensor.py -q
+scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check robot_sf/representation tests/representation
+scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check robot_sf/representation tests/representation
+git diff --check
+```
+
 ## Follow-Up Risks
 
 - Scope risk: do not imply all real sensors are supported; start with Robot SF's supported synthetic
@@ -332,6 +352,35 @@ First implementation target:
 - Calibration risk: synthetic uncertainty is not real sensor calibration.
 - Complexity risk: graph, grid, ray, image, and fused projections can expand quickly; keep the first
   implementation slice narrow.
+
+### Issue #2157 Diagnostics Slice 2026-06-03
+
+Issue #2157 extends the MVP with diagnostic metadata and projection-diff tools for
+representation-quality inspection. The slice adds:
+
+- `TrackedAgentMetadata` dataclass with detection count, missed detections, track age,
+  last-detection timestamp, and coasted flag.
+- `EntityBelief.tracking` optional field populated for non-visible agents.
+- `AgentProjectionDiff` and `ProjectionDiff` dataclasses for structured oracle-vs-partial
+  comparison.
+- `compute_projection_diff()` function that returns a per-agent diff with visibility,
+  confidence, missing-fields, and policy-membership changes.
+- `ScenarioBelief.diagnostic_summary()` method returning a compact dict with
+  per-visibility-state counts, missing-data counts, not-observed-this-step counts, and
+  tracking-metadata counts.
+
+Claim boundary: this is representation/diagnostic-only evidence. It does not claim benchmark
+improvement, SNQI movement, calibrated real-sensor uncertainty, or paper-facing performance.
+Existing `SOCNAV_STRUCT` projection keys are unchanged.
+
+Validation recorded for the diagnostics slice:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/representation/test_scenario_belief.py -q
+scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check robot_sf/representation tests/representation
+scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check robot_sf/representation tests/representation
+git diff --check
+```
 
 ## Design-Only Validation
 

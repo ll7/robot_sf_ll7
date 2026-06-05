@@ -29,6 +29,14 @@ deliberately versioned, non-regenerable binary fixture after an explicit maintai
 artifact can be regenerated from tracked configs, seed schedules, commands, and commits, it is fine
 to leave it ignored or delete it locally once the durable summary/report evidence is preserved.
 
+## Review Fallback
+
+When automated AI review is rate-limited, unavailable, or configured to skip a small evidence file
+under this tree, reviewers should apply the fallback checklist in `docs/code_review.md`. CSV
+evidence is not exempt from review merely because broad CSV filters exist: inspect the header,
+representative rows, provenance fields, parent-issue conclusion alignment, and explicit claim
+boundary before merging an evidence-producing PR.
+
 ## Current Bundles
 
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that
@@ -55,6 +63,16 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
 - `issue_1569_amv_actuation_smoke_2026-05-27/`: compact local smoke summary for the synthetic AMV
   actuation-envelope stress slice, including row-status classification, actuation diagnostics, and
   the explicit non-paper-facing claim boundary.
+- `issue_2224_amv_actuation_ranking_2026-06-04/`: compact matched `amv_actuation_smoke`
+  comparison showing `actuation_aware_hybrid_rule_v0` reduced command clipping versus
+  `hybrid_rule_v3_fast_progress` on one smoke row, while both candidates still timed out.
+- `issue_2259_amv_clipping_success_boundary_2026-06-05/`: compact parent-lane synthesis for
+  Issue #2259, separating synthetic command-feasibility improvement from unchanged navigation
+  success and keeping calibrated AMV actuation blocked.
+- `issue_2308_amv_timeout_trace_2026-06-05/`: compact trace-level AMV timeout analysis showing
+  reduced clipping did not change the route/task progress blocker on the matched smoke row.
+- `issue_2313_local_baseline_quarantine_2026-06-05/`: compact metadata-only planner summary
+  showing the seven absent local-only baseline rows are explicitly unavailable.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and
@@ -101,7 +119,7 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   the #1610 scenario perturbation criticality pilot.
 - `issue_1939_corridor_trace_response_2026-05-31/`: compact diagnostic-only closest-approach trace
   slices for the `classic_head_on_corridor_low` pedestrian-route-offset response observed in the
-  #1610/#1937 pilot.
+  Issue #1610/Issue #1937 pilot.
 - `issue_1941_ped_timing_phase_2026-05-31/`: compact diagnostic-only paired
   no-op-versus-start-delay summary for the #1610 single-pedestrian timing phase perturbation pilot.
 - `issue_1943_ped_speed_perturbation_2026-05-31/`: compact diagnostic-only paired
@@ -118,3 +136,37 @@ to leave it ignored or delete it locally once the durable summary/report evidenc
   single-pedestrian phase grid.
 - `issue_1953_intersection_wait_speed_grid_trace_2026-06-01/`: compact diagnostic-only
   closest-approach trace slices for the strongest #1951 intersection-wait speed-grid response.
+- `issue_2176_remaining_one_factor_h80_2026-06-03/`: compact diagnostic-only h80 summary for the
+  remaining selected Issue #2170 one-factor hybrid component comparisons, including the partial
+  selector-only row caveat.
+- `issue_2178_selector_orca_extra_h80_2026-06-03/`: compact diagnostic-only h80 summary for the
+  corrected selector-only one-factor comparison after syncing the `orca` extra and proving `rvo2`
+  availability.
+- `issue_2180_one_factor_h500_2026-06-03/`: compact local h500 diagnostic summary for the
+  Issue #2170 one-factor hybrid component manifest after all rows completed 18/18 with zero failed
+  jobs.
+- `issue_2182_component_synthesis_2026-06-03/`: compact component-effect classification table
+  synthesized from the Issue #2180 h500 run for Issue #2104 closeout.
+- `issue_2225_learned_policy_failure_synthesis_2026-06-04/`: compact learned-policy failure-mode
+  evidence table synthesizing BC warm-start PPO, shielded PPO repair, ORCA-residual BC, learned risk
+  model, and oracle imitation status against hybrid-rule mechanism evidence for Issue #2225.
+- `issue_2261_static_recenter_slice_local_2026-06-05/`: compact analysis-only summary for
+  Issue #2261, explaining why static recentering stays slice-local after the held-out smoke and
+  naming the missing activation trace needed for definitive attribution.
+- `issue_2306_static_recenter_activation_trace_2026-06-05/`: compact instrumented rerun evidence
+  showing static recentering stayed inactive on the unsolved held-out row from Issue #2221.
+- `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
+  Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
+  and baseline artifact URIs despite a valid launch packet fixture.
+- `issue_2275_predictive_v2_fate_2026-06-05/`: compact decision matrix for Issue #2275 / parent
+  Issue #1490, recording the stop-old-expansion decision after the #1543 negative audit and #1897
+  failed coupling gate.
+- `issue_2274_hybrid_component_matrix_2026-06-05/`: validator-readable hybrid-learning component
+  status matrix for Issue #2274 / parent Issue #1489, with compact CSV and YAML rows for learned
+  risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC warm-start PPO.
+- `issue_2269_research_v1_trace_case_selection_2026-06-05/`: analysis-only case-selection
+  manifest for Issue #2269 / parent Issue #2159, selecting five research-v1 trace-review cases and
+  separating trace-slice-ready cases from AMV-specific trace-export blockers.
+- `issue_2270_panel_candidate_manifest_2026-06-05/`: analysis-only panel candidate manifest for
+  Issue #2270 / parent Issue #2227, recording static-recenter and topology panel candidates that
+  remain blocked on durable `simulation_trace_export.v1` trace pairs.

@@ -1,0 +1,57 @@
+schema_version: hazard_traceability.v1
+id: issue_2164_amv_cross_trap_hazards_v1
+hazards:
+  - id: robot_pedestrian_collision
+    description: Robot contact or collision with a pedestrian actor.
+    severity: safety
+    supporting_metrics:
+      - collision_rate
+    evidence_fields:
+      - metrics.collision
+      - metrics.collision_rate
+  - id: near_miss
+    description: Close robot-pedestrian encounter in the cross-trap interaction.
+    severity: safety
+    supporting_metrics:
+      - near_miss
+      - min_distance
+    evidence_fields:
+      - metrics.near_miss
+      - metrics.min_distance
+  - id: pedestrian_flow_disruption
+    description: Robot motion disrupts intended pedestrian crossing flow.
+    severity: social
+    supporting_metrics:
+      - comfort_exposure
+      - path_efficiency
+    evidence_fields:
+      - metrics.comfort_exposure
+      - metrics.path_efficiency
+scenario_mappings:
+  - id: classic_cross_trap_low_amv
+    scenario_ids:
+      - classic_cross_trap_low
+    scenario_families:
+      - cross_trap
+    hazards:
+      - robot_pedestrian_collision
+      - near_miss
+      - pedestrian_flow_disruption
+    notes: >
+      The tracked issue #1484 cross-kinematics evidence contains executed
+      `classic_cross_trap_low` rows. This mapping joins those rows to the AMV
+      hazard/ODD coverage audit without broadening the repository-wide hazard
+      metadata.
+claim_boundary: >
+  This issue-specific mapping is traceability metadata for the #2164 diagnostic
+  rollup only. It does not certify scenario safety, planner performance, or
+  CARLA/real-world transfer.
+provenance:
+  source_issue: https://github.com/ll7/robot_sf_ll7/issues/2164
+  authored_by: robot_sf_ll7
+  source_files:
+    - configs/scenarios/archetypes/classic_cross_trap.yaml
+    - docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/seed_episode_rows.csv
+  notes: >
+    Created to test whether existing executed AMV rows can join to hazard/ODD
+    metadata through the existing rollup.

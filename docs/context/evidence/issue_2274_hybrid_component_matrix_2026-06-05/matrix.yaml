@@ -1,0 +1,135 @@
+- component: learned_risk_model_v1
+  source_issue: "#1472"
+  commit_artifact: "d06e381d, docs/context/issue_1395_learned_risk_launch_packet.md"
+  evaluation_slice: not_run
+  guard_authority:
+    mechanism: hard_guard_auxiliary_cost_boundary
+    active: false
+    veto_rate: null
+  learned_component_contribution:
+    contribution_type: auxiliary_cost
+    bound: "learned risk may rank otherwise-safe candidates only"
+    active_rate: null
+  intervention_fallback_rates:
+    guard_veto_rate: null
+    fallback_rate: null
+    degraded_rate: null
+  outcomes:
+    success_rate: null
+    collision_rate: null
+    near_miss_rate: null
+    low_progress_rate: null
+    timeout_rate: null
+  evidence_tier: launch_packet
+  verdict: pending
+  baseline_comparator: hybrid_rule_v3_static_margin0_waypoint2
+  seed_schedule: "111,112,113 in launch packet; training inputs not materialized"
+  scenario_manifest: docs/context/issue_1395_learned_risk_launch_packet.md
+- component: orca_residual_bc_v1
+  source_issue: "#1475"
+  commit_artifact: "d06e381d, docs/context/issue_1428_orca_residual_lineage.md"
+  evaluation_slice: smoke
+  guard_authority:
+    mechanism: guarded_orca_residual_runtime
+    active: true
+    veto_rate: 0.0
+  learned_component_contribution:
+    contribution_type: bounded_residual
+    bound: "ORCA command plus clipped learned residual under the existing guard"
+    active_rate: 1.0
+  intervention_fallback_rates:
+    guard_veto_rate: 0.0
+    fallback_rate: 0.0
+    degraded_rate: 0.0
+  outcomes:
+    success_rate: 0.0
+    collision_rate: 0.0
+    near_miss_rate: 0.0
+    low_progress_rate: 1.0
+    timeout_rate: 1.0
+  evidence_tier: failed
+  verdict: revise
+  baseline_comparator: orca
+  seed_schedule: "smoke seed 111"
+  scenario_manifest: docs/context/issue_1428_orca_residual_lineage.md
+- component: oracle_imitation_v1
+  source_issue: "#1470"
+  commit_artifact: "d06e381d, docs/context/issue_1397_oracle_imitation_launch_packet.md"
+  evaluation_slice: not_run
+  guard_authority:
+    mechanism: train_only_oracle_dataset_boundary
+    active: false
+    veto_rate: null
+  learned_component_contribution:
+    contribution_type: warm_start_initialisation
+    bound: "oracle traces are train-only until a guarded deployment adapter exists"
+    active_rate: null
+  intervention_fallback_rates:
+    guard_veto_rate: null
+    fallback_rate: null
+    degraded_rate: null
+  outcomes:
+    success_rate: null
+    collision_rate: null
+    near_miss_rate: null
+    low_progress_rate: null
+    timeout_rate: null
+  evidence_tier: launch_packet
+  verdict: pending
+  baseline_comparator: hybrid_rule_v3_static_margin0_waypoint2
+  seed_schedule: "train seeds 201-206; validation/evaluation disjoint in launch packet"
+  scenario_manifest: docs/context/issue_1397_oracle_imitation_launch_packet.md
+- component: shielded_ppo_repair_v1
+  source_issue: "#1474"
+  commit_artifact: "d06e381d, docs/context/issue_2006_guarded_ppo_zero_motion_repair.md"
+  evaluation_slice: smoke
+  guard_authority:
+    mechanism: risk_guarded_ppo_v1
+    active: true
+    veto_rate: 0.0
+  learned_component_contribution:
+    contribution_type: repair_decision
+    bound: "collision-20 PPO checkpoint inside the frozen risk_guarded_ppo_v1 runtime guard"
+    active_rate: 1.0
+  intervention_fallback_rates:
+    guard_veto_rate: 0.0
+    fallback_rate: 0.0
+    degraded_rate: 0.0
+  outcomes:
+    success_rate: 1.0
+    collision_rate: 0.0
+    near_miss_rate: 0.0
+    low_progress_rate: 0.0
+    timeout_rate: 0.0
+  evidence_tier: smoke_only
+  verdict: continue
+  baseline_comparator: risk_guarded_ppo_v1
+  seed_schedule: smoke replay seed from issue #2029 report
+  scenario_manifest: docs/context/policy_search/reports/2026-06-02_shielded_ppo_issue1474_collision20_v1_smoke.md
+- component: bc_warm_start_ppo_v10
+  source_issue: "#1977"
+  commit_artifact: "d06e381d, docs/context/evidence/issue_1977_bc_warm_start_cancelled_2026-06-02/artifact_manifest.md"
+  evaluation_slice: not_run
+  guard_authority:
+    mechanism: ppo_warm_start_training_only
+    active: false
+    veto_rate: null
+  learned_component_contribution:
+    contribution_type: warm_start_initialisation
+    bound: "preserved BC checkpoint plus PPO continuation; no final deployable PPO checkpoint"
+    active_rate: null
+  intervention_fallback_rates:
+    guard_veto_rate: null
+    fallback_rate: null
+    degraded_rate: null
+  outcomes:
+    success_rate: null
+    collision_rate: null
+    near_miss_rate: null
+    low_progress_rate: null
+    timeout_rate: null
+  evidence_tier: launch_packet
+  verdict: stop
+  baseline_comparator: ppo_issue791_best_v1
+  seed_schedule: "preserved issue #1108/#749 inputs; rerun cancelled before policy analysis"
+  scenario_manifest: docs/context/issue_1961_bc_warm_start_recoverability.md

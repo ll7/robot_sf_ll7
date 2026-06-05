@@ -1,0 +1,207 @@
+version: 1
+issue: 2170
+parent_issue: 2104
+status: one_factor_manifest_contract
+claim_scope: proposal_pre_execution
+created_at: 2026-06-03
+
+source_context:
+  parent_issue: https://github.com/ll7/robot_sf_ll7/issues/2104
+  child_issue: https://github.com/ll7/robot_sf_ll7/issues/2170
+  retrospective_pilot:
+    note: docs/context/issue_2104_component_ablation_pilot.md
+    manifest: configs/policy_search/ablation_manifests/issue_2104_component_ablation_pilot.yaml
+    evidence: docs/context/evidence/issue_2104_component_ablation_pilot_2026-06-02/README.md
+  source_campaign:
+    bundle: docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/README.md
+    table: docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports/seed_variability_by_scenario.csv
+    campaign_commit: 4941ac48f1f4e65053bbfcbbc94a55a336fad9ea
+    archive: https://github.com/ll7/robot_sf_ll7/releases/tag/artifact/issue1454-s10-h500-candidates-2026-05-23
+
+execution_contract:
+  evidence_tier_after_this_issue: proposal_pre_execution_contract
+  intended_follow_up: run a compact one-factor matrix and promote durable effect-size evidence
+  benchmark_profile: experimental
+  algo: hybrid_rule_local_planner
+  base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_horizons: configs/policy_search/scenario_horizons_h500.yaml
+  dt: 0.1
+  horizon: 500
+  workers: 1
+  paper_facing: false
+  fail_closed_policy:
+    fallback_rows_are_success: false
+    degraded_rows_are_success: false
+    missing_planner_config: fail_closed
+    missing_scenario: fail_closed
+
+scenario_slice:
+  rationale: >-
+    Six scenarios cover the largest grouped-component signals from the #2104 pilot
+    and the leader-collision h500 slice while staying small enough for a later local
+    or SLURM execution issue.
+  seed_policy:
+    mode: explicit_per_scenario
+    seeds: [111, 112, 113]
+  scenarios:
+    - id: classic_cross_trap_high
+      family: cross_trap
+      reason: leader-collision slice; strong static-escape signal in #1454 rows
+    - id: classic_merging_low
+      family: merging
+      reason: leader-collision slice; v2 candidate disables static escape/recenter here
+    - id: classic_bottleneck_medium
+      family: bottleneck
+      reason: stress-slice scenario with static-clearance pressure
+    - id: classic_head_on_corridor_low
+      family: head_on_corridor
+      reason: low-density frontal encounter to guard against regressions
+    - id: francis2023_leave_group
+      family: leave_group
+      reason: scenario-adaptive ORCA selector switches to tuned ORCA here
+    - id: francis2023_perpendicular_traffic
+      family: perpendicular_traffic
+      reason: existing scenario override changes speed/static-escape behavior
+
+metrics:
+  primary:
+    - success
+    - collisions
+    - near_misses
+    - timeout_low_progress
+    - time_to_goal_norm
+  runtime:
+    - wall_time_s
+    - planner_step_time_ms
+  diagnostic:
+    - snqi
+    - failure_mechanism
+  caveats:
+    - SNQI remains diagnostic unless the follow-up execution satisfies the SNQI contract.
+    - h500 runtime comparisons should separate wall-clock runtime from normalized time-to-goal.
+
+existing_reference_rows:
+  - key: base_fast_progress
+    candidate: hybrid_rule_v3_fast_progress
+    config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress.yaml
+    role: baseline
+  - key: grouped_static_escape_recenter
+    candidate: hybrid_rule_v3_fast_progress_static_escape
+    config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    role: grouped_reference
+  - key: grouped_continuous_static_checks
+    candidate: hybrid_rule_v3_fast_progress_static_escape_continuous
+    config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+    role: grouped_reference
+  - key: scenario_adaptive_orca_selector
+    candidate: scenario_adaptive_hybrid_orca_v1
+    config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    role: selector_reference
+  - key: scenario_adaptive_collision_guard_label
+    candidate: scenario_adaptive_hybrid_orca_v2_collision_guard
+    config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    role: caveated_reference
+    caveat: >-
+      The current config name says collision guard, but no explicit collision_guard
+      parameter is present in the YAML. Treat this as a named historical row until
+      the follow-up issue resolves the actual guard mechanism.
+  - key: orca_reference
+    candidate: orca
+    config_path: configs/algos/issue707_orca_tuned.yaml
+    role: external_reference_for_selector_switch
+
+planned_one_factor_rows:
+  - key: static_escape_only
+    planned_config_path: configs/policy_search/candidates/issue_2170_static_escape_only.yaml
+    toggles:
+      static_clearance_escape_enabled: true
+      static_recenter_enabled: false
+      static_corridor_transit_enabled: false
+      corridor_subgoal_enabled: false
+      continuous_static_clearance_enabled: false
+    isolates: static clearance escape from recentering and corridor-transit logic
+  - key: static_recenter_only
+    planned_config_path: configs/policy_search/candidates/issue_2170_static_recenter_only.yaml
+    toggles:
+      static_clearance_escape_enabled: false
+      static_recenter_enabled: true
+      static_corridor_transit_enabled: false
+      corridor_subgoal_enabled: false
+      continuous_static_clearance_enabled: false
+    isolates: recentering from static escape
+  - key: static_escape_plus_recenter_no_transit
+    planned_config_path: configs/policy_search/candidates/issue_2170_static_escape_recenter_no_transit.yaml
+    toggles:
+      static_clearance_escape_enabled: true
+      static_recenter_enabled: true
+      static_corridor_transit_enabled: false
+      corridor_subgoal_enabled: false
+      continuous_static_clearance_enabled: false
+    isolates: escape and recenter pair from corridor-transit terms
+  - key: continuous_static_checks_only
+    planned_config_path: configs/policy_search/candidates/issue_2170_continuous_static_checks_only.yaml
+    toggles:
+      corridor_subgoal_enabled: true
+      corridor_subgoal_use_continuous_static_check: true
+      continuous_static_clearance_enabled: true
+    isolates: continuous static-clearance checks on top of the grouped static baseline
+  - key: scenario_adaptive_orca_selector_only
+    planned_config_path: configs/policy_search/candidates/issue_2170_scenario_adaptive_orca_selector_only.yaml
+    toggles:
+      scenario_algo_overrides:
+        francis2023_leave_group:
+          algo: orca
+          base_config_path: configs/algos/issue707_orca_tuned.yaml
+    isolates: static scenario-to-ORCA dispatch from other grouped changes
+  - key: speed_progress_pressure_2p4
+    existing_or_planned_config_path: configs/policy_search/candidates/hybrid_rule_v3_progress_2p4.yaml
+    toggles:
+      max_linear_speed: 2.4
+      goal_progress_weight: 5.0
+    isolates: lower speed envelope plus stronger progress pressure as a grouped sensitivity row
+    caveat: speed and progress pressure are not separable in the existing config
+
+comparison_plan:
+  - id: static_escape_only_minus_base
+    a: static_escape_only
+    b: base_fast_progress
+    interpretation: static clearance escape without recentering
+  - id: static_recenter_only_minus_base
+    a: static_recenter_only
+    b: base_fast_progress
+    interpretation: static recentering without static escape
+  - id: escape_recenter_pair_minus_static_escape_only
+    a: static_escape_plus_recenter_no_transit
+    b: static_escape_only
+    interpretation: recentering effect after static escape is enabled
+  - id: grouped_transit_minus_escape_recenter_pair
+    a: grouped_static_escape_recenter
+    b: static_escape_plus_recenter_no_transit
+    interpretation: static corridor-transit terms after escape and recentering
+  - id: continuous_checks_minus_grouped_static
+    a: continuous_static_checks_only
+    b: grouped_static_escape_recenter
+    interpretation: continuous static-clearance checks
+  - id: selector_only_minus_grouped_static
+    a: scenario_adaptive_orca_selector_only
+    b: grouped_static_escape_recenter
+    interpretation: static scenario-adaptive ORCA selector
+  - id: speed_progress_2p4_minus_base
+    a: speed_progress_pressure_2p4
+    b: base_fast_progress
+    interpretation: grouped speed-envelope/progress-pressure sensitivity
+
+validation_requirements_for_execution_child:
+  - Validate every planned config resolves through the policy-search candidate loader.
+  - Validate every scenario id resolves from the scenario matrix.
+  - Use identical scenario ids, horizons, dt, and seeds across all rows.
+  - Emit paired effect-size tables for primary metrics and runtime metrics.
+  - Emit failure-mechanism summaries only where row-level evidence supports the label.
+  - Store command, commit, config checksums, and row-status counts before interpreting results.
+  - Keep fallback, degraded, unavailable, and failed rows out of successful benchmark evidence.
+
+non_goals:
+  - Execute the matrix in this issue.
+  - Claim one-factor causality before the planned rows are implemented and run.
+  - Add new planner code or tune parameters against final comparison rows.

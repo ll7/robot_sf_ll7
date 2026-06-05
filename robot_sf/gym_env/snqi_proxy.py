@@ -43,7 +43,13 @@ class StepSNQIProxy:
         if robot_pose is not None:
             self.state.prev_robot_pos = extract_robot_xy(robot_pose)
 
-    def compute_step_metrics(self, simulator: Any, *, dt: float) -> dict[str, float]:
+    def compute_step_metrics(
+        self,
+        simulator: Any,
+        *,
+        dt: float,
+        ped_positions_override: Any | None = None,
+    ) -> dict[str, float]:
         """Compute SNQI-aligned proxy metrics and update running state.
 
         Returns:
@@ -53,6 +59,7 @@ class StepSNQIProxy:
             simulator=simulator,
             dt=dt,
             proxy_state=self.state,
+            ped_positions_override=ped_positions_override,
         )
 
 
@@ -139,6 +146,7 @@ def compute_snqi_step_proxies(
     simulator: Any,
     dt: float,
     proxy_state: StepSNQIProxyState,
+    ped_positions_override: Any | None = None,
 ) -> dict[str, float]:
     """Compute per-step SNQI proxy terms from simulator state.
 
@@ -152,6 +160,8 @@ def compute_snqi_step_proxies(
         simulator: Active simulator backend for the environment.
         dt: Simulation timestep in seconds.
         proxy_state: Running state used to estimate jerk proxy over steps.
+        ped_positions_override: Optional step-local pedestrian position snapshot. When provided,
+            this avoids re-reading ``simulator.ped_pos``.
 
     Returns:
         dict[str, float]: Step-level SNQI-aligned metadata terms.
@@ -159,7 +169,12 @@ def compute_snqi_step_proxies(
     d_coll, d_near, comfort_force_threshold = resolve_snqi_thresholds()
     robot_pos = extract_robot_xy(first_robot_pose(getattr(simulator, "robot_poses", [])))
 
-    ped_pos = coerce_xy_rows(getattr(simulator, "ped_pos", np.zeros((0, 2), dtype=float)))
+    ped_pos_source = (
+        ped_positions_override
+        if ped_positions_override is not None
+        else getattr(simulator, "ped_pos", np.zeros((0, 2), dtype=float))
+    )
+    ped_pos = coerce_xy_rows(ped_pos_source)
 
     near_misses = 0.0
     if ped_pos.size > 0:

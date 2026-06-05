@@ -1,0 +1,96 @@
+contracts:
+  - schema_version: scenario_contract.v1
+    id: classic_cross_trap_low_amv_contract
+    scenario_ref:
+      source: configs/scenarios/archetypes/classic_cross_trap.yaml
+      scenario_name: classic_cross_trap_low
+      scenario_family: cross_trap
+    odd:
+      environment_type: synthetic_atomic
+      map_family: classic_crossing
+      density: low
+      flow: bidirectional_crossing
+      assumptions:
+        - The cross-trap scenario is a synthetic low-speed public-space interaction probe.
+        - The contract records traceability intent for the #1484 executed rows only.
+        - Runtime evidence must still be reported with planner, seed, kinematics, and metric provenance.
+    actors:
+      - id: robot
+        kind: robot
+        count:
+          minimum: 1
+          maximum: 1
+        motion_model: configured_robot_policy
+        assumptions:
+          - Robot kinematics are supplied by the benchmark matrix row.
+          - This contract does not promote any planner.
+      - id: crossing_pedestrians
+        kind: pedestrian
+        count:
+          minimum: 1
+          maximum: 12
+        motion_model: social_force
+        assumptions:
+          - Pedestrians are simulated with the repository SocialForce backend.
+          - The low-density cross-trap row is diagnostic, not calibrated crowd evidence.
+    invariants:
+      - id: cross_trap_source_surface
+        scope: authoring
+        severity: required
+        description: The contract must keep pointing at the maintained classic cross-trap scenario YAML entry.
+      - id: no_claim_without_row_status
+        scope: post_run
+        severity: required
+        description: Claims must preserve native/adapter/fallback/degraded row status from the campaign tables.
+    observables:
+      - id: collision_rate
+        metric: collision_rate
+        source: benchmark_episode_metrics
+        required: true
+        interpretation: Collision evidence is safety-relevant but not safety certification.
+      - id: near_miss
+        metric: near_miss
+        source: benchmark_episode_metrics
+        required: true
+        interpretation: Near-miss evidence supports interaction-risk diagnostics.
+      - id: comfort_exposure
+        metric: comfort_exposure
+        source: benchmark_episode_metrics
+        required: false
+        interpretation: Comfort exposure helps distinguish social disruption from route success alone.
+    termination_conditions:
+      - id: route_success
+        reason: success
+        source: benchmark_runner
+        description: The robot reaches the configured route goal under the benchmark runner.
+      - id: safety_collision
+        reason: collision
+        source: benchmark_runner
+        description: A robot collision outcome is a safety-relevant execution failure.
+      - id: horizon_timeout
+        reason: max_steps
+        source: benchmark_runner
+        description: Max-step termination must be interpreted with planner and horizon metadata.
+    certification:
+      schema_version: scenario_cert.v1
+      required_before_benchmark_claim: true
+      expected_eligibility: eligible
+      notes: scenario_contract.v1 records intent; stronger claims still require scenario_cert.v1 and run evidence.
+    benchmark_eligibility:
+      intended_use: exploratory
+      requires_certification: true
+      claim_boundary: Use this contract to join executed #1484 rows to hazard/ODD diagnostics only.
+      eligibility_hooks:
+        - Preserve native/adapter/fallback/degraded row status in any report.
+        - Do not cite this contract alone as benchmark, safety, or transfer evidence.
+    provenance:
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2164
+      authored_by: robot_sf_ll7
+      source_files:
+        - configs/scenarios/archetypes/classic_cross_trap.yaml
+        - docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/seed_episode_rows.csv
+      notes: Created to join the tracked cross-kinematics AMV evidence rows to hazard/ODD metadata.
+    odd_contract_ref:
+      source: configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml
+      contract_id: low_speed_public_space_v1
+      required_for_benchmark_claim: true

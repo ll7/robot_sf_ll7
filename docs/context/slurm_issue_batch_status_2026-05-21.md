@@ -208,18 +208,28 @@ slurm_issue_status:
   commit: 5faaa318d609f87730757d7fbda65b799178b5c5
   config_path:
     - configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
+    - configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml
+    - SLURM/Auxme/issue_1475_orca_residual_bc.sl
     - docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
   output_root: output/slurm/issue1475-orca-residual-bc-job-12749
   stdout_stderr_path:
     - output/slurm/12749-issue1475-orca-residual-bc.out
     - output/slurm/12749-issue1475-orca-residual-bc.err
   durable_artifact_pointer_status: compact summary and smoke report tracked; raw output paths remain local and non-durable
-  next_action: revise ORCA-residual BC candidate or smoke target for low-progress timeout behavior before rerun
-  closure_condition: revised bounded smoke records success before nominal escalation; fallback/degraded rows remain excluded
+  next_action: revise ORCA-residual BC candidate or smoke gate target for low-progress timeout behavior before rerun or nominal_sanity submission
+  closure_condition: revised bounded smoke records success, collision, residual clipping, guard rates, fallback/degraded status, and durable artifact status before nominal escalation
   last_update: 2026-06-05
-  comparison_status: smoke failed closed; nominal escalation blocked
+  comparison_status: >
+    Slurm smoke runner produced one valid row, but the Issue #1475 gate failed closed because
+    success_rate=0.0 and collision_rate=0.0. The episode timed out with low progress on
+    planner_sanity_simple, so nominal escalation is blocked.
   status_basis: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json and docs/context/policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md
-  notes_non_evidence: diagnostic smoke status only; success_rate=0.0 with timeout_low_progress is revise evidence, not learned-residual success evidence
+  notes_non_evidence: >
+    Job 12749 intentionally did not run nominal_sanity. The runner-level decision was pass because
+    JSONL/summary artifacts were produced, but this is diagnostic smoke status only:
+    success_rate=0.0 with timeout_low_progress is revise evidence, not learned-residual success
+    evidence. Raw local output paths remain scratch unless promoted through durable artifact
+    pointers.
 ```
 
 ### Issue #1108 BC Warm-Start PPO Artifact Rescue

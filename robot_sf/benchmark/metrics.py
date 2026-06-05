@@ -282,7 +282,9 @@ def _compute_robot_ped_distance_summary(data: EpisodeData) -> dict[str, float]:
     Returns:
         Mapping of distance-derived aggregate metrics used by `compute_all_metrics`.
     """
-    if data.peds_pos.shape[1] == 0:
+    step_count = int(data.robot_pos.shape[0]) if data.robot_pos.ndim >= 2 else 0
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+    if step_count == 0 or ped_count == 0:
         return {
             "human_collisions": 0.0,
             "near_misses": 0.0,
@@ -304,9 +306,7 @@ def _compute_robot_ped_distance_summary(data: EpisodeData) -> dict[str, float]:
         "mean_distance": float(np.mean(min_dists)),
         "min_clearance": float(clearances.min()),
         "mean_clearance": float(np.mean(min_clearances)),
-        "robot_ped_within_5m_frac": float(
-            np.count_nonzero(min_dists < 5.0) / data.robot_pos.shape[0]
-        ),
+        "robot_ped_within_5m_frac": float(np.count_nonzero(min_dists < 5.0) / step_count),
     }
 
 

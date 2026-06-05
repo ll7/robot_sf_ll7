@@ -1330,6 +1330,21 @@ def test_compute_all_metrics_empty_crowd_skips_robot_ped_distance_matrix(monkeyp
     assert math.isnan(values["robot_ped_within_5m_frac"])
 
 
+def test_robot_ped_distance_summary_zero_timesteps():
+    """The aggregate helper should not reduce empty timestep arrays."""
+    ep = _make_episode(T=0, K=2)
+
+    values = metrics_mod._compute_robot_ped_distance_summary(ep)
+
+    assert values["human_collisions"] == 0.0
+    assert values["near_misses"] == 0.0
+    assert math.isnan(values["min_distance"])
+    assert math.isnan(values["mean_distance"])
+    assert math.isnan(values["min_clearance"])
+    assert math.isnan(values["mean_clearance"])
+    assert math.isnan(values["robot_ped_within_5m_frac"])
+
+
 def test_compute_all_metrics_distance_summary_numeric_equivalence():
     """The aggregate summary should preserve scalar metric semantics."""
     T, K = 8, 2

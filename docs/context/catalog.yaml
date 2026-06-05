@@ -89,6 +89,10 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2266_static_recenter_activation.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2223_topology_hypothesis_planning.md
     status: current
     freshness: evidence

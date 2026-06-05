@@ -132,6 +132,8 @@ knowledge, not every transient iteration detail.
   [issue_2282_topology_selection_instrumentation.md](issue_2282_topology_selection_instrumentation.md)
 * Issue #2266 Static-Recenter Activation Diagnostic 2026-06-05:
   [issue_2266_static_recenter_activation.md](issue_2266_static_recenter_activation.md)
+* Issue #2261 Static-Recenter Slice-Local Explanation:
+  [issue_2261_static_recenter_slice_local.md](issue_2261_static_recenter_slice_local.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Root layout structured migration 2026-06-01:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 import numpy as np
@@ -120,13 +121,23 @@ def _ray_angles(count: int, config: LidarOccupancyGridConfig) -> np.ndarray:
     """Return ego-frame ray angles matching the range-sensor linspace convention."""
     if count <= 0:
         raise LidarOccupancyAdapterError("at least one LiDAR ray is required")
-    if count == 1:
-        return np.asarray([float(config.angle_min)], dtype=float)
     angle_min = float(config.angle_min)
     angle_max = float(config.angle_max)
+    return _cached_ray_angles(int(count), angle_min, angle_max)
+
+
+@lru_cache(maxsize=32)
+def _cached_ray_angles(count: int, angle_min: float, angle_max: float) -> np.ndarray:
+    """Return immutable cached ray angles for stable legacy LiDAR adapter configs."""
+    if count == 1:
+        angles = np.asarray([angle_min], dtype=float)
+        angles.setflags(write=False)
+        return angles
     span = angle_max - angle_min
     endpoint = not np.isclose(abs(span), 2.0 * np.pi)
-    return np.linspace(angle_min, angle_max, count, endpoint=endpoint)
+    angles = np.linspace(angle_min, angle_max, count, endpoint=endpoint)
+    angles.setflags(write=False)
+    return angles
 
 
 def _inflate_cell(channel: np.ndarray, row: int, col: int, radius: int) -> None:
@@ -164,12 +175,17 @@ def lidar_rays_to_occupancy_observation(
     angles = _ray_angles(rays.size, cfg)
     inflation = max(int(cfg.obstacle_inflation_cells), 0)
 
-    for distance, angle in zip(rays.tolist(), angles.tolist(), strict=True):
-        if not np.isfinite(distance) or distance <= 0.0 or distance >= float(cfg.max_range):
-            continue
-        point = np.array([distance * np.cos(angle), distance * np.sin(angle)], dtype=float)
-        col = int(np.floor((float(point[0]) - float(origin[0])) / float(cfg.resolution)))
-        row = int(np.floor((float(point[1]) - float(origin[1])) / float(cfg.resolution)))
+    hit_mask = np.isfinite(rays) & (rays > 0.0) & (rays < float(cfg.max_range))
+    hit_distances = rays[hit_mask]
+    hit_angles = angles[hit_mask]
+    endpoints = np.stack(
+        (hit_distances * np.cos(hit_angles), hit_distances * np.sin(hit_angles)),
+        axis=1,
+    )
+    cols_arr = np.floor((endpoints[:, 0] - float(origin[0])) / float(cfg.resolution)).astype(int)
+    rows_arr = np.floor((endpoints[:, 1] - float(origin[1])) / float(cfg.resolution)).astype(int)
+
+    for row, col in zip(rows_arr, cols_arr, strict=True):
         if row < 0 or row >= rows or col < 0 or col >= cols:
             continue
         _inflate_cell(obstacle_channel, row, col, inflation)

@@ -214,6 +214,9 @@ knowledge, not every transient iteration detail.
 * Issue #2224 synthetic AMV actuation ranking diagnostic:
 
   [issue_2224_amv_actuation_ranking.md](issue_2224_amv_actuation_ranking.md)
+* Issue #2268 AMV Timeout Decomposition 2026-06-05:
+
+  [issue_2268_amv_timeout_decomposition.md](issue_2268_amv_timeout_decomposition.md)
 
 * Issue #2234 predictive perturbation criticality protocol:
 

@@ -52,6 +52,26 @@ def test_socnav_structured_observation_can_expose_critic_privileged_state():
     assert "critic_privileged_state" in obs
     assert obs["critic_privileged_state"].ndim == 1
     assert env.observation_space.contains(obs)
+    assert env._critic_obs_space is not None
+    assert "critic_privileged_state" not in env._critic_obs_space.spaces
+
+    meta = env.state.meta_dict()
+    expected_tail = np.array(
+        [
+            meta.get("step_of_episode", 0) or 0,
+            env.state.sim_time_elapsed,
+            meta.get("max_sim_steps", env.state.max_sim_steps),
+            meta.get("distance_to_goal", 0.0),
+            meta.get("prev_distance_to_goal", 0.0),
+            float(bool(meta.get("is_route_complete"))),
+            float(bool(meta.get("is_timesteps_exceeded"))),
+            float(bool(meta.get("is_pedestrian_collision"))),
+            float(bool(meta.get("is_robot_collision"))),
+            float(bool(meta.get("is_obstacle_collision"))),
+        ],
+        dtype=np.float32,
+    )
+    np.testing.assert_allclose(obs["critic_privileged_state"][-10:], expected_tail)
 
 
 def test_socnav_structured_observation_can_expose_critic_privileged_state_via_factory():
@@ -106,3 +126,58 @@ def test_socnav_bicycle_observation_reports_turn_rate_not_heading():
 
     assert new_obs["robot"]["angular_velocity"][0] == pytest.approx(expected_turn_rate, abs=1e-5)
     assert new_obs["robot"]["angular_velocity"][0] != pytest.approx(new_heading)
+
+
+def test_socnav_critic_privileged_state_metadata_ordering():
+    """Verify privileged-state metadata portion ordering, shape, and expected reset/step values."""
+    env = RobotEnv(
+        env_config=RobotSimulationConfig(observation_mode=ObservationMode.SOCNAV_STRUCT),
+        asymmetric_critic=True,
+    )
+    obs, _ = env.reset()
+    crit = obs["critic_privileged_state"]
+
+    # Check declared shape matches emitted shape
+    crit_space = env.observation_space["critic_privileged_state"]
+    assert crit.shape == crit_space.shape
+    assert crit.dtype == np.float32
+
+    # Metadata lives in the last 10 elements
+    meta = crit[-10:]
+
+    assert meta[0] == 0.0, "step_of_episode should be 0 after reset"
+    assert meta[1] == 0.0, "sim_time_elapsed should be 0 after reset"
+    assert meta[2] > 0.0, "max_sim_steps should be positive"
+    assert meta[5] == 0.0, "is_route_complete should be 0 after reset"
+    assert meta[7] == 0.0, "is_pedestrian_collision should be 0 after reset"
+    assert meta[8] == 0.0, "is_robot_collision should be 0 after reset"
+    assert meta[9] == 0.0, "is_obstacle_collision should be 0 after reset"
+
+    # After one step, step_of_episode must increment
+    obs, _, _, _, _ = env.step(np.array([0.0, 0.0], dtype=np.float32))
+    new_crit = obs["critic_privileged_state"]
+    assert new_crit[-10:][0] == 1.0, "step_of_episode should be 1 after one step"
+    assert env.observation_space.contains(obs)
+
+
+def test_socnav_critic_privileged_state_cache_reuse():
+    """Prove cached leaf traversal + metadata batch survive multi-step resets without corruption."""
+    env = RobotEnv(
+        env_config=RobotSimulationConfig(observation_mode=ObservationMode.SOCNAV_STRUCT),
+        asymmetric_critic=True,
+    )
+    obs, _ = env.reset()
+
+    assert env.observation_space.contains(obs)
+    prev_step = 0.0
+
+    for i in range(10):
+        obs, _, _, _, _ = env.step(np.array([0.0, 0.0], dtype=np.float32))
+        crit = obs["critic_privileged_state"]
+
+        # step_of_episode (metadata[0]) must increment monotonically
+        assert crit[-10] == prev_step + 1.0
+        prev_step = crit[-10]
+
+        # Every step must satisfy the declared observation space
+        assert env.observation_space.contains(obs)

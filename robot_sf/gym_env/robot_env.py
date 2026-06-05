@@ -440,6 +440,7 @@ class RobotEnv(BaseEnv):
             env_config = EnvSettings()
         self._asymmetric_critic_enabled = bool(asymmetric_critic)
         self._critic_privileged_state_key = _ASYMMETRIC_CRITIC_STATE_KEY
+        self._critic_obs_space: spaces.Dict | None = None
         super().__init__(
             env_config=env_config,
             debug=debug,
@@ -498,6 +499,11 @@ class RobotEnv(BaseEnv):
             sensor_adapter = self._setup_default_observation(env_config, sensors)
 
         self._apply_asymmetric_critic_observation_space(env_config)
+
+        # Pre-compute critic leaf traversal to avoid per-step space reconstruction
+        self._critic_obs_traversal: list[tuple[str, ...]] = (
+            self._build_critic_traversal() if self._asymmetric_critic_enabled else []
+        )
 
         # Setup initial state of the robot
         self.state = RobotState(
@@ -575,12 +581,14 @@ class RobotEnv(BaseEnv):
         sim_time_limit = float(getattr(env_config.sim_config, "sim_time_in_secs", 0.0) or 0.0)
         dt = float(getattr(env_config.sim_config, "time_per_step_in_secs", 0.0) or 0.0)
         max_sim_steps = int(np.ceil(sim_time_limit / dt)) if dt > 0.0 else 0
+        critic_obs_space = spaces.Dict(dict(self.observation_space.spaces))
         low, high = _asymmetric_critic_state_spec(
-            self.observation_space,
+            critic_obs_space,
             sim_time_limit=sim_time_limit,
             max_sim_steps=max_sim_steps,
         )
-        obs_dict = dict(self.observation_space.spaces)
+        self._critic_obs_space = critic_obs_space
+        obs_dict = dict(critic_obs_space.spaces)
         obs_dict[self._critic_privileged_state_key] = spaces.Box(
             low=low,
             high=high,
@@ -588,8 +596,44 @@ class RobotEnv(BaseEnv):
         )
         self.observation_space = spaces.Dict(obs_dict)
 
+    def _build_critic_traversal(self) -> list[tuple[str, ...]]:
+        """Pre-compute leaf key-paths for the critic observation space (no privileged state).
+
+        Returns:
+            list[tuple[str, ...]]: Deterministic-order key paths into the obs dict.
+        """
+        paths: list[tuple[str, ...]] = []
+
+        def _traverse(spaces_dict: dict, prefix: tuple[str, ...] = ()) -> None:
+            for key, child in spaces_dict.items():
+                path = prefix + (key,)
+                if isinstance(child, spaces.Dict):
+                    _traverse(child.spaces, path)
+                else:
+                    paths.append(path)
+
+        if self._critic_obs_space is None:
+            raise RuntimeError("asymmetric critic observation space has not been initialized")
+
+        _traverse(self._critic_obs_space.spaces)
+        return paths
+
+    def _extract_obs_leaf(self, obs: dict, path: tuple[str, ...]) -> np.ndarray:
+        """Navigate the nested obs dict along *path* and flatten the leaf value.
+
+        Returns:
+            np.ndarray: 1-D float32 array matching a single observation leaf.
+        """
+        value = obs
+        for key in path:
+            value = value[key]
+        return np.asarray(value, dtype=np.float32).reshape(-1)
+
     def _build_asymmetric_critic_state(self, obs: Any) -> np.ndarray:
         """Build the critic-only privileged state vector from the current observation payload.
+
+        Uses the cached ``_critic_obs_traversal`` to avoid per-step space reconstruction
+        and batches metadata into a single array instead of ten tiny allocations.
 
         Returns:
             np.ndarray: Flattened privileged state for critic-only consumption.
@@ -598,17 +642,8 @@ class RobotEnv(BaseEnv):
             raise RuntimeError("asymmetric critic state requested when disabled")
 
         meta = self.state.meta_dict()
-        critic_obs_space = spaces.Dict(
-            {
-                key: value
-                for key, value in self.observation_space.spaces.items()
-                if key != self._critic_privileged_state_key
-            },
-        )
-        parts = _flatten_obs_from_space(critic_obs_space, obs)
-        # Clamp non-negative scalars at zero; the privileged Box upper bound is finfo.max
-        # so values cannot exceed it in practice but negatives could still appear from
-        # malformed meta entries and would violate the [0, finfo.max] declaration.
+        parts = [self._extract_obs_leaf(obs, path) for path in self._critic_obs_traversal]
+
         finfo_max = float(np.finfo(np.float32).max)
 
         def _nonneg(value: float) -> float:
@@ -617,26 +652,22 @@ class RobotEnv(BaseEnv):
             Returns:
                 float: Metadata value bounded to ``[0, finfo.max]``.
             """
-            return float(np.clip(value, 0.0, finfo_max))
+            return max(0.0, min(float(value), finfo_max))
 
-        parts.extend(
-            [
-                np.array([_nonneg(meta.get("step_of_episode", 0) or 0)], dtype=np.float32),
-                np.array([_nonneg(self.state.sim_time_elapsed)], dtype=np.float32),
-                np.array(
-                    [_nonneg(meta.get("max_sim_steps", self.state.max_sim_steps))],
-                    dtype=np.float32,
-                ),
-                np.array([_nonneg(meta.get("distance_to_goal", 0.0))], dtype=np.float32),
-                np.array([_nonneg(meta.get("prev_distance_to_goal", 0.0))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_route_complete")))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_timesteps_exceeded")))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_pedestrian_collision")))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_robot_collision")))], dtype=np.float32),
-                np.array([float(bool(meta.get("is_obstacle_collision")))], dtype=np.float32),
-            ]
-        )
-        return np.concatenate(parts).astype(np.float32)
+        metadata = np.empty(10, dtype=np.float32)
+        metadata[0] = _nonneg(meta.get("step_of_episode", 0) or 0)
+        metadata[1] = _nonneg(self.state.sim_time_elapsed)
+        metadata[2] = _nonneg(meta.get("max_sim_steps", self.state.max_sim_steps))
+        metadata[3] = _nonneg(meta.get("distance_to_goal", 0.0))
+        metadata[4] = _nonneg(meta.get("prev_distance_to_goal", 0.0))
+        metadata[5] = float(bool(meta.get("is_route_complete")))
+        metadata[6] = float(bool(meta.get("is_timesteps_exceeded")))
+        metadata[7] = float(bool(meta.get("is_pedestrian_collision")))
+        metadata[8] = float(bool(meta.get("is_robot_collision")))
+        metadata[9] = float(bool(meta.get("is_obstacle_collision")))
+
+        parts.append(metadata)
+        return np.concatenate(parts)
 
     def _attach_asymmetric_critic_state(self, obs: Any) -> Any:
         """Attach the privileged critic state to dict observations when enabled.

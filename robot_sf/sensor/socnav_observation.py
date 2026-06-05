@@ -274,7 +274,7 @@ class SocNavObservationFusion:
     _last_heading: float | None = None
 
     def __post_init__(self) -> None:
-        """Initialize optional predictive foresight encoder."""
+        """Initialize optional predictive foresight encoder and reusable buffers."""
         if bool(getattr(self.env_config, "predictive_foresight_enabled", False)):
             self._predictive_foresight = PredictiveForesightEncoder(
                 predictive_foresight_config_from_source(
@@ -282,6 +282,8 @@ class SocNavObservationFusion:
                     default_max_agents=self.max_pedestrians,
                 )
             )
+        self._buf_ped_positions = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
+        self._buf_ped_velocities = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
 
     def reset_cache(self) -> None:
         """No-op to match the SensorFusion interface."""
@@ -435,10 +437,10 @@ class SocNavObservationFusion:
 
         ped_positions = ped_positions[: self.max_pedestrians]
         ped_velocities = ped_velocities[: self.max_pedestrians]
-        padded = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
-        padded_vel = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
+        self._buf_ped_positions.fill(0.0)
+        self._buf_ped_velocities.fill(0.0)
         if ped_positions.size > 0:
-            padded[: ped_positions.shape[0]] = ped_positions
+            self._buf_ped_positions[: ped_positions.shape[0]] = ped_positions
         if ped_velocities.size > 0:
             # Convert pedestrian velocities to ego frame (rotate by -heading)
             cos_h = np.cos(heading)
@@ -448,8 +450,8 @@ class SocNavObservationFusion:
             ego_vx = cos_h * vx + sin_h * vy
             ego_vy = -sin_h * vx + cos_h * vy
             valid_velocity_count = ped_velocities.shape[0]
-            padded_vel[:valid_velocity_count, 0] = ego_vx
-            padded_vel[:valid_velocity_count, 1] = ego_vy
+            self._buf_ped_velocities[:valid_velocity_count, 0] = ego_vx
+            self._buf_ped_velocities[:valid_velocity_count, 1] = ego_vy
 
         goal = np.asarray(self.simulator.goal_pos[self.robot_index], dtype=np.float32)
         next_goal = self.simulator.next_goal_pos[self.robot_index]
@@ -472,7 +474,7 @@ class SocNavObservationFusion:
         robot_pos_clipped = _clip_positions(robot_pos)
         goal_clipped = _clip_positions(goal)
         next_goal_clipped = _clip_positions(next_goal_arr)
-        padded = _clip_positions(padded)
+        np.clip(self._buf_ped_positions, 0.0, position_cap, out=self._buf_ped_positions)
         map_size = np.array(
             [self.simulator.map_def.width, self.simulator.map_def.height],
             dtype=np.float32,
@@ -501,8 +503,8 @@ class SocNavObservationFusion:
                 "next": next_goal_clipped,
             },
             "pedestrians": {
-                "positions": padded,
-                "velocities": padded_vel,
+                "positions": self._buf_ped_positions.copy(),
+                "velocities": self._buf_ped_velocities.copy(),
                 "radius": np.array(
                     [min(self.env_config.sim_config.ped_radius, float(np.max(position_cap)))],
                     dtype=np.float32,

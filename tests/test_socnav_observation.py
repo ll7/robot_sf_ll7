@@ -226,3 +226,68 @@ def test_socnav_observation_visibility_filters_dynamic_occluded_pedestrian() -> 
     assert obs["pedestrians"]["count"][0] == pytest.approx(2.0)
     assert obs["pedestrians"]["positions"][0].tolist() == pytest.approx([2.0, 0.0])
     assert obs["pedestrians"]["positions"][1].tolist() == pytest.approx([4.0, 1.0])
+
+
+def test_socnav_observation_no_stale_pedestrian_data_on_shrink() -> None:
+    """Stale padded values from prior next_obs() calls must not leak into unfilled
+    buffer rows when simulated pedestrian count shrinks."""
+    env_config = RobotSimulationConfig()
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]], dtype=np.float32),
+        ped_vel=np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]], dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    fusion = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    obs1 = fusion.next_obs()
+    assert obs1["pedestrians"]["count"][0] == pytest.approx(3.0)
+    pos1_row2 = obs1["pedestrians"]["positions"][2].copy()
+    vel1_row2 = obs1["pedestrians"]["velocities"][2].copy()
+
+    # Shrink from 3 pedestrians to 1 for the second call
+    simulator.ped_pos = np.array([[1.0, 1.0]], dtype=np.float32)
+    simulator.ped_vel = np.array([[1.0, 0.0]], dtype=np.float32)
+    obs2 = fusion.next_obs()
+
+    assert obs2["pedestrians"]["count"][0] == pytest.approx(1.0)
+    np.testing.assert_array_equal(
+        obs2["pedestrians"]["positions"][0],
+        np.array([1.0, 1.0], dtype=np.float32),
+    )
+    for i in range(1, 4):
+        np.testing.assert_array_equal(
+            obs2["pedestrians"]["positions"][i],
+            np.zeros(2, dtype=np.float32),
+            err_msg=f"Stale position leaked at padded row {i}",
+        )
+        np.testing.assert_array_equal(
+            obs2["pedestrians"]["velocities"][i],
+            np.zeros(2, dtype=np.float32),
+            err_msg=f"Stale velocity leaked at padded row {i}",
+        )
+
+    # Verify snapshot semantics: first observation arrays must not be mutated
+    np.testing.assert_array_equal(
+        obs1["pedestrians"]["positions"][2],
+        pos1_row2,
+        err_msg="Snapshot semantics violated: first observation position mutated",
+    )
+    np.testing.assert_array_equal(
+        obs1["pedestrians"]["velocities"][2],
+        vel1_row2,
+        err_msg="Snapshot semantics violated: first observation velocity mutated",
+    )

@@ -257,6 +257,14 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2277_local_artifact_classification.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2277_local_artifact_classification_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json
     status: evidence
     freshness: evidence

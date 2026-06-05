@@ -451,6 +451,8 @@ knowledge, not every transient iteration detail.
   [issue_1638_model_path_preflight.md](issue_1638_model_path_preflight.md)
 * Issue #1960 local artifact retirement status:
   [issue_1960_local_artifact_retirement.md](issue_1960_local_artifact_retirement.md)
+* Issue #2277 local artifact classification:
+  [issue_2277_local_artifact_classification.md](issue_2277_local_artifact_classification.md)
 * Issue #1845 report grouping contracts:
   [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:

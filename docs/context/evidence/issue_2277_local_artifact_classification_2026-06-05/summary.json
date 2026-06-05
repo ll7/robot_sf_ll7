@@ -1,0 +1,101 @@
+{
+  "schema_version": "artifact_provenance_summary.v1",
+  "issue": 2277,
+  "parent_issue": 1764,
+  "created_at": "2026-06-05T11:10:21Z",
+  "commit": "3a7475f0919040826f832ecf0f938e0b9a22f088",
+  "claim_boundary": "classification only; no artifact promotion, upload, config deletion, or benchmark evidence",
+  "commands": [
+    {
+      "command": "uv run python scripts/validation/check_local_model_artifacts.py configs/baselines --json",
+      "result": "7 rows; all status=blocked and surface=local_experimental"
+    },
+    {
+      "command": "uv run python scripts/tools/plan_model_artifact_promotion.py scan --json",
+      "result": "7 rows; all artifact.exists=false"
+    },
+    {
+      "command": "rg local-only model-path pattern in configs/baselines and configs/training",
+      "result": "7 direct baseline model_path rows; no training resume_from rows matched"
+    }
+  ],
+  "summary": {
+    "total_local_only_references": 7,
+    "blocked_references": 7,
+    "unblocked_references": 0,
+    "missing_artifacts_in_clean_worktree": 7,
+    "classification_counts": {
+      "durable-required": 2,
+      "non-evidence-local-only": 5
+    },
+    "status_counts": {
+      "recoverable_or_retire": 2,
+      "retire_candidate": 5
+    }
+  },
+  "rows": [
+    {
+      "path": "configs/baselines/ppo_issue_791_horizon100_12178.yaml",
+      "field": "model_path",
+      "local_reference_id": "ppo_issue_791_horizon100_20260429T155453_model_zip",
+      "artifact_class": "durable-required",
+      "status": "recoverable_or_retire",
+      "exists_locally": false,
+      "next_action": "Recover a durable checkpoint source with checksum only if this horizon-100 PPO candidate still matters; otherwise retire or rewrite the config."
+    },
+    {
+      "path": "configs/baselines/drl_vo_default.yaml",
+      "field": "model_path",
+      "local_reference_id": "drl_vo_default_pt",
+      "artifact_class": "durable-required",
+      "status": "recoverable_or_retire",
+      "exists_locally": false,
+      "next_action": "Recover a durable DRL-VO checkpoint source with checksum before any benchmark use; otherwise retire or rewrite the config."
+    },
+    {
+      "path": "configs/baselines/ppo_issue_856_all_scenarios_12223.yaml",
+      "field": "model_path",
+      "local_reference_id": "issue856_all_scenarios_12223_best_zip",
+      "artifact_class": "non-evidence-local-only",
+      "status": "retire_candidate",
+      "exists_locally": false,
+      "next_action": "Recover and prove the SLURM checkpoint provenance only if this Issue #856 comparison remains useful; otherwise retire or rewrite."
+    },
+    {
+      "path": "configs/baselines/sac_gate_socnav_struct.yaml",
+      "field": "model_path",
+      "local_reference_id": "sac_gate_socnav_struct_v1_zip",
+      "artifact_class": "non-evidence-local-only",
+      "status": "retire_candidate",
+      "exists_locally": false,
+      "next_action": "Recover and prove provenance only if the experimental SAC baseline remains useful; otherwise retire or rewrite."
+    },
+    {
+      "path": "configs/baselines/sac_gate_socnav_struct_ego.yaml",
+      "field": "model_path",
+      "local_reference_id": "sac_gate_socnav_struct_ego_v1_zip",
+      "artifact_class": "non-evidence-local-only",
+      "status": "retire_candidate",
+      "exists_locally": false,
+      "next_action": "Recover and prove provenance only if the ego-frame SAC baseline remains useful; otherwise retire or rewrite."
+    },
+    {
+      "path": "configs/baselines/sac_gate_socnav_struct_ego_multi.yaml",
+      "field": "model_path",
+      "local_reference_id": "sac_gate_socnav_struct_ego_multi_v1_zip",
+      "artifact_class": "non-evidence-local-only",
+      "status": "retire_candidate",
+      "exists_locally": false,
+      "next_action": "Recover and prove provenance only if the multi-scenario SAC baseline remains useful; otherwise retire or rewrite."
+    },
+    {
+      "path": "configs/baselines/sac_gate_socnav_struct_ego_safe.yaml",
+      "field": "model_path",
+      "local_reference_id": "sac_gate_socnav_struct_ego_safe_v1_zip",
+      "artifact_class": "non-evidence-local-only",
+      "status": "retire_candidate",
+      "exists_locally": false,
+      "next_action": "Recover and prove provenance only if the safety-shaped SAC baseline remains useful; otherwise retire or rewrite."
+    }
+  ]
+}

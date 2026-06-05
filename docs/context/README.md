@@ -171,6 +171,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2269_research_v1_trace_case_selection.md](issue_2269_research_v1_trace_case_selection.md)
 
+* Issue #2263 mechanism activation report fields:
+
+  [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
+
 * Issue #2154 AMMV-aware Social Force model slice:
 
   [issue_2154_ammv_social_force_model.md](issue_2154_ammv_social_force_model.md)
@@ -461,6 +465,8 @@ knowledge, not every transient iteration detail.
   [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md)
 * Issue #2236 Trace Mechanism Evidence Rubric (2026-06-04):
   [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md)
+* Issue #2263 Mechanism Activation Report Fields (2026-06-05):
+  [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
 * Issue #2227 Mechanism Panel Readiness (2026-06-04):
   [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md)
 * Issue #2270 Mechanism Panel Candidate Manifest (2026-06-05):

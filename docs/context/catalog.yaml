@@ -145,6 +145,10 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_release
+  - path: docs/context/issue_2263_mechanism_activation_report_fields.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2154_ammv_social_force_model.md
     status: current
     freshness: maintained
@@ -303,6 +307,10 @@ entries:
   - path: docs/context/issue_2236_trace_mechanism_evidence_rubric.md
     status: current
     freshness: maintained
+    area: manual_control_trace
+  - path: docs/context/evidence/issue_2263_mechanism_activation_fields_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
     area: manual_control_trace
   - path: docs/context/issue_2227_mechanism_panels.md
     status: current

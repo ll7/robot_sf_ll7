@@ -140,3 +140,16 @@ and what likely failure reason remains.
 This does not move any research-v1 claim by itself. It keeps activation evidence diagnostic unless
 the same report ties it to benchmark-valid row status, controlled baseline/intervention identity,
 durable artifacts, and a measured outcome change.
+
+### Issue #2280 First Trace Review 2026-06-05
+
+Issue [#2280](https://github.com/ll7/robot_sf_ll7/issues/2280) promotes
+`docs/context/evidence/issue_2280_first_trace_review_2026-06-05/summary.json` and
+[issue_2280_research_v1_first_trace_review.md](issue_2280_research_v1_first_trace_review.md).
+It reviews the first durable #2269 case, `head_on_corridor_route_offset_response`, using compact
+closest-approach trace slices from Issue #1939.
+
+The result keeps `research-v1.amv.failure_case_review` at `diagnostic`: route offset changed
+closest-approach geometry and one hybrid seed's progress window, but terminal outcomes stayed
+`max_steps`, command-source telemetry was not preserved, and no trace-viewer annotation set or
+paper-facing panel was produced.

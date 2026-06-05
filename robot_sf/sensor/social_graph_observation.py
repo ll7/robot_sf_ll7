@@ -524,20 +524,17 @@ def _build_star_edges(
     Returns:
         Edge index array and integer edge-type labels.
     """
-    sources: list[int] = []
-    edge_types: list[int] = []
-    for idx, active in enumerate(pedestrian_mask, start=1):
-        if active:
-            sources.append(idx)
-            edge_types.append(0)
+    active_ped_indices = np.flatnonzero(pedestrian_mask).astype(np.int64) + 1
+    num_ped = active_ped_indices.shape[0]
     static_offset = 1 + pedestrian_mask.shape[0]
-    for idx, active in enumerate(static_obstacle_mask, start=static_offset):
-        if active:
-            sources.append(idx)
-            edge_types.append(1)
-    if not sources:
+    active_static_indices = np.flatnonzero(static_obstacle_mask).astype(np.int64) + static_offset
+    num_static = active_static_indices.shape[0]
+    total_edges = num_ped + num_static
+    if total_edges == 0:
         return np.zeros((2, 0), dtype=np.int64), np.zeros((0,), dtype=np.int64)
-    return (
-        np.asarray([sources, [0] * len(sources)], dtype=np.int64),
-        np.asarray(edge_types, dtype=np.int64),
-    )
+    edge_index = np.zeros((2, total_edges), dtype=np.int64)
+    edge_index[0, :num_ped] = active_ped_indices
+    edge_index[0, num_ped:] = active_static_indices
+    edge_type = np.zeros((total_edges,), dtype=np.int64)
+    edge_type[num_ped:] = 1
+    return edge_index, edge_type

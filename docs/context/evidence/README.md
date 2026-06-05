@@ -143,3 +143,6 @@ boundary before merging an evidence-producing PR.
 - `issue_2225_learned_policy_failure_synthesis_2026-06-04/`: compact learned-policy failure-mode
   evidence table synthesizing BC warm-start PPO, shielded PPO repair, ORCA-residual BC, learned risk
   model, and oracle imitation status against hybrid-rule mechanism evidence for Issue #2225.
+- `issue_2275_predictive_v2_fate_2026-06-05/`: compact decision matrix for Issue #2275 / parent
+  Issue #1490, recording the stop-old-expansion decision after the #1543 negative audit and #1897
+  failed coupling gate.

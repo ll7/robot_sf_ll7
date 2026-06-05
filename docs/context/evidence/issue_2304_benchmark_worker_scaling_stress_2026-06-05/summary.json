@@ -1,0 +1,173 @@
+{
+  "schema_version": "robot-sf-benchmark-worker-scaling-repeat-profile.v1",
+  "issue": 2304,
+  "generated_at": "2026-06-05T12:31:00+00:00",
+  "git_hash": "67fdb561d825267bc099f3fa32284875448407a7",
+  "claim_boundary": "diagnostic-only",
+  "candidate": "hybrid_rule_v3_fast_progress",
+  "stage": "stress_slice",
+  "stage_horizon": 120,
+  "jobs_per_repeat": 24,
+  "episodes_per_repeat": 24,
+  "repeats": 2,
+  "worker_counts": [
+    1,
+    2,
+    4,
+    6
+  ],
+  "machine_scope": "local machine context; useful for local diagnostic commands but not a cross-host benchmark default by itself",
+  "warnings": [
+    "map_search_paths entry missing: configs/maps/svg_maps",
+    "invalid polygon self-intersection in uni_campus_big.svg obstacle_13"
+  ],
+  "median_rows": [
+    {
+      "workers": 1,
+      "runtime_sec_median": 203.68059772846755,
+      "seconds_per_job_median": 8.486691572019481,
+      "speedup_vs_1_worker_median": 1.0,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "workers": 2,
+      "runtime_sec_median": 109.006195104972,
+      "seconds_per_job_median": 4.541924796040499,
+      "speedup_vs_1_worker_median": 1.868527032299012,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "workers": 4,
+      "runtime_sec_median": 61.414225281972904,
+      "seconds_per_job_median": 2.5589260534155374,
+      "speedup_vs_1_worker_median": 3.316602041368867,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "workers": 6,
+      "runtime_sec_median": 45.502760050527286,
+      "seconds_per_job_median": 1.8959483354386368,
+      "speedup_vs_1_worker_median": 4.4762175548704874,
+      "status": "ok",
+      "decision": "tracked"
+    }
+  ],
+  "marginal_runtime_reduction": [
+    {
+      "from_workers": 1,
+      "to_workers": 2,
+      "runtime_reduction_fraction": 0.4648179732352746,
+      "speedup_ratio": 1.8685231379035379
+    },
+    {
+      "from_workers": 2,
+      "to_workers": 4,
+      "runtime_reduction_fraction": 0.43659876190677466,
+      "speedup_ratio": 1.7749339766884416
+    },
+    {
+      "from_workers": 4,
+      "to_workers": 6,
+      "runtime_reduction_fraction": 0.2590843596640819,
+      "speedup_ratio": 1.3496813207325702
+    }
+  ],
+  "repeat_rows": [
+    {
+      "repeat": 1,
+      "workers": 1,
+      "runtime_sec": 204.21247982699424,
+      "seconds_per_job": 8.50885332612476,
+      "speedup_vs_1_worker": 1.0,
+      "batch_runtime_sec": 204.2058720199857,
+      "parallel_execution": false,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "repeat": 1,
+      "workers": 2,
+      "runtime_sec": 108.93633751000743,
+      "seconds_per_job": 4.539014062916976,
+      "speedup_vs_1_worker": 1.87460386951447,
+      "batch_runtime_sec": 108.92948573292233,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "repeat": 1,
+      "workers": 4,
+      "runtime_sec": 61.83581213792786,
+      "seconds_per_job": 2.5764921724136607,
+      "speedup_vs_1_worker": 3.3024953140663555,
+      "batch_runtime_sec": 61.82885835098568,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "repeat": 1,
+      "workers": 6,
+      "runtime_sec": 45.5568004680099,
+      "seconds_per_job": 1.8982000195004123,
+      "speedup_vs_1_worker": 4.482590474508691,
+      "batch_runtime_sec": 45.54978511296213,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "repeat": 2,
+      "workers": 1,
+      "runtime_sec": 203.14871562994085,
+      "seconds_per_job": 8.464529817914203,
+      "speedup_vs_1_worker": 1.0,
+      "batch_runtime_sec": 203.14213717600796,
+      "parallel_execution": false,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "repeat": 2,
+      "workers": 2,
+      "runtime_sec": 109.07605269993655,
+      "seconds_per_job": 4.544835529164023,
+      "speedup_vs_1_worker": 1.862450195083554,
+      "batch_runtime_sec": 109.06908538902644,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "repeat": 2,
+      "workers": 4,
+      "runtime_sec": 60.99263842601795,
+      "seconds_per_job": 2.5413599344174145,
+      "speedup_vs_1_worker": 3.3307087686713786,
+      "batch_runtime_sec": 60.985619348008186,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "tracked"
+    },
+    {
+      "repeat": 2,
+      "workers": 6,
+      "runtime_sec": 45.448719633044675,
+      "seconds_per_job": 1.8936966513768614,
+      "speedup_vs_1_worker": 4.469844635232283,
+      "batch_runtime_sec": 45.44175316498149,
+      "parallel_execution": true,
+      "status": "ok",
+      "decision": "tracked"
+    }
+  ],
+  "interpretation": {
+    "observed": "The repeated 24-job stress_slice h120 profile continued to improve through six workers, with median speedup of 3.32x at four workers and 4.48x at six workers versus one worker.",
+    "limitation": "This was a local diagnostic runtime profile. The stress_slice decision is tracked rather than pass/revise, and the evidence does not establish planner quality or a cross-host default.",
+    "recommendation": "Use six workers for local stress-slice policy-search diagnostics when CPU headroom is available; keep global/default stage worker settings unchanged until cross-host or CI-resource evidence supports a broader default change."
+  }
+}

@@ -213,6 +213,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2302_benchmark_worker_scaling.md](issue_2302_benchmark_worker_scaling.md)
 
+* Issue #2304 stress-slice benchmark worker scaling diagnostic:
+
+  [issue_2304_benchmark_worker_scaling_stress.md](issue_2304_benchmark_worker_scaling_stress.md)
+
 * Issue #2214 hot-path optimization synthesis:
 
   [issue_2214_hot_path_synthesis.md](issue_2214_hot_path_synthesis.md)

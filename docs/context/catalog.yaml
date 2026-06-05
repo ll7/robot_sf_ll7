@@ -193,6 +193,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2304_benchmark_worker_scaling_stress.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2214_hot_path_synthesis.md
     status: current
     freshness: maintained

@@ -131,6 +131,8 @@ class LidarScannerSettings:
         scan_noise: Two probabilities ``[loss, corruption]``. Loss replaces a
             ray with ``max_scan_dist``; corruption scales the clipped range by a
             random factor in ``[0, 1)``.
+        scan_noise_array: Cached ndarray derived from ``scan_noise``, allocated
+            once at settings init to avoid per-scan array creation.
         detect_other_robots: When true, dynamic objects exposed by the
             occupancy source are treated as circular obstacles.
         angle_opening: Derived symmetric angular interval in radians, populated
@@ -143,16 +145,18 @@ class LidarScannerSettings:
     scan_noise: list[float] = field(default_factory=lambda: [0.005, 0.002])
     detect_other_robots: bool = True
     angle_opening: Range = field(init=False)
+    scan_noise_array: np.ndarray = field(init=False)
     ray_offsets: np.ndarray = field(init=False)
 
     def __post_init__(self):
-        """Validate scanner settings and derive the symmetric angular opening.
+        """Validate scanner settings and derive derived fields.
 
         ``visual_angle_portion`` is a fraction of a full circle, so ``1.0``
         scans 360 degrees and ``1 / 3`` scans 120 degrees. ``scan_noise`` stores
         scan-loss and corruption probabilities, both constrained to ``[0, 1]``.
         ``ray_offsets`` is a cached heading-independent linspace of ray angles
-        relative to the sensor heading.
+        relative to the sensor heading. ``scan_noise_array`` is a read-only
+        float64 ndarray pre-converted from ``scan_noise``.
         """
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
@@ -165,6 +169,9 @@ class LidarScannerSettings:
 
         self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)
         self.ray_offsets = lidar_ray_offsets(self.num_rays, self.visual_angle_portion)
+        scan_noise_arr = np.array(self.scan_noise, dtype=np.float64)
+        scan_noise_arr.flags.writeable = False
+        self.scan_noise_array = scan_noise_arr
 
     @classmethod
     def ego_pedestrian_lidar(cls) -> "LidarScannerSettings":
@@ -456,7 +463,7 @@ def lidar_ray_scan(
     """
 
     (pos_x, pos_y), robot_orient = pose
-    scan_noise = np.array(settings.scan_noise)
+    scan_noise = settings.scan_noise_array
     scan_dist = settings.max_scan_dist
 
     ped_pos = occ.pedestrian_coords

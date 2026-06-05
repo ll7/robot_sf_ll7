@@ -571,3 +571,36 @@ def test_lidar_ray_scan_orientation_equivalence():
     _ranges, ray_angles = lidar_ray_scan(((0.0, 0.0), 0.0), occ, settings)
     expected = np.mod(lidar_ray_offsets(8, 1.0), 2.0 * np.pi)
     assert np.allclose(ray_angles, expected, atol=1e-12, rtol=1e-12)
+
+
+def test_scan_noise_array_values_match_noise():
+    """scan_noise_array element-wise equals the original scan_noise list."""
+    settings = LidarScannerSettings(scan_noise=[0.1, 0.2])
+    assert np.allclose(settings.scan_noise_array, [0.1, 0.2])
+    assert settings.scan_noise_array.dtype == np.float64
+
+
+def test_scan_noise_array_is_read_only():
+    """scan_noise_array is not writeable to protect shared settings state."""
+    settings = LidarScannerSettings(scan_noise=[0.005, 0.002])
+    assert not settings.scan_noise_array.flags.writeable
+    with pytest.raises(ValueError):
+        settings.scan_noise_array[0] = 0.0
+
+
+def test_scan_noise_array_zero_noise_preserved():
+    """Zero-noise scan produces unchanged deterministic ranges via scan_noise_array."""
+    obstacle_coords = np.array([[3.0, -1.0, 3.0, 1.0]])
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+    )
+    settings = LidarScannerSettings(max_scan_dist=10.0, num_rays=4, scan_noise=[0.0, 0.0])
+    ranges_1, _ = lidar_ray_scan(((1.0, 1.0), 0.0), occ, settings)
+    ranges_2, _ = lidar_ray_scan(((1.0, 1.0), 0.0), occ, settings)
+    assert np.array_equal(ranges_1, ranges_2)

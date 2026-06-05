@@ -1,0 +1,3 @@
+candidate,episodes,success_rate,collision_rate,near_miss_rate,failure_mode,failure_count,mean_command_clip_fraction,mean_yaw_rate_saturation_fraction,mean_signed_braking_peak_m_s2,mean_avg_speed,mean_min_distance,likely_blocker,confidence
+hybrid_rule_v3_fast_progress,1,0.0,0.0,0.0,timeout_low_progress,1,0.275,0.0,-2.5,1.662309936770821,2.157113073697281,route_progress,0.72
+actuation_aware_hybrid_rule_v0,1,0.0,0.0,0.0,timeout_low_progress,1,0.1875,0.0,-2.5,1.667037499328765,2.3627177685565335,route_progress,0.72

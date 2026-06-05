@@ -1,0 +1,6 @@
+surface,path,status,checksum_status,labels_status,artifact_pointer_status,training_ready
+trace_contract_fixture,docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/trace_contract_fixture.jsonl,fixture_valid,checksum_recorded,"collision; near_miss; low_progress present",tracked_fixture_only,false
+baseline_summary_stub,docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/baseline_summary_stub.json,freeze_stub,checksum_recorded,not_applicable,tracked_stub_only,false
+baseline_wandb_alias,wandb-artifact://robot-sf/policy-search/hybrid_rule_v3_static_margin0_waypoint2_baseline:pending,missing_concrete_uri,not_available,not_applicable,pending_alias,false
+trace_training_manifest,not_recorded,missing,not_available,not_available,missing,false
+learned_risk_checkpoint,not_recorded,missing,not_available,not_applicable,missing,false

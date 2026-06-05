@@ -143,3 +143,6 @@ boundary before merging an evidence-producing PR.
 - `issue_2225_learned_policy_failure_synthesis_2026-06-04/`: compact learned-policy failure-mode
   evidence table synthesizing BC warm-start PPO, shielded PPO repair, ORCA-residual BC, learned risk
   model, and oracle imitation status against hybrid-rule mechanism evidence for Issue #2225.
+- `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
+  Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
+  and baseline artifact URIs despite a valid launch packet fixture.

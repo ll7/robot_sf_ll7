@@ -47,6 +47,12 @@ def test_fused_sensor_space_stack_shapes() -> None:
     assert orig_space[OBS_RAYS].shape == (timesteps, 4)
     assert norm_space[OBS_DRIVE_STATE].shape == (timesteps, 5)
     assert norm_space[OBS_RAYS].shape == (timesteps, 4)
+    assert orig_space[OBS_DRIVE_STATE].dtype == np.float32
+    assert orig_space[OBS_RAYS].dtype == np.float32
+    np.testing.assert_allclose(orig_space[OBS_DRIVE_STATE].high, np.ones((timesteps, 5)))
+    np.testing.assert_allclose(orig_space[OBS_DRIVE_STATE].low, -np.ones((timesteps, 5)))
+    np.testing.assert_allclose(orig_space[OBS_RAYS].high, np.full((timesteps, 4), 10.0))
+    np.testing.assert_allclose(orig_space[OBS_RAYS].low, np.zeros((timesteps, 4)))
 
 
 def test_sensor_fusion_stacks_history() -> None:

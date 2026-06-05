@@ -795,6 +795,14 @@ Job `12746` (`gse-852-attn1337`) was submitted from branch `gse-852-asym10m-s123
 attention launcher runs directly inside the batch allocation. Treat this as the active
 `goal-slurm-experiment` training lane until it finishes.
 
+Completion update on 2026-06-05: job `12746` completed successfully in 16h44m30s. The final 10M
+checkpoint was also the best checkpoint: success `0.8714`, collision `0.1286`, SNQI `0.0544`, eval
+return `21.91`. This is weaker than attention-only seeds 123 and 231, which both reached `0.8857`
+success / `0.1143` collision. The three-seed band still supports attention-only as a strong
+single-factor mechanism, but not as a converged promotion candidate because all three seeds miss the
+strict collision target. Compact provenance is tracked in
+`docs/context/evidence/issue_852_attention_only_10m_seed1337_2026-06-05/`.
+
 Verification on 2026-04-29:
 
 ```bash

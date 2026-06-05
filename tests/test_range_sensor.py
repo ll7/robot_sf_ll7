@@ -425,3 +425,93 @@ def test_lidar_settings_factory_methods_comparison():
     # Angle opening should reflect the difference
     assert abs(ego_ped_lidar.angle_opening[0]) < abs(default_lidar.angle_opening[0])
     assert abs(ego_ped_lidar.angle_opening[1]) < abs(default_lidar.angle_opening[1])
+
+
+def test_ray_offsets_precomputed_equivalence():
+    """Precomputed offsets preserve absolute ray angles from the old linspace.
+
+    Verifies the refactoring preserves ray-angle values across headings,
+    allowing only sub-ULP arithmetic-order differences.
+    """
+    settings = LidarScannerSettings(num_rays=10, visual_angle_portion=1.0, scan_noise=[0.0, 0.0])
+
+    headings = [
+        0.0,
+        np.pi / 4,
+        np.pi,
+        -np.pi / 2,
+        2 * np.pi,
+        -3 * np.pi,
+        7 * np.pi / 4,
+        -2 * np.pi + np.pi / 6,
+    ]
+
+    for heading in headings:
+        # Old method: direct linspace from (heading + opening[0]) to (heading + opening[1])
+        lower = heading + settings.angle_opening[0]
+        upper = heading + settings.angle_opening[1]
+        expected = np.linspace(lower, upper, settings.num_rays + 1)[:-1]
+        expected = np.array([(a + np.pi * 2) % (np.pi * 2) for a in expected])
+
+        # New method: heading added to precomputed offsets, same wrapping
+        actual = heading + settings.ray_offsets
+        actual = np.array([(a + np.pi * 2) % (np.pi * 2) for a in actual])
+
+        assert np.allclose(actual, expected, atol=1e-12, rtol=1e-12), (
+            f"ray_angles mismatch at heading={heading:.6f}\n"
+            f"  expected[0]={expected[0]:.15f}  actual[0]={actual[0]:.15f}\n"
+            f"  expected[-1]={expected[-1]:.15f}  actual[-1]={actual[-1]:.15f}"
+        )
+
+
+def test_ray_offsets_length_and_range():
+    """Precomputed offsets have correct length and stay within opening bounds."""
+    settings = LidarScannerSettings(num_rays=64, visual_angle_portion=0.5, scan_noise=[0.0, 0.0])
+
+    assert len(settings.ray_offsets) == settings.num_rays
+    assert np.isclose(settings.ray_offsets[0], settings.angle_opening[0])
+    assert settings.ray_offsets[-1] < settings.angle_opening[1]
+    assert np.all(settings.ray_offsets >= settings.angle_opening[0])
+    assert np.all(settings.ray_offsets <= settings.angle_opening[1])
+    assert np.all(np.diff(settings.ray_offsets) > 0)
+
+
+def test_ray_offsets_rebuilt_on_reinit():
+    """Ray offsets are rebuilt when a new settings instance is created."""
+    s1 = LidarScannerSettings(num_rays=8, visual_angle_portion=1.0, scan_noise=[0.0, 0.0])
+    s2 = LidarScannerSettings(num_rays=16, visual_angle_portion=0.5, scan_noise=[0.0, 0.0])
+
+    assert len(s1.ray_offsets) == 8
+    assert len(s2.ray_offsets) == 16
+    assert not np.array_equal(s1.ray_offsets, s2.ray_offsets)
+    assert s2.ray_offsets[0] > s1.ray_offsets[0]  # narrower FOV has less negative start
+
+
+def test_lidar_ray_scan_uses_precomputed_offsets():
+    """Integration: lidar_ray_scan with precomputed offsets matches old direct linspace."""
+    obstacle_coords = np.array([[3.0, 0.0, 3.0, 2.0]])
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+    )
+    settings = LidarScannerSettings(num_rays=4, visual_angle_portion=1.0, scan_noise=[0.0, 0.0])
+
+    for heading in [0.0, np.pi / 3, -np.pi / 2, np.pi, 3 * np.pi / 2]:
+        # Old method
+        lower = heading + settings.angle_opening[0]
+        upper = heading + settings.angle_opening[1]
+        expected_angles = np.linspace(lower, upper, settings.num_rays + 1)[:-1]
+        expected_angles = np.array([(a + np.pi * 2) % (np.pi * 2) for a in expected_angles])
+
+        # New method through public API
+        ranges, actual_angles = lidar_ray_scan(((1.0, 1.0), heading), occ, settings)
+
+        assert np.allclose(actual_angles, expected_angles, atol=1e-12, rtol=1e-12), (
+            f"ray_angles mismatch at heading={heading:.6f}"
+        )
+        assert ranges.shape == (settings.num_rays,)

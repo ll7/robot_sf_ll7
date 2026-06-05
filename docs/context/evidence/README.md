@@ -151,6 +151,8 @@ boundary before merging an evidence-producing PR.
 - `issue_2261_static_recenter_slice_local_2026-06-05/`: compact analysis-only summary for
   Issue #2261, explaining why static recentering stays slice-local after the held-out smoke and
   naming the missing activation trace needed for definitive attribution.
+- `issue_2306_static_recenter_activation_trace_2026-06-05/`: compact instrumented rerun evidence
+  showing static recentering stayed inactive on the unsolved held-out row from Issue #2221.
 - `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
   Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
   and baseline artifact URIs despite a valid launch packet fixture.

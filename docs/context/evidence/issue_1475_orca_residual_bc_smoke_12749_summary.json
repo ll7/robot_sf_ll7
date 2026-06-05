@@ -1,0 +1,76 @@
+{
+  "schema_version": "robot-sf-slurm-evidence-summary.v1",
+  "issue": 1475,
+  "job": {
+    "id": 12749,
+    "name": "gse-1475-smoke",
+    "state": "FAILED",
+    "exit_code": "1:0",
+    "partition": "a30",
+    "qos": "a30-gpu",
+    "started_at": "2026-06-05T07:35:58+02:00",
+    "ended_at": "2026-06-05T07:37:38+02:00",
+    "elapsed": "00:01:40"
+  },
+  "submission": {
+    "branch": "gse-1475-smoke-20260605",
+    "commit": "5faaa318d609f87730757d7fbda65b799178b5c5",
+    "latest_main_checked": true,
+    "command": "scripts/dev/sbatch_orca_residual_bc_issue1475.sh --episodes 3 --seeds \"111:112:113\" --no-status --sbatch-arg \"--job-name=gse-1475-smoke\"",
+    "lineage_config": "configs/training/orca_residual/orca_residual_bc_issue_1428.yaml",
+    "bc_config": "configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml",
+    "slurm_script": "SLURM/Auxme/issue_1475_orca_residual_bc.sl",
+    "run_nominal": false
+  },
+  "preflight": {
+    "lineage_packet_status": "valid",
+    "launcher_dry_run": "passed",
+    "occupancy_gate_before_submit": "no active user jobs"
+  },
+  "classification": {
+    "state": "failed_closed_smoke_gate_revise",
+    "reason": "The smoke runner produced one episode row, but the Issue #1475 wrapper gate requires success before nominal escalation and observed success_rate=0.0.",
+    "nominal_escalation_allowed": false,
+    "claim_boundary": "Diagnostic smoke evidence only; local output artifacts are not durable benchmark evidence."
+  },
+  "metrics": {
+    "episodes": 1,
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "mean_avg_speed": 0.8037693605819239,
+    "termination_reason_counts": {
+      "max_steps": 1
+    },
+    "failure_mode_counts": {
+      "timeout_low_progress": 1
+    },
+    "shield_decision_count": 80,
+    "shield_override_rate": 0.0,
+    "shield_hard_constraint_violation_rate": 0.0,
+    "timing_steps_per_second": 6.462872753290299
+  },
+  "artifacts": {
+    "local_output_root_id": "issue1475-orca-residual-bc-job-12749",
+    "stdout_log_id": "12749-issue1475-orca-residual-bc.out",
+    "stderr_log_id": "12749-issue1475-orca-residual-bc.err",
+    "local_output_boundary": "raw SLURM outputs remain ignored local artifacts; this tracked summary preserves reviewable identifiers and checksums only",
+    "summary_json": {
+      "local_artifact_id": "policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/summary.json",
+      "sha256": "c08b9c64458acf3366b90f87d0b09c0c398c0f9eb2b4b36aa0b21759f1b9883f"
+    },
+    "smoke_jsonl": {
+      "local_artifact_id": "policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/smoke__orca_residual_guarded_ppo_v0.jsonl",
+      "sha256": "ba7092b4bef43788e0c7cdc4af71b0023d2261edf3502e3f75cf61cca13f9ad3"
+    },
+    "bc_policy_zip": {
+      "local_artifact_id": "benchmarks/expert_policies/issue_1428_orca_residual_bc_policy_smoke.zip",
+      "sha256": "85b9c3edf8ec4dbf64ce18bf4fa4540a422b7c9bed76f462a56dc52e28a22774"
+    },
+    "dataset_npz": {
+      "local_artifact_id": "benchmarks/expert_trajectories/issue_1428_orca_residual_bc_smoke.npz",
+      "sha256": "a3870efe372a32fb804868b644c00b66117483fc1644063904bcc23a526e9714"
+    }
+  },
+  "next_action": "Revise the ORCA-residual BC candidate or smoke gate target for low-progress timeout behavior before any rerun or nominal_sanity submission."
+}

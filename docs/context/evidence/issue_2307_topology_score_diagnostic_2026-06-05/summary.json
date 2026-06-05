@@ -1,0 +1,71 @@
+{
+  "schema_version": "robot-sf-topology-score-diagnostic-summary.v1",
+  "issue": 2307,
+  "generated_at": "2026-06-05T13:08:00+00:00",
+  "git_hash": "d9ce46a9d1ee8197bbb8116a02378ee1e5f55308",
+  "claim_boundary": "diagnostic-only",
+  "candidate": "topology_guided_hybrid_rule_v0",
+  "stage": "full_matrix",
+  "scenario_id": "classic_realworld_double_bottleneck_high",
+  "seed": 111,
+  "horizon": 160,
+  "diagnostic_status": "diagnostic_complete",
+  "classification": "scoring_overselects_primary",
+  "required_fields": {
+    "per_frame_hypothesis_count": {
+      "insufficient_hypotheses": 70,
+      "ok": 90
+    },
+    "alternative_hypothesis_count": {
+      "steps_with_score_payload": 98,
+      "steps_with_alternative_hypothesis": 98
+    },
+    "selected_hypothesis": {
+      "route_selector_counts": {
+        "primary_route": 97,
+        "masked_cell_87_79": 1
+      },
+      "topology_command_influence_counts": {
+        "primary_route": 33
+      }
+    },
+    "rejection_reason": {
+      "lower_topology_selection_score": 98
+    },
+    "score_margin_to_primary_route": {
+      "alternative_margin_count": 98,
+      "min": 0.0,
+      "median": 0.4056854309944198,
+      "max": 8.214213684774414
+    },
+    "switch_opportunity_count": 98,
+    "hypothesis_switch_count": 0
+  },
+  "selected_source_counts": {
+    "dynamic_window": 121,
+    "path_follow_0.5m": 2,
+    "route_guide": 4,
+    "topology_hypothesis": 33
+  },
+  "notable_rows": [
+    {
+      "step": 35,
+      "finding": "route selector chose masked_cell_87_79 on a numerical tie with primary_route, but the local command source was dynamic_window and topology_command_influence stayed null",
+      "primary_route_score": -11.336854418424673,
+      "masked_cell_87_79_score": -11.336854418424672,
+      "score_margin_to_selected": 1.7763568394002505e-15
+    },
+    {
+      "step": 1,
+      "finding": "primary_route selected; masked_cell_71_87 rejected by lower_topology_selection_score",
+      "primary_route_score": -14.828023294990286,
+      "masked_cell_71_87_score": -15.296652452074925,
+      "score_margin_to_selected": 0.4686291570846386
+    }
+  ],
+  "interpretation": {
+    "observed": "Topology alternatives were present and scored on 98 steps, but scored alternatives lost with lower_topology_selection_score on 98 rejected hypotheses. The only non-primary selector choice was a near-zero numerical tie and did not produce a topology-command influence switch.",
+    "limitation": "This is a single diagnostic trace and not benchmark-strength mitigation evidence.",
+    "recommendation": "Revise topology scoring or route-diversity terms before downstream planner tuning; do not treat primary-route dominance as an absence-of-alternatives problem for this slice."
+  }
+}

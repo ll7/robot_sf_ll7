@@ -69,6 +69,8 @@ boundary before merging an evidence-producing PR.
 - `issue_2259_amv_clipping_success_boundary_2026-06-05/`: compact parent-lane synthesis for
   Issue #2259, separating synthetic command-feasibility improvement from unchanged navigation
   success and keeping calibrated AMV actuation blocked.
+- `issue_2308_amv_timeout_trace_2026-06-05/`: compact trace-level AMV timeout analysis showing
+  reduced clipping did not change the route/task progress blocker on the matched smoke row.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and

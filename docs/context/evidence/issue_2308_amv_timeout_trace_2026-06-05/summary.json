@@ -1,0 +1,166 @@
+{
+  "issue": 2308,
+  "date": "2026-06-05",
+  "evidence_tier": "diagnostic_only",
+  "classification": "feasibility_improved_but_route_blocked",
+  "claim_boundary": "Trace-level analysis of one synthetic AMV actuation smoke row; not benchmark-strength, calibrated AMV, hardware, safety, or planner-ranking evidence.",
+  "source_context": [
+    "docs/context/issue_2268_amv_timeout_decomposition.md",
+    "docs/context/issue_2259_amv_clipping_success_boundary.md"
+  ],
+  "command": [
+    "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_fast_progress --stage amv_actuation_smoke --output-dir <worktree-local diagnostics dir>/hybrid_rule_v3_fast_progress",
+    "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_policy_search_candidate.py --candidate actuation_aware_hybrid_rule_v0 --stage amv_actuation_smoke --output-dir <worktree-local diagnostics dir>/actuation_aware_hybrid_rule_v0"
+  ],
+  "stage": "amv_actuation_smoke",
+  "scenario": "classic_cross_trap_high",
+  "seed": 101,
+  "horizon": 80,
+  "dt": 0.1,
+  "synthetic_actuation_profile": "amv-actuation-stress-v0",
+  "rows": [
+    {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "status": "failure",
+      "termination_reason": "max_steps",
+      "failure_mode": "timeout_low_progress",
+      "success": false,
+      "steps": 80,
+      "command_clip_fraction": 0.275,
+      "command_clip_steps": 22,
+      "yaw_rate_saturation_fraction": 0.0,
+      "yaw_rate_saturation_steps": 0,
+      "signed_braking_peak_m_s2": -2.5,
+      "mean_avg_speed_m_s": 1.662309936770821,
+      "mean_applied_linear_m_s": 2.1467276975512504,
+      "mean_requested_linear_m_s": 2.3541876016545644,
+      "final_route_progress_m": 12.904024665994093,
+      "final_distance_to_goal_m": 3.6078725186171776,
+      "last_10_step_progress_delta_m": 0.7963458581315876,
+      "last_10_step_mean_applied_linear_m_s": 0.9005736331144968,
+      "last_10_step_mean_abs_linear_gap_m_s": 0.0
+    },
+    {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "status": "failure",
+      "termination_reason": "max_steps",
+      "failure_mode": "timeout_low_progress",
+      "success": false,
+      "steps": 80,
+      "command_clip_fraction": 0.1875,
+      "command_clip_steps": 15,
+      "yaw_rate_saturation_fraction": 0.0,
+      "yaw_rate_saturation_steps": 0,
+      "signed_braking_peak_m_s2": -2.5,
+      "mean_avg_speed_m_s": 1.667037499328765,
+      "mean_applied_linear_m_s": 1.66650771344795,
+      "mean_requested_linear_m_s": 1.6809784164093986,
+      "final_route_progress_m": 12.87191147075262,
+      "final_distance_to_goal_m": 3.639985713858651,
+      "last_10_step_progress_delta_m": 0.9173484465495694,
+      "last_10_step_mean_applied_linear_m_s": 1.0416666666666665,
+      "last_10_step_mean_abs_linear_gap_m_s": 0.008333333333333326
+    }
+  ],
+  "delta_actuation_aware_vs_fast_progress": {
+    "command_clip_fraction": -0.0875,
+    "command_clip_steps": -7,
+    "yaw_rate_saturation_fraction": 0.0,
+    "mean_avg_speed_m_s": 0.004727562557943961,
+    "mean_applied_linear_m_s": -0.4802199841033005,
+    "final_route_progress_m": -0.032113195241472634,
+    "final_distance_to_goal_m": 0.03211319524147352,
+    "last_10_step_progress_delta_m": 0.12100258841798176
+  },
+  "windowed_trace": [
+    {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "window": "0-19",
+      "progress_delta_m": 2.8883964541614287,
+      "clip_fraction": 0.75,
+      "yaw_saturation_fraction": 0.0,
+      "mean_requested_linear_m_s": 2.685833335568508,
+      "mean_applied_linear_m_s": 1.8350000000000002,
+      "mean_abs_linear_gap_m_s": 0.8508333355685075
+    },
+    {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "window": "20-39",
+      "progress_delta_m": 3.6420931587705976,
+      "clip_fraction": 0.1,
+      "yaw_saturation_fraction": 0.0,
+      "mean_requested_linear_m_s": 2.979166666666667,
+      "mean_applied_linear_m_s": 2.9675000000000002,
+      "mean_abs_linear_gap_m_s": 0.011666666666666626
+    },
+    {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "window": "40-59",
+      "progress_delta_m": 3.738012792795292,
+      "clip_fraction": 0.15,
+      "yaw_saturation_fraction": 0.0,
+      "mean_requested_linear_m_s": 2.648806627735833,
+      "mean_applied_linear_m_s": 2.6687499990065895,
+      "mean_abs_linear_gap_m_s": 0.019943371270756138
+    },
+    {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "window": "60-79",
+      "progress_delta_m": 2.072447280449305,
+      "clip_fraction": 0.1,
+      "yaw_saturation_fraction": 0.0,
+      "mean_requested_linear_m_s": 1.1029437766472499,
+      "mean_applied_linear_m_s": 1.1156607911984124,
+      "mean_abs_linear_gap_m_s": 0.01271701455116272
+    },
+    {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "window": "0-19",
+      "progress_delta_m": 2.92761096391877,
+      "clip_fraction": 0.4,
+      "yaw_saturation_fraction": 0.0,
+      "mean_requested_linear_m_s": 1.6070692096367032,
+      "mean_applied_linear_m_s": 1.55,
+      "mean_abs_linear_gap_m_s": 0.057069209636703165
+    },
+    {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "window": "20-39",
+      "progress_delta_m": 3.2348346226410403,
+      "clip_fraction": 0.2,
+      "yaw_saturation_fraction": 0.0,
+      "mean_requested_linear_m_s": 1.7800012866655988,
+      "mean_applied_linear_m_s": 1.7724948567152023,
+      "mean_abs_linear_gap_m_s": 0.015839763283729557
+    },
+    {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "window": "40-59",
+      "progress_delta_m": 3.6002077925834683,
+      "clip_fraction": 0.0,
+      "yaw_saturation_fraction": 0.0,
+      "mean_requested_linear_m_s": 2.0,
+      "mean_applied_linear_m_s": 2.0,
+      "mean_abs_linear_gap_m_s": 0.0
+    },
+    {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "window": "60-79",
+      "progress_delta_m": 2.5209026285295035,
+      "clip_fraction": 0.15,
+      "yaw_saturation_fraction": 0.0,
+      "mean_requested_linear_m_s": 1.3368431693352927,
+      "mean_applied_linear_m_s": 1.3435359970765979,
+      "mean_abs_linear_gap_m_s": 0.006692827741305041
+    }
+  ],
+  "interpretation": {
+    "progress_over_time": "Both candidates made similar positive route progress but remained about 3.6 m from the goal at horizon.",
+    "clipping_over_time": "Actuation-aware scoring reduced early-window clipping from 0.75 to 0.40 and total clip steps from 22 to 15.",
+    "saturation_over_time": "Yaw-rate saturation stayed zero for both candidates across all windows.",
+    "command_speed_profile": "Actuation-aware scoring requested and applied lower linear speeds on average, but terminal progress was effectively unchanged.",
+    "timeout_driver": "The inspected smoke is best explained by route/task progress remaining insufficient, not persistent command infeasibility.",
+    "whether_actuation_aware_scoring_slowed_progress": "No meaningful success-relevant progress improvement was observed; final route progress was 0.032 m lower for the actuation-aware candidate while the last 10-step progress delta was 0.121 m higher."
+  },
+  "recommendation": "Keep actuation-aware scoring diagnostic-only. The targeted trace supports stopping broad AMV actuation escalation until route-progress geometry or horizon/task completion blockers are investigated separately."
+}

@@ -146,3 +146,6 @@ boundary before merging an evidence-producing PR.
 - `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
   Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
   and baseline artifact URIs despite a valid launch packet fixture.
+- `issue_2274_hybrid_component_matrix_2026-06-05/`: validator-readable hybrid-learning component
+  status matrix for Issue #2274 / parent Issue #1489, with compact CSV and YAML rows for learned
+  risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC warm-start PPO.

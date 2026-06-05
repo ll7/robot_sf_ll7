@@ -209,6 +209,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2225_learned_policy_failure_synthesis.md](issue_2225_learned_policy_failure_synthesis.md)
 
+* Issue #2274 hybrid-learning component evidence status matrix:
+
+  [issue_2274_hybrid_component_matrix.md](issue_2274_hybrid_component_matrix.md)
+
 * Issue #2231 mechanism-aware ranking comparison:
 
   [issue_2231_mechanism_aware_ranking.md](issue_2231_mechanism_aware_ranking.md)
@@ -1068,3 +1072,7 @@ why a change was made rather than a full issue execution transcript.
   defines the canonical evidence matrix schema that the synthesis consumer (#1489) will reference
   when component campaigns complete. Includes field contracts, evidence-tier vocabulary,
   non-evidence/failure-mode enumeration, guard-authority constraints, and consumer rules.
+* [Issue #2274 Hybrid-Learning Component Evidence Status Matrix](issue_2274_hybrid_component_matrix.md)
+  classifies learned risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC
+  warm-start PPO before Issue #1489 synthesis. It records blockers, next actions, and the
+  conclusion that Issue #1489 remains blocked from comparative synthesis.

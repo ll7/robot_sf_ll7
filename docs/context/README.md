@@ -452,6 +452,8 @@ knowledge, not every transient iteration detail.
   [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md)
 * Issue #2227 Mechanism Panel Readiness (2026-06-04):
   [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md)
+* Issue #2270 Mechanism Panel Candidate Manifest (2026-06-05):
+  [issue_2270_panel_candidate_manifest.md](issue_2270_panel_candidate_manifest.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
   [issue_1676_proxemic_profile_comfort_slice.md](issue_1676_proxemic_profile_comfort_slice.md)
 * Issue #1617 Local-Planner Repository Survey (2026-05-29):

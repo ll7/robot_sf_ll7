@@ -276,6 +276,29 @@ def test_lidar_ray_scan_basic_obstacle():
     assert np.any(np.isclose(ranges, 2.0))
 
 
+def test_lidar_ray_scan_wraps_large_heading_with_endpoint_convention():
+    """LiDAR ray angles should wrap arbitrary headings without adding the upper endpoint."""
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: np.empty((0, 4), dtype=np.float64),
+        get_pedestrian_coords=lambda: np.empty((0, 2), dtype=np.float64),
+    )
+    settings = LidarScannerSettings(
+        max_scan_dist=10.0,
+        num_rays=4,
+        scan_noise=[0.0, 0.0],
+        visual_angle_portion=1.0,
+    )
+
+    _ranges, ray_angles = lidar_ray_scan(((1.0, 1.0), 8.5 * np.pi), occ, settings)
+
+    expected = np.mod(8.5 * np.pi + np.array([-np.pi, -np.pi / 2.0, 0.0, np.pi / 2.0]), 2.0 * np.pi)
+    np.testing.assert_allclose(ray_angles, expected)
+
+
 def test_lidar_ray_scan_enemy_branch():
     """Ego-ped occupancy path detects enemy radius."""
     obstacle_coords = np.empty((0, 4), dtype=np.float64)

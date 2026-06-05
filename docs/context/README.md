@@ -175,6 +175,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2280_research_v1_first_trace_review.md](issue_2280_research_v1_first_trace_review.md)
 
+* Issue #2281 research-v1 trace review pack:
+
+  [issue_2281_research_v1_trace_review_pack.md](issue_2281_research_v1_trace_review_pack.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)

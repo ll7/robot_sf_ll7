@@ -133,6 +133,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2269_research_v1_trace_case_selection.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
   - path: docs/context/issue_2154_ammv_social_force_model.md
     status: current
     freshness: maintained

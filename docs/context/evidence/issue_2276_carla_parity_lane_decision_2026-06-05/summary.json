@@ -1,0 +1,46 @@
+{
+  "schema": "carla_parity_lane_decision.v1",
+  "issue": 2276,
+  "parent_issue": 1491,
+  "date": "2026-06-05",
+  "status": "analysis_only_lane_decision",
+  "decision": "proceed_to_alignment_repair",
+  "rejected_decisions": [
+    {
+      "decision": "pause_until_carla_host",
+      "reason": "Issue #1509 recorded available CARLA Docker preflight and a live replay path; the blocker is alignment, not host access."
+    },
+    {
+      "decision": "stop_current_parity_lane",
+      "reason": "Issue #1467 showed native smoke metrics can be emitted and compared, so the technical path remains viable after fixture repair."
+    }
+  ],
+  "evidence": [
+    {
+      "source": "docs/context/issue_1444_carla_coordinate_alignment_contract.md",
+      "finding": "Only native and threshold-bounded aligned replay modes are eligible for metric parity."
+    },
+    {
+      "source": "docs/context/evidence/issue_1508_carla_eligibility_2026-05-31/candidate_eligibility_summary.json",
+      "finding": "No existing candidate is eligible for a multi-scenario native/aligned campaign now."
+    },
+    {
+      "source": "docs/context/evidence/issue_1509_carla_native_fixture_2026-05-31/live_replay_pr_promoted.json",
+      "finding": "Certified fixture replay status was oracle-replay but coordinate replay mode was adapted, eligible_for_metric_parity was false, and robot spawn projection was 18.19085467444781 m."
+    },
+    {
+      "source": "docs/context/evidence/issue_1509_carla_native_fixture_2026-05-31/parity_report_pr_promoted.json",
+      "finding": "Parity report status was unavailable because replay mode/status was not native/comparable: oracle-replay-adapted."
+    },
+    {
+      "source": "docs/context/issue_1467_carla_replay_metrics.md",
+      "finding": "Generated native smoke probe emitted comparable success, collision, and intervention_rate metrics."
+    }
+  ],
+  "blocked_followups": [
+    1510,
+    1511
+  ],
+  "unblock_condition": "A certified scenario fixture must replay as native with zero unplanned projection or as explicitly aligned with a pre-declared reversible transform and threshold, while emitting comparable Robot-SF and CARLA metrics.",
+  "claim_boundary": "CARLA lane routing only; not replay parity evidence, simulator-transfer evidence, benchmark-strength evidence, or paper-facing CARLA evidence."
+}

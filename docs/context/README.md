@@ -122,6 +122,8 @@ knowledge, not every transient iteration detail.
   [issue_1508_carla_native_aligned_eligibility.md](issue_1508_carla_native_aligned_eligibility.md)
 * Issue #1509 CARLA native fixture certification:
   [issue_1509_carla_native_fixture_certification.md](issue_1509_carla_native_fixture_certification.md)
+* Issue #2276 CARLA parity lane decision:
+  [issue_2276_carla_parity_lane_decision.md](issue_2276_carla_parity_lane_decision.md)
 * Issue #1894 SLURM job finalizer:
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #2232 planner mechanism transfer benchmark protocol:

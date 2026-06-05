@@ -209,6 +209,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2172_benchmark_worker_scaling.md](issue_2172_benchmark_worker_scaling.md)
 
+* Issue #2302 benchmark worker scaling continuation:
+
+  [issue_2302_benchmark_worker_scaling.md](issue_2302_benchmark_worker_scaling.md)
+
 * Issue #2214 hot-path optimization synthesis:
 
   [issue_2214_hot_path_synthesis.md](issue_2214_hot_path_synthesis.md)

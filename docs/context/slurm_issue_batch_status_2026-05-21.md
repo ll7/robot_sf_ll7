@@ -107,19 +107,19 @@ slurm_issue_status:
   state: not_submitted
   source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
   slurm_job_id: not_submitted
-  branch: issue-1397-oracle-imitation-launch-packet
-  commit: unknown
+  branch: issue-2271-oracle-imitation-preflight
+  commit: e0ca196e63aead9e8491eb7f022d3a0e98c4a126
   config_path:
     - configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
-  output_root: missing
+  output_root: job-local ROBOT_SF_ARTIFACT_ROOT; synced to RESULTS_ROOT on SLURM job exit
   stdout_stderr_path: missing
-  durable_artifact_pointer_status: missing dataset manifest, checksum, split validation, and artifact pointer
-  next_action: validate the launch packet at the exact collection commit and select durable dataset storage before submission
+  durable_artifact_pointer_status: pending concrete W&B aliases, generated trace manifest checksum, generated dataset checksum, and final dataset manifest
+  next_action: submit from an allowed Auxme login node only after rerunning the validator and wrapper dry-run at the intended collection commit
   closure_condition: dataset manifest, checksums, split/leakage validation, and durable artifact pointer exist, or the trail is closed failed/inconclusive/rerun-required
-  last_update: 2026-05-30
-  comparison_status: pending split/leakage validation
-  status_basis: issue body and docs/context/policy_search/SLURM/003_imitation_oracle_dataset_campaign.md
-  notes_non_evidence: issue body names candidate launch commit 034ac79e, but the exact collection commit is not recorded as the execution commit
+  last_update: 2026-06-05
+  comparison_status: launch packet valid; collection output still absent
+  status_basis: docs/context/issue_2271_oracle_imitation_trace_preflight.md
+  notes_non_evidence: local preflight only; no SLURM job submitted, no trace collection, no final imitation NPZ dataset, and no learned-policy evidence
 ```
 
 ### Issue #1472 Learned Risk Model v1 SLURM Campaign

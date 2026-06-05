@@ -8,6 +8,7 @@ from robot_sf.sensor.range_sensor import (
     LidarScannerSettings,
     circle_line_intersection_distance,
     euclid_dist,
+    lidar_ray_offsets,
     lidar_ray_scan,
     lidar_sensor_space,
     lineseg_line_intersection_distance,
@@ -515,3 +516,58 @@ def test_lidar_ray_scan_uses_precomputed_offsets():
             f"ray_angles mismatch at heading={heading:.6f}"
         )
         assert ranges.shape == (settings.num_rays,)
+
+
+################################################################################
+# lidar_ray_offsets tests
+
+
+def test_lidar_ray_offsets_endpoint_convention():
+    """Cached helper produces the same values as direct relative linspace."""
+    num_rays, portion = 4, 0.3
+    half = np.pi * portion
+    expected = np.linspace(-half, half, num_rays + 1)[:-1]
+
+    result = lidar_ray_offsets(num_rays, portion)
+    assert np.allclose(result, expected, atol=1e-12, rtol=1e-12)
+    assert result.shape == (num_rays,)
+
+
+def test_lidar_ray_offsets_cache_identity():
+    """Same arguments return the identical cached array object."""
+    a = lidar_ray_offsets(8, 0.5)
+    b = lidar_ray_offsets(8, 0.5)
+    assert a is b
+
+
+def test_lidar_ray_offsets_different_portion():
+    """Different visual_angle_portion produces distinct cached arrays."""
+    a = lidar_ray_offsets(8, 0.5)
+    b = lidar_ray_offsets(8, 1.0)
+    assert not np.array_equal(a, b)
+
+
+def test_lidar_ray_offsets_read_only():
+    """Cached array is read-only; in-place mutation raises ValueError."""
+    result = lidar_ray_offsets(8, 0.5)
+    assert not result.flags.writeable
+    with pytest.raises(ValueError):
+        result[0] = 0.0
+
+
+def test_lidar_ray_scan_orientation_equivalence():
+    """Ray angles at zero orientation match normalized cached offsets."""
+    obstacle_coords = np.empty((0, 4), dtype=np.float64)
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (0.0, 0.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+    )
+    settings = LidarScannerSettings(num_rays=8, visual_angle_portion=1.0, scan_noise=[0.0, 0.0])
+    _ranges, ray_angles = lidar_ray_scan(((0.0, 0.0), 0.0), occ, settings)
+    expected = np.mod(lidar_ray_offsets(8, 1.0), 2.0 * np.pi)
+    assert np.allclose(ray_angles, expected, atol=1e-12, rtol=1e-12)

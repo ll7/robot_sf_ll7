@@ -7,6 +7,7 @@ settings before they are exposed as Gymnasium observation spaces.
 """
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from math import cos, sin
 
 import numba
@@ -150,8 +151,8 @@ class LidarScannerSettings:
         ``visual_angle_portion`` is a fraction of a full circle, so ``1.0``
         scans 360 degrees and ``1 / 3`` scans 120 degrees. ``scan_noise`` stores
         scan-loss and corruption probabilities, both constrained to ``[0, 1]``.
-        ``ray_offsets`` is a precomputed heading-independent linspace of ray
-        angles relative to the sensor heading, rebuilt once on construction.
+        ``ray_offsets`` is a cached heading-independent linspace of ray angles
+        relative to the sensor heading.
         """
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
@@ -163,9 +164,7 @@ class LidarScannerSettings:
             raise ValueError("Scan noise probabilities must be within [0, 1]!")
 
         self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)
-        self.ray_offsets = np.linspace(
-            self.angle_opening[0], self.angle_opening[1], self.num_rays + 1
-        )[:-1]
+        self.ray_offsets = lidar_ray_offsets(self.num_rays, self.visual_angle_portion)
 
     @classmethod
     def ego_pedestrian_lidar(cls) -> "LidarScannerSettings":
@@ -414,6 +413,24 @@ def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_sca
             out_ranges[i] = out_ranges[i] * np.random.random()
 
 
+@lru_cache(maxsize=32)
+def lidar_ray_offsets(num_rays: int, visual_angle_portion: float) -> np.ndarray:
+    """Return cached heading-relative ray offsets.
+
+    Args:
+        num_rays: Number of equally spaced rays.
+        visual_angle_portion: Fraction of full circle covered.
+
+    Returns:
+        Read-only array of relative ray offsets in the same endpoint convention
+        used by :func:`lidar_ray_scan`.
+    """
+    half_span = np.pi * visual_angle_portion
+    angles = np.linspace(-half_span, half_span, num_rays + 1)[:-1]
+    angles.flags.writeable = False
+    return angles
+
+
 def lidar_ray_scan(
     pose: RobotPose,
     occ: ContinuousOccupancy,
@@ -450,7 +467,7 @@ def lidar_ray_scan(
 
     ray_offsets = settings.ray_offsets
     ray_angles = robot_orient + ray_offsets
-    ray_angles = np.mod(ray_angles + np.pi * 2, np.pi * 2)
+    ray_angles = np.mod(ray_angles, 2.0 * np.pi)
 
     if isinstance(occ, EgoPedContinuousOccupancy):
         enemy_pos = np.array([occ.enemy_coords])

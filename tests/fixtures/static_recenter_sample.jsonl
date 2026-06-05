@@ -1,0 +1,1 @@
+{"row_id": 0, "activations": [{"step": 5, "type": "static_recenter"}], "command_history": [{"source": "planner"}, {"source": "static_recenter"}], "progress": [0.0, 0.0, 0.0, 0.0, 0.1, 0.15, 0.2], "trajectory": [[0,0],[0,0],[0,0],[0,0],[0.1,0.0],[0.2,0.0]], "terminal_outcome": "not_converged"}

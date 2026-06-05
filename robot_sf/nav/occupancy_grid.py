@@ -749,10 +749,13 @@ class OccupancyGrid:
                 idx for idx, ch in enumerate(self.config.channels) if ch != GridChannel.COMBINED
             ]
             if source_indices:
-                combined = np.max(self._grid_data[source_indices], axis=0)
+                np.maximum.reduce(
+                    self._grid_data[source_indices],
+                    axis=0,
+                    out=self._grid_data[combined_idx],
+                )
             else:
-                combined = np.zeros_like(self._grid_data[combined_idx])
-            self._grid_data[combined_idx] = combined.astype(self.config.dtype, copy=False)
+                self._grid_data[combined_idx].fill(0)
             logger.debug("Generated combined channel from %s indices", source_indices)
 
         # Cache obstacle polygons for direct spatial queries

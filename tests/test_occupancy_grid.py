@@ -194,6 +194,7 @@ class TestGridStaticObstacleLayerCache:
         np.testing.assert_array_equal(second, expected)
         np.testing.assert_array_equal(second[0], first[0])
         assert not np.array_equal(second[1], first[1])
+        np.testing.assert_array_equal(second[2], np.maximum(second[0], second[1]))
 
     def test_world_frame_cache_refreshes_when_obstacles_change(self, monkeypatch):
         """Obstacle input changes must refresh the cached static layer."""

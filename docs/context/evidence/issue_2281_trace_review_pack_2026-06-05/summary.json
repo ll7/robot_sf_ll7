@@ -15,14 +15,14 @@
   "mechanisms": [
     {
       "mechanism": "AMMV Social Force direct activation",
-      "source_issue": "#2168/#2269",
+      "source_issue": "#2168/#2269/#2309",
       "evidence_tier": 1,
       "config": "classic_head_on_corridor_low direct mechanism probe",
       "seeds": "111,112,113",
-      "artifacts": "docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/summary.json",
-      "metrics": "AMMV force magnitude and intrusion count",
+      "artifacts": "docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/summary.json; docs/context/evidence/issue_2309_amv_trace_export_probe_2026-06-05/summary.json",
+      "metrics": "AMMV force magnitude and intrusion count; regenerated episode-row JSONL has no step frames",
       "verdict": "unresolved",
-      "caveats": "Blocked for pack rendering because matched simulation_trace_export.v1 traces and benchmark-row AMMV metadata are absent."
+      "caveats": "Blocked for pack rendering because #2309 confirmed the regenerable #2168 benchmark rows are aggregate episode JSONL, not matched simulation_trace_export.v1 traces, and benchmark-row AMMV metadata remains absent."
     },
     {
       "mechanism": "AMV cross-trap hazard/ODD coverage",
@@ -69,5 +69,5 @@
       "caveats": "Phase/clearance sensitivity only; no terminal outcome change and pedestrian IDs are index-based."
     }
   ],
-  "next_step": "Export AMV-specific renderable traces for the AMMV head-on corridor case or build a small annotation set for one reviewed compact trace-slice case."
+  "next_step": "Add a step-event recorder/export path that preserves AMMV metadata before AMMV head-on corridor rendering, or build a small annotation set for one reviewed compact trace-slice case."
 }

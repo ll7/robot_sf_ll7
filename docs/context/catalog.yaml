@@ -73,6 +73,10 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2259_amv_clipping_success_boundary.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2125_seed_sufficiency_ranking_stability.md
     status: current
     freshness: maintained

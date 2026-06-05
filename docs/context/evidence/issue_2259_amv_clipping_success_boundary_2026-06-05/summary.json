@@ -1,0 +1,71 @@
+{
+  "issue": 2259,
+  "date": "2026-06-05",
+  "evidence_tier": "analysis_only",
+  "classification": "diagnostic_success_blocked_by_route_progress",
+  "recommendation": "keep_diagnostic_only",
+  "confidence": {
+    "reduced_clipping_orthogonal_to_success_on_smoke": 0.74,
+    "exact_per_step_timeout_cause": 0.58
+  },
+  "source_evidence": {
+    "ranking_note": "docs/context/issue_2224_amv_actuation_ranking.md",
+    "timeout_decomposition": "docs/context/issue_2268_amv_timeout_decomposition.md",
+    "evidence_ladder": "docs/context/issue_2230_amv_actuation_evidence_ladder.md",
+    "comparison_json": "docs/context/evidence/issue_2224_amv_actuation_ranking_2026-06-04/comparison.json",
+    "timeout_summary": "docs/context/evidence/issue_2268_amv_timeout_decomposition_2026-06-05/summary.json"
+  },
+  "comparison": {
+    "scenario_filter": ["classic_cross_trap_high"],
+    "stage": "amv_actuation_smoke",
+    "synthetic_actuation_profile": "amv-actuation-stress-v0",
+    "baseline_candidate": "hybrid_rule_v3_fast_progress",
+    "actuation_aware_candidate": "actuation_aware_hybrid_rule_v0",
+    "delta_actuation_aware_vs_baseline": {
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0,
+      "mean_command_clip_fraction": -0.0875,
+      "mean_yaw_rate_saturation_fraction": 0.0,
+      "mean_signed_braking_peak_m_s2": 0.0,
+      "mean_avg_speed": 0.004727562557943961,
+      "mean_min_distance": 0.2056046948592529
+    }
+  },
+  "observed_boundary": {
+    "feasibility_improved": true,
+    "task_success_improved": false,
+    "failure_mode_changed": false,
+    "failure_mode": "timeout_low_progress",
+    "likely_blocker": "route_progress"
+  },
+  "interpretation": [
+    "The actuation-aware scorer reduced synthetic command clipping.",
+    "Both candidates still timed out with zero success.",
+    "Speed-cap and yaw-saturation explanations are weak on the durable summary metrics.",
+    "The tracked evidence supports route-progress blocker with feasibility improvement, not a navigation-success improvement."
+  ],
+  "missing_evidence": [
+    "per-step route-progress time series",
+    "per-step selected command and projected command traces",
+    "per-step clipping/projection timeline",
+    "deadlock or oscillation feature timeline"
+  ],
+  "next_smallest_proof": {
+    "type": "trace_level_extractor_or_rerun",
+    "target": "same matched amv_actuation_smoke slice",
+    "required_fields": [
+      "route_progress",
+      "selected_command",
+      "projected_command",
+      "command_clip_fraction_or_projection_flag",
+      "failure_mechanism_timeline"
+    ]
+  },
+  "research_v1_claim_effect": {
+    "claim": "research-v1.amv.calibrated_actuation",
+    "status_after_this_issue": "blocked",
+    "reason": "Synthetic diagnostic clipping evidence does not provide calibrated AMV runtime/provenance fields."
+  },
+  "claim_boundary": "synthetic analysis-only diagnostic; no benchmark-strength, calibrated AMV, hardware, safety, or paper-facing performance claim"
+}

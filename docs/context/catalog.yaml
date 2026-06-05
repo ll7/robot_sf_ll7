@@ -245,6 +245,18 @@ entries:
     status: current
     freshness: dated
     area: learned_policy
+  - path: docs/context/issue_2272_orca_residual_launch_packet_status.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained

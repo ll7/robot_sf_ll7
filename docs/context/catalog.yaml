@@ -300,6 +300,10 @@ entries:
     status: current
     freshness: evidence
     area: manual_control_trace
+  - path: docs/context/issue_2270_panel_candidate_manifest.md
+    status: current
+    freshness: evidence
+    area: manual_control_trace
   - path: docs/context/issue_2040_artifact_publication_workflow.md
     status: current
     freshness: maintained

@@ -1,0 +1,184 @@
+schema_version: panel_candidate_manifest.v1
+issue: 2270
+parent_issue: 2227
+created_at: "2026-06-05"
+status: blocked_missing_durable_trace_exports
+claim_boundary: input_discovery_only_not_panel_evidence
+paper_facing: false
+summary:
+  candidate_count: 2
+  panel_ready_count: 0
+  blocked_count: 2
+  reason: >-
+    Candidate scenario/seed/planner pairs are identifiable from tracked compact evidence, but
+    matched mechanism-specific simulation_trace_export.v1 traces are not tracked for either pair.
+searched_trace_exports:
+  command: "rtk rg -l 'simulation_trace_export\\.v1' docs tests"
+  tracked_mechanism_specific_trace_pairs_found: false
+  generic_trace_fixtures:
+    - tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json
+    - tests/fixtures/analysis_workbench/simulation_trace_export_v1/planner_sanity_open_episode_0000.json
+  prior_gap_manifest:
+    - docs/context/evidence/issue_2227_mechanism_panels_2026-06-04/artifact_gap_manifest.json
+candidates:
+  - id: static_recenter_station_platform_non_transfer
+    mechanism: static_recentering
+    panel_intent: non_transfer_terminal_outcome_pair
+    panel_ready: false
+    blocker: missing_matched_simulation_trace_export_v1_baseline_and_intervention
+    baseline:
+      candidate: hybrid_rule_v3_fast_progress
+      trace_export_path: null
+      terminal_outcome:
+        scenario_id: classic_station_platform_medium
+        seed: 111
+        horizon: 500
+        success: false
+        termination: max_steps
+        near_misses: 60
+        collisions: 0
+    intervention:
+      candidate: issue_2170_static_recenter_only
+      trace_export_path: null
+      terminal_outcome:
+        scenario_id: classic_station_platform_medium
+        seed: 111
+        horizon: 500
+        success: false
+        termination: max_steps
+        near_misses: 60
+        collisions: 0
+    source_evidence:
+      - docs/context/issue_2221_static_recenter_transfer.md
+      - docs/context/evidence/issue_2221_static_recenter_transfer_2026-06-04/comparison_summary.json
+      - docs/context/evidence/issue_2221_static_recenter_transfer_2026-06-04/manifest.md
+      - docs/context/issue_2266_static_recenter_activation.md
+      - docs/context/evidence/issue_2266_static_recenter_activation_2026-06-05/summary.json
+      - docs/context/evidence/issue_2266_static_recenter_activation_2026-06-05/activation_table.csv
+    available_fields:
+      - terminal_outcome
+      - near_miss_count
+      - collision_count
+      - aggregate_success_collision_near_miss_counts
+    missing_fields:
+      - baseline_simulation_trace_export_v1
+      - intervention_simulation_trace_export_v1
+      - static_recenter_activation_count
+      - first_activation_step
+      - selected_command_source_timeline
+      - trajectory_or_route_progress_delta
+      - frame_or_event_range
+    required_exports:
+      - durable://issue_2227_mechanism_panels/traces/static_recenter_station_platform_baseline.json
+      - durable://issue_2227_mechanism_panels/traces/static_recenter_station_platform_recenter.json
+    recommended_next_command_shape:
+      - >-
+        scripts/dev/run_worktree_shared_venv.sh -- uv run python
+        scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_fast_progress
+        --stage full_matrix --funnel-config
+        configs/policy_search/transfer/issue_2221_static_recenter_heldout_smoke.yaml
+        --output-dir <local_scratch_root>/issue_2270/static_recenter/hybrid_rule_v3_fast_progress --workers 1
+        --allow-expensive-stage
+      - >-
+        scripts/dev/run_worktree_shared_venv.sh -- uv run python
+        scripts/validation/run_policy_search_candidate.py --candidate issue_2170_static_recenter_only
+        --stage full_matrix --funnel-config
+        configs/policy_search/transfer/issue_2221_static_recenter_heldout_smoke.yaml
+        --output-dir <local_scratch_root>/issue_2270/static_recenter/issue_2170_static_recenter_only --workers 1
+        --allow-expensive-stage
+      - >-
+        uv run python scripts/tools/build_simulation_trace_export.py --source
+        <episode-recording.jsonl> --output
+        <local_scratch_root>/issue_2227_mechanism_panels/traces/static_recenter_station_platform_<variant>.json
+        --planner-id <candidate> --scenario-id classic_station_platform_medium
+    interpretation_boundary: >-
+      This pair can illustrate static-recentering non-transfer only after durable traces prove
+      activation/command-source and trajectory details. Current tracked evidence supports terminal
+      outcome equality, not visual mechanism explanation.
+  - id: topology_primary_route_double_bottleneck
+    mechanism: topology_guided_recovery
+    panel_intent: primary_route_only_behavior_with_alternatives
+    panel_ready: false
+    blocker: missing_matched_simulation_trace_export_v1_baseline_and_topology_guided
+    baseline:
+      candidate: hybrid_rule_v3_fast_progress
+      trace_export_path: null
+      diagnostic_summary:
+        scenario_id: classic_realworld_double_bottleneck_high
+        seed: 111
+        horizon: 160
+        selected_source_counts:
+          dynamic_window: 158
+          path_follow_0.5m: 2
+        closest_robot_ped_distance_m: 1.898151542713718
+        final_goal_distance_m: 14.788489995011457
+    intervention:
+      candidate: topology_guided_hybrid_rule_v0
+      trace_export_path: null
+      diagnostic_summary:
+        scenario_id: classic_realworld_double_bottleneck_high
+        seed: 111
+        horizon: 160
+        selected_source_counts:
+          dynamic_window: 121
+          path_follow_0.5m: 2
+          route_guide: 4
+          topology_hypothesis: 33
+        topology_status_counts:
+          insufficient_hypotheses: 70
+          ok: 90
+        topology_command_influence_counts:
+          primary_route: 33
+        hypothesis_switch_count: 0
+        closest_robot_ped_distance_m: 1.944036597811866
+        final_goal_distance_m: 14.825826119039796
+    source_evidence:
+      - docs/context/issue_2223_topology_hypothesis_planning.md
+      - docs/context/evidence/issue_2223_topology_hypothesis_2026-06-04/summary.json
+      - docs/context/issue_2258_topology_primary_route_audit.md
+      - docs/context/evidence/issue_2258_topology_primary_route_audit_2026-06-05/summary.json
+      - docs/context/evidence/issue_2258_topology_primary_route_audit_2026-06-05/topology_hypothesis_inventory.csv
+      - docs/context/issue_2282_topology_selection_instrumentation.md
+      - docs/context/evidence/issue_2282_topology_selection_instrumentation_2026-06-05/summary.json
+    available_fields:
+      - selected_source_counts
+      - topology_status_counts
+      - topology_command_primary_route_count
+      - hypothesis_switch_count
+      - compact_topology_selection_score_examples
+      - pre_scoring_hypothesis_inventory_csv
+    missing_fields:
+      - baseline_simulation_trace_export_v1
+      - topology_guided_simulation_trace_export_v1
+      - synchronized_robot_pedestrian_state_timeline
+      - synchronized_command_source_timeline
+      - frame_or_event_range
+      - panel_selection_csv
+    required_exports:
+      - durable://issue_2227_mechanism_panels/traces/topology_double_bottleneck_baseline.json
+      - durable://issue_2227_mechanism_panels/traces/topology_double_bottleneck_guided.json
+    recommended_next_command_shape:
+      - >-
+        scripts/dev/run_worktree_shared_venv.sh -- uv run python
+        scripts/validation/run_topology_hypothesis_diagnostics.py --candidate
+        topology_guided_hybrid_rule_v0 --stage full_matrix --scenario-name
+        classic_realworld_double_bottleneck_high --seed 111 --horizon 160 --max-hypotheses 3
+        --min-hypotheses 2 --output-dir
+        <local_scratch_root>/issue_2270/topology/classic_realworld_double_bottleneck_high_seed111_h160
+      - >-
+        uv run python scripts/tools/build_simulation_trace_export.py --source
+        <episode-recording.jsonl> --output
+        <local_scratch_root>/issue_2227_mechanism_panels/traces/topology_double_bottleneck_<variant>.json
+        --planner-id <candidate> --scenario-id classic_realworld_double_bottleneck_high
+    interpretation_boundary: >-
+      This pair can illustrate primary-route-only behavior only after durable traces preserve
+      synchronized trajectory and command-source timelines. Current tracked evidence supports a
+      diagnostic selection-score explanation, not rendered panel evidence.
+next_step:
+  classification: trace_generation_child_needed
+  selection_csv_target: durable://issue_2227_mechanism_panels/selection.csv
+  render_command_shape: >-
+    uv run python scripts/tools/render_trajectory_panels.py --selection-csv
+    <local_scratch_root>/issue_2227_mechanism_panels/selection.csv --output-dir
+    <local_scratch_root>/issue_2227_mechanism_panels/panels --command
+    "uv run python scripts/tools/render_trajectory_panels.py ..." --commit "$(git rev-parse --short HEAD)"

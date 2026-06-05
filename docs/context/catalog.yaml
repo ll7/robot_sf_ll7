@@ -249,6 +249,14 @@ entries:
     status: current
     freshness: maintained
     area: carla_external_sim
+  - path: docs/context/issue_2276_carla_parity_lane_decision.md
+    status: current
+    freshness: evidence
+    area: carla_external_sim
+  - path: docs/context/evidence/issue_2276_carla_parity_lane_decision_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: carla_external_sim
   - path: docs/context/issue_2122_carla_replay_diagnostics.md
     status: current
     freshness: maintained

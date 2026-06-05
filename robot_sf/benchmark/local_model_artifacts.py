@@ -19,6 +19,8 @@ class BlocklistMetadata(NamedTuple):
     """Known local artifact blockers plus shared issue context."""
 
     reasons: dict[tuple[str, str, str], str]
+    decisions: dict[tuple[str, str, str], str]
+    next_actions: dict[tuple[str, str, str], str]
     follow_up_issue: str
 
 
@@ -32,6 +34,9 @@ class LocalModelReference:
     status: str
     reason: str
     surface: str = "local_experimental"
+    decision: str = ""
+    next_action: str = ""
+    availability: str = ""
 
 
 def is_local_output_model_path(value: Any) -> bool:
@@ -98,7 +103,7 @@ def _parse_blocklist_entry(
     path: Path,
     index: int,
     strict: bool,
-) -> tuple[str, str, str, str] | None:
+) -> tuple[str, str, str, str, str, str] | None:
     """Parse one blocklist entry into normalized fields.
 
     Returns:
@@ -112,8 +117,10 @@ def _parse_blocklist_entry(
     field = str(entry.get("field") or "").strip()
     value = str(entry.get("value") or "").strip()
     reason = str(entry.get("reason") or "").strip()
+    decision = str(entry.get("decision") or "").strip()
+    next_action = str(entry.get("next_action") or "").strip()
     if config_path and field and value and reason:
-        return config_path, field, value, reason
+        return config_path, field, value, reason, decision, next_action
     if strict:
         raise ValueError(
             f"{path}: blocked_references[{index}] requires path, field, value, and reason"
@@ -134,7 +141,7 @@ def load_blocklist(path: Path, *, strict: bool = False) -> BlocklistMetadata:
         Blocklist metadata with ``(path, field, value)`` blocker reasons.
     """
     if not path.exists():
-        return BlocklistMetadata({}, "")
+        return BlocklistMetadata({}, {}, {}, "")
     payload = _load_yaml_mapping(path, strict=strict)
     if strict and payload.get("version") != 1:
         raise ValueError(f"{path}: version must be 1")
@@ -143,15 +150,22 @@ def load_blocklist(path: Path, *, strict: bool = False) -> BlocklistMetadata:
     if not isinstance(entries, list):
         if strict:
             raise ValueError(f"{path}: blocked_references must be a list")
-        return BlocklistMetadata({}, follow_up_issue)
+        return BlocklistMetadata({}, {}, {}, follow_up_issue)
     blocklist: dict[tuple[str, str, str], str] = {}
+    decisions: dict[tuple[str, str, str], str] = {}
+    next_actions: dict[tuple[str, str, str], str] = {}
     for index, entry in enumerate(entries):
         parsed = _parse_blocklist_entry(entry, path=path, index=index, strict=strict)
         if parsed is None:
             continue
-        config_path, field, value, reason = parsed
-        blocklist[(config_path, field, value)] = reason
-    return BlocklistMetadata(blocklist, follow_up_issue)
+        config_path, field, value, reason, decision, next_action = parsed
+        key = (config_path, field, value)
+        blocklist[key] = reason
+        if decision:
+            decisions[key] = decision
+        if next_action:
+            next_actions[key] = next_action
+    return BlocklistMetadata(blocklist, decisions, next_actions, follow_up_issue)
 
 
 def _parse_promoted_surface_entry(
@@ -335,9 +349,23 @@ def classify_local_model_references(
                     )
                 )
                 continue
-            reason = blocklist.reasons.get((rel_path, field, value))
+            key = (rel_path, field, value)
+            reason = blocklist.reasons.get(key)
             if reason:
-                rows.append(LocalModelReference(rel_path, field, value, "blocked", reason))
+                decision = blocklist.decisions.get(key, "")
+                next_action = blocklist.next_actions.get(key, "")
+                rows.append(
+                    LocalModelReference(
+                        rel_path,
+                        field,
+                        value,
+                        "blocked",
+                        reason,
+                        decision=decision,
+                        next_action=next_action,
+                        availability="unavailable" if decision or next_action else "",
+                    )
+                )
             else:
                 rows.append(
                     LocalModelReference(
@@ -347,6 +375,7 @@ def classify_local_model_references(
                         "unblocked",
                         "replace with model_id or add an explicit artifact-promotion blocker",
                         "local_experimental",
+                        availability="unknown",
                     )
                 )
     return rows
@@ -393,16 +422,28 @@ def validate_no_local_model_artifacts(
     display_path = lookup_paths[-1]
     messages: list[str] = []
     for field, value in references:
-        reason = next(
+        key = next(
             (
-                blocklist.reasons[(candidate, field, value)]
+                (candidate, field, value)
                 for candidate in lookup_paths
                 if (candidate, field, value) in blocklist.reasons
             ),
-            "",
+            None,
         )
+        reason = blocklist.reasons[key] if key is not None else ""
         if reason:
-            messages.append(f"{display_path}:{field} points at local artifact {value!r}: {reason}")
+            next_action = blocklist.next_actions.get(key, "") if key is not None else ""
+            decision = blocklist.decisions.get(key, "") if key is not None else ""
+            status_bits = []
+            if decision:
+                status_bits.append(f"decision={decision}")
+            if next_action:
+                status_bits.append(f"next_action={next_action}")
+            status_suffix = f" ({'; '.join(status_bits)})" if status_bits else ""
+            messages.append(
+                f"{display_path}:{field} points at unavailable local artifact {value!r}: "
+                f"{reason}{status_suffix}"
+            )
         else:
             messages.append(
                 f"{display_path}:{field} points at local artifact {value!r}; "

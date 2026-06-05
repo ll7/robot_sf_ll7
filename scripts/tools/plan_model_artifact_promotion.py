@@ -208,7 +208,7 @@ def _row_for_local_reference(
     payload: dict[str, Any],
     repo_root: Path,
     promoted_reason: str,
-    blocker_reason: str,
+    blocker: dict[str, str],
 ) -> dict[str, Any]:
     """Classify one local output artifact reference."""
     artifact = _artifact_metadata(value, repo_root=repo_root)
@@ -219,6 +219,9 @@ def _row_for_local_reference(
         artifact=artifact,
         payload=payload,
     )
+    blocker_reason = blocker.get("reason", "")
+    blocker_decision = blocker.get("decision", "")
+    blocker_next_action = blocker.get("next_action", "")
     if promoted_reason:
         return {
             "config_path": config_path,
@@ -230,6 +233,8 @@ def _row_for_local_reference(
             "artifact": artifact,
             "promotion_plan": promotion_plan,
             "blocker_reason": blocker_reason or None,
+            "availability": "unavailable",
+            "unavailable_reason": promoted_reason,
             "claim_boundary": "not benchmark evidence until durable artifact exists",
             "action": (
                 f"{promoted_reason} This local-only path must not be treated as benchmark "
@@ -238,7 +243,14 @@ def _row_for_local_reference(
             ),
         }
 
-    if artifact["exists"]:
+    if blocker_decision:
+        classification = "unavailable"
+        decision = blocker_decision
+        action = blocker_next_action or (
+            "Recover the checkpoint and prove durable provenance before use, or retire/rewrite "
+            "this config."
+        )
+    elif artifact["exists"]:
         classification = "promotable"
         decision = "prepare_promotion_metadata"
         action = (
@@ -272,6 +284,8 @@ def _row_for_local_reference(
         "artifact": artifact,
         "promotion_plan": promotion_plan,
         "blocker_reason": blocker_reason or None,
+        "availability": "unavailable" if blocker_decision else "local_only",
+        "unavailable_reason": blocker_reason or None,
         "claim_boundary": "not benchmark evidence until durable artifact exists",
         "action": action,
     }
@@ -350,7 +364,12 @@ def _row_for_config(
     )
     if local_references:
         field, value = local_references[0]
-        blocker_reason = blocklist.reasons.get((rel_path, field, value), "")
+        blocklist_key = (rel_path, field, value)
+        blocker = {
+            "reason": blocklist.reasons.get(blocklist_key, ""),
+            "decision": blocklist.decisions.get(blocklist_key, ""),
+            "next_action": blocklist.next_actions.get(blocklist_key, ""),
+        }
         row = _row_for_local_reference(
             config_path=rel_path,
             field=field,
@@ -358,7 +377,7 @@ def _row_for_config(
             payload=payload,
             repo_root=repo_root,
             promoted_reason=promoted_reason,
-            blocker_reason=blocker_reason,
+            blocker=blocker,
         )
         row["local_references"] = [
             {"field": reference_field, "value": reference_value}

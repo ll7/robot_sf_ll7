@@ -117,6 +117,8 @@ def test_parse_algo_config_reports_blocked_local_artifact_follow_up() -> None:
     message = str(exc_info.value)
     assert "https://github.com/ll7/robot_sf_ll7/issues/1764" in message
     assert "DRL-VO default checkpoint" in message
+    assert "unavailable local artifact" in message
+    assert "decision=unavailable_recover_or_retire" in message
 
 
 def test_build_policy_rejects_sac_default_local_output_model_path() -> None:

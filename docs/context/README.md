@@ -468,6 +468,8 @@ knowledge, not every transient iteration detail.
   [issue_1960_local_artifact_retirement.md](issue_1960_local_artifact_retirement.md)
 * Issue #2277 local artifact classification:
   [issue_2277_local_artifact_classification.md](issue_2277_local_artifact_classification.md)
+* Issue #2313 local baseline quarantine:
+  [issue_2313_local_baseline_quarantine.md](issue_2313_local_baseline_quarantine.md)
 * Issue #1845 report grouping contracts:
   [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:

@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
-import numpy as np
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 def fill_history_stack(stacked_state: np.ndarray, current_state: np.ndarray) -> np.ndarray:
-    """Return a stack prefilled with ``current_state`` in every temporal row."""
-    return np.repeat(current_state[np.newaxis, :], stacked_state.shape[0], axis=0).astype(
-        stacked_state.dtype, copy=False
-    )
+    """Fill ``stacked_state`` in place with ``current_state`` in every temporal row.
+
+    Returns
+    -------
+    np.ndarray
+        The same ``stacked_state`` array, modified in place.
+    """
+    stacked_state[:] = current_state
+    return stacked_state
 
 
 def append_history_row(stacked_state: np.ndarray, current_state: np.ndarray) -> np.ndarray:
@@ -27,5 +35,12 @@ def append_history_row(stacked_state: np.ndarray, current_state: np.ndarray) -> 
 
 
 def reset_history_stack(stacked_state: np.ndarray) -> np.ndarray:
-    """Return a zero-filled stack preserving the existing shape and dtype."""
-    return np.zeros_like(stacked_state)
+    """Zero-fill ``stacked_state`` in place.
+
+    Returns
+    -------
+    np.ndarray
+        The same ``stacked_state`` array, modified in place.
+    """
+    stacked_state[:] = 0
+    return stacked_state

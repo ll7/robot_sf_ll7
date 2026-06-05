@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.sensor.history_stack import fill_history_stack, reset_history_stack
 from robot_sf.sensor.image_sensor_fusion import ImageSensorFusion
 from robot_sf.sensor.sensor_fusion import (
     OBS_DRIVE_STATE,
@@ -12,6 +13,26 @@ from robot_sf.sensor.sensor_fusion import (
     SensorFusion,
     fused_sensor_space,
 )
+
+
+def test_fill_history_stack_inplace() -> None:
+    """fill_history_stack should modify the input array in place and return the same object."""
+    stack = np.zeros((3, 4), dtype=np.float32)
+    current = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+    result = fill_history_stack(stack, current)
+    assert result is stack
+    assert np.allclose(stack, current), (
+        f"Expected every stack row to match current, but got stack:\n{stack}\n"
+        f"and current:\n{current}"
+    )
+
+
+def test_reset_history_stack_inplace() -> None:
+    """reset_history_stack should zero the input array in place and return the same object."""
+    stack = np.ones((3, 4), dtype=np.float32)
+    result = reset_history_stack(stack)
+    assert result is stack
+    assert np.allclose(stack, 0.0)
 
 
 def test_fused_sensor_space_stack_shapes() -> None:

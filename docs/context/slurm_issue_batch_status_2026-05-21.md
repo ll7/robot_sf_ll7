@@ -201,23 +201,31 @@ slurm_issue_status:
 ```yaml
 slurm_issue_status:
   issue_number: 1475
-  state: not_submitted
+  state: failed_closed
   source_of_truth: docs/context/slurm_issue_batch_status_2026-05-21.md
-  slurm_job_id: not_submitted
-  branch: unknown
-  commit: unknown
+  slurm_job_id: 12749
+  branch: gse-1475-smoke-20260605
+  commit: 5faaa318d609f87730757d7fbda65b799178b5c5
   config_path:
     - configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
-    - docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
-  output_root: missing
-  stdout_stderr_path: missing
-  durable_artifact_pointer_status: missing residual dataset manifest, learned residual checkpoint pointer, and diagnostics report
-  next_action: validate the lineage packet, replace pending artifact aliases, and run smoke before nominal escalation
+    - configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml
+    - SLURM/Auxme/issue_1475_orca_residual_bc.sl
+  output_root: output/slurm/issue1475-orca-residual-bc-job-12749
+  stdout_stderr_path:
+    - output/slurm/12749-issue1475-orca-residual-bc.out
+    - output/slurm/12749-issue1475-orca-residual-bc.err
+  durable_artifact_pointer_status: compact evidence tracked; raw dataset, checkpoint, logs, and smoke JSONL remain local non-durable artifacts
+  next_action: revise the ORCA-residual BC candidate or smoke gate target for low-progress timeout behavior before any rerun or nominal_sanity submission
   closure_condition: smoke records success, collision, residual clipping, guard rates, fallback/degraded status, and durable artifact status before any nominal escalation
-  last_update: 2026-05-30
-  comparison_status: pending smoke before nominal escalation
-  status_basis: issue body and linked Issue #1428 handoff docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
-  notes_non_evidence: fallback/degraded rows must not count as learned-residual success evidence
+  last_update: 2026-06-05
+  comparison_status: >
+    Slurm smoke runner produced one valid row, but the #1475 gate failed closed because success_rate=0.0
+    and collision_rate=0.0. The episode timed out with low progress on planner_sanity_simple.
+  status_basis: issue comments, squeue/sacct, Slurm logs, tracked compact evidence, and local output inspection
+  notes_non_evidence: >
+    Job 12749 intentionally did not run nominal_sanity. The runner-level decision was pass because
+    JSONL/summary artifacts were produced, but this is not a #1475 success. Local output paths remain
+    scratch until promoted through durable artifact pointers.
 ```
 
 ### Issue #1108 BC Warm-Start PPO Artifact Rescue

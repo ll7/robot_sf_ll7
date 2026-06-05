@@ -34,7 +34,7 @@ blocker or diagnostic mechanism, but they are not successful benchmark evidence 
 | `research-v1.amv.scenario_criticality` | Hazard and ODD coverage can identify critical AMV social-navigation scenarios. | Tracked coverage report, scenario taxonomy, ODD/hazard mapping, row status counts, and explicit missing-coverage list. | `candidate` | Issue [#2164](https://github.com/ll7/robot_sf_ll7/issues/2164) joins the tracked #1484 cross-kinematics AMV rows to issue-specific metadata for `classic_cross_trap_low`: hazard statuses `covered=3`, ODD supported claims `covered=2`, scenario contract `covered=1`. This is selected-scenario coverage evidence only, not full matrix or paper-ready evidence. | Broaden coverage by adding scenario contracts and hazard mappings for the rest of the research-v1 matrix before making full scenario-criticality claims. |
 | `research-v1.amv.transfer_boundary` | CARLA or alternate-simulator replay can bound where Robot SF AMV evidence transfers. | Native/aligned fixture or replay semantics diagnostics, adapter status, durable trace/replay artifacts, and fail-closed exclusions. | `diagnostic` | Issue [#2158](https://github.com/ll7/robot_sf_ll7/issues/2158) produced `docs/context/evidence/issue_2158_research_v1_carla_replay_2026-06-03/`, a three-case CARLA replay diagnostic pack with aggregate row statuses `available=12`, `degraded=10`, `not_available=35`, `unsupported=6`. CARLA parity remains unproven; `sensor_perception_replay` and `broad_simulator_equivalence` are unsupported in every case. | Add native/aligned fixture semantics and close unavailable/degraded replay surfaces before treating transfer as candidate or paper-ready evidence. |
 | `research-v1.amv.calibrated_actuation` | AMV actuation profiles are calibrated enough for paper-facing AMV claims. | Direct hardware or accepted proxy-source manifest, field-level source boundaries, runtime metrics, checksums or durable pointers, and unavailable-field handling. | `blocked` | [issue_2230_amv_actuation_evidence_ladder.md](issue_2230_amv_actuation_evidence_ladder.md) separates synthetic diagnostics, platform-class proxy evidence, and hardware-calibrated evidence. [issue_2001_amv_actuation_proxy_source_analysis.md](issue_2001_amv_actuation_proxy_source_analysis.md) supports longitudinal proxy values only. [issue_2011_amv_actuation_sensitivity_sweep.md](issue_2011_amv_actuation_sensitivity_sweep.md) produced `accepted_unavailable_only` rows, not benchmark evidence. | Resolve the missing runtime/provenance fields before claim movement; keep yaw, angular acceleration, latency, and update rate synthetic or unavailable until sourced. |
-| `research-v1.amv.failure_case_review` | Representative failure-case traces can explain mechanisms worth testing next. | Selected cases, trace-viewer pack, qualitative tags, row statuses, and no aggregation beyond observed cases. | `proposal` | Issue [#2159](https://github.com/ll7/robot_sf_ll7/issues/2159) is qualitative and speculative until cases are selected. | Build the #2159 review pack after claim IDs and matrix/report lanes provide selection criteria. |
+| `research-v1.amv.failure_case_review` | Representative failure-case traces can explain mechanisms worth testing next. | Selected cases, trace-viewer pack, qualitative tags, row statuses, and no aggregation beyond observed cases. | `diagnostic` | Issue [#2269](https://github.com/ll7/robot_sf_ll7/issues/2269) selects five cases in [issue_2269_research_v1_trace_case_selection.md](issue_2269_research_v1_trace_case_selection.md): two AMV-specific cases still need renderable trace exports, and three compact trace-slice cases can feed first render/review children. No trace-viewer pack is built yet. | Render the first selected trace-slice case and add AMV-specific trace exports before assembling the Issue #2159 review pack. |
 
 ## Downstream Update Rule
 
@@ -109,3 +109,20 @@ This keeps `research-v1.amv.model_behavior` at `diagnostic`: the mechanism exist
 benchmark adapter path is not AMMV-specific benchmark evidence. The smallest next proof step is to
 surface AMMV diagnostics in an executable benchmark path or intentionally retain the term as a
 mechanism-only planner variant.
+
+### Issue #2269 Research-v1 Trace Case Selection 2026-06-05
+
+Issue [#2269](https://github.com/ll7/robot_sf_ll7/issues/2269) promotes
+`docs/context/evidence/issue_2269_research_v1_trace_case_selection_2026-06-05/` and
+[issue_2269_research_v1_trace_case_selection.md](issue_2269_research_v1_trace_case_selection.md).
+It selects five cases for the Issue #2159 failure-case review lane:
+
+- AMMV Social Force head-on corridor mechanism activation;
+- AMV cross-trap hazard/ODD coverage;
+- head-on corridor pedestrian-route-offset trace response;
+- leave-group pedestrian-speed outcome flip;
+- intersection-wait `+0.5 m/s` speed-grid phase response.
+
+This moves `research-v1.amv.failure_case_review` to `diagnostic` case-selection status only. It
+does not create rendered panels, trace-viewer annotations, benchmark-strength evidence, or
+paper-facing failure analysis.

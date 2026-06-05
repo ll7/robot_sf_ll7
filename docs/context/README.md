@@ -165,6 +165,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2153_research_v1_evidence_map.md](issue_2153_research_v1_evidence_map.md)
 
+* Issue #2269 research-v1 trace case selection:
+
+  [issue_2269_research_v1_trace_case_selection.md](issue_2269_research_v1_trace_case_selection.md)
+
 * Issue #2154 AMMV-aware Social Force model slice:
 
   [issue_2154_ammv_social_force_model.md](issue_2154_ammv_social_force_model.md)

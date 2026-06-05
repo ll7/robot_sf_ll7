@@ -471,8 +471,9 @@ def lidar_ray_scan(
     )
 
     ray_offsets = settings.ray_offsets
+    two_pi = 2.0 * np.pi
     ray_angles = robot_orient + ray_offsets
-    ray_angles = np.mod(ray_angles, 2.0 * np.pi)
+    np.mod(ray_angles, two_pi, out=ray_angles)
 
     if isinstance(occ, EgoPedContinuousOccupancy):
         enemy_pos = np.array([occ.enemy_coords])

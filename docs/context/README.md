@@ -233,6 +233,9 @@ knowledge, not every transient iteration detail.
 * Issue #2268 AMV Timeout Decomposition 2026-06-05:
 
   [issue_2268_amv_timeout_decomposition.md](issue_2268_amv_timeout_decomposition.md)
+* Issue #2259 AMV Clipping Versus Success Boundary:
+
+  [issue_2259_amv_clipping_success_boundary.md](issue_2259_amv_clipping_success_boundary.md)
 
 * Issue #2234 predictive perturbation criticality protocol:
 

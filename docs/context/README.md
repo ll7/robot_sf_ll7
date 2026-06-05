@@ -128,6 +128,8 @@ knowledge, not every transient iteration detail.
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
+* Issue #2266 Static-Recenter Activation Diagnostic 2026-06-05:
+  [issue_2266_static_recenter_activation.md](issue_2266_static_recenter_activation.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Root layout structured migration 2026-06-01:
@@ -208,6 +210,10 @@ knowledge, not every transient iteration detail.
 * Issue #2225 Learned-Policy Failure Synthesis (2026-06-04):
 
   [issue_2225_learned_policy_failure_synthesis.md](issue_2225_learned_policy_failure_synthesis.md)
+
+* Issue #2274 hybrid-learning component evidence status matrix:
+
+  [issue_2274_hybrid_component_matrix.md](issue_2274_hybrid_component_matrix.md)
 
 * Issue #2231 mechanism-aware ranking comparison:
 
@@ -1066,3 +1072,7 @@ why a change was made rather than a full issue execution transcript.
   defines the canonical evidence matrix schema that the synthesis consumer (#1489) will reference
   when component campaigns complete. Includes field contracts, evidence-tier vocabulary,
   non-evidence/failure-mode enumeration, guard-authority constraints, and consumer rules.
+* [Issue #2274 Hybrid-Learning Component Evidence Status Matrix](issue_2274_hybrid_component_matrix.md)
+  classifies learned risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC
+  warm-start PPO before Issue #1489 synthesis. It records blockers, next actions, and the
+  conclusion that Issue #1489 remains blocked from comparative synthesis.

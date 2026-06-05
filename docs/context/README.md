@@ -470,6 +470,8 @@ knowledge, not every transient iteration detail.
   [issue_1692_topology_hypothesis_probe.md](issue_1692_topology_hypothesis_probe.md)
 * Issue #2223 topology-hypothesis planning diagnostic:
   [issue_2223_topology_hypothesis_planning.md](issue_2223_topology_hypothesis_planning.md)
+* Issue #2258 Topology Primary-Route Audit 2026-06-05:
+  [issue_2258_topology_primary_route_audit.md](issue_2258_topology_primary_route_audit.md)
 * Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:

@@ -14,6 +14,7 @@ from robot_sf.sensor.range_sensor import (
     lineseg_line_intersection_distance,
     range_postprocessing,
     raycast,
+    raycast_circles,
     raycast_obstacles,
     raycast_pedestrians,
 )
@@ -172,6 +173,28 @@ def test_pedestrian_out_of_range():
     )
 
     assert np.all(out_ranges == 10.0)
+
+
+def test_raycast_circles_filters_and_keeps_nearest_hits():
+    """Circle raycasting handles range, direction, and nearest-hit filtering."""
+    out_ranges = np.array([10.0, 10.0, 10.0])
+    scanner_pos = (1.0, 1.0)
+    max_scan_range = 10.0
+    circles = np.array(
+        [
+            [5.0, 1.0, 0.5],  # hit at 3.5 along +x
+            [3.0, 1.0, 0.25],  # nearer hit at 1.75 along +x
+            [1.0, 5.0, 0.5],  # hit at 3.5 along +y
+            [-3.0, 1.0, 0.5],  # behind +x ray
+            [20.0, 1.0, 1.0],  # outside max_scan_range
+        ],
+        dtype=np.float64,
+    )
+    ray_angles = np.array([0.0, np.pi / 2, np.pi])
+
+    _py_func(raycast_circles)(out_ranges, scanner_pos, max_scan_range, circles, ray_angles)
+
+    assert np.allclose(out_ranges, [1.75, 3.5, 3.5])
 
 
 def test_raycast_obstacles_hits():

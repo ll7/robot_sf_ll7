@@ -254,27 +254,25 @@ def raycast_circles(
     if len(circles.shape) != 2 or circles.shape[0] == 0 or circles.shape[1] != 3:
         return
 
-    scanner_pos_np = np.array([scanner_pos[0], scanner_pos[1]])
+    scanner_x, scanner_y = scanner_pos
     threshold_sq = max_scan_range**2
-    relative_circle_pos = circles[:, :2] - scanner_pos_np
-    circle_radii = circles[:, 2]
-    dist_sq = np.sum(relative_circle_pos**2, axis=1)
-    near_mask = np.where(dist_sq <= threshold_sq)[0]
-    if len(near_mask) == 0:
-        return
-    close_circle_pos = relative_circle_pos[near_mask]
-    close_circle_radii = circle_radii[near_mask]
 
     for i, angle in enumerate(ray_angles):
         unit_vec = cos(angle), sin(angle)
-        cos_sims = close_circle_pos[:, 0] * unit_vec[0] + close_circle_pos[:, 1] * unit_vec[1]
-        circle_dir_mask = np.where(cos_sims >= 0)[0]
-        for idx in circle_dir_mask:
-            pos = close_circle_pos[idx]
-            radius = close_circle_radii[idx]
-            circle = ((pos[0], pos[1]), radius)
+        best_range = out_ranges[i]
+        for circle_idx in range(circles.shape[0]):
+            rel_x = circles[circle_idx, 0] - scanner_x
+            rel_y = circles[circle_idx, 1] - scanner_y
+            if rel_x * rel_x + rel_y * rel_y > threshold_sq:
+                continue
+            if rel_x * unit_vec[0] + rel_y * unit_vec[1] < 0.0:
+                continue
+
+            radius = circles[circle_idx, 2]
+            circle = ((rel_x, rel_y), radius)
             coll_dist = circle_line_intersection_distance(circle, (0.0, 0.0), unit_vec)
-            out_ranges[i] = min(coll_dist, out_ranges[i])
+            best_range = min(coll_dist, best_range)
+        out_ranges[i] = best_range
 
 
 @numba.njit(fastmath=True)

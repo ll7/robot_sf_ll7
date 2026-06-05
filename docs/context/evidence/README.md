@@ -155,6 +155,9 @@ boundary before merging an evidence-producing PR.
 - `issue_2274_hybrid_component_matrix_2026-06-05/`: validator-readable hybrid-learning component
   status matrix for Issue #2274 / parent Issue #1489, with compact CSV and YAML rows for learned
   risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC warm-start PPO.
+- `issue_2269_research_v1_trace_case_selection_2026-06-05/`: analysis-only case-selection
+  manifest for Issue #2269 / parent Issue #2159, selecting five research-v1 trace-review cases and
+  separating trace-slice-ready cases from AMV-specific trace-export blockers.
 - `issue_2270_panel_candidate_manifest_2026-06-05/`: analysis-only panel candidate manifest for
   Issue #2270 / parent Issue #2227, recording static-recenter and topology panel candidates that
   remain blocked on durable `simulation_trace_export.v1` trace pairs.

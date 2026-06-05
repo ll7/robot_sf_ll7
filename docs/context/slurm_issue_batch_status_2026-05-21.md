@@ -216,14 +216,14 @@ slurm_issue_status:
     - output/slurm/12749-issue1475-orca-residual-bc.out
     - output/slurm/12749-issue1475-orca-residual-bc.err
   durable_artifact_pointer_status: compact summary and smoke report tracked; raw output paths remain local and non-durable
-  next_action: revise ORCA-residual BC candidate or smoke gate target for low-progress timeout behavior before rerun or nominal_sanity submission
+  next_action: revise ORCA-residual BC residual objective or candidate before rerun or nominal_sanity submission
   closure_condition: revised bounded smoke records success, collision, residual clipping, guard rates, fallback/degraded status, and durable artifact status before nominal escalation
   last_update: 2026-06-05
   comparison_status: >
     Slurm smoke runner produced one valid row, but the Issue #1475 gate failed closed because
     success_rate=0.0 and collision_rate=0.0. The episode timed out with low progress on
     planner_sanity_simple, so nominal escalation is blocked.
-  status_basis: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json and docs/context/policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md
+  status_basis: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json, docs/context/policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md, and docs/context/issue_2311_orca_residual_lane_decision.md
   notes_non_evidence: >
     Job 12749 intentionally did not run nominal_sanity. The runner-level decision was pass because
     JSONL/summary artifacts were produced, but this is diagnostic smoke status only:
@@ -265,7 +265,7 @@ status basis is added.
 
 | Issue | Status | Status basis | Why this pass does not create a full execution block | Next action |
 | --- | --- | --- | --- | --- |
-| Issue #1358 | `parent_blocked` | Issue body | Parent issue; current body says execute through Issue #1475 only. | Wait for Issue #1475 to classify the ORCA-residual lane as continue/revise/stop. |
+| Issue #1358 | `parent_blocked` | Issue body and `docs/context/issue_2311_orca_residual_lane_decision.md` | Parent issue; current body says execute through Issue #1475 only, and Issue #2311 selected `revise_residual_objective` after the failed smoke. | Split a revised residual-objective/candidate child before any new #1475 smoke rerun or nominal escalation. |
 | Issue #1490 | `parent_blocked` | Issue body and `docs/context/issue_1543_predictive_v2_negative_audit.md` | Predictive-v2 umbrella; current body says do not execute directly after Issue #1543. | Maintainer selects a revised predictive-v2 hypothesis or child sequence. |
 | Issue #1496 | `parent_blocked` | Issue body | Blocked by Issue #1470 durable oracle-imitation dataset. | Wait for Issue #1470 dataset manifest/checksums and split validation. |
 

@@ -269,6 +269,10 @@ entries:
     status: current
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2311_orca_residual_lane_decision.md
+    status: current
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_2271_oracle_imitation_trace_preflight.md
     status: current
     freshness: evidence

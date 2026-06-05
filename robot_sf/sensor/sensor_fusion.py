@@ -48,22 +48,26 @@ def fused_sensor_space(
     Tuple[spaces.Dict, spaces.Dict]
         The normalized and original combined observation spaces.
     """
-    # Create the maximum and minimum drive states for each timestep
-    max_drive_state = np.array(
-        [robot_obs.high.tolist() + target_obs.high.tolist() for t in range(timesteps)],
-        dtype=np.float32,
+    # Build one row of bounds and repeat it, avoiding per-timestep Python lists.
+    drive_high = np.concatenate(
+        (
+            np.asarray(robot_obs.high, dtype=np.float32),
+            np.asarray(target_obs.high, dtype=np.float32),
+        )
     )
-    min_drive_state = np.array(
-        [robot_obs.low.tolist() + target_obs.low.tolist() for t in range(timesteps)],
-        dtype=np.float32,
+    drive_low = np.concatenate(
+        (
+            np.asarray(robot_obs.low, dtype=np.float32),
+            np.asarray(target_obs.low, dtype=np.float32),
+        )
     )
+    max_drive_state = np.repeat(drive_high[np.newaxis, :], timesteps, axis=0)
+    min_drive_state = np.repeat(drive_low[np.newaxis, :], timesteps, axis=0)
 
-    # Create the maximum and minimum LiDAR states for each timestep
-    max_lidar_state = np.array(
-        [lidar_obs.high.tolist() for t in range(timesteps)],
-        dtype=np.float32,
-    )
-    min_lidar_state = np.array([lidar_obs.low.tolist() for t in range(timesteps)], dtype=np.float32)
+    lidar_high = np.asarray(lidar_obs.high, dtype=np.float32)
+    lidar_low = np.asarray(lidar_obs.low, dtype=np.float32)
+    max_lidar_state = np.repeat(lidar_high[np.newaxis, :], timesteps, axis=0)
+    min_lidar_state = np.repeat(lidar_low[np.newaxis, :], timesteps, axis=0)
 
     # Create the original observation spaces for the drive and LiDAR states
     orig_box_drive_state = spaces.Box(low=min_drive_state, high=max_drive_state, dtype=np.float32)

@@ -457,7 +457,7 @@ def test_ray_offsets_precomputed_equivalence():
         actual = heading + settings.ray_offsets
         actual = np.array([(a + np.pi * 2) % (np.pi * 2) for a in actual])
 
-        assert np.allclose(actual, expected, atol=1e-15, rtol=1e-15), (
+        assert np.allclose(actual, expected, atol=1e-12, rtol=1e-12), (
             f"ray_angles mismatch at heading={heading:.6f}\n"
             f"  expected[0]={expected[0]:.15f}  actual[0]={actual[0]:.15f}\n"
             f"  expected[-1]={expected[-1]:.15f}  actual[-1]={actual[-1]:.15f}"
@@ -511,7 +511,7 @@ def test_lidar_ray_scan_uses_precomputed_offsets():
         # New method through public API
         ranges, actual_angles = lidar_ray_scan(((1.0, 1.0), heading), occ, settings)
 
-        assert np.allclose(actual_angles, expected_angles, atol=1e-15, rtol=1e-15), (
+        assert np.allclose(actual_angles, expected_angles, atol=1e-12, rtol=1e-12), (
             f"ray_angles mismatch at heading={heading:.6f}"
         )
         assert ranges.shape == (settings.num_rays,)

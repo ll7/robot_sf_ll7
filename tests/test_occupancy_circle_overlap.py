@@ -19,7 +19,7 @@ from loguru import logger
 
 from robot_sf.common.types import Circle2D
 from robot_sf.nav.occupancy_grid import GridConfig, OccupancyGrid
-from robot_sf.nav.occupancy_grid_rasterization import rasterize_circle
+from robot_sf.nav.occupancy_grid_rasterization import rasterize_circle, rasterize_circle_fast
 
 
 class TestCircleCenterOutsideButOverlapping:
@@ -139,6 +139,19 @@ class TestCircleCenterInsideGrid:
         # Should occupy approximately π * (0.5/0.1)² ≈ 78 cells
         assert occupied_cells > 60, "Circle inside grid should occupy cells"
         assert occupied_cells < 100, "Circle occupancy should be bounded"
+
+    def test_fast_rasterization_preserves_higher_values_and_unmasked_cells(self):
+        """Fast circle rasterization should only raise masked cells below value."""
+        config = GridConfig(resolution=1.0, width=7.0, height=7.0)
+        grid = np.zeros((config.grid_height, config.grid_width), dtype=np.float32)
+        grid[3, 3] = 0.9
+        grid[0, 0] = 0.7
+
+        rasterize_circle_fast(((3.0, 3.0), 1.5), grid, config, value=0.5)
+
+        assert grid[3, 3] == 0.9, "Existing higher occupancy inside the mask should be preserved"
+        assert grid[0, 0] == 0.7, "Cells outside the mask should not be changed"
+        assert np.any(np.isclose(grid, 0.5)), "Masked lower cells should be raised to value"
 
 
 @pytest.mark.parametrize(

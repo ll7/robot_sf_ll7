@@ -1,0 +1,6 @@
+component,source_issue,evidence_tier,evaluation_slice,verdict,blocker,next_action,synthesis_eligible
+learned_risk_model_v1,#1472,launch_packet,not_run,pending,No materialized durable trace inputs or trained checkpoint,Run #2273 trace-manifest preflight before training,false
+orca_residual_bc_v1,#1475,failed,smoke,revise,Bounded smoke failed closed with timeout/low-progress and no nominal escalation,Revise the ORCA-residual candidate or smoke target before rerun,false
+oracle_imitation_v1,#1470,launch_packet,not_run,pending,Trace collection has local checksums but still needs durable dataset/artifact promotion,Run #2271/final preflight and promote durable dataset pointers,false
+shielded_ppo_repair_v1,#1474,smoke_only,smoke,continue,Only one guarded smoke row; nominal-sanity evidence is missing,Proceed only to nominal-sanity with guard diagnostics,false
+bc_warm_start_ppo_v10,#1977,not_available,not_run,stop,Continuation was cancelled with tail success rate 0 and no final checkpoint/policy analysis,Stop this run shape unless redesigned or narrowed to intermediate-checkpoint analysis,false

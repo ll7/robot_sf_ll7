@@ -2511,6 +2511,19 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     synthetic_meta = record["algorithm_metadata"]["synthetic_actuation"]
     assert synthetic_meta["profile"]["name"] == "amv-actuation-stress-v0"
     assert synthetic_meta["summary"]["status"] == "ok"
+    trace = synthetic_meta["trace"]
+    assert trace["schema_version"] == "synthetic-actuation-step-trace.v1"
+    assert trace["dt"] == pytest.approx(0.1)
+    assert trace["initial_goal_distance_m"] == pytest.approx(math.sqrt(2.0))
+    assert len(trace["steps"]) == 4
+    first_step = trace["steps"][0]
+    assert first_step["step"] == 0
+    assert first_step["requested_linear_m_s"] == pytest.approx(3.0)
+    assert first_step["command_clipped"] is False
+    assert first_step["route_progress_from_start_m"] == pytest.approx(0.0)
+    assert first_step["distance_to_goal_m"] == pytest.approx(math.sqrt(2.0))
+    assert any(step["command_clipped"] is True for step in trace["steps"])
+    assert any(step["yaw_rate_saturated"] is True for step in trace["steps"])
     assert float(record["metrics"]["command_clip_fraction"]) > 0.0
     assert float(record["metrics"]["yaw_rate_saturation_fraction"]) > 0.0
     assert record["metrics"]["signed_braking_peak_m_s2"] == pytest.approx(0.0)

@@ -1,0 +1,78 @@
+{
+  "schema_version": "static-recenter-activation-trace.v1",
+  "issue": 2306,
+  "date": "2026-06-05",
+  "evidence_tier": "diagnostic_only",
+  "claim_boundary": "Trace-level activation rerun of the #2221 held-out static-recenter smoke; not benchmark-strength, transfer, or planner-improvement evidence.",
+  "stage": "full_matrix",
+  "scenario_matrix": "configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml",
+  "seed_list": [
+    111
+  ],
+  "horizon": 500,
+  "dt": 0.1,
+  "baseline_candidate": "hybrid_rule_v3_fast_progress",
+  "mechanism_candidate": "issue_2170_static_recenter_only",
+  "command": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_static_recenter_activation_trace.py --output-json <worktree-local diagnostics summary>",
+  "rows": [
+    {
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 111,
+      "baseline": {
+        "status": "failure",
+        "termination_reason": "max_steps",
+        "success": false,
+        "steps": 500,
+        "near_misses": 60,
+        "collisions": 0
+      },
+      "mechanism": {
+        "status": "failure",
+        "termination_reason": "max_steps",
+        "success": false,
+        "steps": 500,
+        "near_misses": 60,
+        "collisions": 0
+      },
+      "activation_count": 0,
+      "first_activation_step": null,
+      "selected_command_source": [],
+      "command_source_changed": false,
+      "progress_delta_after_activation": null,
+      "trajectory_delta_m": 0.0,
+      "terminal_outcome_changed": false,
+      "classification": "mechanism_inactive"
+    },
+    {
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 111,
+      "baseline": {
+        "status": "success",
+        "termination_reason": "success",
+        "success": true,
+        "steps": 120,
+        "near_misses": 0,
+        "collisions": 0
+      },
+      "mechanism": {
+        "status": "success",
+        "termination_reason": "success",
+        "success": true,
+        "steps": 120,
+        "near_misses": 0,
+        "collisions": 0
+      },
+      "activation_count": 0,
+      "first_activation_step": null,
+      "selected_command_source": [],
+      "command_source_changed": false,
+      "progress_delta_after_activation": null,
+      "trajectory_delta_m": 0.0,
+      "terminal_outcome_changed": false,
+      "classification": "comparator_already_solved_case"
+    }
+  ],
+  "overall_classification": "mechanism_inactive_on_unsolved_row",
+  "interpretation": "The held-out smoke did not merely lack durable activation evidence: the instrumented rerun shows static recentering did not activate on either matched row. The unsolved station-platform case is mechanism_inactive; the intersection-wait case was already solved by the baseline.",
+  "recommendation": "Do not tune or promote static recentering for this held-out slice. Treat the #2221 non-transfer result as an inactive-mechanism negative for the unsolved row, and prefer other route-progress mechanisms unless a new slice predeclares states where static recenter should activate."
+}

@@ -3213,6 +3213,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
+    record_planner_decision_trace: bool = False,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -3342,6 +3343,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     current_command = (0.0, 0.0)
     actuation_summary: dict[str, Any] = not_available_saturation_metrics()
     synthetic_actuation_trace: list[dict[str, Any]] = []
+    planner_decision_trace: list[dict[str, Any]] = []
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
@@ -3371,6 +3373,16 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             merge_observation_noise_stats(noise_stats, step_noise_stats)
             policy_command = policy_fn(policy_obs)
             actuation_step = None
+            planner_step_decision = None
+            if record_planner_decision_trace and callable(planner_stats):
+                try:
+                    planner_runtime = planner_stats()
+                except (RuntimeError, ValueError, TypeError):
+                    planner_runtime = None
+                if isinstance(planner_runtime, dict) and isinstance(
+                    planner_runtime.get("last_decision"), dict
+                ):
+                    planner_step_decision = dict(planner_runtime["last_decision"])
             # Use per-step flag when available (e.g. SAC with fallback); fall back to the
             # static cached value for planners that set _planner_native_env_action once.
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
@@ -3446,6 +3458,50 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         "distance_to_goal_m": distance_to_goal,
                         "route_progress_from_start_m": route_progress,
                         "route_progress_ratio": float(progress_ratio),
+                        "robot_x_m": float(robot_pos[0]),
+                        "robot_y_m": float(robot_pos[1]),
+                    }
+                )
+            if planner_step_decision is not None:
+                selected_terms = planner_step_decision.get("selected_terms")
+                selected_terms = selected_terms if isinstance(selected_terms, dict) else {}
+                progress_windows_raw = planner_step_decision.get("progress_windows")
+                progress_windows = (
+                    progress_windows_raw if isinstance(progress_windows_raw, dict) else {}
+                )
+                selected_command = planner_step_decision.get("selected_command")
+                selected_command = selected_command if isinstance(selected_command, list) else []
+                distance_to_goal = float(np.linalg.norm(robot_pos - goal_vec))
+                planner_decision_trace.append(
+                    {
+                        "step": int(step_idx),
+                        "selected_source": str(
+                            planner_step_decision.get("selected_source", "unknown")
+                        ),
+                        "selected_command": [
+                            float(value)
+                            for value in selected_command[:2]
+                            if isinstance(value, int | float | np.integer | np.floating)
+                        ],
+                        "selected_score": float(planner_step_decision["selected_score"])
+                        if isinstance(
+                            planner_step_decision.get("selected_score"),
+                            int | float | np.integer | np.floating,
+                        )
+                        and math.isfinite(float(planner_step_decision["selected_score"]))
+                        else None,
+                        "static_recenter": float(selected_terms.get("static_recenter", 0.0)),
+                        "route_arc_progress": float(selected_terms.get("route_arc_progress", 0.0)),
+                        "goal_progress": float(selected_terms.get("goal_progress", 0.0)),
+                        "progress_windows": {
+                            str(key): float(value)
+                            for key, value in progress_windows.items()
+                            if isinstance(value, int | float | np.integer | np.floating)
+                        },
+                        "distance_to_goal_m": distance_to_goal,
+                        "route_progress_from_start_m": float(
+                            initial_goal_distance - distance_to_goal
+                        ),
                         "robot_x_m": float(robot_pos[0]),
                         "robot_y_m": float(robot_pos[1]),
                     }
@@ -3591,6 +3647,13 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     _finalize_feasibility_metadata(algo_meta)
     if isinstance(planner_runtime_snapshot, dict):
         algo_meta["planner_runtime"] = planner_runtime_snapshot
+    if record_planner_decision_trace:
+        algo_meta["planner_decision_trace"] = {
+            "schema_version": "planner-decision-trace.v1",
+            "dt": float(config.sim_config.time_per_step_in_secs),
+            "initial_goal_distance_m": initial_goal_distance,
+            "steps": planner_decision_trace,
+        }
     if actuation_controller is not None:
         actuation_summary = actuation_controller.summary()
         algo_meta["synthetic_actuation"] = {

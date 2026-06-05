@@ -2676,7 +2676,21 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
             _ = obs
             return 0.0, 0.0
 
-        _policy._planner_stats = lambda: {"solver_failures": 2, "fallback_stop_count": 2}
+        _policy._planner_stats = lambda: {
+            "solver_failures": 2,
+            "fallback_stop_count": 2,
+            "last_decision": {
+                "selected_source": "rotate_left",
+                "selected_command": [0.0, -0.6],
+                "selected_score": 1.25,
+                "selected_terms": {
+                    "static_recenter": 1.0,
+                    "route_arc_progress": 0.0,
+                    "goal_progress": -0.1,
+                },
+                "progress_windows": {"3s": 0.0},
+            },
+        }
         return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
 
     monkeypatch.setattr(
@@ -2713,12 +2727,22 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
         algo="goal",
         algo_config_path=None,
         scenario_path=Path("."),
+        record_planner_decision_trace=True,
     )
 
-    assert record["algorithm_metadata"]["planner_runtime"] == {
-        "solver_failures": 2,
-        "fallback_stop_count": 2,
-    }
+    planner_runtime = record["algorithm_metadata"]["planner_runtime"]
+    assert planner_runtime["solver_failures"] == 2
+    assert planner_runtime["fallback_stop_count"] == 2
+    trace = record["algorithm_metadata"]["planner_decision_trace"]
+    assert trace["schema_version"] == "planner-decision-trace.v1"
+    assert trace["initial_goal_distance_m"] == pytest.approx(1.0)
+    assert len(trace["steps"]) == 1
+    step = trace["steps"][0]
+    assert step["selected_source"] == "rotate_left"
+    assert step["selected_command"] == [0.0, -0.6]
+    assert step["selected_score"] == pytest.approx(1.25)
+    assert step["static_recenter"] == pytest.approx(1.0)
+    assert step["progress_windows"]["3s"] == pytest.approx(0.0)
 
 
 def test_run_map_episode_snapshots_planner_runtime_before_close(

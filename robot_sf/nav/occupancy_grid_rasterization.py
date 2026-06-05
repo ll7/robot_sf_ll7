@@ -410,7 +410,7 @@ def rasterize_circle_fast(
         return
 
     region = grid_array[row_min : row_max + 1, col_min : col_max + 1]
-    region[mask] = np.maximum(region[mask], value)
+    np.maximum(region, value, out=region, where=mask)
 
 
 def rasterize_polygon(

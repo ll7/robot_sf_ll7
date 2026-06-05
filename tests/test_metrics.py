@@ -1273,6 +1273,115 @@ def test_aggregated_time():
     assert np.isnan(result)
 
 
+def test_compute_all_metrics_reuses_single_robot_ped_distance_matrix(monkeypatch):
+    """Aggregate distance-derived metrics should share one distance matrix."""
+    T, K = 8, 2
+    ep = _make_episode(T=T, K=K)
+    rng = np.random.default_rng(123)
+    ep.peds_pos[:, :, 0] = rng.uniform(2.0, 5.0, (T, K))
+    ep.peds_pos[:, :, 1] = rng.uniform(2.0, 5.0, (T, K))
+    ep.reached_goal_step = 4
+
+    calls = 0
+    original = metrics_mod._compute_distance_matrix
+
+    def counted_distance_matrix(data):
+        nonlocal calls
+        calls += 1
+        return original(data)
+
+    monkeypatch.setattr(metrics_mod, "_compute_distance_matrix", counted_distance_matrix)
+
+    values = compute_all_metrics(ep, horizon=20)
+
+    assert calls == 1
+    assert values["success"] == metrics_mod.success_rate(ep, horizon=20)
+    assert values["ped_collision_count"] == metrics_mod.human_collisions(ep)
+    assert values["near_misses"] == metrics_mod.near_misses(ep)
+    assert values["min_distance"] == metrics_mod.min_distance(ep)
+    assert values["mean_distance"] == metrics_mod.mean_distance(ep)
+    assert values["min_clearance"] == metrics_mod.min_clearance(ep)
+    assert values["mean_clearance"] == metrics_mod.mean_clearance(ep)
+    assert values["robot_ped_within_5m_frac"] == metrics_mod.robot_ped_within_5m_frac(ep)
+
+
+def test_compute_all_metrics_empty_crowd_skips_robot_ped_distance_matrix(monkeypatch):
+    """The empty-crowd aggregate path should preserve NaNs without matrix work."""
+    ep = _make_episode(T=5, K=0)
+    calls = 0
+    original = metrics_mod._compute_distance_matrix
+
+    def counted_distance_matrix(data):
+        nonlocal calls
+        calls += 1
+        return original(data)
+
+    monkeypatch.setattr(metrics_mod, "_compute_distance_matrix", counted_distance_matrix)
+
+    values = compute_all_metrics(ep, horizon=20)
+
+    assert calls == 0
+    assert values["ped_collision_count"] == 0.0
+    assert values["near_misses"] == 0.0
+    assert math.isnan(values["min_distance"])
+    assert math.isnan(values["mean_distance"])
+    assert math.isnan(values["min_clearance"])
+    assert math.isnan(values["mean_clearance"])
+    assert math.isnan(values["robot_ped_within_5m_frac"])
+
+
+def test_robot_ped_distance_summary_zero_timesteps():
+    """The aggregate helper should not reduce empty timestep arrays."""
+    ep = _make_episode(T=0, K=2)
+
+    values = metrics_mod._compute_robot_ped_distance_summary(ep)
+
+    assert values["human_collisions"] == 0.0
+    assert values["near_misses"] == 0.0
+    assert math.isnan(values["min_distance"])
+    assert math.isnan(values["mean_distance"])
+    assert math.isnan(values["min_clearance"])
+    assert math.isnan(values["mean_clearance"])
+    assert math.isnan(values["robot_ped_within_5m_frac"])
+
+
+def test_compute_all_metrics_distance_summary_numeric_equivalence():
+    """The aggregate summary should preserve scalar metric semantics."""
+    T, K = 8, 2
+    ep = _make_episode(T=T, K=K)
+    rng = np.random.default_rng(123)
+    ep.peds_pos[:, :, 0] = rng.uniform(0, 5, (T, K))
+    ep.peds_pos[:, :, 1] = rng.uniform(0, 5, (T, K))
+    ep.reached_goal_step = 6
+
+    values = compute_all_metrics(ep, horizon=20)
+
+    assert values["success"] == metrics_mod.success_rate(ep, horizon=20)
+    assert values["time_to_goal_norm"] == metrics_mod.time_to_goal_norm(ep, 20)
+    assert np.isclose(
+        values["time_to_goal_norm_success_only"],
+        metrics_mod.time_to_goal_norm_success_only(ep, 20),
+        equal_nan=True,
+    )
+    assert np.isclose(
+        values["time_to_goal_ideal_ratio"],
+        metrics_mod.time_to_goal_ideal_ratio(
+            ep,
+            horizon=20,
+            shortest_path_len=float(np.linalg.norm(ep.robot_pos[0] - ep.goal)),
+            robot_max_speed=1.0,
+        ),
+        equal_nan=True,
+    )
+    assert values["ped_collision_count"] == metrics_mod.human_collisions(ep)
+    assert values["near_misses"] == metrics_mod.near_misses(ep)
+    assert values["min_distance"] == metrics_mod.min_distance(ep)
+    assert values["mean_distance"] == metrics_mod.mean_distance(ep)
+    assert values["min_clearance"] == metrics_mod.min_clearance(ep)
+    assert values["mean_clearance"] == metrics_mod.mean_clearance(ep)
+    assert values["robot_ped_within_5m_frac"] == metrics_mod.robot_ped_within_5m_frac(ep)
+
+
 def test_all_paper_metrics_smoke():
     """Smoke test: all 22 paper metrics are callable and return float/NaN."""
     from robot_sf.benchmark.metrics import (

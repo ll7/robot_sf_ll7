@@ -40,6 +40,33 @@ Use the smallest field set that can distinguish the claimed mechanism from nearb
 When one of those fields is missing, downgrade the evidence level instead of filling the gap with
 aggregate interpretation.
 
+## Mechanism Activation Block
+
+Future trace-mechanism summaries should include a compact `mechanism_activation` block whenever the
+report claims a route, guard, actuation, learned-residual, handoff, or planner-arbitration
+mechanism. This block belongs in the `trace_mechanism_summary.v1` output schema used by
+`.agents/skills/trace-mechanism-review/SKILL.md`.
+
+```yaml
+mechanism_activation:
+  activated: true | false | unknown
+  activation_count: integer | unknown
+  changed_command_source: true | false | unknown
+  changed_outcome: true | false | unknown
+  likely_failure_reason: string
+```
+
+Use `unknown` instead of inferring from aggregate metrics when the trace, report, or compact
+summary does not preserve the relevant telemetry. `changed_command_source` should refer to an
+observed source-selection, guard, handoff, or command-arbitration change, not just a different
+metric row. `changed_outcome` should refer to a measured terminal, safety, route-progress, or
+case-specific outcome change under a named baseline/intervention comparison.
+
+Activation evidence remains diagnostic unless the same report ties it to benchmark-valid row
+status, controlled baseline/intervention identity, durable artifacts, and the measured outcome
+change. A mechanism may activate and still be `unresolved` or `contradicted` when it does not alter
+the command source, route progress, terminal outcome, or the claimed failure reason.
+
 ## Existing Example Classification
 
 | Example | Evidence level | Why | Limit |

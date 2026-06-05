@@ -4,5 +4,11 @@ seed: string
 episode_id: string
 trace_artifact: path-or-url
 video_artifact: path-or-url
+mechanism_activation:
+  activated: true | false | unknown
+  activation_count: integer | unknown
+  changed_command_source: true | false | unknown
+  changed_outcome: true | false | unknown
+  likely_failure_reason: string
 claim_status: supported | contradicted | unresolved
 limits: string

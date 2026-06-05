@@ -126,3 +126,17 @@ It selects five cases for the Issue #2159 failure-case review lane:
 This moves `research-v1.amv.failure_case_review` to `diagnostic` case-selection status only. It
 does not create rendered panels, trace-viewer annotations, benchmark-strength evidence, or
 paper-facing failure analysis.
+
+### Issue #2263 Mechanism Activation Fields 2026-06-05
+
+Issue [#2263](https://github.com/ll7/robot_sf_ll7/issues/2263) adds a compact
+`mechanism_activation` block to the `trace_mechanism_summary.v1` reporting contract and documents
+the field boundary in
+[issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md).
+Future trace-mechanism reports should state whether the mechanism activated, how many activations
+were observed, whether command-source arbitration changed, whether the measured outcome changed,
+and what likely failure reason remains.
+
+This does not move any research-v1 claim by itself. It keeps activation evidence diagnostic unless
+the same report ties it to benchmark-valid row status, controlled baseline/intervention identity,
+durable artifacts, and a measured outcome change.

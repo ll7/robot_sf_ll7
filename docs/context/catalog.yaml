@@ -249,6 +249,14 @@ entries:
     status: current
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2271_oracle_imitation_trace_preflight.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2271_oracle_imitation_trace_preflight_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json
     status: evidence
     freshness: evidence

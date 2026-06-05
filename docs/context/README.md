@@ -110,6 +110,8 @@ knowledge, not every transient iteration detail.
   [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md)
 * Issue #2272 ORCA-residual launch packet status:
   [issue_2272_orca_residual_launch_packet_status.md](issue_2272_orca_residual_launch_packet_status.md)
+* Issue #2271 oracle-imitation trace preflight:
+  [issue_2271_oracle_imitation_trace_preflight.md](issue_2271_oracle_imitation_trace_preflight.md)
 * Thursday development review 2026-05-21:
   [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Worktree training preservation audit 2026-05-25:

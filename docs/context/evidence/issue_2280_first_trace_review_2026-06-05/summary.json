@@ -1,0 +1,71 @@
+{
+  "schema": "trace_mechanism_summary.v1",
+  "issue": 2280,
+  "parent_issue": 2159,
+  "case_selection_issue": 2269,
+  "case_id": "head_on_corridor_route_offset_response",
+  "planner": "goal|orca|scenario_adaptive_hybrid_orca_v2_collision_guard",
+  "scenario": "classic_head_on_corridor_low",
+  "seed": "111|112|116|117",
+  "episode_id": "compact_closest_approach_trace_pairs",
+  "trace_artifact": "docs/context/evidence/issue_1939_corridor_trace_response_2026-05-31/closest_approach_trace_slices.json",
+  "video_artifact": "not_available",
+  "mechanism_activation": {
+    "activated": true,
+    "activation_count": 12,
+    "changed_command_source": "unknown",
+    "changed_outcome": false,
+    "likely_failure_reason": "Route-offset perturbation changed closest-approach geometry, but terminal outcomes stayed max_steps and command-source telemetry was not preserved."
+  },
+  "claim_status": "unresolved",
+  "limits": "Diagnostic compact trace-slice review only; no simulation_trace_export.v1 traces, no rendered panel, no command-source timeline, and no benchmark-strength or paper-facing claim.",
+  "source_case": {
+    "source_scenario_id": "classic_head_on_corridor_low",
+    "perturbed_family": "pedestrian_route_offset",
+    "noop_variant_id": "classic_head_on_corridor_low_noop",
+    "perturbed_variant_id": "classic_head_on_corridor_low_ped_route_offset_y025",
+    "pair_rows": 12,
+    "pair_status_counts": {
+      "completed": 12
+    }
+  },
+  "aggregate_deltas_completed_pairs": {
+    "center_distance_m": 0.153489,
+    "clearance_m": 0.153489,
+    "progress_m": 0.506475,
+    "time_s": -0.25
+  },
+  "highlighted_event": {
+    "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+    "seed": 117,
+    "noop": {
+      "closest_step": 79,
+      "time_s": 8.0,
+      "closest_pedestrian_index": 0,
+      "clearance_m": 1.773034,
+      "progress_m": -5.800117,
+      "termination_reason": "max_steps"
+    },
+    "perturbed": {
+      "closest_step": 46,
+      "time_s": 4.7,
+      "closest_pedestrian_index": 1,
+      "clearance_m": 1.94637,
+      "progress_m": 0.781392,
+      "termination_reason": "max_steps"
+    },
+    "delta": {
+      "clearance_m": 0.173336,
+      "progress_m": 6.581509,
+      "time_s": -3.3
+    }
+  },
+  "supported_explanation": "Pedestrian route offset can move closest-approach geometry away from the robot in this corridor slice; one hybrid seed also shifts the closest-approach window earlier and farther along the route.",
+  "rejected_explanations": [
+    "success_or_benchmark_improvement",
+    "broad_planner_transfer",
+    "command_source_change_proven",
+    "visual_panel_evidence"
+  ],
+  "claim_boundary": "diagnostic local trace inspection only; not benchmark-strength evidence, not paper-facing evidence, and not the full research-v1 trace-review pack"
+}

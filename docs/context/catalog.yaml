@@ -157,6 +157,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_release
+  - path: docs/context/issue_2281_research_v1_trace_review_pack.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2281_trace_review_pack_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
   - path: docs/context/issue_2263_mechanism_activation_report_fields.md
     status: current
     freshness: maintained

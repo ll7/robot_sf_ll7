@@ -153,3 +153,15 @@ The result keeps `research-v1.amv.failure_case_review` at `diagnostic`: route of
 closest-approach geometry and one hybrid seed's progress window, but terminal outcomes stayed
 `max_steps`, command-source telemetry was not preserved, and no trace-viewer annotation set or
 paper-facing panel was produced.
+
+### Issue #2281 Trace Review Pack 2026-06-05
+
+Issue [#2281](https://github.com/ll7/robot_sf_ll7/issues/2281) promotes
+`docs/context/evidence/issue_2281_trace_review_pack_2026-06-05/summary.json` and
+[issue_2281_research_v1_trace_review_pack.md](issue_2281_research_v1_trace_review_pack.md).
+It assembles all five #2269 selected cases into one diagnostic pack: three durable compact
+trace-slice reviews and two AMV-specific cases that remain blocked on renderable trace exports.
+
+This keeps `research-v1.amv.failure_case_review` at `diagnostic`. The recommendation is
+`gather_more_evidence`: export AMV-specific renderable traces or add a maintained annotation set
+before treating the lane as visual-pack or paper-facing evidence.

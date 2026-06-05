@@ -436,17 +436,13 @@ def _build_pedestrian_features(
     )
     active_count = min(config.max_pedestrians, order.shape[0])
     selected = order[:active_count]
-    features[:active_count, :] = np.column_stack(
-        [
-            rel[selected, 0],
-            rel[selected, 1],
-            rel_vel[selected, 0],
-            rel_vel[selected, 1],
-            distances[selected],
-            bearings[selected],
-            np.full((active_count,), fields.pedestrian_radius, dtype=np.float32),
-        ]
-    ).astype(np.float32)
+    features[:active_count, 0] = rel[selected, 0]
+    features[:active_count, 1] = rel[selected, 1]
+    features[:active_count, 2] = rel_vel[selected, 0]
+    features[:active_count, 3] = rel_vel[selected, 1]
+    features[:active_count, 4] = distances[selected]
+    features[:active_count, 5] = bearings[selected]
+    features[:active_count, 6] = fields.pedestrian_radius
     mask[:active_count] = True
     return features, mask
 
@@ -499,17 +495,13 @@ def _build_static_obstacle_features(
     )
     active_count = min(config.max_static_obstacles, order.shape[0])
     selected = order[:active_count]
-    features[:active_count, :] = np.column_stack(
-        [
-            rel_mid[selected, 0],
-            rel_mid[selected, 1],
-            unit_dirs[selected, 0],
-            unit_dirs[selected, 1],
-            lengths[selected],
-            distances[selected],
-            np.zeros((active_count,), dtype=np.float32),
-        ]
-    ).astype(np.float32)
+    features[:active_count, 0] = rel_mid[selected, 0]
+    features[:active_count, 1] = rel_mid[selected, 1]
+    features[:active_count, 2] = unit_dirs[selected, 0]
+    features[:active_count, 3] = unit_dirs[selected, 1]
+    features[:active_count, 4] = lengths[selected]
+    features[:active_count, 5] = distances[selected]
+    features[:active_count, 6] = 0.0
     mask[:active_count] = True
     return features, mask
 

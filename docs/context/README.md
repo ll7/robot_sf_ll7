@@ -413,6 +413,8 @@ knowledge, not every transient iteration detail.
   [issue_2034_platformization_roadmap.md](issue_2034_platformization_roadmap.md)
 * Issue #1395 Learned Risk Model Launch Packet:
   [issue_1395_learned_risk_launch_packet.md](issue_1395_learned_risk_launch_packet.md)
+* Issue #2273 learned-risk trace manifest preflight:
+  [issue_2273_learned_risk_trace_preflight.md](issue_2273_learned_risk_trace_preflight.md)
 * Issue #1686 Learned-Policy Artifact Manifest Fields (2026-05-30):
   [artifact_evidence_vocabulary.md](artifact_evidence_vocabulary.md) and
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)

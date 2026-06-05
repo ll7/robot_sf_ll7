@@ -1,7 +1,14 @@
 issue_split_summary:
   schema: issue_split_summary.v1
   parent_issue: '#1234'
-  mode: draft-only | created | duplicate-found | blocked
+  split_mode: single_child | controlled_batch
+  mode: draft-only | created | duplicate-found | blocked | batch-draft | batch-created | batch-partial
+  batch_request:
+    requested: false
+    requested_by: optional maintainer/source
+    source_plan_ref: optional issue/comment/doc section
+    max_children: 1
+    authorized: false
   duplicate_check:
     queries:
     - gh issue list ...
@@ -10,18 +17,35 @@ issue_split_summary:
       reason: equivalent child scope already exists
   proposed_children:
   - title: string
+    child_order: 1
     issue: '#optional'
     url: optional
     readiness: ready_local | blocked_external | blocked_slurm | decision_required | duplicate | too_broad
+    batch_status: created | skipped_duplicate | skipped_blocked | skipped_too_broad | deferred | not_applicable
     blocker: none | string
     scope: string
     non_goals:
     - string
     validation:
     - command-or-evidence-path
+    duplicate_check:
+      queries:
+      - gh issue list ...
+      matches:
+      - issue: '#1235'
+        reason: equivalent child scope already exists
+  batch_summary:
+    requested_children: 0
+    created: 0
+    skipped_duplicate: 0
+    skipped_blocked: 0
+    skipped_too_broad: 0
+    follow_up:
+    - string
   recommendation:
-    action: create_child | use_existing_child | clarify_parent | stop_blocked
+    action: create_child | create_batch | use_existing_child | clarify_parent | stop_blocked
     rationale: string
   parent_update:
     next_implementable_child: added | skipped
+    batch_summary: added | skipped | not_applicable
     note: string

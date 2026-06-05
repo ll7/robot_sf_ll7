@@ -189,6 +189,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2302_benchmark_worker_scaling.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2214_hot_path_synthesis.md
     status: current
     freshness: maintained

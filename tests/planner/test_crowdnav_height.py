@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -287,6 +288,72 @@ def test_adapter_cleans_up_import_shims(tmp_path: Path, monkeypatch: pytest.Monk
 
     for name in tracked_modules:
         assert name not in sys.modules
+
+
+def test_crowdnav_height_lidar_base_directions_cache_identity() -> None:
+    """lru_cache should return the same array object for the same ray_num."""
+    from robot_sf.planner.crowdnav_height import _crowdnav_height_lidar_base_directions
+
+    a = _crowdnav_height_lidar_base_directions(4)
+    b = _crowdnav_height_lidar_base_directions(4)
+    assert a is b
+
+
+def test_crowdnav_height_lidar_base_directions_readonly_raises_valueerror() -> None:
+    """Modifying a read-only cached directions array should raise ValueError."""
+    from robot_sf.planner.crowdnav_height import _crowdnav_height_lidar_base_directions
+
+    directions = _crowdnav_height_lidar_base_directions(4)
+    with pytest.raises(ValueError):
+        directions[0, 0] = 0.0
+
+
+def test_raycast_obstacles_matches_old_method_reference(tmp_path: Path) -> None:
+    """Refactored _raycast_obstacles should match the old linspace+cos/sin approach."""
+    from robot_sf.planner.crowdnav_height import (
+        _ray_segment_intersection_distance,
+    )
+
+    repo_root = tmp_path / "repo"
+    model_dir = tmp_path / "model"
+    _write_fake_upstream_repo(repo_root)
+    _write_fake_checkpoint_dir(model_dir, action_index=0)
+    adapter = CrowdNavHeightAdapter(
+        build_crowdnav_height_config(
+            {
+                "repo_root": str(repo_root),
+                "model_dir": str(model_dir),
+                "checkpoint_name": "fake.pt",
+            }
+        )
+    )
+    segments_list = [[3.0, -2.0, 3.0, 2.0]]
+    adapter.bind_obstacle_segments(segments_list)
+
+    robot_pos = np.array([0.0, 0.0], dtype=float)
+    heading = math.radians(30.0)
+    result = adapter._raycast_obstacles(robot_pos, heading)
+
+    sensor_range = float(adapter._checkpoint_config.lidar.sensor_range)
+    angular_res = float(adapter._checkpoint_config.lidar.angular_res)
+    ray_num = int(360.0 / angular_res)
+    origin = np.array(robot_pos, dtype=float)
+    ray_angles = np.linspace(0.0, 2.0 * math.pi, ray_num, endpoint=False, dtype=float)
+    angles = heading + ray_angles
+    directions_ref = np.stack((np.cos(angles), np.sin(angles)), axis=-1)
+    distances_ref = np.full((ray_num,), sensor_range, dtype=np.float32)
+    for idx, direction in enumerate(directions_ref):
+        best = sensor_range
+        for seg in segments_list:
+            s = np.array(seg, dtype=float)
+            hit = _ray_segment_intersection_distance(origin, direction, s[:2], s[2:4])
+            if hit is not None and hit < best:
+                best = hit
+        distances_ref[idx] = float(min(best, sensor_range))
+
+    assert result.dtype == distances_ref.dtype
+    assert result.shape == distances_ref.shape
+    assert np.allclose(result, distances_ref)
 
 
 @pytest.mark.parametrize("seed", [7, 11, 23])

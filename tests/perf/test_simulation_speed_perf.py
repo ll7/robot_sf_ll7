@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 _SOFT_STEPS_PER_SEC = float(os.environ.get("ROBOT_SF_SIM_STEPS_SOFT", "2.0"))
 _HARD_STEPS_PER_SEC = float(os.environ.get("ROBOT_SF_SIM_STEPS_HARD", "0.5"))
 _ENFORCE_PERF = os.environ.get("ROBOT_SF_PERF_ENFORCE", "0") == "1"
+_WARMUP_STEPS = int(os.environ.get("ROBOT_SF_SIM_WARMUP_STEPS", "20"))
+_MEASURED_STEPS = 10
 
 
 def _make_minimal_map() -> MapDefinition:
@@ -86,16 +88,20 @@ def test_simulation_step_throughput():
     )
     sim = sims[0]
 
-    num_steps = 10
     actions = [(0.0, 0.0)]
 
+    warmup_start = time.perf_counter()
+    for _ in range(_WARMUP_STEPS):
+        sim.step_once(actions)
+    warmup_elapsed = time.perf_counter() - warmup_start
+
     start = time.perf_counter()
-    for _ in range(num_steps):
+    for _ in range(_MEASURED_STEPS):
         sim.step_once(actions)
     elapsed = time.perf_counter() - start
 
-    steps_per_sec = num_steps / elapsed if elapsed > 0 else 0.0
-    ms_per_step = (elapsed / num_steps) * 1000 if num_steps > 0 else 0.0
+    steps_per_sec = _MEASURED_STEPS / elapsed if elapsed > 0 else 0.0
+    ms_per_step = (elapsed / _MEASURED_STEPS) * 1000 if _MEASURED_STEPS > 0 else 0.0
 
     output_dir = get_artifact_category_path("benchmarks")
     ped_pos = getattr(sim, "ped_pos", None)
@@ -103,7 +109,9 @@ def test_simulation_step_throughput():
     _write_perf_snapshot(
         output_dir / "simulation_speed_smoke.json",
         {
-            "steps": num_steps,
+            "warmup_steps": _WARMUP_STEPS,
+            "warmup_elapsed_sec": warmup_elapsed,
+            "measured_steps": _MEASURED_STEPS,
             "elapsed_sec": elapsed,
             "steps_per_sec": steps_per_sec,
             "ms_per_step": ms_per_step,

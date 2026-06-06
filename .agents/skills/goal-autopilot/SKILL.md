@@ -117,7 +117,7 @@ directory so it survives linked worktrees, context compaction, and branch cleanu
 the PR diff:
 
 ```bash
-LEDGER_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
+LEDGER_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/codex-agent-runs/active"
 mkdir -p "$LEDGER_DIR"
 ```
 

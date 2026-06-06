@@ -395,6 +395,35 @@ def _flatten_social_acceptability_block(base: dict[str, Any], social_acceptabili
             base[target_key] = proxemic.get(source_key)
 
 
+def _flatten_human_interaction_proxy_block(
+    base: dict[str, Any],
+    human_interaction_proxy: Any,
+) -> None:
+    """Flatten schema-backed human-interaction proxy reductions into ``base``."""
+    if not isinstance(human_interaction_proxy, dict):
+        return
+    base["human_proxy_available"] = human_interaction_proxy.get("available")
+    parameters = human_interaction_proxy.get("parameters") or {}
+    if isinstance(parameters, dict):
+        base["human_proxy_proxemic_radius_m"] = parameters.get("proxemic_radius_m")
+        base["human_proxy_yield_speed_mps"] = parameters.get("yield_speed_mps")
+    sample_counts = human_interaction_proxy.get("sample_counts") or {}
+    if isinstance(sample_counts, dict):
+        base["human_proxy_ped_count"] = sample_counts.get("pedestrians")
+        base["human_proxy_timestep_count"] = sample_counts.get("timesteps")
+    reductions = human_interaction_proxy.get("canonical_reductions") or {}
+    if isinstance(reductions, dict):
+        for source_key in (
+            "human_discomfort_exposure_m_s",
+            "intrusion_duration_s",
+            "time_to_yield_s",
+            "robot_yield_distance_m",
+            "pedestrian_path_deviation_proxy_m",
+            "group_split_intrusion_available",
+        ):
+            base[source_key] = reductions.get(source_key)
+
+
 def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     """Flatten metrics dict into a flat per-episode row.
 
@@ -410,6 +439,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     fq = metrics.pop("force_quantiles", {}) or {}
     ped_impact = metrics.pop("pedestrian_impact", {}) or {}
     social_acceptability = metrics.pop("social_acceptability", {}) or {}
+    human_interaction_proxy = metrics.pop("human_interaction_proxy", {}) or {}
     inter_robot = metrics.pop("inter_robot", {}) or {}
     # Flatten known force quantiles
     for qk in ("q50", "q90", "q95"):
@@ -419,6 +449,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     # legacy flat ped_impact_* keys.
     _flatten_pedestrian_impact_block(base, ped_impact)
     _flatten_social_acceptability_block(base, social_acceptability)
+    _flatten_human_interaction_proxy_block(base, human_interaction_proxy)
     if isinstance(inter_robot, dict):
         for key, value in inter_robot.items():
             base[str(key)] = value

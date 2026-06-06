@@ -712,6 +712,126 @@
                         }
                     },
                     "additionalProperties": true
+                },
+                "human_interaction_proxy": {
+                    "type": "object",
+                    "description": "Schema-backed diagnostic simulation-proxy block for human-centered interaction exposure reductions.",
+                    "required": [
+                        "schema_version",
+                        "status",
+                        "parameters",
+                        "units",
+                        "available",
+                        "sample_counts",
+                        "canonical_reductions",
+                        "interpretation"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "human-interaction-proxy.v1"
+                        },
+                        "status": {
+                            "const": "simulation_proxy"
+                        },
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "proxemic_radius_m": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                },
+                                "yield_speed_mps": {
+                                    "type": "number",
+                                    "minimum": 0
+                                }
+                            },
+                            "required": [
+                                "proxemic_radius_m",
+                                "yield_speed_mps"
+                            ],
+                            "additionalProperties": true
+                        },
+                        "units": {
+                            "type": "object",
+                            "properties": {
+                                "discomfort_exposure": {
+                                    "const": "m*s"
+                                },
+                                "duration": {
+                                    "const": "s"
+                                },
+                                "time_to_yield": {
+                                    "const": "s"
+                                },
+                                "distance": {
+                                    "const": "m"
+                                },
+                                "path_deviation": {
+                                    "const": "m"
+                                },
+                                "sample_counts": {
+                                    "const": "count"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "available": {
+                            "type": "boolean"
+                        },
+                        "sample_counts": {
+                            "type": "object",
+                            "properties": {
+                                "pedestrians": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                },
+                                "timesteps": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "canonical_reductions": {
+                            "type": "object",
+                            "properties": {
+                                "human_discomfort_exposure_m_s": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "intrusion_duration_s": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "time_to_yield_s": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "robot_yield_distance_m": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "pedestrian_path_deviation_proxy_m": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "group_split_intrusion_available": {
+                                    "type": "boolean"
+                                }
+                            },
+                            "additionalProperties": true
+                        },
+                        "exclusions": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
                 }
             },
             "additionalProperties": {

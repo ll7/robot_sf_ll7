@@ -170,6 +170,65 @@ def test_episode_schema_validates_social_acceptability_block() -> None:
         jsonschema.validate(instance=record, schema=schema)
 
 
+def test_episode_schema_validates_human_interaction_proxy_block() -> None:
+    """The human-interaction proxy block should be schema-backed when present."""
+    schema = _load_schema()
+    record = {
+        "episode_id": "e_human_interaction_proxy",
+        "version": "v1",
+        "scenario_id": "sc_human_interaction_proxy",
+        "seed": 123,
+        "metrics": {
+            "collisions": 0,
+            "near_misses": 0,
+            "human_interaction_proxy": {
+                "schema_version": "human-interaction-proxy.v1",
+                "status": "simulation_proxy",
+                "parameters": {"proxemic_radius_m": 1.2, "yield_speed_mps": 0.1},
+                "units": {
+                    "discomfort_exposure": "m*s",
+                    "duration": "s",
+                    "time_to_yield": "s",
+                    "distance": "m",
+                    "path_deviation": "m",
+                    "sample_counts": "count",
+                },
+                "available": True,
+                "sample_counts": {"pedestrians": 1, "timesteps": 4},
+                "canonical_reductions": {
+                    "human_discomfort_exposure_m_s": 0.9,
+                    "intrusion_duration_s": 1.0,
+                    "time_to_yield_s": 0.5,
+                    "robot_yield_distance_m": 1.5,
+                    "pedestrian_path_deviation_proxy_m": 0.2,
+                    "group_split_intrusion_available": False,
+                },
+                "exclusions": {
+                    "group_split_intrusion": "No group-membership labels in EpisodeData.",
+                },
+                "interpretation": "Diagnostic simulation-proxy metrics only.",
+            },
+        },
+        "termination_reason": "max_steps",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        "integrity": {"contradictions": []},
+    }
+
+    jsonschema.validate(instance=record, schema=schema)
+    record["metrics"]["human_interaction_proxy"]["schema_version"] = "wrong"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=record, schema=schema)
+
+    record["metrics"]["human_interaction_proxy"]["schema_version"] = "human-interaction-proxy.v1"
+    record["metrics"]["human_interaction_proxy"]["sample_counts"]["pedestrians"] = 1.5
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=record, schema=schema)
+
+
 def test_episode_schema_rejects_collision_event_without_collision_metric() -> None:
     """New v1 records should not report collision_event=true with zero collision count."""
     schema = _load_schema()

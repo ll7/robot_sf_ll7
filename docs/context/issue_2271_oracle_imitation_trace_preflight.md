@@ -78,7 +78,7 @@ The split contract remains:
 - hard-slice recovery examples stay out of evaluation unless predeclared,
 - generated trace and dataset manifests need recorded checksums before imitation training starts.
 
-## 2026-06-06 SLURM Follow-Up
+## Issue #2441 SLURM Follow-Up (2026-06-06)
 
 Issue #2441 submitted the train and validation trace-collection splits from branch
 `gse-2441-oracle-traces` at commit `a9679e1a37495b25c1786917fcf2fa7e749d1475`.

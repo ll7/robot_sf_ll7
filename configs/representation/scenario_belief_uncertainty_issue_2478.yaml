@@ -1,0 +1,115 @@
+schema_version: scenario-belief-uncertainty-contract.v1
+name: scenario_belief_uncertainty_issue_2478
+issue: 2478
+parent_issue: 2469
+predecessor_issue: 2477
+evidence_tier: proposal_with_executable_contract
+benchmark_evidence: false
+status: implemented_interface_contract
+claim_boundary: >
+  This manifest pins uncertainty-aware ScenarioBelief field semantics for object class,
+  pose, velocity, and covariance. It is interface and fixture evidence only. It does not
+  prove planner benefit, perception realism, real-sensor calibration, or benchmark performance.
+
+contract_surfaces:
+  implementation: robot_sf/representation/scenario_belief.py
+  package_exports: robot_sf/representation/__init__.py
+  base_contract_manifest: configs/representation/scenario_belief_contract_issue_2477.yaml
+  base_contract_note: docs/context/issue_2477_scenario_belief_contract.md
+  uncertainty_note: docs/context/issue_2478_uncertainty_scenario_belief.md
+  tests:
+    - tests/representation/test_scenario_belief.py
+    - tests/representation/test_scenario_belief_uncertainty_manifest.py
+
+uncertainty_fields:
+  object_class:
+    dataclass: EntityBelief
+    primary_field: entity_type
+    distribution_field: class_probabilities
+    distribution_shape: tuple[label, probability]
+    probability_units: unitless_probability
+    compatibility_rule: entity_type remains the primary backward-compatible class label
+  pose:
+    dataclass: Estimate2D
+    owning_entity_field: position
+    mean_field: mean_xy
+    covariance_field: covariance_xy
+    frame_field: frame_id
+    default_frame: map
+    mean_units: m
+    covariance_units: m^2
+  velocity:
+    dataclass: Estimate2D
+    owning_entity_field: velocity
+    mean_field: mean_xy
+    covariance_field: covariance_xy
+    frame_field: frame_id
+    default_frame: map
+    mean_units: m/s
+    covariance_units: (m/s)^2
+  scalar_confidence:
+    dataclass: Estimate2D
+    field: confidence
+    units: unitless_probability
+    semantics: confidence is a compact diagnostic score, not a calibrated likelihood guarantee
+  existence_probability:
+    dataclass: EntityBelief
+    field: existence_probability
+    units: unitless_probability
+    semantics: probability that the entity exists in the represented local scenario
+
+covariance_semantics:
+  matrix_shape: 2x2
+  coordinate_order: [x, y]
+  covariance_kind: covariance of the paired mean_xy estimate in the same frame
+  covariance_units_rule: covariance_units must square the corresponding mean units
+  diagonal_convention: isotropic adapter fixtures use equal diagonal variance and zero off-diagonal covariance
+  positive_semidefinite_requirement: downstream calibrated adapters should emit positive semidefinite matrices
+
+producer_expectations:
+  - key: simulator_oracle
+    position_units: m
+    velocity_units: m/s
+    expected_position_variance: near_zero_synthetic
+    expected_velocity_variance: near_zero_synthetic
+    class_probability_rule: primary class probability is 1.0 for synthetic oracle entities
+  - key: visibility_limited_simulator
+    position_units: m
+    velocity_units: m/s
+    expected_uncertainty_behavior: non-visible agents lower confidence and increase covariance
+    class_probability_rule: primary class probability follows the synthetic visibility confidence
+
+consumer_boundaries:
+  - key: socnav_struct_projection
+    method: ScenarioBelief.to_socnav_struct
+    uncertainty_behavior: drops covariance, class probabilities, provenance, and confidence
+    compatibility_rule: preserve existing SOCNAV_STRUCT key layout
+  - key: debug_json
+    method: ScenarioBelief.to_debug_dict
+    uncertainty_behavior: exposes class probabilities, mean, covariance, frame, units, confidence, source, visibility, and missing fields
+    compatibility_rule: deterministic JSON/YAML-ready diagnostics
+  - key: diagnostic_summary
+    method: ScenarioBelief.diagnostic_summary
+    uncertainty_behavior: summarizes visibility and missing-data counts only
+    compatibility_rule: diagnostic-only summary, not planner or benchmark improvement evidence
+
+known_gaps:
+  - heading uncertainty is not represented yet; heading remains a scalar legacy field
+  - covariance is synthetic in current adapters and should not be treated as sensor-calibrated
+  - policy projections intentionally drop uncertainty until a consumer contract explicitly accepts it
+
+first_fixture_or_smoke_path:
+  tests:
+    - tests/representation/test_scenario_belief.py
+    - tests/representation/test_scenario_belief_uncertainty_manifest.py
+  validates:
+    - class probabilities appear in debug output without changing SOCNAV_STRUCT keys
+    - position covariance uses meter-squared units in map frame
+    - velocity covariance uses squared-meter-per-second units in map frame
+    - non-visible synthetic agents have lower confidence and larger covariance than oracle agents
+
+recommended_next_spike:
+  title: scenario-belief uncertainty consumer spike
+  rationale: >
+    Add a planner- or analysis-facing consumer that reads covariance directly before claiming
+    uncertainty-aware planner benefit.

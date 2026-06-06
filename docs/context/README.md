@@ -527,6 +527,8 @@ knowledge, not every transient iteration detail.
   [issue_1966_scenario_belief_interface.md](issue_1966_scenario_belief_interface.md)
 * Issue #2477 ScenarioBelief Contract Bridge (2026-06-06):
   [issue_2477_scenario_belief_contract.md](issue_2477_scenario_belief_contract.md)
+* Issue #2478 Uncertainty-Aware ScenarioBelief Contract (2026-06-06):
+  [issue_2478_uncertainty_scenario_belief.md](issue_2478_uncertainty_scenario_belief.md)
 * Issue #2475 Probabilistic Prediction Interface (2026-06-06):
   [issue_2475_probabilistic_prediction_interface.md](issue_2475_probabilistic_prediction_interface.md)
 * Issue #1638 local model path preflight:

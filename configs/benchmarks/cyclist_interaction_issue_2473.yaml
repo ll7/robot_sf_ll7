@@ -1,0 +1,188 @@
+schema_version: cyclist-interaction-benchmark-contract.v1
+name: cyclist_interaction_issue_2473
+issue: 2473
+parent_issue: 2469
+evidence_tier: proposal_with_existing_proxy_surfaces
+benchmark_evidence: false
+status: scoped_benchmark_direction
+claim_boundary: >
+  This manifest defines a cyclist interaction benchmark direction and existing adjacent proxy
+  surfaces. It does not prove cyclist behavior realism, cyclist dynamics fidelity, local-planner
+  performance, or benchmark coverage of cyclist interactions. Existing pedestrian/overtaking and
+  robot bicycle-drive surfaces are proxy inputs until an executable cyclist actor/scenario path
+  exists.
+
+contract_surfaces:
+  benchmark_spec: docs/benchmark_spec.md
+  fallback_policy: docs/context/issue_691_benchmark_fallback_policy.md
+  scenario_checklist: docs/scenario_spec_checklist.md
+  low_speed_public_space_odd: configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml
+  cross_kinematics_benchmark: configs/benchmarks/cross_kinematics_v1.yaml
+  cross_kinematics_compatibility: configs/benchmarks/cross_kinematics_v1_compatibility.yaml
+  comparability_map: configs/benchmarks/alyassi_comparability_map_v1.yaml
+  amv_actuation_stress_slice: configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml
+  overtaking_archetype: configs/scenarios/archetypes/classic_overtaking.yaml
+  pedestrian_overtaking_proxy: configs/scenarios/single/francis2023_pedestrian_overtaking.yaml
+  robot_overtaking_proxy: configs/scenarios/single/francis2023_robot_overtaking.yaml
+  issue_2473_note: docs/context/issue_2473_cyclist_interaction_benchmark.md
+  tests: tests/benchmark/test_cyclist_interaction_benchmark_manifest.py
+
+scenario_families:
+  - key: cyclist_crossing
+    description: >
+      A cyclist crosses the robot path at higher-than-pedestrian speed; benchmark rows should
+      expose closing-speed and yielding failures not covered by slow pedestrian crossing alone.
+    nearest_existing_proxy: configs/scenarios/archetypes/classic_urban_crossing.yaml
+    required_runtime_status: future_cyclist_actor_required
+    initial_case_ids:
+      - bike_lane_crossing_single_cyclist
+      - oblique_crossing_fast_cyclist
+  - key: same_lane_following
+    description: >
+      Robot follows or is followed by a cyclist in a constrained shared corridor, stressing
+      speed matching, headway, and non-pedestrian braking assumptions.
+    nearest_existing_proxy: configs/scenarios/archetypes/classic_overtaking.yaml
+    required_runtime_status: future_cyclist_actor_required
+    initial_case_ids:
+      - same_direction_cyclist_ahead
+      - cyclist_closes_from_behind
+  - key: cyclist_overtake_pass_by
+    description: >
+      Cyclist overtakes the robot or passes a pedestrian-like actor with asymmetric clearance and
+      turning limits that differ from pedestrian side-stepping.
+    nearest_existing_proxy: configs/scenarios/single/francis2023_robot_overtaking.yaml
+    required_runtime_status: proxy_surface_only
+    initial_case_ids:
+      - cyclist_overtakes_robot_left
+      - robot_overtakes_slow_cyclist
+  - key: bike_lane_merge_transition
+    description: >
+      Cyclist merges between a bike-lane-like route and shared walking space; planner should
+      handle route-intent ambiguity without fallback rows.
+    nearest_existing_proxy: configs/benchmarks/alyassi_comparability_map_v1.yaml
+    required_runtime_status: future_route_intent_required
+    initial_case_ids:
+      - bike_lane_to_shared_space_merge
+      - shared_space_to_bike_lane_exit
+  - key: mixed_shared_space_encounter
+    description: >
+      Cyclist, pedestrian, and robot share space with different speed and comfort envelopes;
+      benchmark should separate cyclist-specific failures from generic crowd density failures.
+    nearest_existing_proxy: configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml
+    required_runtime_status: future_multi_actor_type_required
+    initial_case_ids:
+      - cyclist_pedestrian_robot_three_way
+      - cyclist_passes_pedestrian_near_robot
+
+cyclist_dynamics_assumptions:
+  future_explicit_fields:
+    - actor_type
+    - speed_m_s
+    - acceleration_m_s2
+    - heading_rad
+    - yaw_rate_rad_s
+    - route_or_lane_id
+    - route_intent
+    - min_turn_radius_m
+    - preferred_pass_side
+  candidate_ranges:
+    speed_m_s:
+      low: 2.0
+      high: 7.0
+      rationale: Cyclist-like actors are faster than default pedestrian walking speeds.
+    max_acceleration_m_s2:
+      low: 0.5
+      high: 2.0
+    comfortable_deceleration_m_s2:
+      low: 1.5
+      high: 4.0
+    min_turn_radius_m:
+      low: 1.5
+      high: 5.0
+  non_pedestrian_differences:
+    - higher_nominal_speed
+    - acceleration_and_deceleration_limits
+    - heading_persistence
+    - nonholonomic_or_turn_radius_constraints
+    - lane_or_route_following_preference
+    - asymmetric_overtaking_clearance
+
+required_metrics:
+  existing_metrics:
+    - success
+    - collisions
+    - near_misses
+    - min_distance
+    - time_to_goal_norm
+    - ped_impact_accel_delta_mean
+    - ped_impact_turn_rate_delta_mean
+  cyclist_specific_metrics:
+    - relative_closing_speed_m_s
+    - time_to_conflict_zone_s
+    - pass_clearance_min_m
+    - cyclist_near_miss_count
+    - cyclist_ttc_violation_count
+    - lane_or_route_intrusion_count
+    - cyclist_forced_brake_event_count
+
+required_trace_fields:
+  existing_trace_like_fields:
+    - scenario_id
+    - seed
+    - scenario_params
+    - metrics
+    - outcome.collision_event
+    - algorithm_metadata.planner_kinematics.execution_mode
+  future_cyclist_trace_fields:
+    - actor_type_by_id
+    - cyclist_state_by_step
+    - cyclist_route_or_lane_intent
+    - relative_closing_speed_by_step
+    - time_to_conflict_zone_by_step
+    - pass_clearance_by_step
+    - forced_brake_events
+    - cyclist_specific_near_miss_events
+
+fallback_and_reporting_policy:
+  benchmark_success_requires:
+    - native_or_declared_adapter_execution
+    - explicit cyclist actor type in scenario/runtime data
+    - cyclist dynamics assumptions declared for every cyclist row
+    - no fallback/degraded/not_available row counted as benchmark success
+    - cyclist-specific metrics and trace fields emitted
+  proxy_surfaces_allowed_for:
+    - validating nearby crossing/overtaking/shared-space plumbing
+    - documenting scenario-family gaps before cyclist actor support
+    - planning one executable smoke scenario
+  proxy_surfaces_not_allowed_for:
+    - cyclist_realism_claim
+    - cyclist_interaction_benchmark_claim
+    - local_planner_performance_claim
+    - benchmark_leaderboard_row
+
+first_smoke_or_spike:
+  type: one_executable_cyclist_actor_smoke
+  proxy_surfaces:
+    - configs/scenarios/archetypes/classic_overtaking.yaml
+    - configs/scenarios/archetypes/classic_urban_crossing.yaml
+    - configs/benchmarks/cross_kinematics_v1.yaml
+  future_implementation_spike:
+    title: add one executable cyclist crossing or overtaking smoke scenario
+    files_likely_touched:
+      - robot_sf/training/scenario_loader.py
+      - robot_sf/benchmark/map_runner.py
+      - robot_sf/benchmark/schemas/episode.schema.v1.json
+      - configs/scenarios/
+      - tests/benchmark/
+      - tests/scenario_certification/
+    stop_rule: >
+      Stop after one loadable cyclist actor scenario emits actor_type, speed, heading, route/intent,
+      closing-speed, and clearance trace fields for one baseline-safe planner. Do not run planner
+      comparisons until that smoke passes without fallback or degraded rows.
+
+recommended_follow_up_issue:
+  title: "benchmark: add one executable cyclist interaction smoke scenario"
+  rationale: >
+    Implement one cyclist actor/scenario path with explicit trace fields, then run a one-planner
+    smoke. Keep any result diagnostic-only until a later benchmark issue defines baselines and
+    comparison criteria.

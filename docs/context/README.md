@@ -184,6 +184,8 @@ knowledge, not every transient iteration detail.
   [issue_2275_predictive_v2_fate.md](issue_2275_predictive_v2_fate.md)
 * Issue #2411 predictive-v2 child classification:
   [issue_2411_predictive_v2_child_classification.md](issue_2411_predictive_v2_child_classification.md)
+* Issue #2473 Cyclist Interaction Benchmark Scope:
+  [issue_2473_cyclist_interaction_benchmark.md](issue_2473_cyclist_interaction_benchmark.md)
 * Issue #2476 Multimodal Prediction Benchmark Contract:
   [issue_2476_multimodal_prediction_benchmark.md](issue_2476_multimodal_prediction_benchmark.md)
 * Issue #2496 Multimodal Prediction Contract Smoke:

@@ -81,9 +81,21 @@ class Estimate2D:
     mean_xy: tuple[float, float]
     covariance_xy: tuple[tuple[float, float], tuple[float, float]]
     confidence: float
+    frame_id: str = "map"
+    units: str = "m"
+    covariance_units: str = "m^2"
 
     @classmethod
-    def point(cls, value: Any, *, confidence: float, variance: float) -> Estimate2D:
+    def point(
+        cls,
+        value: Any,
+        *,
+        confidence: float,
+        variance: float,
+        frame_id: str = "map",
+        units: str = "m",
+        covariance_units: str = "m^2",
+    ) -> Estimate2D:
         """Build a point estimate with isotropic covariance.
 
         Returns:
@@ -97,6 +109,9 @@ class Estimate2D:
             mean_xy=(float(arr[0]), float(arr[1])),
             covariance_xy=((variance, 0.0), (0.0, variance)),
             confidence=float(confidence),
+            frame_id=frame_id,
+            units=units,
+            covariance_units=covariance_units,
         )
 
     def as_array(self) -> np.ndarray:
@@ -109,6 +124,9 @@ class Estimate2D:
             "mean_xy": [round(v, 6) for v in self.mean_xy],
             "covariance_xy": [[round(v, 6) for v in row] for row in self.covariance_xy],
             "confidence": round(self.confidence, 6),
+            "frame_id": self.frame_id,
+            "units": self.units,
+            "covariance_units": self.covariance_units,
         }
 
 
@@ -128,12 +146,18 @@ class EntityBelief:
     last_observed_age_s: float = 0.0
     missing_fields: tuple[str, ...] = ()
     tracking: TrackedAgentMetadata | None = None
+    class_probabilities: tuple[tuple[str, float], ...] = ()
 
     def to_debug_dict(self) -> dict[str, Any]:
         """Return deterministic JSON/YAML-ready entity metadata."""
+        class_probabilities = self.class_probabilities or ((self.entity_type, 1.0),)
         result: dict[str, Any] = {
             "entity_id": self.entity_id,
             "entity_type": self.entity_type,
+            "class_probabilities": {
+                label: round(float(probability), 6)
+                for label, probability in sorted(class_probabilities)
+            },
             "position": self.position.to_debug_dict(),
             "velocity": self.velocity.to_debug_dict(),
             "radius": round(float(self.radius), 6),
@@ -629,12 +653,19 @@ def _scenario_belief_from_simulator(
             entity_id=f"robot_{robot_index}",
             entity_type="ego_robot",
             position=Estimate2D.point(robot_pos, confidence=1.0, variance=1e-6),
-            velocity=Estimate2D.point(robot_velocity, confidence=1.0, variance=1e-6),
+            velocity=Estimate2D.point(
+                robot_velocity,
+                confidence=1.0,
+                variance=1e-6,
+                units="m/s",
+                covariance_units="(m/s)^2",
+            ),
             radius=float(getattr(robot.config, "radius", 0.0)),
             heading=robot_heading,
             existence_probability=1.0,
             visibility_state=VisibilityState.VISIBLE,
             source=source,
+            class_probabilities=(("ego_robot", 1.0),),
         ),
         ego_speed=robot_speed,
         goals=(
@@ -685,7 +716,13 @@ def _agent_belief(
         entity_id=f"ped_{idx:03d}",
         entity_type="pedestrian",
         position=Estimate2D.point(position, confidence=confidence, variance=variance),
-        velocity=Estimate2D.point(velocity, confidence=confidence, variance=variance),
+        velocity=Estimate2D.point(
+            velocity,
+            confidence=confidence,
+            variance=variance,
+            units="m/s",
+            covariance_units="(m/s)^2",
+        ),
         radius=radius,
         heading=0.0,
         existence_probability=confidence,
@@ -694,6 +731,7 @@ def _agent_belief(
         last_observed_age_s=0.0 if visible else 1.0,
         missing_fields=missing_fields,
         tracking=tracking,
+        class_probabilities=(("pedestrian", confidence),),
     )
 
 

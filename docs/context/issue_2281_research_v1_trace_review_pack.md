@@ -20,21 +20,21 @@ Compact synthesis summary:
 
 | Case | Status | Mechanism signal | Verdict | Main caveat |
 | --- | --- | --- | --- | --- |
-| `ammv_head_on_corridor_mechanism_activation` | single-row export path unblocked | Direct AMMV force term activated in a mechanism probe; #2405 proved selected default/AMMV aggregate rows can export to loader-valid `simulation_trace_export.v1`. | `gather_more_evidence` | The proof is diagnostic-only and one selected row per side; durable trace-pair publication, annotation, and multi-episode bundle behavior remain unresolved. |
+| `ammv_head_on_corridor_mechanism_activation` | first diagnostic panel proof published | Direct AMMV force term activated in a mechanism probe; Issue #2405 proved selected default/AMMV aggregate rows can export to loader-valid `simulation_trace_export.v1`, and Issue #2428 published one durable rendered default/AMMV trace-panel pair. | `gather_more_evidence` | The proof is diagnostic-only and one selected row per side; annotation, multi-episode bundle behavior, and benchmark/paper-facing interpretation remain unresolved. |
 | `amv_cross_trap_hazard_odd_slice` | blocked | Cross-trap AMV slice has hazard/ODD coverage evidence. | `gather_more_evidence` | No selected per-planner trace slices or annotation set. |
 | `head_on_corridor_route_offset_response` | reviewed | Route offset changed closest-approach geometry; hybrid seed `117` shifted closest approach earlier and farther along route. | `diagnostic_supported_case` | Terminal outcomes stayed `max_steps`; command-source telemetry missing. |
 | `leave_group_speed_outcome_flip` | reviewed | ORCA seed `258` changed from collision to success with a small clearance/phase shift. | `diagnostic_supported_case` | Effect is fragile and seed-local, not a robust speed-perturbation claim. |
 | `intersection_wait_speed_p050_phase_response` | reviewed | `+0.5 m/s` pedestrian speed offset repeated a strong negative clearance shift across 9 pairs. | `diagnostic_supported_case` | Same `max_steps` terminal outcome; pedestrian IDs are index-based. |
 
 The pack satisfies the #2281 stop condition with three durable reviewed cases, one explicit
-missing-input blocker, and one AMMV case whose single-row trace-export path is now unblocked but
-still lacks a durable annotated trace pair.
+missing-input blocker, and one AMMV case whose single-row trace-export path now has a first durable
+diagnostic rendered panel pair but still lacks annotation and multi-episode evidence.
 
 ## Synthesis Table
 
 | Mechanism | Source issue | Evidence tier | Config | Seeds | Artifacts | Metrics | Verdict | Caveats |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- |
-| AMMV Social Force direct activation | #2168 / #2269 / #2309 / #2405 | diagnostic mechanism probe plus single-row trace-export proof | `classic_head_on_corridor_low` direct probe and #2168 benchmark rerun commands | `111`, `112`, `113` | `docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/summary.json`; `docs/context/evidence/issue_2309_amv_trace_export_probe_2026-06-05/summary.json`; `docs/context/evidence/issue_2405_amv_step_export_2026-06-06/summary.json` | AMMV force magnitude and intrusion count; selected default/AMMV aggregate rows now preserve 20 step frames and export with `ammv.pedestrian_force_vectors` | `single_row_trace_export_path_unblocked` | Diagnostic-only one-row export proof; no durable trace pair or annotation set is published, and multi-row JSONL conversion remains out of scope. |
+| AMMV Social Force direct activation | #2168 / #2269 / #2309 / #2405 / #2428 | diagnostic mechanism probe plus single-row trace-export and rendered-panel proof | `classic_head_on_corridor_low` direct probe and #2168 benchmark rerun commands | `111`, `112`, `113` | `docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/summary.json`; `docs/context/evidence/issue_2309_amv_trace_export_probe_2026-06-05/summary.json`; `docs/context/evidence/issue_2405_amv_step_export_2026-06-06/summary.json`; `docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/summary.json` | AMMV force magnitude and intrusion count; selected default/AMMV aggregate rows now preserve 20 step frames, export with `ammv.pedestrian_force_vectors`, and render as a first durable diagnostic panel pair | `diagnostic_panel_pair_published` | Diagnostic-only one-row-per-side panel proof; no annotation set or multi-episode evidence is published, and multi-row JSONL conversion remains out of scope. |
 | AMV cross-trap hazard/ODD coverage | #2164 / #2269 | diagnostic coverage slice | #1484 cross-kinematics reports | `111` | `docs/context/evidence/issue_2164_amv_hazard_odd_join_2026-06-03/hazard_odd_coverage_summary.json` | hazard, ODD, scenario-contract coverage | `blocked_for_pack_render` | Coverage evidence is not a trace review; selected trace slices absent. |
 | Head-on corridor pedestrian route offset | #1939 / #2280 | compact trace-slice review | `configs/scenarios/perturbations/issue_1610_ped_route_offset_pilot_v1.yaml` | `111`, `112`, `116`, `117` | `docs/context/evidence/issue_1939_corridor_trace_response_2026-05-31/closest_approach_trace_slices.json` | 12 completed pairs; mean clearance delta `+0.153489 m`; hybrid seed `117` progress delta `+6.581509 m` | `diagnostic_supported_case` | Geometry/progress signal only; terminal `max_steps` unchanged and command-source timeline absent. |
 | ORCA leave-group speed outcome flip | #1945 | compact trace-slice review | `configs/scenarios/perturbations/issue_1610_ped_speed_pilot_v1.yaml` | `258`, `259`, `260` | `docs/context/evidence/issue_1945_orca_leave_group_speed_trace_2026-06-01/closest_approach_trace_slices.json` | 3 completed pairs; seed `258` collision-to-success; mean clearance delta `+0.034504 m` | `diagnostic_supported_case` | Seed-local phase/order mechanism; neighboring seeds do not show broad outcome improvement. |
@@ -48,7 +48,8 @@ The current pack is valuable enough to continue the why-first trace-review lane,
 be promoted into benchmark-strength or paper-facing evidence. The next useful step is not another
 rubric. It is either:
 
-- publish and annotate a durable AMMV trace pair from the #2405 single-row export path, or
+- annotate or broaden the Issue #2428 durable AMMV trace pair from the Issue #2405 single-row
+  export path, or
 - build a small annotation set for one of the three already reviewed compact trace-slice cases.
 
 Do not broaden to a viewer/UI project until at least one AMV-specific case has durable renderable

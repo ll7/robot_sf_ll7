@@ -349,6 +349,14 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2408_orca_residual_low_progress_analysis.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2408_orca_residual_low_progress_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained

@@ -271,6 +271,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2410_hybrid_component_readiness_refresh.md](issue_2410_hybrid_component_readiness_refresh.md)
 
+* Issue #2408 ORCA-residual low-progress analysis:
+
+  [issue_2408_orca_residual_low_progress_analysis.md](issue_2408_orca_residual_low_progress_analysis.md)
+
 * Issue #2231 mechanism-aware ranking comparison:
 
   [issue_2231_mechanism_aware_ranking.md](issue_2231_mechanism_aware_ranking.md)
@@ -1156,3 +1160,7 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #2410 Hybrid-Learning Component Readiness Refresh](issue_2410_hybrid_component_readiness_refresh.md)
   refreshes the component matrix after the ORCA-residual v1 progress-probe launch-packet revision
   and keeps Issue #1489 blocked from comparative synthesis.
+
+* [Issue #2408 ORCA-Residual Low-Progress Analysis](issue_2408_orca_residual_low_progress_analysis.md)
+  classifies the failed v0 smoke row and recommends only a revised, instrumented progress-probe
+  rerun before any nominal escalation.

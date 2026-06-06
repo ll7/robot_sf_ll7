@@ -161,6 +161,8 @@ boundary before merging an evidence-producing PR.
 - `issue_2410_hybrid_component_readiness_refresh_2026-06-06/`: compact Issue 2410 refresh of
   hybrid-learning component readiness after the ORCA-residual progress-probe launch-packet update,
   preserving the Issue 1489 still-blocked synthesis boundary.
+- `issue_2408_orca_residual_low_progress_2026-06-06/`: compact analysis-only classification of
+  the ORCA-residual BC v0 low-progress smoke failure before a revised progress-probe rerun.
 - `issue_2275_predictive_v2_fate_2026-06-05/`: compact decision matrix for Issue #2275 / parent
   Issue #1490, recording the stop-old-expansion decision after the #1543 negative audit and #1897
   failed coupling gate.

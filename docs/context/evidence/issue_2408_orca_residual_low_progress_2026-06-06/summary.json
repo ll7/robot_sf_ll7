@@ -1,0 +1,45 @@
+{
+  "schema": "orca_residual_low_progress_analysis.v1",
+  "issue": 2408,
+  "parent_issues": [
+    1475,
+    1358
+  ],
+  "date": "2026-06-06",
+  "head_sha": "8a277b48d9ca319fa6bb586c96a13afa7e7942e0",
+  "decision": "rerun_with_instrumentation",
+  "paired_decision_context": "revise_residual_objective was already selected by Issue 2311 and encoded in the progress-probe launch packet.",
+  "recommendation": "Continue only through the revised ORCA-residual progress-probe smoke with residual contribution instrumentation; do not rerun unchanged v0 or submit nominal_sanity from the failed v0 row.",
+  "observed_v0_metrics": {
+    "episodes": 1,
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "failure_mode": "timeout_low_progress",
+    "termination_reason": "max_steps",
+    "mean_avg_speed": 0.8037693605819239,
+    "shield_decision_count": 80,
+    "shield_override_rate": 0.0,
+    "shield_hard_constraint_violation_rate": 0.0,
+    "guard_veto_rate": 0.0,
+    "fallback_rate": 0.0,
+    "degraded_rate": 0.0
+  },
+  "classification_by_question": {
+    "residual_inactive": "unlikely_unresolved",
+    "dataset_too_small": "plausible_contributor",
+    "smoke_target_inappropriate": "rejected",
+    "residual_bound_too_tight": "unresolved_secondary_hypothesis",
+    "guard_or_fallback_dominated": "not_observed",
+    "learned_component_no_route_progress": "primary_observed_failure"
+  },
+  "missing_evidence": [
+    "per-step raw residual magnitude",
+    "per-step bounded residual magnitude",
+    "residual clipping rate",
+    "durable v1 progress-probe smoke output",
+    "durable residual contribution diagnostics beyond the contract fixture"
+  ],
+  "stop_rule": "If the v1 bounded smoke also has success_rate=0.0 with timeout_low_progress, stop the current residual-BC lane shape or reopen only through named objective/dataset redesign.",
+  "claim_boundary": "Analysis-only routing evidence; no new training, benchmark result, checkpoint promotion, learned-component success claim, or paper-facing conclusion."
+}

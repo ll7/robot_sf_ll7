@@ -67,6 +67,18 @@ is to explain a default-vs-AMMV mechanism difference. The next smallest useful A
 select another row or seed with an observed planner-state, action, outcome, or force-pattern
 difference, then annotate that row with the same exact-frame discipline.
 
+## Follow-Up
+
+Issue #2432 broadened this check to the local Issue #2168 `classic_head_on_corridor_low` seed slice.
+Seeds `111`, `112`, and `113` all regenerated successfully with 100-frame step traces, but every
+default/AMMV pair was still numerically identical over robot state, pedestrian state, selected
+action, planner event, and `ammv.pedestrian_force_vectors`. See
+[issue_2432_ammv_trace_selection.md](issue_2432_ammv_trace_selection.md) and
+[issue_2432 AMMV trace-selection evidence](evidence/issue_2432_ammv_trace_selection_2026-06-06/README.md).
+
+The current AMMV behavioral-difference lane therefore needs a different scenario/family, direct
+planner-mode trace source, or extra instrumentation before more annotation/panel work is useful.
+
 ## Missing Fields
 
 Richer annotation would need at least one of:

@@ -1,0 +1,130 @@
+{
+  "candidate_pairs": [
+    {
+      "ammv_avg_speed": 1.2008929699625837,
+      "ammv_collisions": 0,
+      "ammv_episode_id": "classic_head_on_corridor_low--111--c827deb1f2113342",
+      "ammv_force_vectors_max_abs_delta": 0.0,
+      "ammv_min_clearance": 0.48436720607506123,
+      "ammv_status": "failure",
+      "ammv_success": false,
+      "behavioral_delta_found": false,
+      "default_avg_speed": 1.2008929699625837,
+      "default_collisions": 0,
+      "default_episode_id": "classic_head_on_corridor_low--111--9a1298c6fafc0693",
+      "default_min_clearance": 0.48436720607506123,
+      "default_status": "failure",
+      "default_success": false,
+      "event_max_abs_delta": 0.0,
+      "frame_count_ammv": 100,
+      "frame_count_default": 100,
+      "pedestrians_max_abs_delta": 0.0,
+      "per_frame_max_abs_delta": 0.0,
+      "robot_max_abs_delta": 0.0,
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "selected_action_max_abs_delta": 0.0
+    },
+    {
+      "ammv_avg_speed": 1.214691742673514,
+      "ammv_collisions": 0,
+      "ammv_episode_id": "classic_head_on_corridor_low--112--0547ae69edcc31ff",
+      "ammv_force_vectors_max_abs_delta": 0.0,
+      "ammv_min_clearance": 6.022389376088377,
+      "ammv_status": "failure",
+      "ammv_success": false,
+      "behavioral_delta_found": false,
+      "default_avg_speed": 1.214691742673514,
+      "default_collisions": 0,
+      "default_episode_id": "classic_head_on_corridor_low--112--e30cfeff0bee1e63",
+      "default_min_clearance": 6.022389376088377,
+      "default_status": "failure",
+      "default_success": false,
+      "event_max_abs_delta": 0.0,
+      "frame_count_ammv": 100,
+      "frame_count_default": 100,
+      "pedestrians_max_abs_delta": 0.0,
+      "per_frame_max_abs_delta": 0.0,
+      "robot_max_abs_delta": 0.0,
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 112,
+      "selected_action_max_abs_delta": 0.0
+    },
+    {
+      "ammv_avg_speed": 1.2318406091106253,
+      "ammv_collisions": 0,
+      "ammv_episode_id": "classic_head_on_corridor_low--113--9483d6d67c3324ad",
+      "ammv_force_vectors_max_abs_delta": 0.0,
+      "ammv_min_clearance": 4.4253337893935,
+      "ammv_status": "failure",
+      "ammv_success": false,
+      "behavioral_delta_found": false,
+      "default_avg_speed": 1.2318406091106253,
+      "default_collisions": 0,
+      "default_episode_id": "classic_head_on_corridor_low--113--992044279ad9bdb2",
+      "default_min_clearance": 4.4253337893935,
+      "default_status": "failure",
+      "default_success": false,
+      "event_max_abs_delta": 0.0,
+      "frame_count_ammv": 100,
+      "frame_count_default": 100,
+      "pedestrians_max_abs_delta": 0.0,
+      "per_frame_max_abs_delta": 0.0,
+      "robot_max_abs_delta": 0.0,
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 113,
+      "selected_action_max_abs_delta": 0.0
+    }
+  ],
+  "claim_boundary": "diagnostic-only trace-selection evidence; not benchmark-strength or paper-facing evidence",
+  "commands": {
+    "ammv_run": "scripts/dev/run_worktree_shared_venv.sh -- robot_sf_bench run --matrix configs/scenarios/issue_2168_ammv_social_force_pair.yaml --out <worktree-local-ammv-jsonl> --base-seed 111 --repeats 3 --horizon 100 --dt 0.1 --record-forces --record-simulation-step-trace --no-video --video-renderer none --algo social_force --algo-config configs/baselines/social_force_ammv_aware.yaml --workers 1 --no-resume --structured-output json",
+    "default_run": "scripts/dev/run_worktree_shared_venv.sh -- robot_sf_bench run --matrix configs/scenarios/issue_2168_ammv_social_force_pair.yaml --out <worktree-local-default-jsonl> --base-seed 111 --repeats 3 --horizon 100 --dt 0.1 --record-forces --record-simulation-step-trace --no-video --video-renderer none --algo social_force --workers 1 --no-resume --structured-output json"
+  },
+  "created_at": "2026-06-06T12:54:00Z",
+  "issue": 2432,
+  "raw_outputs_tracked": false,
+  "related_issues": [
+    2159,
+    2168,
+    2227,
+    2428,
+    2430
+  ],
+  "result": {
+    "candidate_pairs_compared": 3,
+    "decision": "no_non_identical_default_vs_ammv_pair_found_in_local_seed_111_113_adapter_slice",
+    "frames_per_pair": [
+      100
+    ],
+    "max_per_frame_abs_delta": 0.0,
+    "next_smallest_step": "choose a different scenario/family or direct planner-mode mechanism trace source; do not spend more annotation/panel work on the current adapter-mode head-on seed slice for behavioral-difference evidence",
+    "non_identical_pairs_found": 0,
+    "scenario_id": "classic_head_on_corridor_low",
+    "seeds_compared": [
+      111,
+      112,
+      113
+    ]
+  },
+  "schema_version": "issue_2432_ammv_trace_selection.v1",
+  "source_outputs": {
+    "ammv_jsonl": {
+      "sha256": "024f3662206a3b946e21414efd4cb29f124e8841621e18bc8667c0f4f6184236",
+      "source_label": "worktree-local-ammv-jsonl",
+      "source_note": "ignored worktree-local benchmark JSONL; tracked evidence keeps checksum only",
+      "tracked": false
+    },
+    "default_jsonl": {
+      "sha256": "26f2e65f2ce1475f3478bc7b73b6ecb8defd2a9e2861661efa6278ea2fda2677",
+      "source_label": "worktree-local-default-jsonl",
+      "source_note": "ignored worktree-local benchmark JSONL; tracked evidence keeps checksum only",
+      "tracked": false
+    }
+  },
+  "validation": [
+    "robot_sf_bench validate-config and preview-scenarios passed for configs/scenarios/issue_2168_ammv_social_force_pair.yaml",
+    "default and AMMV local runs each wrote 3 rows with --record-simulation-step-trace",
+    "frame-level comparison covered robot, pedestrians, selected_action, event, and ammv.pedestrian_force_vectors"
+  ]
+}

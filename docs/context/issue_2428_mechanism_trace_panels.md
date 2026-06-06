@@ -52,6 +52,12 @@ Issue #2227 remains partially blocked:
 - AMMV/default Social Force target: now has a first durable diagnostic trace-panel bundle through
   Issue #2428.
 
+Issue #2432 later broadened the AMMV/default selection check across the local Issue #2168 seeds
+`111..113` with 100-frame step traces. That sweep also found no behavioral-difference pair in this
+adapter-mode head-on-corridor slice. Use
+[issue_2432_ammv_trace_selection.md](issue_2432_ammv_trace_selection.md) before selecting more AMMV
+panels from the same slice.
+
 ## Validation
 
 ```bash

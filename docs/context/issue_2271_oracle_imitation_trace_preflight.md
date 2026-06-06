@@ -78,17 +78,32 @@ The split contract remains:
 - hard-slice recovery examples stay out of evaluation unless predeclared,
 - generated trace and dataset manifests need recorded checksums before imitation training starts.
 
+## 2026-06-06 SLURM Follow-Up
+
+Issue #2441 submitted the train and validation trace-collection splits from branch
+`gse-2441-oracle-traces` at commit `a9679e1a37495b25c1786917fcf2fa7e749d1475`.
+
+- Job `12762` collected the train split on `a30` and completed with exit code `0:0`.
+- Job `12763` collected the validation split on `l40s` and completed with exit code `0:0`.
+- Compact checksums and summary metrics are tracked in
+  `docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/README.md`.
+
+The result is `completed_pending_artifact_promotion`: the trace collector produced the expected
+local manifests and JSONL rows, but the raw traces are still local-only `output/` artifacts. The
+classic slices are weak enough that this should remain diagnostic dataset-prep evidence, not an
+oracle-quality or benchmark claim. Downstream imitation training still needs durable artifact
+promotion or a deliberate rerun/revision.
+
 ## Current Decision
 
-Issue #1470 is submit-ready only as a trace-collection handoff. The local evidence proves the
-launch packet validates at the named commit and the wrapper resolves the expected train-split
-SLURM command without submitting. It is not benchmark evidence, not final dataset evidence, and not
+Issue #1470 has train/validation trace-collection evidence, but it is not closed as durable dataset
+evidence yet. The local evidence proves the launch packet validates and the wrapper can collect
+trace rows through SLURM. It is not benchmark evidence, not final dataset evidence, and not
 learned-policy evidence.
 
-Next smallest proof step: from an allowed Auxme SLURM environment, rerun the validator and wrapper
-dry-run at the intended collection commit, remove `--dry-run` only after live partition policy
-checks pass, then record the SLURM job ID, manifest checksum, trace checksum or manifest checksum,
-and concrete durable artifact aliases.
+Next smallest proof step: promote the generated train/validation trace manifests and JSONL files to
+a durable artifact store with concrete retrieval aliases, or revise/rerun before any imitation
+training treats these local outputs as inputs.
 
 Machine-readable summary:
 `docs/context/evidence/issue_2271_oracle_imitation_trace_preflight_2026-06-05/summary.json`

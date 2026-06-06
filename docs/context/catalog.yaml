@@ -449,6 +449,10 @@ entries:
     status: proposal
     freshness: maintained
     area: predictive_planner
+  - path: docs/context/issue_2496_multimodal_prediction_smoke.md
+    status: current
+    freshness: evidence
+    area: predictive_planner
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained

@@ -8,7 +8,7 @@ status: proposed
 depends_on:
   - issue: 2475
     surface: probabilistic prediction interface
-    status: pending_pr
+    status: merged
     pr: 2495
 claim_boundary: >
   This file defines the proposed benchmark contract for testing multimodal pedestrian prediction
@@ -56,7 +56,7 @@ comparators:
       planner and must be reported separately from benchmark success claims.
 
 required_prediction_contract:
-  interface_dependency: "PR #2495"
+  interface_dependency: "PR #2495 (merged)"
   per_pedestrian_fields:
     - pedestrian_id
     - current_position_xy
@@ -131,7 +131,7 @@ stop_rule:
 first_executable_follow_up:
   issue: 2496
   recommended_issue_title: "benchmark: add executable multimodal prediction smoke"
-  waits_for: "PR #2495 merged"
+  status: executable_smoke_added
   minimum_proof: >
     A runner-visible smoke config or test fixture that produces native reactive, single-trajectory,
     and multimodal rows with the required trace fields.

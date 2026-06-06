@@ -369,6 +369,10 @@ entries:
     status: current
     freshness: maintained
     area: learned_policy
+  - path: docs/context/issue_2479_real_trajectory_scenario_prior.md
+    status: proposal
+    freshness: maintained
+    area: learned_policy
   - path: docs/context/issue_2475_probabilistic_prediction_interface.md
     status: current
     freshness: dated

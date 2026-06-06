@@ -1,0 +1,139 @@
+schema_version: scenario-distribution-prior.v1
+name: scenario_distribution_prior_issue_2479
+issue: 2479
+parent_issue: 2469
+evidence_tier: proposal_with_existing_importer
+benchmark_evidence: false
+status: scoped_manifest_contract
+claim_boundary: >
+  This manifest scopes a data-grounded scenario-prior path from real trajectory datasets.
+  It does not prove that any learned distribution is realistic, benchmark-useful, or
+  calibrated to Robot SF without staged data, provenance, extraction evidence, and
+  downstream benchmark validation.
+
+contract_surfaces:
+  existing_importer: scripts/tools/import_sdd_scenarios.py
+  external_data_assistant: scripts/tools/manage_external_data.py
+  importer_tests: tests/tools/test_import_sdd_scenarios.py
+  external_data_docs: docs/external_data_setup.md
+  real_world_import_docs: docs/real_world_trajectory_import.md
+  importer_context_note: docs/context/issue_1091_sdd_importer.md
+  issue_2479_note: docs/context/issue_2479_real_trajectory_scenario_prior.md
+
+candidate_datasets:
+  - key: sdd
+    name: Stanford Drone Dataset
+    repo_status: supported_local_asset
+    first_use: first_non_training_spike
+    source_url: https://cvgl.stanford.edu/projects/uav_data/
+    license_status: verified_in_repo_docs
+    license_note: Creative Commons Attribution-NonCommercial-ShareAlike 3.0
+    provenance_gate: >
+      Use scripts/tools/manage_external_data.py to stage a local annotations.txt tree and
+      scripts/tools/import_sdd_scenarios.py to write map/scenario/provenance outputs.
+    related_issues: [1497, 1126, 1091]
+  - key: eth_ucy_family
+    name: ETH/UCY pedestrian trajectory family
+    repo_status: candidate_requires_source_and_license_verification
+    first_use: follow_up_only
+    license_status: not_verified_in_repo
+    provenance_gate: >
+      Create a dedicated data-staging provenance issue before use; record official source,
+      access terms, coordinate units, scene metadata, and checksums before extraction.
+  - key: trajnet_family
+    name: TrajNet-style pedestrian trajectory collections
+    repo_status: candidate_requires_source_and_license_verification
+    first_use: follow_up_only
+    license_status: not_verified_in_repo
+    provenance_gate: >
+      Treat as an aggregator candidate only after source-dataset licenses and redistribution
+      rights are separated in a tracked provenance manifest.
+  - key: traffic_interaction_family
+    name: Road-user interaction trajectory datasets such as inD/rounD/highD-style sources
+    repo_status: candidate_requires_domain_fit_and_license_verification
+    first_use: follow_up_only
+    license_status: not_verified_in_repo
+    provenance_gate: >
+      Use only after a tracked provenance check confirms pedestrian/local-navigation relevance,
+      license/access terms, map-frame calibration, and whether non-pedestrian agents fit the
+      Robot SF claim boundary.
+
+scenario_distribution_representation:
+  unit_contract:
+    position: m
+    velocity: m/s
+    time: s
+    density: agents_per_m2
+    coordinate_frame: local_scene_frame
+  required_feature_groups:
+    scene_identity:
+      - dataset_key
+      - dataset_scene_id
+      - source_file_or_manifest
+      - source_license
+      - source_checksum_or_artifact_pointer
+    normalization:
+      - coordinate_frame
+      - meters_per_pixel_or_homography
+      - frame_rate_hz
+      - y_axis_policy
+      - map_extent_m
+    agent_population:
+      - agent_count_distribution
+      - pedestrian_label_filter
+      - track_length_distribution_s
+      - missing_or_occluded_fraction
+    kinematics:
+      - speed_distribution_mps
+      - acceleration_distribution_mps2
+      - heading_change_distribution_rad
+      - stop_fraction
+    interaction_geometry:
+      - nearest_neighbor_distance_distribution_m
+      - crossing_angle_distribution_rad
+      - time_to_closest_approach_distribution_s
+      - group_co_motion_fraction
+    scenario_prior:
+      - encounter_type_weights
+      - density_bin_weights
+      - route_endpoint_distribution
+      - temporal_window_distribution_s
+
+first_non_training_spike:
+  dataset_key: sdd
+  goal: compact_feature_manifest_from_staged_sdd_annotation
+  input_gate:
+    - local SDD annotations are staged with scripts/tools/manage_external_data.py
+    - raw files remain ignored and local-only
+    - provenance manifest records source URL, license/access notes, tree checksum, and related issues
+  extraction_contract:
+    - run scripts/tools/import_sdd_scenarios.py on one staged annotations.txt file
+    - derive compact per-scene feature summary from generated provenance and scenario/map outputs
+    - store only the compact feature manifest or checksum-backed pointer under docs/context/evidence
+  stop_rule: >
+    Stop before training. If staged SDD data is unavailable, publish only the scoping manifest
+    and open a follow-up data-staging issue rather than fabricating a feature result.
+
+validation_criteria:
+  docs_only:
+    - referenced files exist
+    - SDD candidate matches the external-data asset registry and importer constants
+    - claim boundary says this is not benchmark evidence
+  future_data_spike:
+    - external data manifest passes manage_external_data.py check/stage
+    - importer output loads through tests/tools/test_import_sdd_scenarios.py contracts
+    - compact feature manifest is represented under docs/context/evidence with provenance
+
+blocked_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+
+recommended_follow_up_issue:
+  title: "data: stage one SDD annotation tree and extract compact scenario-prior features"
+  rationale: >
+    #2479 should stop at a durable scoping contract unless local SDD data is staged under the
+    external-data provenance policy. The next issue should produce a compact feature manifest
+    from real staged input without committing raw annotations.

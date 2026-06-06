@@ -1,0 +1,91 @@
+name: multimodal_prediction_smoke_issue_2496
+contract_kind: executable-smoke
+issue: 2496
+parent_issue: 2476
+parent_contract: configs/benchmarks/multimodal_prediction_contract_issue_2476.yaml
+evidence_tier: contract-smoke
+benchmark_evidence: false
+status: executable
+claim_boundary: >
+  This smoke exercises the multimodal prediction trace contract with deterministic fixtures.
+  It proves that required rows and fail-closed statuses can be emitted. It is not a benchmark
+  result and must not be interpreted as evidence that multimodal prediction improves planning.
+
+scenario_surface:
+  scenario_refs:
+    - configs/scenarios/sanity_v1.yaml#single_ped_crossing_orthogonal
+    - configs/scenarios/single/observation_visibility_blind_corner_smoke.yaml
+  synthetic_runner_only: true
+
+prediction_defaults:
+  pedestrian_ids:
+    - 7
+  prediction_dt: 0.25
+  prediction_horizon_steps: 4
+
+comparators:
+  - key: reactive_no_prediction
+    prediction_mode: reactive_no_prediction
+    prediction_source: none
+    required_status: native
+    hypothesis_confidences: []
+    selected_or_weighted_hypothesis_id: null
+  - key: single_trajectory_prediction
+    prediction_mode: single_trajectory_prediction
+    prediction_source: probabilistic_prediction_interface.v1
+    required_status: native
+    hypothesis_confidences:
+      - 1.0
+    selected_or_weighted_hypothesis_id: 0
+  - key: multimodal_equal_weight
+    prediction_mode: multimodal_prediction
+    prediction_source: probabilistic_prediction_interface.v1
+    required_status: native
+    hypothesis_confidences:
+      - 0.3333333333
+      - 0.3333333333
+      - 0.3333333334
+    selected_or_weighted_hypothesis_id: weighted_equal
+  - key: multimodal_confidence_weighted
+    prediction_mode: multimodal_prediction
+    prediction_source: probabilistic_prediction_interface.v1
+    required_status: native
+    hypothesis_confidences:
+      - 0.6
+      - 0.3
+      - 0.1
+    selected_or_weighted_hypothesis_id: weighted_confidence
+
+fail_closed_cases:
+  - key: missing_prediction_input
+    prediction_mode: single_trajectory_prediction
+    prediction_source: missing
+    expected_status: not_available
+    fallback_or_degraded_reason: missing_prediction_inputs
+  - key: degraded_prediction_input
+    prediction_mode: multimodal_prediction
+    prediction_source: degraded_fixture
+    expected_status: failed
+    fallback_or_degraded_reason: degraded_prediction_inputs_not_allowed
+
+required_trace_fields:
+  - planner_key
+  - prediction_mode
+  - prediction_source
+  - prediction_horizon_steps
+  - prediction_dt
+  - hypothesis_count_per_pedestrian
+  - hypothesis_confidence_vector
+  - selected_or_weighted_hypothesis_id
+  - fallback_or_degraded_reason
+  - collision
+  - success
+  - timeout
+  - min_pedestrian_distance
+  - time_to_goal
+
+required_status_values:
+  - native
+  - diagnostic
+  - not_available
+  - failed

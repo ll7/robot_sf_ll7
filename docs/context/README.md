@@ -186,6 +186,8 @@ knowledge, not every transient iteration detail.
   [issue_2411_predictive_v2_child_classification.md](issue_2411_predictive_v2_child_classification.md)
 * Issue #2476 Multimodal Prediction Benchmark Contract:
   [issue_2476_multimodal_prediction_benchmark.md](issue_2476_multimodal_prediction_benchmark.md)
+* Issue #2496 Multimodal Prediction Contract Smoke:
+  [issue_2496_multimodal_prediction_smoke.md](issue_2496_multimodal_prediction_smoke.md)
 * Issue #1542 manuscript claim evidence map:
   [issue_1542_manuscript_claim_evidence_map.md](issue_1542_manuscript_claim_evidence_map.md)
 

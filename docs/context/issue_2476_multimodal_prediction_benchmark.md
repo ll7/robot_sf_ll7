@@ -6,7 +6,7 @@ Related surfaces:
 
 - GitHub issue: https://github.com/ll7/robot_sf_ll7/issues/2476
 - Parent roadmap issue: https://github.com/ll7/robot_sf_ll7/issues/2469
-- Interface prerequisite: PR #2495 / issue #2475, probabilistic prediction interface
+- Interface prerequisite: PR #2495 / issue #2475, merged probabilistic prediction interface
 - Executable follow-up: https://github.com/ll7/robot_sf_ll7/issues/2496
 - Proposal artifact: `configs/benchmarks/multimodal_prediction_contract_issue_2476.yaml`
 - Policy boundary: `docs/context/issue_691_benchmark_fallback_policy.md`
@@ -18,15 +18,12 @@ Robot SF local planning compared with reactive and single-trajectory prediction 
 note scopes the benchmark question and required evidence. It does not claim that multimodal
 prediction improves planner performance.
 
-## Current Dependency
+## Resolved Dependency
 
-PR #2495 introduces the minimal probabilistic prediction interface. Until that PR is merged, #2476
-must remain a contract proposal or explicitly stack on #2495. Work based on `origin/main` should
-not import or link to prediction-interface files that are only present on the open PR branch.
-
-Executable benchmark work should wait for #2495 to merge unless it intentionally targets that
-branch. The first executable follow-up should prove that the prediction contract can produce native
-reactive, single-trajectory, and multimodal rows before any broader benchmark campaign is proposed.
+PR #2495 introduced the minimal probabilistic prediction interface and has merged. The first
+executable follow-up (#2496) can therefore run from `origin/main` and should prove that the
+prediction contract can produce native reactive, single-trajectory, and multimodal rows before any
+broader benchmark campaign is proposed.
 
 ## Benchmark Question
 
@@ -93,7 +90,9 @@ Use the blocked follow-up issue after #2495 merges:
 
 `benchmark: add executable multimodal prediction smoke` (#2496)
 
-Minimum proof for that follow-up:
+Minimum proof for that follow-up, now implemented as
+`configs/benchmarks/multimodal_prediction_smoke_issue_2496.yaml` and
+`scripts/validation/run_multimodal_prediction_contract_smoke.py`:
 
 - a runner-visible smoke config or fixture,
 - native reactive, single-trajectory, and multimodal rows,

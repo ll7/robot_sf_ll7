@@ -245,3 +245,23 @@ def test_future_like_deployment_fields_fail_closed() -> None:
 
     with pytest.raises(ValueError, match="future_positions"):
         build_social_graph_observation(obs)
+
+
+def test_history_return_not_mutated_by_later_build_calls() -> None:
+    """Returned pedestrian_history must be isolated from subsequent adapter writes."""
+    adapter = SocialGraphObservationAdapter(
+        SocialGraphObservationConfig(max_pedestrians=1, history_steps=3)
+    )
+    adapter.build(_nested_obs(ped_positions=[[1.0, 0.0]]))
+
+    second = adapter.build(_nested_obs(ped_positions=[[2.0, 0.0]]))
+    hist_2 = second["pedestrian_history"]
+
+    third = adapter.build(_nested_obs(ped_positions=[[3.0, 0.0]]))
+    np.testing.assert_allclose(hist_2[:, 0, 0], [1.0, 1.0, 2.0])
+    np.testing.assert_allclose(third["pedestrian_history"][:, 0, 0], [1.0, 2.0, 3.0])
+
+    hist_2[0, 0, 0] = 999.0
+
+    fourth = adapter.build(_nested_obs(ped_positions=[[4.0, 0.0]]))
+    np.testing.assert_allclose(fourth["pedestrian_history"][:, 0, 0], [2.0, 3.0, 4.0])

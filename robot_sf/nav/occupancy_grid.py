@@ -410,6 +410,7 @@ class OccupancyGrid:
         self._last_use_ego_frame: bool = False
         self._prepared_obstacles: list[PreparedGeometry] | None = None
         self._obstacle_polygons: list[Any] = []
+        self._obstacle_polygons_cache_key: tuple[Any, ...] | None = None
         self._static_obstacle_layer_cache_key: _StaticObstacleLayerCacheKey | None = None
         self._static_obstacle_layer_cache: np.ndarray | None = None
 
@@ -749,15 +750,29 @@ class OccupancyGrid:
                 idx for idx, ch in enumerate(self.config.channels) if ch != GridChannel.COMBINED
             ]
             if source_indices:
-                combined = np.max(self._grid_data[source_indices], axis=0)
+                np.maximum.reduce(
+                    self._grid_data[source_indices],
+                    axis=0,
+                    out=self._grid_data[combined_idx],
+                )
             else:
-                combined = np.zeros_like(self._grid_data[combined_idx])
-            self._grid_data[combined_idx] = combined.astype(self.config.dtype, copy=False)
+                self._grid_data[combined_idx].fill(0)
             logger.debug("Generated combined channel from %s indices", source_indices)
 
-        # Cache obstacle polygons for direct spatial queries
-        self._obstacle_polygons = transformed_polygons or []
-        self._prepared_obstacles = self._prepare_obstacles(self._obstacle_polygons)
+        # Cache prepared obstacle geometries, re-preparing only when effective
+        # polygon input changes (handles ego-frame transform invalidation via
+        # _polygon_cache_signature on the already-transformed polygons).
+        new_polygons = transformed_polygons or []
+        new_polygons_key = self._polygon_cache_signature(transformed_polygons)
+        if new_polygons_key != self._obstacle_polygons_cache_key or (
+            new_polygons and self._prepared_obstacles is None
+        ):
+            self._obstacle_polygons = new_polygons
+            self._prepared_obstacles = self._prepare_obstacles(new_polygons)
+            self._obstacle_polygons_cache_key = new_polygons_key
+        else:
+            self._obstacle_polygons = new_polygons
+            logger.debug("Reused cached prepared obstacle geometries")
 
         return self._grid_data
 
@@ -972,6 +987,7 @@ class OccupancyGrid:
         state = self.__dict__.copy()
         # Drop shapely prepared geometries to keep pickling safe
         state["_prepared_obstacles"] = None
+        state["_obstacle_polygons_cache_key"] = None
         return state
 
     def __setstate__(self, state):

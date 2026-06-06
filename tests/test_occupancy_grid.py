@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from shapely.geometry import Polygon as _ShapelyPolygon
 
 from robot_sf.nav import occupancy_grid_rasterization as rasterization
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig, OccupancyGrid, POIQuery
@@ -194,6 +195,7 @@ class TestGridStaticObstacleLayerCache:
         np.testing.assert_array_equal(second, expected)
         np.testing.assert_array_equal(second[0], first[0])
         assert not np.array_equal(second[1], first[1])
+        np.testing.assert_array_equal(second[2], np.maximum(second[0], second[1]))
 
     def test_world_frame_cache_refreshes_when_obstacles_change(self, monkeypatch):
         """Obstacle input changes must refresh the cached static layer."""
@@ -262,6 +264,151 @@ class TestGridStaticObstacleLayerCache:
         grid.generate(obstacles=obstacles, pedestrians=[], robot_pose=((3.0, 3.0), 0.0))
 
         assert rasterize_calls == 2
+
+
+class TestPreparedGeometryCache:
+    """Issue #2360: Shapely prepared obstacle geometries should be cached."""
+
+    @staticmethod
+    def _config(*, center_on_robot: bool = False) -> GridConfig:
+        """Return a compact obstacle-only grid config for cache tests."""
+        return GridConfig(
+            resolution=0.1,
+            width=6.0,
+            height=6.0,
+            channels=[GridChannel.OBSTACLES],
+            center_on_robot=center_on_robot,
+        )
+
+    @staticmethod
+    def _poly(offset: float = 0.0) -> _ShapelyPolygon:
+        """Return a square obstacle polygon shifted by ``offset``."""
+        return _ShapelyPolygon(
+            [
+                (1.0 + offset, 1.0 + offset),
+                (4.0 + offset, 1.0 + offset),
+                (4.0 + offset, 4.0 + offset),
+                (1.0 + offset, 4.0 + offset),
+            ]
+        )
+
+    @staticmethod
+    def _count_prepare(monkeypatch):
+        """Count calls to ``OccupancyGrid._prepare_obstacles``."""
+        prepare_calls = 0
+        original_prepare = OccupancyGrid._prepare_obstacles
+
+        def counting_prepare(self_, polygons):
+            nonlocal prepare_calls
+            prepare_calls += 1
+            return original_prepare(self_, polygons)
+
+        monkeypatch.setattr(OccupancyGrid, "_prepare_obstacles", counting_prepare)
+        return lambda: prepare_calls
+
+    def test_world_frame_reuses_prepared_geometries(self, monkeypatch):
+        """Same obstacle polygons across generate() calls must not re-prepare."""
+        prepare_calls = self._count_prepare(monkeypatch)
+        grid = OccupancyGrid(config=self._config())
+        polygon = self._poly()
+        robot_pose = ((3.0, 3.0), 0.0)
+
+        grid.generate(
+            obstacles=[], pedestrians=[], robot_pose=robot_pose, obstacle_polygons=[polygon]
+        )
+        grid.generate(
+            obstacles=[], pedestrians=[], robot_pose=robot_pose, obstacle_polygons=[polygon]
+        )
+
+        assert prepare_calls() == 1
+
+    def test_world_frame_refreshes_when_polygons_change(self, monkeypatch):
+        """Different obstacle polygon input must re-trigger _prepare_obstacles."""
+        prepare_calls = self._count_prepare(monkeypatch)
+        grid = OccupancyGrid(config=self._config())
+        robot_pose = ((3.0, 3.0), 0.0)
+        grid.generate(
+            obstacles=[], pedestrians=[], robot_pose=robot_pose, obstacle_polygons=[self._poly()]
+        )
+        grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=robot_pose,
+            obstacle_polygons=[self._poly(offset=1.0)],
+        )
+        grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=robot_pose,
+            obstacle_polygons=[self._poly(offset=1.0)],
+        )
+
+        assert prepare_calls() == 2
+
+    def test_ego_frame_re_prepares_on_pose_change(self, monkeypatch):
+        """Ego-frame transformed polygons depend on pose; must re-prepare."""
+        prepare_calls = self._count_prepare(monkeypatch)
+        grid = OccupancyGrid(config=self._config())
+        polygon = self._poly()
+        grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=((3.0, 3.0), 0.0),
+            obstacle_polygons=[polygon],
+            ego_frame=True,
+        )
+        grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=((4.0, 3.0), 0.0),
+            obstacle_polygons=[polygon],
+            ego_frame=True,
+        )
+
+        assert prepare_calls() == 2
+
+    def test_ego_frame_reuses_when_pose_same(self, monkeypatch):
+        """Same pose + same polygons in ego frame must not re-prepare."""
+        prepare_calls = self._count_prepare(monkeypatch)
+        grid = OccupancyGrid(config=self._config())
+        polygon = self._poly()
+        robot_pose = ((3.0, 3.0), 0.0)
+        grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=robot_pose,
+            obstacle_polygons=[polygon],
+            ego_frame=True,
+        )
+        grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=robot_pose,
+            obstacle_polygons=[polygon],
+            ego_frame=True,
+        )
+
+        assert prepare_calls() == 1
+
+    def test_center_on_robot_reuses_world_frame_prepared_geometries(self, monkeypatch):
+        """Center-on-robot shifts grid origin but leaves query polygons in world frame."""
+        prepare_calls = self._count_prepare(monkeypatch)
+        grid = OccupancyGrid(config=self._config(center_on_robot=True))
+        polygon = self._poly()
+        grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=((3.0, 3.0), 0.0),
+            obstacle_polygons=[polygon],
+        )
+        grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=((4.0, 4.0), 0.0),
+            obstacle_polygons=[polygon],
+        )
+
+        assert prepare_calls() == 1
 
 
 class TestGridChannels:

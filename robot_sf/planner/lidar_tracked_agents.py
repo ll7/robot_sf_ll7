@@ -10,6 +10,7 @@ fail-closed benchmark plumbing smoke, not as a perception tracker claim.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from functools import lru_cache
 from typing import Any
 
 import numpy as np
@@ -103,8 +104,12 @@ def _latest_row(values: Any, *, name: str) -> np.ndarray:
     return arr.astype(float, copy=False)
 
 
+@lru_cache(maxsize=32)
 def lidar_ray_angles(num_rays: int, *, visual_angle_portion: float = 1.0) -> np.ndarray:
     """Return ray angles matching :mod:`robot_sf.sensor.range_sensor` convention.
+
+    Results are cached by ``(num_rays, visual_angle_portion)``. Returned
+    arrays are read-only.
 
     Returns:
         np.ndarray: Ego-frame ray angles in radians.
@@ -115,7 +120,9 @@ def lidar_ray_angles(num_rays: int, *, visual_angle_portion: float = 1.0) -> np.
         raise ValueError("visual_angle_portion must be within (0, 1]")
     lower = -np.pi * visual_angle_portion
     upper = np.pi * visual_angle_portion
-    return np.linspace(lower, upper, int(num_rays) + 1, dtype=float)[:-1]
+    angles = np.linspace(lower, upper, int(num_rays) + 1, dtype=float)[:-1]
+    angles.flags.writeable = False
+    return angles
 
 
 def _contiguous_clusters(indices: np.ndarray, *, max_gap: int) -> list[np.ndarray]:

@@ -20,6 +20,28 @@ def test_lidar_ray_angles_match_range_sensor_endpoint_convention() -> None:
     np.testing.assert_allclose(angles, [-np.pi, -np.pi / 2.0, 0.0, np.pi / 2.0])
 
 
+def test_lidar_ray_angles_cache_reuses_array_for_same_args() -> None:
+    """Identical (num_rays, visual_angle_portion) should return the cached object."""
+    a = lidar_ray_angles(4, visual_angle_portion=1.0)
+    b = lidar_ray_angles(4, visual_angle_portion=1.0)
+    assert a is b
+
+
+def test_lidar_ray_angles_cache_distinguishes_different_args() -> None:
+    """Different (num_rays, visual_angle_portion) should produce distinct arrays."""
+    a = lidar_ray_angles(4, visual_angle_portion=1.0)
+    b = lidar_ray_angles(4, visual_angle_portion=0.5)
+    assert a is not b
+
+
+def test_lidar_ray_angles_returned_array_is_read_only() -> None:
+    """Returned angle arrays should not be writeable."""
+    angles = lidar_ray_angles(4, visual_angle_portion=1.0)
+    assert not angles.flags.writeable
+    with pytest.raises(ValueError):
+        angles[0] = 0.0
+
+
 def test_lidar_rays_to_tracked_agents_clusters_adjacent_hits() -> None:
     """Adjacent finite returns should become one visible endpoint track."""
     cfg = LidarTrackedAgentsConfig(

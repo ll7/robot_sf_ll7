@@ -63,3 +63,42 @@ def test_holonomic_to_diff_drive_allows_backwards():
         config=DiffDriveAdapterConfig(allow_backwards=True),
     )
     assert action_backwards[0] < 0.0
+
+
+def test_holonomic_to_diff_drive_clamps_angular():
+    """Over-limit angular gain * heading_error clips to max_angular_speed."""
+    pose = ((0.0, 0.0), 0.0)
+    action = holonomic_to_diff_drive_action(
+        np.array([0.0, 1.0]),
+        pose,
+        max_linear_speed=1.0,
+        max_angular_speed=0.1,
+    )
+    # Desired heading is pi/2 => heading_error ~ pi/2 => angular_gain * heading_error > 0.1
+    assert abs(action[1]) <= 0.1 + 1e-9
+
+
+def test_holonomic_to_diff_drive_clamps_linear_forward():
+    """Over-limit speed clamped to max_linear_speed (no backwards)."""
+    pose = ((0.0, 0.0), 0.0)
+    action = holonomic_to_diff_drive_action(
+        np.array([10.0, 0.0]),
+        pose,
+        max_linear_speed=0.5,
+        max_angular_speed=1.0,
+        config=DiffDriveAdapterConfig(allow_backwards=False),
+    )
+    assert 0.0 <= action[0] <= 0.5 + 1e-9
+
+
+def test_holonomic_to_diff_drive_clamps_linear_backwards():
+    """Over-limit backwards speed clamped to max_linear_speed (allow_backwards)."""
+    pose = ((0.0, 0.0), 0.0)
+    action = holonomic_to_diff_drive_action(
+        np.array([-10.0, 0.0]),
+        pose,
+        max_linear_speed=0.5,
+        max_angular_speed=1.0,
+        config=DiffDriveAdapterConfig(allow_backwards=True),
+    )
+    assert -0.5 - 1e-9 <= action[0] <= 0.0

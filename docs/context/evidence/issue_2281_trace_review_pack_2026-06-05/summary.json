@@ -1,0 +1,73 @@
+{
+  "schema": "evidence_synthesis_summary.v1",
+  "issue": 2281,
+  "parent_issue": 2159,
+  "case_selection_issue": 2269,
+  "first_review_issue": 2280,
+  "status": "diagnostic_synthesis_pack",
+  "recommendation": "gather_more_evidence",
+  "claim_boundary": "diagnostic synthesis only; not benchmark-strength evidence, not paper-facing evidence, and not AMV transfer or calibrated-actuation support",
+  "case_counts": {
+    "selected": 5,
+    "reviewed_durable_trace_slice_cases": 3,
+    "blocked_amv_specific_cases": 2
+  },
+  "mechanisms": [
+    {
+      "mechanism": "AMMV Social Force direct activation",
+      "source_issue": "#2168/#2269/#2309",
+      "evidence_tier": 1,
+      "config": "classic_head_on_corridor_low direct mechanism probe",
+      "seeds": "111,112,113",
+      "artifacts": "docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/summary.json; docs/context/evidence/issue_2309_amv_trace_export_probe_2026-06-05/summary.json",
+      "metrics": "AMMV force magnitude and intrusion count; regenerated episode-row JSONL has no step frames",
+      "verdict": "unresolved",
+      "caveats": "Blocked for pack rendering because #2309 confirmed the regenerable #2168 benchmark rows are aggregate episode JSONL, not matched simulation_trace_export.v1 traces, and benchmark-row AMMV metadata remains absent."
+    },
+    {
+      "mechanism": "AMV cross-trap hazard/ODD coverage",
+      "source_issue": "#2164/#2269",
+      "evidence_tier": 1,
+      "config": "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/campaign_summary.json",
+      "seeds": "111",
+      "artifacts": "docs/context/evidence/issue_2164_amv_hazard_odd_join_2026-06-03/hazard_odd_coverage_summary.json",
+      "metrics": "hazard, ODD, and scenario-contract coverage",
+      "verdict": "unresolved",
+      "caveats": "Coverage evidence is not a trace review; selected per-planner trace slices and annotations are absent."
+    },
+    {
+      "mechanism": "Head-on corridor pedestrian route offset",
+      "source_issue": "#1939/#2280",
+      "evidence_tier": 2,
+      "config": "configs/scenarios/perturbations/issue_1610_ped_route_offset_pilot_v1.yaml",
+      "seeds": "111,112,116,117",
+      "artifacts": "docs/context/evidence/issue_1939_corridor_trace_response_2026-05-31/closest_approach_trace_slices.json",
+      "metrics": "12 completed pairs; mean clearance delta +0.153489 m; hybrid seed 117 progress delta +6.581509 m",
+      "verdict": "supported",
+      "caveats": "Diagnostic local geometry/progress signal only; terminal max_steps unchanged and command-source timeline absent."
+    },
+    {
+      "mechanism": "ORCA leave-group speed outcome flip",
+      "source_issue": "#1945",
+      "evidence_tier": 2,
+      "config": "configs/scenarios/perturbations/issue_1610_ped_speed_pilot_v1.yaml",
+      "seeds": "258,259,260",
+      "artifacts": "docs/context/evidence/issue_1945_orca_leave_group_speed_trace_2026-06-01/closest_approach_trace_slices.json",
+      "metrics": "3 completed pairs; seed 258 collision-to-success; mean clearance delta +0.034504 m",
+      "verdict": "supported",
+      "caveats": "Seed-local phase/order mechanism; neighboring seeds do not support broad speed-perturbation improvement."
+    },
+    {
+      "mechanism": "Intersection-wait speed p050 phase response",
+      "source_issue": "#1953",
+      "evidence_tier": 2,
+      "config": "configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml plus ignored filtered target manifest",
+      "seeds": "240,241,242",
+      "artifacts": "docs/context/evidence/issue_1953_intersection_wait_speed_grid_trace_2026-06-01/closest_approach_trace_slices_speed_h1_p050.json",
+      "metrics": "9 completed pairs; mean clearance delta -3.862581 m; same max_steps termination",
+      "verdict": "supported",
+      "caveats": "Phase/clearance sensitivity only; no terminal outcome change and pedestrian IDs are index-based."
+    }
+  ],
+  "next_step": "Add a step-event recorder/export path that preserves AMMV metadata before AMMV head-on corridor rendering, or build a small annotation set for one reviewed compact trace-slice case."
+}

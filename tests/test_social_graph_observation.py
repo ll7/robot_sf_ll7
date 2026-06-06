@@ -67,6 +67,7 @@ def test_empty_pedestrians_emit_zero_features_and_masks() -> None:
     assert graph["pedestrian_mask"].tolist() == [False, False, False]
     assert graph["pedestrian_count"].tolist() == [0]
     assert graph["edge_index"].shape == (2, 0)
+    assert graph["edge_type"].shape == (0,)
     np.testing.assert_allclose(graph["pedestrian_features"], 0.0)
 
 
@@ -204,6 +205,39 @@ def test_flat_and_nested_socnav_inputs_match() -> None:
         np.testing.assert_array_equal(nested_graph[key], flat_graph[key])
 
 
+def test_edge_index_orders_pedestrians_first_then_static_obstacles() -> None:
+    """Edge index must list active pedestrian sources first, then static obstacle sources."""
+    graph = build_social_graph_observation(
+        _nested_obs(ped_positions=[[2.0, 0.0], [3.0, 0.0]]),
+        config=SocialGraphObservationConfig(
+            max_pedestrians=4,
+            include_static_obstacles=True,
+            max_static_obstacles=2,
+        ),
+        obstacle_segments=[[1.0, -1.0, 1.0, 1.0]],
+    )
+    assert graph["edge_type"].tolist() == [0, 0, 1]
+    assert graph["edge_index"][0].tolist() == [1, 2, 5]
+    assert graph["edge_index"][1].tolist() == [0, 0, 0]
+
+
+def test_edge_index_supports_static_obstacles_without_pedestrians() -> None:
+    """Static obstacle edges should be valid when no pedestrian rows are active."""
+    graph = build_social_graph_observation(
+        _nested_obs(),
+        config=SocialGraphObservationConfig(
+            max_pedestrians=3,
+            include_static_obstacles=True,
+            max_static_obstacles=2,
+        ),
+        obstacle_segments=[[1.0, -1.0, 1.0, 1.0]],
+    )
+
+    assert graph["edge_type"].tolist() == [1]
+    assert graph["edge_index"][0].tolist() == [4]
+    assert graph["edge_index"][1].tolist() == [0]
+
+
 def test_future_like_deployment_fields_fail_closed() -> None:
     """Future trajectory labels should be rejected by the deployment adapter."""
     obs = _nested_obs(ped_positions=[[1.0, 0.0]])
@@ -211,3 +245,23 @@ def test_future_like_deployment_fields_fail_closed() -> None:
 
     with pytest.raises(ValueError, match="future_positions"):
         build_social_graph_observation(obs)
+
+
+def test_history_return_not_mutated_by_later_build_calls() -> None:
+    """Returned pedestrian_history must be isolated from subsequent adapter writes."""
+    adapter = SocialGraphObservationAdapter(
+        SocialGraphObservationConfig(max_pedestrians=1, history_steps=3)
+    )
+    adapter.build(_nested_obs(ped_positions=[[1.0, 0.0]]))
+
+    second = adapter.build(_nested_obs(ped_positions=[[2.0, 0.0]]))
+    hist_2 = second["pedestrian_history"]
+
+    third = adapter.build(_nested_obs(ped_positions=[[3.0, 0.0]]))
+    np.testing.assert_allclose(hist_2[:, 0, 0], [1.0, 1.0, 2.0])
+    np.testing.assert_allclose(third["pedestrian_history"][:, 0, 0], [1.0, 2.0, 3.0])
+
+    hist_2[0, 0, 0] = 999.0
+
+    fourth = adapter.build(_nested_obs(ped_positions=[[4.0, 0.0]]))
+    np.testing.assert_allclose(fourth["pedestrian_history"][:, 0, 0], [2.0, 3.0, 4.0])

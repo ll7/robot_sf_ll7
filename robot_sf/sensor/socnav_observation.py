@@ -13,6 +13,7 @@ import numpy as np
 from gymnasium import spaces
 from loguru import logger
 from shapely.geometry import LineString
+from shapely.prepared import prep
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
@@ -274,7 +275,7 @@ class SocNavObservationFusion:
     _last_heading: float | None = None
 
     def __post_init__(self) -> None:
-        """Initialize optional predictive foresight encoder."""
+        """Initialize optional predictive foresight encoder and reusable buffers."""
         if bool(getattr(self.env_config, "predictive_foresight_enabled", False)):
             self._predictive_foresight = PredictiveForesightEncoder(
                 predictive_foresight_config_from_source(
@@ -282,10 +283,55 @@ class SocNavObservationFusion:
                     default_max_agents=self.max_pedestrians,
                 )
             )
+        self._buf_ped_positions = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
+        self._buf_ped_velocities = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
+        self._cache_static_map_def_id = None
+        self._cache_static_obstacles_id = None
+        self._cache_static_prepared: list[tuple[Any, Any]] = []
+        self._cache_position_cap_map_def_id: int | None = None
+        self._cache_position_cap_value: np.ndarray | None = None
+        self._cache_position_cap_width: float | None = None
+        self._cache_position_cap_height: float | None = None
 
     def reset_cache(self) -> None:
-        """No-op to match the SensorFusion interface."""
+        """Reset internal caches to match the SensorFusion interface."""
         self._last_heading = None
+        self._cache_static_map_def_id = None
+        self._cache_static_obstacles_id = None
+        self._cache_static_prepared = []
+        self._cache_position_cap_map_def_id = None
+        self._cache_position_cap_value = None
+        self._cache_position_cap_width = None
+        self._cache_position_cap_height = None
+
+    def _position_cap(self) -> np.ndarray:
+        """Return cached map position cap, refreshing when map_def identity or dimensions change.
+
+        Avoids allocating a new array every step via ``_map_position_cap``.
+        """
+        map_def = getattr(self.simulator, "map_def", None)
+        if map_def is not None:
+            width = float(getattr(map_def, "width", 0.0) or 0.0)
+            height = float(getattr(map_def, "height", 0.0) or 0.0)
+            map_def_id = id(map_def)
+            cache_valid = (
+                self._cache_position_cap_map_def_id == map_def_id
+                and self._cache_position_cap_width == width
+                and self._cache_position_cap_height == height
+            )
+            if not cache_valid:
+                self._cache_position_cap_map_def_id = map_def_id
+                self._cache_position_cap_width = width
+                self._cache_position_cap_height = height
+                self._cache_position_cap_value = _map_position_cap(map_def)
+        elif self._cache_position_cap_map_def_id is not None:
+            self._cache_position_cap_map_def_id = None
+            self._cache_position_cap_value = _map_position_cap(None)
+            self._cache_position_cap_width = None
+            self._cache_position_cap_height = None
+        if self._cache_position_cap_value is None:
+            self._cache_position_cap_value = _map_position_cap(None)
+        return self._cache_position_cap_value
 
     def _robot_velocity_xy(self, wrapped_heading: float) -> np.ndarray:
         """Return the robot world-frame planar velocity for the structured observation."""
@@ -370,11 +416,51 @@ class SocNavObservationFusion:
             )
         return visible
 
+    def _rebuild_static_occlusion_cache(self) -> None:
+        """Build prepared-geometry cache from current simulator obstacle polygons."""
+        map_def = getattr(self.simulator, "map_def", None)
+        obstacles = getattr(map_def, "obstacles", None) if map_def is not None else None
+        self._cache_static_map_def_id = id(map_def) if map_def is not None else None
+        self._cache_static_obstacles_id = id(obstacles) if obstacles is not None else None
+        prepared_polys: list[tuple[Any, Any]] = []
+        if obstacles:
+            for obstacle in obstacles:
+                polygons = (
+                    obstacle.iter_polygons()
+                    if hasattr(obstacle, "iter_polygons")
+                    else [getattr(obstacle, "geometry", None)]
+                )
+                for polygon in polygons:
+                    if polygon is None or getattr(polygon, "is_empty", False):
+                        continue
+                    prepared_polys.append((prep(polygon), polygon))
+        self._cache_static_prepared = prepared_polys
+
     def _statically_occluded(self, *, robot_pos: np.ndarray, ped_pos: np.ndarray) -> bool:
-        """Return whether static map geometry blocks line of sight to a pedestrian."""
-        obstacles = getattr(getattr(self.simulator, "map_def", None), "obstacles", []) or []
+        """Return whether static map geometry blocks line of sight to a pedestrian.
+
+        Uses a Shapely prepared-geometry cache that refreshes when
+        ``simulator.map_def`` identity or ``map_def.obstacles`` identity changes.
+        Semantics: occluded iff the line segment intersects the polygon interior
+        (intersects without mere boundary touch).
+        """
+        map_def = getattr(self.simulator, "map_def", None)
+        obstacles = getattr(map_def, "obstacles", None) if map_def is not None else None
         if not obstacles:
+            self._cache_static_map_def_id = id(map_def) if map_def is not None else None
+            self._cache_static_obstacles_id = None
+            self._cache_static_prepared = []
             return False
+
+        cache_valid = self._cache_static_map_def_id == id(
+            map_def
+        ) and self._cache_static_obstacles_id == id(obstacles)
+        if not cache_valid:
+            self._rebuild_static_occlusion_cache()
+
+        if not self._cache_static_prepared:
+            return False
+
         segment = LineString(
             [
                 (float(robot_pos[0]), float(robot_pos[1])),
@@ -383,17 +469,10 @@ class SocNavObservationFusion:
         )
         if segment.length <= 0.0:
             return False
-        for obstacle in obstacles:
-            polygons = (
-                obstacle.iter_polygons()
-                if hasattr(obstacle, "iter_polygons")
-                else [getattr(obstacle, "geometry", None)]
-            )
-            for polygon in polygons:
-                if polygon is None or getattr(polygon, "is_empty", False):
-                    continue
-                if segment.intersects(polygon) and not segment.touches(polygon):
-                    return True
+
+        for prep_geom, raw_poly in self._cache_static_prepared:
+            if prep_geom.intersects(segment) and not segment.touches(raw_poly):
+                return True
         return False
 
     def next_obs(self) -> dict[str, Any]:
@@ -435,10 +514,10 @@ class SocNavObservationFusion:
 
         ped_positions = ped_positions[: self.max_pedestrians]
         ped_velocities = ped_velocities[: self.max_pedestrians]
-        padded = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
-        padded_vel = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
+        self._buf_ped_positions.fill(0.0)
+        self._buf_ped_velocities.fill(0.0)
         if ped_positions.size > 0:
-            padded[: ped_positions.shape[0]] = ped_positions
+            self._buf_ped_positions[: ped_positions.shape[0]] = ped_positions
         if ped_velocities.size > 0:
             # Convert pedestrian velocities to ego frame (rotate by -heading)
             cos_h = np.cos(heading)
@@ -448,8 +527,8 @@ class SocNavObservationFusion:
             ego_vx = cos_h * vx + sin_h * vy
             ego_vy = -sin_h * vx + cos_h * vy
             valid_velocity_count = ped_velocities.shape[0]
-            padded_vel[:valid_velocity_count, 0] = ego_vx
-            padded_vel[:valid_velocity_count, 1] = ego_vy
+            self._buf_ped_velocities[:valid_velocity_count, 0] = ego_vx
+            self._buf_ped_velocities[:valid_velocity_count, 1] = ego_vy
 
         goal = np.asarray(self.simulator.goal_pos[self.robot_index], dtype=np.float32)
         next_goal = self.simulator.next_goal_pos[self.robot_index]
@@ -459,7 +538,7 @@ class SocNavObservationFusion:
             else np.zeros(2, dtype=np.float32)
         )
 
-        position_cap = _map_position_cap(self.simulator.map_def)
+        position_cap = self._position_cap()
 
         def _clip_positions(values: np.ndarray) -> np.ndarray:
             """Clip world positions into the representable map extent.
@@ -472,7 +551,7 @@ class SocNavObservationFusion:
         robot_pos_clipped = _clip_positions(robot_pos)
         goal_clipped = _clip_positions(goal)
         next_goal_clipped = _clip_positions(next_goal_arr)
-        padded = _clip_positions(padded)
+        np.clip(self._buf_ped_positions, 0.0, position_cap, out=self._buf_ped_positions)
         map_size = np.array(
             [self.simulator.map_def.width, self.simulator.map_def.height],
             dtype=np.float32,
@@ -501,8 +580,8 @@ class SocNavObservationFusion:
                 "next": next_goal_clipped,
             },
             "pedestrians": {
-                "positions": padded,
-                "velocities": padded_vel,
+                "positions": self._buf_ped_positions.copy(),
+                "velocities": self._buf_ped_velocities.copy(),
                 "radius": np.array(
                     [min(self.env_config.sim_config.ped_radius, float(np.max(position_cap)))],
                     dtype=np.float32,

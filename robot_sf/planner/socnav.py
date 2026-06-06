@@ -3845,12 +3845,26 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return min(boosted, max_steps)
         return min(base_steps, max_steps)
 
-    def _risk_speed_cap_ratio(self, *, future_peds: np.ndarray, mask: np.ndarray) -> float:
+    def _risk_speed_cap_ratio(
+        self,
+        *,
+        future_peds: np.ndarray,
+        mask: np.ndarray,
+        min_pred_dist: float | None = None,
+    ) -> float:
         """Compute a near-field risk speed cap ratio.
 
         ``near-field risk`` means predicted pedestrian proximity below
         ``predictive_near_field_distance`` over the short prediction horizon.
         The returned ratio shrinks max candidate speed in dense/conflict states.
+
+        Args:
+            future_peds: Predicted pedestrian trajectories in robot frame.
+            mask: Agent validity mask.
+            min_pred_dist: Optional precomputed minimum predicted distance.
+                When provided, the internal ``_min_predicted_distance`` call is
+                skipped so callers that already hold this value can avoid
+                redundant computation.
 
         Returns:
             float: Speed cap ratio in ``[0.1, 1.0]``.
@@ -3858,11 +3872,12 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         near_field = float(self.config.predictive_near_field_distance)
         if near_field <= 0.0:
             return 1.0
-        min_pred_dist = self._min_predicted_distance(
-            future_peds=future_peds,
-            mask=mask,
-            steps=max(2, min(int(self.config.predictive_horizon_steps), future_peds.shape[1])),
-        )
+        if min_pred_dist is None:
+            min_pred_dist = self._min_predicted_distance(
+                future_peds=future_peds,
+                mask=mask,
+                steps=max(2, min(int(self.config.predictive_horizon_steps), future_peds.shape[1])),
+            )
         if not np.isfinite(min_pred_dist):
             return 1.0
         cap = float(self.config.predictive_near_field_speed_cap)
@@ -3886,15 +3901,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             list[tuple[float, float]]: Candidate ``(v, omega)`` commands.
         """
-        cap_ratio = self._risk_speed_cap_ratio(future_peds=future_peds, mask=mask)
+        near_field = float(self.config.predictive_near_field_distance)
+        near_horizon = max(2, min(int(self.config.predictive_horizon_steps), future_peds.shape[1]))
+        min_pred_dist = self._min_predicted_distance(
+            future_peds=future_peds, mask=mask, steps=near_horizon
+        )
+        cap_ratio = self._risk_speed_cap_ratio(
+            future_peds=future_peds, mask=mask, min_pred_dist=min_pred_dist
+        )
         base_speed_ratios = [float(v) for v in self.config.predictive_candidate_speeds]
         heading_deltas = [float(v) for v in self.config.predictive_candidate_heading_deltas]
-        near_field = float(self.config.predictive_near_field_distance)
-        min_pred_dist = self._min_predicted_distance(
-            future_peds=future_peds,
-            mask=mask,
-            steps=max(2, min(int(self.config.predictive_horizon_steps), future_peds.shape[1])),
-        )
         if np.isfinite(min_pred_dist) and min_pred_dist <= near_field:
             base_speed_ratios.extend(
                 float(v) for v in self.config.predictive_near_field_speed_samples

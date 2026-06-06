@@ -1,4 +1,4 @@
-# Issue 852 attention-only 10M seed-231 run
+# Issue #852 Attention-Only 10M Seed-231 Run 2026-06-04
 
 This directory records compact, reviewable provenance for the issue #852 attention-only 10M
 seed-231 replication run submitted after the seed-123 10M single-factor triad favored the

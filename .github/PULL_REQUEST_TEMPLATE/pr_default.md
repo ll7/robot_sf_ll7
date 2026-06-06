@@ -36,6 +36,17 @@ to `NA` and state why.
   durable/versioned input, or a linked follow-up issue that names the decision, claim boundary, or
   synthesis surface it will update:
 
+## Falsification / Non-Transfer Check
+Required for research-result PRs when the expected mechanism did not improve the measured outcome,
+only helped a local slice, or produced diagnostic-only evidence. For support/tooling/docs-only PRs
+that make no research claim, set fields to `NA` and state why.
+
+- Did the mechanism activate? yes / no / unknown / NA
+- Did the intervention change command source, selected command, trajectory, or route progress?
+- Did the scenario actually contain the targeted failure mode?
+- Result route: stop / revise / narrow / continue / NA
+- Follow-up question or issue for weak, negative, or non-transfer results:
+
 ## Validation / Proof
 For research/benchmark/metric/paper-facing analysis-tool PRs: include one
 representative use on durable/versioned input (tracked config, model

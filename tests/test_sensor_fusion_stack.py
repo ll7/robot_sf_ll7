@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.sensor.history_stack import fill_history_stack, reset_history_stack
 from robot_sf.sensor.image_sensor_fusion import ImageSensorFusion
 from robot_sf.sensor.sensor_fusion import (
     OBS_DRIVE_STATE,
@@ -12,6 +13,26 @@ from robot_sf.sensor.sensor_fusion import (
     SensorFusion,
     fused_sensor_space,
 )
+
+
+def test_fill_history_stack_inplace() -> None:
+    """fill_history_stack should modify the input array in place and return the same object."""
+    stack = np.zeros((3, 4), dtype=np.float32)
+    current = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+    result = fill_history_stack(stack, current)
+    assert result is stack
+    assert np.allclose(stack, current), (
+        f"Expected every stack row to match current, but got stack:\n{stack}\n"
+        f"and current:\n{current}"
+    )
+
+
+def test_reset_history_stack_inplace() -> None:
+    """reset_history_stack should zero the input array in place and return the same object."""
+    stack = np.ones((3, 4), dtype=np.float32)
+    result = reset_history_stack(stack)
+    assert result is stack
+    assert np.allclose(stack, 0.0)
 
 
 def test_fused_sensor_space_stack_shapes() -> None:
@@ -26,6 +47,12 @@ def test_fused_sensor_space_stack_shapes() -> None:
     assert orig_space[OBS_RAYS].shape == (timesteps, 4)
     assert norm_space[OBS_DRIVE_STATE].shape == (timesteps, 5)
     assert norm_space[OBS_RAYS].shape == (timesteps, 4)
+    assert orig_space[OBS_DRIVE_STATE].dtype == np.float32
+    assert orig_space[OBS_RAYS].dtype == np.float32
+    np.testing.assert_allclose(orig_space[OBS_DRIVE_STATE].high, np.ones((timesteps, 5)))
+    np.testing.assert_allclose(orig_space[OBS_DRIVE_STATE].low, -np.ones((timesteps, 5)))
+    np.testing.assert_allclose(orig_space[OBS_RAYS].high, np.full((timesteps, 4), 10.0))
+    np.testing.assert_allclose(orig_space[OBS_RAYS].low, np.zeros((timesteps, 4)))
 
 
 def test_sensor_fusion_stacks_history() -> None:
@@ -165,7 +192,7 @@ def test_image_sensor_fusion_history_is_oldest_to_newest() -> None:
 
 
 def test_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
-    """Reset should clear both cache metadata and concrete temporal stack arrays."""
+    """Reset should zero the stacks; next next_obs refills history from current observation."""
     robot_obs = spaces.Box(low=-10.0, high=10.0, shape=(2,), dtype=np.float32)
     target_obs = spaces.Box(low=-10.0, high=10.0, shape=(3,), dtype=np.float32)
     lidar_obs = spaces.Box(low=0.0, high=10.0, shape=(2,), dtype=np.float32)
@@ -181,14 +208,25 @@ def test_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
     fusion.next_obs()
     fusion.reset_cache()
 
-    assert len(fusion.drive_state_cache) == 0
-    assert len(fusion.lidar_state_cache) == 0
+    # After reset, stacks are zeroed
     assert np.allclose(fusion.stacked_drive_state, 0.0)
     assert np.allclose(fusion.stacked_lidar_state, 0.0)
 
+    # Next next_obs refills history from current observation (fill_history_stack semantics)
+    obs = fusion.next_obs()
+    assert np.allclose(obs[OBS_RAYS], [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]])
+    assert np.allclose(
+        obs[OBS_DRIVE_STATE],
+        [
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+        ],
+    )
+
 
 def test_image_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
-    """ImageSensorFusion reset should use the same temporal stack reset semantics."""
+    """ImageSensorFusion reset zeros stacks; next next_obs refills history."""
     robot_obs = spaces.Box(low=-10.0, high=10.0, shape=(2,), dtype=np.float32)
     target_obs = spaces.Box(low=-10.0, high=10.0, shape=(3,), dtype=np.float32)
     lidar_obs = spaces.Box(low=0.0, high=10.0, shape=(2,), dtype=np.float32)
@@ -206,7 +244,18 @@ def test_image_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
     fusion.next_obs()
     fusion.reset_cache()
 
-    assert len(fusion.drive_state_cache) == 0
-    assert len(fusion.lidar_state_cache) == 0
+    # After reset, stacks are zeroed
     assert np.allclose(fusion.stacked_drive_state, 0.0)
     assert np.allclose(fusion.stacked_lidar_state, 0.0)
+
+    # Next next_obs refills history from current observation (fill_history_stack semantics)
+    obs = fusion.next_obs()
+    assert np.allclose(obs[OBS_RAYS], [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]])
+    assert np.allclose(
+        obs[OBS_DRIVE_STATE],
+        [
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+        ],
+    )

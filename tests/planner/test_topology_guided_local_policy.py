@@ -83,9 +83,24 @@ def test_topology_guided_selector_finds_two_distinct_route_hypotheses() -> None:
         for item in decision["hypotheses"]
         if item["hypothesis_id"] == decision["selected_hypothesis_id"]
     )
+    rejected = [
+        item
+        for item in decision["hypotheses"]
+        if item["hypothesis_id"] != decision["selected_hypothesis_id"]
+    ]
     assert selected["route_corridor"]["route_path_cell_count"] > 1
     assert selected["route_corridor"]["route_waypoint_world"]
     assert selected["static_clearance_min_m"] is not None
+    assert decision["selected_score"] == selected["score"]
+    assert selected["selection_outcome"] == "selected"
+    assert selected["rejection_reason"] is None
+    assert selected["score_components"].keys() == {
+        "length_penalty",
+        "static_clearance_bonus",
+    }
+    assert all(item["selection_outcome"] == "rejected" for item in rejected)
+    assert all(item["rejection_reason"] == "lower_topology_selection_score" for item in rejected)
+    assert all(item["score_margin_to_selected"] >= 0.0 for item in decision["hypotheses"])
 
 
 def test_topology_guided_policy_fails_closed_without_required_inputs() -> None:
@@ -117,6 +132,12 @@ def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> Non
     route_corridor = diagnostics["last_decision"]["route_corridor"]
     assert route_corridor["topology_status"] == "ok"
     assert len(route_corridor["topology_hypotheses"]) == 2
+    assert all("score_components" in item for item in route_corridor["topology_hypotheses"])
+    assert any(
+        item["rejection_reason"] == "lower_topology_selection_score"
+        for item in route_corridor["topology_hypotheses"]
+        if item["selection_outcome"] == "rejected"
+    )
 
 
 def test_topology_hypothesis_can_select_local_command_source() -> None:

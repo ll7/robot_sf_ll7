@@ -1,0 +1,46 @@
+{
+  "schema": "amv_trace_export_blocker_summary.v1",
+  "issue": 2309,
+  "parent_issue": 2159,
+  "source_issues": [2168, 2269, 2281],
+  "status": "failed_closed_blocker",
+  "created_at": "2026-06-05",
+  "git_head": "1875d7c08fd7e497e430c33e90183f303f5d737d",
+  "case_id": "ammv_head_on_corridor_mechanism_activation",
+  "scenario_id": "classic_head_on_corridor_low",
+  "configs": {
+    "scenario_matrix": "configs/scenarios/issue_2168_ammv_social_force_pair.yaml",
+    "ammv_planner_config": "configs/baselines/social_force_ammv_aware.yaml"
+  },
+  "local_probe_outputs": [
+    {
+      "artifact_label": "worktree-local-default-jsonl",
+      "classification": "discard",
+      "sha256": "3f6d9b599f2c4ef67bb6dfb6997533deb014986147aed2cb8df84f8ca8802ae5",
+      "line_count": 3,
+      "durable": false
+    },
+    {
+      "artifact_label": "worktree-local-ammv-jsonl",
+      "classification": "discard",
+      "sha256": "24afc0713af934d1eca6f6f2185710a1641dccc26394260dee57e7d0e0d1bd85",
+      "line_count": 3,
+      "durable": false
+    }
+  ],
+  "probe_result": {
+    "benchmark_rerun_regenerable": true,
+    "simulation_trace_export_materialized": false,
+    "failure_reason": "Regenerated benchmark JSONL contains aggregate episode rows, not step event records with state.robot_pose frames.",
+    "exporter_failure": "<worktree-local-default-jsonl> has no step frames for conversion"
+  },
+  "artifact_decision": {
+    "tracked_compact_evidence": [
+      "docs/context/evidence/issue_2309_amv_trace_export_probe_2026-06-05/summary.json",
+      "docs/context/issue_2309_amv_trace_export_blocker.md"
+    ],
+    "raw_outputs_committed": false,
+    "raw_output_policy": "The regenerated JSONL files are worktree-local probe outputs only and must not be treated as durable trace evidence."
+  },
+  "next_smallest_proof_step": "Add a step-event recorder/export path that preserves AMMV force/intrusion metadata, or add a narrow direct-probe trace exporter with robot-planner-only limitations."
+}

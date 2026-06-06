@@ -5,6 +5,7 @@ This module defines the reward function for the robot environment.
 from __future__ import annotations
 
 import importlib
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import partial
@@ -206,6 +207,22 @@ def simple_ped_reward(
     return float(reward)
 
 
+def _two_component_action_delta_norm(action: object, last_action: object) -> float:
+    """Return the Euclidean norm for the common two-scalar action delta.
+
+    Falls back to NumPy for non-standard action containers so legacy reward
+    behavior is preserved outside the hot RobotEnv action path.
+    """
+    try:
+        if len(action) == 2 and len(last_action) == 2:  # type: ignore[arg-type]
+            dx = action[0] - last_action[0]  # type: ignore[index]
+            dy = action[1] - last_action[1]  # type: ignore[index]
+            return math.hypot(float(dx), float(dy))
+    except (TypeError, ValueError, IndexError):
+        pass
+    return float(np.linalg.norm(np.array(action) - np.array(last_action)))
+
+
 def stationary_collision_ped_reward(  # noqa: PLR0913
     meta: dict,
     max_episode_step_discount: float = -0.1,
@@ -304,7 +321,7 @@ def punish_action_reward(
 
     # punish the robot taking a different action from the last action
     if punish_action and meta["last_action"] is not None:
-        action_diff = np.linalg.norm(np.array(meta["action"]) - np.array(meta["last_action"]))
+        action_diff = _two_component_action_delta_norm(meta["action"], meta["last_action"])
         if action_diff > 0:
             reward += punish_action_penalty * action_diff
 

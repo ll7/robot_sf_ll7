@@ -87,6 +87,51 @@ def test_resulting_wheel_speeds_are_angular_rates() -> None:
     assert right_wheel_rad_s == 4.0
 
 
+def test_over_limit_linear_speed_clipped() -> None:
+    """Over-limit linear delta is clipped to max_linear_speed."""
+    motion = DifferentialDriveMotion(
+        DifferentialDriveSettings(max_linear_speed=2.0, max_angular_speed=5.0)
+    )
+    state = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    # Apply a huge positive linear delta
+    motion.move(state, (100.0, 0.0), 1.0)
+    dot_x, _ = state.velocity
+    assert dot_x == 2.0
+
+
+def test_over_limit_angular_speed_clipped() -> None:
+    """Over-limit angular delta is clipped to max_angular_speed."""
+    motion = DifferentialDriveMotion(
+        DifferentialDriveSettings(max_linear_speed=5.0, max_angular_speed=1.0)
+    )
+    state = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    motion.move(state, (0.0, 100.0), 1.0)
+    _, dot_orient = state.velocity
+    assert dot_orient == 1.0
+
+
+def test_over_limit_negative_linear_speed_clipped() -> None:
+    """Over-limit negative linear delta is clipped to min_linear_speed."""
+    motion = DifferentialDriveMotion(
+        DifferentialDriveSettings(max_linear_speed=2.0, max_angular_speed=5.0)
+    )
+    state = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    motion.move(state, (-100.0, 0.0), 1.0)
+    dot_x, _ = state.velocity
+    assert dot_x == 0.0  # allow_backwards=False
+
+
+def test_over_limit_negative_angular_speed_clipped() -> None:
+    """Negative over-limit angular delta is clipped."""
+    motion = DifferentialDriveMotion(
+        DifferentialDriveSettings(max_linear_speed=5.0, max_angular_speed=1.0)
+    )
+    state = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    motion.move(state, (0.0, -100.0), 1.0)
+    _, dot_orient = state.velocity
+    assert dot_orient == -1.0
+
+
 def test_in_place_rotation_matches_kinematics() -> None:
     """Verify in-place rotation math to prevent drift in heading updates."""
     motion = DifferentialDriveMotion(

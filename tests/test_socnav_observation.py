@@ -226,3 +226,239 @@ def test_socnav_observation_visibility_filters_dynamic_occluded_pedestrian() -> 
     assert obs["pedestrians"]["count"][0] == pytest.approx(2.0)
     assert obs["pedestrians"]["positions"][0].tolist() == pytest.approx([2.0, 0.0])
     assert obs["pedestrians"]["positions"][1].tolist() == pytest.approx([4.0, 1.0])
+
+
+def test_socnav_observation_no_stale_pedestrian_data_on_shrink() -> None:
+    """Stale padded values from prior next_obs() calls must not leak into unfilled
+    buffer rows when simulated pedestrian count shrinks."""
+    env_config = RobotSimulationConfig()
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]], dtype=np.float32),
+        ped_vel=np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]], dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    fusion = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    obs1 = fusion.next_obs()
+    assert obs1["pedestrians"]["count"][0] == pytest.approx(3.0)
+    pos1_row2 = obs1["pedestrians"]["positions"][2].copy()
+    vel1_row2 = obs1["pedestrians"]["velocities"][2].copy()
+
+    # Shrink from 3 pedestrians to 1 for the second call
+    simulator.ped_pos = np.array([[1.0, 1.0]], dtype=np.float32)
+    simulator.ped_vel = np.array([[1.0, 0.0]], dtype=np.float32)
+    obs2 = fusion.next_obs()
+
+    assert obs2["pedestrians"]["count"][0] == pytest.approx(1.0)
+    np.testing.assert_array_equal(
+        obs2["pedestrians"]["positions"][0],
+        np.array([1.0, 1.0], dtype=np.float32),
+    )
+    for i in range(1, 4):
+        np.testing.assert_array_equal(
+            obs2["pedestrians"]["positions"][i],
+            np.zeros(2, dtype=np.float32),
+            err_msg=f"Stale position leaked at padded row {i}",
+        )
+        np.testing.assert_array_equal(
+            obs2["pedestrians"]["velocities"][i],
+            np.zeros(2, dtype=np.float32),
+            err_msg=f"Stale velocity leaked at padded row {i}",
+        )
+
+    # Verify snapshot semantics: first observation arrays must not be mutated
+    np.testing.assert_array_equal(
+        obs1["pedestrians"]["positions"][2],
+        pos1_row2,
+        err_msg="Snapshot semantics violated: first observation position mutated",
+    )
+    np.testing.assert_array_equal(
+        obs1["pedestrians"]["velocities"][2],
+        vel1_row2,
+        err_msg="Snapshot semantics violated: first observation velocity mutated",
+    )
+
+
+def test_static_occlusion_cache_refresh_on_map_def_change() -> None:
+    """Static-occlusion cache should rebuild when simulator.map_def identity changes."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        static_occlusion=True,
+    )
+    obstacle = Obstacle([(1.0, -0.5), (2.0, -0.5), (2.0, 0.5), (1.0, 0.5)])
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[3.0, 0.0], [0.0, 3.0]], dtype=np.float32),
+        ped_vel=np.zeros((2, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[obstacle]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    fusion = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    obs1 = fusion.next_obs()
+    assert obs1["pedestrians"]["count"][0] == pytest.approx(1.0)
+
+    # Replace map_def with a new object containing different obstacles
+    new_obstacle = Obstacle([(3.5, -0.5), (4.5, -0.5), (4.5, 0.5), (3.5, 0.5)])
+    simulator.map_def = SimpleNamespace(width=10.0, height=10.0, obstacles=[new_obstacle])
+
+    obs2 = fusion.next_obs()
+    assert obs2["pedestrians"]["count"][0] == pytest.approx(2.0)
+
+
+def test_static_occlusion_cache_refresh_on_obstacles_change() -> None:
+    """Static-occlusion cache should rebuild when obstacles list identity changes on same map_def."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        static_occlusion=True,
+    )
+    obstacle = Obstacle([(1.0, -0.5), (2.0, -0.5), (2.0, 0.5), (1.0, 0.5)])
+    map_def = SimpleNamespace(width=10.0, height=10.0, obstacles=[obstacle])
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[3.0, 0.0], [0.0, 3.0]], dtype=np.float32),
+        ped_vel=np.zeros((2, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=map_def,
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    fusion = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    obs1 = fusion.next_obs()
+    assert obs1["pedestrians"]["count"][0] == pytest.approx(1.0)
+
+    # Replace obstacles on the same map_def object
+    map_def.obstacles = []
+
+    obs2 = fusion.next_obs()
+    assert obs2["pedestrians"]["count"][0] == pytest.approx(2.0)
+
+
+def test_static_occlusion_edge_touch_not_occluded() -> None:
+    """A line segment that only touches the obstacle boundary should not occlude."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        static_occlusion=True,
+    )
+    obstacle = Obstacle([(1.0, -0.5), (2.0, -0.5), (2.0, 0.5), (1.0, 0.5)])
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[3.0, 0.5], [3.0, 0.0]], dtype=np.float32),
+        ped_vel=np.zeros((2, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.5), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.5], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[obstacle]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    fusion = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    obs = fusion.next_obs()
+
+    # Robot at (0, 0.5)
+    # ped at (3, 0.5): line at y=0.5 only touches obstacle top edge -> visible
+    # ped at (3, 0.0): line goes through obstacle interior -> occluded
+    assert obs["pedestrians"]["count"][0] == pytest.approx(1.0)
+    np.testing.assert_allclose(obs["pedestrians"]["positions"][0], [3.0, 0.5], atol=1e-6)
+
+
+def test_position_cap_cache_refreshes_on_map_def_change() -> None:
+    """Position cap should refresh when map_def identity or width/height changes."""
+    env_config = RobotSimulationConfig()
+    simulator = SimpleNamespace(
+        ped_pos=np.zeros((1, 2), dtype=np.float32),
+        ped_vel=np.zeros((1, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([0.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=120.0, height=80.0),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    fusion = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    cap1 = fusion._position_cap()
+    cap1_id = id(cap1)
+    assert cap1.tolist() == pytest.approx([120.0, 80.0])
+
+    cap1_again = fusion._position_cap()
+    assert id(cap1_again) == cap1_id, "Same map_def should reuse cached array"
+
+    # Mutate width on same map_def object — should refresh
+    simulator.map_def.width = 200.0
+    cap2 = fusion._position_cap()
+    assert cap2.tolist() == pytest.approx([200.0, 80.0])
+    assert id(cap2) != cap1_id, "Width change should produce new cached array"
+
+    # Replace map_def entirely — should refresh
+    simulator.map_def = SimpleNamespace(width=60.0, height=60.0)
+    cap3 = fusion._position_cap()
+    assert cap3.tolist() == pytest.approx([60.0, 60.0])
+    assert id(cap3) != id(cap2), "Map def replacement should produce new cached array"
+
+    # reset_cache should clear position cap too
+    fusion.reset_cache()
+    cap4 = fusion._position_cap()
+    assert cap4.tolist() == pytest.approx([60.0, 60.0])
+
+    # Verify next_obs() also respects refreshed caps
+    cap_via_obs = fusion.next_obs()["map"]["size"]
+    np.testing.assert_array_equal(cap_via_obs, np.array([60.0, 60.0], dtype=np.float32))

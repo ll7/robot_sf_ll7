@@ -1,0 +1,6 @@
+surface,source,evidence_tier,observed_signal,decision,gate_recommendation
+negative_same_seed_obstacle_audit,Issue #1543 / PR #1480,analysis_only,"Obstacle-feature success 0.1014 vs baseline 0.1304; hard-seed success 0.0000 for both",revise_coupling_not_expansion,"Do not reopen the four-way matrix from #1427 evidence"
+planner_side_coupling_gate,Issue #1897 / Issue #1856,preflight_failed,"baseline_like and phase_coupled_sequence_gate both had global success 0.0000 and hard success 0.0000",stop_old_predictive_v2_expansion,"Require a new objective/coupling hypothesis before any rerun"
+issue_1505_data_preflight,Issue #1505,state_blocked,"Parent decision blocks routine data-row preflight",blocked,"Keep blocked; reopen only behind a new coupling/objective hypothesis"
+issue_1506_training_matrix,Issue #1506,state_blocked,"Old same-seed four-way Slurm matrix has no passing preflight",blocked,"Keep blocked; do not launch old four-way expansion"
+issue_1507_transfer_analysis,Issue #1507,state_blocked,"Forecast-to-control analysis needs either a new hypothesis or a close/downgrade decision",blocked_or_rescope,"May rescope to close/downgrade synthesis; do not treat as execution gate"

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.lidar_occupancy import (
     LidarOccupancyGridConfig,
     LidarOccupancyPlannerAdapter,
+    _ray_angles,
     lidar_rays_to_occupancy_observation,
 )
 from robot_sf.planner.safety_barrier import SafetyBarrierPlannerAdapter, SafetyBarrierPlannerConfig
@@ -72,6 +74,19 @@ def test_lidar_rays_to_occupancy_includes_limited_fov_endpoints() -> None:
 
     assert grid[0, 2, 4] == 1.0
     assert grid[0, 6, 4] == 1.0
+
+
+def test_lidar_occupancy_ray_angles_reuse_immutable_cache() -> None:
+    """Stable legacy adapter configs should not rebuild ray-angle arrays every step."""
+    cfg = LidarOccupancyGridConfig(angle_min=-np.pi / 2.0, angle_max=np.pi / 2.0)
+
+    first = _ray_angles(8, cfg)
+    second = _ray_angles(8, cfg)
+
+    assert first is second
+    assert not first.flags.writeable
+    with pytest.raises(ValueError):
+        first[0] = 0.0
 
 
 def test_lidar_occupancy_wrapper_reset_tolerates_seedless_planners() -> None:

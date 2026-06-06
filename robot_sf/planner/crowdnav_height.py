@@ -8,6 +8,7 @@ import math
 import sys
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -127,6 +128,15 @@ def _ray_segment_intersection_distance(
     if t < 0.0 or not (0.0 <= u <= 1.0):
         return None
     return float(t)
+
+
+@lru_cache(maxsize=32)
+def _crowdnav_height_lidar_base_directions(ray_num: int) -> np.ndarray:
+    """Return cached heading-zero unit directions for CrowdNav_HEIGHT lidar rays."""
+    angles = np.linspace(0.0, 2.0 * math.pi, ray_num, endpoint=False, dtype=float)
+    directions = np.column_stack((np.cos(angles), np.sin(angles)))
+    directions.flags.writeable = False
+    return directions
 
 
 def _load_config_class(config_path: Path) -> Any:
@@ -666,9 +676,12 @@ class CrowdNavHeightAdapter:
         ray_num = int(360.0 / angular_res)
         distances = np.full((ray_num,), sensor_range, dtype=np.float32)
         origin = np.asarray(robot_pos, dtype=float)
-        ray_angles = np.linspace(0.0, 2.0 * math.pi, ray_num, endpoint=False, dtype=float)
-        angles = heading + ray_angles
-        directions = np.stack((np.cos(angles), np.sin(angles)), axis=-1)
+        base_directions = _crowdnav_height_lidar_base_directions(ray_num)
+        cos_h = math.cos(heading)
+        sin_h = math.sin(heading)
+        directions = np.empty_like(base_directions)
+        directions[:, 0] = base_directions[:, 0] * cos_h - base_directions[:, 1] * sin_h
+        directions[:, 1] = base_directions[:, 0] * sin_h + base_directions[:, 1] * cos_h
         segments = self._obstacle_segments
         for idx, direction in enumerate(directions):
             best = sensor_range

@@ -97,3 +97,38 @@ def test_unicycle_acceleration():
     motion.move(state, deceleration_action, 1.0)
     speed = state.velocity
     assert speed == 0  # assert not moving backwards
+
+
+def test_unicycle_over_limit_acceleration_clipped():
+    """Acceleration beyond max_accel is clipped."""
+    motion = UnicycleMotion(UnicycleDriveSettings(max_accel=1.0))
+    state = UnicycleDriveState(((0.0, 0.0), 0.0), 0.0)
+    motion.move(state, (100.0, 0.0), 1.0)
+    assert state.velocity == 1.0
+
+
+def test_unicycle_over_limit_deceleration_clipped():
+    """Deceleration beyond max_accel in negative direction is clipped."""
+    motion = UnicycleMotion(UnicycleDriveSettings(max_accel=1.0, allow_backwards=True))
+    state = UnicycleDriveState(((0.0, 0.0), 0.0), 0.0)
+    motion.move(state, (-100.0, 0.0), 1.0)
+    assert state.velocity == -1.0
+
+
+def test_unicycle_over_limit_steering_clipped():
+    """Steering angle beyond max_steer is clipped."""
+    motion = UnicycleMotion(UnicycleDriveSettings(max_steer=0.78))
+    state = UnicycleDriveState(((0.0, 0.0), 0.0), 1.0)
+    motion.move(state, (0.0, 100.0), 1.0)
+    # state should have moved with clipped steering; check position changed
+    pos_after, _ = state.pose
+    assert pos_after[0] > 0.0
+
+
+def test_unicycle_over_limit_negative_steering_clipped():
+    """Negative steering angle beyond max_steer is clipped."""
+    motion = UnicycleMotion(UnicycleDriveSettings(max_steer=0.78))
+    state = UnicycleDriveState(((0.0, 0.0), 0.0), 1.0)
+    motion.move(state, (0.0, -100.0), 1.0)
+    pos_after, _ = state.pose
+    assert pos_after[0] > 0.0

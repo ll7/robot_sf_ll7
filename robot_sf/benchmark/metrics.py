@@ -276,6 +276,40 @@ def _compute_clearance_matrix(data: EpisodeData) -> np.ndarray:
     return center_dists - float(data.robot_radius + data.ped_radius)
 
 
+def _compute_robot_ped_distance_summary(data: EpisodeData) -> dict[str, float]:
+    """Compute aggregate robot-pedestrian metrics from one distance matrix.
+
+    Returns:
+        Mapping of distance-derived aggregate metrics used by `compute_all_metrics`.
+    """
+    step_count = int(data.robot_pos.shape[0]) if data.robot_pos.ndim >= 2 else 0
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+    if step_count == 0 or ped_count == 0:
+        return {
+            "human_collisions": 0.0,
+            "near_misses": 0.0,
+            "min_distance": float("nan"),
+            "mean_distance": float("nan"),
+            "min_clearance": float("nan"),
+            "mean_clearance": float("nan"),
+            "robot_ped_within_5m_frac": float("nan"),
+        }
+
+    dists = _compute_distance_matrix(data)
+    min_dists = dists.min(axis=1)
+    clearances = dists - float(data.robot_radius + data.ped_radius)
+    min_clearances = clearances.min(axis=1)
+    return {
+        "human_collisions": float(np.count_nonzero(min_clearances < 0.0)),
+        "near_misses": float(np.count_nonzero((min_clearances >= 0.0) & (min_clearances < D_NEAR))),
+        "min_distance": float(dists.min()),
+        "mean_distance": float(np.mean(min_dists)),
+        "min_clearance": float(clearances.min()),
+        "mean_clearance": float(np.mean(min_clearances)),
+        "robot_ped_within_5m_frac": float(np.count_nonzero(min_dists < 5.0) / step_count),
+    }
+
+
 def _rolling_nanmean(samples: np.ndarray, *, window: int) -> np.ndarray:
     """Compute trailing rolling mean with NaN-aware averaging per pedestrian.
 
@@ -2424,39 +2458,58 @@ def compute_all_metrics(
             "Missing pedestrian force data; force-based metrics will be NaN.",
         )
 
+    robot_ped_summary = _compute_robot_ped_distance_summary(data)
+    obstacle_collision_count = wall_collisions(data)
+    agent_collision_count = agent_collisions(data)
+    ped_collision_count = robot_ped_summary["human_collisions"]
+    total_collision_count = ped_collision_count + obstacle_collision_count + agent_collision_count
+    episode_success = (
+        data.reached_goal_step is not None
+        and data.reached_goal_step < horizon
+        and total_collision_count == 0
+    )
+
     values: dict[str, float] = {}
     # Use collision-count-based success semantics for benchmark-facing outputs.
-    values["success"] = success_rate(data, horizon=horizon)
-    values["time_to_goal_norm"] = time_to_goal_norm(data, horizon)
-    values["time_to_goal_norm_success_only"] = time_to_goal_norm_success_only(data, horizon)
+    values["success"] = 1.0 if episode_success else 0.0
+    values["time_to_goal_norm"] = (
+        float(data.reached_goal_step) / float(horizon) if episode_success else 1.0
+    )
+    values["time_to_goal_norm_success_only"] = (
+        float(data.reached_goal_step) / float(horizon) if episode_success else float("nan")
+    )
     values["time_to_goal_success_only_valid"] = (
         1.0 if math.isfinite(values["time_to_goal_norm_success_only"]) else 0.0
     )
     speed_cap = _resolved_robot_max_speed(data, robot_max_speed=robot_max_speed)
-    values["time_to_goal_ideal_ratio"] = time_to_goal_ideal_ratio(
-        data,
-        horizon=horizon,
-        shortest_path_len=shortest_path_len,
-        robot_max_speed=speed_cap,
-    )
+    if episode_success:
+        actual_time_to_goal = time_to_goal(data)
+        ideal = ideal_time_to_goal(
+            data,
+            shortest_path_len=shortest_path_len,
+            robot_max_speed=speed_cap,
+        )
+        values["time_to_goal_ideal_ratio"] = (
+            float(actual_time_to_goal / ideal)
+            if math.isfinite(actual_time_to_goal) and math.isfinite(ideal) and ideal > 0.0
+            else float("nan")
+        )
+    else:
+        values["time_to_goal_ideal_ratio"] = float("nan")
     values["time_to_goal_ideal_ratio_valid"] = (
         1.0 if math.isfinite(values["time_to_goal_ideal_ratio"]) else 0.0
     )
-    ped_collision_count = human_collisions(data)
-    obstacle_collision_count = wall_collisions(data)
-    agent_collision_count = agent_collisions(data)
-    total_collision_count = ped_collision_count + obstacle_collision_count + agent_collision_count
     values["collisions"] = total_collision_count
     values["ped_collision_count"] = ped_collision_count
     values["obstacle_collision_count"] = obstacle_collision_count
     values["agent_collision_count"] = agent_collision_count
     values["total_collision_count"] = total_collision_count
-    values["near_misses"] = near_misses(data)
-    values["min_distance"] = min_distance(data)
-    values["mean_distance"] = mean_distance(data)
-    values["min_clearance"] = min_clearance(data)
-    values["mean_clearance"] = mean_clearance(data)
-    values["robot_ped_within_5m_frac"] = robot_ped_within_5m_frac(data)
+    values["near_misses"] = robot_ped_summary["near_misses"]
+    values["min_distance"] = robot_ped_summary["min_distance"]
+    values["mean_distance"] = robot_ped_summary["mean_distance"]
+    values["min_clearance"] = robot_ped_summary["min_clearance"]
+    values["mean_clearance"] = robot_ped_summary["mean_clearance"]
+    values["robot_ped_within_5m_frac"] = robot_ped_summary["robot_ped_within_5m_frac"]
     values["path_efficiency"] = path_efficiency(data, shortest_path_len)
     values["socnavbench_path_length"] = socnavbench_path_length(data)
     values["socnavbench_path_length_ratio"] = socnavbench_path_length_ratio(data)

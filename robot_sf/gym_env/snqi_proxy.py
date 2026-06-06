@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -198,7 +199,7 @@ def compute_snqi_step_proxies(
                 acc = (vel - proxy_state.prev_robot_vel) / dt
                 if proxy_state.prev_robot_acc is not None:
                     jerk = (acc - proxy_state.prev_robot_acc) / dt
-                    jerk_mag = float(np.linalg.norm(jerk))
+                    jerk_mag = math.hypot(float(jerk[0]), float(jerk[1]))
                     if np.isfinite(jerk_mag):
                         proxy_state.jerk_sum += jerk_mag
                         proxy_state.jerk_count += 1

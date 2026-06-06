@@ -106,6 +106,29 @@ Do not use this roadmap to imply:
 5. Keep implementation PRs narrow; roadmap issues should point to children, not become umbrella
    implementation branches.
 
+## Negative Result And Non-Transfer Routing
+
+Research-result PRs should include a `Falsification / Non-Transfer Check` when the expected
+mechanism does not improve the measured outcome, only helps a local slice, or remains
+diagnostic-only. The check should answer:
+
+- whether the mechanism activated;
+- whether the intervention changed command source, selected command, trajectory, or route progress;
+- whether the scenario actually contained the targeted failure mode;
+- whether the result should stop, revise, narrow, or continue the mechanism claim.
+
+When a result is classified as `slice_local`, `explanation_signal_without_mitigation`, or
+`diagnostic_only`, route the next step toward an empirical follow-up that asks why the mechanism
+failed, what evidence would falsify further work, and what evidence would justify continuation. Do
+not answer weak or negative empirical results with another framework-only PR unless the next
+empirical step is impossible or explicitly blocked.
+
+Framework/rubric/protocol saturation rule: if three or more framework, rubric, or protocol PRs land
+in one research lane without applying the new guidance to a concrete result, the next PR in that
+lane should apply the accumulated framework to tracked empirical evidence or record why the lane is
+blocked from doing so. Exploratory work remains welcome when its status is labeled honestly as
+proposal, diagnostic, blocked, or not benchmark evidence.
+
 ## Validation
 
 This note is documentation/governance only. Expected validation for PR handoff:

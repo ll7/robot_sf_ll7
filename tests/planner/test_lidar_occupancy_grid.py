@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.lidar_occupancy_grid import (
     LidarOccupancyGridConfig,
@@ -18,6 +19,17 @@ def test_lidar_ray_angles_match_range_sensor_endpoint_convention() -> None:
     """Ray angles should exclude the duplicated upper endpoint."""
     angles = lidar_ray_angles(4, visual_angle_portion=1.0)
     np.testing.assert_allclose(angles, [-np.pi, -np.pi / 2.0, 0.0, np.pi / 2.0])
+
+
+def test_lidar_ray_angles_reuses_immutable_cached_array() -> None:
+    """Stable LiDAR grid configurations should not rebuild angle arrays every step."""
+    first = lidar_ray_angles(16, visual_angle_portion=1.0 / 3.0)
+    second = lidar_ray_angles(16, visual_angle_portion=1.0 / 3.0)
+
+    assert first is second
+    assert not first.flags.writeable
+    with pytest.raises(ValueError):
+        first[0] = 0.0
 
 
 def test_lidar_rays_to_ego_occupancy_grid_marks_hit_endpoint_only() -> None:

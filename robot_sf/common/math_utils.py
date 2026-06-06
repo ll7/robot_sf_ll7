@@ -5,6 +5,22 @@ from __future__ import annotations
 from math import atan2, cos, pi, sin
 
 
+def clip_scalar(value: float, lower: float, upper: float) -> float:
+    """Clip a scalar value to inclusive bounds without NumPy dispatch.
+
+    Comparison-based clipping preserves ``np.clip`` scalar NaN behavior because
+    both comparisons are false for NaN and the original value is returned.
+
+    Returns:
+        float: The bounded scalar, or the original value when already in range.
+    """
+    if value < lower:
+        return lower
+    if value > upper:
+        return upper
+    return value
+
+
 def wrap_angle_pi(angle: float) -> float:
     """Wrap an angle to the ``[-pi, pi)`` interval.
 

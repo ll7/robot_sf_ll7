@@ -8,7 +8,6 @@ optional static-obstacle state.
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -97,13 +96,17 @@ class SocialGraphObservationAdapter:
     """Stateful adapter that maintains a bounded pedestrian feature history."""
 
     def __init__(self, config: SocialGraphObservationConfig | None = None) -> None:
-        """Create an adapter with an empty history buffer."""
+        """Create an adapter with an empty preallocated history buffer."""
         self.config = config or SocialGraphObservationConfig()
-        self._history: deque[np.ndarray] = deque(maxlen=self.config.history_steps)
+        H = self.config.history_steps
+        M = self.config.max_pedestrians
+        F = len(PEDESTRIAN_FEATURE_NAMES)
+        self._buffer = np.zeros((H, M, F), dtype=np.float32)
+        self._filled = 0
 
     def reset(self) -> None:
         """Clear cached pedestrian history between episodes."""
-        self._history.clear()
+        self._filled = 0
 
     def build(
         self,
@@ -123,12 +126,13 @@ class SocialGraphObservationAdapter:
             obstacle_segments=obstacle_segments,
         )
         current = graph["pedestrian_features"]
-        if not self._history:
-            for _ in range(self.config.history_steps):
-                self._history.append(current.copy())
+        if self._filled < self.config.history_steps:
+            self._buffer[:] = current[np.newaxis, :, :]
+            self._filled = self.config.history_steps
         else:
-            self._history.append(current.copy())
-        graph["pedestrian_history"] = np.stack(list(self._history), axis=0).astype(np.float32)
+            self._buffer[:-1] = self._buffer[1:]
+            self._buffer[-1] = current
+        graph["pedestrian_history"] = self._buffer.copy()
         return graph
 
 
@@ -436,17 +440,13 @@ def _build_pedestrian_features(
     )
     active_count = min(config.max_pedestrians, order.shape[0])
     selected = order[:active_count]
-    features[:active_count, :] = np.column_stack(
-        [
-            rel[selected, 0],
-            rel[selected, 1],
-            rel_vel[selected, 0],
-            rel_vel[selected, 1],
-            distances[selected],
-            bearings[selected],
-            np.full((active_count,), fields.pedestrian_radius, dtype=np.float32),
-        ]
-    ).astype(np.float32)
+    features[:active_count, 0] = rel[selected, 0]
+    features[:active_count, 1] = rel[selected, 1]
+    features[:active_count, 2] = rel_vel[selected, 0]
+    features[:active_count, 3] = rel_vel[selected, 1]
+    features[:active_count, 4] = distances[selected]
+    features[:active_count, 5] = bearings[selected]
+    features[:active_count, 6] = fields.pedestrian_radius
     mask[:active_count] = True
     return features, mask
 
@@ -499,17 +499,13 @@ def _build_static_obstacle_features(
     )
     active_count = min(config.max_static_obstacles, order.shape[0])
     selected = order[:active_count]
-    features[:active_count, :] = np.column_stack(
-        [
-            rel_mid[selected, 0],
-            rel_mid[selected, 1],
-            unit_dirs[selected, 0],
-            unit_dirs[selected, 1],
-            lengths[selected],
-            distances[selected],
-            np.zeros((active_count,), dtype=np.float32),
-        ]
-    ).astype(np.float32)
+    features[:active_count, 0] = rel_mid[selected, 0]
+    features[:active_count, 1] = rel_mid[selected, 1]
+    features[:active_count, 2] = unit_dirs[selected, 0]
+    features[:active_count, 3] = unit_dirs[selected, 1]
+    features[:active_count, 4] = lengths[selected]
+    features[:active_count, 5] = distances[selected]
+    features[:active_count, 6] = 0.0
     mask[:active_count] = True
     return features, mask
 
@@ -524,20 +520,17 @@ def _build_star_edges(
     Returns:
         Edge index array and integer edge-type labels.
     """
-    sources: list[int] = []
-    edge_types: list[int] = []
-    for idx, active in enumerate(pedestrian_mask, start=1):
-        if active:
-            sources.append(idx)
-            edge_types.append(0)
+    active_ped_indices = np.flatnonzero(pedestrian_mask).astype(np.int64) + 1
+    num_ped = active_ped_indices.shape[0]
     static_offset = 1 + pedestrian_mask.shape[0]
-    for idx, active in enumerate(static_obstacle_mask, start=static_offset):
-        if active:
-            sources.append(idx)
-            edge_types.append(1)
-    if not sources:
+    active_static_indices = np.flatnonzero(static_obstacle_mask).astype(np.int64) + static_offset
+    num_static = active_static_indices.shape[0]
+    total_edges = num_ped + num_static
+    if total_edges == 0:
         return np.zeros((2, 0), dtype=np.int64), np.zeros((0,), dtype=np.int64)
-    return (
-        np.asarray([sources, [0] * len(sources)], dtype=np.int64),
-        np.asarray(edge_types, dtype=np.int64),
-    )
+    edge_index = np.zeros((2, total_edges), dtype=np.int64)
+    edge_index[0, :num_ped] = active_ped_indices
+    edge_index[0, num_ped:] = active_static_indices
+    edge_type = np.zeros((total_edges,), dtype=np.int64)
+    edge_type[num_ped:] = 1
+    return edge_index, edge_type

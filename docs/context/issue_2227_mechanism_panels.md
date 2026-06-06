@@ -67,7 +67,7 @@ The correct next step is a targeted trace-generation pass, not a full benchmark 
 Until that targeted regeneration exists, #2227 remains diagnostic-only readiness work, not figure
 evidence and not paper-facing mechanism proof.
 
-## 2026-06-06 Partial AMMV Panel Proof
+## Issue #2428 Partial AMMV Panel Proof (2026-06-06)
 
 Issue #2428 converted the Issue #2405 AMMV step-export unblocker into a first durable rendered panel
 bundle:

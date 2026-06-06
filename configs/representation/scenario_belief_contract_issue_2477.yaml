@@ -1,0 +1,123 @@
+schema_version: scenario-belief-contract.v1
+name: scenario_belief_contract_issue_2477
+issue: 2477
+parent_issue: 2469
+predecessor_issue: 1966
+evidence_tier: proposal_with_existing_mvp
+benchmark_evidence: false
+status: implemented_mvp_contract
+claim_boundary: >
+  This manifest identifies the existing sensor-independent ScenarioBelief representation
+  contract and its first simulator/visibility-limited fixtures. It is interface and diagnostic
+  evidence only. It does not prove real-sensor calibration, planner improvement, or benchmark
+  performance.
+
+contract_surfaces:
+  implementation: robot_sf/representation/scenario_belief.py
+  package_exports: robot_sf/representation/__init__.py
+  tests: tests/representation/test_scenario_belief.py
+  design_note: docs/context/issue_1966_scenario_belief_interface.md
+  issue_2477_note: docs/context/issue_2477_scenario_belief_contract.md
+
+representation_ownership:
+  belief_layer_owns:
+    - semantic entity and goal estimates
+    - uncertainty and confidence metadata
+    - visibility and missing-data state
+    - source provenance and diagnostic summaries
+  projections_own:
+    - fixed policy-observation key layout
+    - padding and truncation
+    - normalization and clipping
+    - dropping or reducing uncertainty for legacy consumers
+  input_adapters_own:
+    - translating simulator or sensor-specific data into ScenarioBelief fields
+    - declaring source adapter and calibration status
+    - assigning visibility, stale-data, and missing-field semantics
+
+required_top_level_fields:
+  - schema_version
+  - frame_id
+  - sim_time_s
+  - timestep_s
+  - map_size
+  - ego
+  - ego_speed
+  - goals
+  - agents
+  - source_summary
+  - max_pedestrians
+  - pedestrian_radius
+
+required_entity_fields:
+  - entity_id
+  - entity_type
+  - position
+  - velocity
+  - radius
+  - heading
+  - existence_probability
+  - visibility_state
+  - source
+  - last_observed_age_s
+  - missing_fields
+
+required_estimate_fields:
+  - mean_xy
+  - covariance_xy
+  - confidence
+
+producer_boundaries:
+  - key: simulator_oracle
+    function: scenario_belief_from_simulator_oracle
+    source_adapter: simulator_oracle
+    role: high-confidence simulator-state adapter
+    calibration_status: synthetic
+  - key: visibility_limited_simulator
+    function: scenario_belief_from_visibility_limited_simulator
+    source_adapter: visibility_limited_simulator
+    role: partial-observation synthetic visibility adapter
+    calibration_status: synthetic_not_sensor_calibrated
+
+consumer_boundaries:
+  - key: socnav_struct_projection
+    method: ScenarioBelief.to_socnav_struct
+    output_contract: existing SOCNAV_STRUCT key layout
+    compatibility_rule: preserve top-level keys robot, goal, pedestrians, map, sim
+  - key: debug_json
+    method: ScenarioBelief.to_debug_dict
+    output_contract: deterministic JSON/YAML-ready diagnostics
+    compatibility_rule: include uncertainty, source, visibility, and missing-data fields
+  - key: diagnostic_summary
+    method: ScenarioBelief.diagnostic_summary
+    output_contract: compact diagnostic-only representation quality summary
+    compatibility_rule: do not treat summary counts as planner or benchmark improvement
+
+sensor_independent_assumptions:
+  - Supported producers emit the same ScenarioBelief schema even when confidence and visibility differ.
+  - Simulator oracle state is high-confidence synthetic input, not privileged policy semantics.
+  - Missing or unobserved values must be explicit through visibility, confidence, source, or missing_fields.
+  - Policy projections may drop uncertainty only as an explicit consumer boundary.
+
+non_goals:
+  - replacing all observation spaces
+  - implementing a full perception or fusion stack
+  - proving real-sensor calibration
+  - claiming planner performance improvement
+  - merging benchmark rows across observation tracks without caveats
+
+first_fixture_or_smoke_path:
+  tests:
+    - tests/representation/test_scenario_belief.py
+  validates:
+    - oracle and visibility-limited producers share schema and projection keys
+    - partial observations expose uncertainty, visibility, and missing data
+    - debug output is deterministic
+    - projection diffs distinguish oracle and partial beliefs
+
+recommended_next_spike:
+  issue: 2478
+  title: uncertainty-aware scenario belief interface
+  rationale: >
+    Extend the existing ScenarioBelief contract toward explicit class/pose/velocity covariance
+    semantics before adding more sensor adapters or planner consumers.

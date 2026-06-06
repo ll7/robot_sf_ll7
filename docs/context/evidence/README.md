@@ -173,6 +173,9 @@ Policy caveats:
   fixtures for the learned-risk-model pre-SLURM launch-packet validator.
 - `issue_1397_oracle_imitation_launch_packet_2026-05-24/`: dry-run fixture and checksum evidence
   for the pre-Slurm oracle-imitation launch-packet validator.
+- `issue_2441_oracle_imitation_traces_2026-06-06/`: compact SLURM finalization,
+  split-check, metric summary, and source checksums for the Issue #2441 train/validation
+  oracle-imitation trace collection; raw traces remain local-only until durable promotion.
 - `issue_1318_teb_corridor_deadlock_2026-05-20/`: compact TEB/ORCA/hybrid-rule
   classic-merging corridor-deadlock comparison summary for issue #1318.
 - `issue_1484_broader_cross_kinematics_2026-05-28/`: compact broader cross-kinematics campaign

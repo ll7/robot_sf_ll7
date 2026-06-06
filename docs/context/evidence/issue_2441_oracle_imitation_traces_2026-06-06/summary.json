@@ -1,0 +1,189 @@
+{
+  "schema_version": "oracle_imitation_trace_collection_summary.v1",
+  "issue": 2441,
+  "parent_issue": 1470,
+  "created_at": "2026-06-06T15:10:00Z",
+  "branch": "gse-2441-oracle-traces",
+  "commit": "a9679e1a37495b25c1786917fcf2fa7e749d1475",
+  "claim_boundary": "Trace collection and local checksum evidence only; not final imitation NPZ dataset evidence, not imitation-training evidence, not benchmark or paper-facing planner evidence, and not durable external artifact promotion.",
+  "artifact_classification": {
+    "tracked_bundle": "tracked-compact-evidence",
+    "raw_trace_jsonl": "durable-required",
+    "raw_slurm_logs": "non-evidence-local-only",
+    "durable_artifact_pointer_status": "missing"
+  },
+  "launch_surface": {
+    "launch_packet": "configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml",
+    "wrapper": "scripts/dev/sbatch_oracle_imitation_traces_issue1470.sh",
+    "batch_script": "SLURM/Auxme/issue_1470_oracle_imitation_traces.sl",
+    "source_candidate": "hybrid_rule_v3_static_margin0_waypoint2",
+    "dataset_id": "issue_1397_oracle_imitation_v1",
+    "horizon": 500,
+    "workers": 1
+  },
+  "split_leakage_check": {
+    "status": "passed_manifest_check",
+    "train_seeds": [
+      201,
+      202,
+      203,
+      204,
+      205,
+      206
+    ],
+    "validation_seeds": [
+      101,
+      102,
+      103
+    ],
+    "evaluation_seeds": [
+      111,
+      112,
+      113
+    ],
+    "observed_splits": [
+      "train",
+      "validation"
+    ],
+    "train_rows": 6,
+    "validation_rows": 3,
+    "notes": "The collected train and validation rows match the launch-packet split counts and keep evaluation seeds uncollected."
+  },
+  "jobs": [
+    {
+      "job_id": "12762",
+      "job_name": "gse-2441-a30",
+      "partition": "a30",
+      "qos": "a30-gpu",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "start": "2026-06-06T16:53:50",
+      "end": "2026-06-06T16:57:24",
+      "elapsed": "00:03:34",
+      "split": "train",
+      "local_output_root": "output/slurm/issue1470-oracle-imitation-traces-job-12762/",
+      "manifest": "output/slurm/issue1470-oracle-imitation-traces-job-12762/oracle_imitation/issue1470_train_candidate_traces/oracle_candidate_trace_manifest.json",
+      "combined_jsonl": "output/slurm/issue1470-oracle-imitation-traces-job-12762/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
+      "summary": {
+        "episodes": 6,
+        "success_rate": 0.6666666666666666,
+        "collision_rate": 0.16666666666666666,
+        "near_miss_rate": 0.16666666666666666,
+        "mean_avg_speed": 1.2239742048886093,
+        "mean_min_distance": 4.763404354369564,
+        "failure_mode_counts": {
+          "static_collision": 1,
+          "timeout_low_progress": 1
+        },
+        "termination_reason_counts": {
+          "collision": 1,
+          "max_steps": 1,
+          "success": 4
+        },
+        "scenario_family": {
+          "classic": {
+            "episodes": 4,
+            "success_rate": 0.5,
+            "collision_rate": 0.25,
+            "near_miss_rate": 0.25
+          },
+          "francis2023": {
+            "episodes": 1,
+            "success_rate": 1.0,
+            "collision_rate": 0.0,
+            "near_miss_rate": 0.0
+          },
+          "nominal": {
+            "episodes": 1,
+            "success_rate": 1.0,
+            "collision_rate": 0.0,
+            "near_miss_rate": 0.0
+          }
+        }
+      }
+    },
+    {
+      "job_id": "12763",
+      "job_name": "gse-2441-l40s",
+      "partition": "l40s",
+      "qos": "l40s-gpu",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "start": "2026-06-06T16:53:50",
+      "end": "2026-06-06T16:57:03",
+      "elapsed": "00:03:13",
+      "split": "validation",
+      "local_output_root": "output/slurm/issue1470-oracle-imitation-traces-job-12763/",
+      "manifest": "output/slurm/issue1470-oracle-imitation-traces-job-12763/oracle_imitation/issue1470_validation_candidate_traces/oracle_candidate_trace_manifest.json",
+      "combined_jsonl": "output/slurm/issue1470-oracle-imitation-traces-job-12763/oracle_imitation/issue1470_validation_candidate_traces/validation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
+      "summary": {
+        "episodes": 3,
+        "success_rate": 0.3333333333333333,
+        "collision_rate": 0.0,
+        "near_miss_rate": 0.0,
+        "mean_avg_speed": 0.8104800114668361,
+        "mean_min_distance": 1.9357205218670321,
+        "failure_mode_counts": {
+          "bottleneck_yield_failure": 1,
+          "timeout_low_progress": 1
+        },
+        "termination_reason_counts": {
+          "max_steps": 1,
+          "success": 1,
+          "terminated": 1
+        },
+        "scenario_family": {
+          "classic": {
+            "episodes": 2,
+            "success_rate": 0.0,
+            "collision_rate": 0.0,
+            "near_miss_rate": 0.0
+          },
+          "nominal": {
+            "episodes": 1,
+            "success_rate": 1.0,
+            "collision_rate": 0.0,
+            "near_miss_rate": 0.0
+          }
+        }
+      }
+    }
+  ],
+  "analysis": {
+    "result_classification": "completed_pending_artifact_promotion",
+    "interpretation": "The source candidate produced trace rows for the requested train and validation splits, but classic scenarios remain weak: train classic success is 0.5 with one collision and one low-progress timeout, while validation classic success is 0.0 with bottleneck-yield and low-progress failures.",
+    "useful_for": [
+      "checking source-candidate trace schema and split routing",
+      "debugging classic-slice oracle behavior",
+      "materializing a small diagnostic trace dataset after durable artifact promotion"
+    ],
+    "not_useful_for_yet": [
+      "training an imitation policy without durable artifact promotion",
+      "claiming oracle quality across all splits",
+      "benchmark or paper-facing planner conclusions"
+    ]
+  },
+  "validation": [
+    {
+      "command": "sacct -j 12762,12763 --format=JobID,JobName%24,State,ExitCode,Partition,Elapsed,Start,End -P",
+      "result": "both jobs COMPLETED with ExitCode 0:0"
+    },
+    {
+      "command": "jq '.summary' output/slurm/issue1470-oracle-imitation-traces-job-12762/oracle_imitation/issue1470_train_candidate_traces/oracle_candidate_trace_manifest.json",
+      "result": "train split summary extracted"
+    },
+    {
+      "command": "jq '.summary' output/slurm/issue1470-oracle-imitation-traces-job-12763/oracle_imitation/issue1470_validation_candidate_traces/oracle_candidate_trace_manifest.json",
+      "result": "validation split summary extracted"
+    },
+    {
+      "command": "wc -l output/slurm/issue1470-oracle-imitation-traces-job-12762/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl output/slurm/issue1470-oracle-imitation-traces-job-12763/oracle_imitation/issue1470_validation_candidate_traces/validation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
+      "result": "6 train rows and 3 validation rows"
+    },
+    {
+      "command": "uv run python scripts/tools/slurm_job_finalize.py ...",
+      "result": "finalization_12762.json and finalization_12763.json classify all required local artifacts as present"
+    }
+  ],
+  "next_action": "Promote the raw trace JSONL and manifests to a durable artifact store or explicitly rerun/revise before downstream imitation training treats them as inputs."
+}

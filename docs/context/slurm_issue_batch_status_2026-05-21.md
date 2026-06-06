@@ -209,6 +209,7 @@ slurm_issue_status:
   config_path:
     - configs/training/orca_residual/orca_residual_bc_issue_1428.yaml
     - configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml
+    - configs/policy_search/candidates/orca_residual_guarded_ppo_progress_v1.yaml
     - SLURM/Auxme/issue_1475_orca_residual_bc.sl
     - docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
   output_root: output/slurm/issue1475-orca-residual-bc-job-12749
@@ -216,20 +217,23 @@ slurm_issue_status:
     - output/slurm/12749-issue1475-orca-residual-bc.out
     - output/slurm/12749-issue1475-orca-residual-bc.err
   durable_artifact_pointer_status: compact summary and smoke report tracked; raw output paths remain local and non-durable
-  next_action: revise ORCA-residual BC residual objective or candidate before rerun or nominal_sanity submission
-  closure_condition: revised bounded smoke records success, collision, residual clipping, guard rates, fallback/degraded status, and durable artifact status before nominal escalation
-  last_update: 2026-06-05
+  next_action: submit the revised progress-probe smoke only from an allowed Auxme login node after local packet and dry-run validation
+  closure_condition: progress-probe bounded smoke records success, collision, residual clipping, guard rates, fallback/degraded status, and durable artifact status before nominal escalation
+  last_update: 2026-06-06
   comparison_status: >
     Slurm smoke runner produced one valid row, but the Issue #1475 gate failed closed because
     success_rate=0.0 and collision_rate=0.0. The episode timed out with low progress on
-    planner_sanity_simple, so nominal escalation is blocked.
+    planner_sanity_simple, so nominal escalation is blocked. Issue #2390 revises the next smoke
+    target to `orca_residual_guarded_ppo_progress_v1` with a modestly larger forward residual
+    envelope and the existing ORCA-prior v2 progress-comparison margin value.
   status_basis: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json, docs/context/policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md, and docs/context/issue_2311_orca_residual_lane_decision.md
   notes_non_evidence: >
     Job 12749 intentionally did not run nominal_sanity. The runner-level decision was pass because
     JSONL/summary artifacts were produced, but this is diagnostic smoke status only:
     success_rate=0.0 with timeout_low_progress is revise evidence, not learned-residual success
-    evidence. Raw local output paths remain scratch unless promoted through durable artifact
-    pointers.
+    evidence. The revised v1 launch packet is not learned-residual evidence until a bounded smoke
+    rerun produces durable artifacts. Raw local output paths remain scratch unless promoted through
+    durable artifact pointers.
 ```
 
 ### Issue #1108 BC Warm-Start PPO Artifact Rescue

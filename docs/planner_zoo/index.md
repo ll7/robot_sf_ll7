@@ -96,6 +96,7 @@ the claim boundary with new evidence.
 | `mpc_clearance_guarded_v1` | NMPC clearance diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate mpc_clearance_guarded_v1 --stage smoke` |
 | `planner_selector_v2_diagnostic` | Adaptive ensemble diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate planner_selector_v2_diagnostic --stage smoke` |
 | `orca_residual_guarded_ppo_v0` | Runtime residual prototype | Smoke-only runtime surface; learned residual training/checkpoint lineage is pending. |
+| `orca_residual_guarded_ppo_progress_v1` | Runtime residual progress probe | Smoke-only #1475 rerun candidate; hard guards remain authoritative and no learned-residual evidence exists until the bounded smoke artifact is promoted. |
 
 ## Learned-Policy Intake
 
@@ -112,6 +113,7 @@ before opening implementation work.
 | `ppo_issue791_best_v1` | Implemented learned baseline | Comparison evidence exists for the configured PPO baseline; not a blanket safety promotion. |
 | `guarded_ppo_orca_prior` and related guarded PPO rows | Implemented/smoke-proven | Inference-only guarded tuning lane; not benchmark evidence unless specific reports support the claim. |
 | `orca_residual_guarded_ppo_v0` | Staged launch-packet lane | Runtime residual surface exists; training and checkpoint lineage are pending. |
+| `orca_residual_guarded_ppo_progress_v1` | Staged launch-packet lane | Named progress-probe candidate for the #1475 rerun; no checkpoint or smoke evidence yet. |
 | `learned_risk_model_v1` | SLURM handoff | Pre-SLURM launch packet only; not local benchmark evidence. |
 | External learned-policy families | Monitor-only, source-first, or rejected | CrowdNav, Arena-Rosnav, DRL-VO, GenSafeNav/SoNIC, NeuPAN, SAGE/MPC-transfer, NavDP/NoMaD, diffusion-policy, foundation/VLA, DWA-RL, and DreamerV3 rows are not Robot SF benchmark rows until their registry reopen conditions are met. |
 

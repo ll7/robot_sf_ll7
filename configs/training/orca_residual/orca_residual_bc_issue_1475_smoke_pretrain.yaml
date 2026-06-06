@@ -3,9 +3,9 @@
 # This is the concrete BC config consumed by
 # SLURM/Auxme/issue_1475_orca_residual_bc.sl.  It intentionally stays bounded to
 # the policy-search smoke scenario; nominal escalation is gated by the wrapper.
-run_id: issue_1475_orca_residual_bc_smoke
-dataset_id: issue_1428_orca_residual_bc_smoke
-policy_output_id: issue_1428_orca_residual_bc_policy_smoke
+run_id: issue_1475_orca_residual_bc_progress_v1_smoke
+dataset_id: issue_1428_orca_residual_bc_progress_v1_smoke
+policy_output_id: issue_1428_orca_residual_bc_progress_v1_policy_smoke
 training_config: ../ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
 scenario_config: ../../scenarios/single/planner_sanity_simple.yaml
 scenario_id: planner_sanity_simple

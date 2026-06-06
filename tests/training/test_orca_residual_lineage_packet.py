@@ -22,8 +22,36 @@ def test_checked_in_packet_is_valid() -> None:
 
     assert report["status"] == "valid"
     assert report["objective"]["method"] == "behavior_cloning_residual"
-    assert report["residual_bounds"]["linear_delta"] == 0.25
+    assert report["objective"]["target"] == "progress_probe_bounded_policy_action_minus_orca_action"
+    assert report["objective"]["revision_id"] == "orca_residual_progress_probe_v1"
+    assert report["residual_bounds"]["linear_delta"] == 0.35
     assert report["residual_bounds"]["angular_delta"] == 0.35
+
+
+def test_packet_allows_legacy_residual_objective_target(tmp_path: Path) -> None:
+    """Existing lineage packets keep validating while v1 records the progress-probe revision."""
+    packet = _load_packet()
+    packet["objective"]["target"] = "bounded_policy_action_minus_orca_action"
+    packet["objective"].pop("revision_id", None)
+    packet["objective"].pop("revision_reason", None)
+    legacy_config = tmp_path / "legacy_objective.yaml"
+    legacy_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
+
+    report = validate_launch_packet(legacy_config, repo_root=REPO_ROOT)
+
+    assert report["status"] == "valid"
+    assert report["objective"]["target"] == "bounded_policy_action_minus_orca_action"
+
+
+def test_packet_rejects_unknown_objective_target(tmp_path: Path) -> None:
+    """The objective label is allowlisted so ambiguous launch packets fail closed."""
+    packet = _load_packet()
+    packet["objective"]["target"] = "unbounded_orca_residual"
+    bad_config = tmp_path / "bad_objective.yaml"
+    bad_config.write_text(yaml.safe_dump(packet), encoding="utf-8")
+
+    with pytest.raises(OrcaResidualLineagePacketError, match="objective.target"):
+        validate_launch_packet(bad_config, repo_root=REPO_ROOT)
 
 
 def test_packet_rejects_privileged_observation_features(tmp_path: Path) -> None:

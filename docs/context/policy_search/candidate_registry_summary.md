@@ -71,6 +71,7 @@ artifact provenance, and fail-closed behavior before benchmark claims.
 | `orca_prior_guarded_ppo_v2_static_global` | `learned_policy_intake` | `smoke_only` | Global ORCA-prior guarded variant. |
 | `orca_primary_guarded_ppo_v1` | `learned_policy_intake` | `smoke_only` | ORCA-primary guarded variant. |
 | `orca_residual_guarded_ppo_v0` | `learned_policy_intake` | `smoke_only` | Runtime residual surface exists; training/checkpoint lineage is deferred. |
+| `orca_residual_guarded_ppo_progress_v1` | `learned_policy_intake` | `smoke_only` | Progress-probe residual candidate for the #1475 rerun; not learned-residual evidence until the bounded smoke produces durable artifacts. |
 | `tentabot_value_scorer_v0` | `learned_policy_intake` | `diagnostic_only` | Clean-room value-scorer baseline; hand-authored Tentabot-style recovery is stopped after Issue #1910 unless a separate learned-value-estimator contract is opened. |
 | `tentabot_value_scorer_v1_static_gated` | `learned_policy_intake` | `diagnostic_only` | Stopped diagnostic lane; the static-safety demotion tier reduced low-progress only with worse collisions/near misses. |
 | `tentabot_value_scorer_v2_route_arc` | `learned_policy_intake` | `diagnostic_only` | Stopped diagnostic lane; scalar route-arc progress reduced low-progress only with worse static-collision/near-miss behavior. |

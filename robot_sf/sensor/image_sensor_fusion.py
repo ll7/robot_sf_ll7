@@ -2,7 +2,6 @@
 Extended sensor fusion that includes image observations.
 """
 
-from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -40,10 +39,7 @@ class ImageSensorFusion:
     use_next_goal: bool
     use_image_obs: bool = False
 
-    # Drive-state cache stores warm-history markers; stacked_drive_state owns values.
-    drive_state_cache: deque[None] = field(init=False, default_factory=deque)
-    lidar_state_cache: deque = field(init=False, default_factory=deque)
-    image_state_cache: deque = field(init=False, default_factory=deque)
+    _initialized: bool = field(init=False, default=False)
     cache_steps: int = field(init=False)
 
     def __post_init__(self):
@@ -61,11 +57,7 @@ class ImageSensorFusion:
         self._drive_state_buffer = np.zeros(5, dtype=np.float32)
         self.stacked_lidar_state = np.zeros((self.cache_steps, lidar_shape), dtype=np.float32)
 
-        # Initialize caches for sensors
-        self.drive_state_cache = deque(maxlen=self.cache_steps)
-        self.lidar_state_cache = deque(maxlen=self.cache_steps)
-        if self.use_image_obs:
-            self.image_state_cache = deque(maxlen=self.cache_steps)
+        self._initialized = False
 
     def next_obs(self) -> dict[str, np.ndarray]:
         """
@@ -78,7 +70,6 @@ class ImageSensorFusion:
         """
         sensor_data = self._collect_sensor_data()
         self._initialize_caches_if_empty(sensor_data)
-        self._update_sensor_caches(sensor_data)
         self._update_stacked_states(sensor_data)
 
         return self._build_observation(sensor_data)
@@ -115,23 +106,14 @@ class ImageSensorFusion:
 
     def _initialize_caches_if_empty(self, sensor_data: dict):
         """Initialize caches if they are empty."""
-        if len(self.drive_state_cache) == 0:
-            for _ in range(self.cache_steps):
-                self.drive_state_cache.append(None)
-                self.lidar_state_cache.append(sensor_data["lidar_state"])
-                if self.use_image_obs and sensor_data["image_state"] is not None:
-                    self.image_state_cache.append(sensor_data["image_state"])
+        if not self._initialized:
+            self._initialized = True
             self.stacked_drive_state = fill_history_stack(
                 self.stacked_drive_state, sensor_data["drive_state"]
             )
             self.stacked_lidar_state = fill_history_stack(
                 self.stacked_lidar_state, sensor_data["lidar_state"]
             )
-
-    def _update_sensor_caches(self, sensor_data: dict):
-        """Update sensor caches with current data."""
-        self.drive_state_cache.append(None)
-        self.lidar_state_cache.append(sensor_data["lidar_state"])
 
     def _update_stacked_states(self, sensor_data: dict):
         """Update stacked states with current sensor data."""
@@ -172,7 +154,6 @@ class ImageSensorFusion:
                 shape = getattr(space, "shape", None)
                 img = np.zeros(shape, dtype=np.float32) if shape is not None else None
             if img is not None:
-                self.image_state_cache.append(img)
                 # Images are already normalized in the sensor
                 # Note: Images are intentionally NOT stacked like drive/lidar states
                 # to match the observation space design where images represent current frame only
@@ -195,10 +176,7 @@ class ImageSensorFusion:
         """
         Clear the caches of previous states.
         """
-        self.drive_state_cache.clear()
-        self.lidar_state_cache.clear()
-        if self.use_image_obs:
-            self.image_state_cache.clear()
+        self._initialized = False
 
         # Reset stacked states to zeros
         self.stacked_drive_state = reset_history_stack(self.stacked_drive_state)

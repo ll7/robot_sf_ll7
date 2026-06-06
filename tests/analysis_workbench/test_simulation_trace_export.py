@@ -222,7 +222,13 @@ def test_build_trace_export_uses_aggregate_simulation_step_trace(tmp_path: Path)
                                     "heading": 0.25,
                                     "velocity": [0.0, 0.0],
                                 },
-                                "pedestrians": [],
+                                "pedestrians": [
+                                    {
+                                        "id": 0,
+                                        "position": [2.0, 3.0],
+                                        "velocity": [0.1, 0.2],
+                                    }
+                                ],
                                 "planner": {
                                     "event": "step",
                                     "selected_action": {
@@ -255,6 +261,7 @@ def test_build_trace_export_uses_aggregate_simulation_step_trace(tmp_path: Path)
     frame = payload["frames"][0]
     assert frame["time_s"] == pytest.approx(0.1)
     assert frame["robot"]["heading"] == pytest.approx(0.25)
+    assert frame["pedestrians"][0]["id"] == "0"
     assert frame["planner"]["amv"]["command_clipped"] is False
 
 

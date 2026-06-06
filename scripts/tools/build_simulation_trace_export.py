@@ -206,11 +206,20 @@ def _copy_trace_frame(frame: dict[str, Any], *, source: Path, index: int) -> dic
     if missing:
         raise ValueError(f"{source}: aggregate trace frame {index} missing {missing}")
 
+    pedestrians = frame["pedestrians"]
+    if isinstance(pedestrians, list):
+        pedestrians = [
+            {**pedestrian, "id": str(pedestrian["id"])}
+            if isinstance(pedestrian, dict) and "id" in pedestrian
+            else pedestrian
+            for pedestrian in pedestrians
+        ]
+
     copied = {
         "step": frame["step"],
         "time_s": frame["time_s"],
         "robot": frame["robot"],
-        "pedestrians": frame["pedestrians"],
+        "pedestrians": pedestrians,
         "planner": frame["planner"],
     }
     if not isinstance(copied["robot"], dict):

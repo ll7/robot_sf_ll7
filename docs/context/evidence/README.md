@@ -74,6 +74,9 @@ boundary before merging an evidence-producing PR.
 - `issue_2404_amv_timeout_decomposition_2026-06-06/`: compact analysis-only synthesis mapping the
   Issue #2308 AMV timeout trace rerun onto the Issue #2404 requested decomposition fields and
   decision-output vocabulary.
+- `issue_2405_amv_step_export_2026-06-06/`: compact diagnostic proof that the Issue #2168
+  default/AMMV Social Force path can regenerate selected aggregate rows with step frames and export
+  one selected row per side as loader-valid `simulation_trace_export.v1`.
 - `issue_2313_local_baseline_quarantine_2026-06-05/`: compact metadata-only planner summary
   showing the seven absent local-only baseline rows are explicitly unavailable.
 - `issue_2409_local_baseline_quarantine_2026-06-06/`: compact follow-on synthesis showing Issue

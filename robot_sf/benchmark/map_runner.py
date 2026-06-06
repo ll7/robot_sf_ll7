@@ -3980,6 +3980,7 @@ def _run_map_job_worker(
         observation_noise=params.get("observation_noise"),
         synthetic_actuation_profile=params.get("synthetic_actuation_profile"),
         latency_stress_profile=params.get("latency_stress_profile"),
+        record_simulation_step_trace=bool(params.get("record_simulation_step_trace", False)),
     )
 
 

@@ -759,6 +759,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1085 Pedestrian-Impact Aggregate Metrics](issue_1085_pedestrian_impact_metrics.md)
   defines the schema-backed `pedestrian-impact.v1` block, canonical aggregate reductions, and
   opt-in CLI path for pedestrian-impact benchmark outputs.
+* [Issue #2458 Human-Interaction Proxy Metrics](issue_2458_human_interaction_proxy_metrics.md)
+  defines the schema-backed `human-interaction-proxy.v1` block, simulation-proxy formulas, and
+  claim boundary for human-centered mechanism-report reductions.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.

@@ -654,6 +654,8 @@ def test_experimental_ped_impact_metrics_are_opt_in() -> None:
     base = compute_all_metrics(ep, horizon=10)
     assert not any(key.startswith("ped_impact_") for key in base)
     assert not any(key.startswith("social_proxemic_") for key in base)
+    assert not any(key.startswith("human_proxy_") for key in base)
+    assert "human_discomfort_exposure_m_s" not in base
 
     enabled = compute_all_metrics(ep, horizon=10, experimental_ped_impact=True)
     assert "ped_impact_radius_m" in enabled
@@ -670,6 +672,69 @@ def test_experimental_ped_impact_metrics_are_opt_in() -> None:
         social_proxemic_radius_m=0.75,
     )
     assert custom_radius["social_proxemic_radius_m"] == 0.75
+
+
+def test_experimental_human_interaction_proxy_metrics_are_opt_in() -> None:
+    """Human-centered interaction proxy keys should only appear when explicitly enabled."""
+    ep = _make_episode(T=4, K=1)
+    ep.peds_pos[:, 0, 0] = 1.0
+
+    base = compute_all_metrics(ep, horizon=4)
+    assert "human_proxy_proxemic_radius_m" not in base
+
+    enabled = compute_all_metrics(ep, horizon=4, experimental_human_interaction_proxy=True)
+    assert enabled["human_proxy_available"] == 1.0
+    assert enabled["human_proxy_proxemic_radius_m"] == 1.2
+    assert enabled["human_proxy_yield_speed_mps"] == 0.15
+    assert "human_discomfort_exposure_m_s" in enabled
+
+
+def test_experimental_human_interaction_proxy_fixture() -> None:
+    """Human-interaction proxies should follow documented formulas on a crafted trajectory."""
+    ep = _make_episode(T=4, K=1)
+    ep.dt = 0.5
+    ep.robot_pos[:] = 0.0
+    ep.robot_vel[:, 0] = np.array([1.0, 0.8, 0.05, 0.0])
+    radii_sum = ep.robot_radius + ep.ped_radius
+    clearances = np.array([1.5, 0.5, 0.1, 2.0])
+    ep.peds_pos[:, 0, 0] = radii_sum + clearances
+    ep.peds_pos[:, 0, 1] = np.array([0.0, 0.4, -0.4, 0.0])
+
+    vals = compute_all_metrics(
+        ep,
+        horizon=4,
+        experimental_human_interaction_proxy=True,
+        social_proxemic_radius_m=1.2,
+        human_proxy_yield_speed_mps=0.1,
+    )
+
+    assert vals["human_proxy_available"] == 1.0
+    assert vals["human_proxy_ped_count"] == 1.0
+    assert vals["human_proxy_timestep_count"] == 4.0
+    center_distances = np.linalg.norm(ep.peds_pos[:, 0, :] - ep.robot_pos, axis=1)
+    actual_clearances = center_distances - radii_sum
+    expected_exposure = np.sum(np.maximum(1.2 - actual_clearances, 0.0)) * ep.dt
+    assert vals["human_discomfort_exposure_m_s"] == pytest.approx(expected_exposure)
+    assert vals["intrusion_duration_s"] == pytest.approx(1.0)
+    assert vals["time_to_yield_s"] == pytest.approx(0.5)
+    assert vals["robot_yield_distance_m"] == pytest.approx(center_distances[2])
+    assert vals["pedestrian_path_deviation_proxy_m"] > 0.0
+    assert vals["group_split_intrusion_available"] == 0.0
+
+
+def test_experimental_human_interaction_proxy_handles_empty_crowd() -> None:
+    """Human-interaction proxies should expose unavailable status for K=0."""
+    ep = _make_episode(T=4, K=0)
+    vals = compute_all_metrics(ep, horizon=4, experimental_human_interaction_proxy=True)
+
+    assert vals["human_proxy_available"] == 0.0
+    assert vals["human_proxy_ped_count"] == 0.0
+    assert vals["human_proxy_timestep_count"] == 4.0
+    assert vals["human_discomfort_exposure_m_s"] == 0.0
+    assert vals["intrusion_duration_s"] == 0.0
+    assert math.isnan(vals["time_to_yield_s"])
+    assert math.isnan(vals["robot_yield_distance_m"])
+    assert math.isnan(vals["pedestrian_path_deviation_proxy_m"])
 
 
 def test_experimental_social_acceptability_proxemic_intrusion() -> None:
@@ -797,6 +862,41 @@ def test_post_process_metrics_adds_social_acceptability_pilot_block() -> None:
     assert block["sample_counts"] == {"pedestrians": 2, "timesteps": 3}
     assert block["proxemic"]["intrusion_area_m_s"] == 0.8
     assert "not a replacement for SNQI" in block["interpretation"]
+
+
+def test_post_process_metrics_adds_human_interaction_proxy_block() -> None:
+    """Post-processing should expose human-interaction proxies with claim boundaries."""
+    metrics = post_process_metrics(
+        {
+            "success": 1.0,
+            "collisions": 0.0,
+            "human_proxy_available": 1.0,
+            "human_proxy_proxemic_radius_m": 1.2,
+            "human_proxy_yield_speed_mps": 0.1,
+            "human_proxy_ped_count": 2.0,
+            "human_proxy_timestep_count": 4.0,
+            "human_discomfort_exposure_m_s": 0.9,
+            "intrusion_duration_s": 1.0,
+            "time_to_yield_s": 0.5,
+            "robot_yield_distance_m": 1.5,
+            "pedestrian_path_deviation_proxy_m": 0.25,
+            "group_split_intrusion_available": 0.0,
+        },
+        snqi_weights=None,
+        snqi_baseline=None,
+    )
+
+    assert metrics["human_proxy_available"] is True
+    assert metrics["human_proxy_ped_count"] == 2
+    block = metrics["human_interaction_proxy"]
+    assert block["schema_version"] == "human-interaction-proxy.v1"
+    assert block["status"] == "simulation_proxy"
+    assert block["parameters"] == {"proxemic_radius_m": 1.2, "yield_speed_mps": 0.1}
+    assert block["sample_counts"] == {"pedestrians": 2, "timesteps": 4}
+    assert block["canonical_reductions"]["time_to_yield_s"] == 0.5
+    assert block["canonical_reductions"]["group_split_intrusion_available"] is False
+    assert "human-subject" in block["interpretation"]
+    assert "group-membership" in block["exclusions"]["group_split_intrusion"]
 
 
 def test_experimental_ped_impact_handles_empty_crowd() -> None:

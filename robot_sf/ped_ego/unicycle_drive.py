@@ -6,7 +6,7 @@ from math import cos, sin, tan
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.common.math_utils import normalize_angle_atan2
+from robot_sf.common.math_utils import clip_scalar, normalize_angle_atan2
 from robot_sf.common.types import PedPose, PolarVec2D, UnicycleAction, Vec2D
 
 
@@ -86,12 +86,12 @@ class UnicycleMotion:
         velocity = state.velocity
 
         # Apply limits to the acceleration and calculate new velocity
-        acceleration = np.clip(acceleration, -self.config.max_accel, self.config.max_accel)
+        acceleration = clip_scalar(acceleration, -self.config.max_accel, self.config.max_accel)
         new_velocity = velocity + d_t * acceleration
-        new_velocity = np.clip(new_velocity, self.config.min_velocity, self.config.max_velocity)
+        new_velocity = clip_scalar(new_velocity, self.config.min_velocity, self.config.max_velocity)
 
         # Apply limits to the steering angle
-        steering_angle = np.clip(steering_angle, -self.config.max_steer, self.config.max_steer)
+        steering_angle = clip_scalar(steering_angle, -self.config.max_steer, self.config.max_steer)
 
         # Calculate angular velocity based on velocity and steering angle
         angular_velocity = new_velocity * tan(steering_angle)

@@ -409,3 +409,56 @@ def test_static_occlusion_edge_touch_not_occluded() -> None:
     # ped at (3, 0.0): line goes through obstacle interior -> occluded
     assert obs["pedestrians"]["count"][0] == pytest.approx(1.0)
     np.testing.assert_allclose(obs["pedestrians"]["positions"][0], [3.0, 0.5], atol=1e-6)
+
+
+def test_position_cap_cache_refreshes_on_map_def_change() -> None:
+    """Position cap should refresh when map_def identity or width/height changes."""
+    env_config = RobotSimulationConfig()
+    simulator = SimpleNamespace(
+        ped_pos=np.zeros((1, 2), dtype=np.float32),
+        ped_vel=np.zeros((1, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([0.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=120.0, height=80.0),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    fusion = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    cap1 = fusion._position_cap()
+    cap1_id = id(cap1)
+    assert cap1.tolist() == pytest.approx([120.0, 80.0])
+
+    cap1_again = fusion._position_cap()
+    assert id(cap1_again) == cap1_id, "Same map_def should reuse cached array"
+
+    # Mutate width on same map_def object — should refresh
+    simulator.map_def.width = 200.0
+    cap2 = fusion._position_cap()
+    assert cap2.tolist() == pytest.approx([200.0, 80.0])
+    assert id(cap2) != cap1_id, "Width change should produce new cached array"
+
+    # Replace map_def entirely — should refresh
+    simulator.map_def = SimpleNamespace(width=60.0, height=60.0)
+    cap3 = fusion._position_cap()
+    assert cap3.tolist() == pytest.approx([60.0, 60.0])
+    assert id(cap3) != id(cap2), "Map def replacement should produce new cached array"
+
+    # reset_cache should clear position cap too
+    fusion.reset_cache()
+    cap4 = fusion._position_cap()
+    assert cap4.tolist() == pytest.approx([60.0, 60.0])
+
+    # Verify next_obs() also respects refreshed caps
+    cap_via_obs = fusion.next_obs()["map"]["size"]
+    np.testing.assert_array_equal(cap_via_obs, np.array([60.0, 60.0], dtype=np.float32))

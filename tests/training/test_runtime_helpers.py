@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import time
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from robot_sf.training.runtime_helpers import append_jsonl_record, resolve_ray_runtime_env
+
+_JSONL_APPEND_RECORDS = int(os.environ.get("ROBOT_SF_JSONL_APPEND_RECORDS", "250"))
+_JSONL_APPEND_SOFT_RECORDS_PER_SEC = float(
+    os.environ.get("ROBOT_SF_JSONL_APPEND_SOFT_RECORDS_PER_SEC", "500.0")
+)
+_ENFORCE_PERF = os.environ.get("ROBOT_SF_PERF_ENFORCE", "0") == "1"
 
 
 def test_append_jsonl_record_appends_multiple_lines(tmp_path: Path) -> None:
@@ -115,6 +123,42 @@ def test_append_jsonl_record_writes_non_finite_numbers_as_null(tmp_path: Path) -
         "inf": None,
         "np_nan": None,
     }
+
+
+def test_append_jsonl_record_synthetic_batch_throughput(tmp_path: Path) -> None:
+    """Guard JSONL append throughput with a hardware-tolerant synthetic batch."""
+
+    out_path = tmp_path / "append_perf.jsonl"
+    payload = {
+        "iteration": 0,
+        "metrics": {
+            "reward_mean": np.float64(1.25),
+            "loss": np.float64(0.125),
+            "window": np.arange(16, dtype=np.int64),
+        },
+        "checkpoint": tmp_path / "model.pt",
+    }
+
+    started = time.perf_counter()
+    for iteration in range(_JSONL_APPEND_RECORDS):
+        append_jsonl_record(out_path, {**payload, "iteration": iteration})
+    elapsed_sec = time.perf_counter() - started
+
+    lines = out_path.read_text(encoding="utf-8").splitlines()
+    records_per_sec = _JSONL_APPEND_RECORDS / elapsed_sec if elapsed_sec > 0 else 0.0
+    message = (
+        "append_jsonl_record synthetic throughput below soft threshold: "
+        f"{records_per_sec:.1f} records/sec < {_JSONL_APPEND_SOFT_RECORDS_PER_SEC:.1f}; "
+        f"records={_JSONL_APPEND_RECORDS}, elapsed_sec={elapsed_sec:.4f}, "
+        f"bytes={out_path.stat().st_size}"
+    )
+
+    assert len(lines) == _JSONL_APPEND_RECORDS
+    assert json.loads(lines[-1])["iteration"] == _JSONL_APPEND_RECORDS - 1
+    if records_per_sec < _JSONL_APPEND_SOFT_RECORDS_PER_SEC:
+        if _ENFORCE_PERF:
+            pytest.fail(message)
+        pytest.skip(f"{message}; set ROBOT_SF_PERF_ENFORCE=1 to enforce on this machine")
 
 
 def test_resolve_ray_runtime_env_sets_defaults() -> None:

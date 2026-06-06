@@ -197,6 +197,11 @@ Location: `robot_sf/benchmark/runner.py`
 - Performance degradation > 50% should trigger investigation
 - Compare against `configs/benchmarks/perf_baseline_classic_cold_warm_v1.json`
 - Use `output/benchmarks/perf/*.json` and nightly artifacts for trend monitoring
+- JSONL append throughput uses a lightweight synthetic guard in
+  `tests/training/test_runtime_helpers.py`. Tune `ROBOT_SF_JSONL_APPEND_RECORDS` and
+  `ROBOT_SF_JSONL_APPEND_SOFT_RECORDS_PER_SEC` for local diagnosis; keep
+  `ROBOT_SF_PERF_ENFORCE=0` on heterogeneous machines unless a hardware-specific threshold is
+  intentional.
 
 ## Optimization Notes
 

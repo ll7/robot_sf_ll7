@@ -166,6 +166,8 @@ boundary before merging an evidence-producing PR.
 - `issue_2275_predictive_v2_fate_2026-06-05/`: compact decision matrix for Issue #2275 / parent
   Issue #1490, recording the stop-old-expansion decision after the #1543 negative audit and #1897
   failed coupling gate.
+- `issue_2411_predictive_v2_child_classification_2026-06-06/`: compact classification of old
+  predictive-v2 child issues after the stop-old-expansion decision.
 - `issue_2274_hybrid_component_matrix_2026-06-05/`: validator-readable hybrid-learning component
   status matrix for Issue #2274 / parent Issue #1489, with compact CSV and YAML rows for learned
   risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC warm-start PPO.

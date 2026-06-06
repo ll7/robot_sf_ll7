@@ -176,6 +176,8 @@ knowledge, not every transient iteration detail.
   [issue_1543_predictive_v2_negative_audit.md](issue_1543_predictive_v2_negative_audit.md)
 * Issue #2275 predictive-v2 fate decision:
   [issue_2275_predictive_v2_fate.md](issue_2275_predictive_v2_fate.md)
+* Issue #2411 predictive-v2 child classification:
+  [issue_2411_predictive_v2_child_classification.md](issue_2411_predictive_v2_child_classification.md)
 * Issue #1542 manuscript claim evidence map:
   [issue_1542_manuscript_claim_evidence_map.md](issue_1542_manuscript_claim_evidence_map.md)
 
@@ -1164,3 +1166,7 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #2408 ORCA-Residual Low-Progress Analysis](issue_2408_orca_residual_low_progress_analysis.md)
   classifies the failed v0 smoke row and recommends only a revised, instrumented progress-probe
   rerun before any nominal escalation.
+
+* [Issue #2411 Predictive-v2 Child Classification](issue_2411_predictive_v2_child_classification.md)
+  classifies stale predictive-v2 child issues after the stop-old-expansion decision so blocked
+  proposal work is not treated as benchmark-ready execution.

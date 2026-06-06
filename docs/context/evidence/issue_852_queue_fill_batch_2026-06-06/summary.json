@@ -44,7 +44,7 @@
         "state": "COMPLETED"
       },
       "launcher": "SLURM/Auxme/issue_791_reward_curriculum.sl",
-      "local_output_root": "output/slurm/issue791-reward-curriculum-job-12750",
+      "local_output_root": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12750",
       "metrics": {
         "best_checkpoint": {
           "collision_rate": 0.0857,
@@ -79,11 +79,11 @@
       "run_id": "ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118",
       "seed": 231,
       "source_artifacts": {
-        "best_checkpoint_summary_json": "output/slurm/issue791-reward-curriculum-job-12750/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_best.summary.json",
-        "eval_timeline_json": "output/slurm/issue791-reward-curriculum-job-12750/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118.json",
-        "policy_zip": "output/slurm/issue791-reward-curriculum-job-12750/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231.zip",
-        "run_summary_json": "output/slurm/issue791-reward-curriculum-job-12750/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118.json",
-        "slurm_log": "output/slurm/12750-issue791-reward-curriculum.out"
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12750/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12750/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12750/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12750/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118.json",
+        "slurm_log": "ignored-slurm-artifacts/12750-issue791-reward-curriculum.out"
       },
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/8sq89hfw"
     },
@@ -104,7 +104,7 @@
         "state": "COMPLETED"
       },
       "launcher": "SLURM/Auxme/issue_791_reward_curriculum.sl",
-      "local_output_root": "output/slurm/issue791-reward-curriculum-job-12752",
+      "local_output_root": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12752",
       "metrics": {
         "best_checkpoint": {
           "collision_rate": 0.4143,
@@ -139,11 +139,11 @@
       "run_id": "ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139",
       "seed": 231,
       "source_artifacts": {
-        "best_checkpoint_summary_json": "output/slurm/issue791-reward-curriculum-job-12752/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_best.summary.json",
-        "eval_timeline_json": "output/slurm/issue791-reward-curriculum-job-12752/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139.json",
-        "policy_zip": "output/slurm/issue791-reward-curriculum-job-12752/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231.zip",
-        "run_summary_json": "output/slurm/issue791-reward-curriculum-job-12752/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139.json",
-        "slurm_log": "output/slurm/12752-issue791-reward-curriculum.out"
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12752/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12752/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12752/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12752/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139.json",
+        "slurm_log": "ignored-slurm-artifacts/12752-issue791-reward-curriculum.out"
       },
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/13oeq9wv"
     },
@@ -164,7 +164,7 @@
         "state": "COMPLETED"
       },
       "launcher": "SLURM/Auxme/issue_791_reward_curriculum.sl",
-      "local_output_root": "output/slurm/issue791-reward-curriculum-job-12753",
+      "local_output_root": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12753",
       "metrics": {
         "best_checkpoint": {
           "collision_rate": 0.1571,
@@ -199,11 +199,11 @@
       "run_id": "ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106",
       "seed": 1337,
       "source_artifacts": {
-        "best_checkpoint_summary_json": "output/slurm/issue791-reward-curriculum-job-12753/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_best.summary.json",
-        "eval_timeline_json": "output/slurm/issue791-reward-curriculum-job-12753/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106.json",
-        "policy_zip": "output/slurm/issue791-reward-curriculum-job-12753/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337.zip",
-        "run_summary_json": "output/slurm/issue791-reward-curriculum-job-12753/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106.json",
-        "slurm_log": "output/slurm/12753-issue791-reward-curriculum.out"
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12753/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12753/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12753/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12753/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106.json",
+        "slurm_log": "ignored-slurm-artifacts/12753-issue791-reward-curriculum.out"
       },
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/qex6vida"
     },
@@ -224,7 +224,7 @@
         "state": "COMPLETED"
       },
       "launcher": "SLURM/Auxme/issue_791_asymmetric_critic.sl",
-      "local_output_root": "output/slurm/issue791-asymmetric-critic-job-12754",
+      "local_output_root": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12754",
       "metrics": {
         "best_checkpoint": {
           "collision_rate": 0.1571,
@@ -259,11 +259,11 @@
       "run_id": "ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542",
       "seed": 1337,
       "source_artifacts": {
-        "best_checkpoint_summary_json": "output/slurm/issue791-asymmetric-critic-job-12754/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_best.summary.json",
-        "eval_timeline_json": "output/slurm/issue791-asymmetric-critic-job-12754/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542.json",
-        "policy_zip": "output/slurm/issue791-asymmetric-critic-job-12754/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337.zip",
-        "run_summary_json": "output/slurm/issue791-asymmetric-critic-job-12754/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542.json",
-        "slurm_log": "output/slurm/12754-issue791-asymmetric-critic.out"
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12754/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12754/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12754/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12754/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542.json",
+        "slurm_log": "ignored-slurm-artifacts/12754-issue791-asymmetric-critic.out"
       },
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/s4bdmdlc"
     },
@@ -284,7 +284,7 @@
         "state": "COMPLETED"
       },
       "launcher": "SLURM/Auxme/issue_791_asymmetric_critic.sl",
-      "local_output_root": "output/slurm/issue791-asymmetric-critic-job-12755",
+      "local_output_root": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12755",
       "metrics": {
         "best_checkpoint": {
           "collision_rate": 0.4857,
@@ -319,11 +319,11 @@
       "run_id": "ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201",
       "seed": 1337,
       "source_artifacts": {
-        "best_checkpoint_summary_json": "output/slurm/issue791-asymmetric-critic-job-12755/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_best.summary.json",
-        "eval_timeline_json": "output/slurm/issue791-asymmetric-critic-job-12755/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201.json",
-        "policy_zip": "output/slurm/issue791-asymmetric-critic-job-12755/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337.zip",
-        "run_summary_json": "output/slurm/issue791-asymmetric-critic-job-12755/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201.json",
-        "slurm_log": "output/slurm/12755-issue791-asymmetric-critic.out"
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12755/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12755/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12755/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12755/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201.json",
+        "slurm_log": "ignored-slurm-artifacts/12755-issue791-asymmetric-critic.out"
       },
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/7fg4zth4"
     }

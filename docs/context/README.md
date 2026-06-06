@@ -612,6 +612,7 @@ knowledge, not every transient iteration detail.
   [Issue #1442 CARLA Native Spawn Probe Evidence](evidence/issue_1442_carla_native_spawn_probe_2026-05-24/README.md),
   [Issue #1344 Paired AMV Primary Evidence](evidence/issue_1344_paired_amv_primary_2026-05-20/README.md),
   [Issue #1416 Converted-Map Cache Evidence](evidence/issue_1416_converted_map_cache_2026-05-20/README.md),
+  [Issue #852 queue-fill single-factor batch evidence](evidence/issue_852_queue_fill_batch_2026-06-06/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 

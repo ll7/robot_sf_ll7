@@ -17,7 +17,7 @@ asymmetric seed-231 job `12751` is intentionally not preserved here as a complet
 - Intent: fill both `a30` and `l40s` queues with bounded issue-852 single-factor jobs while
   preserving intermediate and completed results.
 
-Local `output/` paths are ignored and non-durable. W&B run URLs below are the durable
+Local generated artifact paths are ignored and non-durable. W&B run URLs below are the durable
 external pointers observed from the completed logs; `SHA256SUMS` records hashes for the
 source local artifacts used to build this compact evidence bundle.
 

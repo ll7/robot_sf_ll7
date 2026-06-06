@@ -8,6 +8,9 @@ Status: launch-packet status correction; no SLURM submission from this issue.
 Compact smoke evidence:
 [evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json](evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json)
 
+Source checksum manifest:
+[evidence/issue_1475_orca_residual_bc_smoke_12749.SHA256SUMS](evidence/issue_1475_orca_residual_bc_smoke_12749.SHA256SUMS)
+
 Smoke report:
 [policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md](policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md)
 
@@ -50,7 +53,7 @@ The tracked summary records the required smoke-gate fields for this status step:
 - shield decision count, shield override rate, hard-constraint violation rate, and
   `nominal_escalation_allowed`;
 - local output paths plus checksums for the summary JSON, smoke JSONL, BC policy zip, and dataset
-  NPZ.
+  NPZ; the standalone checksum manifest also records the stdout/stderr log hashes.
 
 ## Recommendation
 

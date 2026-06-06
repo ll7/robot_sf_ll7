@@ -99,6 +99,10 @@ Use REST-backed `gh api repos/...` calls for ordinary issue/PR/label/comment ope
 `git` for repository state. Reserve GraphQL for Projects v2, review-thread operations, and nested
 queries that are genuinely cheaper. If GraphQL quota is low, finish issue cleanup through REST and
 leave Project #5 mutations as explicit pending work rather than retry-looping.
+During long delegated runs, record the REST publication path that actually worked: PR create,
+head-SHA check-run polling, labels, merge, closeout comment, and cleanup. A successful REST
+operation is publication evidence only; still verify branch head, CI state, and local validation
+before applying merge-ready or calling an issue closed.
 
 The priority workflow uses [docs/project_prioritization.md](../project_prioritization.md) as an
 advisory rubric, not as hard authority over current maintainer direction or fresh evidence.
@@ -190,6 +194,10 @@ Treat it as a reviewer-lens pass, not another full test suite:
   `.git/codex-agent-runs/notes/inbox/`; use `agent-workflow-promotion` only when evidence supports
   a small durable repo change. Do not promote private logs, local paths, or weak observations, and
   do not relax benchmark or paper-facing proof rules.
+- delegated worker outputs: record useful sidecar answers as `route_evidence`, not benchmark or
+  claim proof by themselves. Classify missing or sparse compact artifacts as route failure or T0
+  evidence. If the worker produced no useful `result`, `status`, or `diffstat` summary, rely on
+  local validation or reroute instead of treating the silence as a negative finding.
 
 ### 7. Open the PR
 

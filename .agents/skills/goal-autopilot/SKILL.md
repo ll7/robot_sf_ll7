@@ -107,8 +107,8 @@ Before each phase, run a delegation checkpoint:
 
 Publication and final judgment remain local: delegates must not push, open, or merge PRs; change
 labels or project state; resolve review threads; or make final benchmark, paper, or safety claims
-unless the user explicitly grants that permission. Their output is route evidence that must be
-reviewed and validated before phase completion.
+unless the user explicitly grants that permission. Their output is `route_evidence` that must be
+reviewed and validated before phase completion, not benchmark or claim proof by itself.
 
 ### Active Delegation Ledger
 
@@ -129,6 +129,9 @@ refs, worker artifacts, validation logs, or final summaries.
 Track only the fields needed to resume safely in under one minute:
 
 - route: provider/tool, model or agent role, run ID or artifact path, and route status;
+- delegation budget: for long delegated runs, record Gemini attempts, model variant,
+  capacity/quota outcome, accepted evidence tier, and any user-defined stop threshold such as
+  weekly usage remaining;
 - task state: issue/PR number, phase, branch, worktree, claim ref/status, and next action;
 - ownership: files or modules the delegate may read or edit;
 - validation: commands planned/run, pass/fail state, and any blocker signature;
@@ -176,6 +179,9 @@ Record cleanup status in the ledger, handoff notes, or self-review companion usi
 one of:
 
 - `worker completed` — external subprocess exited cleanly, artifacts confirmed.
+- `worker_sparse_artifacts` — subprocess exited or was stopped but compact result/status/diffstat
+  artifacts are missing or empty; treat as route failure or T0 evidence until local validation
+  proves the finding independently.
 - `app agent closed` — Codex subagent session closed after integration/rejection.
 - `no active process remains` — neither subagent nor worker process remains open.
 - `cleanup_failed` — close/confirm failed; record the error and escalate.

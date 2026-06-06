@@ -34,7 +34,9 @@ to `NA` and state why.
 - Parent issue, claim map, registry, context note, or synthesis surface to update:
 - New research/benchmark/metric/paper-facing analysis tool, if any: representative use on
   durable/versioned input, or a linked follow-up issue that names the decision, claim boundary, or
-  synthesis surface it will update:
+  synthesis surface it will update. Examples: trace-panel generators, topology-score
+  instrumentation, seed-sufficiency analysis, and why-report generation. For support helpers that
+  do not interpret research evidence, state `NA - support helper` with the reason:
 
 ## Falsification / Non-Transfer Check
 Required for research-result PRs when the expected mechanism did not improve the measured outcome,
@@ -66,6 +68,9 @@ synthesis surface the tool will update. Local-only `output/` files are
 not durable proof unless promoted or represented by a tracked manifest.
 Small support helpers (formatters, CLI wrappers, quick diagnostics)
 that make no research/benchmark/metric/paper claim are exempt.
+Examples that do need first use or a concrete follow-up include trace-panel generators,
+topology-score instrumentation, seed-sufficiency analysis, and why-report generation. Support
+helpers that do not interpret research evidence should state `NA - support helper` with the reason.
 
 - Commands run:
 - Evidence that the change works here:

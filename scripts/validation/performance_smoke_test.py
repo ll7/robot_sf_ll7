@@ -49,6 +49,29 @@ from robot_sf.training.scenario_loader import (
 
 
 @dataclass(slots=True)
+class StepLoopMetrics:
+    """Advisory simulator step-loop attribution for performance smoke output."""
+
+    step_samples: int
+    first_step_sec: float
+    step_loop_sec: float
+    steady_step_loop_sec: float
+    steps_per_sec: float
+    steady_steps_per_sec: float
+
+    def to_dict(self) -> dict[str, float | int]:
+        """Serialize step-loop metrics to a JSON-friendly mapping."""
+        return {
+            "step_samples": self.step_samples,
+            "first_step_sec": self.first_step_sec,
+            "step_loop_sec": self.step_loop_sec,
+            "steady_step_loop_sec": self.steady_step_loop_sec,
+            "steps_per_sec": self.steps_per_sec,
+            "steady_steps_per_sec": self.steady_steps_per_sec,
+        }
+
+
+@dataclass(slots=True)
 class SmokeTestResult:
     """Structured result for performance smoke tests."""
 
@@ -60,6 +83,7 @@ class SmokeTestResult:
     total_time_sec: float
     thresholds: dict[str, float | bool]
     statuses: dict[str, str]
+    step_loop: StepLoopMetrics
     recommendations: tuple[PerformanceRecommendation, ...] = ()
     scenario: str | None = None
     exit_code: int = 0
@@ -78,6 +102,7 @@ class SmokeTestResult:
             "ms_per_reset": self.ms_per_reset,
             "total_test_resets": self.total_resets,
             "total_test_time_sec": self.total_time_sec,
+            "step_loop": self.step_loop.to_dict(),
             "thresholds": self.thresholds,
             "statuses": self.statuses,
             "scenario": self.scenario,
@@ -147,9 +172,73 @@ def measure_environment_creation(config: RobotSimulationConfig | None = None) ->
     return creation_time
 
 
+def measure_step_loop_performance(
+    step_samples: int = 10,
+    config: RobotSimulationConfig | None = None,
+) -> StepLoopMetrics:
+    """Measure first-step and steady step-loop attribution.
+
+    The result is advisory telemetry only. Existing smoke thresholds still gate
+    environment creation and reset throughput, while these fields help diagnose
+    whether future slowdowns are startup- or steady-step dominated.
+    """
+
+    if step_samples <= 0:
+        raise ValueError("step_samples must be greater than zero")
+
+    print("\n=== Step Loop Attribution ===")
+    env = make_robot_env(config=copy.deepcopy(config or RobotSimulationConfig()), debug=False)
+    action = (0.0, 0.0)
+    try:
+        env.reset()
+
+        loop_start = time.time()
+        first_step_start = time.time()
+        _, _, terminated, truncated, _ = env.step(action)
+        first_step_sec = time.time() - first_step_start
+
+        steady_start = time.time()
+        for index in range(1, step_samples):
+            if terminated or truncated:
+                env.reset()
+            _, _, terminated, truncated, _ = env.step(action)
+        steady_step_loop_sec = time.time() - steady_start
+        step_loop_sec = time.time() - loop_start
+    finally:
+        env.close()
+
+    steps_per_sec = step_samples / step_loop_sec if step_loop_sec > 0 else 0.0
+    steady_samples = max(0, step_samples - 1)
+    steady_steps_per_sec = (
+        steady_samples / steady_step_loop_sec
+        if steady_samples > 0 and steady_step_loop_sec > 0
+        else 0.0
+    )
+
+    print(f"Step samples: {step_samples}")
+    print(f"First step: {first_step_sec:.3f}s")
+    print(f"Total step loop: {step_loop_sec:.3f}s ({steps_per_sec:.2f} steps/sec)")
+    if steady_samples:
+        print(
+            f"Steady step loop: {steady_step_loop_sec:.3f}s ({steady_steps_per_sec:.2f} steps/sec)",
+        )
+    else:
+        print("Steady step loop: not available (single step sample)")
+
+    return StepLoopMetrics(
+        step_samples=step_samples,
+        first_step_sec=first_step_sec,
+        step_loop_sec=step_loop_sec,
+        steady_step_loop_sec=steady_step_loop_sec,
+        steps_per_sec=steps_per_sec,
+        steady_steps_per_sec=steady_steps_per_sec,
+    )
+
+
 def run_performance_smoke_test(  # noqa: PLR0913
     *,
     num_resets: int = 5,
+    step_samples: int = 10,
     scenario: str | None = None,
     include_recommendations: bool = True,
     creation_soft: float | None = None,
@@ -175,6 +264,9 @@ def run_performance_smoke_test(  # noqa: PLR0913
     Returns:
         SmokeTestResult containing metrics, status labels, and recommendations.
     """
+    if step_samples <= 0:
+        raise ValueError("step_samples must be greater than zero")
+
     creation_soft = (
         creation_soft
         if creation_soft is not None
@@ -198,6 +290,7 @@ def run_performance_smoke_test(  # noqa: PLR0913
     config, scenario_label = _load_scenario_config(scenario)
     creation_time = measure_environment_creation(config)
     perf_metrics = measure_environment_performance(num_resets, config=config)
+    step_loop = measure_step_loop_performance(step_samples, config=config)
     resets_per_sec = perf_metrics["resets_per_sec"]
 
     creation_soft_ok = creation_time <= creation_soft
@@ -249,6 +342,7 @@ def run_performance_smoke_test(  # noqa: PLR0913
         total_time_sec=perf_metrics["total_time"],
         thresholds=thresholds,
         statuses=statuses,
+        step_loop=step_loop,
         recommendations=recommendations,
         scenario=scenario_label or scenario,
         exit_code=exit_code,
@@ -268,6 +362,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=5,
         help="Number of environment resets to benchmark (default: 5)",
+    )
+    parser.add_argument(
+        "--step-samples",
+        type=int,
+        default=10,
+        help="Number of simulator steps for advisory startup/steady attribution (default: 10)",
     )
     parser.add_argument(
         "--json-output",
@@ -319,6 +419,7 @@ def main() -> int:
 
     result = run_performance_smoke_test(
         num_resets=args.num_resets,
+        step_samples=args.step_samples,
         scenario=args.scenario,
         include_recommendations=args.include_recommendations,
         creation_soft=creation_soft,
@@ -338,6 +439,14 @@ def main() -> int:
     print(
         "Reset throughput: "
         f"{result.statuses['reset']} ({result.resets_per_sec:.2f} resets/sec, {result.ms_per_reset:.2f} ms/reset)",
+    )
+    print(
+        "Step attribution: "
+        f"first={result.step_loop.first_step_sec:.3f}s, "
+        f"loop={result.step_loop.step_loop_sec:.3f}s "
+        f"({result.step_loop.steps_per_sec:.2f} steps/sec), "
+        f"steady={result.step_loop.steady_step_loop_sec:.3f}s "
+        f"({result.step_loop.steady_steps_per_sec:.2f} steady steps/sec)",
     )
 
     if result.recommendations:
@@ -477,6 +586,11 @@ def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
         "timestamp_ms": int(result.timestamp.timestamp() * 1000),
         "step_id": "performance_smoke_test",
         "steps_per_sec": result.resets_per_sec,
+        "first_step_sec": result.step_loop.first_step_sec,
+        "step_loop_sec": result.step_loop.step_loop_sec,
+        "steady_step_loop_sec": result.step_loop.steady_step_loop_sec,
+        "sim_steps_per_sec": result.step_loop.steps_per_sec,
+        "steady_sim_steps_per_sec": result.step_loop.steady_steps_per_sec,
         "notes": "perf-smoke-summary",
     }
     path.parent.mkdir(parents=True, exist_ok=True)

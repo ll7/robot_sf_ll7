@@ -1,11 +1,4 @@
 {
-  "active_followup_not_preserved_as_complete": {
-    "job_id": 12751,
-    "name": "gse-852-asym231",
-    "reason": "job was still in flight at preservation time; final evidence should be added after completion",
-    "state_at_last_check": "RUNNING",
-    "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/wu9vx2tq"
-  },
   "artifact_status": {
     "durable_external_pointer": "W&B run URLs per job; completed logs report successful W&B file/artifact sync",
     "local_output_is_durable": false,
@@ -13,8 +6,10 @@
     "tracked_compact_evidence": "docs/context/evidence/issue_852_queue_fill_batch_2026-06-06"
   },
   "base_commit": "5faaa318d609f87730757d7fbda65b799178b5c5",
-  "branch": "gse-queue-fill-20260605",
-  "commit": "5faaa318d609f87730757d7fbda65b799178b5c5",
+  "branches": [
+    "gse-queue-fill-20260605",
+    "gse-queue-fill-20260606"
+  ],
   "created_at": "2026-06-06",
   "evidence_claim": "completed diagnostic training evidence for issue-852 queue-fill single-factor runs",
   "issue": 852,
@@ -51,12 +46,12 @@
           "comfort_exposure": 0.0034,
           "eval_avg_step_reward": 0.5441,
           "eval_episode_return": 23.1802,
+          "path_efficiency": 0.8258,
+          "snqi": 0.2632,
+          "success_rate": 0.9143,
           "eval_step": 6815744,
           "meets_convergence": false,
-          "path_efficiency": 0.8258,
-          "selection_metric": "success_rate",
-          "snqi": 0.2632,
-          "success_rate": 0.9143
+          "selection_metric": "success_rate"
         },
         "final_checkpoint": {
           "collision_rate": 0.1429,
@@ -71,6 +66,7 @@
         "run_summary": {
           "mean_collision_rate": 0.1993,
           "mean_success_rate": 0.7986,
+          "mean_snqi": -0.1587,
           "total_timesteps_executed": 10000000,
           "wall_clock_hours": 16.331
         }
@@ -85,7 +81,70 @@
         "run_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12750/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118.json",
         "slurm_log": "ignored-slurm-artifacts/12750-issue791-reward-curriculum.out"
       },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260605",
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/8sq89hfw"
+    },
+    {
+      "arm": "asymmetric_critic_only",
+      "config": "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_10m_env22_seed231.yaml",
+      "horizon": "10M",
+      "job": {
+        "elapsed": "1-03:54:54",
+        "end": "2026-06-06T11:45:37",
+        "exit_code": "0:0",
+        "id": 12751,
+        "name": "gse-852-asym231",
+        "node": "auxme-imech254",
+        "partition": "a30",
+        "qos": "a30-gpu",
+        "start": "2026-06-05T07:50:43",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_asymmetric_critic.sl",
+      "local_output_root": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12751",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.1143,
+          "comfort_exposure": 0.0185,
+          "eval_avg_step_reward": 0.5324,
+          "eval_episode_return": 22.95,
+          "path_efficiency": 0.8273,
+          "snqi": 0.1497,
+          "success_rate": 0.8857,
+          "eval_step": 6291456,
+          "meets_convergence": false,
+          "selection_metric": "success_rate"
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.1286,
+          "comfort_exposure": 0.0254,
+          "eval_avg_step_reward": 0.5309,
+          "eval_episode_return": 22.3197,
+          "eval_step": 10000000,
+          "path_efficiency": 0.8289,
+          "snqi": 0.0404,
+          "success_rate": 0.8714
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.2421,
+          "mean_success_rate": 0.7571,
+          "mean_snqi": -0.2951,
+          "total_timesteps_executed": 10000000,
+          "wall_clock_hours": 27.9
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed231",
+      "run_id": "ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed231_20260605T055121",
+      "seed": 231,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12751/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed231/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed231_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12751/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed231_20260605T055121.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12751/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed231.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12751/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed231_20260605T055121.json",
+        "slurm_log": "ignored-slurm-artifacts/12751-issue791-asymmetric-critic.out"
+      },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260605",
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/wu9vx2tq"
     },
     {
       "arm": "reward_curriculum_only",
@@ -111,12 +170,12 @@
           "comfort_exposure": 0.0593,
           "eval_avg_step_reward": 0.2077,
           "eval_episode_return": 7.0729,
+          "path_efficiency": 0.8361,
+          "snqi": -0.8894,
+          "success_rate": 0.5714,
           "eval_step": 1000000,
           "meets_convergence": false,
-          "path_efficiency": 0.8361,
-          "selection_metric": "success_rate",
-          "snqi": -0.8894,
-          "success_rate": 0.5714
+          "selection_metric": "success_rate"
         },
         "final_checkpoint": {
           "collision_rate": 0.4143,
@@ -131,6 +190,7 @@
         "run_summary": {
           "mean_collision_rate": 0.5786,
           "mean_success_rate": 0.4,
+          "mean_snqi": -1.558,
           "total_timesteps_executed": 1000000,
           "wall_clock_hours": 1.8173
         }
@@ -145,6 +205,7 @@
         "run_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12752/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139.json",
         "slurm_log": "ignored-slurm-artifacts/12752-issue791-reward-curriculum.out"
       },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260605",
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/13oeq9wv"
     },
     {
@@ -171,12 +232,12 @@
           "comfort_exposure": 0.0346,
           "eval_avg_step_reward": 0.1936,
           "eval_episode_return": 19.7147,
+          "path_efficiency": 0.8405,
+          "snqi": -0.0534,
+          "success_rate": 0.8429,
           "eval_step": 6291456,
           "meets_convergence": false,
-          "path_efficiency": 0.8405,
-          "selection_metric": "success_rate",
-          "snqi": -0.0534,
-          "success_rate": 0.8429
+          "selection_metric": "success_rate"
         },
         "final_checkpoint": {
           "collision_rate": 0.1571,
@@ -191,6 +252,7 @@
         "run_summary": {
           "mean_collision_rate": 0.2357,
           "mean_success_rate": 0.7621,
+          "mean_snqi": -0.3099,
           "total_timesteps_executed": 10000000,
           "wall_clock_hours": 8.0098
         }
@@ -205,6 +267,7 @@
         "run_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12753/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106.json",
         "slurm_log": "ignored-slurm-artifacts/12753-issue791-reward-curriculum.out"
       },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260605",
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/qex6vida"
     },
     {
@@ -231,12 +294,12 @@
           "comfort_exposure": 0.0205,
           "eval_avg_step_reward": 0.1944,
           "eval_episode_return": 20.8994,
+          "path_efficiency": 0.8399,
+          "snqi": -0.0397,
+          "success_rate": 0.8429,
           "eval_step": 7864320,
           "meets_convergence": false,
-          "path_efficiency": 0.8399,
-          "selection_metric": "success_rate",
-          "snqi": -0.0397,
-          "success_rate": 0.8429
+          "selection_metric": "success_rate"
         },
         "final_checkpoint": {
           "collision_rate": 0.1571,
@@ -251,6 +314,7 @@
         "run_summary": {
           "mean_collision_rate": 0.2621,
           "mean_success_rate": 0.735,
+          "mean_snqi": -0.3812,
           "total_timesteps_executed": 10000000,
           "wall_clock_hours": 9.1714
         }
@@ -265,6 +329,7 @@
         "run_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12754/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542.json",
         "slurm_log": "ignored-slurm-artifacts/12754-issue791-asymmetric-critic.out"
       },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260605",
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/s4bdmdlc"
     },
     {
@@ -291,12 +356,12 @@
           "comfort_exposure": 0.0365,
           "eval_avg_step_reward": -0.2416,
           "eval_episode_return": 4.1666,
+          "path_efficiency": 0.8424,
+          "snqi": -1.06,
+          "success_rate": 0.5143,
           "eval_step": 917504,
           "meets_convergence": false,
-          "path_efficiency": 0.8424,
-          "selection_metric": "success_rate",
-          "snqi": -1.06,
-          "success_rate": 0.5143
+          "selection_metric": "success_rate"
         },
         "final_checkpoint": {
           "collision_rate": 0.4857,
@@ -311,6 +376,7 @@
         "run_summary": {
           "mean_collision_rate": 0.6607,
           "mean_success_rate": 0.3089,
+          "mean_snqi": -1.7592,
           "total_timesteps_executed": 1000000,
           "wall_clock_hours": 1.0326
         }
@@ -325,14 +391,322 @@
         "run_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12755/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201.json",
         "slurm_log": "ignored-slurm-artifacts/12755-issue791-asymmetric-critic.out"
       },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260605",
       "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/7fg4zth4"
+    },
+    {
+      "arm": "attention_only",
+      "config": "configs/training/ppo/ablations/single_factor/attention_only_1m_env22_seed123.yaml",
+      "horizon": "1M",
+      "job": {
+        "elapsed": "01:52:04",
+        "end": "2026-06-06T09:07:00",
+        "exit_code": "0:0",
+        "id": 12756,
+        "name": "gse-852-attn1m123",
+        "node": "auxme-imech172",
+        "partition": "a30",
+        "qos": "a30-gpu",
+        "start": "2026-06-06T07:14:56",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_attention_head.sl",
+      "local_output_root": "ignored-slurm-artifacts/issue791-attention-head-job-12756",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.4143,
+          "comfort_exposure": 0.0561,
+          "eval_avg_step_reward": 0.3726,
+          "eval_episode_return": 10.0166,
+          "path_efficiency": 0.8521,
+          "snqi": -0.9064,
+          "success_rate": 0.6,
+          "eval_step": 917504,
+          "meets_convergence": false,
+          "selection_metric": "success_rate"
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.3857,
+          "comfort_exposure": 0.0518,
+          "eval_avg_step_reward": 0.3893,
+          "eval_episode_return": 8.5354,
+          "eval_step": 1000000,
+          "path_efficiency": 0.8299,
+          "snqi": -0.8863,
+          "success_rate": 0.6
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.5732,
+          "mean_success_rate": 0.4179,
+          "mean_snqi": -1.4638,
+          "total_timesteps_executed": 1000000,
+          "wall_clock_hours": 1.8568
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_attention_only_1m_env22_seed123",
+      "run_id": "ppo_expert_issue_852_attention_only_1m_env22_seed123_20260606T051531",
+      "seed": 123,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-attention-head-job-12756/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_attention_only_1m_env22_seed123/ppo_expert_issue_852_attention_only_1m_env22_seed123_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-attention-head-job-12756/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_attention_only_1m_env22_seed123_20260606T051531.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-attention-head-job-12756/benchmarks/expert_policies/ppo_expert_issue_852_attention_only_1m_env22_seed123.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-attention-head-job-12756/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_attention_only_1m_env22_seed123_20260606T051531.json",
+        "slurm_log": "ignored-slurm-artifacts/12756-issue791-attention-head.out"
+      },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260606",
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/0j8g37cp"
+    },
+    {
+      "arm": "reward_curriculum_only",
+      "config": "configs/training/ppo/ablations/single_factor/reward_curriculum_only_1m_env22_seed1337.yaml",
+      "horizon": "1M",
+      "job": {
+        "elapsed": "01:45:50",
+        "end": "2026-06-06T10:52:50",
+        "exit_code": "0:0",
+        "id": 12757,
+        "name": "gse-852-rwd1m1337",
+        "node": "auxme-imech172",
+        "partition": "a30",
+        "qos": "a30-gpu",
+        "start": "2026-06-06T09:07:00",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_reward_curriculum.sl",
+      "local_output_root": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12757",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.3714,
+          "comfort_exposure": 0.0161,
+          "eval_avg_step_reward": -0.027,
+          "eval_episode_return": 9.7566,
+          "path_efficiency": 0.8517,
+          "snqi": -0.6352,
+          "success_rate": 0.6286,
+          "eval_step": 1000000,
+          "meets_convergence": false,
+          "selection_metric": "success_rate"
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.3714,
+          "comfort_exposure": 0.0161,
+          "eval_avg_step_reward": -0.027,
+          "eval_episode_return": 9.7566,
+          "eval_step": 1000000,
+          "path_efficiency": 0.8517,
+          "snqi": -0.6352,
+          "success_rate": 0.6286
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.5804,
+          "mean_success_rate": 0.4161,
+          "mean_snqi": -1.4991,
+          "total_timesteps_executed": 1000000,
+          "wall_clock_hours": 1.7573
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed1337",
+      "run_id": "ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed1337_20260606T070720",
+      "seed": 1337,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12757/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed1337/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed1337_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12757/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed1337_20260606T070720.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12757/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed1337.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-reward-curriculum-job-12757/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed1337_20260606T070720.json",
+        "slurm_log": "ignored-slurm-artifacts/12757-issue791-reward-curriculum.out"
+      },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260606",
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/5ayonzkc"
+    },
+    {
+      "arm": "attention_only",
+      "config": "configs/training/ppo/ablations/single_factor/attention_only_1m_env22_seed231.yaml",
+      "horizon": "1M",
+      "job": {
+        "elapsed": "00:57:37",
+        "end": "2026-06-06T08:12:36",
+        "exit_code": "0:0",
+        "id": 12758,
+        "name": "gse-852-attn1m231",
+        "node": "auxme-imech091",
+        "partition": "l40s",
+        "qos": "l40s-gpu",
+        "start": "2026-06-06T07:14:59",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_attention_head.sl",
+      "local_output_root": "ignored-slurm-artifacts/issue791-attention-head-job-12758",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.3429,
+          "comfort_exposure": 0.0334,
+          "eval_avg_step_reward": 0.2795,
+          "eval_episode_return": 8.3002,
+          "path_efficiency": 0.8113,
+          "snqi": -0.6748,
+          "success_rate": 0.6286,
+          "eval_step": 917504,
+          "meets_convergence": false,
+          "selection_metric": "success_rate"
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.4143,
+          "comfort_exposure": 0.0143,
+          "eval_avg_step_reward": 0.268,
+          "eval_episode_return": 6.8709,
+          "eval_step": 1000000,
+          "path_efficiency": 0.8207,
+          "snqi": -0.822,
+          "success_rate": 0.5857
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.5339,
+          "mean_success_rate": 0.4482,
+          "mean_snqi": -1.3503,
+          "total_timesteps_executed": 1000000,
+          "wall_clock_hours": 0.953
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_attention_only_1m_env22_seed231",
+      "run_id": "ppo_expert_issue_852_attention_only_1m_env22_seed231_20260606T051521",
+      "seed": 231,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-attention-head-job-12758/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_attention_only_1m_env22_seed231/ppo_expert_issue_852_attention_only_1m_env22_seed231_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-attention-head-job-12758/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_attention_only_1m_env22_seed231_20260606T051521.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-attention-head-job-12758/benchmarks/expert_policies/ppo_expert_issue_852_attention_only_1m_env22_seed231.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-attention-head-job-12758/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_attention_only_1m_env22_seed231_20260606T051521.json",
+        "slurm_log": "ignored-slurm-artifacts/12758-issue791-attention-head.out"
+      },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260606",
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/48f6p3iz"
+    },
+    {
+      "arm": "asymmetric_critic_only",
+      "config": "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_1m_env22_seed123.yaml",
+      "horizon": "1M",
+      "job": {
+        "elapsed": "01:00:41",
+        "end": "2026-06-06T08:15:40",
+        "exit_code": "0:0",
+        "id": 12759,
+        "name": "gse-852-asym1m123",
+        "node": "auxme-imech093",
+        "partition": "l40s",
+        "qos": "l40s-gpu",
+        "start": "2026-06-06T07:14:59",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_asymmetric_critic.sl",
+      "local_output_root": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12759",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.5143,
+          "comfort_exposure": 0.023,
+          "eval_avg_step_reward": 0.2353,
+          "eval_episode_return": 5.5557,
+          "path_efficiency": 0.8623,
+          "snqi": -1.1102,
+          "success_rate": 0.4857,
+          "eval_step": 917504,
+          "meets_convergence": false,
+          "selection_metric": "success_rate"
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.5143,
+          "comfort_exposure": 0.0328,
+          "eval_avg_step_reward": 0.2319,
+          "eval_episode_return": 5.3966,
+          "eval_step": 1000000,
+          "path_efficiency": 0.8607,
+          "snqi": -1.1593,
+          "success_rate": 0.4857
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.6911,
+          "mean_success_rate": 0.2857,
+          "mean_snqi": -1.742,
+          "total_timesteps_executed": 1000000,
+          "wall_clock_hours": 1.0035
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed123",
+      "run_id": "ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed123_20260606T051520",
+      "seed": 123,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12759/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed123/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed123_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12759/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed123_20260606T051520.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12759/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed123.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12759/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed123_20260606T051520.json",
+        "slurm_log": "ignored-slurm-artifacts/12759-issue791-asymmetric-critic.out"
+      },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260606",
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/11sl5b9d"
+    },
+    {
+      "arm": "asymmetric_critic_only",
+      "config": "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_1m_env22_seed231.yaml",
+      "horizon": "1M",
+      "job": {
+        "elapsed": "01:03:16",
+        "end": "2026-06-06T09:15:52",
+        "exit_code": "0:0",
+        "id": 12760,
+        "name": "gse-852-asym1m231",
+        "node": "auxme-imech091",
+        "partition": "l40s",
+        "qos": "l40s-gpu",
+        "start": "2026-06-06T08:12:36",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_asymmetric_critic.sl",
+      "local_output_root": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12760",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.5857,
+          "comfort_exposure": 0.0206,
+          "eval_avg_step_reward": 0.0155,
+          "eval_episode_return": -1.0037,
+          "path_efficiency": 0.8323,
+          "snqi": -1.3159,
+          "success_rate": 0.4286,
+          "eval_step": 917504,
+          "meets_convergence": false,
+          "selection_metric": "success_rate"
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.6,
+          "comfort_exposure": 0.0342,
+          "eval_avg_step_reward": -0.0025,
+          "eval_episode_return": -3.089,
+          "eval_step": 1000000,
+          "path_efficiency": 0.8096,
+          "snqi": -1.3946,
+          "success_rate": 0.4
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.6821,
+          "mean_success_rate": 0.2875,
+          "mean_snqi": -1.7222,
+          "total_timesteps_executed": 1000000,
+          "wall_clock_hours": 1.049
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed231",
+      "run_id": "ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed231_20260606T061249",
+      "seed": 231,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12760/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed231/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed231_best.summary.json",
+        "eval_timeline_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12760/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed231_20260606T061249.json",
+        "policy_zip": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12760/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed231.zip",
+        "run_summary_json": "ignored-slurm-artifacts/issue791-asymmetric-critic-job-12760/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed231_20260606T061249.json",
+        "slurm_log": "ignored-slurm-artifacts/12760-issue791-asymmetric-critic.out"
+      },
+      "source_worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260606",
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/0dqg97wy"
     }
   ],
-  "status": "tracked_compact_evidence_with_wandb_pointers",
-  "warnings": [
-    "Local output paths are ignored and worktree-local; use W&B pointers or SHA256SUMS rather than assuming output/ exists elsewhere.",
-    "Known map/route warnings occurred in logs: uni_campus_big.svg obstacle_13 self-intersection and some generated straight-line routes.",
-    "The 1M filler jobs are low-budget diagnostics and should not be compared as converged 10M policy candidates."
-  ],
-  "worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260605"
+  "source_worktrees": [
+    "../robot_sf_ll7.worktrees/gse-queue-fill-20260605",
+    "../robot_sf_ll7.worktrees/gse-queue-fill-20260606"
+  ]
 }

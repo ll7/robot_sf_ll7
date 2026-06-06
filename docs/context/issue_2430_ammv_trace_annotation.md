@@ -1,4 +1,4 @@
-# Issue #2430 AMMV Trace Annotation Decision
+# Issue #2430 AMMV Trace Annotation Decision (2026-06-06)
 
 Date: 2026-06-06
 

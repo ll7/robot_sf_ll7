@@ -1,0 +1,5 @@
+decision_output,classification,evidence_summary
+feasibility_improved_but_route_blocked,accepted,"Command feasibility improved while both candidates remained timeout_low_progress about 3.6 m from the goal."
+feasibility_improved_but_speed_too_low,not_selected_primary,"Mean average speed changed by only +0.0047 m/s and late progress was slightly higher for the actuation-aware row; late-episode speed-cap binding is not separately instrumented."
+scoring_too_conservative,not_selected_primary,"Lower requested/applied speeds did not create a success-relevant progress loss in the tracked trace, but scoring conservativeness is not directly instrumented."
+unrelated_navigation_deadlock,not_instrumented,"No deadlock or oscillation detector is present in the tracked trace."

@@ -1,0 +1,76 @@
+{
+  "schema_version": "robot-sf-amv-timeout-decomposition-decision.v1",
+  "issue": 2404,
+  "generated_at": "2026-06-06T09:45:00+00:00",
+  "claim_boundary": "analysis-only synthesis of the Issue #2308 AMV timeout trace rerun; not benchmark-strength, calibrated AMV, hardware, safety, planner-ranking, or paper-facing evidence",
+  "source_diagnostic": {
+    "issue": 2308,
+    "summary_path": "docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json",
+    "diagnostic_status": "diagnostic_complete",
+    "stage": "amv_actuation_smoke",
+    "scenario": "classic_cross_trap_high",
+    "seed": 101,
+    "horizon": 80,
+    "baseline_candidate": "hybrid_rule_v3_fast_progress",
+    "intervention_candidate": "actuation_aware_hybrid_rule_v0",
+    "synthetic_actuation_profile": "amv-actuation-stress-v0"
+  },
+  "related_issues_checked": [
+    2259,
+    2268,
+    2308
+  ],
+  "rerun_decision": {
+    "additional_rerun_performed": false,
+    "reason": "Issue #2308 already reran the same matched AMV actuation-smoke row after Issue #2268 identified missing per-step timeout traces and promoted the requested decomposition field block."
+  },
+  "decision_output": "feasibility_improved_but_route_blocked",
+  "decision_rationale": {
+    "feasibility_improved_but_route_blocked": "accepted: command clipping fell from 22 to 15 steps and early clip fraction from 0.75 to 0.40, but both rows stayed timeout_low_progress about 3.6 m from the goal",
+    "feasibility_improved_but_speed_too_low": "not selected as primary: mean average speed changed by only +0.0047 m/s and late progress was slightly higher for actuation-aware, but late-episode speed-cap binding is not separately instrumented",
+    "scoring_too_conservative": "not selected as primary: lower requested/applied speeds did not create a success-relevant progress loss in the tracked trace, but scoring conservativeness is not directly instrumented",
+    "unrelated_navigation_deadlock": "not instrumented: the tracked fields point to route/task progress remaining insufficient, but no deadlock/oscillation detector is present"
+  },
+  "amv_timeout_decomposition": {
+    "progress_over_time": "Both candidates made similar positive route progress but remained about 3.6 m from the goal at horizon.",
+    "clipping_over_time": "Actuation-aware scoring reduced early-window clipping from 0.75 to 0.40 and total clip steps from 22 to 15.",
+    "saturation_over_time": "Yaw-rate saturation stayed zero for both candidates across all windows.",
+    "command_speed_profile": "Actuation-aware scoring requested and applied lower linear speeds on average, but terminal progress was effectively unchanged.",
+    "route_progress_blocked": true,
+    "speed_cap_binding": "partially_instrumented_not_primary",
+    "scoring_too_conservative": "partially_instrumented_not_primary",
+    "unrelated_deadlock": "not_instrumented"
+  },
+  "matched_row_summary": {
+    "baseline": {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "success": false,
+      "failure_mode": "timeout_low_progress",
+      "command_clip_steps": 22,
+      "yaw_rate_saturation_steps": 0,
+      "mean_avg_speed_m_s": 1.662309936770821,
+      "final_route_progress_m": 12.904024665994093,
+      "final_distance_to_goal_m": 3.6078725186171776
+    },
+    "actuation_aware": {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "success": false,
+      "failure_mode": "timeout_low_progress",
+      "command_clip_steps": 15,
+      "yaw_rate_saturation_steps": 0,
+      "mean_avg_speed_m_s": 1.667037499328765,
+      "final_route_progress_m": 12.87191147075262,
+      "final_distance_to_goal_m": 3.639985713858651
+    },
+    "delta_actuation_aware_minus_baseline": {
+      "command_clip_fraction": -0.0875,
+      "command_clip_steps": -7,
+      "yaw_rate_saturation_fraction": 0.0,
+      "mean_avg_speed_m_s": 0.004727562557943961,
+      "final_route_progress_m": -0.032113195241472634,
+      "final_distance_to_goal_m": 0.03211319524147352,
+      "last_10_step_progress_delta_m": 0.12100258841798176
+    }
+  },
+  "next_research_direction": "Keep actuation-aware scoring diagnostic-only and investigate route-progress geometry or horizon/task completion blockers before adding another AMV actuation scorer."
+}

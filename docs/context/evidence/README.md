@@ -71,6 +71,9 @@ boundary before merging an evidence-producing PR.
   success and keeping calibrated AMV actuation blocked.
 - `issue_2308_amv_timeout_trace_2026-06-05/`: compact trace-level AMV timeout analysis showing
   reduced clipping did not change the route/task progress blocker on the matched smoke row.
+- `issue_2404_amv_timeout_decomposition_2026-06-06/`: compact analysis-only synthesis mapping the
+  Issue #2308 AMV timeout trace rerun onto the Issue #2404 requested decomposition fields and
+  decision-output vocabulary.
 - `issue_2313_local_baseline_quarantine_2026-06-05/`: compact metadata-only planner summary
   showing the seven absent local-only baseline rows are explicitly unavailable.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100

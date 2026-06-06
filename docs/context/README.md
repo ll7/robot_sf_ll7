@@ -294,6 +294,9 @@ knowledge, not every transient iteration detail.
 * Issue #2308 AMV Timeout Trace Analysis 2026-06-05:
 
   [issue_2308_amv_timeout_trace_analysis.md](issue_2308_amv_timeout_trace_analysis.md)
+* Issue #2404 AMV timeout decomposition decision:
+
+  [issue_2404_amv_timeout_decomposition_decision.md](issue_2404_amv_timeout_decomposition_decision.md)
 * Issue #2259 AMV Clipping Versus Success Boundary:
 
   [issue_2259_amv_clipping_success_boundary.md](issue_2259_amv_clipping_success_boundary.md)

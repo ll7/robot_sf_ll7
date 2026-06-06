@@ -137,6 +137,10 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/mechanism_closure_status.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2231_mechanism_aware_ranking.md
     status: current
     freshness: maintained
@@ -310,6 +314,10 @@ entries:
     freshness: evidence
     area: learned_policy
   - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_852_queue_fill_batch_2026-06-06/summary.json
     status: evidence
     freshness: evidence
     area: learned_policy

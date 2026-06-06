@@ -224,7 +224,7 @@ class TestImageSensorFusion:
             assert obs[OBS_IMAGE].shape == (64, 64, 3)
 
     def test_reset_cache_with_image_enabled(self, mock_sensors, mock_obs_space):
-        """Test cache reset functionality with image observations."""
+        """Reset clears stacks; next_obs refills history stacks from current observation."""
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -237,24 +237,25 @@ class TestImageSensorFusion:
             use_image_obs=True,
         )
 
-        # Get an observation to populate caches
+        # Get an observation to populate stacks
         _ = fusion.next_obs()
-
-        # Verify caches have data
-        assert len(fusion.drive_state_cache) > 0
-        assert len(fusion.lidar_state_cache) > 0
-        assert len(fusion.image_state_cache) > 0
+        assert not np.allclose(fusion.stacked_drive_state, 0.0)
+        assert not np.allclose(fusion.stacked_lidar_state, 0.0)
 
         # Reset cache
         fusion.reset_cache()
+        assert np.allclose(fusion.stacked_drive_state, 0.0)
+        assert np.allclose(fusion.stacked_lidar_state, 0.0)
 
-        # Verify caches are empty
-        assert len(fusion.drive_state_cache) == 0
-        assert len(fusion.lidar_state_cache) == 0
-        assert len(fusion.image_state_cache) == 0
+        # Next next_obs refills history stacks (fill_history_stack semantics)
+        obs = fusion.next_obs()
+        assert obs[OBS_DRIVE_STATE].shape == (3, 5)
+        assert obs[OBS_RAYS].shape == (3, 5)
+        assert OBS_IMAGE in obs
+        assert obs[OBS_IMAGE].shape == (64, 64, 3)
 
     def test_reset_cache_with_image_disabled(self, mock_sensors, mock_obs_space):
-        """Test cache reset functionality with image observations disabled."""
+        """Reset clears stacks; next_obs refills history stacks without image."""
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -267,15 +268,21 @@ class TestImageSensorFusion:
             use_image_obs=False,
         )
 
-        # Get an observation to populate caches
+        # Get an observation to populate stacks
         _ = fusion.next_obs()
+        assert not np.allclose(fusion.stacked_drive_state, 0.0)
+        assert not np.allclose(fusion.stacked_lidar_state, 0.0)
 
-        # Reset cache should work even without image cache
+        # Reset cache
         fusion.reset_cache()
+        assert np.allclose(fusion.stacked_drive_state, 0.0)
+        assert np.allclose(fusion.stacked_lidar_state, 0.0)
 
-        # Verify basic caches are empty
-        assert len(fusion.drive_state_cache) == 0
-        assert len(fusion.lidar_state_cache) == 0
+        # Next next_obs refills history stacks
+        obs = fusion.next_obs()
+        assert obs[OBS_DRIVE_STATE].shape == (3, 5)
+        assert obs[OBS_RAYS].shape == (3, 5)
+        assert OBS_IMAGE not in obs
 
     def test_normalization_consistency(self, mock_sensors, mock_obs_space):
         """Test that observations are properly normalized."""

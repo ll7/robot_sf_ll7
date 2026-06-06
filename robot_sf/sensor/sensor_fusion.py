@@ -3,7 +3,6 @@ The `sensor_fusion.py` file defines a `SensorFusion` class that combines data fr
 It also provides a function `fused_sensor_space` to create a combined observation space.
 """
 
-from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -155,12 +154,6 @@ class SensorFusion:
     unnormed_obs_space : spaces.Dict
         The unnormalized observation space.
     use_next_goal : bool
-        Whether to use the next goal in the observation.
-    drive_state_cache : deque[None]
-        Warm-history markers for drive state. Concrete temporal values are stored
-        in ``stacked_drive_state``.
-    lidar_state_cache : List[np.ndarray]
-        A cache of previous LiDAR states.
     cache_steps : int
         The number of steps to cache.
     """
@@ -170,8 +163,7 @@ class SensorFusion:
     target_sensor: Callable[[], tuple[float, float, float]]
     unnormed_obs_space: spaces.Dict
     use_next_goal: bool
-    drive_state_cache: deque[None] = field(init=False, default_factory=deque)
-    lidar_state_cache: list[np.ndarray] = field(init=False, default_factory=list)
+    _initialized: bool = field(init=False, default=False)
     cache_steps: int = field(init=False)
 
     def __post_init__(self):
@@ -188,8 +180,7 @@ class SensorFusion:
             (self.cache_steps, len(self.lidar_sensor())),
             dtype=np.float32,
         )
-        self.drive_state_cache = deque(maxlen=self.cache_steps)
-        self.lidar_state_cache = deque(maxlen=self.cache_steps)
+        self._initialized = False
 
     def next_obs(self) -> dict[str, np.ndarray]:
         """
@@ -219,16 +210,12 @@ class SensorFusion:
         drive_state[:] = (speed_x, speed_rot, target_distance, target_angle, next_target_angle)
 
         # Populate history with the current state on first call to avoid zeros.
-        if len(self.drive_state_cache) == 0:
-            for _ in range(self.cache_steps):
-                self.drive_state_cache.append(None)
-                self.lidar_state_cache.append(lidar_state)
+        if not self._initialized:
+            self._initialized = True
             self.stacked_drive_state = fill_history_stack(self.stacked_drive_state, drive_state)
             self.stacked_lidar_state = fill_history_stack(self.stacked_lidar_state, lidar_state)
         else:
             # Add current states as the newest row so temporal stacks are oldest-to-newest.
-            self.drive_state_cache.append(None)
-            self.lidar_state_cache.append(lidar_state)
             self.stacked_drive_state = append_history_row(self.stacked_drive_state, drive_state)
             self.stacked_lidar_state = append_history_row(self.stacked_lidar_state, lidar_state)
 
@@ -244,7 +231,6 @@ class SensorFusion:
         """
         Clear the caches of previous drive and LiDAR states.
         """
-        self.drive_state_cache.clear()
-        self.lidar_state_cache.clear()
+        self._initialized = False
         self.stacked_drive_state = reset_history_stack(self.stacked_drive_state)
         self.stacked_lidar_state = reset_history_stack(self.stacked_lidar_state)

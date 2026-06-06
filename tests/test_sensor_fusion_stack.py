@@ -192,7 +192,7 @@ def test_image_sensor_fusion_history_is_oldest_to_newest() -> None:
 
 
 def test_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
-    """Reset should clear both cache metadata and concrete temporal stack arrays."""
+    """Reset should zero the stacks; next next_obs refills history from current observation."""
     robot_obs = spaces.Box(low=-10.0, high=10.0, shape=(2,), dtype=np.float32)
     target_obs = spaces.Box(low=-10.0, high=10.0, shape=(3,), dtype=np.float32)
     lidar_obs = spaces.Box(low=0.0, high=10.0, shape=(2,), dtype=np.float32)
@@ -208,14 +208,25 @@ def test_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
     fusion.next_obs()
     fusion.reset_cache()
 
-    assert len(fusion.drive_state_cache) == 0
-    assert len(fusion.lidar_state_cache) == 0
+    # After reset, stacks are zeroed
     assert np.allclose(fusion.stacked_drive_state, 0.0)
     assert np.allclose(fusion.stacked_lidar_state, 0.0)
 
+    # Next next_obs refills history from current observation (fill_history_stack semantics)
+    obs = fusion.next_obs()
+    assert np.allclose(obs[OBS_RAYS], [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]])
+    assert np.allclose(
+        obs[OBS_DRIVE_STATE],
+        [
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+        ],
+    )
+
 
 def test_image_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
-    """ImageSensorFusion reset should use the same temporal stack reset semantics."""
+    """ImageSensorFusion reset zeros stacks; next next_obs refills history."""
     robot_obs = spaces.Box(low=-10.0, high=10.0, shape=(2,), dtype=np.float32)
     target_obs = spaces.Box(low=-10.0, high=10.0, shape=(3,), dtype=np.float32)
     lidar_obs = spaces.Box(low=0.0, high=10.0, shape=(2,), dtype=np.float32)
@@ -233,7 +244,18 @@ def test_image_sensor_fusion_reset_cache_clears_temporal_stacks() -> None:
     fusion.next_obs()
     fusion.reset_cache()
 
-    assert len(fusion.drive_state_cache) == 0
-    assert len(fusion.lidar_state_cache) == 0
+    # After reset, stacks are zeroed
     assert np.allclose(fusion.stacked_drive_state, 0.0)
     assert np.allclose(fusion.stacked_lidar_state, 0.0)
+
+    # Next next_obs refills history from current observation (fill_history_stack semantics)
+    obs = fusion.next_obs()
+    assert np.allclose(obs[OBS_RAYS], [[0.1, 0.1], [0.1, 0.1], [0.1, 0.1]])
+    assert np.allclose(
+        obs[OBS_DRIVE_STATE],
+        [
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+            [0.2, 0.0, 0.3, 0.0, 0.0],
+        ],
+    )

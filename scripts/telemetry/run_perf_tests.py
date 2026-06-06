@@ -34,6 +34,7 @@ def run_perf_tests(
     scenario: str | None,
     output_hint: str | None,
     num_resets: int,
+    step_samples: int = 10,
     artifact_root: Path | None = None,
 ) -> tuple[int, Path | None]:
     """Execute the smoke test and record tracker artifacts.
@@ -57,6 +58,7 @@ def run_perf_tests(
     started_at = datetime.now(UTC)
     result = performance_smoke_test.run_performance_smoke_test(
         num_resets=num_resets,
+        step_samples=step_samples,
         scenario=scenario,
         include_recommendations=True,
     )
@@ -75,6 +77,7 @@ def run_perf_tests(
         summary_path,
         scenario_label,
         num_resets,
+        step_samples,
         recommendation_count,
     )
 
@@ -139,6 +142,7 @@ def _build_manifest_summary(
     summary_path: Path,
     scenario: str | None,
     num_resets: int,
+    step_samples: int,
     recommendation_count: int,
 ) -> dict[str, Any]:
     """TODO docstring. Document this function.
@@ -156,9 +160,14 @@ def _build_manifest_summary(
     summary: dict[str, Any] = {
         "scenario": scenario or "default",
         "num_resets": num_resets,
+        "step_samples": step_samples,
         "creation_seconds": round(result.creation_seconds, 3),
         "resets_per_sec": round(result.resets_per_sec, 3),
         "ms_per_reset": round(result.ms_per_reset, 3),
+        "first_step_sec": round(result.step_loop.first_step_sec, 3),
+        "step_loop_sec": round(result.step_loop.step_loop_sec, 3),
+        "steps_per_sec": round(result.step_loop.steps_per_sec, 3),
+        "steady_steps_per_sec": round(result.step_loop.steady_steps_per_sec, 3),
         "total_time_sec": round(result.total_time_sec, 3),
         "status": result.statuses.get("overall", "unknown"),
         "thresholds": result.thresholds,
@@ -247,6 +256,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Number of environment resets to benchmark (default: 5)",
     )
     parser.add_argument(
+        "--step-samples",
+        type=int,
+        default=10,
+        help="Number of simulator steps for advisory startup/steady attribution",
+    )
+    parser.add_argument(
         "--artifact-root",
         type=Path,
         help="Override the artifact root (defaults to output/)",
@@ -269,6 +284,7 @@ def main(argv: list[str] | None = None) -> int:
             scenario=args.scenario,
             output_hint=args.output,
             num_resets=args.num_resets,
+            step_samples=args.step_samples,
             artifact_root=args.artifact_root,
         )
     except RuntimeError as exc:

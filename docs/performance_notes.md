@@ -51,12 +51,21 @@ Location: `scripts/validation/performance_smoke_test.py`
 - Environment creation < 3.0s (allows headroom)
 - Reset performance > 0.5 resets/sec (minimum acceptable)
 - Consistent performance across multiple runs
+- Advisory startup/steady attribution fields:
+  - `step_loop.first_step_sec`
+  - `step_loop.step_loop_sec`
+  - `step_loop.steady_step_loop_sec`
+  - `step_loop.steps_per_sec`
+  - `step_loop.steady_steps_per_sec`
+
+The step-loop fields help classify local slowdowns but do not add hard smoke-test gates by
+default. Use `--step-samples` to tune the advisory sample count for local diagnosis.
 
 **Usage**:
 ```bash
 # Run performance smoke test
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
-  uv run python scripts/validation/performance_smoke_test.py
+  uv run python scripts/validation/performance_smoke_test.py --step-samples 10
 
 # Results saved to: output/benchmarks/performance_smoke_test.json
 ```

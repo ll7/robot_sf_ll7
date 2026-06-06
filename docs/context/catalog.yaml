@@ -141,6 +141,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2389_mechanism_aware_evaluation_thread.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2231_mechanism_aware_ranking.md
     status: current
     freshness: maintained

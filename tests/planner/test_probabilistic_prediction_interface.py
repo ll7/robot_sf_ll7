@@ -141,6 +141,37 @@ class TestTrajectoryDistribution:
         with pytest.raises(ValueError, match="std"):
             TrajectoryDistribution(mean=mean, std=std)
 
+    def test_nonfinite_trajectory_values_are_rejected(self) -> None:
+        """Mean trajectories should not carry NaN or infinite coordinates."""
+        mean = np.zeros((8, 2), dtype=np.float32)
+        mean[0, 0] = np.nan
+
+        with pytest.raises(ValueError, match="finite"):
+            TrajectoryDistribution(mean=mean)
+
+    def test_negative_std_is_rejected(self) -> None:
+        """Diagonal uncertainty should stay physically non-negative."""
+        mean = np.zeros((8, 2), dtype=np.float32)
+        std = np.zeros((8, 2), dtype=np.float32)
+        std[0, 0] = -0.1
+
+        with pytest.raises(ValueError, match="non-negative"):
+            TrajectoryDistribution(mean=mean, std=std)
+
+    def test_nonphysical_covariance_is_rejected(self) -> None:
+        """Full covariance matrices should be symmetric positive semidefinite."""
+        mean = np.zeros((8, 2), dtype=np.float32)
+        nonsymmetric = np.tile(np.eye(2, dtype=np.float32), (8, 1, 1))
+        nonsymmetric[0, 0, 1] = 0.5
+
+        with pytest.raises(ValueError, match="symmetric"):
+            TrajectoryDistribution(mean=mean, covariance=nonsymmetric)
+
+        negative_variance = np.tile(np.eye(2, dtype=np.float32), (8, 1, 1))
+        negative_variance[0, 0, 0] = -0.1
+        with pytest.raises(ValueError, match="positive semidefinite"):
+            TrajectoryDistribution(mean=mean, covariance=negative_variance)
+
 
 class TestProbabilisticPrediction:
     """ProbabilisticPrediction dataclass contract."""
@@ -175,6 +206,20 @@ class TestProbabilisticPrediction:
         assert pred.timestamp == 10.0
         assert pred.sample_count == 16
         assert pred.metadata["mode"] == "cvar"
+
+    def test_prediction_horizon_matches_trajectory_steps(self) -> None:
+        """Shared horizon metadata should agree with each trajectory length."""
+        trajectory = TrajectoryDistribution(
+            mean=np.zeros((8, 2), dtype=np.float32),
+            pedestrian_id=0,
+        )
+
+        with pytest.raises(ValueError, match="prediction_horizon"):
+            ProbabilisticPrediction(
+                predictions=[trajectory],
+                prediction_horizon=1.4,
+                prediction_dt=0.2,
+            )
 
     def test_metadata_scalar_fields_are_normalized(self) -> None:
         """Numpy scalar metadata should be normalized to plain Python scalars."""

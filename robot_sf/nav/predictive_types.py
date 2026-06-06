@@ -45,7 +45,30 @@ def _require_float_array(
         raise ValueError(f"{name} must have shape (T, 2)" if ndim == 2 else f"{name} invalid")
     if not np.issubdtype(array.dtype, np.floating):
         raise ValueError(f"{name} must use a floating dtype")
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must contain only finite values")
     return array.astype(np.float32, copy=False)
+
+
+def _require_covariance_array(value: NDArray[np.float32], *, steps: int) -> NDArray[np.float32]:
+    """Validate and normalize full per-timestep covariance matrices.
+
+    Returns:
+        Float32 array with shape ``(T, 2, 2)``.
+    """
+    covariance = np.asarray(value)
+    expected_shape = (steps, 2, 2)
+    if covariance.shape != expected_shape:
+        raise ValueError("covariance must have shape (T, 2, 2)")
+    if not np.issubdtype(covariance.dtype, np.floating):
+        raise ValueError("covariance must use a floating dtype")
+    if not np.all(np.isfinite(covariance)):
+        raise ValueError("covariance must contain only finite values")
+    if not np.allclose(covariance, np.swapaxes(covariance, -1, -2)):
+        raise ValueError("covariance matrices must be symmetric")
+    if np.any(np.linalg.eigvalsh(covariance) < -1e-6):
+        raise ValueError("covariance matrices must be positive semidefinite")
+    return covariance.astype(np.float32, copy=False)
 
 
 @dataclass
@@ -80,14 +103,13 @@ class TrajectoryDistribution:
             self.std = _require_float_array("std", self.std, ndim=2)
             if self.std.shape != self.mean.shape:
                 raise ValueError("std must match mean shape")
+            if np.any(self.std < 0.0):
+                raise ValueError("std must be non-negative")
         if self.covariance is not None:
-            covariance = np.asarray(self.covariance)
-            expected_shape = (self.mean.shape[0], 2, 2)
-            if covariance.shape != expected_shape:
-                raise ValueError("covariance must have shape (T, 2, 2)")
-            if not np.issubdtype(covariance.dtype, np.floating):
-                raise ValueError("covariance must use a floating dtype")
-            self.covariance = covariance.astype(np.float32, copy=False)
+            self.covariance = _require_covariance_array(
+                self.covariance,
+                steps=self.mean.shape[0],
+            )
         self.confidence = float(self.confidence)
         self.pedestrian_id = int(self.pedestrian_id)
         if not 0.0 <= self.confidence <= 1.0:
@@ -135,6 +157,13 @@ class ProbabilisticPrediction:
             raise ValueError("prediction_dt must be positive")
         if self.sample_count < 1:
             raise ValueError("sample_count must be at least 1")
+        if self.predictions:
+            expected_steps = self.prediction_horizon / self.prediction_dt
+            for prediction in self.predictions:
+                if not np.isclose(prediction.mean.shape[0], expected_steps):
+                    raise ValueError(
+                        "prediction_horizon must equal trajectory steps multiplied by prediction_dt"
+                    )
 
 
 @runtime_checkable

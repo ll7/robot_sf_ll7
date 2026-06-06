@@ -1,0 +1,157 @@
+"""Probabilistic pedestrian prediction types and protocol.
+
+This module defines the minimal interface contract for probabilistic pedestrian
+trajectory prediction. Planners can consume these types to obtain future
+trajectory distributions and per-pedestrian confidence without committing to any
+specific predictor implementation, training regime, or prediction quality claim.
+
+The interface is intentionally additive: existing deterministic predictors can
+emit confidence=1.0 and identity covariance to signal "no uncertainty estimate."
+Any claim about prediction accuracy or planning benefit from using these types
+requires separate benchmark evidence per the project's maintainer values.
+
+.. admonition:: Claim boundary
+   :class: note
+
+   Defining or implementing this interface does **not** constitute evidence of
+   prediction quality, calibration, or planning improvement. Benchmark runs
+   are required before any such claim may be made.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
+
+def _require_float_array(name: str, value: NDArray[np.float32], *, ndim: int) -> None:
+    """Validate a numeric prediction array enough to enforce the public contract."""
+    array = np.asarray(value)
+    if array.ndim != ndim or array.shape[-1] != 2:
+        raise ValueError(f"{name} must have shape (T, 2)" if ndim == 2 else f"{name} invalid")
+    if not np.issubdtype(array.dtype, np.floating):
+        raise ValueError(f"{name} must use a floating dtype")
+
+
+@dataclass
+class TrajectoryDistribution:
+    """Probabilistic future trajectory for a single pedestrian.
+
+    Attributes:
+        mean: Mean future positions in robot frame, shape ``(T, 2)`` where
+            ``T`` is the number of predicted timesteps and columns are
+            ``(x, y)`` in world or robot-frame coordinates.
+        std: Per-timestep per-axis standard deviation, shape ``(T, 2)``.
+            ``None`` when the predictor only emits means (deterministic mode).
+        covariance: Full per-timestep covariance matrices, shape ``(T, 2, 2)``.
+            May be ``None`` when only diagonal uncertainty is available.
+        confidence: Scalar confidence in ``[0, 1]`` reflecting the predictor's
+            own assessment of this trajectory's reliability. A deterministic
+            predictor may emit ``1.0`` (no uncertainty expressed).
+        pedestrian_id: Index or identifier for this pedestrian within the
+            observation's pedestrian array.
+    """
+
+    mean: NDArray[np.float32]
+    std: NDArray[np.float32] | None = None
+    covariance: NDArray[np.float32] | None = None
+    confidence: float = 1.0
+    pedestrian_id: int = -1
+
+    def __post_init__(self) -> None:
+        """Validate shape and confidence fields for one pedestrian trajectory."""
+        _require_float_array("mean", self.mean, ndim=2)
+        if self.std is not None:
+            _require_float_array("std", self.std, ndim=2)
+            if np.asarray(self.std).shape != np.asarray(self.mean).shape:
+                raise ValueError("std must match mean shape")
+        if self.covariance is not None:
+            covariance = np.asarray(self.covariance)
+            expected_shape = (np.asarray(self.mean).shape[0], 2, 2)
+            if covariance.shape != expected_shape:
+                raise ValueError("covariance must have shape (T, 2, 2)")
+            if not np.issubdtype(covariance.dtype, np.floating):
+                raise ValueError("covariance must use a floating dtype")
+        if not 0.0 <= float(self.confidence) <= 1.0:
+            raise ValueError("confidence must be in [0, 1]")
+
+
+@dataclass
+class ProbabilisticPrediction:
+    """Container for multi-agent probabilistic pedestrian predictions.
+
+    This is the top-level return type of :class:`ProbabilisticPredictor`.
+    It bundles per-pedestrian trajectory distributions together with shared
+    metadata so consumers do not need to track prediction horizon or
+    timestamps separately.
+
+    Attributes:
+        predictions: One :class:`TrajectoryDistribution` per pedestrian.
+        prediction_horizon: Forecast horizon in seconds.
+        prediction_dt: Timestep between consecutive predicted positions
+            in seconds.
+        timestamp: Simulation timestamp (seconds) at which this prediction
+            was produced. May be ``-1`` when the caller does not provide it.
+        sample_count: Number of Monte-Carlo or scenario samples used to
+            derive the uncertainty estimates. ``1`` for deterministic.
+        metadata: Free-form key-value store for predictor-specific data
+            (e.g. model version, feature schema, fallback mode).
+    """
+
+    predictions: list[TrajectoryDistribution] = field(default_factory=list)
+    prediction_horizon: float = 0.0
+    prediction_dt: float = 0.1
+    timestamp: float = -1.0
+    sample_count: int = 1
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Validate shared prediction metadata fields."""
+        if float(self.prediction_horizon) < 0.0:
+            raise ValueError("prediction_horizon must be non-negative")
+        if float(self.prediction_dt) <= 0.0:
+            raise ValueError("prediction_dt must be positive")
+        if int(self.sample_count) < 1:
+            raise ValueError("sample_count must be at least 1")
+
+
+@runtime_checkable
+class ProbabilisticPredictor(Protocol):
+    """Protocol for probabilistic pedestrian trajectory predictors.
+
+    Any object that implements ``predict(observation) -> ProbabilisticPrediction``
+    satisfies this protocol. The observation dict follows the SocNav-structured
+    schema produced by :class:`robot_sf.sensor.socnav_observation.SocNavObservationFusion`.
+
+    Implementing this protocol does **not** commit the predictor to any accuracy,
+    calibration, or planning-benefit claim. See module-level docstring.
+
+    Example::
+
+        class MyPredictor:
+            def predict(self, observation: dict[str, Any]) -> ProbabilisticPrediction: ...
+    """
+
+    def predict(self, observation: dict[str, Any]) -> ProbabilisticPrediction:
+        """Return probabilistic future trajectories for all observed pedestrians.
+
+        Args:
+            observation: SocNav-structured dict with keys ``"robot"``,
+                ``"goal"``, ``"pedestrians"``, ``"map"``, ``"sim"``.
+
+        Returns:
+            ProbabilisticPrediction: Per-pedestrian trajectory distributions
+            with associated uncertainty and confidence.
+        """
+
+
+__all__ = [
+    "ProbabilisticPrediction",
+    "ProbabilisticPredictor",
+    "TrajectoryDistribution",
+]

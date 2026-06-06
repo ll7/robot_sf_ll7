@@ -1,0 +1,7 @@
+field,status,value_summary,source
+per_frame_hypothesis_count,produced,"70 insufficient_hypotheses frames; 90 ok frames",docs/context/evidence/issue_2307_topology_score_diagnostic_2026-06-05/summary.json
+alternative_hypothesis_count,produced,"98 steps with score payload and alternative hypotheses",docs/context/evidence/issue_2307_topology_score_diagnostic_2026-06-05/summary.json
+selected_hypothesis,produced,"route selector primary_route=97 and masked_cell_87_79=1 numerical tie; topology_command_influence primary_route=33",docs/context/evidence/issue_2307_topology_score_diagnostic_2026-06-05/summary.json
+score_margin_to_primary_route,produced,"98 alternative margins; min=0.0 median=0.4056854309944198 max=8.214213684774414",docs/context/evidence/issue_2307_topology_score_diagnostic_2026-06-05/summary.json
+rejection_reason,produced,"lower_topology_selection_score=98",docs/context/evidence/issue_2307_topology_score_diagnostic_2026-06-05/summary.json
+switch_opportunity_count,produced,"98 switch opportunities; hypothesis_switch_count=0",docs/context/evidence/issue_2307_topology_score_diagnostic_2026-06-05/summary.json

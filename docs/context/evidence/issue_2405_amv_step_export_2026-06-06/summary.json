@@ -1,0 +1,74 @@
+{
+  "claim_boundary": "Diagnostic trace-export proof only; not benchmark-strength evidence and not a raw trace publication.",
+  "created_at": "2026-06-06T10:31:00Z",
+  "issue": 2405,
+  "parent_context": [
+    2227,
+    2159
+  ],
+  "predecessor_issue": 2392,
+  "raw_outputs_tracked": false,
+  "schema_version": "amv-step-export-proof.v1",
+  "summary": {
+    "aggregate_rows_per_variant": 3,
+    "exported_selected_rows_per_variant": 1,
+    "frames_per_aggregate_row": 20,
+    "loader_valid_exports": 2,
+    "old_no_step_frame_blocker_resolved": true,
+    "planner_metadata_key": "ammv.pedestrian_force_vectors",
+    "raw_output_root": "ignored worktree-local artifact directory",
+    "trace_schema": "simulation_trace_export.v1"
+  },
+  "variants": [
+    {
+      "aggregate_rows": 3,
+      "export_frames": 20,
+      "export_schema": "simulation_trace_export.v1",
+      "frames_per_row": [
+        20,
+        20,
+        20
+      ],
+      "loader_valid": true,
+      "planner_id": "default_social_force",
+      "planner_metadata_keys": [
+        "ammv.pedestrian_force_vectors"
+      ],
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "variant": "default_social_force"
+    },
+    {
+      "aggregate_rows": 3,
+      "export_frames": 20,
+      "export_schema": "simulation_trace_export.v1",
+      "frames_per_row": [
+        20,
+        20,
+        20
+      ],
+      "loader_valid": true,
+      "planner_id": "ammv_social_force",
+      "planner_metadata_keys": [
+        "ammv.pedestrian_force_vectors"
+      ],
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "variant": "ammv_social_force"
+    }
+  ],
+  "validation": [
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- pytest tests/analysis_workbench/test_simulation_trace_export.py::test_build_trace_export_uses_aggregate_simulation_step_trace tests/benchmark/test_map_runner_utils.py::test_run_map_job_worker_forwards_metadata_params -q",
+      "result": "2 passed"
+    },
+    {
+      "command": "robot_sf_bench run with --record-simulation-step-trace for default and AMMV Social Force",
+      "result": "each run wrote 3 aggregate rows with 20 step frames per row"
+    },
+    {
+      "command": "scripts/tools/build_simulation_trace_export.py on selected first-row JSONL for default and AMMV",
+      "result": "both selected rows wrote loader-valid simulation_trace_export.v1 JSON"
+    }
+  ]
+}

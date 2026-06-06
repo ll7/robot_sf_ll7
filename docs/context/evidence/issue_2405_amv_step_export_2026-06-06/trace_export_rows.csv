@@ -1,0 +1,3 @@
+variant,source_jsonl,selected_row_seed,aggregate_rows,frames_per_row,export_schema,export_frames,planner_metadata_key,claim_boundary
+default_social_force,ignored worktree-local default aggregate JSONL,111,3,20,simulation_trace_export.v1,20,ammv.pedestrian_force_vectors,diagnostic_only_not_benchmark_evidence
+ammv_social_force,ignored worktree-local AMMV aggregate JSONL,111,3,20,simulation_trace_export.v1,20,ammv.pedestrian_force_vectors,diagnostic_only_not_benchmark_evidence

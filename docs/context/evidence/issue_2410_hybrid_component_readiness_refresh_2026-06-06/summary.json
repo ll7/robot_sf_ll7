@@ -1,0 +1,22 @@
+{
+  "schema": "hybrid_component_readiness_refresh.v1",
+  "issue": 2410,
+  "parent_issue": 1489,
+  "date": "2026-06-06",
+  "previous_matrix_issue": 2274,
+  "head_sha": "1984a026088e2c3ce0695a72e6a568c003af5f22",
+  "component_classifications": {
+    "learned_risk_model_v1": "blocked",
+    "orca_residual_bc_v1": "diagnostic-only",
+    "oracle_imitation_v1": "blocked",
+    "shielded_ppo_repair_v1": "diagnostic-only",
+    "bc_warm_start_ppo_v10": "negative"
+  },
+  "synthesis_ready": false,
+  "recommendation": "Issue 1489 remains blocked from comparative hybrid-learning synthesis until at least two component lanes have durable comparable stress/full-matrix evidence or explicit fail-closed classifications suitable for conservative synthesis.",
+  "new_information_since_issue_2274": [
+    "Issue 2398 prepared the ORCA-residual v1 progress-probe launch packet after the v0 low-progress smoke failure.",
+    "The Issue 2398 update is launch-packet/config preflight evidence only and does not change the no-runtime-success boundary for Issue 1489."
+  ],
+  "claim_boundary": "Synthesis-readiness maintenance only; no new training, benchmark run, checkpoint promotion, or learned-component success claim."
+}

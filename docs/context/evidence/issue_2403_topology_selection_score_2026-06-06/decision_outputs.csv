@@ -1,0 +1,6 @@
+decision_output,classification,evidence_summary
+no_alternatives_generated,rejected,"Alternatives were present: 98 scored alternative opportunities and 90 ok hypothesis frames."
+alternatives_invalid,rejected,"Alternatives were scored and rejected by lower_topology_selection_score, not by a validity failure."
+primary_route_overselected,accepted,"Primary_route dominated route selection and all 33 topology-command influence steps; rejected scored alternatives consistently lost on topology selection score."
+topology_not_relevant_for_case,rejected,"Topology command influenced 33 steps, so topology was active in the diagnostic case even though it inherited primary_route."
+revision_candidate_found,partial,"Issue #2393 names topology_hypothesis_near_parity_diversity_gate_v0 as the next diagnostic-only revision candidate."

@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-04
+updated_at: 2026-06-06
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -45,6 +45,18 @@ entries:
     status: current
     freshness: policy
     area: benchmark_evidence
+  - path: docs/context/issue_1584_socnav_unavailable_row_policy.md
+    status: current
+    freshness: policy
+    area: benchmark_evidence
+  - path: docs/context/issue_2397_socnavbench_control_status_2026-06-06.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2397_socnavbench_control_status_2026-06-06.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1436_reproducibility_flaky_acceptance.md
     status: current
     freshness: policy
@@ -81,6 +93,14 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2404_amv_timeout_decomposition_decision.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2404_amv_timeout_decomposition_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2259_amv_clipping_success_boundary.md
     status: current
     freshness: evidence
@@ -113,6 +133,14 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2402_static_recenter_activation_decision.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2402_static_recenter_activation_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2261_static_recenter_slice_local.md
     status: current
     freshness: evidence
@@ -132,6 +160,26 @@ entries:
   - path: docs/context/issue_2307_topology_score_diagnostic.md
     status: current
     freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2393_topology_selection_preflight.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2403_topology_selection_score_decision.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2403_topology_selection_score_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/mechanism_closure_status.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_2389_mechanism_aware_evaluation_thread.md
+    status: current
+    freshness: maintained
     area: benchmark_evidence
   - path: docs/context/issue_2231_mechanism_aware_ranking.md
     status: current
@@ -182,6 +230,46 @@ entries:
     freshness: evidence
     area: benchmark_release
   - path: docs/context/evidence/issue_2309_amv_trace_export_probe_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2405_amv_step_export_decision.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2405_amv_step_export_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2428_mechanism_trace_panels.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2430_ammv_trace_annotation.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2430_ammv_trace_annotation_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2432_ammv_trace_selection.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/issue_2434_ammv_scenario_sweep.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/summary.json
     status: evidence
     freshness: evidence
     area: benchmark_release
@@ -305,7 +393,19 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2409_local_baseline_quarantine_decision.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2409_local_baseline_quarantine_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_852_queue_fill_batch_2026-06-06/summary.json
     status: evidence
     freshness: evidence
     area: learned_policy
@@ -313,6 +413,30 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2410_hybrid_component_readiness_refresh.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2410_hybrid_component_readiness_refresh_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/issue_2408_orca_residual_low_progress_analysis.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2408_orca_residual_low_progress_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/issue_2411_predictive_v2_child_classification.md
+    status: current
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2411_predictive_v2_child_classification_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained
@@ -410,6 +534,14 @@ entries:
     area: manual_control_trace
   - path: docs/context/issue_2227_mechanism_panels.md
     status: current
+    freshness: evidence
+    area: manual_control_trace
+  - path: docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/README.md
+    status: evidence
+    freshness: evidence
+    area: manual_control_trace
+  - path: docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/README.md
+    status: evidence
     freshness: evidence
     area: manual_control_trace
   - path: docs/context/issue_2270_panel_candidate_manifest.md

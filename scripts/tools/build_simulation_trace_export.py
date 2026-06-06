@@ -1,5 +1,5 @@
 """Build renderer-neutral trace-export artifacts from simulation JSONL source."""
-# ruff: noqa: C901, PLR0915
+# ruff: noqa: C901, PLR0912, PLR0915
 
 from __future__ import annotations
 
@@ -184,6 +184,78 @@ def _select_action(
     return {"linear_velocity": 0.0, "angular_velocity": 0.0}
 
 
+def _aggregate_algorithm_metadata(record: dict[str, Any]) -> dict[str, Any]:
+    """Return aggregate-row algorithm metadata when present."""
+
+    metadata = record.get("algorithm_metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _aggregate_scenario_params(record: dict[str, Any]) -> dict[str, Any]:
+    """Return aggregate-row scenario params when present."""
+
+    params = record.get("scenario_params")
+    return params if isinstance(params, dict) else {}
+
+
+def _copy_trace_frame(frame: dict[str, Any], *, source: Path, index: int) -> dict[str, Any]:
+    """Copy a schema-shaped aggregate trace frame for export validation."""
+
+    required = {"step", "time_s", "robot", "pedestrians", "planner"}
+    missing = sorted(required - set(frame))
+    if missing:
+        raise ValueError(f"{source}: aggregate trace frame {index} missing {missing}")
+
+    pedestrians = frame["pedestrians"]
+    if isinstance(pedestrians, list):
+        pedestrians = [
+            {**pedestrian, "id": str(pedestrian["id"])}
+            if isinstance(pedestrian, dict) and "id" in pedestrian
+            else pedestrian
+            for pedestrian in pedestrians
+        ]
+
+    copied = {
+        "step": frame["step"],
+        "time_s": frame["time_s"],
+        "robot": frame["robot"],
+        "pedestrians": pedestrians,
+        "planner": frame["planner"],
+    }
+    if not isinstance(copied["robot"], dict):
+        raise ValueError(f"{source}: aggregate trace frame {index} robot must be an object")
+    if not isinstance(copied["pedestrians"], list):
+        raise ValueError(f"{source}: aggregate trace frame {index} pedestrians must be a list")
+    if not isinstance(copied["planner"], dict):
+        raise ValueError(f"{source}: aggregate trace frame {index} planner must be an object")
+    return copied
+
+
+def _frames_from_aggregate_records(
+    source: Path, records: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Extract opt-in simulation step traces from aggregate benchmark JSONL records."""
+
+    frames: list[dict[str, Any]] = []
+    for record_index, record in enumerate(records):
+        trace = _aggregate_algorithm_metadata(record).get("simulation_step_trace")
+        if not isinstance(trace, dict):
+            continue
+        steps = trace.get("steps")
+        if not isinstance(steps, list):
+            raise ValueError(
+                f"{source}: aggregate record {record_index} trace steps must be a list"
+            )
+        for step_index, frame in enumerate(steps):
+            if not isinstance(frame, dict):
+                raise ValueError(
+                    f"{source}: aggregate record {record_index} trace step {step_index} "
+                    "must be an object"
+                )
+            frames.append(_copy_trace_frame(frame, source=source, index=step_index))
+    return frames
+
+
 def build_simulation_trace_export(
     source: Path,
     *,
@@ -195,23 +267,33 @@ def build_simulation_trace_export(
 
     records = _load_jsonl(source)
     metadata = _load_source_metadata(source)
+    first_record = records[0]
+    first_algo_metadata = _aggregate_algorithm_metadata(first_record)
+    first_scenario_params = _aggregate_scenario_params(first_record)
 
     planner_id = planner_id or str(
         metadata.get("algorithm")
         or metadata.get("planner")
         or metadata.get("planner_id")
+        or first_algo_metadata.get("algorithm")
+        or first_scenario_params.get("algo")
         or "unknown_planner"
     )
     scenario = scenario_id or str(
-        metadata.get("scenario") or metadata.get("scenario_id") or "unknown_scenario"
+        metadata.get("scenario")
+        or metadata.get("scenario_id")
+        or first_record.get("scenario_id")
+        or first_scenario_params.get("scenario_id")
+        or first_scenario_params.get("id")
+        or "unknown_scenario"
     )
-    seed = metadata.get("seed", 0)
+    seed = metadata.get("seed", first_record.get("seed", 0))
     try:
         seed_int = int(seed)
     except (TypeError, ValueError):
         seed_int = 0
 
-    episode_id = metadata.get("episode_id", records[0].get("episode_id", 0))
+    episode_id = metadata.get("episode_id", first_record.get("episode_id", 0))
     if episode_id is None:
         episode_id = 0
 
@@ -304,6 +386,8 @@ def build_simulation_trace_export(
         previous_timestamp = time_s
         included += 1
 
+    if not frames:
+        frames = _frames_from_aggregate_records(source, records)
     if not frames:
         raise ValueError(f"{source} has no step frames for conversion")
 

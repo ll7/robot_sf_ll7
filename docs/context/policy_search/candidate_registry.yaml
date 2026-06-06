@@ -851,6 +851,23 @@ candidates:
       - nominal_sanity
       - stress_slice
 
+  orca_residual_guarded_ppo_progress_v1:
+    status: prototype
+    family: guarded_learning_policy
+    training_required: true
+    promotion_gate: tier_c
+    candidate_config_path: configs/policy_search/candidates/orca_residual_guarded_ppo_progress_v1.yaml
+    learned_policy_registry_id: orca_residual_guarded_ppo_progress_v1
+    hypothesis: >
+      The v0 residual smoke timed out with low progress without guard saturation. This progress
+      probe keeps the ORCA residual hard guard authoritative while increasing the forward residual
+      envelope and using the existing ORCA-prior v2 progress-comparison margin before rerunning
+      the bounded #1475 smoke gate.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
   ppo_issue791_best_v1:
     status: implemented
     family: learned_policy_network

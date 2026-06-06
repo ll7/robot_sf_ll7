@@ -4,8 +4,10 @@ Date: 2026-06-04
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/2227>
 
-Status: diagnostic artifact-gap result; panel generation is blocked on durable
-mechanism-specific `simulation_trace_export.v1` trace pairs.
+Status: partially advanced diagnostic lane. Issue #2428 published the first durable AMMV/default
+Social Force trace-panel bundle, while the originally requested static-recentering and
+topology-guided panels remain blocked on durable mechanism-specific `simulation_trace_export.v1`
+trace pairs.
 
 ## Goal
 
@@ -64,6 +66,30 @@ The correct next step is a targeted trace-generation pass, not a full benchmark 
 
 Until that targeted regeneration exists, #2227 remains diagnostic-only readiness work, not figure
 evidence and not paper-facing mechanism proof.
+
+## Issue #2428 Partial AMMV Panel Proof (2026-06-06)
+
+Issue #2428 converted the Issue #2405 AMMV step-export unblocker into a first durable rendered panel
+bundle:
+
+- context note: `docs/context/issue_2428_mechanism_trace_panels.md`;
+- evidence bundle: `docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/`;
+- scope: one selected `classic_head_on_corridor_low` seed `111` row per planner for
+  `default_social_force` and `ammv_social_force`;
+- result: both promoted traces are loader-valid `simulation_trace_export.v1` files with 20 frames,
+  and the renderer produced PNG/PDF trajectory panels with checksums.
+
+This narrows Issue #2227's blocker from "no durable rendered mechanism panel exists" to "AMMV/default has
+a diagnostic rendered example; static recentering and topology-guided recovery still need selected
+trace pairs." The Issue #2428 bundle remains diagnostic-only and should not be cited as benchmark or
+paper-facing evidence.
+
+Issue #2432 then checked the full local Issue #2168 seed slice (`111..113`) with 100-frame
+default/AMMV step traces. All three seed pairs were frame-identical over robot state, pedestrian
+state, selected action, planner event, and `ammv.pedestrian_force_vectors`, so this
+head-on-corridor adapter-mode slice remains blocked as behavioral-difference panel input. The AMMV
+target now needs a different scenario/family, direct planner-mode mechanism trace, or additional
+instrumentation before further panel work is useful.
 
 ## Evidence Manifest
 

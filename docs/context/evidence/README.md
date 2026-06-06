@@ -71,8 +71,29 @@ boundary before merging an evidence-producing PR.
   success and keeping calibrated AMV actuation blocked.
 - `issue_2308_amv_timeout_trace_2026-06-05/`: compact trace-level AMV timeout analysis showing
   reduced clipping did not change the route/task progress blocker on the matched smoke row.
+- `issue_2404_amv_timeout_decomposition_2026-06-06/`: compact analysis-only synthesis mapping the
+  Issue #2308 AMV timeout trace rerun onto the Issue #2404 requested decomposition fields and
+  decision-output vocabulary.
+- `issue_2405_amv_step_export_2026-06-06/`: compact diagnostic proof that the Issue #2168
+  default/AMMV Social Force path can regenerate selected aggregate rows with step frames and export
+  one selected row per side as loader-valid `simulation_trace_export.v1`.
+- `issue_2428_mechanism_trace_panels_2026-06-06/`: compact diagnostic-only AMMV/default Social
+  Force trace-panel bundle proving the #2405 single-row export path can feed the trajectory-panel
+  renderer and preserve reviewable PNG/PDF/checksum artifacts.
+- `issue_2430_ammv_trace_annotation_2026-06-06/`: compact frame-level parity decision showing the
+  Issue #2428 selected default/AMMV trace pair is telemetry-rich but frame-identical, so it is not
+  behavioral-difference evidence.
+- `issue_2432_ammv_trace_selection_2026-06-06/`: compact three-seed AMMV/default trace-selection
+  check showing the local Issue #2168 head-on-corridor slice still has no non-identical
+  behavioral-difference pair.
+- `issue_2434_ammv_scenario_sweep_2026-06-06/`: compact five-family AMMV/default episode-metric
+  screen showing the selected classic close-interaction adapter slice still has no non-identical
+  pair.
 - `issue_2313_local_baseline_quarantine_2026-06-05/`: compact metadata-only planner summary
   showing the seven absent local-only baseline rows are explicitly unavailable.
+- `issue_2409_local_baseline_quarantine_2026-06-06/`: compact follow-on synthesis showing the
+  Issue #2313 quarantine already covered the seven local-only baseline rows and no durable artifact
+  source was newly found or claimed.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and
@@ -106,6 +127,9 @@ boundary before merging an evidence-producing PR.
   reports from the May 4 run.
 - `issue_1692_topology_hypothesis_probe_2026-05-30/`: compact diagnostic-only evidence for the
   topology-hypothesis trace probe on `classic_realworld_double_bottleneck_high` seed 111.
+- `issue_2403_topology_selection_score_2026-06-06/`: compact analysis-only synthesis mapping the
+  Issue #2307 instrumented topology rerun onto the Issue #2403 requested selection-score fields and
+  decision-output vocabulary.
 - `issue_1904_scenario_perturbation_pilot_2026-05-31/`: compact diagnostic-only paired
   no-op-versus-route-offset pilot summary for the first #1610 scenario perturbation criticality
   slice.
@@ -155,12 +179,22 @@ boundary before merging an evidence-producing PR.
   naming the missing activation trace needed for definitive attribution.
 - `issue_2306_static_recenter_activation_trace_2026-06-05/`: compact instrumented rerun evidence
   showing static recentering stayed inactive on the unsolved held-out row from Issue #2221.
+- `issue_2402_static_recenter_activation_2026-06-06/`: compact analysis-only synthesis mapping the
+  Issue #2306 instrumented static-recenter rerun onto the Issue #2402 requested activation fields
+  and decision-output vocabulary.
 - `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
   Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
   and baseline artifact URIs despite a valid launch packet fixture.
+- `issue_2410_hybrid_component_readiness_refresh_2026-06-06/`: compact Issue 2410 refresh of
+  hybrid-learning component readiness after the ORCA-residual progress-probe launch-packet update,
+  preserving the Issue 1489 still-blocked synthesis boundary.
+- `issue_2408_orca_residual_low_progress_2026-06-06/`: compact analysis-only classification of
+  the ORCA-residual BC v0 low-progress smoke failure before a revised progress-probe rerun.
 - `issue_2275_predictive_v2_fate_2026-06-05/`: compact decision matrix for Issue #2275 / parent
   Issue #1490, recording the stop-old-expansion decision after the #1543 negative audit and #1897
   failed coupling gate.
+- `issue_2411_predictive_v2_child_classification_2026-06-06/`: compact classification of old
+  predictive-v2 child issues after the stop-old-expansion decision.
 - `issue_2274_hybrid_component_matrix_2026-06-05/`: validator-readable hybrid-learning component
   status matrix for Issue #2274 / parent Issue #1489, with compact CSV and YAML rows for learned
   risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC warm-start PPO.

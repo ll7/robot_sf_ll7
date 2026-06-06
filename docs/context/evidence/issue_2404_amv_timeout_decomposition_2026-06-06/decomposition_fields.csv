@@ -1,0 +1,9 @@
+field,status,value_summary,source
+progress_over_time,produced,"Both candidates made similar positive route progress but remained about 3.6 m from goal; final route-progress delta actuation-aware minus baseline was -0.0321 m",docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json
+clipping_over_time,produced,"Clip steps fell from 22 to 15; first-window clip fraction fell from 0.75 to 0.40",docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json
+saturation_over_time,produced,"Yaw-rate saturation stayed 0.0 across all windows for both candidates",docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json
+command_speed_profile,produced,"Requested/applied linear-speed aggregate and windowed profiles are tracked for both candidates",docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json
+route_progress_blocked,produced,"Both candidates ended timeout_low_progress and remained about 3.6 m from goal",docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json
+speed_cap_binding,partially_instrumented,"Not selected as primary: mean average speed changed by +0.0047 m/s and yaw saturation stayed zero; late-episode speed-cap binding is not separately instrumented",docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json
+scoring_too_conservative,partially_instrumented,"Not selected as primary: lower actuation-aware speeds did not create success-relevant progress loss; scoring conservativeness is not directly instrumented",docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json
+unrelated_deadlock,not_instrumented,"No deadlock or oscillation detector is present in the tracked trace; route/task progress is the best-supported available driver",docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json

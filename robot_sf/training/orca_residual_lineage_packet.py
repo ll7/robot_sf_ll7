@@ -42,6 +42,10 @@ _REQUIRED_OUTPUTS = (
     "residual_contribution_diagnostics",
     "guard_veto_fallback_status",
 )
+_ALLOWED_OBJECTIVE_TARGETS = (
+    "bounded_policy_action_minus_orca_action",
+    "progress_probe_bounded_policy_action_minus_orca_action",
+)
 
 
 class OrcaResidualLineagePacketError(ValueError):
@@ -157,8 +161,11 @@ def _validate_objective(packet: dict[str, Any], errors: list[str]) -> dict[str, 
         return {}
     if objective.get("method") != "behavior_cloning_residual":
         errors.append("objective.method must be 'behavior_cloning_residual'")
-    if objective.get("target") != "bounded_policy_action_minus_orca_action":
-        errors.append("objective.target must be 'bounded_policy_action_minus_orca_action'")
+    if objective.get("target") not in _ALLOWED_OBJECTIVE_TARGETS:
+        errors.append(
+            "objective.target must be one of "
+            f"{', '.join(repr(target) for target in _ALLOWED_OBJECTIVE_TARGETS)}"
+        )
     if objective.get("teacher_policy") != "ppo_leader":
         errors.append("objective.teacher_policy must be 'ppo_leader'")
     if objective.get("base_policy") != "orca":
@@ -170,6 +177,7 @@ def _validate_objective(packet: dict[str, Any], errors: list[str]) -> dict[str, 
         "target": objective.get("target"),
         "teacher_policy": objective.get("teacher_policy"),
         "base_policy": objective.get("base_policy"),
+        "revision_id": objective.get("revision_id"),
     }
 
 

@@ -70,6 +70,8 @@ Do not retry preflight on the same PR without a state change.
    ```
 2. For each PR:
    - Run preflight checks.
+   - Update the active delegation ledger from `.agents/skills/goal-autopilot/SKILL.md` with the PR
+     number, head SHA, preflight status, merge command status, cleanup status, and next action.
    - If all pass, record the PR head SHA and merge using squash merge:
      ```bash
      HEAD_SHA=$(gh pr view <number> --json headRefOid --jq .headRefOid)
@@ -79,6 +81,9 @@ Do not retry preflight on the same PR without a state change.
      the lookup failure before attempting the merge.
    - If merge fails, run diagnostics and handle the failure (see Merge
      Command Failure below) before continuing to the next PR.
+   - Update the active ledger after remote merge verification, branch deletion, claim release, and
+     worktree/artifact cleanup decisions. Keep remote merge success separate from local cleanup
+     failures.
 3. Report merged PRs, skipped PRs with reasons, and any failures.
 
 Do not merge multiple PRs in parallel. Process sequentially.

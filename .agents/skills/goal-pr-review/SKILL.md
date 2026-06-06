@@ -90,6 +90,9 @@ Avoid loops:
 2. Sort/prioritize queue (or follow explicit user order).
 3. For each PR:
    - capture issue link and head SHA,
+   - create or update the active delegation ledger from
+     `.agents/skills/goal-autopilot/SKILL.md` with the PR, head SHA, route/run IDs, validation
+     plan/status, review/CI state, cleanup status, and next action,
    - run `implementation-verification` for contract alignment,
    - classify findings as fixable now, deferred, or blocker.
 4. Fix actionable items on writable branches; commit and push.
@@ -99,6 +102,8 @@ Avoid loops:
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
 8. Update `merge-ready` only after full proof bar closes.
+9. Update the active ledger before any CI wait or final handoff. Route completion is not task
+   completion until the main agent has verified proof, GitHub state, and cleanup.
 
 ## Proof and Validation
 

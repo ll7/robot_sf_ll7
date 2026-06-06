@@ -1,0 +1,7 @@
+question_id,classification,confidence,evidence_basis,next_evidence
+residual_inactive,unlikely_unresolved,0.45,"Residual active rate is recorded as 1.0 and guard/fallback rates are 0.0, but no per-step residual magnitude is tracked","Capture raw and bounded residual magnitude in the next smoke summary"
+dataset_too_small,plausible_contributor,0.65,"BC used three seed episodes and the BC-trained candidate timed out after adapter repair","Do not rerun unchanged BC; require objective or dataset redesign evidence"
+smoke_target_inappropriate,rejected,0.90,"planner_sanity_simple is the first gate and v0 underperformed goal, ORCA, and PPO baselines","Keep the smoke gate before nominal escalation"
+residual_bound_too_tight,unresolved_secondary_hypothesis,0.35,"v0 used 0.25 residual bounds and v1 raises to 0.35, but v0 clipping rate is not tracked","Record residual clipping rate and magnitude before attributing failure to bounds"
+guard_or_fallback_dominated,not_observed,0.95,"Shield override, hard-constraint violation, guard veto, fallback, and degraded rates are 0.0","Preserve hard guard and keep reporting these rates"
+learned_component_no_route_progress,primary_observed_failure,0.85,"One guarded row timed out with low progress after 80 steps, no collision, no near miss, and no guard intervention","Run only the revised progress-probe smoke with residual contribution diagnostics"

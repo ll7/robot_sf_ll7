@@ -1,0 +1,20 @@
+# Compact local AMMV/default trace-selection sweep for Issue #2434.
+#
+# This matrix intentionally selects a few existing close-interaction archetype scenarios for
+# diagnostic-only trace comparison. It is not a benchmark-strength or paper-facing scenario set.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - archetypes/classic_bottleneck.yaml
+  - archetypes/classic_cross_trap.yaml
+  - archetypes/classic_doorway.yaml
+  - archetypes/classic_head_on_corridor.yaml
+  - archetypes/classic_overtaking.yaml
+select_scenarios:
+  - classic_bottleneck_medium
+  - classic_cross_trap_low
+  - classic_doorway_high
+  - classic_head_on_corridor_medium
+  - classic_overtaking_medium
+map_search_paths:
+  - ../../maps/svg_maps

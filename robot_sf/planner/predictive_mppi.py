@@ -189,6 +189,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         prev_action = np.array([0.0, 0.0], dtype=float)
         anchor = np.asarray(anchor_action, dtype=float)
         future_steps = int(future.shape[1])
+        valid_idx = np.where(mask > 0.5)[0]
 
         for step, action in enumerate(sequence):
             v = float(action[0])
@@ -201,9 +202,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
 
             ped_idx = min(step, future_steps - 1)
             ped_t = future[:, ped_idx, :]
-            if ped_t.size > 0:
+            if ped_t.size > 0 and valid_idx.size > 0:
                 dists = np.linalg.norm(ped_t - local_pos[None, :], axis=1)
-                valid_dist = dists[mask > 0.5]
+                valid_dist = dists[valid_idx]
                 if valid_dist.size > 0:
                     min_clear = min(min_clear, float(np.min(valid_dist)))
                     if step == 0:

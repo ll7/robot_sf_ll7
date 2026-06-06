@@ -1,0 +1,95 @@
+{
+  "schema_version": "robot-sf-static-recenter-activation-decision.v1",
+  "issue": 2402,
+  "generated_at": "2026-06-06T09:30:00+00:00",
+  "claim_boundary": "analysis-only synthesis of the Issue #2306 instrumented static-recenter rerun; not benchmark-strength mitigation or transfer evidence",
+  "source_diagnostic": {
+    "issue": 2306,
+    "summary_path": "docs/context/evidence/issue_2306_static_recenter_activation_trace_2026-06-05/summary.json",
+    "diagnostic_status": "diagnostic_complete",
+    "stage": "full_matrix",
+    "scenario_matrix": "configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml",
+    "seed_list": [
+      111
+    ],
+    "horizon": 500,
+    "baseline_candidate": "hybrid_rule_v3_fast_progress",
+    "mechanism_candidate": "issue_2170_static_recenter_only"
+  },
+  "related_issues_checked": [
+    2261,
+    2266,
+    2306
+  ],
+  "rerun_decision": {
+    "additional_rerun_performed": false,
+    "reason": "Issue #2306 already reran the same held-out static-recenter smoke after Issue #2266 identified missing activation instrumentation and promoted the exact requested field block."
+  },
+  "overall_decision": "mechanism_inactive_on_unsolved_row",
+  "decision_rationale": {
+    "mechanism_inactive": "accepted for classic_station_platform_medium: activation_count was 0 and the unchanged terminal failure therefore did not come from active-but-irrelevant recentering",
+    "mechanism_active_but_irrelevant": "rejected: no row recorded static-recenter activation",
+    "comparator_already_solved_case": "accepted for francis2023_intersection_wait: baseline and mechanism candidate both succeeded with no near misses or collisions",
+    "scenario_lacks_target_failure_mode": "not the primary classification: the solved row lacks a rescue target, but the unsolved row is directly classified as mechanism_inactive",
+    "missing_instrumentation": "rejected for the current state: Issue #2306 filled the activation instrumentation gap left by Issue #2266"
+  },
+  "mechanism_activation": [
+    {
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 111,
+      "activation_count": 0,
+      "first_activation_step": null,
+      "selected_command_source": [],
+      "command_source_changed": false,
+      "progress_delta_after_activation": null,
+      "trajectory_delta_m": 0.0,
+      "terminal_outcome_changed": false,
+      "baseline_terminal_outcome": {
+        "status": "failure",
+        "termination_reason": "max_steps",
+        "success": false,
+        "steps": 500,
+        "near_misses": 60,
+        "collisions": 0
+      },
+      "mechanism_terminal_outcome": {
+        "status": "failure",
+        "termination_reason": "max_steps",
+        "success": false,
+        "steps": 500,
+        "near_misses": 60,
+        "collisions": 0
+      },
+      "classification": "mechanism_inactive"
+    },
+    {
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 111,
+      "activation_count": 0,
+      "first_activation_step": null,
+      "selected_command_source": [],
+      "command_source_changed": false,
+      "progress_delta_after_activation": null,
+      "trajectory_delta_m": 0.0,
+      "terminal_outcome_changed": false,
+      "baseline_terminal_outcome": {
+        "status": "success",
+        "termination_reason": "success",
+        "success": true,
+        "steps": 120,
+        "near_misses": 0,
+        "collisions": 0
+      },
+      "mechanism_terminal_outcome": {
+        "status": "success",
+        "termination_reason": "success",
+        "success": true,
+        "steps": 120,
+        "near_misses": 0,
+        "collisions": 0
+      },
+      "classification": "comparator_already_solved_case"
+    }
+  ],
+  "next_research_direction": "Do not tune or promote static recentering from this held-out slice; prefer a predeclared slice where static recenter should activate or route-progress mechanisms with clearer activation hypotheses."
+}

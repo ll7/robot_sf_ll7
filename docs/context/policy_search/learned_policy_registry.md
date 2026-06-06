@@ -207,6 +207,21 @@ adapter-only proof are useful planning evidence, but they are not benchmark evid
   - `docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md`
   - `configs/training/orca_residual/orca_residual_bc_issue_1428.yaml`
 
+### `orca_residual_guarded_ppo_progress_v1`
+
+- `paper_or_source`: internal ORCA-residual behavior-cloning progress-probe revision.
+- `upstream_implementation`: local guarded PPO residual surface.
+- `license`: local repository.
+- `observation_schema`: runtime-only observation plus ORCA command/risk context.
+- `action_interface`: bounded residual command added to ORCA, then hard-guarded.
+- `checkpoint_availability`: pending.
+- `expected_dependencies`: bounded #1475 SLURM smoke rerun after local packet validation.
+- `reproducibility_status`: launch packet only; no trained checkpoint or smoke artifact yet.
+- `local_anchors`:
+  - `configs/policy_search/candidates/orca_residual_guarded_ppo_progress_v1.yaml`
+  - `configs/training/orca_residual/orca_residual_bc_issue_1428.yaml`
+  - `docs/context/issue_2311_orca_residual_lane_decision.md`
+
 ### `learned_risk_model_v1`
 
 - `paper_or_source`: internal learned auxiliary risk scorer plan.

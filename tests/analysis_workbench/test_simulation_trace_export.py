@@ -196,6 +196,75 @@ def test_build_trace_export_skips_non_step_records(tmp_path: Path) -> None:
     assert [frame["time_s"] for frame in payload["frames"]] == [0.0, 1.0]
 
 
+def test_build_trace_export_uses_aggregate_simulation_step_trace(tmp_path: Path) -> None:
+    """Aggregate benchmark rows can carry opt-in AMV trace frames for review packs."""
+
+    source = tmp_path / "aggregate.jsonl"
+    _write_jsonl(
+        source,
+        [
+            {
+                "episode_id": "s1--7--trace",
+                "scenario_id": "s1",
+                "seed": 7,
+                "scenario_params": {"algo": "goal"},
+                "algorithm_metadata": {
+                    "algorithm": "goal",
+                    "simulation_step_trace": {
+                        "schema_version": "simulation-step-trace.v1",
+                        "dt": 0.1,
+                        "steps": [
+                            {
+                                "step": 0,
+                                "time_s": 0.1,
+                                "robot": {
+                                    "position": [1.0, 2.0],
+                                    "heading": 0.25,
+                                    "velocity": [0.0, 0.0],
+                                },
+                                "pedestrians": [
+                                    {
+                                        "id": 0,
+                                        "position": [2.0, 3.0],
+                                        "velocity": [0.1, 0.2],
+                                    }
+                                ],
+                                "planner": {
+                                    "event": "step",
+                                    "selected_action": {
+                                        "linear_velocity": 0.0,
+                                        "angular_velocity": 0.0,
+                                    },
+                                    "amv": {
+                                        "requested_linear_m_s": 3.0,
+                                        "requested_angular_rad_s": 2.0,
+                                        "applied_linear_m_s": 0.0,
+                                        "applied_angular_rad_s": 0.0,
+                                        "command_clipped": False,
+                                        "yaw_rate_saturated": False,
+                                    },
+                                },
+                            }
+                        ],
+                    },
+                },
+            }
+        ],
+    )
+
+    payload = build_simulation_trace_export(source)
+
+    assert payload["source"]["scenario_id"] == "s1"
+    assert payload["source"]["seed"] == 7
+    assert payload["source"]["planner_id"] == "goal"
+    assert payload["source"]["episode_id"] == "s1--7--trace"
+    frame = payload["frames"][0]
+    assert frame["time_s"] == pytest.approx(0.1)
+    assert frame["robot"]["heading"] == pytest.approx(0.25)
+    assert frame["pedestrians"][0]["id"] == "0"
+    assert frame["planner"]["amv"]["command_clipped"] is False
+
+
 def test_build_trace_export_rejects_non_object_metadata(tmp_path: Path) -> None:
     """Sidecar metadata must be an object so provenance fields are explicit."""
     source = tmp_path / "episode.jsonl"

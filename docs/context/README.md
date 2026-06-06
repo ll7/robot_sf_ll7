@@ -140,12 +140,22 @@ knowledge, not every transient iteration detail.
   [issue_2282_topology_selection_instrumentation.md](issue_2282_topology_selection_instrumentation.md)
 * Issue #2307 topology score diagnostic:
   [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md)
+* Issue #2393 topology selection preflight:
+  [issue_2393_topology_selection_preflight.md](issue_2393_topology_selection_preflight.md)
+* Issue #2403 topology selection-score decision:
+  [issue_2403_topology_selection_score_decision.md](issue_2403_topology_selection_score_decision.md)
+* Mechanism closure status:
+  [mechanism_closure_status.md](mechanism_closure_status.md)
+* Issue #2389 mechanism-aware evaluation thread:
+  [issue_2389_mechanism_aware_evaluation_thread.md](issue_2389_mechanism_aware_evaluation_thread.md)
 * Issue #2266 Static-Recenter Activation Diagnostic 2026-06-05:
   [issue_2266_static_recenter_activation.md](issue_2266_static_recenter_activation.md)
 * Issue #2306 Static-Recenter Activation Trace 2026-06-05:
-  [issue_2306_static_recenter_activation_trace.md](issue_2306_static_recenter_activation_trace.md)
+[issue_2306_static_recenter_activation_trace.md](issue_2306_static_recenter_activation_trace.md)
+* Issue #2402 static-recenter activation decision:
+  [issue_2402_static_recenter_activation_decision.md](issue_2402_static_recenter_activation_decision.md)
 * Issue #2261 Static-Recenter Slice-Local Explanation:
-  [issue_2261_static_recenter_slice_local.md](issue_2261_static_recenter_slice_local.md)
+[issue_2261_static_recenter_slice_local.md](issue_2261_static_recenter_slice_local.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Root layout structured migration 2026-06-01:
@@ -154,6 +164,8 @@ knowledge, not every transient iteration detail.
   [issue_2035_path_reference_audit.md](issue_2035_path_reference_audit.md)
 * Issue #1584 SocNavBench Unavailable Row Policy (2026-05-28):
   [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
+* Issue #2397 SocNavBench Control-Pipeline Asset Status (2026-06-06):
+  [issue_2397_socnavbench_control_status_2026-06-06.md](issue_2397_socnavbench_control_status_2026-06-06.md)
 * Issue #1583 high-risk root path boundaries:
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
 * Issue #1636 benchmark metric semantics:
@@ -168,6 +180,8 @@ knowledge, not every transient iteration detail.
   [issue_1543_predictive_v2_negative_audit.md](issue_1543_predictive_v2_negative_audit.md)
 * Issue #2275 predictive-v2 fate decision:
   [issue_2275_predictive_v2_fate.md](issue_2275_predictive_v2_fate.md)
+* Issue #2411 predictive-v2 child classification:
+  [issue_2411_predictive_v2_child_classification.md](issue_2411_predictive_v2_child_classification.md)
 * Issue #1542 manuscript claim evidence map:
   [issue_1542_manuscript_claim_evidence_map.md](issue_1542_manuscript_claim_evidence_map.md)
 
@@ -194,6 +208,26 @@ knowledge, not every transient iteration detail.
 * Issue #2309 AMV trace export blocker:
 
   [issue_2309_amv_trace_export_blocker.md](issue_2309_amv_trace_export_blocker.md)
+
+* Issue #2405 AMV step-export decision:
+
+  [issue_2405_amv_step_export_decision.md](issue_2405_amv_step_export_decision.md)
+
+* Issue #2428 AMMV mechanism trace panels:
+
+  [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md)
+
+* Issue #2430 AMMV trace annotation decision:
+
+  [issue_2430_ammv_trace_annotation.md](issue_2430_ammv_trace_annotation.md)
+
+* Issue #2432 AMMV trace selection decision:
+
+  [issue_2432_ammv_trace_selection.md](issue_2432_ammv_trace_selection.md)
+
+* Issue #2434 AMMV scenario sweep decision:
+
+  [issue_2434_ammv_scenario_sweep.md](issue_2434_ammv_scenario_sweep.md)
 
 * Issue #2263 mechanism activation report fields:
 
@@ -259,6 +293,14 @@ knowledge, not every transient iteration detail.
 
   [issue_2274_hybrid_component_matrix.md](issue_2274_hybrid_component_matrix.md)
 
+* Issue #2410 hybrid-learning component readiness refresh:
+
+  [issue_2410_hybrid_component_readiness_refresh.md](issue_2410_hybrid_component_readiness_refresh.md)
+
+* Issue #2408 ORCA-residual low-progress analysis:
+
+  [issue_2408_orca_residual_low_progress_analysis.md](issue_2408_orca_residual_low_progress_analysis.md)
+
 * Issue #2231 mechanism-aware ranking comparison:
 
   [issue_2231_mechanism_aware_ranking.md](issue_2231_mechanism_aware_ranking.md)
@@ -272,6 +314,9 @@ knowledge, not every transient iteration detail.
 * Issue #2308 AMV Timeout Trace Analysis 2026-06-05:
 
   [issue_2308_amv_timeout_trace_analysis.md](issue_2308_amv_timeout_trace_analysis.md)
+* Issue #2404 AMV timeout decomposition decision:
+
+  [issue_2404_amv_timeout_decomposition_decision.md](issue_2404_amv_timeout_decomposition_decision.md)
 * Issue #2259 AMV Clipping Versus Success Boundary:
 
   [issue_2259_amv_clipping_success_boundary.md](issue_2259_amv_clipping_success_boundary.md)
@@ -476,6 +521,8 @@ knowledge, not every transient iteration detail.
   [issue_2277_local_artifact_classification.md](issue_2277_local_artifact_classification.md)
 * Issue #2313 local baseline quarantine:
   [issue_2313_local_baseline_quarantine.md](issue_2313_local_baseline_quarantine.md)
+* Issue #2409 local baseline quarantine decision:
+  [issue_2409_local_baseline_quarantine_decision.md](issue_2409_local_baseline_quarantine_decision.md)
 * Issue #1845 report grouping contracts:
   [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:
@@ -508,6 +555,8 @@ knowledge, not every transient iteration detail.
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
 * Issue #2227 Mechanism Panel Readiness (2026-06-04):
   [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md)
+* Issue #2428 AMMV Mechanism Trace Panels (2026-06-06):
+  [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md)
 * Issue #2270 Mechanism Panel Candidate Manifest (2026-06-05):
   [issue_2270_panel_candidate_manifest.md](issue_2270_panel_candidate_manifest.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
@@ -542,6 +591,10 @@ knowledge, not every transient iteration detail.
   [issue_2258_topology_primary_route_audit.md](issue_2258_topology_primary_route_audit.md)
 * Issue #2307 topology score diagnostic:
   [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md)
+* Issue #2393 topology selection preflight:
+  [issue_2393_topology_selection_preflight.md](issue_2393_topology_selection_preflight.md)
+* Issue #2403 topology selection-score decision:
+  [issue_2403_topology_selection_score_decision.md](issue_2403_topology_selection_score_decision.md)
 * Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
@@ -612,6 +665,10 @@ knowledge, not every transient iteration detail.
   [Issue #1442 CARLA Native Spawn Probe Evidence](evidence/issue_1442_carla_native_spawn_probe_2026-05-24/README.md),
   [Issue #1344 Paired AMV Primary Evidence](evidence/issue_1344_paired_amv_primary_2026-05-20/README.md),
   [Issue #1416 Converted-Map Cache Evidence](evidence/issue_1416_converted_map_cache_2026-05-20/README.md),
+  [Issue #852 queue-fill single-factor batch evidence](evidence/issue_852_queue_fill_batch_2026-06-06/README.md),
+  [Issue #2428 AMMV mechanism trace panels](evidence/issue_2428_mechanism_trace_panels_2026-06-06/README.md),
+  [Issue #2432 AMMV trace selection evidence](evidence/issue_2432_ammv_trace_selection_2026-06-06/README.md),
+  [Issue #2434 AMMV scenario sweep evidence](evidence/issue_2434_ammv_scenario_sweep_2026-06-06/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 
@@ -1138,3 +1195,14 @@ why a change was made rather than a full issue execution transcript.
   classifies learned risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC
   warm-start PPO before Issue #1489 synthesis. It records blockers, next actions, and the
   conclusion that Issue #1489 remains blocked from comparative synthesis.
+* [Issue #2410 Hybrid-Learning Component Readiness Refresh](issue_2410_hybrid_component_readiness_refresh.md)
+  refreshes the component matrix after the ORCA-residual v1 progress-probe launch-packet revision
+  and keeps Issue #1489 blocked from comparative synthesis.
+
+* [Issue #2408 ORCA-Residual Low-Progress Analysis](issue_2408_orca_residual_low_progress_analysis.md)
+  classifies the failed v0 smoke row and recommends only a revised, instrumented progress-probe
+  rerun before any nominal escalation.
+
+* [Issue #2411 Predictive-v2 Child Classification](issue_2411_predictive_v2_child_classification.md)
+  classifies stale predictive-v2 child issues after the stop-old-expansion decision so blocked
+  proposal work is not treated as benchmark-ready execution.

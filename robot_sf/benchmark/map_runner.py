@@ -2731,6 +2731,7 @@ def _scenario_identity_payload(  # noqa: PLR0913
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
+    record_simulation_step_trace: bool = False,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
 
@@ -2764,6 +2765,7 @@ def _scenario_identity_payload(  # noqa: PLR0913
         payload["synthetic_actuation_profile"] = dict(synthetic_actuation_profile)
     if latency_stress_profile is not None:
         payload["latency_stress_profile"] = dict(latency_stress_profile)
+    payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
     if dt is not None and float(dt) > 0.0:
@@ -2785,6 +2787,83 @@ def _compute_map_episode_id(identity_payload: dict[str, Any], seed: int) -> str:
     )
     identity_hash = _config_hash(identity_payload)
     return f"{scenario_id}--{seed}--{identity_hash}"
+
+
+def _first_float(value: Any, default: float = 0.0) -> float:
+    """Return the first finite numeric value from scalar-or-sequence inputs."""
+
+    if isinstance(value, int | float | np.integer | np.floating):
+        numeric = float(value)
+        return numeric if math.isfinite(numeric) else default
+    if isinstance(value, (list, tuple, np.ndarray)) and len(value) > 0:
+        return _first_float(value[0], default=default)
+    return default
+
+
+def _observation_heading(obs: Any, *, default: float = 0.0) -> float:
+    """Extract robot heading from structured or flat observations.
+
+    Returns:
+        Heading in radians, or the provided default when unavailable.
+    """
+
+    if isinstance(obs, dict):
+        robot = obs.get("robot")
+        if isinstance(robot, dict) and "heading" in robot:
+            return _first_float(robot.get("heading"), default=default)
+        if "robot_heading" in obs:
+            return _first_float(obs.get("robot_heading"), default=default)
+    return default
+
+
+def _trace_pedestrians(
+    positions: np.ndarray,
+    previous_positions: np.ndarray | None,
+    dt_seconds: float,
+) -> list[dict[str, Any]]:
+    """Build trace-export pedestrian frames from simulator position buffers.
+
+    Returns:
+        Renderer-neutral pedestrian frame entries.
+    """
+
+    if positions.size == 0:
+        return []
+    pedestrians: list[dict[str, Any]] = []
+    for ped_idx, ped_pos in enumerate(np.asarray(positions, dtype=float)):
+        if (
+            previous_positions is not None
+            and previous_positions.shape == positions.shape
+            and dt_seconds > 0.0
+        ):
+            velocity = (ped_pos - previous_positions[ped_idx]) / dt_seconds
+        else:
+            velocity = np.zeros(2, dtype=float)
+        pedestrians.append(
+            {
+                "id": int(ped_idx),
+                "position": [float(ped_pos[0]), float(ped_pos[1])],
+                "velocity": [float(velocity[0]), float(velocity[1])],
+            }
+        )
+    return pedestrians
+
+
+def _command_action_payload(command: Any) -> dict[str, float]:
+    """Normalize planner commands to trace-export selected_action fields.
+
+    Returns:
+        Linear and angular velocity action fields.
+    """
+
+    if isinstance(command, np.ndarray):
+        command = command.tolist()
+    if isinstance(command, (list, tuple)) and len(command) >= 2:
+        return {
+            "linear_velocity": _first_float(command[0]),
+            "angular_velocity": _first_float(command[1]),
+        }
+    return {"linear_velocity": 0.0, "angular_velocity": 0.0}
 
 
 def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
@@ -3214,6 +3293,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
+    record_simulation_step_trace: bool = False,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -3344,6 +3424,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     actuation_summary: dict[str, Any] = not_available_saturation_metrics()
     synthetic_actuation_trace: list[dict[str, Any]] = []
     planner_decision_trace: list[dict[str, Any]] = []
+    simulation_step_trace: list[dict[str, Any]] = []
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
@@ -3367,6 +3448,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
     initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
+    previous_trace_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
+    previous_trace_ped_pos: np.ndarray | None = None
+    previous_trace_heading = _observation_heading(obs)
     try:
         for step_idx in range(horizon_val):
             policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
@@ -3434,6 +3518,53 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             ped_positions.append(peds)
             if record_forces:
                 ped_forces.append(forces_arr)
+            if record_simulation_step_trace:
+                dt_seconds = float(config.sim_config.time_per_step_in_secs)
+                robot_velocity = (
+                    (robot_pos - previous_trace_robot_pos) / dt_seconds
+                    if dt_seconds > 0.0
+                    else np.zeros(2, dtype=float)
+                )
+                heading = _observation_heading(obs, default=previous_trace_heading)
+                planner_payload: dict[str, Any] = {
+                    "event": "step",
+                    "selected_action": _command_action_payload(policy_command),
+                }
+                if actuation_step is not None:
+                    planner_payload["amv"] = {
+                        "requested_linear_m_s": float(actuation_step.requested_command[0]),
+                        "requested_angular_rad_s": float(actuation_step.requested_command[1]),
+                        "applied_linear_m_s": float(actuation_step.applied_command[0]),
+                        "applied_angular_rad_s": float(actuation_step.applied_command[1]),
+                        "command_clipped": bool(actuation_step.command_clipped),
+                        "yaw_rate_saturated": bool(actuation_step.yaw_rate_saturated),
+                    }
+                if record_forces and peds.size:
+                    planner_payload["ammv"] = {
+                        "pedestrian_force_vectors": [
+                            [float(force[0]), float(force[1])] for force in forces_arr
+                        ]
+                    }
+                simulation_step_trace.append(
+                    {
+                        "step": int(step_idx),
+                        "time_s": float((step_idx + 1) * dt_seconds),
+                        "robot": {
+                            "position": [float(robot_pos[0]), float(robot_pos[1])],
+                            "heading": float(heading),
+                            "velocity": [float(robot_velocity[0]), float(robot_velocity[1])],
+                        },
+                        "pedestrians": _trace_pedestrians(
+                            peds,
+                            previous_trace_ped_pos,
+                            dt_seconds,
+                        ),
+                        "planner": planner_payload,
+                    }
+                )
+                previous_trace_robot_pos = np.array(robot_pos, dtype=float, copy=True)
+                previous_trace_ped_pos = np.array(peds, dtype=float, copy=True)
+                previous_trace_heading = float(heading)
             if actuation_step is not None:
                 distance_to_goal = float(np.linalg.norm(robot_pos - goal_vec))
                 route_progress = float(initial_goal_distance - distance_to_goal)
@@ -3654,6 +3785,13 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "initial_goal_distance_m": initial_goal_distance,
             "steps": planner_decision_trace,
         }
+    if record_simulation_step_trace:
+        algo_meta["simulation_step_trace"] = {
+            "schema_version": "simulation-step-trace.v1",
+            "dt": float(config.sim_config.time_per_step_in_secs),
+            "initial_goal_distance_m": initial_goal_distance,
+            "steps": simulation_step_trace,
+        }
     if actuation_controller is not None:
         actuation_summary = actuation_controller.summary()
         algo_meta["synthetic_actuation"] = {
@@ -3715,6 +3853,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             if latency_profile is not None
             else None
         ),
+        record_simulation_step_trace=record_simulation_step_trace,
     )
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - start_time))
@@ -3841,6 +3980,7 @@ def _run_map_job_worker(
         observation_noise=params.get("observation_noise"),
         synthetic_actuation_profile=params.get("synthetic_actuation_profile"),
         latency_stress_profile=params.get("latency_stress_profile"),
+        record_simulation_step_trace=bool(params.get("record_simulation_step_trace", False)),
     )
 
 
@@ -4022,6 +4162,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     observation_noise: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
+    record_simulation_step_trace: bool = False,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -4310,6 +4451,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         if latency_profile is not None
                         else None
                     ),
+                    record_simulation_step_trace=record_simulation_step_trace,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
                     filtered_jobs.append((sc, seed))
@@ -4345,6 +4487,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "latency_stress_metrics": (
             not_available_latency_metrics() if latency_profile is not None else None
         ),
+        "record_simulation_step_trace": bool(record_simulation_step_trace),
     }
 
     total_jobs = len(jobs)
